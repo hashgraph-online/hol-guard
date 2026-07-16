@@ -10,6 +10,7 @@ from .command_model import CanonicalCommand, CommandSegment
 from .command_option_parsing import (
     argument_semantics,
     flags_present_in_all_option_parses,
+    known_option_advance,
     matches_subcommands_conservatively,
 )
 
@@ -110,6 +111,7 @@ class ExecutableMatcher:
                 subcommand_arguments = _after_leading_options(
                     subcommand_arguments,
                     self.leading_options_with_values,
+                    self.interspersed_flags,
                 )
             if (
                 self.subcommands
@@ -154,7 +156,7 @@ class ExecutableMatcher:
                     conservative_requirements.difference_update({positive, negative})
                     effective_token = semantics.option_token(positive)
                     if effective_token is not None:
-                        conservative_requirements.add(effective_token.split("=", 1)[0])
+                        conservative_requirements.add(effective_token)
                 required_semantics_present = required_semantics_present and flags_present_in_all_option_parses(
                     lowered_arguments,
                     frozenset(conservative_requirements) | {option for option, _values in self.required_option_values},
@@ -444,7 +446,11 @@ def _normalize_option_token(value: str) -> str:
     return stripped.lower() if stripped.startswith("--") else stripped
 
 
-def _after_leading_options(arguments: tuple[str, ...], options_with_values: frozenset[str]) -> tuple[str, ...]:
+def _after_leading_options(
+    arguments: tuple[str, ...],
+    options_with_values: frozenset[str],
+    flags: frozenset[str],
+) -> tuple[str, ...]:
     index = 0
     while index < len(arguments):
         argument = arguments[index]
@@ -452,11 +458,12 @@ def _after_leading_options(arguments: tuple[str, ...], options_with_values: froz
             return arguments[index + 1 :]
         if not argument.startswith("-"):
             return arguments[index:]
-        option_name = argument.split("=", 1)[0]
-        if option_name in options_with_values and "=" not in argument:
-            index += 2
-        else:
-            index += 1
+        advance = known_option_advance(
+            argument,
+            options_with_values=options_with_values,
+            known_flags=flags,
+        )
+        index += advance if advance is not None else 1
     return ()
 
 
@@ -474,19 +481,14 @@ def _without_options(
         if argument == "--":
             retained.extend(arguments[index + 1 :])
             break
-        option_name = argument.split("=", 1)[0]
-        attached_short_option = (
-            argument[:2]
-            if len(argument) > 2 and argument[0] == "-" and argument[1] != "-" and argument[:2] in options_with_values
-            else None
+        advance = known_option_advance(
+            argument,
+            options_with_values=options_with_values,
+            known_flags=flags,
         )
-        if option_name in flags:
-            index += 1
-            continue
-        if option_name not in options_with_values and attached_short_option is None:
+        if advance is None:
             retained.append(argument)
             index += 1
             continue
-        is_attached_short = attached_short_option is not None and option_name not in options_with_values
-        index += 1 if "=" in argument or is_attached_short else 2
+        index += advance
     return tuple(retained)
