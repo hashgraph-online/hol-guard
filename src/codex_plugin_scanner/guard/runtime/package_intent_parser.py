@@ -346,7 +346,7 @@ def _lockfiles_record_typescript(lockfiles: tuple[PackageExecutionFileEvidence, 
         except (OSError, UnicodeDecodeError):
             continue
         dependencies = parse_manifest_dependencies(path=lockfile.path, text=text)
-        if any(name == "typescript" or name.endswith("/typescript") for name in dependencies):
+        if "typescript" in dependencies:
             return True
     return False
 
