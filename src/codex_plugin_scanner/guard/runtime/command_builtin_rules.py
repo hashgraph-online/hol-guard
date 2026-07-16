@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .command_domain_extensions import DOMAIN_COMMAND_RULES
 from .command_rules import (
     AnyMatcher,
     ArgumentMatcher,
@@ -33,6 +34,8 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "git destructive command": ("destructive_shell",),
     "system destructive command": ("destructive_shell",),
     "windows destructive command": ("destructive_shell",),
+    "kubernetes destructive command": ("destructive_shell", "network_egress"),
+    "infrastructure destructive command": ("destructive_shell", "network_egress"),
 }
 _GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {"-c", "-C", "--config-env", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree"}
@@ -322,6 +325,7 @@ BUILT_IN_COMMAND_RULES = (
             ),
         ),
     ),
+    *DOMAIN_COMMAND_RULES,
 )
 
 _RULES_BY_EXTENSION: dict[str, tuple[CommandSafetyRule, ...]] = {}

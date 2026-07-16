@@ -8,6 +8,7 @@ from pathlib import PurePosixPath
 from typing import Literal, final
 
 from .command_builtin_rules import COMMAND_ACTION_RISK_CLASSES, rules_for_extension
+from .command_domain_extensions import DOMAIN_COMMAND_EXTENSION_SPECS, domain_command_extension_values
 from .command_model import CanonicalCommand
 from .command_package_extensions import PACKAGE_COMMAND_EXTENSION_SPECS, PackageCommandExtensionSpec
 from .command_rules import CommandSafetyRule, MatcherEvidence, matcher_index_hints
@@ -413,6 +414,11 @@ _BUILT_IN_EXTENSIONS = (
             "Pass only the specific secret or file required by the container.",
         ),
         rules=rules_for_extension("command.container-runtime"),
+        reference_urls=(
+            "https://docs.docker.com/reference/cli/docker/system/prune/",
+            "https://docs.docker.com/reference/cli/docker/container/rm/",
+            "https://docs.docker.com/reference/cli/docker/container/run/",
+        ),
     ),
     CommandSafetyExtension(
         extension_id="command.data-protection",
@@ -459,6 +465,7 @@ _BUILT_IN_EXTENSIONS = (
         risk_classes=("local_secret_read",),
         safer_alternatives=("Request only the required non-secret field or metadata instead of the Secret payload.",),
         rules=rules_for_extension("command.kubernetes-secrets"),
+        reference_urls=("https://kubernetes.io/docs/reference/kubectl/generated/kubectl_get/",),
     ),
     CommandSafetyExtension(
         extension_id="command.shell-mutations",
@@ -479,6 +486,7 @@ _BUILT_IN_EXTENSIONS = (
         ),
         rules=rules_for_extension("command.shell-mutations"),
     ),
+    *(CommandSafetyExtension(**domain_command_extension_values(spec)) for spec in DOMAIN_COMMAND_EXTENSION_SPECS),
     *(_package_command_extension(spec) for spec in PACKAGE_COMMAND_EXTENSION_SPECS),
 )
 
