@@ -44,7 +44,6 @@ def _configure_guard_policy_parsers(
     policy_diff_parser.add_argument("--json", action="store_true")
 
     policy_export_parser = policy_subparsers.add_parser("export", help="Export local policies")
-    policy_export_parser.add_argument("--format", choices=("yaml",), default="yaml")
     policy_export_parser.add_argument("--output")
     policy_export_parser.add_argument("--include-provenance", action="store_true")
     _add_guard_common_args(policy_export_parser)

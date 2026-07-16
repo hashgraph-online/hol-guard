@@ -169,6 +169,43 @@ def test_export_rejects_invalid_local_expiry() -> None:
         )
 
 
+def test_export_rejects_invalid_local_timestamp() -> None:
+    with pytest.raises(PolicyCompilationError, match="invalid_local_policy_timestamp"):
+        build_policy_document_from_rows(
+            [
+                {
+                    "decision_id": 10,
+                    "harness": "codex",
+                    "scope": "global",
+                    "action": "allow",
+                    "source": "review-decision",
+                    "updated_at": "not-a-timestamp",
+                }
+            ],
+            include_provenance=True,
+        )
+
+
+def test_export_identifies_yaml_import_provenance() -> None:
+    document = build_policy_document_from_rows(
+        [
+            {
+                "decision_id": 11,
+                "harness": "codex",
+                "scope": "global",
+                "action": "allow",
+                "source": "policy-yaml-import",
+                "updated_at": "2026-07-16T10:00:00Z",
+            }
+        ],
+        include_provenance=True,
+    )
+
+    rule = document.rules[0]
+    assert rule.provenance is not None
+    assert rule.provenance.source == "import"
+
+
 def test_export_order_is_stable_when_primary_fields_tie() -> None:
     rows = [
         {
@@ -204,6 +241,13 @@ def test_compile_rejects_match_not_supported_by_local_store() -> None:
     document = _policy_document(match={"commands": ["deploy"]})
 
     with pytest.raises(PolicyCompilationError, match="unsupported_policy_match"):
+        compile_policy_document(document)
+
+
+def test_compile_rejects_empty_selector_lists() -> None:
+    document = _policy_document(match={"artifacts": []})
+
+    with pytest.raises(PolicyCompilationError, match="invalid_policy_match_selector"):
         compile_policy_document(document)
 
 

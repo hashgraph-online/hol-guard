@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TextIO, cast
 
 from ..approval_gate import ApprovalGateError, require_high_risk
+from ..policy_authority import PolicyAuthorityError
 from ..policy_document import policy_document_digest
 from ..policy_document_io import (
     PolicyCompilationError,
@@ -244,7 +245,13 @@ def _run_guard_policy_document_command(
             return 0
 
         raise ValueError("unknown_policy_document_command")
-    except (ApprovalGateError, PolicyCompilationError, PolicyDocumentError, PolicyFileTrustError) as error:
+    except (
+        ApprovalGateError,
+        PolicyAuthorityError,
+        PolicyCompilationError,
+        PolicyDocumentError,
+        PolicyFileTrustError,
+    ) as error:
         code = getattr(error, "code", error.__class__.__name__)
         _write_payload(
             f"policy {command}",

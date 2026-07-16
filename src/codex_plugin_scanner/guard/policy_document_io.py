@@ -271,12 +271,12 @@ def diff_policy_documents(
     return PolicyDocumentDiff(changed=bool(text), text=text)
 
 
-def _normalized_timestamp(value: object) -> str:
+def _normalized_timestamp(value: object, *, rule_id: str) -> str:
     if isinstance(value, str):
         candidate = value.strip().replace("+00:00", "Z")
         if _UTC_TIMESTAMP_RE.fullmatch(candidate):
             return candidate
-    return "1970-01-01T00:00:00Z"
+    raise PolicyCompilationError("invalid_local_policy_timestamp", rule_id)
 
 
 def _normalized_expiry(value: object, *, rule_id: str, code: str) -> str | None:
@@ -306,6 +306,8 @@ def _provenance_source(value: object) -> str:
         return value
     if value == "cloud-sync":
         return "cloud"
+    if value == _POLICY_IMPORT_SOURCE:
+        return "import"
     return "local"
 
 
@@ -345,7 +347,9 @@ def _rule_from_policy_row(row: Mapping[str, object], *, include_provenance: bool
     )
     provenance: dict[str, object] = {
         "source": _provenance_source(row.get("source")) if include_provenance else "export-redacted",
-        "createdAt": _normalized_timestamp(row.get("updated_at")) if include_provenance else _REDACTED_TIMESTAMP,
+        "createdAt": _normalized_timestamp(row.get("updated_at"), rule_id=rule_id)
+        if include_provenance
+        else _REDACTED_TIMESTAMP,
     }
     owner = _optional_string(row.get("owner"))
     if include_provenance and owner is not None:
@@ -423,15 +427,20 @@ def build_policy_document_from_rows(
     return GuardPolicyDocument.from_mapping(mapping)
 
 
-def _selector_values(match: Mapping[str, object], key: str) -> tuple[str | None, ...]:
+def _selector_values(
+    match: Mapping[str, object],
+    key: str,
+    *,
+    rule_id: str,
+) -> tuple[str | None, ...]:
     value = match.get(key)
     if value is None:
         return (None,)
     if not isinstance(value, list) or not value:
-        return (None,)
+        raise PolicyCompilationError("invalid_policy_match_selector", rule_id)
     items = cast(list[object], value)
-    if not all(isinstance(item, str) for item in items):
-        return (None,)
+    if not all(isinstance(item, str) and item for item in items):
+        raise PolicyCompilationError("invalid_policy_match_selector", rule_id)
     return tuple(cast(list[str], items))
 
 
@@ -496,10 +505,10 @@ def compile_policy_document(document: GuardPolicyDocument) -> tuple[CompiledPoli
         local_extension = raw_rule.get("x-hol-local")
         extension = local_extension if isinstance(local_extension, Mapping) else {}
         selectors = itertools.product(
-            _selector_values(match, "artifacts"),
-            _selector_values(match, "harnesses"),
-            _selector_values(match, "publishers"),
-            _selector_values(match, "workspaces"),
+            _selector_values(match, "artifacts", rule_id=rule_id),
+            _selector_values(match, "harnesses", rule_id=rule_id),
+            _selector_values(match, "publishers", rule_id=rule_id),
+            _selector_values(match, "workspaces", rule_id=rule_id),
         )
         provenance = raw_rule.get("provenance")
         provenance_mapping = provenance if isinstance(provenance, Mapping) else {}
