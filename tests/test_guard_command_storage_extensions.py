@@ -30,6 +30,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.storage.aws-s3.deletion",
         ),
         (
+            "aws --no-cli-pager s3 rm s3://archive/private.json",
+            "AWS storage destructive command",
+            "command.storage.aws-s3.deletion",
+        ),
+        (
             "gcloud storage --project app-prod rm --recursive gs://archive/old",
             "Google storage destructive command",
             "command.storage.google-cloud.deletion",
@@ -45,7 +50,17 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.storage.google-cloud.deletion",
         ),
         (
+            "gcloud --quiet storage rm gs://archive/private.json",
+            "Google storage destructive command",
+            "command.storage.google-cloud.deletion",
+        ),
+        (
             "az.cmd storage blob delete-batch --subscription app-prod --source archive",
+            "Azure storage destructive command",
+            "command.storage.azure-blob.deletion",
+        ),
+        (
+            "az --debug storage blob delete --container-name archive --name private.json",
             "Azure storage destructive command",
             "command.storage.azure-blob.deletion",
         ),
