@@ -2,7 +2,29 @@
 
 from __future__ import annotations
 
-from functools import cache
+from dataclasses import dataclass
+from enum import Enum, auto
+from typing import Final
+
+_MAX_OPTION_PARSE_STATES: Final = 16_384
+
+
+class _ParseOutcome(Enum):
+    MATCH = auto()
+    NO_MATCH = auto()
+    UNCERTAIN = auto()
+
+
+@dataclass(frozen=True, slots=True)
+class _OptionTransition:
+    advance: int
+    flags: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True, slots=True)
+class _OptionShape:
+    transitions: tuple[_OptionTransition, ...]
+    fully_known: bool
 
 
 def matches_subcommands_conservatively(
@@ -12,38 +34,15 @@ def matches_subcommands_conservatively(
     options_with_values: frozenset[str],
     known_flags: frozenset[str],
 ) -> bool:
-    """Match a destructive prefix under any plausible unknown-option shape."""
+    """Match a destructive prefix, including when bounded parsing is uncertain."""
 
-    @cache
-    def matches(argument_index: int, subcommand_index: int) -> bool:
-        if subcommand_index == len(subcommands):
-            return True
-        if argument_index >= len(arguments):
-            return False
-        argument = arguments[argument_index]
-        if argument == "--":
-            remaining = len(subcommands) - subcommand_index
-            return arguments[argument_index + 1 : argument_index + 1 + remaining] == subcommands[subcommand_index:]
-        if _is_option(argument):
-            option_name = argument.split("=", 1)[0]
-            attached_short_option = _attached_short_value_option(argument, options_with_values)
-            last_short_is_known_flag = _last_short_option_is_known_flag(argument, known_flags)
-            if option_name in options_with_values:
-                advance = 1 if "=" in argument else 2
-                return matches(argument_index + advance, subcommand_index)
-            if attached_short_option is not None or "=" in argument or last_short_is_known_flag:
-                return matches(argument_index + 1, subcommand_index)
-            if option_name in known_flags:
-                return matches(argument_index + 1, subcommand_index)
-            return matches(argument_index + 1, subcommand_index) or matches(
-                argument_index + 2,
-                subcommand_index,
-            )
-        if argument != subcommands[subcommand_index]:
-            return False
-        return matches(argument_index + 1, subcommand_index + 1)
-
-    return matches(0, 0)
+    outcome = _subcommand_parse_outcome(
+        arguments,
+        subcommands,
+        options_with_values=options_with_values,
+        known_flags=known_flags,
+    )
+    return outcome is not _ParseOutcome.NO_MATCH
 
 
 def flags_present_in_all_option_parses(
@@ -53,76 +52,171 @@ def flags_present_in_all_option_parses(
     options_with_values: frozenset[str],
     known_flags: frozenset[str],
 ) -> bool:
-    """Return whether every plausible option parse contains each required flag."""
+    """Return whether every bounded parse certainly contains each required flag."""
 
     return all(
-        _flag_present_in_all_option_parses(
+        _flag_parse_outcome(
             arguments,
             required_flag,
             options_with_values=options_with_values,
             known_flags=known_flags,
         )
+        is _ParseOutcome.MATCH
         for required_flag in required_flags
     )
 
 
-def _flag_present_in_all_option_parses(
+def known_option_advance(
+    argument: str,
+    *,
+    options_with_values: frozenset[str],
+    known_flags: frozenset[str],
+) -> int | None:
+    """Return the deterministic token advance for a fully known option shape."""
+
+    if not _is_option(argument):
+        return None
+    shape = _option_shape(
+        argument,
+        options_with_values=options_with_values,
+        known_flags=known_flags,
+    )
+    advances = {transition.advance for transition in shape.transitions}
+    if not shape.fully_known or len(advances) != 1:
+        return None
+    return advances.pop()
+
+
+def _subcommand_parse_outcome(
+    arguments: tuple[str, ...],
+    subcommands: tuple[str, ...],
+    *,
+    options_with_values: frozenset[str],
+    known_flags: frozenset[str],
+) -> _ParseOutcome:
+    pending = [(0, 0)]
+    visited: set[tuple[int, int]] = set()
+    while pending:
+        state = pending.pop()
+        if state in visited:
+            continue
+        if len(visited) >= _MAX_OPTION_PARSE_STATES:
+            return _ParseOutcome.UNCERTAIN
+        visited.add(state)
+        argument_index, subcommand_index = state
+        if subcommand_index == len(subcommands):
+            return _ParseOutcome.MATCH
+        if argument_index >= len(arguments):
+            continue
+        argument = arguments[argument_index]
+        if argument == "--":
+            remaining = len(subcommands) - subcommand_index
+            if arguments[argument_index + 1 : argument_index + 1 + remaining] == subcommands[subcommand_index:]:
+                return _ParseOutcome.MATCH
+            continue
+        if _is_option(argument):
+            shape = _option_shape(
+                argument,
+                options_with_values=options_with_values,
+                known_flags=known_flags,
+            )
+            pending.extend((argument_index + transition.advance, subcommand_index) for transition in shape.transitions)
+            continue
+        if argument == subcommands[subcommand_index]:
+            pending.append((argument_index + 1, subcommand_index + 1))
+    return _ParseOutcome.NO_MATCH
+
+
+def _flag_parse_outcome(
     arguments: tuple[str, ...],
     required_flag: str,
     *,
     options_with_values: frozenset[str],
     known_flags: frozenset[str],
-) -> bool:
-    @cache
-    def present(argument_index: int, seen: bool) -> bool:
-        if argument_index >= len(arguments):
-            return seen
+) -> _ParseOutcome:
+    pending = [(0, False)]
+    visited: set[tuple[int, bool]] = set()
+    found_terminal = False
+    while pending:
+        state = pending.pop()
+        if state in visited:
+            continue
+        if len(visited) >= _MAX_OPTION_PARSE_STATES:
+            return _ParseOutcome.UNCERTAIN
+        visited.add(state)
+        argument_index, seen = state
+        if argument_index >= len(arguments) or arguments[argument_index] == "--":
+            if not seen:
+                return _ParseOutcome.NO_MATCH
+            found_terminal = True
+            continue
         argument = arguments[argument_index]
-        if argument == "--":
-            return seen
         if not _is_option(argument):
-            return present(argument_index + 1, seen)
-        option_name = argument.split("=", 1)[0]
-        attached_short_option = _attached_short_value_option(argument, options_with_values)
-        if option_name in options_with_values:
-            advance = 1 if "=" in argument else 2
-            return present(argument_index + advance, seen)
-        if attached_short_option is not None:
-            return present(argument_index + 1, seen)
-        token_flags = _flags_in_option_token(argument, options_with_values)
-        next_seen = seen or required_flag in token_flags
-        if option_name in known_flags or "=" in argument or _last_short_option_is_known_flag(argument, known_flags):
-            return present(argument_index + 1, next_seen)
-        return present(argument_index + 1, next_seen) and present(argument_index + 2, seen)
+            pending.append((argument_index + 1, seen))
+            continue
+        shape = _option_shape(
+            argument,
+            options_with_values=options_with_values,
+            known_flags=known_flags,
+        )
+        pending.extend(
+            (
+                argument_index + transition.advance,
+                seen or required_flag in transition.flags,
+            )
+            for transition in shape.transitions
+        )
+    return _ParseOutcome.MATCH if found_terminal else _ParseOutcome.NO_MATCH
 
-    return present(0, False)
+
+def _option_shape(
+    argument: str,
+    *,
+    options_with_values: frozenset[str],
+    known_flags: frozenset[str],
+) -> _OptionShape:
+    if argument.startswith("--"):
+        option_name, separator, _value = argument.partition("=")
+        if option_name in options_with_values:
+            advance = 1 if separator else 2
+            return _OptionShape((_OptionTransition(advance),), fully_known=True)
+        if option_name in known_flags:
+            return _OptionShape((_OptionTransition(1, frozenset({option_name, argument})),), fully_known=True)
+        if separator:
+            return _OptionShape((_OptionTransition(1),), fully_known=True)
+        return _OptionShape((_OptionTransition(1), _OptionTransition(2)), fully_known=False)
+    return _short_option_shape(
+        argument,
+        options_with_values=options_with_values,
+        known_flags=known_flags,
+    )
+
+
+def _short_option_shape(
+    argument: str,
+    *,
+    options_with_values: frozenset[str],
+    known_flags: frozenset[str],
+) -> _OptionShape:
+    transitions: set[_OptionTransition] = set()
+    flags: set[str] = set()
+    fully_known = True
+    for index, character in enumerate(argument[1:], start=1):
+        short_option = f"-{character}"
+        if short_option in options_with_values:
+            advance = 1 if index + 1 < len(argument) else 2
+            transitions.add(_OptionTransition(advance, frozenset(flags)))
+            return _OptionShape(tuple(transitions), fully_known=fully_known)
+        if short_option in known_flags:
+            flags.add(short_option)
+            continue
+        fully_known = False
+        transitions.add(_OptionTransition(1, frozenset(flags)))
+        if index + 1 == len(argument):
+            transitions.add(_OptionTransition(2, frozenset(flags)))
+    transitions.add(_OptionTransition(1, frozenset(flags)))
+    return _OptionShape(tuple(transitions), fully_known=fully_known)
 
 
 def _is_option(argument: str) -> bool:
     return len(argument) > 1 and argument.startswith("-")
-
-
-def _attached_short_value_option(argument: str, options_with_values: frozenset[str]) -> str | None:
-    if len(argument) <= 2 or not argument.startswith("-") or argument.startswith("--"):
-        return None
-    option = argument[:2]
-    return option if option in options_with_values else None
-
-
-def _last_short_option_is_known_flag(argument: str, known_flags: frozenset[str]) -> bool:
-    return len(argument) > 2 and not argument.startswith("--") and f"-{argument[-1]}" in known_flags
-
-
-def _flags_in_option_token(argument: str, options_with_values: frozenset[str]) -> frozenset[str]:
-    flags = {argument}
-    if "=" in argument:
-        flags.add(argument.split("=", 1)[0])
-    if argument.startswith("-") and not argument.startswith("--") and len(argument) > 2:
-        for character in argument[1:]:
-            if not character.isalnum():
-                continue
-            short_flag = f"-{character}"
-            flags.add(short_flag)
-            if short_flag in options_with_values:
-                break
-    return frozenset(flags)
