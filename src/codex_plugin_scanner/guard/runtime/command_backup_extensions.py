@@ -6,8 +6,30 @@ from .command_extension_matchers import executable_matcher, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 
-_RCLONE_GLOBAL_OPTIONS = frozenset({"--config", "--log-file", "--password-command", "--rc-addr"})
-_RESTIC_GLOBAL_OPTIONS = frozenset({"-r", "--repo", "--password-file", "--cache-dir", "-o", "--option"})
+_RCLONE_GLOBAL_OPTIONS = frozenset({"--config", "--log-file", "--log-level", "--password-command", "--rc-addr"})
+_RESTIC_GLOBAL_OPTIONS = frozenset(
+    {
+        "--cacert",
+        "--cache-dir",
+        "--compression",
+        "--http-user-agent",
+        "--key-hint",
+        "--limit-download",
+        "--limit-upload",
+        "--option",
+        "--pack-size",
+        "--password-command",
+        "--password-file",
+        "--repo",
+        "--repository-file",
+        "--retry-lock",
+        "--stuck-request-timeout",
+        "--tls-client-cert",
+        "-o",
+        "-p",
+        "-r",
+    }
+)
 _BORG_GLOBAL_OPTIONS = frozenset(
     {
         "-r",
@@ -16,6 +38,7 @@ _BORG_GLOBAL_OPTIONS = frozenset(
         "--debug-topic",
         "--lock-wait",
         "--remote-path",
+        "--remote-ratelimit",
         "--rsh",
         "--socket",
         "--umask",
@@ -65,6 +88,7 @@ _RCLONE_MUTATION = AnyMatcher(
             command,
             allow_leading_options=True,
             leading_options_with_values=_RCLONE_GLOBAL_OPTIONS,
+            fail_secure_unknown_options=True,
         )
         for command in ("delete", "deletefile", "purge", "rmdirs", "sync", "move", "moveto", "bisync")
     )
@@ -76,12 +100,14 @@ _RESTIC_MUTATION = AnyMatcher(
             "forget",
             allow_leading_options=True,
             leading_options_with_values=_RESTIC_GLOBAL_OPTIONS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "restic",
             "prune",
             allow_leading_options=True,
             leading_options_with_values=_RESTIC_GLOBAL_OPTIONS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "restic",
@@ -89,6 +115,7 @@ _RESTIC_MUTATION = AnyMatcher(
             required_flags=frozenset({"--forget"}),
             allow_leading_options=True,
             leading_options_with_values=_RESTIC_GLOBAL_OPTIONS,
+            fail_secure_unknown_options=True,
         ),
     )
 )
@@ -99,6 +126,7 @@ _BORG_MUTATION = AnyMatcher(
             command,
             allow_leading_options=True,
             leading_options_with_values=_BORG_GLOBAL_OPTIONS,
+            fail_secure_unknown_options=True,
         )
         for command in ("delete", "prune", "recreate")
     )
@@ -110,6 +138,7 @@ _BORG_DRY_RUN = AnyMatcher(
             command,
             allow_leading_options=True,
             leading_options_with_values=_BORG_GLOBAL_OPTIONS,
+            fail_secure_unknown_options=True,
         )
         for command in ("prune", "recreate")
     )
@@ -122,6 +151,7 @@ _VELERO_DELETE = AnyMatcher(
             "delete",
             global_options_with_values=_VELERO_GLOBAL_OPTIONS,
             global_flags=_VELERO_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         )
         for resource in ("backup", "schedule", "restore")
     )

@@ -7,6 +7,7 @@ from typing import Literal, final
 
 from .command_matcher_contracts import CommandMatcher, MatcherEvidence
 from .command_model import CanonicalCommand, CommandSegment
+from .command_option_parsing import flags_present_in_all_option_parses, matches_subcommands_conservatively
 
 CommandRuleSeverity = Literal["critical", "high", "medium", "low"]
 CommandRuleMode = Literal["required", "enforce", "review", "monitor", "disabled"]
@@ -32,6 +33,7 @@ class ExecutableMatcher:
     interspersed_flags: frozenset[str] = frozenset()
     options_with_values: frozenset[str] = frozenset()
     required_flags_in_all_arguments: bool = False
+    fail_secure_unknown_options: bool = False
 
     def __post_init__(self) -> None:
         normalized = frozenset(value.strip().lower() for value in self.executables if value.strip())
@@ -77,7 +79,23 @@ class ExecutableMatcher:
                     subcommand_arguments,
                     self.leading_options_with_values,
                 )
-            if self.subcommands and subcommand_arguments[: len(self.subcommands)] != self.subcommands:
+            if (
+                self.subcommands
+                and subcommand_arguments[: len(self.subcommands)] != self.subcommands
+                and (
+                    not self.fail_secure_unknown_options
+                    or not matches_subcommands_conservatively(
+                        lowered_arguments,
+                        self.subcommands,
+                        options_with_values=(
+                            self.options_with_values
+                            | self.leading_options_with_values
+                            | self.interspersed_options_with_values
+                        ),
+                        known_flags=self.interspersed_flags,
+                    )
+                )
+            ):
                 continue
             if self.required_flags_in_all_arguments:
                 flag_arguments = lowered_arguments
@@ -91,7 +109,19 @@ class ExecutableMatcher:
                     self.options_with_values | self.leading_options_with_values | self.interspersed_options_with_values
                 ),
             )
-            if not self.required_flags <= present_flags or self.forbidden_flags & present_flags:
+            required_flags_present = self.required_flags <= present_flags
+            if self.fail_secure_unknown_options and self.required_flags_in_all_arguments:
+                required_flags_present = flags_present_in_all_option_parses(
+                    lowered_arguments,
+                    self.required_flags,
+                    options_with_values=(
+                        self.options_with_values
+                        | self.leading_options_with_values
+                        | self.interspersed_options_with_values
+                    ),
+                    known_flags=self.interspersed_flags | self.required_flags | self.forbidden_flags,
+                )
+            if not required_flags_present or self.forbidden_flags & present_flags:
                 continue
             evidence.append(
                 MatcherEvidence(

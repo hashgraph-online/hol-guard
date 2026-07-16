@@ -23,6 +23,7 @@ def executable_matcher(
     allow_leading_options: bool = False,
     leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
     options_with_values: frozenset[str] = _EMPTY_STRING_SET,
+    fail_secure_unknown_options: bool = False,
 ) -> ExecutableMatcher:
     """Build a portable executable matcher with structured option handling."""
 
@@ -36,6 +37,7 @@ def executable_matcher(
         allow_leading_options=allow_leading_options,
         leading_options_with_values=leading_options_with_values,
         options_with_values=options_with_values,
+        fail_secure_unknown_options=fail_secure_unknown_options,
     )
 
 
@@ -57,6 +59,7 @@ def with_required_flag(matcher: AnyMatcher, flag: str) -> AnyMatcher:
                 interspersed_flags=child.interspersed_flags,
                 options_with_values=child.options_with_values,
                 required_flags_in_all_arguments=True,
+                fail_secure_unknown_options=child.fail_secure_unknown_options,
             )
             for child in matcher.matchers
             if isinstance(child, ExecutableMatcher)

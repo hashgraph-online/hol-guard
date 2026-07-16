@@ -38,10 +38,15 @@ _GCLOUD_GLOBAL_OPTIONS = frozenset(
         "--account",
         "--billing-project",
         "--configuration",
+        "--filter",
         "--flags-file",
+        "--flatten",
         "--format",
         "--impersonate-service-account",
+        "--limit",
+        "--page-size",
         "--project",
+        "--sort-by",
         "--trace-token",
         "--verbosity",
     }
@@ -67,10 +72,20 @@ _MINIO_GLOBAL_FLAGS = frozenset(
 _AWS_STORAGE_DELETE = AnyMatcher(
     matchers=(
         executable_matcher(
-            "aws", "s3", "rm", global_options_with_values=_AWS_GLOBAL_OPTIONS, global_flags=_AWS_GLOBAL_FLAGS
+            "aws",
+            "s3",
+            "rm",
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
-            "aws", "s3", "rb", global_options_with_values=_AWS_GLOBAL_OPTIONS, global_flags=_AWS_GLOBAL_FLAGS
+            "aws",
+            "s3",
+            "rb",
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "aws",
@@ -79,6 +94,7 @@ _AWS_STORAGE_DELETE = AnyMatcher(
             required_flags=frozenset({"--delete"}),
             global_options_with_values=_AWS_GLOBAL_OPTIONS,
             global_flags=_AWS_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "aws",
@@ -86,6 +102,7 @@ _AWS_STORAGE_DELETE = AnyMatcher(
             "delete-object",
             global_options_with_values=_AWS_GLOBAL_OPTIONS,
             global_flags=_AWS_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "aws",
@@ -93,6 +110,7 @@ _AWS_STORAGE_DELETE = AnyMatcher(
             "delete-objects",
             global_options_with_values=_AWS_GLOBAL_OPTIONS,
             global_flags=_AWS_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "aws",
@@ -100,13 +118,19 @@ _AWS_STORAGE_DELETE = AnyMatcher(
             "delete-bucket",
             global_options_with_values=_AWS_GLOBAL_OPTIONS,
             global_flags=_AWS_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
     )
 )
 _AWS_STORAGE_DRY_RUN = AnyMatcher(
     matchers=(
         executable_matcher(
-            "aws", "s3", "rm", global_options_with_values=_AWS_GLOBAL_OPTIONS, global_flags=_AWS_GLOBAL_FLAGS
+            "aws",
+            "s3",
+            "rm",
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "aws",
@@ -115,6 +139,7 @@ _AWS_STORAGE_DRY_RUN = AnyMatcher(
             required_flags=frozenset({"--delete"}),
             global_options_with_values=_AWS_GLOBAL_OPTIONS,
             global_flags=_AWS_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
     )
 )
@@ -126,6 +151,7 @@ _GCS_STORAGE_DELETE = AnyMatcher(
             "rm",
             global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
             global_flags=_GCLOUD_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "gcloud",
@@ -134,6 +160,7 @@ _GCS_STORAGE_DELETE = AnyMatcher(
             "delete",
             global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
             global_flags=_GCLOUD_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "gcloud",
@@ -142,6 +169,7 @@ _GCS_STORAGE_DELETE = AnyMatcher(
             required_flags=frozenset({"--delete-unmatched-destination-objects"}),
             global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
             global_flags=_GCLOUD_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher("gsutil", "rm", allow_leading_options=True, leading_options_with_values=frozenset({"-o"})),
         executable_matcher(
@@ -162,6 +190,7 @@ _GCLOUD_RSYNC_DELETE = AnyMatcher(
             required_flags=frozenset({"--delete-unmatched-destination-objects"}),
             global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
             global_flags=_GCLOUD_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
     )
 )
@@ -185,6 +214,7 @@ _AZURE_STORAGE_DELETE = AnyMatcher(
             "delete",
             global_options_with_values=_AZURE_GLOBAL_OPTIONS,
             global_flags=_AZURE_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "az",
@@ -193,6 +223,7 @@ _AZURE_STORAGE_DELETE = AnyMatcher(
             "delete-batch",
             global_options_with_values=_AZURE_GLOBAL_OPTIONS,
             global_flags=_AZURE_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "az",
@@ -201,6 +232,7 @@ _AZURE_STORAGE_DELETE = AnyMatcher(
             "delete",
             global_options_with_values=_AZURE_GLOBAL_OPTIONS,
             global_flags=_AZURE_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
     )
 )
@@ -213,6 +245,7 @@ _AZURE_BATCH_DELETE = AnyMatcher(
             "delete-batch",
             global_options_with_values=_AZURE_GLOBAL_OPTIONS,
             global_flags=_AZURE_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
     )
 )

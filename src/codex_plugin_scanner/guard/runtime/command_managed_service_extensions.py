@@ -38,10 +38,15 @@ _GCLOUD_OPTIONS = frozenset(
         "--account",
         "--billing-project",
         "--configuration",
+        "--filter",
         "--flags-file",
+        "--flatten",
         "--format",
         "--impersonate-service-account",
+        "--limit",
+        "--page-size",
         "--project",
+        "--sort-by",
         "--trace-token",
         "--verbosity",
     }
@@ -90,6 +95,7 @@ def _aws(*subcommands: str):
         *subcommands,
         global_options_with_values=_AWS_OPTIONS,
         global_flags=_AWS_FLAGS,
+        fail_secure_unknown_options=True,
     )
 
 
@@ -101,6 +107,7 @@ def _gcloud(*subcommands: str, tracks: tuple[str, ...] = ("", "alpha", "beta")):
             *subcommands,
             global_options_with_values=_GCLOUD_OPTIONS,
             global_flags=_GCLOUD_FLAGS,
+            fail_secure_unknown_options=True,
         )
         for track in tracks
     )
@@ -112,6 +119,7 @@ def _azure(*subcommands: str):
         *subcommands,
         global_options_with_values=_AZURE_OPTIONS,
         global_flags=_AZURE_FLAGS,
+        fail_secure_unknown_options=True,
     )
 
 

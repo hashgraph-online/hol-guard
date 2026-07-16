@@ -38,10 +38,15 @@ _GCLOUD_GLOBAL_OPTIONS = frozenset(
         "--account",
         "--billing-project",
         "--configuration",
+        "--filter",
         "--flags-file",
+        "--flatten",
         "--format",
         "--impersonate-service-account",
+        "--limit",
+        "--page-size",
         "--project",
+        "--sort-by",
         "--trace-token",
         "--verbosity",
     }
@@ -67,6 +72,7 @@ _AWS_RESOURCE_DELETE = AnyMatcher(
             "terminate-instances",
             global_options_with_values=_AWS_GLOBAL_OPTIONS,
             global_flags=_AWS_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "aws",
@@ -74,6 +80,7 @@ _AWS_RESOURCE_DELETE = AnyMatcher(
             "delete-db-instance",
             global_options_with_values=_AWS_GLOBAL_OPTIONS,
             global_flags=_AWS_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "aws",
@@ -81,6 +88,7 @@ _AWS_RESOURCE_DELETE = AnyMatcher(
             "delete-db-cluster",
             global_options_with_values=_AWS_GLOBAL_OPTIONS,
             global_flags=_AWS_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
         executable_matcher(
             "aws",
@@ -88,6 +96,7 @@ _AWS_RESOURCE_DELETE = AnyMatcher(
             "delete-cluster",
             global_options_with_values=_AWS_GLOBAL_OPTIONS,
             global_flags=_AWS_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
     )
 )
@@ -99,6 +108,7 @@ _AWS_EC2_TERMINATE = AnyMatcher(
             "terminate-instances",
             global_options_with_values=_AWS_GLOBAL_OPTIONS,
             global_flags=_AWS_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
     )
 )
@@ -111,6 +121,7 @@ _GCLOUD_RESOURCE_DELETE = AnyMatcher(
                 *operation,
                 global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
                 global_flags=_GCLOUD_GLOBAL_FLAGS,
+                fail_secure_unknown_options=True,
             )
             for track in ((), ("alpha",), ("beta",), ("preview",))
             for operation in (("compute", "instances", "delete"),)
@@ -124,6 +135,7 @@ _GCLOUD_RESOURCE_DELETE = AnyMatcher(
                 "delete",
                 global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
                 global_flags=_GCLOUD_GLOBAL_FLAGS,
+                fail_secure_unknown_options=True,
             )
             for track in ((), ("alpha",), ("beta",))
         ),
@@ -137,6 +149,7 @@ _AZURE_RESOURCE_DELETE = AnyMatcher(
             "delete",
             global_options_with_values=_AZURE_GLOBAL_OPTIONS,
             global_flags=_AZURE_GLOBAL_FLAGS,
+            fail_secure_unknown_options=True,
         ),
     )
 )
