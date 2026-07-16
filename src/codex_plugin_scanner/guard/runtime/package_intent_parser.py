@@ -1054,6 +1054,20 @@ def _normalized_command_segments(
                 current_cwd=effective_shell_cwd,
                 current_source=shell_cwd_source,
             )
+    return tuple(segments)
+
+
+def _execution_context_hash(command_text: str, segment_index: int) -> str:
+    payload = json.dumps(
+        {
+            "schema": "local-package-execution-context-v1",
+            "command": command_text,
+            "segment_index": segment_index,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"sha256:{hashlib.sha256(payload.encode('utf-8')).hexdigest()}"
 
 
 def _raw_command_segments(tokens: list[str]) -> tuple[list[str], ...]:
