@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from .command_segment_parsing import shell_tokens_without_redirects
 from .command_structure import (
     CommandRedirect,
     EmbeddedCommand,
@@ -36,22 +37,6 @@ MAX_COMMAND_SEGMENTS = 128
 MAX_COMMAND_TOKENS = 2_048
 
 _SHELL_SCRIPT_EXECUTABLES = frozenset({"ash", "bash", "dash", "sh", "zsh"})
-
-
-def _shell_tokens_without_redirects(
-    command: str,
-    *,
-    source_offset: int,
-    redirects: tuple[CommandRedirect, ...],
-) -> tuple[str, ...]:
-    masked = list(command)
-    for redirect in redirects:
-        local_start = redirect.start - source_offset
-        local_end = redirect.end - source_offset
-        if local_start < 0 or local_end > len(masked):
-            continue
-        masked[local_start:local_end] = " " * (local_end - local_start)
-    return shell_tokens("".join(masked))[0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,7 +237,7 @@ def parse_shell_command(
             start = min(cursor, len(normalized_text))
         end = min(start + len(segment_text), len(normalized_text))
         cursor = end
-        command_tokens = _shell_tokens_without_redirects(
+        command_tokens = shell_tokens_without_redirects(
             segment_text,
             source_offset=start,
             redirects=command_redirects,
@@ -482,7 +467,7 @@ def _segments_for_embedded(
         context_prefix=execution_context,
     ):
         tokens, _exact = shell_tokens(segment_text)
-        command_tokens = _shell_tokens_without_redirects(
+        command_tokens = shell_tokens_without_redirects(
             segment_text,
             source_offset=local_offset,
             redirects=redirects,
