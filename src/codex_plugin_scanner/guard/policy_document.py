@@ -44,6 +44,7 @@ POLICY_MATCH_FIELDS = (
 JsonValue: TypeAlias = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 EncodedExtensions: TypeAlias = tuple[tuple[str, str], ...]
 
+
 def _mapping(value: object) -> dict[str, object]:
     if not isinstance(value, dict):
         raise TypeError("validated_policy_document_shape")
@@ -58,6 +59,7 @@ def _sequence(value: object) -> list[object]:
 
 def _json_value(value: object) -> JsonValue:
     return cast(JsonValue, value)
+
 
 def _canonical_json_text(value: JsonValue | object) -> str:
     if value is None:
@@ -76,22 +78,13 @@ def _canonical_json_text(value: JsonValue | object) -> str:
         items = cast(dict[str, object], value).items()
         ordered = sorted(items, key=lambda item: item[0].encode("utf-16-be"))
         return (
-            "{"
-            + ",".join(
-                f"{_canonical_json_text(key)}:{_canonical_json_text(item)}"
-                for key, item in ordered
-            )
-            + "}"
+            "{" + ",".join(f"{_canonical_json_text(key)}:{_canonical_json_text(item)}" for key, item in ordered) + "}"
         )
     raise TypeError("unsupported_canonical_json_value")
 
 
 def _encode_extensions(value: dict[str, object], known_fields: frozenset[str]) -> EncodedExtensions:
-    return tuple(
-        (key, _canonical_json_text(item))
-        for key, item in sorted(value.items())
-        if key not in known_fields
-    )
+    return tuple((key, _canonical_json_text(item)) for key, item in sorted(value.items()) if key not in known_fields)
 
 
 def _decode_extensions(value: EncodedExtensions) -> dict[str, JsonValue]:
@@ -153,11 +146,7 @@ class PolicyDefaults:
                 "syncEnabled",
             }
         )
-        values = tuple(
-            (key, _json_value(value[key]))
-            for key in sorted(known - {"mode"})
-            if key in value
-        )
+        values = tuple((key, _json_value(value[key])) for key in sorted(known - {"mode"}) if key in value)
         return cls(mode=str(value["mode"]), values=values, extensions=_encode_extensions(value, known))
 
     def to_mapping(self) -> dict[str, JsonValue]:
@@ -332,10 +321,16 @@ class GuardPolicyDocument:
         return _with_extensions(result, self.extensions)
 
 
+def canonical_json_bytes(value: JsonValue) -> bytes:
+    """Return canonical JSON bytes for the contract's integer-only number subset."""
+
+    return _canonical_json_text(value).encode("utf-8")
+
+
 def canonical_policy_document_bytes(document: GuardPolicyDocument) -> bytes:
     """Return RFC 8785-compatible JSON for the contract's integer-only number subset."""
 
-    return _canonical_json_text(document.to_mapping()).encode("utf-8")
+    return canonical_json_bytes(document.to_mapping())
 
 
 def policy_document_digest(document: GuardPolicyDocument) -> str:
