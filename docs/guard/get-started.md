@@ -447,6 +447,16 @@ To inspect a pending request's details or get the approval URL, pass the request
 
 ## Troubleshooting
 
+### Codex cannot authenticate the local daemon
+
+Codex hooks authenticate the daemon discovery record before sending the local daemon token or hook input. The bridge automatically attempts one daemon restart and then uses the isolated local review path. If Codex reports that daemon authentication still failed, run:
+
+```bash
+hol-guard daemon repair
+```
+
+Then retry the Codex action. Repair preserves pending approvals, clears stale authenticated-discovery state, and removes an invalid discovery key so the next daemon start can generate a private replacement. Do not make `daemon-state.json`, `daemon-auth-token`, or `daemon-discovery-key` group- or world-readable; Guard rejects those files instead of weakening the identity check.
+
 ### Approval link says API error
 
 If the approval center URL in a block message returns an API error, the local approval center locator may be stale.

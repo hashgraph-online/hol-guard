@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
+import secrets
 import subprocess
 import sys
 import time
@@ -118,6 +120,7 @@ def send_hook(
     payload: dict,
     *,
     auth_token: str = "",
+    daemon_state_id: str = "",
     guard_home: str = "/tmp/guard-home",
     workspace: str = "/root/workspace",
 ) -> dict:
@@ -126,10 +129,47 @@ def send_hook(
         f"guard-home={urllib.parse.quote(guard_home)}&home={urllib.parse.quote(guard_home)}"
         f"&workspace={urllib.parse.quote(workspace)}"
     )
+    encoded_payload = json.dumps(payload).encode()
     headers = {"Content-Type": "application/json"}
     if auth_token:
         headers["X-Guard-Token"] = auth_token
-    req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method="POST")
+    if harness == "codex":
+        nonce = secrets.token_hex(32)
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        try:
+            connection.request(
+                "POST",
+                "/v1/daemon/identity-challenge",
+                body=json.dumps(
+                    {
+                        "protocol_version": 1,
+                        "nonce": nonce,
+                        "state_id": daemon_state_id,
+                        "hook_event": payload.get("hook_event_name", payload.get("event", "PreToolUse")),
+                    }
+                ).encode(),
+                headers={"Content-Type": "application/json", "Connection": "keep-alive"},
+            )
+            challenge_response = connection.getresponse()
+            challenge_body = challenge_response.read().decode()
+            if challenge_response.status != 200:
+                return {"error": challenge_response.status, "body": challenge_body}
+            challenge = json.loads(challenge_body)
+            headers.update(
+                {
+                    "Connection": "close",
+                    "X-Guard-Daemon-Nonce": nonce,
+                    "X-Guard-Daemon-Proof": challenge["proof"],
+                }
+            )
+            parsed = urllib.parse.urlparse(url)
+            connection.request("POST", f"{parsed.path}?{parsed.query}", body=encoded_payload, headers=headers)
+            response = connection.getresponse()
+            body = response.read().decode()
+            return json.loads(body) if response.status == 200 else {"error": response.status, "body": body}
+        finally:
+            connection.close()
+    req = urllib.request.Request(url, data=encoded_payload, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
             return json.loads(r.read().decode())
@@ -137,7 +177,7 @@ def send_hook(
         return {"error": e.code, "body": e.read().decode()}
 
 
-def run_tests(port: int, auth_token: str, harnesses: list[str]) -> tuple[int, int]:
+def run_tests(port: int, auth_token: str, daemon_state_id: str, harnesses: list[str]) -> tuple[int, int]:
     passed = failed = 0
 
     for harness in harnesses:
@@ -153,6 +193,7 @@ def run_tests(port: int, auth_token: str, harnesses: list[str]) -> tuple[int, in
                 "tool_input": {"command": "echo hello"},
             },
             auth_token=auth_token,
+            daemon_state_id=daemon_state_id,
         )
         if "error" in result:
             print(f"  [FAIL] PreToolUse error: {result}")
@@ -176,6 +217,7 @@ def run_tests(port: int, auth_token: str, harnesses: list[str]) -> tuple[int, in
                 "tool_response": [{"type": "text", "text": 'export const hello = "world";'}],
             },
             auth_token=auth_token,
+            daemon_state_id=daemon_state_id,
         )
         if "error" in result:
             print(f"  [FAIL] PostToolUse file read error: {result}")
@@ -207,6 +249,7 @@ def run_tests(port: int, auth_token: str, harnesses: list[str]) -> tuple[int, in
                 },
             },
             auth_token=auth_token,
+            daemon_state_id=daemon_state_id,
         )
         if "error" in result:
             print(f"  [FAIL] PostToolUse with source_ref error: {result}")
@@ -245,6 +288,7 @@ def run_tests(port: int, auth_token: str, harnesses: list[str]) -> tuple[int, in
                 ],
             },
             auth_token=auth_token,
+            daemon_state_id=daemon_state_id,
         )
         if "error" in result:
             print(f"  [FAIL] Docs fixture output error: {result}")
@@ -282,6 +326,7 @@ def run_tests(port: int, auth_token: str, harnesses: list[str]) -> tuple[int, in
                 },
             },
             auth_token=auth_token,
+            daemon_state_id=daemon_state_id,
         )
         if "error" in result:
             print(f"  [FAIL] Docs fixture edit output error: {result}")
@@ -304,6 +349,7 @@ def run_tests(port: int, auth_token: str, harnesses: list[str]) -> tuple[int, in
                 "tool_response": [{"type": "text", "text": "credential = 'prod-live-value'\\n"}],
             },
             auth_token=auth_token,
+            daemon_state_id=daemon_state_id,
         )
         if "error" in result:
             print(f"  [FAIL] Real credential output error: {result}")
@@ -326,6 +372,7 @@ def run_tests(port: int, auth_token: str, harnesses: list[str]) -> tuple[int, in
                 "tool_response": [{"type": "text", "text": "credential = 'fixture-prod-value'\\n"}],
             },
             auth_token=auth_token,
+            daemon_state_id=daemon_state_id,
         )
         if "error" in result:
             print(f"  [FAIL] Fixture-prefixed credential output error: {result}")
@@ -358,7 +405,8 @@ def main():
             sys.exit(1)
         print(f"Daemon ready on port {port}")
 
-        # Get auth token from daemon state file
+        # Get the private token and authenticated state generation from inside
+        # the isolated daemon container.
         result = subprocess.run(
             [
                 "docker",
@@ -366,15 +414,21 @@ def main():
                 container_id,
                 "python",
                 "-c",
-                "from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token; "
+                "import json; "
                 "from pathlib import Path; "
-                "print(load_guard_daemon_auth_token(Path('/tmp/guard-home')) or '')",
+                "from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token; "
+                "home=Path('/tmp/guard-home'); "
+                "state=json.loads((home/'daemon-state.json').read_text()); "
+                "print(json.dumps({'auth_token': load_guard_daemon_auth_token(home) or '', "
+                "'state_id': state.get('state_id', '')}))",
             ],
             capture_output=True,
             text=True,
             timeout=10,
         )
-        auth_token = result.stdout.strip() if result.returncode == 0 else ""
+        identity = json.loads(result.stdout) if result.returncode == 0 else {}
+        auth_token = str(identity.get("auth_token", ""))
+        daemon_state_id = str(identity.get("state_id", ""))
 
         # Create test workspace and files
         subprocess.run(["docker", "exec", container_id, "mkdir", "-p", "/root/workspace/src"], check=True, timeout=5)
@@ -391,7 +445,7 @@ def main():
             timeout=5,
         )
 
-        _passed, failed = run_tests(port, auth_token, harnesses)
+        _passed, failed = run_tests(port, auth_token, daemon_state_id, harnesses)
         if failed > 0:
             sys.exit(1)
     finally:

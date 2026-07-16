@@ -1510,17 +1510,11 @@ class TestGuardApprovals:
                     }
                 ).encode("utf-8")
 
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_load_state",
-            lambda _guard_home: {
-                "port": 5530,
-                "pid": 12345,
-                "auth_token": "token-123",
-                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-                "source_root": daemon_manager_module._current_guard_daemon_source_root(),
-                "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
-            },
+        daemon_manager_module.write_guard_daemon_state(
+            guard_home,
+            5530,
+            "token-123",
+            pid=12345,
         )
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
         monkeypatch.setattr(
@@ -1557,17 +1551,11 @@ class TestGuardApprovals:
                     }
                 ).encode("utf-8")
 
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_load_state",
-            lambda _guard_home: {
-                "port": 5530,
-                "pid": 12345,
-                "auth_token": "token-123",
-                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-                "source_root": daemon_manager_module._current_guard_daemon_source_root(),
-                "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
-            },
+        daemon_manager_module.write_guard_daemon_state(
+            guard_home,
+            5530,
+            "token-123",
+            pid=12345,
         )
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
         monkeypatch.setattr(
@@ -1645,6 +1633,7 @@ class TestGuardApprovals:
         token_path = store.guard_home / "daemon-auth-token"
         token_path.parent.mkdir(parents=True, exist_ok=True)
         token_path.write_text("persisted-token", encoding="utf-8")
+        token_path.chmod(0o600)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
 
         try:
@@ -3355,6 +3344,7 @@ class TestGuardApprovals:
         token_path = store.guard_home / "daemon-auth-token"
         token_path.parent.mkdir(parents=True, exist_ok=True)
         token_path.write_text("bridge-token", encoding="utf-8")
+        token_path.chmod(0o600)
         post_calls: list[tuple[str, dict[str, object], dict[str, str] | None]] = []
 
         def fake_post(url: str, json: dict[str, object], timeout: int, headers: dict[str, str] | None = None):
