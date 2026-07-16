@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .command_backup_extensions import BACKUP_COMMAND_RULES
 from .command_cloud_extensions import CLOUD_COMMAND_RULES
 from .command_domain_extensions import DOMAIN_COMMAND_RULES
 from .command_rules import (
@@ -45,6 +46,10 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "google storage destructive command": ("destructive_shell", "network_egress"),
     "azure storage destructive command": ("destructive_shell", "network_egress"),
     "minio storage destructive command": ("destructive_shell", "network_egress"),
+    "rclone destructive command": ("destructive_shell", "network_egress"),
+    "restic destructive command": ("destructive_shell", "network_egress"),
+    "borg destructive command": ("destructive_shell", "network_egress"),
+    "velero destructive command": ("destructive_shell", "network_egress"),
 }
 _GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {"-c", "-C", "--config-env", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree"}
@@ -337,6 +342,7 @@ BUILT_IN_COMMAND_RULES = (
     *DOMAIN_COMMAND_RULES,
     *CLOUD_COMMAND_RULES,
     *STORAGE_COMMAND_RULES,
+    *BACKUP_COMMAND_RULES,
 )
 
 _RULES_BY_EXTENSION: dict[str, tuple[CommandSafetyRule, ...]] = {}

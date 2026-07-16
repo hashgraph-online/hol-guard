@@ -50,6 +50,7 @@ class ExecutableMatcher:
     leading_options_with_values: frozenset[str] = frozenset()
     interspersed_options_with_values: frozenset[str] = frozenset()
     options_with_values: frozenset[str] = frozenset()
+    required_flags_in_all_arguments: bool = False
 
     def __post_init__(self) -> None:
         normalized = frozenset(value.strip().lower() for value in self.executables if value.strip())
@@ -92,8 +93,18 @@ class ExecutableMatcher:
                 )
             if self.subcommands and subcommand_arguments[: len(self.subcommands)] != self.subcommands:
                 continue
-            flag_arguments = subcommand_arguments[len(self.subcommands) :] if self.subcommands else subcommand_arguments
-            present_flags = _present_flags(flag_arguments, options_with_values=self.options_with_values)
+            if self.required_flags_in_all_arguments:
+                flag_arguments = lowered_arguments
+            elif self.subcommands:
+                flag_arguments = subcommand_arguments[len(self.subcommands) :]
+            else:
+                flag_arguments = subcommand_arguments
+            present_flags = _present_flags(
+                flag_arguments,
+                options_with_values=(
+                    self.options_with_values | self.leading_options_with_values | self.interspersed_options_with_values
+                ),
+            )
             if not self.required_flags <= present_flags or self.forbidden_flags & present_flags:
                 continue
             evidence.append(

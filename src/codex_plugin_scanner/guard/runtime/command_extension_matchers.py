@@ -49,6 +49,7 @@ def with_required_flag(matcher: AnyMatcher, flag: str) -> AnyMatcher:
                 leading_options_with_values=child.leading_options_with_values,
                 interspersed_options_with_values=child.interspersed_options_with_values,
                 options_with_values=child.options_with_values,
+                required_flags_in_all_arguments=True,
             )
             for child in matcher.matchers
             if isinstance(child, ExecutableMatcher)
