@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..protect import _collect_package_specs
-from .command_model import CanonicalCommand, CommandSegment, parse_shell_command
+from .command_model import CanonicalCommand
 from .homebrew_intent import parse_brew_intent
 from .mcp_protection import _command_name, _package_token
 from .package_intent_common import (
