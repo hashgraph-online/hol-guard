@@ -1,0 +1,220 @@
+"""Structured rules and metadata for cloud provider command extensions."""
+
+from __future__ import annotations
+
+from .command_extension_specs import CommandExtensionSpec
+from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant, ExecutableMatcher
+
+_AWS_GLOBAL_OPTIONS = frozenset(
+    {
+        "--ca-bundle",
+        "--cli-connect-timeout",
+        "--cli-read-timeout",
+        "--endpoint-url",
+        "--output",
+        "--profile",
+        "--query",
+        "--region",
+    }
+)
+_GCLOUD_GLOBAL_OPTIONS = frozenset(
+    {
+        "--access-token-file",
+        "--account",
+        "--billing-project",
+        "--configuration",
+        "--flags-file",
+        "--format",
+        "--impersonate-service-account",
+        "--project",
+        "--trace-token",
+        "--verbosity",
+    }
+)
+_AZURE_GLOBAL_OPTIONS = frozenset({"--output", "-o", "--query", "--subscription"})
+_EMPTY_STRING_SET: frozenset[str] = frozenset()
+
+
+def _matcher(
+    executable: str,
+    *subcommands: str,
+    required_flags: frozenset[str] = _EMPTY_STRING_SET,
+    leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
+) -> ExecutableMatcher:
+    return ExecutableMatcher(
+        executables=frozenset({executable}),
+        subcommands=subcommands,
+        required_flags=required_flags,
+        allow_leading_options=bool(leading_options_with_values),
+        leading_options_with_values=leading_options_with_values,
+    )
+
+
+def _same_commands_with_flag(matcher: AnyMatcher, flag: str) -> AnyMatcher:
+    return AnyMatcher(
+        matchers=tuple(
+            ExecutableMatcher(
+                executables=child.executables,
+                subcommands=child.subcommands,
+                required_flags=frozenset({flag}),
+                allow_leading_options=child.allow_leading_options,
+                leading_options_with_values=child.leading_options_with_values,
+            )
+            for child in matcher.matchers
+            if isinstance(child, ExecutableMatcher)
+        )
+    )
+
+
+def _safe_flag_variant(matcher: AnyMatcher, *, variant_id: str, title: str, flag: str) -> CommandSafeVariant:
+    return CommandSafeVariant(
+        variant_id=variant_id,
+        title=title,
+        matcher=_same_commands_with_flag(matcher, flag),
+    )
+
+
+_AWS_RESOURCE_DELETE = AnyMatcher(
+    matchers=(
+        _matcher("aws", "ec2", "terminate-instances", leading_options_with_values=_AWS_GLOBAL_OPTIONS),
+        _matcher("aws", "rds", "delete-db-instance", leading_options_with_values=_AWS_GLOBAL_OPTIONS),
+        _matcher("aws", "rds", "delete-db-cluster", leading_options_with_values=_AWS_GLOBAL_OPTIONS),
+        _matcher("aws", "eks", "delete-cluster", leading_options_with_values=_AWS_GLOBAL_OPTIONS),
+    )
+)
+_AWS_EC2_TERMINATE = AnyMatcher(
+    matchers=(_matcher("aws", "ec2", "terminate-instances", leading_options_with_values=_AWS_GLOBAL_OPTIONS),)
+)
+_GCLOUD_RESOURCE_DELETE = AnyMatcher(
+    matchers=tuple(
+        _matcher("gcloud", *track, *operation, leading_options_with_values=_GCLOUD_GLOBAL_OPTIONS)
+        for track in ((), ("alpha",), ("beta",), ("preview",))
+        for operation in (("compute", "instances", "delete"), ("sql", "instances", "delete"))
+    )
+)
+_AZURE_RESOURCE_DELETE = AnyMatcher(
+    matchers=(_matcher("az", "vm", "delete", leading_options_with_values=_AZURE_GLOBAL_OPTIONS),)
+)
+
+
+def _cloud_delete_rule(
+    *,
+    rule_id: str,
+    title: str,
+    description: str,
+    matcher: AnyMatcher,
+    action_class: str,
+    safer_alternative: str,
+    safe_variants: tuple[CommandSafeVariant, ...],
+) -> CommandSafetyRule:
+    return CommandSafetyRule(
+        rule_id=rule_id,
+        title=title,
+        description=description,
+        severity="critical",
+        risk_classes=("destructive_shell", "network_egress"),
+        action_classes=(action_class,),
+        safer_alternatives=(safer_alternative,),
+        matcher=matcher,
+        safe_variants=safe_variants,
+    )
+
+
+CLOUD_COMMAND_RULES = (
+    _cloud_delete_rule(
+        rule_id="command.cloud.aws.resource-deletion",
+        title="AWS resource deletion",
+        description="Identifies termination or deletion of compute, database, and cluster resources through AWS CLI.",
+        matcher=_AWS_RESOURCE_DELETE,
+        action_class="AWS destructive command",
+        safer_alternative="Describe the exact resources and confirm the active account and region before deletion.",
+        safe_variants=(
+            _safe_flag_variant(_AWS_RESOURCE_DELETE, variant_id="help", title="AWS command help", flag="--help"),
+            _safe_flag_variant(
+                _AWS_RESOURCE_DELETE,
+                variant_id="generate-cli-skeleton",
+                title="AWS request skeleton",
+                flag="--generate-cli-skeleton",
+            ),
+            _safe_flag_variant(
+                _AWS_EC2_TERMINATE,
+                variant_id="dry-run",
+                title="EC2 termination permission check",
+                flag="--dry-run",
+            ),
+        ),
+    ),
+    _cloud_delete_rule(
+        rule_id="command.cloud.gcp.resource-deletion",
+        title="Google Cloud resource deletion",
+        description="Identifies deletion of compute and database resources through Google Cloud CLI.",
+        matcher=_GCLOUD_RESOURCE_DELETE,
+        action_class="Google Cloud destructive command",
+        safer_alternative="Describe the exact resources and confirm the active project and location before deletion.",
+        safe_variants=(
+            _safe_flag_variant(
+                _GCLOUD_RESOURCE_DELETE,
+                variant_id="help",
+                title="Google Cloud command help",
+                flag="--help",
+            ),
+        ),
+    ),
+    _cloud_delete_rule(
+        rule_id="command.cloud.azure.resource-deletion",
+        title="Azure resource deletion",
+        description="Identifies deletion of virtual machines through Azure CLI.",
+        matcher=_AZURE_RESOURCE_DELETE,
+        action_class="Azure destructive command",
+        safer_alternative=(
+            "Show the exact resource and confirm the active subscription and resource group before deletion."
+        ),
+        safe_variants=(
+            _safe_flag_variant(
+                _AZURE_RESOURCE_DELETE,
+                variant_id="help",
+                title="Azure command help",
+                flag="--help",
+            ),
+        ),
+    ),
+)
+
+
+CLOUD_COMMAND_EXTENSION_SPECS = (
+    CommandExtensionSpec(
+        extension_id="command.cloud.aws",
+        name="AWS command protection",
+        description="Reviews AWS CLI operations that permanently delete compute, database, or cluster resources.",
+        action_classes=("AWS destructive command",),
+        risk_classes=("destructive_shell", "network_egress"),
+        safer_alternatives=("Inspect resource state, account, region, and recovery options before deletion.",),
+        reference_urls=(
+            "https://docs.aws.amazon.com/cli/latest/reference/ec2/terminate-instances.html",
+            "https://docs.aws.amazon.com/cli/latest/reference/rds/delete-db-instance.html",
+            "https://docs.aws.amazon.com/cli/latest/reference/rds/delete-db-cluster.html",
+            "https://docs.aws.amazon.com/cli/latest/reference/eks/delete-cluster.html",
+        ),
+    ),
+    CommandExtensionSpec(
+        extension_id="command.cloud.gcp",
+        name="Google Cloud command protection",
+        description="Reviews Google Cloud CLI operations that permanently delete compute or database resources.",
+        action_classes=("Google Cloud destructive command",),
+        risk_classes=("destructive_shell", "network_egress"),
+        safer_alternatives=("Inspect resource state, project, location, and recovery options before deletion.",),
+        reference_urls=(
+            "https://cloud.google.com/sdk/gcloud/reference/compute/instances/delete",
+            "https://cloud.google.com/sdk/gcloud/reference/sql/instances/delete",
+        ),
+    ),
+    CommandExtensionSpec(
+        extension_id="command.cloud.azure",
+        name="Azure command protection",
+        description="Reviews Azure CLI operations that permanently delete virtual machines.",
+        action_classes=("Azure destructive command",),
+        risk_classes=("destructive_shell", "network_egress"),
+        safer_alternatives=("Inspect resource state, subscription, resource group, and attached resources first.",),
+        reference_urls=("https://learn.microsoft.com/cli/azure/vm#az-vm-delete",),
+    ),
+)

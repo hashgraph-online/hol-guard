@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TypedDict
-
+from .command_extension_specs import CommandExtensionSpec
 from .command_rules import (
     AnyMatcher,
     CommandRuleSeverity,
@@ -12,34 +10,6 @@ from .command_rules import (
     CommandSafeVariant,
     ExecutableMatcher,
 )
-
-
-@dataclass(frozen=True, slots=True)
-class DomainCommandExtensionSpec:
-    """Static metadata for a directly enforced command domain."""
-
-    extension_id: str
-    name: str
-    description: str
-    action_classes: tuple[str, ...]
-    risk_classes: tuple[str, ...]
-    safer_alternatives: tuple[str, ...]
-    reference_urls: tuple[str, ...]
-
-
-class DomainCommandExtensionValues(TypedDict):
-    """Constructor values for one domain command extension."""
-
-    extension_id: str
-    version: str
-    name: str
-    description: str
-    action_classes: tuple[str, ...]
-    risk_classes: tuple[str, ...]
-    safer_alternatives: tuple[str, ...]
-    rules: tuple[CommandSafetyRule, ...]
-    reference_urls: tuple[str, ...]
-
 
 _DOCKER_GLOBAL_OPTIONS = frozenset({"--config", "--context", "--host", "-h", "--log-level"})
 _KUBECTL_GLOBAL_OPTIONS = frozenset(
@@ -368,7 +338,7 @@ DOMAIN_COMMAND_RULES = (
 
 
 DOMAIN_COMMAND_EXTENSION_SPECS = (
-    DomainCommandExtensionSpec(
+    CommandExtensionSpec(
         extension_id="command.kubernetes-operations",
         name="Kubernetes operation protection",
         description="Reviews cluster operations that delete resources, evict workloads, or remove releases.",
@@ -384,7 +354,7 @@ DOMAIN_COMMAND_EXTENSION_SPECS = (
             "https://helm.sh/docs/helm/helm_uninstall/",
         ),
     ),
-    DomainCommandExtensionSpec(
+    CommandExtensionSpec(
         extension_id="command.infrastructure-as-code",
         name="Infrastructure-as-code protection",
         description="Reviews infrastructure teardown through Terraform, OpenTofu, and Pulumi.",
@@ -401,20 +371,3 @@ DOMAIN_COMMAND_EXTENSION_SPECS = (
         ),
     ),
 )
-
-
-def domain_command_extension_values(spec: DomainCommandExtensionSpec) -> DomainCommandExtensionValues:
-    """Return typed registry constructor values for one domain spec."""
-
-    rules = tuple(rule for rule in DOMAIN_COMMAND_RULES if rule.rule_id.startswith(f"{spec.extension_id}."))
-    return {
-        "extension_id": spec.extension_id,
-        "version": "1.0.0",
-        "name": spec.name,
-        "description": spec.description,
-        "action_classes": spec.action_classes,
-        "risk_classes": spec.risk_classes,
-        "safer_alternatives": spec.safer_alternatives,
-        "rules": rules,
-        "reference_urls": spec.reference_urls,
-    }
