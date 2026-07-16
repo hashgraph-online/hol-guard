@@ -10695,12 +10695,12 @@ def test_guard_hook_explains_ignored_remembered_rule_when_local_trust_is_degrade
     store.upsert_policy(
         PolicyDecision(
             harness="codex",
-            scope="workspace",
+            scope="artifact",
             action="allow",
             artifact_id=artifact.artifact_id,
             artifact_hash=None,
-            workspace=str(workspace_dir),
-            reason="remember this install in this project",
+            workspace=None,
+            reason="remember this exact install",
             source="manual",
         ),
         "2026-06-19T00:00:00Z",
@@ -10792,12 +10792,12 @@ def test_guard_hook_does_not_override_cloud_allow_with_remembered_rule_review_co
     store.upsert_policy(
         PolicyDecision(
             harness="codex",
-            scope="workspace",
+            scope="artifact",
             action="allow",
             artifact_id=artifact.artifact_id,
             artifact_hash=None,
-            workspace=str(workspace_dir),
-            reason="remember this install in this project",
+            workspace=None,
+            reason="remember this exact install",
             source="manual",
         ),
         "2026-06-19T00:00:00Z",

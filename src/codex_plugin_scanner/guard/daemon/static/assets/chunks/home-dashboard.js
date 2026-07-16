@@ -1,4 +1,4 @@
-import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, f as fetchReceiptAnalytics, h as harnessDisplayName, i as isDisplayableHarness, b as EmptyState, A as ActionButton, c as EvidenceInsightsShareModal, d as HiMiniCheckCircle, e as GuardHero, k as formatNumber, l as HiMiniShieldCheck, D as DeviceProofCard, m as formatRelativeTime, n as HiMiniSparkles, o as HiMiniXMark, p as HiMiniChevronUp, q as HiMiniChevronDown, s as resolveCloudIntelCopy, t as HiMiniCloud, u as HiMiniQuestionMarkCircle, v as useFocusTrap, w as approvalProofRequiresPassword, x as HiMiniExclamationTriangle, y as HiMiniBolt, B as Badge, z as HiMiniChevronRight, C as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, u as useReceiptAnalytics, h as harnessDisplayName, i as isDisplayableHarness, b as EmptyState, A as ActionButton, c as EvidenceInsightsShareModal, d as HiMiniCheckCircle, e as GuardHero, f as formatNumber, k as HiMiniShieldCheck, D as DeviceProofCard, l as formatRelativeTime, m as HiMiniSparkles, n as HiMiniXMark, o as HiMiniChevronUp, p as HiMiniChevronDown, q as resolveCloudIntelCopy, s as HiMiniCloud, t as HiMiniQuestionMarkCircle, v as useFocusTrap, w as approvalProofRequiresPassword, x as HiMiniExclamationTriangle, y as HiMiniBolt, B as Badge, z as HiMiniChevronRight, C as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { H as HomeProtectionModule } from "./home-protection-module.js";
 function HomeInsightsSkeleton() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -65,53 +65,6 @@ function EvidenceInsightsHomePreview({
       }
     ) : analyticsLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-4 w-36 rounded" }) : null }) : null
   ] });
-}
-const ANALYTICS_CACHE_TTL_MS = 6e4;
-let analyticsCache = null;
-let analyticsInflight = null;
-async function loadReceiptAnalyticsCached(force = false) {
-  if (!force && analyticsCache && analyticsCache.expiresAt > Date.now()) {
-    return analyticsCache.data;
-  }
-  if (!force && analyticsInflight) {
-    return analyticsInflight;
-  }
-  analyticsInflight = fetchReceiptAnalytics().then((data) => {
-    analyticsCache = { data, expiresAt: Date.now() + ANALYTICS_CACHE_TTL_MS };
-    return data;
-  }).finally(() => {
-    analyticsInflight = null;
-  });
-  return analyticsInflight;
-}
-function useReceiptAnalytics(enabled) {
-  const [state, setState] = reactExports.useState(
-    () => enabled ? { kind: "loading" } : { kind: "idle" }
-  );
-  reactExports.useEffect(() => {
-    if (!enabled) {
-      setState({ kind: "idle" });
-      return;
-    }
-    let cancelled = false;
-    setState({ kind: "loading" });
-    loadReceiptAnalyticsCached().then((data) => {
-      if (!cancelled) {
-        setState({ kind: "ready", data });
-      }
-    }).catch((error) => {
-      if (!cancelled) {
-        setState({
-          kind: "error",
-          message: error instanceof Error ? error.message : "Unable to load analytics."
-        });
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled]);
-  return state;
 }
 const safeLocalStorage = {
   getItem(key) {

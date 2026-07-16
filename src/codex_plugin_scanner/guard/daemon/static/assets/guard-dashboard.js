@@ -12583,6 +12583,9 @@ function isSupplyChainScannerEvidence(value) {
 function isSupplyChainAuditEvidence(value) {
   return isSupplyChainScannerEvidence(value) && value.operation === "audit";
 }
+function isPackageExecutionContextEvidence(value) {
+  return isScannerEvidenceRecord(value) && value.kind === "package_execution_context" && value.schema_version === 2 && typeof value.portable === "boolean" && typeof value.context_digest === "string";
+}
 var DefaultContext = {
   color: void 0,
   size: void 0,
@@ -18190,6 +18193,57 @@ function TabBar(props) {
     tab.value
   )) });
 }
+const ANALYTICS_CACHE_TTL_MS = 6e4;
+let analyticsCache = null;
+let analyticsInflight = null;
+async function loadReceiptAnalyticsCached(force = false) {
+  if (!force && analyticsCache && analyticsCache.expiresAt > Date.now()) {
+    return analyticsCache.data;
+  }
+  if (!force && analyticsInflight) {
+    return analyticsInflight;
+  }
+  analyticsInflight = fetchReceiptAnalytics().then((data) => {
+    analyticsCache = { data, expiresAt: Date.now() + ANALYTICS_CACHE_TTL_MS };
+    return data;
+  }).finally(() => {
+    analyticsInflight = null;
+  });
+  return analyticsInflight;
+}
+function invalidateReceiptAnalyticsCache() {
+  analyticsCache = null;
+  analyticsInflight = null;
+}
+function useReceiptAnalytics(enabled) {
+  const [state, setState] = reactExports.useState(
+    () => enabled ? { kind: "loading" } : { kind: "idle" }
+  );
+  reactExports.useEffect(() => {
+    if (!enabled) {
+      setState({ kind: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setState({ kind: "loading" });
+    loadReceiptAnalyticsCached().then((data) => {
+      if (!cancelled) {
+        setState({ kind: "ready", data });
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        setState({
+          kind: "error",
+          message: error instanceof Error ? error.message : "Unable to load analytics."
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+  return state;
+}
 function formatBlockedShare(blocked, total) {
   if (!(total > 0) || !(blocked > 0)) {
     return null;
@@ -22671,7 +22725,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
   const [page, setPage] = reactExports.useState(0);
   const [exportOpen, setExportOpen] = reactExports.useState(false);
   const [clearOpen, setClearOpen] = reactExports.useState(false);
-  const [analyticsState, setAnalyticsState] = reactExports.useState({ kind: "idle" });
+  const analytics = useReceiptAnalytics(true);
   const urlSyncTimerRef = reactExports.useRef(null);
   const harnesses = reactExports.useMemo(
     () => Array.from(
@@ -22771,28 +22825,9 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
   }, []);
   const handleConfirmClear = reactExports.useCallback(() => {
     setFilters(DEFAULT_FILTER_STATE);
+    invalidateReceiptAnalyticsCache();
     if (onClearEvidence) onClearEvidence();
   }, [onClearEvidence]);
-  reactExports.useEffect(() => {
-    if (filters.view !== "insights") {
-      return;
-    }
-    let cancelled = false;
-    setAnalyticsState({ kind: "loading" });
-    fetchReceiptAnalytics().then((data) => {
-      if (!cancelled) setAnalyticsState({ kind: "ready", data });
-    }).catch((error) => {
-      if (!cancelled) {
-        setAnalyticsState({
-          kind: "error",
-          message: error instanceof Error ? error.message : "Could not load analytics"
-        });
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [filters.view, receiptItems.length]);
   const handleViewActions = reactExports.useCallback(() => {
     setFilters((prev) => ({ ...prev, view: "actions", day: "" }));
   }, []);
@@ -22828,12 +22863,13 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     );
   }
   const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
+  const totalReceiptCount = analytics.kind === "ready" ? analytics.data.total : receiptItems.length;
   const insightsHeaderDescription = reactExports.useMemo(() => {
     if (filters.view !== "insights") return void 0;
-    if (analyticsState.kind !== "ready") return "Loading analytics from your local evidence store.";
-    const total = analyticsState.data.total;
+    if (analytics.kind !== "ready") return "Loading analytics from your local evidence store.";
+    const total = analytics.data.total;
     return `${formatEvidenceCount(total)} actions in your full local store.`;
-  }, [filters.view, analyticsState]);
+  }, [filters.view, analytics]);
   const headerActions = reactExports.useMemo(
     () => /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -22872,7 +22908,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
         actions: headerActions
       }
     ),
-    filters.view !== "insights" && /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceHero, { totalCount: receiptItems.length, lastActivityAt: metrics.lastActivityAt }),
+    filters.view !== "insights" && /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceHero, { totalCount: totalReceiptCount, lastActivityAt: metrics.lastActivityAt }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-1", children: [
       filters.view === "actions" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "div",
@@ -22888,7 +22924,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
                 {
                   filters,
                   onChange: handleFilterChange,
-                  totalCount: receiptItems.length,
+                  totalCount: totalReceiptCount,
                   filteredCount: filtered.length,
                   harnesses
                 }
@@ -22927,10 +22963,10 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
           role: "tabpanel",
           "aria-labelledby": "tab-insights",
           className: "guard-fade-in",
-          children: analyticsState.kind === "loading" || analyticsState.kind === "idle" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-center py-16 text-sm text-slate-500", children: "Loading insights…" }) : analyticsState.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", children: analyticsState.message }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+          children: analytics.kind === "loading" || analytics.kind === "idle" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-center py-16 text-sm text-slate-500", children: "Loading insights…" }) : analytics.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", children: analytics.message }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
             EvidenceAnalyticsPanel,
             {
-              analytics: analyticsState.data,
+              analytics: analytics.data,
               runtime,
               sampleCount: receiptItems.length,
               onFilterHarness: handleFilterHarnessFromInsights,
@@ -22996,7 +23032,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       EvidenceClearModal,
       {
-        count: receiptItems.length,
+        count: totalReceiptCount,
         isOpen: clearOpen,
         onClose: handleCloseClear,
         onCleared: handleConfirmClear
@@ -23051,6 +23087,7 @@ function SkillSignalRow(props) {
 }
 function SupplyChainRiskCard(props) {
   const scSignals = deriveSupplyChainRiskSignals(props.item);
+  const packageContext = props.item.scanner_evidence?.find(isPackageExecutionContextEvidence) ?? null;
   const isSupplyChainArtifact = props.item.artifact_type === "supply_chain" || props.item.artifact_type === "package_request" || typeof props.item.artifact_type === "string" && props.item.artifact_type.endsWith("_package");
   if (scSignals.length === 0 && !isSupplyChainArtifact) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -23060,10 +23097,66 @@ function SupplyChainRiskCard(props) {
       "aria-label": "Supply-chain risk",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Supply-chain risk" }),
-        scSignals.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainSignalRow, { signal }, signal.signal_id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: "This action originates from a supply-chain artifact. Verify the publisher and version before approving." })
+        scSignals.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainSignalRow, { signal }, signal.signal_id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: "This action originates from a supply-chain artifact. Verify the publisher and version before approving." }),
+        packageContext !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PackageExecutionContextSummary, { context: packageContext }) : null
       ]
     }
   );
+}
+const PACKAGE_CONTEXT_LABELS = {
+  environment_policy: "registry and proxy environment",
+  exact_workspace: "project location",
+  lifecycle_hooks_overrides_and_patches: "lifecycle hooks, overrides, or patches",
+  manifests_and_lockfiles: "manifests or lockfiles",
+  package_manager_executable: "package manager executable",
+  registry_and_proxy_configuration: "registry or proxy configuration",
+  repository_identity: "Git repository identity",
+  workspace_configuration: "workspace configuration",
+  workspace_identity: "workspace location within the repository"
+};
+function packageContextLabel(value) {
+  return PACKAGE_CONTEXT_LABELS[value] ?? value.replaceAll("_", " ");
+}
+function nonPortableReason(value) {
+  switch (value) {
+    case "dynamic_manager_configuration":
+      return "the package manager loads configuration dynamically";
+    case "dynamic_lifecycle_hook":
+      return "the project defines a lifecycle hook that can load additional local inputs";
+    case "oversized_configuration":
+      return "a package configuration input is too large to bind safely";
+    case "package_manager_executable_unavailable":
+      return "the package manager executable could not be verified";
+    case "repository_identity_unavailable":
+      return "a linked Git repository identity could not be verified";
+    case "symlinked_configuration":
+      return "a package configuration file is symlinked";
+    case "unreadable_configuration":
+      return "a package configuration input could not be read";
+    case "unsupported_package_manager":
+    case "unsupported_configuration":
+      return "the package configuration is not safely portable";
+    default:
+      return "Guard could not verify every package execution input";
+  }
+}
+function packageExecutionContextMessages(context) {
+  const messages = [
+    context.portable ? "A project approval is reused only in linked Git worktrees when the repository, package manager executable, dependency files, settings, hooks, overrides, patches, and registry/proxy environment all match." : `This approval is limited to one retry because ${nonPortableReason(context.non_portable_reason)}.`
+  ];
+  const changedComponents = context.changed_components ?? [];
+  if (changedComponents.length > 0) {
+    messages.push(
+      `Guard asked again because the following changed: ${changedComponents.map(packageContextLabel).join(", ")}.`
+    );
+  }
+  return messages;
+}
+function PackageExecutionContextSummary(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 border-t border-brand-purple/10 pt-3", "aria-label": "Package approval reuse", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-brand-purple", children: "Approval reuse" }),
+    packageExecutionContextMessages(props.context).map((message) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: message }, message))
+  ] });
 }
 function SupplyChainSignalRow(props) {
   const { signal } = props;
@@ -27015,22 +27108,22 @@ export {
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,
-  fetchReceiptAnalytics as f,
+  formatNumber as f,
   getHeatmapLevel as g,
   harnessDisplayName as h,
   isDisplayableHarness as i,
   jsxRuntimeExports as j,
-  formatNumber as k,
-  HiMiniShieldCheck as l,
-  formatRelativeTime as m,
-  HiMiniSparkles as n,
-  HiMiniXMark as o,
-  HiMiniChevronUp as p,
-  HiMiniChevronDown as q,
+  HiMiniShieldCheck as k,
+  formatRelativeTime as l,
+  HiMiniSparkles as m,
+  HiMiniXMark as n,
+  HiMiniChevronUp as o,
+  HiMiniChevronDown as p,
+  resolveCloudIntelCopy as q,
   reactExports as r,
-  resolveCloudIntelCopy as s,
-  HiMiniCloud as t,
-  HiMiniQuestionMarkCircle as u,
+  HiMiniCloud as s,
+  HiMiniQuestionMarkCircle as t,
+  useReceiptAnalytics as u,
   useFocusTrap as v,
   approvalProofRequiresPassword as w,
   HiMiniExclamationTriangle as x,

@@ -26,10 +26,12 @@ from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots,
 
 from .adapters.base import HarnessContext
 from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
-from .approval_scope_support import package_request_portable_workspace_scope
+from .approval_scope_support import package_request_runtime_workspace_scope
 from .config import GuardConfig, resolve_risk_action
 from .mdm.network import managed_urlopen
 from .models import GuardAction, GuardArtifact, GuardReceipt
+from .package_execution_context import PackageExecutionContext, build_package_execution_context
+from .policy_integrity import is_remote_policy_source
 from .redaction import redact_local_path, redact_text
 from .runtime.package_intent_common import (
     PackageIntent,
@@ -1229,6 +1231,15 @@ def build_package_protect_payload(
         store=store,
         evaluation=evaluation,
     )
+    package_execution_context = build_package_execution_context(
+        workspace_dir=workspace_dir,
+        artifact=artifact,
+        executable=(
+            sanitized_intent.command_tokens[0]
+            if sanitized_intent.command_tokens and ";" not in sanitized_intent.command_tokens
+            else None
+        ),
+    )
     evaluation = _apply_stored_package_policy_override(
         evaluation,
         store=store,
@@ -1236,6 +1247,7 @@ def build_package_protect_payload(
         artifact_hash=artifact_hash,
         workspace_dir=workspace_dir,
         now=now,
+        execution_context=package_execution_context,
     )
     verdict_action = _protect_action_for_decision(evaluation.decision)
     risk_signals = tuple(_evaluation_risk_signals(evaluation))
@@ -1245,6 +1257,7 @@ def build_package_protect_payload(
         "package_targets": [target.raw_spec for target in sanitized_intent.targets],
         "policy_version": evaluation.policy_version,
         "redacted_command": sanitized_intent.redacted_command,
+        "package_execution_context": package_execution_context.to_evidence(),
     }
     if evaluation.bundle_version is not None:
         receipt_policy_metadata["bundle_version"] = evaluation.bundle_version
@@ -1275,6 +1288,7 @@ def build_package_protect_payload(
             "targets": [target.to_dict() for target in sanitized_intent.targets],
             "manifest_paths": list(sanitized_intent.manifest_paths),
             "lockfile_paths": list(sanitized_intent.lockfile_paths),
+            "package_execution_context": package_execution_context.to_evidence(),
         },
         "targets": [_protect_target_payload(target) for target in sanitized_intent.targets],
         "verdict": {
@@ -1388,6 +1402,7 @@ def apply_stored_package_policy_override(
     artifact_hash: str,
     workspace_dir: Path,
     now: str,
+    execution_context: PackageExecutionContext | None = None,
 ) -> Any:
     """Apply a saved package approval when the content hash still matches."""
 
@@ -1398,6 +1413,7 @@ def apply_stored_package_policy_override(
         artifact_hash=artifact_hash,
         workspace_dir=workspace_dir,
         now=now,
+        execution_context=execution_context,
     )
 
 
@@ -1409,12 +1425,18 @@ def _apply_stored_package_policy_override(
     artifact_hash: str,
     workspace_dir: Path,
     now: str,
+    execution_context: PackageExecutionContext | None = None,
 ) -> Any:
+    resolved_execution_context = execution_context or build_package_execution_context(
+        workspace_dir=workspace_dir,
+        artifact=artifact,
+    )
     decision = None
     for policy_workspace in _package_policy_workspace_candidates(
         artifact=artifact,
         artifact_hash=artifact_hash,
         workspace_dir=workspace_dir,
+        execution_context=resolved_execution_context,
     ):
         decision = store.resolve_policy_decision(
             artifact.harness,
@@ -1428,6 +1450,12 @@ def _apply_stored_package_policy_override(
             break
     if not isinstance(decision, dict):
         return evaluation
+    if (
+        decision.get("action") == "allow"
+        and decision.get("scope") not in {"artifact", "workspace"}
+        and not is_remote_policy_source(_string_value(decision.get("source")))
+    ):
+        return evaluation
     if _stored_package_policy_is_stale_policy_bundle_family(decision, store=store):
         return evaluation
     action = decision.get("action")
@@ -1439,7 +1467,8 @@ def _apply_stored_package_policy_override(
             title="Allowed by saved approval",
             summary="HOL Guard reused your saved approval for this package request.",
             harness_message=(
-                "HOL Guard reused your saved approval for this package request and let the install continue."
+                "HOL Guard verified the same repository, package manager, dependency files, settings, and "
+                "registry environment before reusing your saved approval."
             ),
             reason_code="saved_package_approval",
             reason_message="HOL Guard reused your saved approval for this package request.",
@@ -1473,17 +1502,19 @@ def _package_policy_workspace_candidates(
     artifact: GuardArtifact,
     artifact_hash: str,
     workspace_dir: Path,
+    execution_context: PackageExecutionContext | None = None,
 ) -> tuple[str, ...]:
-    candidates: list[str] = []
-    portable_workspace = package_request_portable_workspace_scope(
+    resolved_execution_context = execution_context or build_package_execution_context(
+        workspace_dir=workspace_dir,
+        artifact=artifact,
+    )
+    runtime_workspace = package_request_runtime_workspace_scope(
         artifact_id=artifact.artifact_id,
         artifact_hash=artifact_hash,
         artifact_type=artifact.artifact_type,
+        execution_context=resolved_execution_context,
     )
-    if portable_workspace is not None:
-        candidates.append(portable_workspace)
-    candidates.append(str(workspace_dir))
-    return tuple(dict.fromkeys(candidates))
+    return (runtime_workspace,) if runtime_workspace is not None else ()
 
 
 def _stored_package_policy_is_stale_policy_bundle_family(decision: dict[str, object], *, store: Any) -> bool:

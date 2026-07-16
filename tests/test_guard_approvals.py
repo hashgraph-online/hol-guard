@@ -14,6 +14,7 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import bridge as guard_bridge_module
+from codex_plugin_scanner.guard.approval_scope_support import package_request_portable_workspace_scope
 from codex_plugin_scanner.guard.approvals import (
     apply_approval_resolution,
     build_runtime_snapshot,
@@ -33,6 +34,7 @@ from codex_plugin_scanner.guard.models import (
     HarnessDetection,
     PolicyDecision,
 )
+from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.store import GuardStore
 
 _AGENT_CONTEXT_ENV_MARKERS = (
@@ -1183,17 +1185,17 @@ class TestGuardApprovals:
             GuardApprovalRequest(
                 request_id="req-package-save",
                 harness="guard-cli",
-                artifact_id="guard-cli:project:package-request:impeccable",
+                artifact_id="guard-cli:project:mcp:impeccable",
                 artifact_name="impeccable",
-                artifact_type="package_request",
+                artifact_type="mcp",
                 artifact_hash="hash-impeccable",
                 policy_action="require-reapproval",
                 recommended_scope="global",
-                changed_fields=("package_request",),
+                changed_fields=("args",),
                 source_scope="project",
                 config_path=str(tmp_path / "workspace" / "hol-guard.toml"),
                 workspace=str(tmp_path / "workspace"),
-                launch_target="npx impeccable update",
+                launch_target="impeccable.update",
                 review_command="hol-guard approvals approve req-package-save",
                 approval_url="http://127.0.0.1:4455/approvals/req-package-save",
             ),
@@ -1218,22 +1220,22 @@ class TestGuardApprovals:
     def test_guard_saved_scope_falls_back_to_once_when_integrity_repair_fails(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
         workspace = str(tmp_path / "workspace")
-        artifact_id = "guard-cli:project:package-request:impeccable"
+        artifact_id = "guard-cli:project:mcp:impeccable"
         store.add_approval_request(
             GuardApprovalRequest(
                 request_id="req-package-degraded",
                 harness="guard-cli",
                 artifact_id=artifact_id,
                 artifact_name="impeccable",
-                artifact_type="package_request",
+                artifact_type="mcp",
                 artifact_hash="hash-impeccable",
                 policy_action="require-reapproval",
                 recommended_scope="global",
-                changed_fields=("package_request",),
+                changed_fields=("args",),
                 source_scope="project",
                 config_path=str(tmp_path / "workspace" / "hol-guard.toml"),
                 workspace=workspace,
-                launch_target="npx impeccable update",
+                launch_target="impeccable.update",
                 review_command="hol-guard approvals approve req-package-degraded",
                 approval_url="http://127.0.0.1:4455/approvals/req-package-degraded",
             ),
@@ -3479,6 +3481,35 @@ class TestGuardApprovals:
     def test_guard_workspace_package_resolution_stays_bound_to_same_request(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        (workspace_dir / ".git").mkdir()
+        _write_text(workspace_dir / ".git" / "config", '[remote "origin"]\nurl = https://example.test/app.git\n')
+        _write_text(workspace_dir / "package.json", '{"name":"approval-test"}\n')
+        executable = tmp_path / "bin" / "npm"
+        _write_text(executable, "#!/bin/sh\n")
+        executable.chmod(0o755)
+        (tmp_path / "home").mkdir()
+        package_artifact = GuardArtifact(
+            artifact_id="guard-cli:project:package-request:a",
+            name="npm install left-pad",
+            harness="guard-cli",
+            artifact_type="package_request",
+            source_scope="project",
+            config_path=str(workspace_dir / "hol-guard.toml"),
+            metadata={
+                "package_manager": "npm",
+                "package_executable": "npm",
+                "manifest_paths": ["package.json"],
+                "lockfile_paths": [],
+            },
+        )
+        package_context = build_package_execution_context(
+            workspace_dir=workspace_dir,
+            artifact=package_artifact,
+            environment={"HOME": str(tmp_path / "home"), "PATH": str(executable.parent)},
+        )
+        assert package_context.portable is True
+        scanner_evidence = (package_context.to_evidence(),)
         store.add_approval_request(
             GuardApprovalRequest(
                 request_id="req-package-a",
@@ -3495,6 +3526,7 @@ class TestGuardApprovals:
                 approval_url="http://127.0.0.1/pending",
                 workspace=str(workspace_dir),
                 artifact_type="package_request",
+                scanner_evidence=scanner_evidence,
             ),
             "2026-04-11T00:00:00+00:00",
         )
@@ -3514,6 +3546,7 @@ class TestGuardApprovals:
                 approval_url="http://127.0.0.1/pending",
                 workspace=str(workspace_dir),
                 artifact_type="package_request",
+                scanner_evidence=scanner_evidence,
             ),
             "2026-04-11T00:00:00+00:00",
         )
@@ -3531,12 +3564,26 @@ class TestGuardApprovals:
         assert resolved["status"] == "resolved"
         assert store.get_approval_request("req-package-a")["status"] == "resolved"
         assert store.get_approval_request("req-package-b")["status"] == "pending"
+        package_a_workspace = package_request_portable_workspace_scope(
+            artifact_id="guard-cli:project:package-request:a",
+            artifact_hash="hash-package-a",
+            artifact_type="package_request",
+            execution_context=package_context,
+        )
+        package_b_workspace = package_request_portable_workspace_scope(
+            artifact_id="guard-cli:project:package-request:b",
+            artifact_hash="hash-package-b",
+            artifact_type="package_request",
+            execution_context=package_context,
+        )
+        assert package_a_workspace is not None
+        assert package_b_workspace is not None
         assert (
             store.resolve_policy_decision(
                 "guard-cli",
                 "guard-cli:project:package-request:a",
                 "hash-package-a",
-                str(workspace_dir),
+                package_a_workspace,
                 now="2026-04-11T00:03:00+00:00",
             )["action"]
             == "allow"
@@ -3546,7 +3593,7 @@ class TestGuardApprovals:
                 "guard-cli",
                 "guard-cli:project:package-request:b",
                 "hash-package-b",
-                str(workspace_dir),
+                package_b_workspace,
             )
             is None
         )

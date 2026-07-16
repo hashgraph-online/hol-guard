@@ -25,6 +25,24 @@ Only after verification:
 
 Avoid broad or permanent exceptions.
 
+### Package approval reuse
+
+A saved **This project** package approval is portable only between linked Git
+worktrees whose package execution context is identical. Guard v2 binds that
+decision to the repository identity, workspace-relative location, package
+manager executable, manifests and lockfiles, registry and proxy settings,
+lifecycle hooks, overrides, patches, workspace configuration, and relevant
+environment policy. The approval center names the component that changed when
+it asks again.
+
+Guard intentionally ignores legacy v1 portable package approvals. It also
+limits the decision to **This retry only** when a required input is unreadable,
+unsupported, oversized, symlinked, or dynamically loaded. This may add a prompt
+for unusual package-manager setups or projects with local lifecycle hooks, but
+it prevents an incomplete context from silently widening a previous approval.
+Registry credentials and configuration values are never included in approval
+evidence; only digests and safe component labels are retained.
+
 ## 4. Audit and rollback
 
 - Keep the remediation trail in Guard evidence/audit output.

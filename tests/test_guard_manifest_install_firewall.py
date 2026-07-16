@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
+from codex_plugin_scanner.guard.cli.protect_approvals import _annotate_package_execution_context_change
 from codex_plugin_scanner.guard.local_supply_chain import (
     _package_policy_workspace_candidates,
     build_package_protect_payload,
@@ -47,6 +48,32 @@ def _write_pnpm_workspace(workspace_dir: Path, *, extra_dependency: str | None =
         ),
         encoding="utf-8",
     )
+
+
+def _write_linked_git_worktrees(primary: Path, linked: Path) -> None:
+    linked.mkdir(parents=True, exist_ok=True)
+    common_git_dir = primary / ".git"
+    common_git_dir.mkdir()
+    (common_git_dir / "config").write_text(
+        '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = https://example.test/team/app.git\n',
+        encoding="utf-8",
+    )
+    linked_git_dir = common_git_dir / "worktrees" / linked.name
+    linked_git_dir.mkdir(parents=True)
+    (linked_git_dir / "commondir").write_text("../..\n", encoding="utf-8")
+    (linked / ".git").write_text(f"gitdir: {linked_git_dir}\n", encoding="utf-8")
+
+
+def _install_fake_pnpm(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    executable_dir = tmp_path / "bin"
+    executable_dir.mkdir()
+    executable = executable_dir / "pnpm"
+    executable.write_text("#!/bin/sh\n# test pnpm\n", encoding="utf-8")
+    executable.chmod(0o755)
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("PATH", str(executable_dir))
+    monkeypatch.setenv("HOME", str(home))
 
 
 def test_parse_package_intent_supports_pnpm_install_alias(tmp_path: Path) -> None:
@@ -154,12 +181,17 @@ def test_build_package_protect_payload_reprompts_after_manifest_edit_despite_sav
     )
 
 
-def test_workspace_package_approval_reuses_same_lockfile_across_worktrees(tmp_path: Path) -> None:
+def test_workspace_package_approval_reuses_same_context_across_linked_worktrees(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     workspace_dir = tmp_path / "workspace"
     worktree_dir = tmp_path / "workspace-worktree"
     workspace_dir.mkdir()
     worktree_dir.mkdir()
+    _write_linked_git_worktrees(workspace_dir, worktree_dir)
+    _install_fake_pnpm(monkeypatch, tmp_path)
     _write_pnpm_workspace(workspace_dir, extra_dependency="evilpkg")
     _write_pnpm_workspace(worktree_dir, extra_dependency="evilpkg")
     command = ["pnpm", "install"]
@@ -177,6 +209,10 @@ def test_workspace_package_approval_reuses_same_lockfile_across_worktrees(tmp_pa
     assert baseline_rc == 2
     receipt = baseline_payload["receipt"]
     assert isinstance(receipt, dict)
+    baseline_request = baseline_payload["request"]
+    assert isinstance(baseline_request, dict)
+    package_context = baseline_request["package_execution_context"]
+    assert isinstance(package_context, dict)
     store.add_approval_request(
         GuardApprovalRequest(
             request_id="req-pnpm-workspace",
@@ -194,6 +230,7 @@ def test_workspace_package_approval_reuses_same_lockfile_across_worktrees(tmp_pa
             launch_target="pnpm install",
             review_command="hol-guard approvals approve req-pnpm-workspace",
             approval_url="http://127.0.0.1:4455/approvals/req-pnpm-workspace",
+            scanner_evidence=(dict(package_context),),
         ),
         "2026-06-14T00:00:30Z",
     )
@@ -231,10 +268,55 @@ def test_workspace_package_approval_reuses_same_lockfile_across_worktrees(tmp_pa
         for reason in evaluation.get("reasons", [])
     )
 
+    unrelated_dir = tmp_path / "unrelated-workspace"
+    unrelated_dir.mkdir()
+    _write_linked_git_worktrees(unrelated_dir, tmp_path / "unrelated-unused-linked")
+    _write_pnpm_workspace(unrelated_dir, extra_dependency="evilpkg")
+    unrelated_payload, unrelated_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=unrelated_dir,
+        dry_run=True,
+        now="2026-06-14T00:03:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+    assert unrelated_rc == 2
+    assert unrelated_payload["verdict"]["action"] == "review"
+    unrelated_evaluation = unrelated_payload["supply_chain_evaluation"]
+    assert isinstance(unrelated_evaluation, dict)
+    assert not any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
+        for reason in unrelated_evaluation.get("reasons", [])
+    )
+    unrelated_request = unrelated_payload["request"]
+    assert isinstance(unrelated_request, dict)
+    unrelated_context = unrelated_request["package_execution_context"]
+    assert isinstance(unrelated_context, dict)
+    approval_item: dict[str, object] = {
+        "changed_fields": [],
+        "scanner_evidence": [dict(unrelated_context)],
+    }
+    _annotate_package_execution_context_change(
+        approval_item,
+        store=store,
+        artifact_id=str(receipt["artifact_id"]),
+    )
+    evidence = approval_item["scanner_evidence"]
+    assert isinstance(evidence, list)
+    assert isinstance(evidence[0], dict)
+    assert evidence[0]["changed_components"] == ["repository_identity"]
 
-def test_package_policy_workspace_candidates_prefer_portable_scope(tmp_path: Path) -> None:
+
+def test_package_policy_workspace_candidates_use_only_context_complete_v2_scope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
+    _write_linked_git_worktrees(workspace_dir, tmp_path / "unused-linked")
+    _install_fake_pnpm(monkeypatch, tmp_path)
     _write_pnpm_workspace(workspace_dir, extra_dependency="evilpkg")
     intent = parse_package_intent("pnpm install", workspace=workspace_dir)
     assert intent is not None
@@ -251,16 +333,80 @@ def test_package_policy_workspace_candidates_prefer_portable_scope(tmp_path: Pat
         workspace_dir=workspace_dir,
     )
 
-    assert candidates[0].startswith("package-request-workspace:v1:")
-    assert candidates[1] == str(workspace_dir)
+    assert len(candidates) == 1
+    assert candidates[0].startswith("package-request-workspace:v2:")
 
 
-def test_workspace_package_approval_still_reprompts_when_worktree_lockfile_changes(tmp_path: Path) -> None:
+def test_legacy_v1_package_workspace_approval_is_not_reused(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_linked_git_worktrees(workspace_dir, tmp_path / "unused-linked")
+    _install_fake_pnpm(monkeypatch, tmp_path)
+    _write_pnpm_workspace(workspace_dir, extra_dependency="evilpkg")
+    command = ["pnpm", "install"]
+    baseline_payload, baseline_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-06-14T00:00:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+    assert baseline_rc == 2
+    receipt = baseline_payload["receipt"]
+    assert isinstance(receipt, dict)
+    store.ensure_policy_integrity_ready_for_write(now="2026-06-14T00:00:30Z")
+    store.upsert_policy(
+        PolicyDecision(
+            harness="guard-cli",
+            scope="workspace",
+            action="allow",
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_hash=str(receipt["artifact_hash"]),
+            workspace=f"package-request-workspace:v1:{'a' * 64}",
+            source="approval-gate",
+        ),
+        "2026-06-14T00:00:30Z",
+    )
+
+    retry_payload, retry_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-06-14T00:01:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+
+    assert retry_rc == 2
+    assert retry_payload["verdict"]["action"] == "review"
+    evaluation = retry_payload["supply_chain_evaluation"]
+    assert isinstance(evaluation, dict)
+    assert not any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
+        for reason in evaluation.get("reasons", [])
+    )
+
+
+def test_workspace_package_approval_still_reprompts_when_worktree_lockfile_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     workspace_dir = tmp_path / "workspace"
     worktree_dir = tmp_path / "workspace-worktree"
     workspace_dir.mkdir()
     worktree_dir.mkdir()
+    _write_linked_git_worktrees(workspace_dir, worktree_dir)
+    _install_fake_pnpm(monkeypatch, tmp_path)
     _write_pnpm_workspace(workspace_dir, extra_dependency="evilpkg")
     _write_pnpm_workspace(worktree_dir, extra_dependency="evilpkg")
     command = ["pnpm", "install"]
@@ -278,6 +424,10 @@ def test_workspace_package_approval_still_reprompts_when_worktree_lockfile_chang
     assert baseline_rc == 2
     receipt = baseline_payload["receipt"]
     assert isinstance(receipt, dict)
+    baseline_request = baseline_payload["request"]
+    assert isinstance(baseline_request, dict)
+    package_context = baseline_request["package_execution_context"]
+    assert isinstance(package_context, dict)
     store.add_approval_request(
         GuardApprovalRequest(
             request_id="req-pnpm-workspace",
@@ -295,6 +445,7 @@ def test_workspace_package_approval_still_reprompts_when_worktree_lockfile_chang
             launch_target="pnpm install",
             review_command="hol-guard approvals approve req-pnpm-workspace",
             approval_url="http://127.0.0.1:4455/approvals/req-pnpm-workspace",
+            scanner_evidence=(dict(package_context),),
         ),
         "2026-06-14T00:00:30Z",
     )

@@ -117,6 +117,9 @@ def build_package_request_artifact(
     source_scope: str,
 ) -> GuardArtifact:
     manifest_paths, lockfile_paths = _artifact_workspace_paths(intent)
+    package_executable = (
+        intent.command_tokens[0] if intent.command_tokens and ";" not in intent.command_tokens else None
+    )
     fingerprint = hashlib.sha256(
         json.dumps(
             {
@@ -142,6 +145,7 @@ def build_package_request_artifact(
         config_path=config_path,
         metadata={
             "package_manager": intent.package_manager,
+            "package_executable": package_executable,
             "intent_kind": intent.intent_kind,
             "targets": [target.to_dict() for target in intent.targets],
             "manifest_paths": list(manifest_paths),

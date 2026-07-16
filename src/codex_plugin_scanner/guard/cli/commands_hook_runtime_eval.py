@@ -32,7 +32,9 @@ if TYPE_CHECKING:
     )
 
 
+from ..approval_scope_support import package_request_runtime_workspace_scope
 from ..models import GuardAction
+from ..package_execution_context import PackageExecutionContext, build_package_execution_context
 from ._commands_shared import *
 from .commands_hook_runtime_state import RuntimeArtifactHookState
 from .commands_parser_helpers import *
@@ -71,6 +73,7 @@ def _evaluate_runtime_artifact_hook(
     payload_map = dict(payload)
     event_name = _hook_event_name(payload_map) or "PreToolUse"
     package_evaluation = None
+    package_execution_context: PackageExecutionContext | None = None
     if runtime_artifact.artifact_type == "package_request":
         package_evaluation = evaluate_package_request_artifact(
             artifact=runtime_artifact,
@@ -86,11 +89,24 @@ def _evaluate_runtime_artifact_hook(
             )
         else:
             runtime_artifact_hash = artifact_hash(runtime_artifact)
+        if runtime_workspace is not None:
+            package_execution_context = build_package_execution_context(
+                workspace_dir=runtime_workspace,
+                artifact=runtime_artifact,
+            )
     else:
         runtime_artifact_hash = artifact_hash(runtime_artifact)
     artifact_id = runtime_artifact.artifact_id
     artifact_name = runtime_artifact.name
     policy_harness = _canonical_harness_name(args.harness)
+    policy_workspace = str(runtime_workspace) if runtime_workspace else None
+    if package_execution_context is not None:
+        policy_workspace = package_request_runtime_workspace_scope(
+            artifact_id=runtime_artifact.artifact_id,
+            artifact_hash=runtime_artifact_hash,
+            artifact_type=runtime_artifact.artifact_type,
+            execution_context=package_execution_context,
+        )
     if (
         policy_harness == "cursor"
         and event_name == "PreToolUse"
@@ -118,7 +134,7 @@ def _evaluate_runtime_artifact_hook(
         policy_harness,
         artifact_id,
         artifact_hash=runtime_artifact_hash,
-        workspace=str(runtime_workspace) if runtime_workspace else None,
+        workspace=policy_workspace,
         publisher=runtime_artifact.publisher,
         runtime_exact_match_context=runtime_exact_match_context,
         memory_command=runtime_artifact.command,
@@ -131,12 +147,12 @@ def _evaluate_runtime_artifact_hook(
         artifact=runtime_artifact,
         artifact_id=artifact_id,
         artifact_hash=runtime_artifact_hash,
-        workspace=str(runtime_workspace) if runtime_workspace else None,
+        workspace=policy_workspace,
         decision_lookup=policy_lookup,
     )
     remembered_rule_rejection = policy_lookup["ignored_local_integrity"]
     trust_status = policy_lookup["trust_status"]
-    if stored_policy_action is None:
+    if stored_policy_action is None and runtime_artifact.artifact_type != "package_request":
         legacy_artifact = _legacy_claude_alias_runtime_artifact(
             artifact=runtime_artifact,
             requested_harness=args.harness,
@@ -226,6 +242,7 @@ def _evaluate_runtime_artifact_hook(
             artifact_hash=runtime_artifact_hash,
             workspace_dir=runtime_workspace,
             now=_now(),
+            execution_context=package_execution_context,
         )
     changed_capabilities = [runtime_artifact.artifact_type]
     scanner_evidence = (
@@ -234,6 +251,8 @@ def _evaluate_runtime_artifact_hook(
         else ()
     )
     scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
+    if package_execution_context is not None:
+        scanner_evidence_payload.append(package_execution_context.to_evidence())
     package_policy_action: GuardAction | None = (
         _resolved_guard_action(package_evaluation.policy_action, "warn") if package_evaluation is not None else None
     )

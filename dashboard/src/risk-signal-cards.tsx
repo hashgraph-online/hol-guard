@@ -1,6 +1,11 @@
 import { deriveSkillRiskSignals, deriveSupplyChainRiskSignals, deriveEncodedLayerSignals } from "./approval-center-utils";
 import { SectionLabel } from "./approval-center-primitives";
-import type { GuardApprovalRequest, RiskSignalV2 } from "./guard-types";
+import {
+  isPackageExecutionContextEvidence,
+  type GuardApprovalRequest,
+  type PackageExecutionContextEvidence,
+  type RiskSignalV2,
+} from "./guard-types";
 
 type SkillRiskCardProps = {
   item: GuardApprovalRequest;
@@ -53,6 +58,7 @@ type SupplyChainRiskCardProps = {
 
 export function SupplyChainRiskCard(props: SupplyChainRiskCardProps) {
   const scSignals = deriveSupplyChainRiskSignals(props.item);
+  const packageContext = props.item.scanner_evidence?.find(isPackageExecutionContextEvidence) ?? null;
   const isSupplyChainArtifact =
     props.item.artifact_type === "supply_chain" ||
     props.item.artifact_type === "package_request" ||
@@ -75,6 +81,75 @@ export function SupplyChainRiskCard(props: SupplyChainRiskCardProps) {
           This action originates from a supply-chain artifact. Verify the publisher and version before approving.
         </p>
       )}
+      {packageContext !== null ? <PackageExecutionContextSummary context={packageContext} /> : null}
+    </div>
+  );
+}
+
+const PACKAGE_CONTEXT_LABELS: Record<string, string> = {
+  environment_policy: "registry and proxy environment",
+  exact_workspace: "project location",
+  lifecycle_hooks_overrides_and_patches: "lifecycle hooks, overrides, or patches",
+  manifests_and_lockfiles: "manifests or lockfiles",
+  package_manager_executable: "package manager executable",
+  registry_and_proxy_configuration: "registry or proxy configuration",
+  repository_identity: "Git repository identity",
+  workspace_configuration: "workspace configuration",
+  workspace_identity: "workspace location within the repository",
+};
+
+function packageContextLabel(value: string): string {
+  return PACKAGE_CONTEXT_LABELS[value] ?? value.replaceAll("_", " ");
+}
+
+function nonPortableReason(value: string | undefined): string {
+  switch (value) {
+    case "dynamic_manager_configuration":
+      return "the package manager loads configuration dynamically";
+    case "dynamic_lifecycle_hook":
+      return "the project defines a lifecycle hook that can load additional local inputs";
+    case "oversized_configuration":
+      return "a package configuration input is too large to bind safely";
+    case "package_manager_executable_unavailable":
+      return "the package manager executable could not be verified";
+    case "repository_identity_unavailable":
+      return "a linked Git repository identity could not be verified";
+    case "symlinked_configuration":
+      return "a package configuration file is symlinked";
+    case "unreadable_configuration":
+      return "a package configuration input could not be read";
+    case "unsupported_package_manager":
+    case "unsupported_configuration":
+      return "the package configuration is not safely portable";
+    default:
+      return "Guard could not verify every package execution input";
+  }
+}
+
+export function packageExecutionContextMessages(context: PackageExecutionContextEvidence): string[] {
+  const messages = [
+    context.portable
+      ? "A project approval is reused only in linked Git worktrees when the repository, package manager executable, dependency files, settings, hooks, overrides, patches, and registry/proxy environment all match."
+      : `This approval is limited to one retry because ${nonPortableReason(context.non_portable_reason)}.`,
+  ];
+  const changedComponents = context.changed_components ?? [];
+  if (changedComponents.length > 0) {
+    messages.push(
+      `Guard asked again because the following changed: ${changedComponents.map(packageContextLabel).join(", ")}.`,
+    );
+  }
+  return messages;
+}
+
+function PackageExecutionContextSummary(props: { context: PackageExecutionContextEvidence }) {
+  return (
+    <div className="mt-3 border-t border-brand-purple/10 pt-3" aria-label="Package approval reuse">
+      <p className="text-xs font-semibold uppercase tracking-wide text-brand-purple">Approval reuse</p>
+      {packageExecutionContextMessages(props.context).map((message) => (
+        <p key={message} className="mt-1 text-xs leading-5 text-brand-dark/70">
+          {message}
+        </p>
+      ))}
     </div>
   );
 }
