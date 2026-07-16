@@ -60,6 +60,7 @@ _SSH_CONFIGURED_EXECUTION = AnyMatcher(
             value_keys=frozenset({"knownhostscommand", "proxycommand", "remotecommand"}),
             forbidden_flags=frozenset({"-G", "-O", "-Q", "-V"}),
             ignored_values=frozenset({"none"}),
+            cluster_options_with_values=_SSH_OPTIONS_WITH_VALUES,
         ),
         OptionValueKeyMatcher(
             executables=executable_names("ssh"),
@@ -68,6 +69,7 @@ _SSH_CONFIGURED_EXECUTION = AnyMatcher(
             forbidden_flags=frozenset({"-G", "-O", "-Q", "-V"}),
             ignored_values=frozenset({"none"}),
             required_key_values=(("permitlocalcommand", "yes"),),
+            cluster_options_with_values=_SSH_OPTIONS_WITH_VALUES,
         ),
     )
 )

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from .command_segment_parsing import shell_tokens_without_redirects
 from .command_structure import (
     CommandRedirect,
     EmbeddedCommand,
@@ -17,6 +18,7 @@ from .data_flow import (
     ShellHeredoc,
     extract_command_segments,
     extract_command_substitution_spans,
+    extract_expanded_heredoc_substitution_spans,
     extract_heredocs,
     extract_pipes,
     mask_heredoc_bodies,
@@ -35,22 +37,6 @@ MAX_COMMAND_SEGMENTS = 128
 MAX_COMMAND_TOKENS = 2_048
 
 _SHELL_SCRIPT_EXECUTABLES = frozenset({"ash", "bash", "dash", "sh", "zsh"})
-
-
-def _shell_tokens_without_redirects(
-    command: str,
-    *,
-    source_offset: int,
-    redirects: tuple[CommandRedirect, ...],
-) -> tuple[str, ...]:
-    masked = list(command)
-    for redirect in redirects:
-        local_start = redirect.start - source_offset
-        local_end = redirect.end - source_offset
-        if local_start < 0 or local_end > len(masked):
-            continue
-        masked[local_start:local_end] = " " * (local_end - local_start)
-    return shell_tokens("".join(masked))[0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,7 +237,7 @@ def parse_shell_command(
             start = min(cursor, len(normalized_text))
         end = min(start + len(segment_text), len(normalized_text))
         cursor = end
-        command_tokens = _shell_tokens_without_redirects(
+        command_tokens = shell_tokens_without_redirects(
             segment_text,
             source_offset=start,
             redirects=command_redirects,
@@ -282,6 +268,8 @@ def parse_shell_command(
         normalized_text,
         heredocs=heredocs,
         top_level_segments=tuple(segments),
+        cwd=cwd,
+        home_dir=home_dir,
     )
     segments.extend(embedded_segments)
     if len(segments) > MAX_COMMAND_SEGMENTS or sum(len(segment.tokens) for segment in segments) > MAX_COMMAND_TOKENS:
@@ -336,6 +324,8 @@ def _embedded_execution(
     *,
     heredocs: tuple[ShellHeredoc, ...],
     top_level_segments: tuple[CommandSegment, ...],
+    cwd: Path | None,
+    home_dir: Path | None,
 ) -> tuple[tuple[EmbeddedCommand, ...], tuple[CommandSegment, ...]]:
     embedded: list[EmbeddedCommand] = []
     segments: list[CommandSegment] = []
@@ -347,6 +337,8 @@ def _embedded_execution(
         embedded=embedded,
         segments=segments,
         depth=0,
+        cwd=cwd,
+        home_dir=home_dir,
     )
 
     for index, heredoc in enumerate(heredocs):
@@ -365,6 +357,9 @@ def _embedded_execution(
                     embedded=embedded,
                     segments=segments,
                     depth=0,
+                    expanded_heredoc=True,
+                    cwd=cwd,
+                    home_dir=home_dir,
                 )
             continue
         context = f"heredoc:{index}"
@@ -382,6 +377,8 @@ def _embedded_execution(
                 heredoc.body,
                 execution_context=context,
                 source_offset=heredoc.body_start,
+                cwd=cwd,
+                home_dir=home_dir,
             )
         )
         _append_substitution_execution(
@@ -392,6 +389,8 @@ def _embedded_execution(
             embedded=embedded,
             segments=segments,
             depth=0,
+            cwd=cwd,
+            home_dir=home_dir,
         )
     return tuple(embedded), tuple(segments)
 
@@ -405,10 +404,14 @@ def _append_substitution_execution(
     embedded: list[EmbeddedCommand],
     segments: list[CommandSegment],
     depth: int,
+    cwd: Path | None,
+    home_dir: Path | None,
+    expanded_heredoc: bool = False,
 ) -> None:
     if depth >= 4:
         return
-    for index, substitution in enumerate(extract_command_substitution_spans(command)):
+    extractor = extract_expanded_heredoc_substitution_spans if expanded_heredoc else extract_command_substitution_spans
+    for index, substitution in enumerate(extractor(command)):
         absolute_start = source_offset + substitution.body_start
         if any(start <= absolute_start < end for start, end in excluded_ranges):
             continue
@@ -427,6 +430,8 @@ def _append_substitution_execution(
                 substitution.body,
                 execution_context=context,
                 source_offset=absolute_start,
+                cwd=cwd,
+                home_dir=home_dir,
             )
         )
         _append_substitution_execution(
@@ -437,6 +442,8 @@ def _append_substitution_execution(
             embedded=embedded,
             segments=segments,
             depth=depth + 1,
+            cwd=cwd,
+            home_dir=home_dir,
         )
 
 
@@ -445,16 +452,22 @@ def _segments_for_embedded(
     *,
     execution_context: str,
     source_offset: int,
+    cwd: Path | None,
+    home_dir: Path | None,
 ) -> tuple[CommandSegment, ...]:
     results: list[CommandSegment] = []
-    heredocs = extract_heredocs(command)
-    redirects = extract_command_redirects(mask_heredoc_bodies(command, heredocs), heredocs)
+    normalization = normalize_transparent_shell_command(command, cwd=cwd, home_dir=home_dir)
+    heredocs = extract_heredocs(normalization.normalized_command)
+    redirects = extract_command_redirects(
+        mask_heredoc_bodies(normalization.normalized_command, heredocs),
+        heredocs,
+    )
     for context, pipeline_index, segment_text, local_offset in _execution_segment_texts(
-        command,
+        normalization.normalized_command,
         context_prefix=execution_context,
     ):
         tokens, _exact = shell_tokens(segment_text)
-        command_tokens = _shell_tokens_without_redirects(
+        command_tokens = shell_tokens_without_redirects(
             segment_text,
             source_offset=local_offset,
             redirects=redirects,
@@ -462,7 +475,8 @@ def _segments_for_embedded(
         environment_names, executable_index, wrappers = leading_environment(command_tokens)
         executable = command_tokens[executable_index] if executable_index < len(command_tokens) else None
         arguments = command_tokens[executable_index + 1 :] if executable is not None else ()
-        start = source_offset + local_offset
+        original_offset = command.find(segment_text)
+        start = source_offset + (original_offset if original_offset >= 0 else local_offset)
         results.append(
             CommandSegment(
                 text=segment_text,
@@ -470,7 +484,7 @@ def _segments_for_embedded(
                 executable=executable,
                 arguments=arguments,
                 environment_names=environment_names,
-                wrapper_chain=wrappers,
+                wrapper_chain=(*normalization.wrapper_chain, *wrappers),
                 path_overridden="PATH" in environment_names,
                 execution_context=context,
                 pipeline_index=pipeline_index,

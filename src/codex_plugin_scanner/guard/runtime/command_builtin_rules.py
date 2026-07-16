@@ -80,6 +80,8 @@ _GIT_FORCE_REFSPEC = SubcommandOperandPrefixMatcher(
     operand_prefixes=frozenset({"+"}),
     leading_options_with_values=_GIT_GLOBAL_OPTIONS_WITH_VALUES,
     options_with_values=_GIT_SUBCOMMAND_OPTIONS_WITH_VALUES["push"],
+    leading_operands_to_skip=1,
+    options_supplying_leading_operands=frozenset({"--repo"}),
 )
 
 
@@ -310,10 +312,19 @@ BUILT_IN_COMMAND_RULES = (
             CommandSafeVariant(
                 variant_id="dry-run",
                 title="Git push preview",
-                matcher=_git_matcher(
-                    "push",
-                    required_flags=frozenset({"--dry-run"}),
-                    inverse_flag_pairs=frozenset({("--dry-run", "--no-dry-run")}),
+                matcher=AnyMatcher(
+                    matchers=(
+                        _git_matcher(
+                            "push",
+                            required_flags=frozenset({"-n"}),
+                            inverse_flag_pairs=frozenset({("-n", "--no-dry-run")}),
+                        ),
+                        _git_matcher(
+                            "push",
+                            required_flags=frozenset({"--dry-run"}),
+                            inverse_flag_pairs=frozenset({("--dry-run", "--no-dry-run")}),
+                        ),
+                    )
                 ),
             ),
         ),

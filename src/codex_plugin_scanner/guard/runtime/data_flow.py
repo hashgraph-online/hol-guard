@@ -24,6 +24,9 @@ from .shell_structure import (
     extract_command_substitutions as extract_command_substitutions,
 )
 from .shell_structure import (
+    extract_expanded_heredoc_substitution_spans as extract_expanded_heredoc_substitution_spans,
+)
+from .shell_structure import (
     extract_heredocs as extract_heredocs,
 )
 from .shell_structure import (
