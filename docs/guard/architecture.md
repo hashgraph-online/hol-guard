@@ -50,3 +50,4 @@ Cisco AIBOM stays out of Guard runtime policy in this phase. If it returns later
 - [Command extension precedence](command-extension-precedence.md)
 - [Command extension threat model](command-extension-threat-model.md)
 - [Package command extension coverage](command-package-extension-coverage.md)
+- [Infrastructure command extension coverage](command-domain-extension-coverage.md)
