@@ -36,7 +36,6 @@ from .package_intent_common import (
     version_target,
 )
 from .package_manager_command import strip_package_manager_global_options
-from .package_manifest_diff import parse_manifest_dependencies
 from .secret_file_requests import _SHELL_TOOL_NAMES, _candidate_command_texts, _normalize_tool_name
 
 _CONTROL_TOKENS = {"&&", "||", ";", "|", "|&", "&"}
@@ -346,11 +345,12 @@ def _lockfiles_record_typescript(lockfiles: tuple[PackageExecutionFileEvidence, 
         ):
             continue
         try:
-            text = Path(lockfile.resolved_path).read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+            payload = json.loads(Path(lockfile.resolved_path).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError):
             continue
-        dependencies = parse_manifest_dependencies(path=lockfile.path, text=text)
-        if "typescript" in dependencies:
+        packages = payload.get("packages") if isinstance(payload, dict) else None
+        typescript_entry = packages.get("node_modules/typescript") if isinstance(packages, dict) else None
+        if isinstance(typescript_entry, dict) and isinstance(typescript_entry.get("version"), str):
             return True
     return False
 
