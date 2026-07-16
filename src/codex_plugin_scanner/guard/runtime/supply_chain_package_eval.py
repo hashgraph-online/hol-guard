@@ -2240,7 +2240,7 @@ def _fallback_package_results(
     if bun_fallback_packages:
         return tuple(bun_fallback_packages)
     lockfile_versions = _lockfile_dependency_versions(workspace_dir, artifact, targets)
-    flags = {str(flag) for flag in artifact.metadata.get("flags", ())}
+    flags = set(_string_tuple(artifact.metadata.get("flags")))
     return tuple(
         _unknown_package_result(
             target,
