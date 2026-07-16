@@ -15,9 +15,17 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
     ("command", "action_class", "rule_id"),
     [
         ("vercel remove app.example.test", "Vercel destructive command", "command.platform.vercel.deletion"),
+        ("vercel rm app.example.test", "Vercel destructive command", "command.platform.vercel.deletion"),
         ("vercel project rm web", "Vercel destructive command", "command.platform.vercel.deletion"),
         ("vercel promote deployment-id", "Vercel production command", "command.platform.vercel.production-change"),
+        (
+            "vercel -t token-value -S team promote deployment-id",
+            "Vercel production command",
+            "command.platform.vercel.production-change",
+        ),
         ("vercel rollback deployment-id", "Vercel production command", "command.platform.vercel.production-change"),
+        ("vercel deploy --prod", "Vercel production command", "command.platform.vercel.production-change"),
+        ("vercel deploy -p", "Vercel production command", "command.platform.vercel.production-change"),
         (
             "netlify sites:delete --site site-id",
             "Netlify destructive command",
@@ -35,6 +43,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ("vercel.cmd --scope team project rm web", "Vercel destructive command", "command.platform.vercel.deletion"),
         (
             "netlify.exe deploy --site site-id --prod",
+            "Netlify production command",
+            "command.platform.netlify.production-deploy",
+        ),
+        (
+            "netlify --auth token-value deploy --prod",
             "Netlify production command",
             "command.platform.netlify.production-deploy",
         ),
@@ -67,6 +80,7 @@ def test_platform_rules_feed_inspection_and_runtime_hooks(
         "vercel remove --help",
         "vercel promote status web",
         "vercel project inspect web",
+        "vercel list --prod",
         "netlify sites:delete --help",
         "netlify deploy --dir dist",
         "netlify build --dry",
