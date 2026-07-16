@@ -148,6 +148,7 @@ _LOAD_BALANCER_DELETE = AnyMatcher(
 _MONITORING_DELETE = AnyMatcher(
     matchers=(
         _aws("cloudwatch", "delete-alarms"),
+        *_gcloud("monitoring", "policies", "delete"),
         _azure("monitor", "metrics", "alert", "delete"),
         _azure("monitor", "activity-log", "alert", "delete"),
     )
@@ -179,7 +180,7 @@ _PAYMENT_DELETE = AnyMatcher(
             global_options_with_values=_STRIPE_OPTIONS,
             global_flags=_STRIPE_FLAGS,
         )
-        for resource in ("coupons", "customers", "products")
+        for resource in ("coupons", "customers", "products", "webhook_endpoints")
     )
 )
 
@@ -343,6 +344,7 @@ MANAGED_SERVICE_COMMAND_EXTENSION_SPECS = (
         safer_alternative="Export alert configuration and verify notification coverage before deletion.",
         reference_urls=(
             "https://docs.aws.amazon.com/cli/latest/reference/cloudwatch/delete-alarms.html",
+            "https://cloud.google.com/sdk/gcloud/reference/monitoring/policies/delete",
             "https://learn.microsoft.com/cli/azure/monitor/metrics/alert#az-monitor-metrics-alert-delete",
             "https://learn.microsoft.com/cli/azure/monitor/activity-log/alert#az-monitor-activity-log-alert-delete",
         ),
@@ -373,7 +375,7 @@ MANAGED_SERVICE_COMMAND_EXTENSION_SPECS = (
     _spec(
         extension_id="command.payment",
         name="Payment service command protection",
-        description="Reviews product, coupon, and customer deletion through Stripe CLI.",
+        description="Reviews product, coupon, customer, and webhook endpoint deletion through Stripe CLI.",
         action_class="Payment destructive command",
         safer_alternative="Inspect dependent resources and prefer archival where supported.",
         reference_urls=(
@@ -381,6 +383,7 @@ MANAGED_SERVICE_COMMAND_EXTENSION_SPECS = (
             "https://docs.stripe.com/api/products/delete",
             "https://docs.stripe.com/api/customers/delete",
             "https://docs.stripe.com/api/coupons/delete",
+            "https://docs.stripe.com/api/webhook_endpoints/delete",
         ),
     ),
 )

@@ -55,6 +55,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.monitoring.delete",
         ),
         (
+            "gcloud beta monitoring policies delete policy123",
+            "Monitoring destructive command",
+            "command.monitoring.delete",
+        ),
+        (
             "az monitor metrics alert delete -g app -n latency",
             "Monitoring destructive command",
             "command.monitoring.delete",
@@ -85,6 +90,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.payment.delete",
         ),
         ("stripe.exe customers delete cus_123", "Payment destructive command", "command.payment.delete"),
+        (
+            "stripe webhook_endpoints delete we_123",
+            "Payment destructive command",
+            "command.payment.delete",
+        ),
     ],
 )
 def test_managed_service_rules_feed_runtime_hooks(
