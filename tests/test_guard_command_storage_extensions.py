@@ -35,6 +35,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.storage.aws-s3.deletion",
         ),
         (
+            "aws --future-global-option account s3 rm s3://archive/private.json",
+            "AWS storage destructive command",
+            "command.storage.aws-s3.deletion",
+        ),
+        (
             "gcloud storage --project app-prod rm --recursive gs://archive/old",
             "Google storage destructive command",
             "command.storage.google-cloud.deletion",
@@ -55,6 +60,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.storage.google-cloud.deletion",
         ),
         (
+            "gcloud --filter active storage rm gs://archive/private.json",
+            "Google storage destructive command",
+            "command.storage.google-cloud.deletion",
+        ),
+        (
             "az.cmd storage blob delete-batch --subscription app-prod --source archive",
             "Azure storage destructive command",
             "command.storage.azure-blob.deletion",
@@ -66,6 +76,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ),
         (
             "az -otable storage blob delete --container-name archive --name private.json",
+            "Azure storage destructive command",
+            "command.storage.azure-blob.deletion",
+        ),
+        (
+            "az --future-global-option tenant storage blob delete --container-name archive --name private.json",
             "Azure storage destructive command",
             "command.storage.azure-blob.deletion",
         ),
@@ -120,10 +135,16 @@ def test_storage_rules_feed_runtime_hooks(
         "gcloud storage rsync ./out gs://archive --delete-unmatched-destination-objects --dry-run",
         "gsutil -m rsync -d -n ./out gs://archive",
         "az storage blob delete-batch --source archive --dryrun",
+        "aws --future-global-option account s3 rm s3://archive/private.json --dryrun",
+        "gcloud --future-global-option account storage rm gs://archive/private.json --help",
+        "az --future-global-option tenant storage blob delete --container-name archive --name private.json --help",
         "mc rm --help",
         "aws s3 ls s3://archive",
+        "aws --future-global-option account s3 ls s3://archive",
         "gcloud storage ls gs://archive",
+        "gcloud --filter active storage ls gs://archive",
         "az storage blob list --container-name archive",
+        "az --future-global-option tenant storage blob list --container-name archive",
         "mc ls prod/archive",
         "mc --config-dir /tmp/mc ls prod/archive",
         "mc --help rm prod/archive",

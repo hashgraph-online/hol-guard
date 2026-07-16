@@ -21,12 +21,57 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "Rclone destructive command",
             "command.backup.rclone.mutation",
         ),
+        (
+            "rclone --log-level DEBUG purge remote:archive",
+            "Rclone destructive command",
+            "command.backup.rclone.mutation",
+        ),
+        (
+            "rclone --log-level=DEBUG purge remote:archive",
+            "Rclone destructive command",
+            "command.backup.rclone.mutation",
+        ),
+        (
+            "rclone --future-global-option --dry-run purge remote:archive",
+            "Rclone destructive command",
+            "command.backup.rclone.mutation",
+        ),
         ("restic -r s3:archive forget latest --prune", "Restic destructive command", "command.backup.restic.mutation"),
+        (
+            "restic --compression max forget latest --prune",
+            "Restic destructive command",
+            "command.backup.restic.mutation",
+        ),
+        (
+            "restic --compression=max forget latest --prune",
+            "Restic destructive command",
+            "command.backup.restic.mutation",
+        ),
+        (
+            "restic --future-global-option --dry-run forget latest --prune",
+            "Restic destructive command",
+            "command.backup.restic.mutation",
+        ),
         ("restic rewrite --forget latest", "Restic destructive command", "command.backup.restic.mutation"),
         ("borg.cmd prune --keep-daily 7 /archive", "Borg destructive command", "command.backup.borg.mutation"),
         ("borg delete /archive::old", "Borg destructive command", "command.backup.borg.mutation"),
         ("borg --repo /archive prune --keep-daily 7", "Borg destructive command", "command.backup.borg.mutation"),
         ("borg -r/archive delete old", "Borg destructive command", "command.backup.borg.mutation"),
+        (
+            "borg --remote-ratelimit 1000 delete /archive::old",
+            "Borg destructive command",
+            "command.backup.borg.mutation",
+        ),
+        (
+            "borg --remote-ratelimit=1000 delete /archive::old",
+            "Borg destructive command",
+            "command.backup.borg.mutation",
+        ),
+        (
+            "borg --future-global-option --dry-run delete /archive::old",
+            "Borg destructive command",
+            "command.backup.borg.mutation",
+        ),
         ("velero backup delete release-1", "Velero destructive command", "command.backup.velero.deletion"),
         (
             "velero --namespace prod backup delete release-1",
@@ -39,6 +84,21 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.backup.velero.deletion",
         ),
         ("velero -nprod schedule delete nightly", "Velero destructive command", "command.backup.velero.deletion"),
+        (
+            "velero --future-global-option cluster backup delete release-1",
+            "Velero destructive command",
+            "command.backup.velero.deletion",
+        ),
+        (
+            "velero --future-global-option=cluster backup delete release-1",
+            "Velero destructive command",
+            "command.backup.velero.deletion",
+        ),
+        (
+            "velero --future-global-option --help backup delete release-1",
+            "Velero destructive command",
+            "command.backup.velero.deletion",
+        ),
     ],
 )
 def test_backup_rules_feed_runtime_hooks(
@@ -73,10 +133,18 @@ def test_backup_rules_feed_runtime_hooks(
         "borg recreate /archive --dry-run",
         "borg --repo /archive prune --keep-daily 7 --dry-run",
         "velero backup delete --help",
+        "rclone --log-level DEBUG purge remote:archive --dry-run",
+        "restic --compression max forget latest --dry-run",
+        "borg --remote-ratelimit 1000 prune --keep-daily 7 /archive --dry-run",
+        "velero --future-global-option cluster backup delete release-1 --help",
         "rclone lsl remote:archive",
+        "rclone --log-level DEBUG lsl remote:archive",
         "restic snapshots",
+        "restic --compression max snapshots",
         "borg list /archive",
+        "borg --remote-ratelimit 1000 list /archive",
         "velero backup describe release-1",
+        "velero --future-global-option cluster backup describe release-1",
         "grep 'rclone sync|restic forget|borg prune|velero backup delete' docs",
     ],
 )
