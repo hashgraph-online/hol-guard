@@ -19,6 +19,7 @@ _AWS_GLOBAL_OPTIONS = frozenset(
         "--region",
     }
 )
+_AWS_GLOBAL_FLAGS = frozenset({"--debug", "--no-cli-pager", "--no-sign-request", "--no-verify-ssl"})
 _GCLOUD_GLOBAL_OPTIONS = frozenset(
     {
         "--access-token-file",
@@ -33,7 +34,11 @@ _GCLOUD_GLOBAL_OPTIONS = frozenset(
         "--verbosity",
     }
 )
+_GCLOUD_GLOBAL_FLAGS = frozenset(
+    {"--help", "--log-http", "--quiet", "--user-output-enabled", "--no-user-output-enabled"}
+)
 _AZURE_GLOBAL_OPTIONS = frozenset({"--output", "-o", "--query", "--subscription"})
+_AZURE_GLOBAL_FLAGS = frozenset({"--debug", "--only-show-errors", "--verbose"})
 _EMPTY_STRING_SET: frozenset[str] = frozenset()
 
 
@@ -42,16 +47,20 @@ def _matcher(
     *subcommands: str,
     required_flags: frozenset[str] = _EMPTY_STRING_SET,
     leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
+    interspersed_flags: frozenset[str] = _EMPTY_STRING_SET,
 ) -> ExecutableMatcher:
     return ExecutableMatcher(
         executables=frozenset({executable, f"{executable}.cmd", f"{executable}.exe"}),
         subcommands=subcommands,
         required_flags=required_flags,
         interspersed_options_with_values=leading_options_with_values,
+        interspersed_flags=interspersed_flags,
     )
 
 
 def _same_commands_with_flag(matcher: AnyMatcher, flag: str) -> AnyMatcher:
+    if not all(isinstance(child, ExecutableMatcher) for child in matcher.matchers):
+        raise ValueError("Cloud safe variants require executable matcher children")
     return AnyMatcher(
         matchers=tuple(
             ExecutableMatcher(
@@ -61,6 +70,9 @@ def _same_commands_with_flag(matcher: AnyMatcher, flag: str) -> AnyMatcher:
                 allow_leading_options=child.allow_leading_options,
                 leading_options_with_values=child.leading_options_with_values,
                 interspersed_options_with_values=child.interspersed_options_with_values,
+                interspersed_flags=child.interspersed_flags,
+                options_with_values=child.options_with_values,
+                required_flags_in_all_arguments=True,
             )
             for child in matcher.matchers
             if isinstance(child, ExecutableMatcher)
@@ -78,30 +90,84 @@ def _safe_flag_variant(matcher: AnyMatcher, *, variant_id: str, title: str, flag
 
 _AWS_RESOURCE_DELETE = AnyMatcher(
     matchers=(
-        _matcher("aws", "ec2", "terminate-instances", leading_options_with_values=_AWS_GLOBAL_OPTIONS),
-        _matcher("aws", "rds", "delete-db-instance", leading_options_with_values=_AWS_GLOBAL_OPTIONS),
-        _matcher("aws", "rds", "delete-db-cluster", leading_options_with_values=_AWS_GLOBAL_OPTIONS),
-        _matcher("aws", "eks", "delete-cluster", leading_options_with_values=_AWS_GLOBAL_OPTIONS),
+        _matcher(
+            "aws",
+            "ec2",
+            "terminate-instances",
+            leading_options_with_values=_AWS_GLOBAL_OPTIONS,
+            interspersed_flags=_AWS_GLOBAL_FLAGS,
+        ),
+        _matcher(
+            "aws",
+            "rds",
+            "delete-db-instance",
+            leading_options_with_values=_AWS_GLOBAL_OPTIONS,
+            interspersed_flags=_AWS_GLOBAL_FLAGS,
+        ),
+        _matcher(
+            "aws",
+            "rds",
+            "delete-db-cluster",
+            leading_options_with_values=_AWS_GLOBAL_OPTIONS,
+            interspersed_flags=_AWS_GLOBAL_FLAGS,
+        ),
+        _matcher(
+            "aws",
+            "eks",
+            "delete-cluster",
+            leading_options_with_values=_AWS_GLOBAL_OPTIONS,
+            interspersed_flags=_AWS_GLOBAL_FLAGS,
+        ),
     )
 )
 _AWS_EC2_TERMINATE = AnyMatcher(
-    matchers=(_matcher("aws", "ec2", "terminate-instances", leading_options_with_values=_AWS_GLOBAL_OPTIONS),)
+    matchers=(
+        _matcher(
+            "aws",
+            "ec2",
+            "terminate-instances",
+            leading_options_with_values=_AWS_GLOBAL_OPTIONS,
+            interspersed_flags=_AWS_GLOBAL_FLAGS,
+        ),
+    )
 )
 _GCLOUD_RESOURCE_DELETE = AnyMatcher(
     matchers=(
         *(
-            _matcher("gcloud", *track, *operation, leading_options_with_values=_GCLOUD_GLOBAL_OPTIONS)
+            _matcher(
+                "gcloud",
+                *track,
+                *operation,
+                leading_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
+                interspersed_flags=_GCLOUD_GLOBAL_FLAGS,
+            )
             for track in ((), ("alpha",), ("beta",), ("preview",))
             for operation in (("compute", "instances", "delete"),)
         ),
         *(
-            _matcher("gcloud", *track, "sql", "instances", "delete", leading_options_with_values=_GCLOUD_GLOBAL_OPTIONS)
+            _matcher(
+                "gcloud",
+                *track,
+                "sql",
+                "instances",
+                "delete",
+                leading_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
+                interspersed_flags=_GCLOUD_GLOBAL_FLAGS,
+            )
             for track in ((), ("alpha",), ("beta",))
         ),
     )
 )
 _AZURE_RESOURCE_DELETE = AnyMatcher(
-    matchers=(_matcher("az", "vm", "delete", leading_options_with_values=_AZURE_GLOBAL_OPTIONS),)
+    matchers=(
+        _matcher(
+            "az",
+            "vm",
+            "delete",
+            leading_options_with_values=_AZURE_GLOBAL_OPTIONS,
+            interspersed_flags=_AZURE_GLOBAL_FLAGS,
+        ),
+    )
 )
 
 
