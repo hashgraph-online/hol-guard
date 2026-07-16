@@ -8,6 +8,41 @@ from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 
 _RCLONE_GLOBAL_OPTIONS = frozenset({"--config", "--log-file", "--password-command", "--rc-addr"})
 _RESTIC_GLOBAL_OPTIONS = frozenset({"-r", "--repo", "--password-file", "--cache-dir", "-o", "--option"})
+_VELERO_GLOBAL_OPTIONS = frozenset(
+    {
+        "--features",
+        "--kubeconfig",
+        "--kubecontext",
+        "--log_backtrace_at",
+        "--log_dir",
+        "--log_file",
+        "--log_file_max_size",
+        "--log-backtrace-at",
+        "--log-dir",
+        "--log-file",
+        "--log-file-max-size",
+        "--namespace",
+        "--stderrthreshold",
+        "--v",
+        "--vmodule",
+        "-n",
+        "-v",
+    }
+)
+_VELERO_GLOBAL_FLAGS = frozenset(
+    {
+        "--add-dir-header",
+        "--add_dir_header",
+        "--alsologtostderr",
+        "--colorized",
+        "--logtostderr",
+        "--one_output",
+        "--skip_headers",
+        "--skip_log_headers",
+        "--skip-headers",
+        "--skip-log-headers",
+    }
+)
 _RCLONE_MUTATION = AnyMatcher(
     matchers=tuple(
         executable_matcher(
@@ -51,7 +86,16 @@ _BORG_DRY_RUN = AnyMatcher(
     matchers=tuple(executable_matcher("borg", command, allow_leading_options=True) for command in ("prune", "recreate"))
 )
 _VELERO_DELETE = AnyMatcher(
-    matchers=tuple(executable_matcher("velero", resource, "delete") for resource in ("backup", "schedule", "restore"))
+    matchers=tuple(
+        executable_matcher(
+            "velero",
+            resource,
+            "delete",
+            global_options_with_values=_VELERO_GLOBAL_OPTIONS,
+            global_flags=_VELERO_GLOBAL_FLAGS,
+        )
+        for resource in ("backup", "schedule", "restore")
+    )
 )
 
 

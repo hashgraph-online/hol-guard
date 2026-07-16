@@ -26,6 +26,17 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ("borg.cmd prune --keep-daily 7 /archive", "Borg destructive command", "command.backup.borg.mutation"),
         ("borg delete /archive::old", "Borg destructive command", "command.backup.borg.mutation"),
         ("velero backup delete release-1", "Velero destructive command", "command.backup.velero.deletion"),
+        (
+            "velero --namespace prod backup delete release-1",
+            "Velero destructive command",
+            "command.backup.velero.deletion",
+        ),
+        (
+            "velero --kubeconfig=config-file restore delete release-1",
+            "Velero destructive command",
+            "command.backup.velero.deletion",
+        ),
+        ("velero -nprod schedule delete nightly", "Velero destructive command", "command.backup.velero.deletion"),
     ],
 )
 def test_backup_rules_feed_runtime_hooks(
