@@ -86,7 +86,7 @@ def _flag_present_in_all_option_parses(
         attached_short_option = _attached_short_value_option(argument, options_with_values)
         if option_name in options_with_values:
             advance = 1 if "=" in argument else 2
-            return present(argument_index + advance, seen)
+            return present(argument_index + advance, seen or required_flag == option_name)
         if attached_short_option is not None:
             return present(argument_index + 1, seen)
         token_flags = _flags_in_option_token(argument, options_with_values)

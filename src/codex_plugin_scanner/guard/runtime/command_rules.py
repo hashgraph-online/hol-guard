@@ -16,6 +16,7 @@ _VALID_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
 _VALID_MODES = frozenset({"required", "enforce", "review", "monitor", "disabled"})
 _EMPTY_STRING_SET: frozenset[str] = frozenset()
 _TRUTHY_FLAG_VALUES = frozenset({"1", "on", "true", "yes"})
+_FALSEY_FLAG_VALUES = frozenset({"0", "false", "no", "off"})
 
 
 @final
@@ -32,6 +33,8 @@ class ExecutableMatcher:
     interspersed_options_with_values: frozenset[str] = frozenset()
     interspersed_flags: frozenset[str] = frozenset()
     options_with_values: frozenset[str] = frozenset()
+    inverse_flag_pairs: frozenset[tuple[str, str]] = frozenset()
+    required_option_values: tuple[tuple[str, frozenset[str]], ...] = ()
     required_flags_in_all_arguments: bool = False
     fail_secure_unknown_options: bool = False
 
@@ -53,6 +56,24 @@ class ExecutableMatcher:
             value.strip().lower() for value in self.interspersed_flags if value.strip()
         )
         normalized_options = frozenset(value.strip().lower() for value in self.options_with_values if value.strip())
+        normalized_inverse_pairs = frozenset(
+            (positive.strip().lower(), negative.strip().lower())
+            for positive, negative in self.inverse_flag_pairs
+            if positive.strip() and negative.strip()
+        )
+        normalized_required_option_values = tuple(
+            sorted(
+                [
+                    (
+                        option.strip().lower(),
+                        frozenset(value.strip().lower() for value in values if value.strip()),
+                    )
+                    for option, values in self.required_option_values
+                    if option.strip()
+                ],
+                key=lambda item: item[0],
+            )
+        )
         object.__setattr__(self, "subcommands", normalized_subcommands)
         object.__setattr__(self, "required_flags", normalized_required_flags)
         object.__setattr__(self, "forbidden_flags", normalized_forbidden_flags)
@@ -60,8 +81,18 @@ class ExecutableMatcher:
         object.__setattr__(self, "interspersed_options_with_values", normalized_interspersed_options)
         object.__setattr__(self, "interspersed_flags", normalized_interspersed_flags)
         object.__setattr__(self, "options_with_values", normalized_options)
+        object.__setattr__(self, "inverse_flag_pairs", normalized_inverse_pairs)
+        object.__setattr__(self, "required_option_values", normalized_required_option_values)
         if normalized_required_flags & normalized_forbidden_flags:
             raise ValueError("A matcher flag cannot be both required and forbidden")
+        inverse_names = [name for pair in normalized_inverse_pairs for name in pair]
+        if len(inverse_names) != len(set(inverse_names)):
+            raise ValueError("Inverse flag pairs cannot reuse an option name")
+        required_option_names = [option for option, _values in normalized_required_option_values]
+        if len(required_option_names) != len(set(required_option_names)):
+            raise ValueError("Required option values cannot declare an option more than once")
+        if any(not values for _option, values in normalized_required_option_values):
+            raise ValueError("Required option values cannot be empty")
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         evidence: list[MatcherEvidence] = []
@@ -103,25 +134,42 @@ class ExecutableMatcher:
                 flag_arguments = subcommand_arguments[len(self.subcommands) :]
             else:
                 flag_arguments = subcommand_arguments
-            present_flags = _present_flags(
+            semantics = _argument_semantics(
                 flag_arguments,
                 options_with_values=(
                     self.options_with_values | self.leading_options_with_values | self.interspersed_options_with_values
                 ),
+                inverse_flag_pairs=self.inverse_flag_pairs,
             )
-            required_flags_present = self.required_flags <= present_flags
+            required_semantics_present = self.required_flags <= semantics.present_flags and not any(
+                semantics.option_value(option) not in allowed_values
+                for option, allowed_values in self.required_option_values
+            )
             if self.fail_secure_unknown_options and self.required_flags_in_all_arguments:
-                required_flags_present = flags_present_in_all_option_parses(
+                conservative_requirements = set(self.required_flags)
+                for positive, negative in self.inverse_flag_pairs:
+                    if not conservative_requirements.intersection({positive, negative}):
+                        continue
+                    conservative_requirements.difference_update({positive, negative})
+                    effective_token = semantics.option_token(positive)
+                    if effective_token is not None:
+                        conservative_requirements.add(effective_token.split("=", 1)[0])
+                required_semantics_present = required_semantics_present and flags_present_in_all_option_parses(
                     lowered_arguments,
-                    self.required_flags,
+                    frozenset(conservative_requirements) | {option for option, _values in self.required_option_values},
                     options_with_values=(
                         self.options_with_values
                         | self.leading_options_with_values
                         | self.interspersed_options_with_values
                     ),
-                    known_flags=self.interspersed_flags | self.required_flags | self.forbidden_flags,
+                    known_flags=(
+                        self.interspersed_flags
+                        | self.required_flags
+                        | self.forbidden_flags
+                        | {name for pair in self.inverse_flag_pairs for name in pair}
+                    ),
                 )
-            if not required_flags_present or self.forbidden_flags & present_flags:
+            if not required_semantics_present or self.forbidden_flags & semantics.present_flags:
                 continue
             evidence.append(
                 MatcherEvidence(
@@ -154,7 +202,9 @@ class ArgumentMatcher:
         for index, segment in enumerate(command.segments):
             if not _segment_matches_executable(segment, self.executables):
                 continue
-            present_arguments = _present_flags(tuple(argument.lower() for argument in segment.arguments))
+            present_arguments = _argument_semantics(
+                tuple(argument.lower() for argument in segment.arguments)
+            ).present_flags
             if not self.required_arguments <= present_arguments:
                 continue
             evidence.append(
@@ -345,7 +395,9 @@ def matcher_index_hints(matcher: CommandMatcher) -> MatcherIndexHints:
     if isinstance(matcher, ExecutableMatcher):
         return MatcherIndexHints(
             executables=matcher.executables,
-            keywords=frozenset((*matcher.subcommands, *matcher.required_flags)),
+            keywords=frozenset(
+                (*matcher.subcommands, *matcher.required_flags, *(name for name, _ in matcher.required_option_values))
+            ),
         )
     if isinstance(matcher, ArgumentMatcher):
         return MatcherIndexHints(
@@ -391,14 +443,42 @@ def _normalize_option_token(value: str) -> str:
     return stripped.lower() if stripped.startswith("--") else stripped
 
 
-def _present_flags(
+@dataclass(frozen=True, slots=True)
+class _EffectiveOption:
+    name: str
+    token: str
+    value: str | None
+    is_value_option: bool
+    positive_flag: str | None = None
+    negative_flag: str | None = None
+    positive_polarity: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class _ArgumentSemantics:
+    present_flags: frozenset[str]
+    effective_options: tuple[tuple[str, str, str | None], ...]
+
+    def option_value(self, option: str) -> str | None:
+        return next((value for name, _token, value in self.effective_options if name == option), None)
+
+    def option_token(self, option: str) -> str | None:
+        return next((token for name, token, _value in self.effective_options if name == option), None)
+
+
+def _argument_semantics(
     arguments: tuple[str, ...],
     *,
     options_with_values: frozenset[str] = _EMPTY_STRING_SET,
-) -> frozenset[str]:
+    inverse_flag_pairs: frozenset[tuple[str, str]] = frozenset(),
+) -> _ArgumentSemantics:
     flags: set[str] = set()
-    # Safe variants honor the final long-option assignment, matching common CLI parsers.
-    effective_long_options: dict[str, tuple[str, str | None, bool]] = {}
+    inverse_aliases = {
+        alias: (positive, negative, alias == positive)
+        for positive, negative in inverse_flag_pairs
+        for alias in (positive, negative)
+    }
+    effective_options: dict[str, _EffectiveOption] = {}
     index = 0
     while index < len(arguments):
         argument = arguments[index]
@@ -407,32 +487,66 @@ def _present_flags(
         option_name, separator, option_value = argument.partition("=")
         is_long_option = argument.startswith("--")
         is_value_option = option_name in options_with_values
-        if is_long_option:
+        inverse_alias = inverse_aliases.get(option_name)
+        if is_long_option or inverse_alias is not None:
             if is_value_option and not separator:
                 option_value = arguments[index + 1] if index + 1 < len(arguments) else ""
-            effective_long_options[option_name] = (
-                argument,
-                option_value if separator or is_value_option else None,
-                is_value_option,
+            effective_name = inverse_alias[0] if inverse_alias is not None else option_name
+            effective_options[effective_name] = _EffectiveOption(
+                name=effective_name,
+                token=argument,
+                value=option_value if separator or is_value_option else None,
+                is_value_option=is_value_option,
+                positive_flag=inverse_alias[0] if inverse_alias is not None else None,
+                negative_flag=inverse_alias[1] if inverse_alias is not None else None,
+                positive_polarity=inverse_alias[2] if inverse_alias is not None else True,
             )
         else:
             flags.add(argument)
             if argument.startswith("-") and separator:
                 flags.add(option_name)
-        if option_name.startswith("-") and not option_name.startswith("--") and len(option_name) > 2:
+        if inverse_alias is None and option_name.startswith("-") and not option_name.startswith("--"):
             for character in option_name[1:]:
                 if not character.isalnum():
                     continue
                 short_flag = f"-{character}"
-                flags.add(short_flag)
+                short_alias = inverse_aliases.get(short_flag)
+                if short_alias is None:
+                    flags.add(short_flag)
+                else:
+                    effective_options[short_alias[0]] = _EffectiveOption(
+                        name=short_alias[0],
+                        token=short_flag,
+                        value=None,
+                        is_value_option=False,
+                        positive_flag=short_alias[0],
+                        negative_flag=short_alias[1],
+                        positive_polarity=short_alias[2],
+                    )
                 if short_flag in options_with_values:
                     break
         index += 2 if option_name in options_with_values and "=" not in argument else 1
-    for option_name, (argument, option_value, is_value_option) in effective_long_options.items():
-        flags.add(argument)
-        if is_value_option or option_value is None or option_value in _TRUTHY_FLAG_VALUES:
-            flags.add(option_name)
-    return frozenset(flags)
+    for option in effective_options.values():
+        flags.add(option.token)
+        if option.positive_flag is not None and option.negative_flag is not None:
+            assigned_value = _boolean_flag_value(option.value)
+            if assigned_value is not None:
+                enabled = assigned_value if option.positive_polarity else not assigned_value
+                flags.add(option.positive_flag if enabled else option.negative_flag)
+        elif option.is_value_option or option.value is None or option.value in _TRUTHY_FLAG_VALUES:
+            flags.add(option.name)
+    return _ArgumentSemantics(
+        present_flags=frozenset(flags),
+        effective_options=tuple((name, option.token, option.value) for name, option in effective_options.items()),
+    )
+
+
+def _boolean_flag_value(value: str | None) -> bool | None:
+    if value is None or value in _TRUTHY_FLAG_VALUES:
+        return True
+    if value in _FALSEY_FLAG_VALUES:
+        return False
+    return None
 
 
 def _after_leading_options(arguments: tuple[str, ...], options_with_values: frozenset[str]) -> tuple[str, ...]:
