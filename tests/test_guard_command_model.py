@@ -118,6 +118,28 @@ def test_executable_matcher_can_skip_declared_global_options() -> None:
     assert matcher.match(parsed)
 
 
+def test_executable_matcher_can_skip_declared_interspersed_options() -> None:
+    parsed = parse_shell_command("cloud compute --project app instances delete api-1")
+    matcher = ExecutableMatcher(
+        executables=frozenset({"cloud"}),
+        subcommands=("compute", "instances", "delete"),
+        interspersed_options_with_values=frozenset({"--project"}),
+    )
+
+    assert matcher.match(parsed)
+
+
+def test_executable_matcher_preserves_undeclared_interspersed_options() -> None:
+    parsed = parse_shell_command("cloud compute --plugin delete instances delete api-1")
+    matcher = ExecutableMatcher(
+        executables=frozenset({"cloud"}),
+        subcommands=("compute", "instances", "delete"),
+        interspersed_options_with_values=frozenset({"--project"}),
+    )
+
+    assert matcher.match(parsed) == ()
+
+
 def test_executable_matcher_does_not_treat_option_values_as_flags() -> None:
     parsed = parse_shell_command("git clean -e -f")
     matcher = ExecutableMatcher(
