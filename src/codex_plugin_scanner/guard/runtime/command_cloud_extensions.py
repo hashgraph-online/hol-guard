@@ -20,7 +20,18 @@ _AWS_GLOBAL_OPTIONS = frozenset(
         "--region",
     }
 )
-_AWS_GLOBAL_FLAGS = frozenset({"--debug", "--no-cli-pager", "--no-sign-request", "--no-verify-ssl"})
+_AWS_GLOBAL_FLAGS = frozenset(
+    {
+        "--cli-auto-prompt",
+        "--debug",
+        "--no-cli-auto-prompt",
+        "--no-cli-pager",
+        "--no-color",
+        "--no-paginate",
+        "--no-sign-request",
+        "--no-verify-ssl",
+    }
+)
 _GCLOUD_GLOBAL_OPTIONS = frozenset(
     {
         "--access-token-file",

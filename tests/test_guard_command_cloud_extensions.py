@@ -57,6 +57,26 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.cloud.aws.resource-deletion",
         ),
         (
+            "aws --no-paginate ec2 terminate-instances --instance-ids i-123",
+            "AWS destructive command",
+            "command.cloud.aws.resource-deletion",
+        ),
+        (
+            "aws ec2 --cli-auto-prompt terminate-instances --instance-ids i-123",
+            "AWS destructive command",
+            "command.cloud.aws.resource-deletion",
+        ),
+        (
+            "aws ec2 terminate-instances --no-cli-auto-prompt --instance-ids i-123",
+            "AWS destructive command",
+            "command.cloud.aws.resource-deletion",
+        ),
+        (
+            "aws --no-color ec2 terminate-instances --instance-ids i-123",
+            "AWS destructive command",
+            "command.cloud.aws.resource-deletion",
+        ),
+        (
             "gcloud.cmd compute --project app-prod instances delete api-1",
             "Google Cloud destructive command",
             "command.cloud.gcp.resource-deletion",
