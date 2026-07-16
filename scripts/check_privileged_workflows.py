@@ -122,14 +122,14 @@ def _validate_privileged_job(
 
         if not isinstance(reference, str) or not reference.startswith("astral-sh/setup-uv@"):
             continue
-        uv_version = _mapping(step.get("with")).get("uv-version")
+        uv_version = _mapping(step.get("with")).get("version")
         if not isinstance(uv_version, str) or _EXACT_UV_VERSION.fullmatch(uv_version.strip()) is None:
             violations.append(
                 WorkflowPolicyViolation(
                     workflow_path,
                     job_name,
                     "uv-version-not-pinned",
-                    f"{step_name} must set with.uv-version to an exact X.Y.Z version.",
+                    f"{step_name} must set with.version to an exact X.Y.Z version.",
                 )
             )
     return violations

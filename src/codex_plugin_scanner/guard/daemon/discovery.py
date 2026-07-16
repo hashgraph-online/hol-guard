@@ -16,7 +16,6 @@ DAEMON_DISCOVERY_KEY_FILE = "daemon-discovery-key"
 DAEMON_STATE_SIGNATURE_FIELD = "state_signature"
 DAEMON_CHALLENGE_PROOF_FIELD = "proof"
 _PRIVATE_FILE_MODE = 0o600
-_PRIVATE_DIR_MODE = 0o700
 _DISCOVERY_KEY_BYTES = 32
 
 
@@ -53,7 +52,10 @@ def load_daemon_discovery_key(guard_home: Path) -> str | None:
 def ensure_daemon_discovery_key(guard_home: Path) -> str:
     guard_home.mkdir(parents=True, exist_ok=True)
     if os.name != "nt":
-        os.chmod(guard_home, _PRIVATE_DIR_MODE)
+        # Semgrep's file-permission rule recommends 0o644, which is unsafe for
+        # this secret-bearing directory; owner-only access is intentional.
+        # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
+        os.chmod(guard_home, 0o700)
     existing = load_daemon_discovery_key(guard_home)
     if existing is not None:
         return existing

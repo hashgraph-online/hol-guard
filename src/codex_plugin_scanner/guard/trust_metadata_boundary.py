@@ -68,11 +68,7 @@ def _is_prior_proof_key(key: object) -> bool:
 
 def _without_prior_proofs(value: object) -> object:
     if isinstance(value, dict):
-        return {
-            str(key): _without_prior_proofs(item)
-            for key, item in value.items()
-            if not _is_prior_proof_key(key)
-        }
+        return {str(key): _without_prior_proofs(item) for key, item in value.items() if not _is_prior_proof_key(key)}
     if isinstance(value, (list, tuple)):
         return [_without_prior_proofs(item) for item in value]
     return value

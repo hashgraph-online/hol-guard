@@ -1219,9 +1219,7 @@ def _destructive_shell_tool_action_request(
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
             action_class=(
-                "GitHub remote mutation command"
-                if is_remote_mutation
-                else "Unverified GitHub command capability"
+                "GitHub remote mutation command" if is_remote_mutation else "Unverified GitHub command capability"
             ),
             reason=(
                 f"{github_assessment.detail} Guard requires confirmation because the operation "
@@ -1323,9 +1321,7 @@ def _classify_github_shell_segment(segment: list[str], command_index: int) -> Gi
         if token in {"2>&1", "1>&2"}:
             index += 1
             continue
-        if token in {">", ">>", ">|", "<", "<<", "<<<"} or any(
-            marker in token for marker in (">", "<")
-        ):
+        if token in {">", ">>", ">|", "<", "<<", "<<<"} or any(marker in token for marker in (">", "<")):
             return GitHubCommandAssessment(
                 capability="write_local",
                 reason_code="github.command.shell-redirection",

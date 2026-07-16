@@ -57,7 +57,7 @@ jobs:
     steps:
       - uses: {PINNED_UV}
         with:
-          uv-version: latest
+          version: latest
 """,
     )
 
@@ -112,7 +112,7 @@ jobs:
       - uses: {PINNED_ACTION}
       - uses: {PINNED_UV}
         with:
-          uv-version: "0.9.26"
+          version: "0.9.26"
 """,
     )
 

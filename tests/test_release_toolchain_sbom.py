@@ -93,7 +93,7 @@ def test_publish_workflow_limits_ambient_credentials_for_build_and_version_sync(
     assert token_steps == ["Open repository version sync PR"]
 
     publish_uv_versions = {
-        step["with"]["uv-version"]
+        step["with"]["version"]
         for job in jobs.values()
         for step in job.get("steps", [])
         if str(step.get("uses", "")).startswith("astral-sh/setup-uv@")

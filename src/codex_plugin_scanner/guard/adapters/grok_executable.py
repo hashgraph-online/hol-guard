@@ -208,9 +208,7 @@ def _resolve_candidate(
         content_sha256 = _file_sha256(resolved)
     except OSError:
         return GrokExecutableResolution(None, "The selected Grok executable could not be hashed.")
-    return GrokExecutableResolution(
-        TrustedGrokExecutable(path=resolved, content_sha256=content_sha256, source=source)
-    )
+    return GrokExecutableResolution(TrustedGrokExecutable(path=resolved, content_sha256=content_sha256, source=source))
 
 
 def _registered_executable(context: HarnessContext) -> GrokExecutableResolution:
