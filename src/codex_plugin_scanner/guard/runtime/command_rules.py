@@ -159,6 +159,51 @@ class ArgumentMatcher:
 
 @final
 @dataclass(frozen=True, slots=True)
+class ArgumentPositionMatcher:
+    """Match an exact argument at one of a bounded set of positions."""
+
+    executables: frozenset[str]
+    required_argument: str
+    positions: frozenset[int]
+    forbidden_arguments: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
+        normalized_required = self.required_argument.strip().lower()
+        normalized_forbidden = frozenset(value.strip().lower() for value in self.forbidden_arguments if value.strip())
+        if not normalized_executables or not normalized_required or not self.positions:
+            raise ValueError("ArgumentPositionMatcher requires executables, an argument, and positions")
+        if any(position < 0 for position in self.positions):
+            raise ValueError("ArgumentPositionMatcher positions cannot be negative")
+        object.__setattr__(self, "executables", normalized_executables)
+        object.__setattr__(self, "required_argument", normalized_required)
+        object.__setattr__(self, "forbidden_arguments", normalized_forbidden)
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        for index, segment in enumerate(command.segments):
+            if not _segment_matches_executable(segment, self.executables):
+                continue
+            arguments = tuple(argument.lower() for argument in segment.arguments)
+            if self.forbidden_arguments & frozenset(arguments):
+                continue
+            if not any(
+                position < len(arguments) and arguments[position] == self.required_argument
+                for position in self.positions
+            ):
+                continue
+            evidence.append(
+                MatcherEvidence(
+                    segment_index=index,
+                    executable=segment.executable,
+                    detail="Matched an exact structured argument position.",
+                )
+            )
+        return tuple(evidence)
+
+
+@final
+@dataclass(frozen=True, slots=True)
 class LeadingOperandCountMatcher:
     """Match commands with enough operands after documented leading options."""
 
@@ -199,6 +244,62 @@ class LeadingOperandCountMatcher:
                     segment_index=index,
                     executable=segment.executable,
                     detail=f"Matched command with at least {self.minimum_operands} structured operands.",
+                )
+            )
+        return tuple(evidence)
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class LeadingSubcommandMatcher:
+    """Match subcommands after case-sensitive leading option parsing."""
+
+    executables: frozenset[str]
+    subcommands: tuple[str, ...]
+    options_with_values: frozenset[str] = frozenset()
+    forbidden_flags: frozenset[str] = frozenset()
+    required_flags_anywhere: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
+        normalized_subcommands = tuple(value.strip().lower() for value in self.subcommands if value.strip())
+        normalized_options = frozenset(
+            _normalize_option_token(value) for value in self.options_with_values if value.strip()
+        )
+        normalized_forbidden = frozenset(
+            _normalize_option_token(value) for value in self.forbidden_flags if value.strip()
+        )
+        normalized_required = frozenset(
+            value.strip().lower() for value in self.required_flags_anywhere if value.strip()
+        )
+        if not normalized_executables or not normalized_subcommands:
+            raise ValueError("LeadingSubcommandMatcher requires executables and subcommands")
+        object.__setattr__(self, "executables", normalized_executables)
+        object.__setattr__(self, "subcommands", normalized_subcommands)
+        object.__setattr__(self, "options_with_values", normalized_options)
+        object.__setattr__(self, "forbidden_flags", normalized_forbidden)
+        object.__setattr__(self, "required_flags_anywhere", normalized_required)
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        for index, segment in enumerate(command.segments):
+            if not _segment_matches_executable(segment, self.executables):
+                continue
+            leading_flags, operands = _leading_flags_and_operands(
+                segment.arguments,
+                options_with_values=self.options_with_values,
+            )
+            lowered_operands = tuple(value.lower() for value in operands)
+            if self.forbidden_flags & leading_flags or lowered_operands[: len(self.subcommands)] != self.subcommands:
+                continue
+            present_flags = _present_flags(tuple(argument.lower() for argument in segment.arguments))
+            if not self.required_flags_anywhere <= present_flags:
+                continue
+            evidence.append(
+                MatcherEvidence(
+                    segment_index=index,
+                    executable=segment.executable,
+                    detail="Matched executable and leading-option-aware subcommands.",
                 )
             )
         return tuple(evidence)
@@ -389,8 +490,15 @@ def matcher_index_hints(matcher: CommandMatcher) -> MatcherIndexHints:
             executables=matcher.executables,
             keywords=matcher.required_arguments,
         )
+    if isinstance(matcher, ArgumentPositionMatcher):
+        return MatcherIndexHints(
+            executables=matcher.executables,
+            keywords=frozenset({matcher.required_argument}),
+        )
     if isinstance(matcher, LeadingOperandCountMatcher):
         return MatcherIndexHints(executables=matcher.executables)
+    if isinstance(matcher, LeadingSubcommandMatcher):
+        return MatcherIndexHints(executables=matcher.executables, keywords=frozenset(matcher.subcommands))
     if isinstance(matcher, PipelineMatcher):
         return _merge_matcher_hints((matcher.producer, matcher.consumer))
     if isinstance(matcher, (AnyMatcher, AllMatcher)):

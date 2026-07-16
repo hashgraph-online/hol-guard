@@ -55,3 +55,4 @@ Cisco AIBOM stays out of Guard runtime policy in this phase. If it returns later
 - [Storage command extension coverage](command-storage-extension-coverage.md)
 - [Backup command extension coverage](command-backup-extension-coverage.md)
 - [Remote command extension coverage](command-remote-extension-coverage.md)
+- [Database command extension coverage](command-database-extension-coverage.md)
