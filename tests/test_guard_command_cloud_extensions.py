@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_cloud_extensions import _same_commands_with_flag
+from codex_plugin_scanner.guard.runtime.command_extension_matchers import with_required_flag
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.runtime.command_rules import AnyMatcher, ExecutableMatcher
@@ -154,4 +154,4 @@ def test_cloud_safe_variant_rejects_unsupported_matcher_nesting() -> None:
     nested = AnyMatcher(matchers=(AnyMatcher(matchers=(ExecutableMatcher(executables=frozenset({"aws"})),)),))
 
     with pytest.raises(ValueError, match="executable matcher children"):
-        _same_commands_with_flag(nested, "--help")
+        with_required_flag(nested, "--help")

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from .command_extension_matchers import executable_matcher, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
-from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant, ExecutableMatcher
+from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 
 _AWS_GLOBAL_OPTIONS = frozenset(
     {
@@ -39,120 +40,71 @@ _GCLOUD_GLOBAL_FLAGS = frozenset(
 )
 _AZURE_GLOBAL_OPTIONS = frozenset({"--output", "-o", "--query", "--subscription"})
 _AZURE_GLOBAL_FLAGS = frozenset({"--debug", "--only-show-errors", "--verbose"})
-_EMPTY_STRING_SET: frozenset[str] = frozenset()
-
-
-def _matcher(
-    executable: str,
-    *subcommands: str,
-    required_flags: frozenset[str] = _EMPTY_STRING_SET,
-    leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
-    interspersed_flags: frozenset[str] = _EMPTY_STRING_SET,
-) -> ExecutableMatcher:
-    return ExecutableMatcher(
-        executables=frozenset({executable, f"{executable}.cmd", f"{executable}.exe"}),
-        subcommands=subcommands,
-        required_flags=required_flags,
-        interspersed_options_with_values=leading_options_with_values,
-        interspersed_flags=interspersed_flags,
-    )
-
-
-def _same_commands_with_flag(matcher: AnyMatcher, flag: str) -> AnyMatcher:
-    if not all(isinstance(child, ExecutableMatcher) for child in matcher.matchers):
-        raise ValueError("Cloud safe variants require executable matcher children")
-    return AnyMatcher(
-        matchers=tuple(
-            ExecutableMatcher(
-                executables=child.executables,
-                subcommands=child.subcommands,
-                required_flags=frozenset({flag}),
-                allow_leading_options=child.allow_leading_options,
-                leading_options_with_values=child.leading_options_with_values,
-                interspersed_options_with_values=child.interspersed_options_with_values,
-                interspersed_flags=child.interspersed_flags,
-                options_with_values=child.options_with_values,
-                required_flags_in_all_arguments=True,
-            )
-            for child in matcher.matchers
-            if isinstance(child, ExecutableMatcher)
-        )
-    )
-
-
-def _safe_flag_variant(matcher: AnyMatcher, *, variant_id: str, title: str, flag: str) -> CommandSafeVariant:
-    return CommandSafeVariant(
-        variant_id=variant_id,
-        title=title,
-        matcher=_same_commands_with_flag(matcher, flag),
-    )
-
-
 _AWS_RESOURCE_DELETE = AnyMatcher(
     matchers=(
-        _matcher(
+        executable_matcher(
             "aws",
             "ec2",
             "terminate-instances",
-            leading_options_with_values=_AWS_GLOBAL_OPTIONS,
-            interspersed_flags=_AWS_GLOBAL_FLAGS,
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
         ),
-        _matcher(
+        executable_matcher(
             "aws",
             "rds",
             "delete-db-instance",
-            leading_options_with_values=_AWS_GLOBAL_OPTIONS,
-            interspersed_flags=_AWS_GLOBAL_FLAGS,
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
         ),
-        _matcher(
+        executable_matcher(
             "aws",
             "rds",
             "delete-db-cluster",
-            leading_options_with_values=_AWS_GLOBAL_OPTIONS,
-            interspersed_flags=_AWS_GLOBAL_FLAGS,
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
         ),
-        _matcher(
+        executable_matcher(
             "aws",
             "eks",
             "delete-cluster",
-            leading_options_with_values=_AWS_GLOBAL_OPTIONS,
-            interspersed_flags=_AWS_GLOBAL_FLAGS,
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
         ),
     )
 )
 _AWS_EC2_TERMINATE = AnyMatcher(
     matchers=(
-        _matcher(
+        executable_matcher(
             "aws",
             "ec2",
             "terminate-instances",
-            leading_options_with_values=_AWS_GLOBAL_OPTIONS,
-            interspersed_flags=_AWS_GLOBAL_FLAGS,
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
         ),
     )
 )
 _GCLOUD_RESOURCE_DELETE = AnyMatcher(
     matchers=(
         *(
-            _matcher(
+            executable_matcher(
                 "gcloud",
                 *track,
                 *operation,
-                leading_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
-                interspersed_flags=_GCLOUD_GLOBAL_FLAGS,
+                global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
+                global_flags=_GCLOUD_GLOBAL_FLAGS,
             )
             for track in ((), ("alpha",), ("beta",), ("preview",))
             for operation in (("compute", "instances", "delete"),)
         ),
         *(
-            _matcher(
+            executable_matcher(
                 "gcloud",
                 *track,
                 "sql",
                 "instances",
                 "delete",
-                leading_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
-                interspersed_flags=_GCLOUD_GLOBAL_FLAGS,
+                global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
+                global_flags=_GCLOUD_GLOBAL_FLAGS,
             )
             for track in ((), ("alpha",), ("beta",))
         ),
@@ -160,12 +112,12 @@ _GCLOUD_RESOURCE_DELETE = AnyMatcher(
 )
 _AZURE_RESOURCE_DELETE = AnyMatcher(
     matchers=(
-        _matcher(
+        executable_matcher(
             "az",
             "vm",
             "delete",
-            leading_options_with_values=_AZURE_GLOBAL_OPTIONS,
-            interspersed_flags=_AZURE_GLOBAL_FLAGS,
+            global_options_with_values=_AZURE_GLOBAL_OPTIONS,
+            global_flags=_AZURE_GLOBAL_FLAGS,
         ),
     )
 )
@@ -203,14 +155,14 @@ CLOUD_COMMAND_RULES = (
         action_class="AWS destructive command",
         safer_alternative="Describe the exact resources and confirm the active account and region before deletion.",
         safe_variants=(
-            _safe_flag_variant(_AWS_RESOURCE_DELETE, variant_id="help", title="AWS command help", flag="--help"),
-            _safe_flag_variant(
+            safe_flag_variant(_AWS_RESOURCE_DELETE, variant_id="help", title="AWS command help", flag="--help"),
+            safe_flag_variant(
                 _AWS_RESOURCE_DELETE,
                 variant_id="generate-cli-skeleton",
                 title="AWS request skeleton",
                 flag="--generate-cli-skeleton",
             ),
-            _safe_flag_variant(
+            safe_flag_variant(
                 _AWS_EC2_TERMINATE,
                 variant_id="dry-run",
                 title="EC2 termination permission check",
@@ -226,7 +178,7 @@ CLOUD_COMMAND_RULES = (
         action_class="Google Cloud destructive command",
         safer_alternative="Describe the exact resources and confirm the active project and location before deletion.",
         safe_variants=(
-            _safe_flag_variant(
+            safe_flag_variant(
                 _GCLOUD_RESOURCE_DELETE,
                 variant_id="help",
                 title="Google Cloud command help",
@@ -244,7 +196,7 @@ CLOUD_COMMAND_RULES = (
             "Show the exact resource and confirm the active subscription and resource group before deletion."
         ),
         safe_variants=(
-            _safe_flag_variant(
+            safe_flag_variant(
                 _AZURE_RESOURCE_DELETE,
                 variant_id="help",
                 title="Azure command help",

@@ -7,10 +7,8 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Literal, final
 
+from .command_builtin_extension_catalog import DIRECT_COMMAND_EXTENSION_VALUES
 from .command_builtin_rules import COMMAND_ACTION_RISK_CLASSES, rules_for_extension
-from .command_cloud_extensions import CLOUD_COMMAND_EXTENSION_SPECS, CLOUD_COMMAND_RULES
-from .command_domain_extensions import DOMAIN_COMMAND_EXTENSION_SPECS, DOMAIN_COMMAND_RULES
-from .command_extension_specs import command_extension_values
 from .command_model import CanonicalCommand
 from .command_package_extensions import PACKAGE_COMMAND_EXTENSION_SPECS, PackageCommandExtensionSpec
 from .command_rules import CommandSafetyRule, MatcherEvidence, matcher_index_hints
@@ -488,12 +486,7 @@ _BUILT_IN_EXTENSIONS = (
         ),
         rules=rules_for_extension("command.shell-mutations"),
     ),
-    *(
-        CommandSafetyExtension(**command_extension_values(spec, rules))
-        for specs, rules in ((DOMAIN_COMMAND_EXTENSION_SPECS, DOMAIN_COMMAND_RULES),
-                             (CLOUD_COMMAND_EXTENSION_SPECS, CLOUD_COMMAND_RULES))
-        for spec in specs
-    ),
+    *(CommandSafetyExtension(**values) for values in DIRECT_COMMAND_EXTENSION_VALUES),
     *(_package_command_extension(spec) for spec in PACKAGE_COMMAND_EXTENSION_SPECS),
 )
 

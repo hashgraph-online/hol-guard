@@ -108,9 +108,7 @@ class ExecutableMatcher:
             present_flags = _present_flags(
                 flag_arguments,
                 options_with_values=(
-                    self.options_with_values
-                    | self.leading_options_with_values
-                    | self.interspersed_options_with_values
+                    self.options_with_values | self.leading_options_with_values | self.interspersed_options_with_values
                 ),
             )
             if not self.required_flags <= present_flags or self.forbidden_flags & present_flags:
