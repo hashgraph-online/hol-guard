@@ -19,6 +19,7 @@ from .command_rules import (
 )
 from .command_search_messaging_extensions import SEARCH_MESSAGING_COMMAND_RULES
 from .command_storage_extensions import STORAGE_COMMAND_RULES
+from .command_structured_matchers import SubcommandOperandPrefixMatcher
 
 COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "credential exfiltration shell command": (
@@ -73,6 +74,13 @@ _GIT_SUBCOMMAND_OPTIONS_WITH_VALUES = {
     "push": frozenset({"--exec", "--push-option", "--receive-pack", "--repo", "-o"}),
     "reset": frozenset({"--pathspec-from-file"}),
 }
+_GIT_FORCE_REFSPEC = SubcommandOperandPrefixMatcher(
+    executables=frozenset({"git"}),
+    subcommands=("push",),
+    operand_prefixes=frozenset({"+"}),
+    leading_options_with_values=_GIT_GLOBAL_OPTIONS_WITH_VALUES,
+    options_with_values=_GIT_SUBCOMMAND_OPTIONS_WITH_VALUES["push"],
+)
 
 
 def _git_matcher(subcommand: str, *, required_flags: frozenset[str]) -> ExecutableMatcher:
@@ -279,6 +287,7 @@ BUILT_IN_COMMAND_RULES = (
             matchers=(
                 _git_matcher("push", required_flags=frozenset({"--force"})),
                 _git_matcher("push", required_flags=frozenset({"-f"})),
+                _GIT_FORCE_REFSPEC,
             )
         ),
         action_class="git destructive command",

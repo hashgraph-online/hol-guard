@@ -333,6 +333,16 @@ def _embedded_execution(
         )
         executable = executable_name(owner.executable) if owner is not None else None
         if executable not in _SHELL_SCRIPT_EXECUTABLES:
+            if not heredoc.quoted:
+                _append_substitution_execution(
+                    heredoc.body,
+                    source_offset=heredoc.body_start,
+                    context_prefix=f"heredoc:{index}:substitution",
+                    excluded_ranges=(),
+                    embedded=embedded,
+                    segments=segments,
+                    depth=0,
+                )
             continue
         context = f"heredoc:{index}"
         embedded.append(

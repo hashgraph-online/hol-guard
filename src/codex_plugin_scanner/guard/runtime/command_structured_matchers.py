@@ -58,6 +58,59 @@ class LeadingOperandCountMatcher:
 
 @final
 @dataclass(frozen=True, slots=True)
+class SubcommandOperandPrefixMatcher:
+    """Match prefixed operands for a subcommand without scanning option values."""
+
+    executables: frozenset[str]
+    subcommands: tuple[str, ...]
+    operand_prefixes: frozenset[str]
+    leading_options_with_values: frozenset[str] = frozenset()
+    options_with_values: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
+        normalized_subcommands = tuple(value.strip().lower() for value in self.subcommands if value.strip())
+        normalized_prefixes = frozenset(value for value in self.operand_prefixes if value)
+        if not normalized_executables or not normalized_subcommands or not normalized_prefixes:
+            raise ValueError("SubcommandOperandPrefixMatcher requires executables, subcommands, and prefixes")
+        object.__setattr__(self, "executables", normalized_executables)
+        object.__setattr__(self, "subcommands", normalized_subcommands)
+        object.__setattr__(self, "operand_prefixes", normalized_prefixes)
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        for index, segment in enumerate(command.segments):
+            if not _segment_matches_executable(segment, self.executables):
+                continue
+            _flags, leading_operands = leading_flags_and_operands(
+                segment.arguments,
+                options_with_values=self.leading_options_with_values,
+            )
+            lowered = tuple(value.lower() for value in leading_operands)
+            if lowered[: len(self.subcommands)] != self.subcommands:
+                continue
+            operands = _operands_without_options(
+                leading_operands[len(self.subcommands) :],
+                options_with_values=self.options_with_values,
+            )
+            if not any(
+                len(operand) > len(prefix) and operand.startswith(prefix)
+                for operand in operands
+                for prefix in self.operand_prefixes
+            ):
+                continue
+            evidence.append(
+                MatcherEvidence(
+                    segment_index=index,
+                    executable=segment.executable,
+                    detail="Matched a structured subcommand operand prefix.",
+                )
+            )
+        return tuple(evidence)
+
+
+@final
+@dataclass(frozen=True, slots=True)
 class OptionValueKeyMatcher:
     """Match documented option values whose leading key has execution semantics."""
 
@@ -159,6 +212,8 @@ def structured_matcher_index_hints(matcher: CommandMatcher) -> tuple[frozenset[s
 
     if isinstance(matcher, LeadingOperandCountMatcher):
         return matcher.executables, frozenset()
+    if isinstance(matcher, SubcommandOperandPrefixMatcher):
+        return matcher.executables, frozenset(matcher.subcommands)
     if isinstance(matcher, OptionValueKeyMatcher):
         return matcher.executables, matcher.option_names
     if isinstance(matcher, EnvironmentNameMatcher):
@@ -237,7 +292,16 @@ def _option_values(arguments: tuple[str, ...], option_names: frozenset[str]) -> 
             ),
             None,
         )
+        clustered_match = _clustered_short_value(argument, option_names)
         if matched_option is None:
+            if clustered_match is not None:
+                _option, value = clustered_match
+                if value:
+                    values.append(value)
+                elif index + 1 < len(arguments):
+                    values.append(arguments[index + 1])
+                    index += 2
+                    continue
             index += 1
             continue
         if argument == matched_option:
@@ -251,6 +315,49 @@ def _option_values(arguments: tuple[str, ...], option_names: frozenset[str]) -> 
             values.append(argument[len(matched_option) :])
         index += 1
     return tuple(values)
+
+
+def _operands_without_options(
+    arguments: tuple[str, ...],
+    *,
+    options_with_values: frozenset[str],
+) -> tuple[str, ...]:
+    operands: list[str] = []
+    index = 0
+    parse_options = True
+    while index < len(arguments):
+        argument = arguments[index]
+        if parse_options and argument == "--":
+            parse_options = False
+            index += 1
+            continue
+        if parse_options and argument.startswith("-") and argument != "-":
+            option_name = _normalize_option_token(argument.split("=", 1)[0])
+            clustered_match = _clustered_short_value(argument, options_with_values)
+            takes_separate_value = option_name in options_with_values and "=" not in argument
+            if clustered_match is not None:
+                _option, attached_value = clustered_match
+                takes_separate_value = not attached_value
+            index += 2 if takes_separate_value else 1
+            continue
+        operands.append(argument)
+        index += 1
+    return tuple(operands)
+
+
+def _clustered_short_value(
+    argument: str,
+    option_names: frozenset[str],
+) -> tuple[str, str] | None:
+    if not argument.startswith("-") or argument.startswith("--") or len(argument) <= 2:
+        return None
+    for offset, character in enumerate(argument[1:], start=1):
+        if not character.isalnum():
+            return None
+        option = f"-{character}"
+        if option in option_names:
+            return option, argument[offset + 1 :]
+    return None
 
 
 def _normalize_option_token(value: str) -> str:

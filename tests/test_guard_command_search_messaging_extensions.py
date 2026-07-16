@@ -30,6 +30,26 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.search.elasticsearch.delete",
         ),
         (
+            "curl -X DELETE --url localhost:9200/customer-index",
+            "Elasticsearch destructive command",
+            "command.search.elasticsearch.delete",
+        ),
+        (
+            "curl -X DELETE --url=http://localhost:9200/customer-index",
+            "Elasticsearch destructive command",
+            "command.search.elasticsearch.delete",
+        ),
+        (
+            "curl -X DELETE --url=localhost:9200/customer-index",
+            "Elasticsearch destructive command",
+            "command.search.elasticsearch.delete",
+        ),
+        (
+            "curl -X DELETE elasticsearch:9200/customer-index",
+            "Elasticsearch destructive command",
+            "command.search.elasticsearch.delete",
+        ),
+        (
             "kafka-topics.sh --bootstrap-server localhost:9092 --delete --topic events",
             "Kafka destructive command",
             "command.messaging.kafka.delete",
@@ -113,8 +133,11 @@ def test_search_messaging_rules_feed_runtime_hooks(
     [
         "curl -X DELETE https://api.example.com/users/1",
         "curl -X DELETE https://api.example.com/_snapshot/old",
+        "curl -X DELETE --url api.example.com/users/1",
+        "curl -X DELETE --url=https://api.example.com/users/1",
         "curl -x http://localhost:9200/customer-index https://api.example.com/users/1",
         "curl http://localhost:9200/customer-index",
+        "curl --url localhost:9200/customer-index",
         "curl -X GET http://localhost:9200/customer-index",
         "kafka-topics.sh --bootstrap-server localhost:9092 --list",
         "kafka-topics.sh --delete --help",

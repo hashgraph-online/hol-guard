@@ -70,6 +70,10 @@ def test_command_inspection_maps_existing_sensitive_actions_to_extensions(
     [
         "grep 'git reset|rm -rf|browser' scripts/guard-test",
         "printf '%s\\n' 'rm -rf ./build'",
+        "printf '%s\\n' '+refs/heads/main:refs/heads/main'",
+        "git push --push-option +audit origin main",
+        "git push --push-option=+audit origin main",
+        "git push -o+audit origin main",
         "bunx vitest run __tests__/guard-review.test.ts",
         "rg 'destructive shell command' src tests | head -20",
         "git status --short",
@@ -173,6 +177,7 @@ def test_structured_core_rules_feed_runtime_classification(
         "git clean -nfdx",
         "git clean --dry-run -fdx",
         "git push origin main --force --dry-run",
+        "git push --dry-run origin +refs/heads/main:refs/heads/main",
         "shutdown --help",
         "mkfs --version",
         "Format-Volume -DriveLetter D -WhatIf",
@@ -405,9 +410,12 @@ def test_command_cli_lists_one_extension_and_rejects_unknown_ids(capsys: pytest.
 def test_inspection_does_not_classify_literal_heredoc_data(tmp_path: Path) -> None:
     body = "r" + "m -rf ./build"
     data = inspect_command(f"cat <<'EOF'\n{body}\nEOF", cwd=tmp_path, home_dir=tmp_path)
+    expanded = inspect_command(f"cat <<EOF\n$({body})\nEOF", cwd=tmp_path, home_dir=tmp_path)
     script = inspect_command(f"bash <<'EOF'\n{body}\nEOF", cwd=tmp_path, home_dir=tmp_path)
 
     assert data["status"] == "no_match"
+    assert expanded["status"] == "review"
+    assert "command.filesystem.recursive-delete" in {rule["rule_id"] for rule in expanded["rules"]}
     assert script["status"] == "review"
     assert "command.filesystem.recursive-delete" in {rule["rule_id"] for rule in script["rules"]}
 

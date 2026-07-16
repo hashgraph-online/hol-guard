@@ -68,17 +68,20 @@ class CurlElasticsearchDeleteMatcher:
         return tuple(evidence)
 
     def _matches_target(self, target: str) -> bool:
-        lowered = target.lower()
+        normalized = target.strip("'\"")
+        lowered = normalized.lower()
         if lowered.startswith(("$elasticsearch_", "${elasticsearch_")):
             return "/" in lowered
         try:
-            parsed = urlsplit(target)
+            explicit_scheme = "://" in normalized
+            parsed = urlsplit(normalized if explicit_scheme else f"//{normalized}")
             port = parsed.port
         except ValueError:
             return False
         hostname = parsed.hostname or ""
         recognizable_host = port in self.service_ports or "elasticsearch" in hostname.split(".")
-        return parsed.scheme in {"http", "https"} and recognizable_host and parsed.path not in {"", "/"}
+        supported_scheme = parsed.scheme in {"http", "https"} if explicit_scheme else not parsed.scheme
+        return supported_scheme and recognizable_host and parsed.path not in {"", "/"}
 
 
 def _curl_method_and_targets(arguments: tuple[str, ...]) -> tuple[str | None, tuple[str, ...]]:
@@ -98,11 +101,19 @@ def _curl_method_and_targets(arguments: tuple[str, ...]) -> tuple[str | None, tu
             method = arguments[index + 1].lower()
             index += 2
             continue
+        if lowered == "--url" and index + 1 < len(arguments):
+            targets.append(arguments[index + 1].strip("'\""))
+            index += 2
+            continue
+        if lowered.startswith("--url="):
+            targets.append(argument.split("=", 1)[1].strip("'\""))
+            index += 1
+            continue
         if lowered.startswith("--request="):
             method = lowered.split("=", 1)[1]
         elif argument.startswith("-X") and len(argument) > 2:
             method = argument[2:].lower()
-        if argument.startswith(("http://", "https://", "$")):
+        if not argument.startswith("-"):
             targets.append(argument.strip("'\""))
         index += 1
     return method, tuple(targets)
