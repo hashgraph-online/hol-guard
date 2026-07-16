@@ -17,6 +17,7 @@ from .command_rules import (
     ExecutableMatcher,
     PipelineMatcher,
 )
+from .command_search_messaging_extensions import SEARCH_MESSAGING_COMMAND_RULES
 from .command_storage_extensions import STORAGE_COMMAND_RULES
 
 COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
@@ -358,6 +359,7 @@ BUILT_IN_COMMAND_RULES = (
     *BACKUP_COMMAND_RULES,
     *REMOTE_COMMAND_RULES,
     *DATABASE_COMMAND_RULES,
+    *SEARCH_MESSAGING_COMMAND_RULES,
 )
 
 _RULES_BY_EXTENSION: dict[str, tuple[CommandSafetyRule, ...]] = {}
