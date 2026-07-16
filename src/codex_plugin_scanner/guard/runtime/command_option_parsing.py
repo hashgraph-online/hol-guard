@@ -7,6 +7,7 @@ from enum import Enum, auto
 from typing import Final
 
 _MAX_OPTION_PARSE_STATES: Final = 16_384
+_TRUTHY_FLAG_VALUES: Final = frozenset({"1", "on", "true", "yes"})
 
 
 class _ParseOutcome(Enum):
@@ -85,6 +86,13 @@ def known_option_advance(
     if not shape.fully_known or len(advances) != 1:
         return None
     return advances.pop()
+
+
+def long_flag_assignment_is_enabled(argument: str) -> bool:
+    """Return whether a long flag is bare or explicitly assigned a truthy value."""
+
+    _option_name, separator, value = argument.partition("=")
+    return not separator or value.lower() in _TRUTHY_FLAG_VALUES
 
 
 def _subcommand_parse_outcome(
@@ -181,7 +189,10 @@ def _option_shape(
             advance = 1 if separator else 2
             return _OptionShape((_OptionTransition(advance),), fully_known=True)
         if option_name in known_flags:
-            return _OptionShape((_OptionTransition(1, frozenset({option_name, argument})),), fully_known=True)
+            flags = {argument}
+            if long_flag_assignment_is_enabled(argument):
+                flags.add(option_name)
+            return _OptionShape((_OptionTransition(1, frozenset(flags)),), fully_known=True)
         if separator:
             return _OptionShape((_OptionTransition(1),), fully_known=True)
         return _OptionShape((_OptionTransition(1), _OptionTransition(2)), fully_known=False)

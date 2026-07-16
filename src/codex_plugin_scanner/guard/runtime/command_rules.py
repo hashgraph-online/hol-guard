@@ -10,6 +10,7 @@ from .command_model import CanonicalCommand, CommandSegment
 from .command_option_parsing import (
     flags_present_in_all_option_parses,
     known_option_advance,
+    long_flag_assignment_is_enabled,
     matches_subcommands_conservatively,
 )
 
@@ -19,7 +20,6 @@ CommandRuleMode = Literal["required", "enforce", "review", "monitor", "disabled"
 _VALID_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
 _VALID_MODES = frozenset({"required", "enforce", "review", "monitor", "disabled"})
 _EMPTY_STRING_SET: frozenset[str] = frozenset()
-_TRUTHY_FLAG_VALUES = frozenset({"1", "on", "true", "yes"})
 
 
 @final
@@ -435,7 +435,7 @@ def _present_flags(
         index += 2 if option_name in options_with_values and "=" not in argument else 1
     for option_name, (argument, option_value, is_value_option) in effective_long_options.items():
         flags.add(argument)
-        if is_value_option or option_value is None or option_value in _TRUTHY_FLAG_VALUES:
+        if is_value_option or option_value is None or long_flag_assignment_is_enabled(argument):
             flags.add(option_name)
     return frozenset(flags)
 

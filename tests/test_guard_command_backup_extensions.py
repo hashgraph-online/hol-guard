@@ -42,6 +42,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.backup.rclone.mutation",
         ),
         (
+            "rclone purge remote:archive --dry-run=false",
+            "Rclone destructive command",
+            "command.backup.rclone.mutation",
+        ),
+        (
+            "rclone purge remote:archive --dry-run=0",
+            "Rclone destructive command",
+            "command.backup.rclone.mutation",
+        ),
+        (
             "rclone -ab value purge remote:archive",
             "Rclone destructive command",
             "command.backup.rclone.mutation",
@@ -181,6 +191,8 @@ def test_backup_rules_feed_runtime_hooks(
     "command",
     [
         "rclone sync source: destination: --dry-run",
+        "rclone purge remote:archive --dry-run=true",
+        "rclone purge remote:archive --dry-run=1",
         "rclone -n purge remote:archive",
         "restic -r s3:archive forget latest --dry-run",
         "restic rewrite --forget latest --dry-run",
