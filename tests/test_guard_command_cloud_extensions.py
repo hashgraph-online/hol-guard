@@ -121,6 +121,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "Azure destructive command",
             "command.cloud.azure.resource-deletion",
         ),
+        (
+            "az --output table vm delete --resource-group app --name api-1 --yes",
+            "Azure destructive command",
+            "command.cloud.azure.resource-deletion",
+        ),
+        (
+            "az vm --output table delete --resource-group app --name api-1 --yes",
+            "Azure destructive command",
+            "command.cloud.azure.resource-deletion",
+        ),
     ],
 )
 def test_cloud_rules_feed_inspection_and_runtime_hooks(
