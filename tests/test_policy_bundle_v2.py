@@ -138,6 +138,24 @@ def test_shared_sync_validator_dispatches_v2_without_changing_v1_parser() -> Non
     assert persisted_keys == (verification_key,)
 
 
+def test_shared_sync_validator_rejects_sync_only_v2_signing_key() -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verification_key = _verification_key(private_key)
+    bundle = _signed_bundle(private_key, verification_key)
+
+    validated, reason, persisted_keys = validate_synced_policy_bundle(
+        bundle,
+        stored_keyring={},
+        sync_payload={
+            "policyBundleVerificationKeys": [verification_key.to_dict()],
+        },
+    )
+
+    assert validated is None
+    assert reason == "untrusted_signing_key"
+    assert persisted_keys == ()
+
+
 def test_v2_bundle_rejects_payload_tampering_before_apply() -> None:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     verification_key = _verification_key(private_key)
@@ -177,6 +195,29 @@ def test_v2_bundle_rejects_invalid_signature() -> None:
     assert reason == "bundle_signature_invalid"
 
 
+def test_v2_bundle_rejects_non_contract_pss_salt_length() -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verification_key = _verification_key(private_key)
+    bundle = _signed_bundle(private_key, verification_key)
+    verifier = cast(dict[str, object], bundle["verifier"])
+    signature = private_key.sign(
+        canonical_policy_bundle_v2_payload(bundle),
+        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=8),
+        hashes.SHA256(),
+    )
+    verifier["signature"] = base64.b64encode(signature).decode("ascii")
+
+    validated, reason = validated_policy_bundle_v2_payload(
+        bundle,
+        trusted_verification_keys=(verification_key,),
+        anchored_verification_keys=(verification_key,),
+        now=datetime(2026, 7, 16, tzinfo=timezone.utc),
+    )
+
+    assert validated is None
+    assert reason == "bundle_signature_invalid"
+
+
 def test_v2_bundle_rejects_expired_envelope() -> None:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     verification_key = _verification_key(private_key)
@@ -191,6 +232,23 @@ def test_v2_bundle_rejects_expired_envelope() -> None:
 
     assert validated is None
     assert reason == "bundle_expired"
+
+
+def test_v2_bundle_rejects_whitespace_padded_identifiers() -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verification_key = _verification_key(private_key)
+    bundle = _signed_bundle(private_key, verification_key)
+    bundle["workspaceId"] = " workspace-alpha "
+
+    validated, reason = validated_policy_bundle_v2_payload(
+        bundle,
+        trusted_verification_keys=(verification_key,),
+        anchored_verification_keys=(verification_key,),
+        now=datetime(2026, 7, 16, tzinfo=timezone.utc),
+    )
+
+    assert validated is None
+    assert reason == "invalid_workspace_id"
 
 
 def test_v2_bundle_rejects_unsigned_unknown_fields() -> None:

@@ -24,7 +24,6 @@ from .policy_document_yaml import PolicyDocumentError, parse_policy_document_yam
 
 POLICY_BUNDLE_V2_CONTRACT = "guard-policy-bundle.v2"
 POLICY_BUNDLE_V2_ENVELOPE_VERSION = 2
-POLICY_BUNDLE_V2_CAPABILITY = "guard-policy-bundle.v2"
 POLICY_BUNDLE_V2_CANONICALIZATION = {"algorithm": "rfc8785", "version": "1"}
 POLICY_BUNDLE_V2_ACK_STATUSES = frozenset({"received", "validated", "applied", "failed", "offline"})
 
@@ -97,9 +96,9 @@ def _non_empty_string(value: object, *, maximum: int = _MAX_STRING_LENGTH) -> st
     if not isinstance(value, str):
         return None
     normalized = value.strip()
-    if not normalized or len(value.encode("utf-8")) > maximum:
+    if not normalized or normalized != value or len(value.encode("utf-8")) > maximum:
         return None
-    return value
+    return normalized
 
 
 def _strict_utc_timestamp(value: object) -> datetime | None:
@@ -233,7 +232,7 @@ def _verify_signature(
     signing_key = resolve_policy_bundle_signing_key(key_id, trusted_verification_keys)
     if signing_key is None:
         return "untrusted_signing_key"
-    if anchored_verification_keys and not signing_key_is_trusted(signing_key, anchored_verification_keys):
+    if not signing_key_is_trusted(signing_key, anchored_verification_keys):
         return "untrusted_signing_key"
     if not signing_key_is_current(signing_key):
         return "untrusted_signing_key"
@@ -253,11 +252,12 @@ def _verify_signature(
         signature_bytes = base64.b64decode(signature, validate=True)
     except (binascii.Error, ValueError):
         return "invalid_verifier"
+    salt_length = padding.calculate_max_pss_salt_length(public_key, hashes.SHA256())
     try:
         public_key.verify(
             signature_bytes,
             canonical_policy_bundle_v2_payload(policy_bundle),
-            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.AUTO),
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=salt_length),
             hashes.SHA256(),
         )
     except (InvalidSignature, ValueError, TypeError):

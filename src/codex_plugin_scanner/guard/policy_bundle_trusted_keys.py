@@ -11,6 +11,7 @@ from typing import Protocol, cast
 from .runtime.supply_chain_bundle_base import _parse_iso_timestamp
 
 _VERIFICATION_KEY_STATES = frozenset({"active", "grace", "revoked"})
+_POLICY_BUNDLE_V2_CONTRACT = "guard-policy-bundle.v2"
 
 
 def _policy_bundle_parser_module():
@@ -239,7 +240,7 @@ def validate_synced_policy_bundle(
         sync_payload=sync_payload,
         supply_chain_keyring=supply_chain_keyring,
     )
-    if policy_bundle.get("contractVersion") == "guard-policy-bundle.v2":
+    if policy_bundle.get("contractVersion") == _POLICY_BUNDLE_V2_CONTRACT:
         validated_policy_bundle_v2_payload = _policy_bundle_v2_module().validated_policy_bundle_v2_payload
 
         validated_bundle, rejection_reason = validated_policy_bundle_v2_payload(
