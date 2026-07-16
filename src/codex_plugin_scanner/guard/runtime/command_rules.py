@@ -389,8 +389,8 @@ def _present_flags(
             flags.add(argument)
             if argument.startswith("-") and separator:
                 flags.add(option_name)
-        if argument.startswith("-") and not argument.startswith("--") and len(argument) > 2:
-            for character in argument[1:]:
+        if option_name.startswith("-") and not option_name.startswith("--") and len(option_name) > 2:
+            for character in option_name[1:]:
                 if not character.isalnum():
                     continue
                 short_flag = f"-{character}"

@@ -119,6 +119,7 @@ def test_executable_matcher_normalizes_flag_value_and_windows_path_forms() -> No
         ("--help=0", False),
         ("--help=no", False),
         ("--help=off", False),
+        ("--help=auto", False),
         ("--help --help=false", False),
         ("--help=false --help", True),
         ("--help=true --help=off --help=yes", True),
@@ -199,6 +200,17 @@ def test_executable_matcher_does_not_treat_option_values_as_flags() -> None:
         subcommands=("clean",),
         required_flags=frozenset({"-f"}),
         options_with_values=frozenset({"-e"}),
+    )
+
+    assert matcher.match(parsed) == ()
+
+
+def test_executable_matcher_does_not_unpack_attached_short_option_value() -> None:
+    parsed = parse_shell_command("tool delete -d=client")
+    matcher = ExecutableMatcher(
+        executables=frozenset({"tool"}),
+        subcommands=("delete",),
+        required_flags=frozenset({"-c"}),
     )
 
     assert matcher.match(parsed) == ()
