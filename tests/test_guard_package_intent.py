@@ -410,6 +410,23 @@ def test_parse_package_intent_keeps_transitive_only_typescript_lock_guarded(
     assert parse_package_intent("npx tsc --noEmit --pretty", workspace=tmp_path) is not None
 
 
+def test_parse_package_intent_keeps_ambiguous_pnpm_typescript_lock_guarded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_text(tmp_path / "package.json", '{"devDependencies":{"typescript":"^5.9.0"}}\n')
+    _write_text(tmp_path / "pnpm-lock.yaml", "packages:\n  typescript@5.9.0:\n    resolution: {}\n")
+    runner = tmp_path / "node_modules" / ".bin" / "tsc"
+    _write_text(runner, "#!/bin/sh\n")
+    runner.chmod(0o755)
+    manager = tmp_path / "bin" / "npx"
+    _write_text(manager, "#!/bin/sh\n")
+    manager.chmod(0o755)
+    monkeypatch.setenv("PATH", str(manager.parent))
+
+    assert parse_package_intent("npx tsc --noEmit --pretty", workspace=tmp_path) is not None
+
+
 @pytest.mark.parametrize(
     "command",
     (

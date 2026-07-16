@@ -339,7 +339,11 @@ def _is_verified_read_only_typescript_check(
 
 def _lockfiles_record_typescript(lockfiles: tuple[PackageExecutionFileEvidence, ...]) -> bool:
     for lockfile in lockfiles:
-        if lockfile.resolved_path is None or lockfile.status != "available":
+        if (
+            lockfile.resolved_path is None
+            or lockfile.status != "available"
+            or Path(lockfile.path).name != "package-lock.json"
+        ):
             continue
         try:
             text = Path(lockfile.resolved_path).read_text(encoding="utf-8")
