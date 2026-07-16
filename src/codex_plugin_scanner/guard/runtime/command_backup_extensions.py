@@ -7,6 +7,7 @@ from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 
 _RCLONE_GLOBAL_OPTIONS = frozenset({"--config", "--log-file", "--log-level", "--password-command", "--rc-addr"})
+_RCLONE_GLOBAL_FLAGS = frozenset({"--dry-run", "--quiet", "--verbose", "-n", "-q", "-v"})
 _RESTIC_GLOBAL_OPTIONS = frozenset(
     {
         "--cacert",
@@ -30,8 +31,12 @@ _RESTIC_GLOBAL_OPTIONS = frozenset(
         "-r",
     }
 )
+_RESTIC_GLOBAL_FLAGS = frozenset({"--quiet", "--verbose", "-q", "-v"})
 _BORG_GLOBAL_OPTIONS = frozenset(
     {
+        "-P",
+        "-a",
+        "-e",
         "-r",
         "--repo",
         "--debug-profile",
@@ -46,6 +51,7 @@ _BORG_GLOBAL_OPTIONS = frozenset(
         "--upload-ratelimit",
     }
 )
+_BORG_GLOBAL_FLAGS = frozenset({"--debug", "--show-rc", "--show-version", "--verbose", "-n", "-v"})
 _VELERO_GLOBAL_OPTIONS = frozenset(
     {
         "--features",
@@ -88,6 +94,7 @@ _RCLONE_MUTATION = AnyMatcher(
             command,
             allow_leading_options=True,
             leading_options_with_values=_RCLONE_GLOBAL_OPTIONS,
+            global_flags=_RCLONE_GLOBAL_FLAGS,
             fail_secure_unknown_options=True,
         )
         for command in ("delete", "deletefile", "purge", "rmdirs", "sync", "move", "moveto", "bisync")
@@ -100,6 +107,7 @@ _RESTIC_MUTATION = AnyMatcher(
             "forget",
             allow_leading_options=True,
             leading_options_with_values=_RESTIC_GLOBAL_OPTIONS,
+            global_flags=_RESTIC_GLOBAL_FLAGS,
             fail_secure_unknown_options=True,
         ),
         executable_matcher(
@@ -107,6 +115,7 @@ _RESTIC_MUTATION = AnyMatcher(
             "prune",
             allow_leading_options=True,
             leading_options_with_values=_RESTIC_GLOBAL_OPTIONS,
+            global_flags=_RESTIC_GLOBAL_FLAGS,
             fail_secure_unknown_options=True,
         ),
         executable_matcher(
@@ -115,6 +124,7 @@ _RESTIC_MUTATION = AnyMatcher(
             required_flags=frozenset({"--forget"}),
             allow_leading_options=True,
             leading_options_with_values=_RESTIC_GLOBAL_OPTIONS,
+            global_flags=_RESTIC_GLOBAL_FLAGS,
             fail_secure_unknown_options=True,
         ),
     )
@@ -126,6 +136,7 @@ _BORG_MUTATION = AnyMatcher(
             command,
             allow_leading_options=True,
             leading_options_with_values=_BORG_GLOBAL_OPTIONS,
+            global_flags=_BORG_GLOBAL_FLAGS,
             fail_secure_unknown_options=True,
         )
         for command in ("delete", "prune", "recreate")
@@ -138,6 +149,7 @@ _BORG_DRY_RUN = AnyMatcher(
             command,
             allow_leading_options=True,
             leading_options_with_values=_BORG_GLOBAL_OPTIONS,
+            global_flags=_BORG_GLOBAL_FLAGS,
             fail_secure_unknown_options=True,
         )
         for command in ("prune", "recreate")
