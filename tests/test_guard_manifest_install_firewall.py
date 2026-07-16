@@ -396,6 +396,110 @@ def test_legacy_v1_package_workspace_approval_is_not_reused(
     )
 
 
+def test_private_registry_package_approval_is_not_reused_after_registry_change(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_linked_git_worktrees(workspace_dir, tmp_path / "unused-linked")
+    _install_fake_pnpm(monkeypatch, tmp_path)
+    monkeypatch.setenv("NPM_CONFIG_REGISTRY", "https://packages.example.test/npm/")
+    command = ["pnpm", "add", "private-demo@1.0.0"]
+
+    baseline_payload, baseline_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-06-14T00:00:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+    assert baseline_rc == 2
+    receipt = baseline_payload["receipt"]
+    request = baseline_payload["request"]
+    assert isinstance(receipt, dict)
+    assert isinstance(request, dict)
+    package_context = request["package_execution_context"]
+    assert isinstance(package_context, dict)
+    store.add_approval_request(
+        GuardApprovalRequest(
+            request_id="req-private-registry",
+            harness="guard-cli",
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_name="pnpm add private-demo@1.0.0",
+            artifact_type="package_request",
+            artifact_hash=str(receipt["artifact_hash"]),
+            policy_action="require-reapproval",
+            recommended_scope="workspace",
+            changed_fields=("package_request",),
+            source_scope="project",
+            config_path=str(workspace_dir / "hol-guard.toml"),
+            workspace=str(workspace_dir),
+            launch_target="pnpm add private-demo@1.0.0",
+            review_command="hol-guard approvals approve req-private-registry",
+            approval_url="http://127.0.0.1:4455/approvals/req-private-registry",
+            scanner_evidence=(dict(package_context),),
+        ),
+        "2026-06-14T00:00:30Z",
+    )
+    apply_approval_resolution(
+        store=store,
+        request_id="req-private-registry",
+        action="allow",
+        scope="workspace",
+        workspace=str(workspace_dir),
+        reason="trusted private package and registry",
+        now="2026-06-14T00:01:00Z",
+    )
+
+    same_registry_payload, same_registry_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-06-14T00:02:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+    assert same_registry_rc == 0
+    assert same_registry_payload["verdict"]["action"] == "allow"
+    same_evaluation = same_registry_payload["supply_chain_evaluation"]
+    assert isinstance(same_evaluation, dict)
+    assert any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
+        for reason in same_evaluation.get("reasons", [])
+    )
+
+    monkeypatch.setenv("NPM_CONFIG_REGISTRY", "https://mirror.example.test/npm/")
+    changed_registry_payload, changed_registry_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-06-14T00:03:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+
+    assert changed_registry_rc == 2
+    assert changed_registry_payload["verdict"]["action"] == "review"
+    changed_receipt = changed_registry_payload["receipt"]
+    assert isinstance(changed_receipt, dict)
+    assert changed_receipt["artifact_hash"] != receipt["artifact_hash"]
+    changed_evaluation = changed_registry_payload["supply_chain_evaluation"]
+    assert isinstance(changed_evaluation, dict)
+    assert not any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
+        for reason in changed_evaluation.get("reasons", [])
+    )
+
+
 def test_workspace_package_approval_still_reprompts_when_worktree_lockfile_changes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -502,7 +606,7 @@ def test_build_package_protect_payload_saved_hashless_block_clear_command_omits_
         unsafe_raw_output=False,
         timeout_seconds=30,
     )
-    assert baseline_rc == 0
+    assert baseline_rc == 2
     receipt = baseline_payload["receipt"]
     assert isinstance(receipt, dict)
     store.upsert_policy(

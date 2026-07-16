@@ -480,8 +480,8 @@ def test_guard_store_init_does_not_hold_sqlite_writer_during_missing_policy_inte
     assert slow_process.exitcode == 0
     slow_result = slow_results.get(timeout=1)
 
-    assert fast_result["returncode"] == 0
-    assert slow_result["returncode"] == 0
+    assert fast_result["returncode"] == 2
+    assert slow_result["returncode"] == 2
     assert fast_elapsed < 3.0
 
 
@@ -722,8 +722,8 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
     finally:
         lock_process.join(timeout=20)
 
-    assert result.returncode == 0
-    assert marker_path.exists()
+    assert result.returncode == 2
+    assert marker_path.exists() is False
     assert "database is locked" not in result.stderr
 
 
@@ -1954,6 +1954,8 @@ def test_guard_protect_retry_runs_after_local_package_approval(
     fake_bin.mkdir(parents=True, exist_ok=True)
     marker_path = tmp_path / "npm-approved-marker.json"
     write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    original_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
     server, thread, sync_url = _start_cloud_eval_server(
         decision="allow",
         package_name="minimist",
@@ -1997,8 +1999,6 @@ def test_guard_protect_retry_runs_after_local_package_approval(
             reason="reviewed",
         )
 
-        original_path = os.environ.get("PATH", "")
-        monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
         retry_payload, retry_exit_code = build_protect_payload(
             command=["npm", "install", "minimist@1.2.8"],
             store=store,
@@ -2034,6 +2034,8 @@ def test_guard_protect_retry_after_local_package_approval_reuses_recent_cloud_va
     fake_bin.mkdir(parents=True, exist_ok=True)
     marker_path = tmp_path / "npm-approved-cache-marker.json"
     write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    original_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
     server, thread, sync_url = _start_cloud_eval_server(
         decision="allow",
         package_name="minimist",
@@ -2081,8 +2083,6 @@ def test_guard_protect_retry_after_local_package_approval_reuses_recent_cloud_va
         server = None
         thread = None
 
-        original_path = os.environ.get("PATH", "")
-        monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
         retry_payload, retry_exit_code = build_protect_payload(
             command=["npm", "install", "minimist@1.2.8"],
             store=store,
@@ -2464,6 +2464,8 @@ def test_guard_protect_retry_runs_after_cached_advisory_package_approval(
     fake_bin.mkdir(parents=True, exist_ok=True)
     marker_path = tmp_path / "npm-cached-approval-marker.json"
     write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    original_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
     store = GuardStore(home_dir)
     _seed_bundle_cache_only(
         home_dir=home_dir,
@@ -2514,8 +2516,6 @@ def test_guard_protect_retry_runs_after_cached_advisory_package_approval(
         reason="reviewed",
     )
 
-    original_path = os.environ.get("PATH", "")
-    monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
     retry_payload, retry_exit_code = build_protect_payload(
         command=["npm", "install", "badpkg@1.0.0"],
         store=store,

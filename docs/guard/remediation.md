@@ -43,6 +43,20 @@ it prevents an incomplete context from silently widening a previous approval.
 Registry credentials and configuration values are never included in approval
 evidence; only digests and safe component labels are retained.
 
+### Private and unpublished packages
+
+Guard pauses an unidentified package from a protected or beta ecosystem instead
+of treating a telemetry-only `monitor` result as permission to install. Configure
+the private registry in the package manager's project-scoped configuration (for
+example, `.npmrc`, `pip.conf`, or the manager's equivalent), review the exact
+package request, and save a **This project** approval when appropriate.
+
+That approval remains bound to the package ecosystem and normalized name, source,
+requested and resolved versions, package manager, and the fingerprinted execution
+context. A registry, proxy, credential-policy, executable, manifest, lockfile, or
+hook change causes Guard to ask again. Secret registry values are hashed before
+they enter the context evidence.
+
 ## 4. Audit and rollback
 
 - Keep the remediation trail in Guard evidence/audit output.
