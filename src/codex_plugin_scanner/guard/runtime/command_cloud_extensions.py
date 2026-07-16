@@ -47,7 +47,15 @@ _GCLOUD_GLOBAL_OPTIONS = frozenset(
     }
 )
 _GCLOUD_GLOBAL_FLAGS = frozenset(
-    {"--help", "--log-http", "--quiet", "--user-output-enabled", "--no-user-output-enabled"}
+    {
+        "--help",
+        "--log-http",
+        "--no-log-http",
+        "--quiet",
+        "-q",
+        "--user-output-enabled",
+        "--no-user-output-enabled",
+    }
 )
 _AZURE_GLOBAL_OPTIONS = frozenset({"--output", "-o", "--query", "--subscription"})
 _AZURE_GLOBAL_FLAGS = frozenset({"--debug", "--only-show-errors", "--verbose"})
