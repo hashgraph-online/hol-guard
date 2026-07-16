@@ -502,6 +502,7 @@ def apply_approval_resolution(
     resolve_scope_matches: bool = True,
     approval_gate_input: ApprovalGateInput | None = None,
     approval_gate_grant: ApprovalGateGrant | None = None,
+    approval_gate_subject: str | None = None,
     persist_policy: bool | None = None,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
@@ -555,6 +556,7 @@ def apply_approval_resolution(
         scope=scope,
         approval_gate_input=approval_gate_input,
         approval_gate_grant=approval_gate_grant,
+        subject=approval_gate_subject or f"approval-request:{request_id}",
         now=resolved_at,
     )
     persisted_rule = persist_policy is True or (persist_policy is None and scope != "artifact")
@@ -2069,12 +2071,14 @@ def bulk_allow_read_only_once(
 
     bulk_resolution_action = "allow"
     bulk_resolution_scope = "artifact"
+    bulk_subject = f"approval-request-batch:{uuid.uuid5(uuid.NAMESPACE_URL, chr(0).join(sorted(request_ids))).hex}"
     resolved_count = 0
     failed: list[dict[str, str]] = []
     bulk_gate_grant = require_approval_decision(
         store.guard_home,
         action=bulk_resolution_action,
         scope=bulk_resolution_scope,
+        subject=bulk_subject,
         approval_gate_input=approval_gate_input,
         now=resolved_at,
     )
@@ -2100,6 +2104,7 @@ def bulk_allow_read_only_once(
                 return_queue_result=False,
                 resolve_scope_matches=True,
                 approval_gate_grant=bulk_gate_grant,
+                approval_gate_subject=bulk_subject,
                 persist_policy=False,
             )
             resolved_count += 1

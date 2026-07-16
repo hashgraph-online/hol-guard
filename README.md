@@ -287,6 +287,8 @@ hol-guard settings approval-totp status
 
 TOTP uses SHA-1, 6 digits, 30-second steps, and a Base32 `otpauth://totp/HOL%20Guard:<device>` provisioning URI. Guard stores the seed encrypted locally, rejects replayed steps, and never includes the seed in settings export, receipts, or public status. Disabling TOTP or the password gate requires fresh password proof plus a current TOTP code when TOTP is enabled.
 
+Two-factor proof creates only a 30-second, transaction-local grant for the exact action, scope, subject, and session nonce being processed. The grant is never returned to the browser or reused as a general login session. Password and authenticator failures have independent counters plus a combined five-attempt lockout budget; rotating either factor revokes outstanding grants and any saved recovery, session, or trusted-device state.
+
 ## Guard: Advisory Sync Privacy
 
 Guard's advisory database updates are optional and pull-only. When you run `hol-guard advisories sync`, Guard fetches a signed advisory list from `advisories.hol.org`. No local file paths, harness configs, receipt data, or workspace identifiers are sent to any server during sync.

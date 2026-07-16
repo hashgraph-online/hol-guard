@@ -1323,7 +1323,7 @@ function resolveSettingsSaveProofModalCopy(input) {
     if (input.maintenanceAction === "disable-totp") {
       return {
         title: "Disconnect authenticator",
-        detail: "Confirm a current app code to remove this second factor.",
+        detail: "Enter your approval password and a current app code to remove this second factor.",
         confirmLabel: "Disconnect"
       };
     }
@@ -1372,15 +1372,12 @@ function isSettingsSaveProofSubmitDisabled(mode2, credentials, totpRequired) {
     if (next.length === 0 || confirm.length === 0 || next !== confirm) {
       return true;
     }
-    return totpRequired ? totp.length === 0 : current.length === 0;
-  }
-  if (totpRequired) {
-    return totp.length === 0;
+    return current.length === 0 || totpRequired && totp.length === 0;
   }
   if (current.length === 0) {
     return true;
   }
-  return false;
+  return totpRequired && totp.length === 0;
 }
 function SettingsSaveProofModal(props) {
   const dialogRef = reactExports.useRef(null);
@@ -1400,11 +1397,7 @@ function SettingsSaveProofModal(props) {
       return;
     }
     const timer = setTimeout(() => {
-      if (props.gate?.totp_enabled === true && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance")) {
-        totpRef.current?.focus();
-      } else {
-        passwordRef.current?.focus();
-      }
+      passwordRef.current?.focus();
     }, 50);
     return () => clearTimeout(timer);
   }, [props.gate?.totp_enabled, props.open, props.mode]);
@@ -1425,7 +1418,7 @@ function SettingsSaveProofModal(props) {
     return void 0;
   }, [props.open]);
   const totpRequired = props.gate?.totp_enabled === true && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance");
-  const needsCurrentPassword = props.mode !== "setup-gate" && !totpRequired;
+  const needsCurrentPassword = props.mode !== "setup-gate";
   const handleCurrentPasswordChange = reactExports.useCallback((event) => {
     setCurrentPassword(event.target.value);
   }, []);

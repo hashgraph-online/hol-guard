@@ -13,8 +13,8 @@ type ApprovalProofFieldInputsProps = {
   onApprovalTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
 };
 
-export function approvalProofRequiresPassword(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
-  return gate?.totp_enabled !== true;
+export function approvalProofRequiresTotp(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
+  return gate?.totp_enabled === true;
 }
 
 export function isApprovalProofSubmitDisabled(
@@ -25,39 +25,36 @@ export function isApprovalProofSubmitDisabled(
   if (busy) {
     return true;
   }
-  if (approvalProofRequiresPassword(gate)) {
-    return credentials.approvalPassword.trim() === "";
-  }
-  return credentials.approvalTotpCode.trim() === "";
+  return credentials.approvalPassword.trim() === ""
+    || (approvalProofRequiresTotp(gate) && credentials.approvalTotpCode.trim() === "");
 }
 
 export function buildApprovalProofCredentials(
   gate: GuardApprovalGatePublicConfig | null | undefined,
   credentials: { approvalPassword: string; approvalTotpCode: string },
 ): { approval_password?: string; approval_totp_code?: string } {
-  if (approvalProofRequiresPassword(gate)) {
-    return { approval_password: credentials.approvalPassword };
-  }
-  return { approval_totp_code: credentials.approvalTotpCode };
+  return {
+    approval_password: credentials.approvalPassword,
+    ...(approvalProofRequiresTotp(gate) ? { approval_totp_code: credentials.approvalTotpCode } : {}),
+  };
 }
 
 export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
-  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
+  const needsTotp = approvalProofRequiresTotp(props.approvalGate);
   return (
     <div className="space-y-3">
-      {needsPassword ? (
-        <label className="block">
-          <span className="text-sm font-semibold text-brand-dark">Approval password</span>
-          <input
-            ref={props.passwordRef}
-            type="password"
-            autoComplete="current-password"
-            value={props.approvalPassword}
-            onChange={props.onApprovalPasswordChange}
-            className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          />
-        </label>
-      ) : (
+      <label className="block">
+        <span className="text-sm font-semibold text-brand-dark">Approval password</span>
+        <input
+          ref={props.passwordRef}
+          type="password"
+          autoComplete="current-password"
+          value={props.approvalPassword}
+          onChange={props.onApprovalPasswordChange}
+          className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        />
+      </label>
+      {needsTotp ? (
         <label className="block">
           <span className="text-sm font-semibold text-brand-dark">Authenticator code</span>
           <input
@@ -70,7 +67,7 @@ export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
             className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           />
         </label>
-      )}
+      ) : null}
     </div>
   );
 }

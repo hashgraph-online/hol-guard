@@ -307,6 +307,8 @@ hol-guard settings approval-totp status
 
 Guard emits a standard `otpauth://totp/HOL%20Guard:<device>` URI with a Base32 secret, SHA-1, 6 digits, and a 30-second period. The seed is encrypted locally and never appears in public settings, diagnostics export, receipts, URLs, or screenshots. Guard rejects invalid codes, replayed time steps, and stale enrollment state. When TOTP is enabled, protected actions require both the current password and a current authenticator code.
 
+After both factors succeed, Guard issues an internal 30-second grant bound to that exact action, scope, subject, and session nonce. It exists only long enough for the daemon and store to finish the current transaction; it is not exposed to the browser or reusable as a broad session. Password and authenticator failures are counted separately and against a combined five-attempt budget. Password or TOTP rotation revokes outstanding grants and clears any recovery, approval-session, or trusted-device state.
+
 ## What `install` does
 
 `guard install <harness>` creates a local launcher shim under Guard’s home directory:

@@ -77,16 +77,24 @@ assert(
 );
 
 assert(
-  isSettingsSaveProofSubmitDisabled("verify-save", { totpCode: "123456" }, true) === false,
-  "save-proof: verify accepts totp without password when enabled",
+  isSettingsSaveProofSubmitDisabled("verify-save", { totpCode: "123456" }, true) === true,
+  "save-proof: verify rejects totp without password when enabled",
 );
 assert(
   isSettingsSaveProofSubmitDisabled(
     "change-password",
     { newPassword: "next-secret", confirmPassword: "next-secret", totpCode: "123456" },
     true,
+  ) === true,
+  "save-proof: change-password rejects missing current password when enabled",
+);
+assert(
+  isSettingsSaveProofSubmitDisabled(
+    "change-password",
+    { currentPassword: "old", newPassword: "next-secret", confirmPassword: "next-secret", totpCode: "123456" },
+    true,
   ) === false,
-  "save-proof: change-password accepts totp without current password when enabled",
+  "save-proof: change-password accepts both current factors and matching new password",
 );
 assert(
   isSettingsSaveProofSubmitDisabled("setup-gate", { newPassword: "alpha", confirmPassword: "beta" }, false) === true,

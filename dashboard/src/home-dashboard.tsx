@@ -24,7 +24,7 @@ import { harnessDisplayName, formatRelativeTime, formatNumber, isDisplayableHarn
 import { useFocusTrap } from "./use-focus-trap";
 import { DeviceProofCard, resolveCloudIntelCopy } from "./runtime-overview";
 import { HomeProtectionModule } from "./home-protection-module";
-import { approvalProofRequiresPassword } from "./approval-proof-inline";
+import { approvalProofRequiresTotp } from "./approval-proof-inline";
 import { EvidenceInsightsHomePreview } from "./evidence/evidence-insights-home-preview";
 import { EvidenceInsightsShareModal } from "./evidence/evidence-insights-share-modal";
 import { useReceiptAnalytics } from "./evidence/use-receipt-analytics";
@@ -445,7 +445,9 @@ function ClearConfirmDialog(props: {
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(true, dialogRef);
   const needsProof = props.approvalGate?.enabled === true && props.approvalGate.configured === true;
-  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
+  const needsTotp = approvalProofRequiresTotp(props.approvalGate);
+  const proofIncomplete = needsProof
+    && (props.clearPassword.trim() === "" || (needsTotp && props.clearTotpCode.trim() === ""));
 
   return (
     <div className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Confirm clear decisions">
@@ -461,18 +463,17 @@ function ClearConfirmDialog(props: {
                 </p>
                 {needsProof && (
                   <div className="mt-4 grid gap-3">
-                    {needsPassword ? (
-                      <label className="block">
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
-                        <input
-                          type="password"
-                          autoComplete="current-password"
-                          value={props.clearPassword}
-                          onChange={props.onClearPasswordChange}
-                          className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                        />
-                      </label>
-                    ) : (
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={props.clearPassword}
+                        onChange={props.onClearPasswordChange}
+                        className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                      />
+                    </label>
+                    {needsTotp ? (
                       <label className="block">
                         <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Authenticator code</span>
                         <input
@@ -487,7 +488,7 @@ function ClearConfirmDialog(props: {
                           className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                         />
                       </label>
-                    )}
+                    ) : null}
                   </div>
                 )}
                 {props.clearError !== null && (
@@ -508,7 +509,7 @@ function ClearConfirmDialog(props: {
               <button
                 type="button"
                 onClick={props.onConfirmClear}
-                disabled={props.clearSubmitting}
+                disabled={props.clearSubmitting || proofIncomplete}
                 className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-60"
               >
                 {props.clearSubmitting ? "Clearing..." : "Clear decisions"}

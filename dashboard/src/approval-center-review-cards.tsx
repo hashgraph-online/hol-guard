@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type ChangeEvent } from "react";
 import { HiMiniCheck, HiMiniXMark, HiMiniKey } from "react-icons/hi2";
 import type { GuardApprovalRequest, GuardApprovalGatePublicConfig } from "./guard-types";
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
-import { approvalProofRequiresPassword } from "./approval-proof-inline";
+import { approvalProofRequiresTotp } from "./approval-proof-inline";
 
 type WhyThisPausedProps = {
   item: GuardApprovalRequest;
@@ -112,17 +112,15 @@ type ApprovalPasswordModalProps = {
 export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
   const passwordRef = useRef<HTMLInputElement>(null);
   const totpRef = useRef<HTMLInputElement>(null);
-  const needsPassword = approvalProofRequiresPassword(props.gate);
+  const needsTotp = approvalProofRequiresTotp(props.gate);
+  const submitDisabled = props.approvalPassword.trim() === ""
+    || (needsTotp && props.approvalTotpCode.trim() === "");
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (needsPassword) {
-        passwordRef.current?.focus();
-      } else {
-        totpRef.current?.focus();
-      }
+      passwordRef.current?.focus();
     }, 50);
     return () => clearTimeout(timer);
-  }, [needsPassword]);
+  }, []);
 
   const showCooldownOption =
     props.gate.cooldown_seconds > 0 &&
@@ -138,12 +136,12 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && !submitDisabled) {
         e.preventDefault();
         props.onSubmit();
       }
     },
-    [props.onSubmit]
+    [props.onSubmit, submitDisabled]
   );
 
   return (
@@ -165,7 +163,7 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
               id="approval-password-modal-title"
               className="text-lg font-semibold tracking-tight text-brand-dark"
             >
-              {needsPassword ? "Approval password required" : "Authenticator code required"}
+              {needsTotp ? "Password and authenticator required" : "Approval password required"}
             </h2>
             <p className="text-sm text-brand-dark/70">
               Guard needs a fresh proof before it can save this decision.
@@ -174,19 +172,18 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
         </div>
 
         <div className="mt-5 space-y-3">
-          {needsPassword ? (
-            <label className="block">
-              <span className="text-sm font-semibold text-brand-dark">Approval password</span>
-              <input
-                ref={passwordRef}
-                type="password"
-                autoComplete="current-password"
-                value={props.approvalPassword}
-                onChange={props.onApprovalPasswordChange}
-                className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-              />
-            </label>
-          ) : (
+          <label className="block">
+            <span className="text-sm font-semibold text-brand-dark">Approval password</span>
+            <input
+              ref={passwordRef}
+              type="password"
+              autoComplete="current-password"
+              value={props.approvalPassword}
+              onChange={props.onApprovalPasswordChange}
+              className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            />
+          </label>
+          {needsTotp ? (
             <label className="block">
               <span className="text-sm font-semibold text-brand-dark">Authenticator code</span>
               <input
@@ -200,7 +197,7 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
                 className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               />
             </label>
-          )}
+          ) : null}
           {showCooldownOption && (
             <label className="flex cursor-pointer items-center gap-2 text-sm text-brand-dark">
               <input
@@ -225,7 +222,8 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
           <button
             type="button"
             onClick={props.onSubmit}
-            className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90"
+            disabled={submitDisabled}
+            className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {props.submitLabel}
           </button>

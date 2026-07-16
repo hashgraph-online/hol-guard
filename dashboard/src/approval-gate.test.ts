@@ -232,7 +232,7 @@ function testBulkApproveGateCredentialsPayload(): void {
   assert(!("approval_gate_use_cooldown" in withoutGate), "bulk payload should not include approval_gate_use_cooldown when no gate credentials");
 }
 
-function testApprovalProofTotpOverridesPassword(): void {
+function testApprovalProofTotpRequiresPasswordAndCode(): void {
   const totpGate: GuardApprovalGatePublicConfig = {
     enabled: true,
     configured: true,
@@ -246,12 +246,20 @@ function testApprovalProofTotpOverridesPassword(): void {
     totp_pending: false,
   };
   assert(
-    isApprovalProofSubmitDisabled(totpGate, { approvalPassword: "", approvalTotpCode: "123456" }, false) === false,
-    "totp approval proof should not require password",
+    isApprovalProofSubmitDisabled(totpGate, { approvalPassword: "", approvalTotpCode: "123456" }, false) === true,
+    "two-factor approval proof should reject a missing password",
   );
-  const credentials = buildApprovalProofCredentials(totpGate, { approvalPassword: "ignored", approvalTotpCode: "123456" });
+  assert(
+    isApprovalProofSubmitDisabled(totpGate, { approvalPassword: "secret", approvalTotpCode: "" }, false) === true,
+    "two-factor approval proof should reject a missing authenticator code",
+  );
+  assert(
+    isApprovalProofSubmitDisabled(totpGate, { approvalPassword: "secret", approvalTotpCode: "123456" }, false) === false,
+    "two-factor approval proof should accept both factors",
+  );
+  const credentials = buildApprovalProofCredentials(totpGate, { approvalPassword: "secret", approvalTotpCode: "123456" });
   assert(credentials.approval_totp_code === "123456", "totp approval proof should include authenticator code");
-  assert(!("approval_password" in credentials), "totp approval proof should omit password");
+  assert(credentials.approval_password === "secret", "totp approval proof should include password");
 }
 
 const tests: Array<[string, () => void]> = [
@@ -263,7 +271,7 @@ const tests: Array<[string, () => void]> = [
   ["testApprovalGateToggleReflectedInDraftApprovalGate", testApprovalGateToggleReflectedInDraftApprovalGate],
   ["testApprovalGateCooldownReflectedInDraftApprovalGate", testApprovalGateCooldownReflectedInDraftApprovalGate],
   ["testBulkApproveGateCredentialsPayload", testBulkApproveGateCredentialsPayload],
-  ["testApprovalProofTotpOverridesPassword", testApprovalProofTotpOverridesPassword],
+  ["testApprovalProofTotpRequiresPasswordAndCode", testApprovalProofTotpRequiresPasswordAndCode],
 ];
 
 let passed = 0;
