@@ -17,6 +17,7 @@ from .data_flow import (
     ShellHeredoc,
     extract_command_segments,
     extract_command_substitution_spans,
+    extract_expanded_heredoc_substitution_spans,
     extract_heredocs,
     extract_pipes,
     mask_heredoc_bodies,
@@ -342,6 +343,7 @@ def _embedded_execution(
                     embedded=embedded,
                     segments=segments,
                     depth=0,
+                    expanded_heredoc=True,
                 )
             continue
         context = f"heredoc:{index}"
@@ -382,10 +384,12 @@ def _append_substitution_execution(
     embedded: list[EmbeddedCommand],
     segments: list[CommandSegment],
     depth: int,
+    expanded_heredoc: bool = False,
 ) -> None:
     if depth >= 4:
         return
-    for index, substitution in enumerate(extract_command_substitution_spans(command)):
+    extractor = extract_expanded_heredoc_substitution_spans if expanded_heredoc else extract_command_substitution_spans
+    for index, substitution in enumerate(extractor(command)):
         absolute_start = source_offset + substitution.body_start
         if any(start <= absolute_start < end for start, end in excluded_ranges):
             continue
