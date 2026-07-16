@@ -20,6 +20,18 @@ _AWS_GLOBAL_OPTIONS = frozenset(
         "--region",
     }
 )
+_AWS_GLOBAL_FLAGS = frozenset(
+    {
+        "--cli-auto-prompt",
+        "--debug",
+        "--no-cli-auto-prompt",
+        "--no-cli-pager",
+        "--no-color",
+        "--no-paginate",
+        "--no-sign-request",
+        "--no-verify-ssl",
+    }
+)
 _GCLOUD_GLOBAL_OPTIONS = frozenset(
     {
         "--access-token-file",
@@ -34,35 +46,91 @@ _GCLOUD_GLOBAL_OPTIONS = frozenset(
         "--verbosity",
     }
 )
+_GCLOUD_GLOBAL_FLAGS = frozenset(
+    {"--help", "--log-http", "--quiet", "--user-output-enabled", "--no-user-output-enabled"}
+)
 _AZURE_GLOBAL_OPTIONS = frozenset({"--output", "-o", "--query", "--subscription"})
+_AZURE_GLOBAL_FLAGS = frozenset({"--debug", "--only-show-errors", "--verbose"})
 _AWS_RESOURCE_DELETE = AnyMatcher(
     matchers=(
-        executable_matcher("aws", "ec2", "terminate-instances", global_options_with_values=_AWS_GLOBAL_OPTIONS),
-        executable_matcher("aws", "rds", "delete-db-instance", global_options_with_values=_AWS_GLOBAL_OPTIONS),
-        executable_matcher("aws", "rds", "delete-db-cluster", global_options_with_values=_AWS_GLOBAL_OPTIONS),
-        executable_matcher("aws", "eks", "delete-cluster", global_options_with_values=_AWS_GLOBAL_OPTIONS),
+        executable_matcher(
+            "aws",
+            "ec2",
+            "terminate-instances",
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
+        ),
+        executable_matcher(
+            "aws",
+            "rds",
+            "delete-db-instance",
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
+        ),
+        executable_matcher(
+            "aws",
+            "rds",
+            "delete-db-cluster",
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
+        ),
+        executable_matcher(
+            "aws",
+            "eks",
+            "delete-cluster",
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
+        ),
     )
 )
 _AWS_EC2_TERMINATE = AnyMatcher(
-    matchers=(executable_matcher("aws", "ec2", "terminate-instances", global_options_with_values=_AWS_GLOBAL_OPTIONS),)
+    matchers=(
+        executable_matcher(
+            "aws",
+            "ec2",
+            "terminate-instances",
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
+        ),
+    )
 )
 _GCLOUD_RESOURCE_DELETE = AnyMatcher(
     matchers=(
         *(
-            executable_matcher("gcloud", *track, *operation, global_options_with_values=_GCLOUD_GLOBAL_OPTIONS)
+            executable_matcher(
+                "gcloud",
+                *track,
+                *operation,
+                global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
+                global_flags=_GCLOUD_GLOBAL_FLAGS,
+            )
             for track in ((), ("alpha",), ("beta",), ("preview",))
             for operation in (("compute", "instances", "delete"),)
         ),
         *(
             executable_matcher(
-                "gcloud", *track, "sql", "instances", "delete", global_options_with_values=_GCLOUD_GLOBAL_OPTIONS
+                "gcloud",
+                *track,
+                "sql",
+                "instances",
+                "delete",
+                global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
+                global_flags=_GCLOUD_GLOBAL_FLAGS,
             )
             for track in ((), ("alpha",), ("beta",))
         ),
     )
 )
 _AZURE_RESOURCE_DELETE = AnyMatcher(
-    matchers=(executable_matcher("az", "vm", "delete", global_options_with_values=_AZURE_GLOBAL_OPTIONS),)
+    matchers=(
+        executable_matcher(
+            "az",
+            "vm",
+            "delete",
+            global_options_with_values=_AZURE_GLOBAL_OPTIONS,
+            global_flags=_AZURE_GLOBAL_FLAGS,
+        ),
+    )
 )
 
 

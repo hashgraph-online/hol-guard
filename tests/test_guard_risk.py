@@ -3217,6 +3217,63 @@ def test_tool_action_request_classifier_detects_shell_wrapper_script_command():
     assert request.action_class == "destructive shell command"
 
 
+@pytest.mark.parametrize("shell_name", ["bash", "sh"])
+def test_tool_action_request_classifier_detects_clustered_shell_command_flag(shell_name: str):
+    command = f"{shell_name} -cl 'rm -rf dangerous-marker.json'"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": command},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+    artifact = build_tool_action_request_artifact(
+        "opencode",
+        request,
+        config_path="opencode.json",
+        source_scope="project",
+    )
+    assert artifact.metadata["command_text"] == "rm -rf dangerous-marker.json"
+    assert artifact.metadata["raw_command_text"] == command
+
+
+def test_clustered_shell_command_approval_hash_covers_the_complete_command():
+    first_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "bash -cl 'rm -rf first-dangerous-marker.json'"},
+    )
+    second_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "bash -cl 'rm -rf second-dangerous-marker.json'"},
+    )
+
+    assert first_request is not None
+    assert second_request is not None
+    first_artifact = build_tool_action_request_artifact(
+        "opencode",
+        first_request,
+        config_path="opencode.json",
+        source_scope="project",
+    )
+    second_artifact = build_tool_action_request_artifact(
+        "opencode",
+        second_request,
+        config_path="opencode.json",
+        source_scope="project",
+    )
+
+    assert artifact_hash(first_artifact) != artifact_hash(second_artifact)
+
+
+def test_tool_action_request_classifier_keeps_clustered_shell_read_only_lookup_unblocked():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "bash -cl 'grep -R needle src'"},
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_detects_base64_decode_and_exec_command():
     request = extract_sensitive_tool_action_request(
         "bash",

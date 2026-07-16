@@ -18,6 +18,7 @@ def executable_matcher(
     *subcommands: str,
     required_flags: frozenset[str] = _EMPTY_STRING_SET,
     global_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
+    global_flags: frozenset[str] = _EMPTY_STRING_SET,
     allow_leading_options: bool = False,
     leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
     options_with_values: frozenset[str] = _EMPTY_STRING_SET,
@@ -29,6 +30,7 @@ def executable_matcher(
         subcommands=subcommands,
         required_flags=required_flags,
         interspersed_options_with_values=global_options_with_values,
+        interspersed_flags=global_flags,
         allow_leading_options=allow_leading_options,
         leading_options_with_values=leading_options_with_values,
         options_with_values=options_with_values,
@@ -38,6 +40,8 @@ def executable_matcher(
 def with_required_flag(matcher: AnyMatcher, flag: str) -> AnyMatcher:
     """Clone executable children while adding one required flag."""
 
+    if not all(isinstance(child, ExecutableMatcher) for child in matcher.matchers):
+        raise ValueError("Safe variants require executable matcher children")
     return AnyMatcher(
         matchers=tuple(
             ExecutableMatcher(
@@ -48,6 +52,7 @@ def with_required_flag(matcher: AnyMatcher, flag: str) -> AnyMatcher:
                 allow_leading_options=child.allow_leading_options,
                 leading_options_with_values=child.leading_options_with_values,
                 interspersed_options_with_values=child.interspersed_options_with_values,
+                interspersed_flags=child.interspersed_flags,
                 options_with_values=child.options_with_values,
                 required_flags_in_all_arguments=True,
             )

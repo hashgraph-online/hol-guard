@@ -6,8 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime.command_extension_matchers import with_required_flag
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
+from codex_plugin_scanner.guard.runtime.command_rules import AnyMatcher, ExecutableMatcher
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
 
@@ -50,12 +52,47 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.cloud.aws.resource-deletion",
         ),
         (
+            "aws --no-cli-pager ec2 terminate-instances --instance-ids i-123",
+            "AWS destructive command",
+            "command.cloud.aws.resource-deletion",
+        ),
+        (
+            "aws --no-paginate ec2 terminate-instances --instance-ids i-123",
+            "AWS destructive command",
+            "command.cloud.aws.resource-deletion",
+        ),
+        (
+            "aws ec2 --cli-auto-prompt terminate-instances --instance-ids i-123",
+            "AWS destructive command",
+            "command.cloud.aws.resource-deletion",
+        ),
+        (
+            "aws ec2 terminate-instances --no-cli-auto-prompt --instance-ids i-123",
+            "AWS destructive command",
+            "command.cloud.aws.resource-deletion",
+        ),
+        (
+            "aws --no-color ec2 terminate-instances --instance-ids i-123",
+            "AWS destructive command",
+            "command.cloud.aws.resource-deletion",
+        ),
+        (
             "gcloud.cmd compute --project app-prod instances delete api-1",
             "Google Cloud destructive command",
             "command.cloud.gcp.resource-deletion",
         ),
         (
+            "gcloud --quiet compute instances delete api-1",
+            "Google Cloud destructive command",
+            "command.cloud.gcp.resource-deletion",
+        ),
+        (
             "az.cmd vm --subscription app-prod delete --resource-group app --name api-1 --yes",
+            "Azure destructive command",
+            "command.cloud.azure.resource-deletion",
+        ),
+        (
+            "az --only-show-errors vm delete --resource-group app --name api-1 --yes",
             "Azure destructive command",
             "command.cloud.azure.resource-deletion",
         ),
@@ -131,3 +168,10 @@ def test_cloud_extensions_publish_primary_references() -> None:
         assert extension is not None
         assert extension.reference_urls
         assert all(url.startswith("https://") for url in extension.reference_urls)
+
+
+def test_cloud_safe_variant_rejects_unsupported_matcher_nesting() -> None:
+    nested = AnyMatcher(matchers=(AnyMatcher(matchers=(ExecutableMatcher(executables=frozenset({"aws"})),)),))
+
+    with pytest.raises(ValueError, match="executable matcher children"):
+        with_required_flag(nested, "--help")

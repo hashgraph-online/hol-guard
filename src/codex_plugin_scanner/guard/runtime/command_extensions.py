@@ -24,6 +24,8 @@ _VALID_EXTENSION_DELEGATES = frozenset({"package-firewall"})
 
 
 def risk_classes_for_command_action(action_class: str) -> tuple[str, ...]:
+    """Return the existing runtime risk classes for a command action class."""
+
     return COMMAND_ACTION_RISK_CLASSES.get(action_class.strip().lower(), ())
 
 
@@ -487,4 +489,5 @@ _BUILT_IN_EXTENSIONS = (
     *(CommandSafetyExtension(**values) for values in DIRECT_COMMAND_EXTENSION_VALUES),
     *(_package_command_extension(spec) for spec in PACKAGE_COMMAND_EXTENSION_SPECS),
 )
+
 BUILT_IN_COMMAND_EXTENSION_REGISTRY = CommandSafetyExtensionRegistry(_BUILT_IN_EXTENSIONS)
