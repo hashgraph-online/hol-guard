@@ -48,6 +48,7 @@ class ExecutableMatcher:
     forbidden_flags: frozenset[str] = frozenset()
     allow_leading_options: bool = False
     leading_options_with_values: frozenset[str] = frozenset()
+    interspersed_options_with_values: frozenset[str] = frozenset()
     options_with_values: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
@@ -61,11 +62,15 @@ class ExecutableMatcher:
         normalized_leading_options = frozenset(
             value.strip().lower() for value in self.leading_options_with_values if value.strip()
         )
+        normalized_interspersed_options = frozenset(
+            value.strip().lower() for value in self.interspersed_options_with_values if value.strip()
+        )
         normalized_options = frozenset(value.strip().lower() for value in self.options_with_values if value.strip())
         object.__setattr__(self, "subcommands", normalized_subcommands)
         object.__setattr__(self, "required_flags", normalized_required_flags)
         object.__setattr__(self, "forbidden_flags", normalized_forbidden_flags)
         object.__setattr__(self, "leading_options_with_values", normalized_leading_options)
+        object.__setattr__(self, "interspersed_options_with_values", normalized_interspersed_options)
         object.__setattr__(self, "options_with_values", normalized_options)
         if normalized_required_flags & normalized_forbidden_flags:
             raise ValueError("A matcher flag cannot be both required and forbidden")
@@ -76,11 +81,15 @@ class ExecutableMatcher:
             if not _segment_matches_executable(segment, self.executables):
                 continue
             lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
-            subcommand_arguments = (
-                _after_leading_options(lowered_arguments, self.leading_options_with_values)
-                if self.allow_leading_options
-                else lowered_arguments
+            subcommand_arguments = _without_options(
+                lowered_arguments,
+                self.interspersed_options_with_values,
             )
+            if self.allow_leading_options:
+                subcommand_arguments = _after_leading_options(
+                    subcommand_arguments,
+                    self.leading_options_with_values,
+                )
             if self.subcommands and subcommand_arguments[: len(self.subcommands)] != self.subcommands:
                 continue
             flag_arguments = subcommand_arguments[len(self.subcommands) :] if self.subcommands else subcommand_arguments
@@ -380,3 +389,19 @@ def _after_leading_options(arguments: tuple[str, ...], options_with_values: froz
         else:
             index += 1
     return ()
+
+
+def _without_options(arguments: tuple[str, ...], options_with_values: frozenset[str]) -> tuple[str, ...]:
+    if not options_with_values:
+        return arguments
+    retained: list[str] = []
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        option_name = argument.split("=", 1)[0]
+        if option_name not in options_with_values:
+            retained.append(argument)
+            index += 1
+            continue
+        index += 1 if "=" in argument else 2
+    return tuple(retained)

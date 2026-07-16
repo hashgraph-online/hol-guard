@@ -44,6 +44,21 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "Azure destructive command",
             "command.cloud.azure.resource-deletion",
         ),
+        (
+            "aws.exe ec2 --region us-east-1 terminate-instances --instance-ids i-123",
+            "AWS destructive command",
+            "command.cloud.aws.resource-deletion",
+        ),
+        (
+            "gcloud.cmd compute --project app-prod instances delete api-1",
+            "Google Cloud destructive command",
+            "command.cloud.gcp.resource-deletion",
+        ),
+        (
+            "az.cmd vm --subscription app-prod delete --resource-group app --name api-1 --yes",
+            "Azure destructive command",
+            "command.cloud.azure.resource-deletion",
+        ),
     ],
 )
 def test_cloud_rules_feed_inspection_and_runtime_hooks(

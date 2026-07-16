@@ -7,10 +7,10 @@ Guard evaluates cloud CLI operations from the canonical parsed command model. Ru
 | Extension | Reviewed operations | Safe counterparts |
 | --- | --- | --- |
 | `command.cloud.aws` | EC2 instance termination, RDS instance or cluster deletion, EKS cluster deletion | Help, request skeleton generation, EC2 permission-only dry run, describe operations |
-| `command.cloud.gcp` | Compute Engine instance deletion and Cloud SQL instance deletion, including alpha, beta, and preview tracks | Help and describe operations |
+| `command.cloud.gcp` | Compute Engine instance deletion, including alpha, beta, and preview tracks; Cloud SQL instance deletion, including alpha and beta tracks | Help and describe operations |
 | `command.cloud.azure` | Virtual machine deletion | Help and show operations |
 
-Global account, project, subscription, profile, region, output, and query options are normalized before subcommand matching. Reordered operation flags do not change the result.
+Global account, project, subscription, profile, region, output, and query options are normalized wherever the CLI accepts them. Reordered operation flags do not change the result. Native Windows launcher suffixes are recognized.
 
 ## References
 

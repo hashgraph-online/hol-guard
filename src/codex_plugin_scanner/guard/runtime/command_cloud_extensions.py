@@ -9,7 +9,9 @@ _AWS_GLOBAL_OPTIONS = frozenset(
     {
         "--ca-bundle",
         "--cli-connect-timeout",
+        "--cli-binary-format",
         "--cli-read-timeout",
+        "--color",
         "--endpoint-url",
         "--output",
         "--profile",
@@ -42,11 +44,10 @@ def _matcher(
     leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
 ) -> ExecutableMatcher:
     return ExecutableMatcher(
-        executables=frozenset({executable}),
+        executables=frozenset({executable, f"{executable}.cmd", f"{executable}.exe"}),
         subcommands=subcommands,
         required_flags=required_flags,
-        allow_leading_options=bool(leading_options_with_values),
-        leading_options_with_values=leading_options_with_values,
+        interspersed_options_with_values=leading_options_with_values,
     )
 
 
@@ -59,6 +60,7 @@ def _same_commands_with_flag(matcher: AnyMatcher, flag: str) -> AnyMatcher:
                 required_flags=frozenset({flag}),
                 allow_leading_options=child.allow_leading_options,
                 leading_options_with_values=child.leading_options_with_values,
+                interspersed_options_with_values=child.interspersed_options_with_values,
             )
             for child in matcher.matchers
             if isinstance(child, ExecutableMatcher)
@@ -86,10 +88,16 @@ _AWS_EC2_TERMINATE = AnyMatcher(
     matchers=(_matcher("aws", "ec2", "terminate-instances", leading_options_with_values=_AWS_GLOBAL_OPTIONS),)
 )
 _GCLOUD_RESOURCE_DELETE = AnyMatcher(
-    matchers=tuple(
-        _matcher("gcloud", *track, *operation, leading_options_with_values=_GCLOUD_GLOBAL_OPTIONS)
-        for track in ((), ("alpha",), ("beta",), ("preview",))
-        for operation in (("compute", "instances", "delete"), ("sql", "instances", "delete"))
+    matchers=(
+        *(
+            _matcher("gcloud", *track, *operation, leading_options_with_values=_GCLOUD_GLOBAL_OPTIONS)
+            for track in ((), ("alpha",), ("beta",), ("preview",))
+            for operation in (("compute", "instances", "delete"),)
+        ),
+        *(
+            _matcher("gcloud", *track, "sql", "instances", "delete", leading_options_with_values=_GCLOUD_GLOBAL_OPTIONS)
+            for track in ((), ("alpha",), ("beta",))
+        ),
     )
 )
 _AZURE_RESOURCE_DELETE = AnyMatcher(
