@@ -55,6 +55,12 @@ def test_parse_shell_command_excludes_redirects_from_cli_arguments(command: str)
     assert any("--help" in token for token in parsed.segments[0].tokens)
 
 
+def test_parse_shell_command_preserves_quoted_heredoc_like_argument() -> None:
+    parsed = parse_shell_command("tool delete target '<<--help'")
+
+    assert parsed.segments[0].arguments == ("delete", "target", "<<--help")
+
+
 def test_parse_shell_command_skips_all_sudo_options_with_values() -> None:
     parsed = parse_shell_command(
         "sudo --command-timeout 10 --login-class staff git --config-env token=TOKEN push --force"
