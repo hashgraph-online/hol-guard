@@ -1,0 +1,20 @@
+apiVersion: guard.hashgraphonline.com/v1alpha1
+kind: GuardPolicy
+metadata:
+  id: policy.invalid
+  name: Invalid
+  revision: 1
+spec:
+  defaults:
+    mode: prompt
+  rules:
+    - id: rule.invalid
+      enabled: true
+      effect: allow
+      match: {}
+      lifetime:
+        mode: until
+        expiresAt: 2026-02-31T12:00:00Z
+      provenance:
+        source: import
+        createdAt: 2026-07-15T12:00:00Z
