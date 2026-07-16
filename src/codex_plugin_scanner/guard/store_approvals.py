@@ -948,6 +948,7 @@ def resolve_request_with_queue_result(
     duplicate_ids = resolve_matching_duplicate_requests(
         connection,
         queue_group_id=str(queue_group_id) if isinstance(queue_group_id, str) else None,
+        oauth_source=str(request["oauth_source"]) if isinstance(request.get("oauth_source"), str) else None,
         request_id=request_id,
         resolution_action=resolution_action,
         resolution_scope=resolution_scope,
@@ -1025,6 +1026,7 @@ def resolve_matching_duplicate_requests(
     connection: sqlite3.Connection,
     *,
     queue_group_id: str | None,
+    oauth_source: str | None,
     request_id: str,
     resolution_action: str,
     resolution_scope: str,
@@ -1039,11 +1041,12 @@ def resolve_matching_duplicate_requests(
         select request_id
         from approval_requests
         where queue_group_id = ?
+          and oauth_source is ?
           and request_id != ?
           and status = 'pending'
         order by last_seen_at desc, request_id desc
         """,
-        (queue_group_id, request_id),
+        (queue_group_id, oauth_source, request_id),
     ).fetchall()
     connection.execute(
         """
@@ -1054,10 +1057,11 @@ def resolve_matching_duplicate_requests(
             reason = ?,
             resolved_at = ?
         where queue_group_id = ?
+          and oauth_source is ?
           and request_id != ?
           and status = 'pending'
         """,
-        (resolution_action, resolution_scope, reason, resolved_at, queue_group_id, request_id),
+        (resolution_action, resolution_scope, reason, resolved_at, queue_group_id, oauth_source, request_id),
     )
     return [str(row["request_id"]) for row in rows]
 

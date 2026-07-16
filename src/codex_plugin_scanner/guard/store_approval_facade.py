@@ -194,6 +194,7 @@ class StoreApprovalsMixin:
             return persist_duplicate_resolutions(
                 connection,
                 queue_group_id=queue_group_id,
+                oauth_source=self._guard_source,
                 request_id=request_id,
                 resolution_action=resolution_action,
                 resolution_scope=resolution_scope,
