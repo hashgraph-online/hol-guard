@@ -31,12 +31,21 @@ def _run_guard_command_inspection_command(
 
     command_command = str(getattr(args, "command_command", ""))
     try:
+        if command_command == "setup":
+            from ..runtime.command_ecosystem_detection import command_setup_detection_payload
+
+            workspace = Path(str(getattr(args, "workspace", "."))).resolve()
+            if not workspace.is_dir():
+                raise ValueError("Command setup workspace must be an existing directory")
+            payload = command_setup_detection_payload(workspace)
+            _emit("command-setup", payload, bool(getattr(args, "json", False)))
+            return 0
         if command_command == "extensions":
             payload = command_extensions_payload(getattr(args, "extension_id", None))
             _emit("command-extensions", payload, bool(getattr(args, "json", False)))
             return 0
         if command_command not in {"test", "explain"}:
-            print("Choose command test, command explain, or command extensions.", file=sys.stderr)
+            print("Choose command test, command explain, command extensions, or command setup.", file=sys.stderr)
             return 2
         payload = inspect_command(str(getattr(args, "command_text", "")), cwd=Path.cwd(), home_dir=Path.home())
     except ValueError as error:

@@ -4093,6 +4093,8 @@ def _docker_sensitive_reason(command_text: str, *, _inherited_sensitive_env: boo
         )
         args = global_tokens[subcommand_index:]
         subcommand = args[0].lower()
+        if _docker_subcommand_help_requested(args):
+            continue
         if subcommand in _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS:
             return subcommand
         if subcommand in _DOCKER_BUILD_SUBCOMMANDS and _docker_build_args_are_sensitive(args[1:]):
@@ -4113,6 +4115,14 @@ def _docker_sensitive_reason(command_text: str, *, _inherited_sensitive_env: boo
             ):
                 return "buildx-build-sensitive-flags"
     return None
+
+
+def _docker_subcommand_help_requested(args: list[str]) -> bool:
+    for index, token in enumerate(args[1:], start=1):
+        if token != "--help":
+            continue
+        return all(previous.startswith("-") for previous in args[1:index])
+    return False
 
 
 def _docker_subcommand_index(args: list[str]) -> int | None:

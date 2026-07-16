@@ -3892,6 +3892,30 @@ args = ["workspace-skill.js", "--changed"]
         assert commands == [["pipx", "upgrade", "hol-guard"]]
         assert output["status"] == "updated"
 
+    def test_guard_update_pins_detected_stable_release_from_uv_canary(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        commands: list[list[str]] = []
+
+        def fake_run(command: list[str], **_: object):
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, stdout="updated", stderr="")
+
+        monkeypatch.setattr(guard_update_commands_module.subprocess, "run", fake_run)
+        monkeypatch.setattr(guard_update_commands_module.sys, "prefix", "/mock-home/.local/share/uv/tools/hol-guard")
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.1091.dev10044056673277")
+        monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.1092")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.1092")
+
+        rc = main(["guard", "update", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["installer"] == "uv"
+        assert commands == [["uv", "tool", "install", "--force", "hol-guard==2.0.1092"]]
+        assert output["resulting_version"] == "2.0.1092"
+        assert output["status"] == "updated"
+
     def test_guard_update_marks_already_current_pipx_runs_as_current(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         commands: list[list[str]] = []

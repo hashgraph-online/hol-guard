@@ -35,7 +35,8 @@ class ShellCommandSubstitution:
 
 
 _HEREDOC_OPERATOR_PATTERN = re.compile(
-    r"(?<!<)(?P<operator><<-?)[ \t]*(?P<quote>['\"]?)(?P<delimiter>[A-Za-z_][A-Za-z0-9_]*)(?P=quote)"
+    r"(?<!<)(?P<operator><<-?)[ \t]*(?P<quote>['\"]?)"
+    r"(?P<delimiter>(?:[A-Za-z_][A-Za-z0-9_]*|--[A-Za-z0-9][A-Za-z0-9_-]*))(?P=quote)"
 )
 
 
@@ -161,6 +162,20 @@ def extract_command_substitutions(command: str) -> tuple[str, ...]:
 def extract_command_substitution_spans(command: str) -> tuple[ShellCommandSubstitution, ...]:
     """Return top-level substitutions with exact source spans."""
 
+    return _extract_command_substitution_spans(command, respect_quotes=True)
+
+
+def extract_expanded_heredoc_substitution_spans(command: str) -> tuple[ShellCommandSubstitution, ...]:
+    """Return substitutions expanded by an unquoted heredoc delimiter."""
+
+    return _extract_command_substitution_spans(command, respect_quotes=False)
+
+
+def _extract_command_substitution_spans(
+    command: str,
+    *,
+    respect_quotes: bool,
+) -> tuple[ShellCommandSubstitution, ...]:
     substitutions: list[ShellCommandSubstitution] = []
     index = 0
     quote: str | None = None
@@ -169,19 +184,19 @@ def extract_command_substitution_spans(command: str) -> tuple[ShellCommandSubsti
         if char == "\\":
             index += 2
             continue
-        if char == "'" and quote is None:
+        if respect_quotes and char == "'" and quote is None:
             quote = "'"
             index += 1
             continue
-        if char == "'" and quote == "'":
+        if respect_quotes and char == "'" and quote == "'":
             quote = None
             index += 1
             continue
-        if char == '"' and quote is None:
+        if respect_quotes and char == '"' and quote is None:
             quote = '"'
             index += 1
             continue
-        if char == '"' and quote == '"':
+        if respect_quotes and char == '"' and quote == '"':
             quote = None
             index += 1
             continue

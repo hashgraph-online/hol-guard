@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime.command_model import MAX_COMMAND_BYTES, parse_shell_command
 from codex_plugin_scanner.guard.runtime.command_rules import (
     AllMatcher,
@@ -36,6 +38,35 @@ def test_parse_shell_command_tracks_sudo_and_nested_environment_wrapper() -> Non
     assert parsed.segments[0].executable == "git"
     assert parsed.segments[0].arguments == ("-C", "repo", "push", "--force")
     assert parsed.path_overridden is True
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "aws route53 delete-hosted-zone --id Z123 > --help",
+        "stripe products delete prod_123 2>--help",
+    ],
+)
+def test_parse_shell_command_excludes_redirects_from_cli_arguments(command: str) -> None:
+    parsed = parse_shell_command(command)
+
+    assert "--help" not in parsed.segments[0].arguments
+    assert parsed.redirects[0].target == "--help"
+    assert any("--help" in token for token in parsed.segments[0].tokens)
+
+
+def test_parse_shell_command_preserves_quoted_heredoc_like_argument() -> None:
+    parsed = parse_shell_command("tool delete target '<<--help'")
+
+    assert parsed.segments[0].arguments == ("delete", "target", "<<--help")
+
+
+@pytest.mark.parametrize("argument", ["< --help", "> --help", "2> --help", "value>--help"])
+def test_parse_shell_command_preserves_quoted_redirect_like_argument(argument: str) -> None:
+    parsed = parse_shell_command(f"tool delete '{argument}'")
+
+    assert parsed.segments[0].arguments == ("delete", argument)
+    assert parsed.redirects == ()
 
 
 def test_parse_shell_command_skips_all_sudo_options_with_values() -> None:
@@ -105,6 +136,153 @@ def test_executable_matcher_normalizes_flag_value_and_windows_path_forms() -> No
     assert matcher.match(parsed)
 
 
+@pytest.mark.parametrize(
+    ("arguments", "matches"),
+    [
+        ("--help", True),
+        ("--help=true", True),
+        ("--help=1", True),
+        ("--help=yes", True),
+        ("--help=on", True),
+        ("--help=false", False),
+        ("--help=0", False),
+        ("--help=no", False),
+        ("--help=off", False),
+        ("--help=auto", False),
+        ("--help --help=false", False),
+        ("--help=false --help", True),
+        ("--help=true --help=off --help=yes", True),
+    ],
+)
+def test_executable_matcher_uses_effective_boolean_flag_value(arguments: str, matches: bool) -> None:
+    matcher = ExecutableMatcher(
+        executables=frozenset({"tool"}),
+        subcommands=("delete",),
+        required_flags=frozenset({"--help"}),
+    )
+
+    evidence = matcher.match(parse_shell_command(f"tool delete target {arguments}"))
+
+    assert bool(evidence) is matches
+
+
+@pytest.mark.parametrize(
+    ("arguments", "matches"),
+    [
+        ("--dry-run=client", True),
+        ("--dry-run=client --dry-run=none", False),
+        ("--dry-run=none --dry-run=client", True),
+        ("--dry-run=client --dry-run=false", False),
+    ],
+)
+def test_executable_matcher_uses_effective_exact_option_value(arguments: str, matches: bool) -> None:
+    matcher = ExecutableMatcher(
+        executables=frozenset({"tool"}),
+        subcommands=("delete",),
+        required_flags=frozenset({"--dry-run=client"}),
+    )
+
+    evidence = matcher.match(parse_shell_command(f"tool delete target {arguments}"))
+
+    assert bool(evidence) is matches
+
+
+@pytest.mark.parametrize(
+    ("arguments", "matches"),
+    [
+        ("--dry-run", True),
+        ("--dry-run --no-dry-run", False),
+        ("--no-dry-run --dry-run", True),
+        ("--dry-run=true --no-dry-run=true", False),
+        ("--dry-run=false --no-dry-run=false", True),
+        ("--no-dry-run=false --dry-run=false", False),
+        ("--unknown --dry-run", False),
+    ],
+)
+def test_executable_matcher_uses_effective_inverse_boolean_alias(arguments: str, matches: bool) -> None:
+    matcher = ExecutableMatcher(
+        executables=frozenset({"tool"}),
+        subcommands=("delete",),
+        required_flags=frozenset({"--dry-run"}),
+        inverse_flag_pairs=frozenset({("--dry-run", "--no-dry-run")}),
+        required_flags_in_all_arguments=True,
+        fail_secure_unknown_options=True,
+    )
+
+    evidence = matcher.match(parse_shell_command(f"tool delete target {arguments}"))
+
+    assert bool(evidence) is matches
+
+
+@pytest.mark.parametrize(
+    ("arguments", "matches"),
+    [
+        ("-an", True),
+        ("-an --no-dry-run", False),
+        ("--no-dry-run -an", True),
+    ],
+)
+def test_executable_matcher_orders_short_flag_and_long_inverse(arguments: str, matches: bool) -> None:
+    matcher = ExecutableMatcher(
+        executables=frozenset({"tool"}),
+        subcommands=("delete",),
+        required_flags=frozenset({"-n"}),
+        inverse_flag_pairs=frozenset({("-n", "--no-dry-run")}),
+    )
+
+    evidence = matcher.match(parse_shell_command(f"tool delete target {arguments}"))
+
+    assert bool(evidence) is matches
+
+
+@pytest.mark.parametrize(
+    ("arguments", "matches"),
+    [
+        ("--generate-cli-skeleton input", True),
+        ("--generate-cli-skeleton=output", True),
+        ("--generate-cli-skeleton=yaml-input", True),
+        ("--generate-cli-skeleton=bogus", False),
+        ("--generate-cli-skeleton=output --generate-cli-skeleton=bogus", False),
+        ("--generate-cli-skeleton=bogus --generate-cli-skeleton=output", True),
+        ("--unknown --generate-cli-skeleton=output", False),
+    ],
+)
+def test_executable_matcher_requires_allowed_effective_option_value(arguments: str, matches: bool) -> None:
+    matcher = ExecutableMatcher(
+        executables=frozenset({"tool"}),
+        subcommands=("delete",),
+        options_with_values=frozenset({"--generate-cli-skeleton"}),
+        required_option_values=(("--generate-cli-skeleton", frozenset({"input", "output", "yaml-input"})),),
+        required_flags_in_all_arguments=True,
+        fail_secure_unknown_options=True,
+    )
+
+    evidence = matcher.match(parse_shell_command(f"tool delete target {arguments}"))
+
+    assert bool(evidence) is matches
+
+
+def test_executable_matcher_rejects_ambiguous_option_semantics() -> None:
+    with pytest.raises(ValueError, match="cannot reuse an option name"):
+        ExecutableMatcher(
+            executables=frozenset({"tool"}),
+            inverse_flag_pairs=frozenset(
+                {
+                    ("--dry-run", "--no-dry-run"),
+                    ("--preview", "--no-dry-run"),
+                }
+            ),
+        )
+    with pytest.raises(ValueError, match="cannot declare an option more than once"):
+        ExecutableMatcher(
+            executables=frozenset({"tool"}),
+            required_option_values=(
+                ("--format", frozenset({"json"})),
+                ("--format", frozenset({"yaml"})),
+            ),
+        )
+
+
 def test_executable_matcher_can_skip_declared_global_options() -> None:
     parsed = parse_shell_command("git --no-pager -C repo push origin main --force")
     matcher = ExecutableMatcher(
@@ -118,6 +296,28 @@ def test_executable_matcher_can_skip_declared_global_options() -> None:
     assert matcher.match(parsed)
 
 
+def test_executable_matcher_can_skip_declared_interspersed_options() -> None:
+    parsed = parse_shell_command("cloud compute --project app instances delete api-1")
+    matcher = ExecutableMatcher(
+        executables=frozenset({"cloud"}),
+        subcommands=("compute", "instances", "delete"),
+        interspersed_options_with_values=frozenset({"--project"}),
+    )
+
+    assert matcher.match(parsed)
+
+
+def test_executable_matcher_preserves_undeclared_interspersed_options() -> None:
+    parsed = parse_shell_command("cloud compute --plugin delete instances delete api-1")
+    matcher = ExecutableMatcher(
+        executables=frozenset({"cloud"}),
+        subcommands=("compute", "instances", "delete"),
+        interspersed_options_with_values=frozenset({"--project"}),
+    )
+
+    assert matcher.match(parsed) == ()
+
+
 def test_executable_matcher_does_not_treat_option_values_as_flags() -> None:
     parsed = parse_shell_command("git clean -e -f")
     matcher = ExecutableMatcher(
@@ -125,6 +325,17 @@ def test_executable_matcher_does_not_treat_option_values_as_flags() -> None:
         subcommands=("clean",),
         required_flags=frozenset({"-f"}),
         options_with_values=frozenset({"-e"}),
+    )
+
+    assert matcher.match(parsed) == ()
+
+
+def test_executable_matcher_does_not_unpack_attached_short_option_value() -> None:
+    parsed = parse_shell_command("tool delete -d=client")
+    matcher = ExecutableMatcher(
+        executables=frozenset({"tool"}),
+        subcommands=("delete",),
+        required_flags=frozenset({"-c"}),
     )
 
     assert matcher.match(parsed) == ()
@@ -195,6 +406,17 @@ def test_parse_shell_command_distinguishes_heredoc_data_from_executable_script()
     assert script.segments[1].execution_context == "heredoc:0:0"
     assert script.embedded_commands[0].kind == "heredoc"
     assert script.redirects[0].target == "EOF"
+
+
+def test_parse_shell_command_extracts_substitutions_from_unquoted_data_heredocs() -> None:
+    body = "r" + "m -rf ./build"
+    expanded = parse_shell_command(f"cat <<EOF\n$({body})\nEOF")
+    literal = parse_shell_command(f"cat <<'EOF'\n$({body})\nEOF")
+
+    assert [segment.executable for segment in expanded.segments] == ["cat", "rm"]
+    assert expanded.segments[1].execution_context == "heredoc:0:substitution:0:0"
+    assert literal.embedded_commands == ()
+    assert [segment.executable for segment in literal.segments] == ["cat"]
 
 
 def test_parse_shell_command_preserves_tab_stripped_heredoc_segment_spans() -> None:

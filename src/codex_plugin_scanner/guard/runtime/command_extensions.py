@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Literal, final
 
+from .command_builtin_extension_catalog import DIRECT_COMMAND_EXTENSION_VALUES
 from .command_builtin_rules import COMMAND_ACTION_RISK_CLASSES, rules_for_extension
 from .command_model import CanonicalCommand
+from .command_package_extensions import PACKAGE_COMMAND_EXTENSION_SPECS, PackageCommandExtensionSpec
 from .command_rules import CommandSafetyRule, MatcherEvidence, matcher_index_hints
 
 COMMAND_EXTENSION_SCHEMA_VERSION = 2
@@ -15,7 +18,9 @@ _VERSION_PATTERN = re.compile(r"^[1-9][0-9]*\.[0-9]+\.[0-9]+$")
 _EXTENSION_ID_PATTERN = re.compile(r"^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
 
 CommandExtensionSource = Literal["built-in", "local-admin", "signed-cloud"]
+CommandExtensionDelegate = Literal["package-firewall"]
 _VALID_EXTENSION_SOURCES = frozenset({"built-in", "local-admin", "signed-cloud"})
+_VALID_EXTENSION_DELEGATES = frozenset({"package-firewall"})
 
 
 def risk_classes_for_command_action(action_class: str) -> tuple[str, ...]:
@@ -41,6 +46,11 @@ class CommandSafetyExtension:
     aliases: tuple[str, ...] = ()
     dependencies: tuple[str, ...] = ()
     conflicts: tuple[str, ...] = ()
+    delegated_protection: CommandExtensionDelegate | None = None
+    ecosystem_ids: tuple[str, ...] = ()
+    executables: tuple[str, ...] = ()
+    project_markers: tuple[str, ...] = ()
+    reference_urls: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -55,6 +65,11 @@ class CommandSafetyExtension:
             "aliases": list(self.aliases),
             "dependencies": list(self.dependencies),
             "conflicts": list(self.conflicts),
+            "delegated_protection": self.delegated_protection,
+            "ecosystem_ids": list(self.ecosystem_ids),
+            "executables": list(self.executables),
+            "project_markers": list(self.project_markers),
+            "reference_urls": list(self.reference_urls),
             "action_classes": list(self.action_classes),
             "risk_classes": list(self.risk_classes),
             "safer_alternatives": list(self.safer_alternatives),
@@ -224,8 +239,10 @@ def _validate_extension(extension: CommandSafetyExtension) -> None:
         raise ValueError(f"Invalid command safety extension version: {extension.version}")
     if not extension.name.strip() or not extension.description.strip():
         raise ValueError(f"Command safety extension {extension.extension_id} requires a name and description")
-    if not extension.action_classes and not extension.rules:
-        raise ValueError(f"Command safety extension {extension.extension_id} must own an action class or rule")
+    if not extension.action_classes and not extension.rules and extension.delegated_protection is None:
+        raise ValueError(
+            f"Command safety extension {extension.extension_id} must own an action class, rule, or delegated protection"
+        )
     if len(set(extension.action_classes)) != len(extension.action_classes):
         raise ValueError(f"Command safety extension {extension.extension_id} has duplicate action classes")
     if not extension.risk_classes:
@@ -236,6 +253,11 @@ def _validate_extension(extension: CommandSafetyExtension) -> None:
         raise ValueError(f"Command safety extension {extension.extension_id} requires safer alternatives")
     if extension.source not in _VALID_EXTENSION_SOURCES:
         raise ValueError(f"Command safety extension {extension.extension_id} has invalid source")
+    if extension.delegated_protection is not None:
+        if extension.delegated_protection not in _VALID_EXTENSION_DELEGATES:
+            raise ValueError(f"Command safety extension {extension.extension_id} has invalid delegated protection")
+        if extension.action_classes or extension.rules:
+            raise ValueError(f"Delegated command safety extension {extension.extension_id} cannot own command rules")
     if extension.required and extension.source != "built-in":
         raise ValueError(f"Required command safety extension {extension.extension_id} must be built-in")
     for field_name, values in (
@@ -245,6 +267,31 @@ def _validate_extension(extension: CommandSafetyExtension) -> None:
     ):
         if len(set(values)) != len(values) or any(not _EXTENSION_ID_PATTERN.fullmatch(value) for value in values):
             raise ValueError(f"Command safety extension {extension.extension_id} has invalid {field_name}")
+    for field_name, values in (
+        ("ecosystem IDs", extension.ecosystem_ids),
+        ("executables", extension.executables),
+        ("project markers", extension.project_markers),
+        ("reference URLs", extension.reference_urls),
+    ):
+        if len(set(values)) != len(values) or any(not value or value != value.strip() for value in values):
+            raise ValueError(f"Command safety extension {extension.extension_id} has invalid {field_name}")
+    if extension.delegated_protection is not None and (not extension.ecosystem_ids or not extension.executables):
+        raise ValueError(
+            f"Delegated command safety extension {extension.extension_id} requires ecosystem and executable metadata"
+        )
+    if extension.delegated_protection is not None and (
+        not extension.reference_urls or any(not value.startswith("https://") for value in extension.reference_urls)
+    ):
+        raise ValueError(f"Delegated command safety extension {extension.extension_id} requires HTTPS references")
+    if any("/" in value or "\\" in value for value in extension.executables):
+        raise ValueError(f"Command safety extension {extension.extension_id} executable metadata must use basenames")
+    if any(not _safe_project_marker(value) for value in extension.project_markers):
+        raise ValueError(f"Command safety extension {extension.extension_id} has unsafe project marker metadata")
+
+
+def _safe_project_marker(value: str) -> bool:
+    marker = PurePosixPath(value)
+    return not marker.is_absolute() and ".." not in marker.parts and "\\" not in value
 
 
 def _validate_registry_relationships(
@@ -282,6 +329,26 @@ def _validate_registry_relationships(
 
     for extension in extensions:
         visit(extension.extension_id)
+
+
+def _package_command_extension(spec: PackageCommandExtensionSpec) -> CommandSafetyExtension:
+    return CommandSafetyExtension(
+        extension_id=spec.extension_id,
+        version="1.0.0",
+        name=spec.name,
+        description=spec.description,
+        action_classes=(),
+        risk_classes=("supply_chain",),
+        safer_alternatives=(
+            "Use the existing project manifest and lockfile instead of an unpinned package source.",
+            "Review package provenance and advisory evidence before installation or one-shot execution.",
+        ),
+        delegated_protection="package-firewall",
+        ecosystem_ids=spec.ecosystem_ids,
+        executables=spec.executables,
+        project_markers=spec.project_markers,
+        reference_urls=spec.reference_urls,
+    )
 
 
 _BUILT_IN_EXTENSIONS = (
@@ -347,6 +414,11 @@ _BUILT_IN_EXTENSIONS = (
             "Pass only the specific secret or file required by the container.",
         ),
         rules=rules_for_extension("command.container-runtime"),
+        reference_urls=(
+            "https://docs.docker.com/reference/cli/docker/system/prune/",
+            "https://docs.docker.com/reference/cli/docker/container/rm/",
+            "https://docs.docker.com/reference/cli/docker/container/run/",
+        ),
     ),
     CommandSafetyExtension(
         extension_id="command.data-protection",
@@ -393,6 +465,7 @@ _BUILT_IN_EXTENSIONS = (
         risk_classes=("local_secret_read",),
         safer_alternatives=("Request only the required non-secret field or metadata instead of the Secret payload.",),
         rules=rules_for_extension("command.kubernetes-secrets"),
+        reference_urls=("https://kubernetes.io/docs/reference/kubectl/generated/kubectl_get/",),
     ),
     CommandSafetyExtension(
         extension_id="command.shell-mutations",
@@ -413,6 +486,8 @@ _BUILT_IN_EXTENSIONS = (
         ),
         rules=rules_for_extension("command.shell-mutations"),
     ),
+    *(CommandSafetyExtension(**values) for values in DIRECT_COMMAND_EXTENSION_VALUES),
+    *(_package_command_extension(spec) for spec in PACKAGE_COMMAND_EXTENSION_SPECS),
 )
 
 BUILT_IN_COMMAND_EXTENSION_REGISTRY = CommandSafetyExtensionRegistry(_BUILT_IN_EXTENSIONS)

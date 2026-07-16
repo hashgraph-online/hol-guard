@@ -201,7 +201,18 @@ def run_guard_update(
         vcs_install=vcs_install,
         local_source_install=local_source_install,
     )
-    command = _update_command(installer, use_pypi=use_pypi, wheel_path=requested_wheel_path)
+    target_version = None
+    if version_check.get("update_available") is True:
+        latest_version = version_check.get("latest_version")
+        if isinstance(latest_version, str) and latest_version.strip():
+            target_version = latest_version.strip()
+            use_pypi = True
+    command = _update_command(
+        installer,
+        use_pypi=use_pypi,
+        target_version=target_version,
+        wheel_path=requested_wheel_path,
+    )
     execution_command = _execution_update_command(command, installer=installer, context=context)
     if force_pypi_reinstall:
         payload["recovery_reinstall"] = True

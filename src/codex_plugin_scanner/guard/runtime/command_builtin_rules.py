@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from .command_backup_extensions import BACKUP_COMMAND_RULES
+from .command_cloud_extensions import CLOUD_COMMAND_RULES
+from .command_database_extensions import DATABASE_COMMAND_RULES
+from .command_domain_extensions import DOMAIN_COMMAND_RULES
+from .command_remote_extensions import REMOTE_COMMAND_RULES
 from .command_rules import (
     AnyMatcher,
     ArgumentMatcher,
@@ -12,6 +17,9 @@ from .command_rules import (
     ExecutableMatcher,
     PipelineMatcher,
 )
+from .command_search_messaging_extensions import SEARCH_MESSAGING_COMMAND_RULES
+from .command_storage_extensions import STORAGE_COMMAND_RULES
+from .command_structured_matchers import SubcommandOperandPrefixMatcher
 
 COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "credential exfiltration shell command": (
@@ -33,6 +41,30 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "git destructive command": ("destructive_shell",),
     "system destructive command": ("destructive_shell",),
     "windows destructive command": ("destructive_shell",),
+    "kubernetes destructive command": ("destructive_shell", "network_egress"),
+    "infrastructure destructive command": ("destructive_shell", "network_egress"),
+    "aws destructive command": ("destructive_shell", "network_egress"),
+    "google cloud destructive command": ("destructive_shell", "network_egress"),
+    "azure destructive command": ("destructive_shell", "network_egress"),
+    "aws storage destructive command": ("destructive_shell", "network_egress"),
+    "google storage destructive command": ("destructive_shell", "network_egress"),
+    "azure storage destructive command": ("destructive_shell", "network_egress"),
+    "minio storage destructive command": ("destructive_shell", "network_egress"),
+    "rclone destructive command": ("destructive_shell", "network_egress"),
+    "restic destructive command": ("destructive_shell", "network_egress"),
+    "borg destructive command": ("destructive_shell", "network_egress"),
+    "velero destructive command": ("destructive_shell", "network_egress"),
+    "ssh remote execution command": ("execution", "network_egress"),
+    "ssh configured execution command": ("execution", "network_egress"),
+    "scp overwrite command": ("destructive_shell", "network_egress"),
+    "rsync destructive command": ("destructive_shell", "network_egress"),
+    "postgresql destructive command": ("destructive_shell", "network_egress"),
+    "mysql destructive command": ("destructive_shell", "network_egress"),
+    "mongodb destructive command": ("destructive_shell", "network_egress"),
+    "redis destructive command": ("destructive_shell", "network_egress"),
+    "sqlite destructive command": ("destructive_shell",),
+    "supabase destructive command": ("destructive_shell", "network_egress"),
+    "rsync remote shell command": ("execution", "network_egress"),
 }
 _GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {"-c", "-C", "--config-env", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree"}
@@ -42,9 +74,23 @@ _GIT_SUBCOMMAND_OPTIONS_WITH_VALUES = {
     "push": frozenset({"--exec", "--push-option", "--receive-pack", "--repo", "-o"}),
     "reset": frozenset({"--pathspec-from-file"}),
 }
+_GIT_FORCE_REFSPEC = SubcommandOperandPrefixMatcher(
+    executables=frozenset({"git"}),
+    subcommands=("push",),
+    operand_prefixes=frozenset({"+"}),
+    leading_options_with_values=_GIT_GLOBAL_OPTIONS_WITH_VALUES,
+    options_with_values=_GIT_SUBCOMMAND_OPTIONS_WITH_VALUES["push"],
+    leading_operands_to_skip=1,
+    options_supplying_leading_operands=frozenset({"--repo"}),
+)
 
 
-def _git_matcher(subcommand: str, *, required_flags: frozenset[str]) -> ExecutableMatcher:
+def _git_matcher(
+    subcommand: str,
+    *,
+    required_flags: frozenset[str],
+    inverse_flag_pairs: frozenset[tuple[str, str]] = frozenset(),
+) -> ExecutableMatcher:
     return ExecutableMatcher(
         executables=frozenset({"git"}),
         subcommands=(subcommand,),
@@ -52,6 +98,7 @@ def _git_matcher(subcommand: str, *, required_flags: frozenset[str]) -> Executab
         allow_leading_options=True,
         leading_options_with_values=_GIT_GLOBAL_OPTIONS_WITH_VALUES,
         options_with_values=_GIT_SUBCOMMAND_OPTIONS_WITH_VALUES.get(subcommand, frozenset()),
+        inverse_flag_pairs=inverse_flag_pairs,
     )
 
 
@@ -233,8 +280,16 @@ BUILT_IN_COMMAND_RULES = (
                 title="Git clean preview",
                 matcher=AnyMatcher(
                     matchers=(
-                        _git_matcher("clean", required_flags=frozenset({"-n"})),
-                        _git_matcher("clean", required_flags=frozenset({"--dry-run"})),
+                        _git_matcher(
+                            "clean",
+                            required_flags=frozenset({"-n"}),
+                            inverse_flag_pairs=frozenset({("-n", "--no-dry-run")}),
+                        ),
+                        _git_matcher(
+                            "clean",
+                            required_flags=frozenset({"--dry-run"}),
+                            inverse_flag_pairs=frozenset({("--dry-run", "--no-dry-run")}),
+                        ),
                     )
                 ),
             ),
@@ -248,6 +303,7 @@ BUILT_IN_COMMAND_RULES = (
             matchers=(
                 _git_matcher("push", required_flags=frozenset({"--force"})),
                 _git_matcher("push", required_flags=frozenset({"-f"})),
+                _GIT_FORCE_REFSPEC,
             )
         ),
         action_class="git destructive command",
@@ -256,7 +312,20 @@ BUILT_IN_COMMAND_RULES = (
             CommandSafeVariant(
                 variant_id="dry-run",
                 title="Git push preview",
-                matcher=_git_matcher("push", required_flags=frozenset({"--dry-run"})),
+                matcher=AnyMatcher(
+                    matchers=(
+                        _git_matcher(
+                            "push",
+                            required_flags=frozenset({"-n"}),
+                            inverse_flag_pairs=frozenset({("-n", "--no-dry-run")}),
+                        ),
+                        _git_matcher(
+                            "push",
+                            required_flags=frozenset({"--dry-run"}),
+                            inverse_flag_pairs=frozenset({("--dry-run", "--no-dry-run")}),
+                        ),
+                    )
+                ),
             ),
         ),
     ),
@@ -322,6 +391,13 @@ BUILT_IN_COMMAND_RULES = (
             ),
         ),
     ),
+    *DOMAIN_COMMAND_RULES,
+    *CLOUD_COMMAND_RULES,
+    *STORAGE_COMMAND_RULES,
+    *BACKUP_COMMAND_RULES,
+    *REMOTE_COMMAND_RULES,
+    *DATABASE_COMMAND_RULES,
+    *SEARCH_MESSAGING_COMMAND_RULES,
 )
 
 _RULES_BY_EXTENSION: dict[str, tuple[CommandSafetyRule, ...]] = {}
