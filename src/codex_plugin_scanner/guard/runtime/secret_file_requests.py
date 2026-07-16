@@ -33,6 +33,7 @@ from .false_positive_rules import (
     split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
+from .interpreter_options import shell_interpreter_command_payload as _shell_interpreter_command_payload
 from .kubernetes_commands import kubernetes_secret_read_source
 from .secret_sensitivity import SecretPathMatch as SensitivePathMatch
 from .secret_sensitivity import classify_secret_path
@@ -6361,14 +6362,9 @@ def _shell_command_scripts(parts: list[str]) -> tuple[str, ...]:
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_name not in _SHELL_COMMAND_STRING_INTERPRETERS or command_index is None:
             continue
-        index = command_index + 1
-        while index < len(segment):
-            flag_payload = _interpreter_flag_payload(segment, index)
-            if flag_payload is not None:
-                scripts.append(flag_payload.script_text)
-                index += flag_payload.tokens_consumed
-                continue
-            index += 1
+        flag_payload = _shell_interpreter_command_payload(segment, command_index)
+        if flag_payload is not None:
+            scripts.append(flag_payload.script_text)
     return tuple(scripts)
 
 
@@ -6383,12 +6379,9 @@ def _contains_pytest_env_shell_script_wrapper(parts: list[str]) -> bool:
         )
         if not has_unsafe_env:
             continue
-        index = command_index + 1
-        while index < len(segment):
-            flag_payload = _interpreter_flag_payload(segment, index)
-            if flag_payload is not None and _shell_script_targets_pytest(flag_payload.script_text):
-                return True
-            index += flag_payload.tokens_consumed if flag_payload is not None else 1
+        flag_payload = _shell_interpreter_command_payload(segment, command_index)
+        if flag_payload is not None and _shell_script_targets_pytest(flag_payload.script_text):
+            return True
     return False
 
 
