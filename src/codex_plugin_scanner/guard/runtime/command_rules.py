@@ -423,12 +423,24 @@ def _without_options(
             retained.extend(arguments[index + 1 :])
             break
         option_name = argument.split("=", 1)[0]
+        attached_short_option = next(
+            (
+                option
+                for option in options_with_values
+                if len(option) == 2
+                and option.startswith("-")
+                and not option.startswith("--")
+                and argument.startswith(option)
+                and len(argument) > len(option)
+            ),
+            None,
+        )
         if option_name in flags:
             index += 1
             continue
-        if option_name not in options_with_values:
+        if option_name not in options_with_values and attached_short_option is None:
             retained.append(argument)
             index += 1
             continue
-        index += 1 if "=" in argument else 2
+        index += 1 if "=" in argument or attached_short_option is not None else 2
     return tuple(retained)
