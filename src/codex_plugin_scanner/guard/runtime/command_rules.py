@@ -425,10 +425,7 @@ def _without_options(
         option_name = argument.split("=", 1)[0]
         attached_short_option = (
             argument[:2]
-            if len(argument) > 2
-            and argument[0] == "-"
-            and argument[1] != "-"
-            and argument[:2] in options_with_values
+            if len(argument) > 2 and argument[0] == "-" and argument[1] != "-" and argument[:2] in options_with_values
             else None
         )
         if option_name in flags:
