@@ -25,6 +25,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.search.elasticsearch.delete",
         ),
         (
+            "curl -X DELETE -x http://proxy.example http://localhost:9200/customer-index",
+            "Elasticsearch destructive command",
+            "command.search.elasticsearch.delete",
+        ),
+        (
             "kafka-topics.sh --bootstrap-server localhost:9092 --delete --topic events",
             "Kafka destructive command",
             "command.messaging.kafka.delete",
@@ -65,6 +70,21 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "NATS destructive command",
             "command.messaging.nats.delete",
         ),
+        (
+            "nats con rm ORDERS PROCESSOR",
+            "NATS destructive command",
+            "command.messaging.nats.delete",
+        ),
+        (
+            "nats obj nuke artifacts --force",
+            "NATS destructive command",
+            "command.messaging.nats.delete",
+        ),
+        (
+            "nats kv nuke sessions --force",
+            "NATS destructive command",
+            "command.messaging.nats.delete",
+        ),
     ],
 )
 def test_search_messaging_rules_feed_runtime_hooks(
@@ -92,6 +112,8 @@ def test_search_messaging_rules_feed_runtime_hooks(
     "command",
     [
         "curl -X DELETE https://api.example.com/users/1",
+        "curl -X DELETE https://api.example.com/_snapshot/old",
+        "curl -x http://localhost:9200/customer-index https://api.example.com/users/1",
         "curl http://localhost:9200/customer-index",
         "curl -X GET http://localhost:9200/customer-index",
         "kafka-topics.sh --bootstrap-server localhost:9092 --list",

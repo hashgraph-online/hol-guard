@@ -8,25 +8,16 @@ from urllib.parse import urlsplit
 from .command_database_matchers import LeadingSubcommandMatcher
 from .command_extension_matchers import executable_names, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
+from .command_matcher_contracts import CommandMatcher, MatcherEvidence
 from .command_model import CanonicalCommand
 from .command_rules import (
     AnyMatcher,
-    CommandMatcher,
     CommandSafetyRule,
     CommandSafeVariant,
     ExecutableMatcher,
-    MatcherEvidence,
 )
 
 _CURL_EXECUTABLES = executable_names("curl")
-_ELASTIC_DELETE_PATH_PREFIXES = (
-    "/_component_template/",
-    "/_data_stream/",
-    "/_enrich/policy/",
-    "/_ilm/policy/",
-    "/_index_template/",
-    "/_snapshot/",
-)
 _RABBITMQ_OPTIONS_WITH_VALUES = frozenset({"-n", "--node", "-t", "--timeout", "--formatter", "--erlang-cookie"})
 _NATS_OPTIONS_WITH_VALUES = frozenset(
     {
@@ -56,7 +47,6 @@ class CurlElasticsearchDeleteMatcher:
     """Match explicit curl DELETE requests to recognizable Elasticsearch targets."""
 
     executables: frozenset[str] = _CURL_EXECUTABLES
-    path_prefixes: tuple[str, ...] = _ELASTIC_DELETE_PATH_PREFIXES
     service_ports: frozenset[int] = frozenset({9200})
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
@@ -79,8 +69,6 @@ class CurlElasticsearchDeleteMatcher:
 
     def _matches_target(self, target: str) -> bool:
         lowered = target.lower()
-        if any(prefix in lowered for prefix in self.path_prefixes):
-            return True
         if lowered.startswith(("$elasticsearch_", "${elasticsearch_")):
             return "/" in lowered
         try:
@@ -88,7 +76,9 @@ class CurlElasticsearchDeleteMatcher:
             port = parsed.port
         except ValueError:
             return False
-        return parsed.scheme in {"http", "https"} and port in self.service_ports and parsed.path not in {"", "/"}
+        hostname = parsed.hostname or ""
+        recognizable_host = port in self.service_ports or "elasticsearch" in hostname.split(".")
+        return parsed.scheme in {"http", "https"} and recognizable_host and parsed.path not in {"", "/"}
 
 
 def _curl_method_and_targets(arguments: tuple[str, ...]) -> tuple[str | None, tuple[str, ...]]:
@@ -98,14 +88,20 @@ def _curl_method_and_targets(arguments: tuple[str, ...]) -> tuple[str | None, tu
     while index < len(arguments):
         argument = arguments[index]
         lowered = argument.lower()
-        if lowered in {"-x", "--request"} and index + 1 < len(arguments):
+        if argument == "-x" or lowered == "--proxy":
+            index += 2
+            continue
+        if (argument.startswith("-x") and len(argument) > 2) or lowered.startswith("--proxy="):
+            index += 1
+            continue
+        if (argument == "-X" or lowered == "--request") and index + 1 < len(arguments):
             method = arguments[index + 1].lower()
             index += 2
             continue
         if lowered.startswith("--request="):
             method = lowered.split("=", 1)[1]
-        elif lowered.startswith("-x") and len(argument) > 2:
-            method = lowered[2:]
+        elif argument.startswith("-X") and len(argument) > 2:
+            method = argument[2:].lower()
         if argument.startswith(("http://", "https://", "$")):
             targets.append(argument.strip("'\""))
         index += 1
@@ -180,8 +176,13 @@ _NATS_DELETE = AnyMatcher(
             ("str", "rm"),
             ("str", "purge"),
             ("consumer", "rm"),
+            ("con", "rm"),
             ("kv", "rm"),
+            ("kv", "nuke"),
             ("object", "rm"),
+            ("object", "nuke"),
+            ("obj", "rm"),
+            ("obj", "nuke"),
         )
     )
 )
