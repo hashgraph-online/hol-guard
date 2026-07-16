@@ -13,6 +13,7 @@ from ..trust_models import TrustAdapterScore, TrustComponentScore, TrustDomainSc
 from ..trust_plugin_scoring import build_plugin_domain
 from ..trust_skill_scoring import build_skill_domain
 from .runtime.evidence_hash import guard_evidence_hash
+from .trust_metadata_boundary import separate_untrusted_adapter_trust_metadata
 
 _INVENTORY_TRUST_SCAN_OPTIONS = ScanOptions(cisco_skill_scan="off")
 
@@ -65,6 +66,11 @@ def trust_resolution_from_domain(
 
     trust_components = _trust_components_from_domain(domain)
     normalized_captured_at = _normalize_inventory_datetime(captured_at)
+    evidence = _local_baseline_evidence_payload(
+        domain,
+        captured_at=normalized_captured_at,
+        trust_components=trust_components,
+    )
     metadata = {
         "profileId": domain.profile_id,
         "profileVersion": domain.profile_version,
@@ -76,21 +82,8 @@ def trust_resolution_from_domain(
         "evidenceSchemaVersion": "guard-aibom-local-baseline-evidence.v1",
         "evidenceAuthority": "device_claim",
         "affectsV4Score": False,
-        "evidence": _local_baseline_evidence_payload(
-            domain,
-            captured_at=normalized_captured_at,
-            trust_components=trust_components,
-        ),
-        "evidenceHash": _trust_evidence_hash(
-            {
-                "capturedAt": normalized_captured_at,
-                "resolutionSource": "local",
-                "status": "local",
-                "trustScore": round(domain.score),
-                "trustComponents": trust_components,
-                "trustDomain": domain.domain,
-            }
-        ),
+        "evidence": evidence,
+        "evidenceHash": _trust_evidence_hash(evidence),
     }
 
     return {
@@ -101,6 +94,7 @@ def trust_resolution_from_domain(
         "trustScore": round(domain.score),
         "trustComponents": trust_components,
         "capturedAt": normalized_captured_at,
+        "provenance": _local_claim_provenance("hol-guard-local-baseline"),
         "metadata": metadata,
     }
 
@@ -114,17 +108,14 @@ def apply_local_trust_metadata(
     workspace_dir: Path | None,
     cisco_runs: tuple[object, ...] = (),
 ) -> dict[str, object]:
-    enriched = dict(metadata)
+    enriched = separate_untrusted_adapter_trust_metadata(metadata)
     trust_layers: list[dict[str, object]] = []
 
-    if item_kind in _LOCAL_BASELINE_ITEM_KINDS and not isinstance(
-        metadata.get("trustResolution"),
-        dict,
-    ):
+    if item_kind in _LOCAL_BASELINE_ITEM_KINDS:
         domain = _local_trust_domain_for_artifact(
             artifact,
             item_kind=item_kind,
-            metadata=metadata,
+            metadata=enriched,
             workspace_dir=workspace_dir,
         )
         if domain is not None:
@@ -144,7 +135,7 @@ def apply_local_trust_metadata(
     local_security = _local_security_for_artifact(
         artifact,
         item_kind=item_kind,
-        metadata=metadata,
+        metadata=enriched,
         captured_at=captured_at,
         cisco_runs=cisco_runs,
         workspace_dir=workspace_dir,
@@ -153,7 +144,7 @@ def apply_local_trust_metadata(
         enriched["localSecurity"] = local_security
 
     if trust_layers:
-        enriched["trustLayers"] = _merge_trust_layers(metadata.get("trustLayers"), trust_layers)
+        enriched["trustLayers"] = _merge_trust_layers(None, trust_layers)
     return enriched
 
 
@@ -629,6 +620,7 @@ def _trust_layer_from_domain(
         "trustScore": round(domain.score),
         "trustComponents": trust_components,
         "capturedAt": normalized_captured_at,
+        "provenance": _local_claim_provenance("hol-guard-local-baseline"),
         "metadata": {
             "profileId": domain.profile_id,
             "profileVersion": domain.profile_version,
@@ -641,17 +633,7 @@ def _trust_layer_from_domain(
             "affectsV4Score": False,
             "evidenceSchemaVersion": "guard-aibom-local-baseline-evidence.v1",
             "evidence": evidence,
-            "evidenceHash": _trust_evidence_hash(
-                {
-                    "capturedAt": normalized_captured_at,
-                    "layerId": "local_baseline",
-                    "layerType": "local_baseline",
-                    "status": "local",
-                    "trustScore": round(domain.score),
-                    "trustComponents": trust_components,
-                    "trustDomain": domain.domain,
-                }
-            ),
+            "evidenceHash": _trust_evidence_hash(evidence),
         },
     }
 
@@ -680,6 +662,7 @@ def _local_baseline_evidence_payload(
                 "status": str(component.get("status", "")),
                 "summary": str(component.get("summary", "")),
                 "weight": component.get("weight"),
+                **({"evidence": component["evidence"]} if "evidence" in component else {}),
             }
             for component in trust_components
         ],
@@ -703,6 +686,14 @@ def _merge_trust_layers(
         if isinstance(layer_type, str) and layer_type:
             merged[layer_type] = layer
     return list(merged.values())
+
+
+def _local_claim_provenance(derivation: str) -> dict[str, object]:
+    return {
+        "origin": "hol-guard-local",
+        "verificationStatus": "locally_derived",
+        "derivation": derivation,
+    }
 
 
 def _cisco_trust_layers_for_artifact(
@@ -913,6 +904,7 @@ def _cisco_trust_layer(
         "trustScore": trust_score,
         "trustComponents": trust_components,
         "capturedAt": _normalize_inventory_datetime(captured_at),
+        "provenance": _local_claim_provenance(str(safe_metadata.get("scannerSource") or layer_id)),
         "metadata": safe_metadata,
     }
 

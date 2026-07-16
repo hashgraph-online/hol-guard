@@ -12,6 +12,7 @@ Before each Guard harness release:
 - In release notes, call out that `hol-guard connect` is the canonical Guard Cloud sign-in flow and `hol-guard connect --headless` is the canonical SSH/CI flow.
 - In release notes, call out that pasted `--token` login and legacy bearer setup are retired.
 - Attach smoke evidence to the release notes or pull request before publishing.
+- Verify trust attestation consumers support the v3 domain-separated subject bindings, key revocation, and replay policy described in `trust-attestation-security.md`.
 
 For GitHub Action pin updates, keep Dependabot updates as individual pull requests. Review the upstream changelog
 between the old and new commits, verify permission and runtime changes, retain the full commit SHA, and require the

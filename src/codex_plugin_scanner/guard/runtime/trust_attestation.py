@@ -3,8 +3,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
+import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
@@ -18,6 +20,8 @@ from .evidence_hash import canonical_guard_evidence_payload, guard_evidence_hash
 
 GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION = "guard-aibom-trust-attestation.v1"
 GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V2 = "guard-aibom-trust-attestation.v2"
+GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V3 = "guard-aibom-trust-attestation.v3"
+GUARD_TRUST_ATTESTATION_DOMAIN = "hol-guard:aibom-trust-attestation:v3"
 GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256 = "ecdsa-p256-sha256"
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -40,6 +44,18 @@ class GuardTrustAttestationVerificationKey:
     public_key_pem: str
     fingerprint_sha256: str
     public_jwk_thumbprint: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class GuardTrustAttestationVerificationPolicy:
+    """Local verification state for rotation, revocation, and replay checks."""
+
+    revoked_key_ids: frozenset[str] = frozenset()
+    key_not_before: tuple[tuple[str, str], ...] = ()
+    minimum_sequence: int | None = None
+    seen_replay_keys: frozenset[str] = frozenset()
+    now: str | None = None
+    require_nonce: bool = True
 
 
 def canonical_trust_attestation_payload(payload: Mapping[str, object]) -> bytes:
@@ -257,14 +273,15 @@ def build_trust_attestation_payload(
     device_id: str | None = None,
     layer_id: str | None = None,
     layer_type: str | None = None,
+    adapter_id: str | None = None,
+    adapter_version: str | None = None,
+    config_path_hash: str | None = None,
+    repository_id: str | None = None,
+    claim_hash: str | None = None,
 ) -> dict[str, object]:
-    payload_version = (
-        GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V2
-        if workspace_id is not None or device_id is not None
-        else GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION
-    )
     payload: dict[str, object] = {
-        "payloadVersion": payload_version,
+        "payloadVersion": GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V3,
+        "domainSeparator": GUARD_TRUST_ATTESTATION_DOMAIN,
         "agentId": agent_id,
         "itemId": item_id,
         "itemKind": item_kind,
@@ -303,7 +320,17 @@ def build_trust_attestation_payload(
         payload["layerId"] = layer_id
     if layer_type is not None:
         payload["layerType"] = layer_type
-    return payload
+    if adapter_id is not None:
+        payload["adapterId"] = adapter_id
+    if adapter_version is not None:
+        payload["adapterVersion"] = adapter_version
+    if config_path_hash is not None:
+        payload["configPathHash"] = config_path_hash
+    if repository_id is not None:
+        payload["repositoryId"] = repository_id
+    if claim_hash is not None:
+        payload["claimHash"] = claim_hash
+    return _validate_attestation_payload(payload, require_signed_at=False)
 
 
 def apply_trust_attestation_metadata(
@@ -325,42 +352,81 @@ def apply_trust_attestation_metadata(
     policy_version: str | None = None,
     workspace_id: str | None = None,
     device_id: str | None = None,
+    adapter_id: str | None = None,
+    adapter_version: str | None = None,
+    config_path_hash: str | None = None,
+    repository_id: str | None = None,
     signing_config: GuardTrustAttestationSigningConfig | None = None,
 ) -> dict[str, object]:
+    enriched = dict(metadata)
+    raw_trust_resolution = enriched.get("trustResolution")
+    trust_resolution = _validated_local_trust_claim(raw_trust_resolution, require_layer_identity=False)
+    if trust_resolution is None:
+        enriched.pop("trustResolution", None)
+    else:
+        enriched["trustResolution"] = trust_resolution
+
+    raw_trust_layers = enriched.get("trustLayers")
+    trust_layers = (
+        [
+            layer
+            for raw_layer in raw_trust_layers
+            if (layer := _validated_local_trust_claim(raw_layer, require_layer_identity=True)) is not None
+        ]
+        if isinstance(raw_trust_layers, list)
+        else []
+    )
+    if trust_layers:
+        enriched["trustLayers"] = trust_layers
+    else:
+        enriched.pop("trustLayers", None)
+
     config = signing_config or resolve_trust_attestation_signing_config()
     if config is None:
-        return metadata
+        return enriched
 
-    enriched = dict(metadata)
     include_v2_bindings = workspace_id is not None or device_id is not None
-    attestation_bindings = {
+    effective_nonce = nonce or secrets.token_urlsafe(24)
+    effective_policy_version = policy_version or "guard-local-policy:default"
+    common_attestation_bindings = {
         key: value
         for key, value in {
+            "domainSeparator": GUARD_TRUST_ATTESTATION_DOMAIN,
             "challengeId": challenge_id,
             "deviceId": device_id,
             "analyzerId": analyzer_id if include_v2_bindings else None,
             "analyzerSpecVersion": analyzer_spec_version if include_v2_bindings else None,
             "analyzerVersion": analyzer_version if include_v2_bindings else None,
-            "evidenceSchemaVersion": "guard-aibom-trust-evidence.v1" if include_v2_bindings else None,
             "expiresAt": expires_at,
             "installationId": installation_id,
-            "nonce": nonce,
-            "policyVersion": policy_version if include_v2_bindings else None,
+            "nonce": effective_nonce,
+            "policyVersion": effective_policy_version,
             "sequence": sequence,
             "uploadId": upload_id,
             "workspaceId": workspace_id,
+            "adapterId": adapter_id,
+            "adapterVersion": adapter_version,
+            "configPathHash": config_path_hash,
+            "repositoryId": repository_id,
         }.items()
         if value is not None
     }
 
-    raw_trust_resolution = enriched.get("trustResolution")
-    if isinstance(raw_trust_resolution, dict):
-        trust_resolution = dict(raw_trust_resolution)
+    if trust_resolution is not None:
         raw_resolution_metadata = trust_resolution.get("metadata")
         resolution_metadata = dict(raw_resolution_metadata) if isinstance(raw_resolution_metadata, dict) else {}
         evidence_hash = resolution_metadata.get("evidenceHash")
+        evidence_schema_version = resolution_metadata.get("evidenceSchemaVersion")
         captured_at = trust_resolution.get("capturedAt")
-        if isinstance(evidence_hash, str) and evidence_hash and isinstance(captured_at, str) and captured_at:
+        claim_hash = trust_claim_hash(trust_resolution, require_layer_identity=False)
+        if (
+            isinstance(evidence_hash, str)
+            and evidence_hash
+            and isinstance(evidence_schema_version, str)
+            and evidence_schema_version
+            and isinstance(captured_at, str)
+            and captured_at
+        ):
             resolution_metadata["attestation"] = sign_trust_attestation(
                 payload=build_trust_attestation_payload(
                     agent_id=agent_id,
@@ -374,42 +440,49 @@ def apply_trust_attestation_metadata(
                     challenge_id=challenge_id,
                     expires_at=expires_at,
                     evidence_hash=evidence_hash,
-                    evidence_schema_version="guard-aibom-trust-evidence.v1" if include_v2_bindings else None,
+                    evidence_schema_version=evidence_schema_version,
                     installation_id=installation_id,
-                    nonce=nonce,
-                    policy_version=policy_version if include_v2_bindings else None,
+                    nonce=effective_nonce,
+                    policy_version=effective_policy_version,
                     sequence=sequence,
                     scope="trust_resolution",
                     upload_id=upload_id,
                     workspace_id=workspace_id,
                     device_id=device_id,
+                    adapter_id=adapter_id,
+                    adapter_version=adapter_version,
+                    config_path_hash=config_path_hash,
+                    repository_id=repository_id,
+                    claim_hash=claim_hash,
                 ),
                 config=config,
                 signed_at=captured_at,
             )
             resolution_metadata["attestationStatus"] = "signed"
-            if attestation_bindings:
-                resolution_metadata["attestationBindings"] = dict(attestation_bindings)
+            resolution_metadata["attestationBindings"] = {
+                **common_attestation_bindings,
+                "evidenceSchemaVersion": evidence_schema_version,
+                "claimHash": claim_hash,
+            }
             trust_resolution["metadata"] = resolution_metadata
             enriched["trustResolution"] = trust_resolution
 
-    raw_trust_layers = enriched.get("trustLayers")
-    if isinstance(raw_trust_layers, list):
-        signed_layers: list[object] = []
-        for raw_layer in raw_trust_layers:
-            if not isinstance(raw_layer, dict):
-                signed_layers.append(raw_layer)
-                continue
-            layer = dict(raw_layer)
+    if trust_layers:
+        signed_layers: list[dict[str, object]] = []
+        for layer in trust_layers:
             raw_layer_metadata = layer.get("metadata")
             layer_metadata = dict(raw_layer_metadata) if isinstance(raw_layer_metadata, dict) else {}
             evidence_hash = layer_metadata.get("evidenceHash")
+            evidence_schema_version = layer_metadata.get("evidenceSchemaVersion")
             captured_at = layer.get("capturedAt")
             layer_id = layer.get("layerId")
             layer_type = layer.get("layerType")
+            claim_hash = trust_claim_hash(layer, require_layer_identity=True)
             if (
                 isinstance(evidence_hash, str)
                 and evidence_hash
+                and isinstance(evidence_schema_version, str)
+                and evidence_schema_version
                 and isinstance(captured_at, str)
                 and captured_at
                 and isinstance(layer_id, str)
@@ -430,10 +503,10 @@ def apply_trust_attestation_metadata(
                         challenge_id=challenge_id,
                         expires_at=expires_at,
                         evidence_hash=evidence_hash,
-                        evidence_schema_version="guard-aibom-trust-evidence.v1" if include_v2_bindings else None,
+                        evidence_schema_version=evidence_schema_version,
                         installation_id=installation_id,
-                        nonce=nonce,
-                        policy_version=policy_version if include_v2_bindings else None,
+                        nonce=effective_nonce,
+                        policy_version=effective_policy_version,
                         sequence=sequence,
                         scope="trust_layer",
                         upload_id=upload_id,
@@ -441,18 +514,208 @@ def apply_trust_attestation_metadata(
                         device_id=device_id,
                         layer_id=layer_id,
                         layer_type=layer_type,
+                        adapter_id=adapter_id,
+                        adapter_version=adapter_version,
+                        config_path_hash=config_path_hash,
+                        repository_id=repository_id,
+                        claim_hash=claim_hash,
                     ),
                     config=config,
                     signed_at=captured_at,
                 )
                 layer_metadata["attestationStatus"] = "signed"
-                if attestation_bindings:
-                    layer_metadata["attestationBindings"] = dict(attestation_bindings)
+                layer_metadata["attestationBindings"] = {
+                    **common_attestation_bindings,
+                    "evidenceSchemaVersion": evidence_schema_version,
+                    "claimHash": claim_hash,
+                }
                 layer["metadata"] = layer_metadata
             signed_layers.append(layer)
         enriched["trustLayers"] = signed_layers
 
     return enriched
+
+
+_PRIOR_ATTESTATION_METADATA_KEYS = frozenset(
+    {
+        "attestation",
+        "attestationBindings",
+        "attestationRef",
+        "attestationVerification",
+    }
+)
+
+
+def _validated_local_trust_claim(
+    raw_claim: object,
+    *,
+    require_layer_identity: bool,
+) -> dict[str, object] | None:
+    """Return a proof-free locally derived claim or reject it fail-closed."""
+
+    if not isinstance(raw_claim, dict):
+        return None
+    provenance = raw_claim.get("provenance")
+    if not isinstance(provenance, dict):
+        return None
+    if provenance.get("origin") != "hol-guard-local" or provenance.get("verificationStatus") != "locally_derived":
+        return None
+    derivation = provenance.get("derivation")
+    if not isinstance(derivation, str) or not derivation:
+        return None
+    if raw_claim.get("evidenceAuthority") != "device_claim" or raw_claim.get("affectsV4Score") is not False:
+        return None
+    captured_at = raw_claim.get("capturedAt")
+    if _parse_attestation_timestamp(captured_at) is None:
+        return None
+    if require_layer_identity:
+        if not isinstance(raw_claim.get("layerId"), str) or not raw_claim.get("layerId"):
+            return None
+        if not isinstance(raw_claim.get("layerType"), str) or not raw_claim.get("layerType"):
+            return None
+    elif raw_claim.get("resolutionSource") != "local":
+        return None
+    raw_metadata = raw_claim.get("metadata")
+    if not isinstance(raw_metadata, dict):
+        return None
+    evidence = raw_metadata.get("evidence")
+    evidence_hash = raw_metadata.get("evidenceHash")
+    evidence_schema_version = raw_metadata.get("evidenceSchemaVersion")
+    if not isinstance(evidence, dict):
+        return None
+    if not isinstance(evidence_hash, str) or evidence_hash != guard_evidence_hash(evidence):
+        return None
+    if not isinstance(evidence_schema_version, str) or not evidence_schema_version.startswith("guard-aibom-"):
+        return None
+    claim = dict(raw_claim)
+    metadata = {key: value for key, value in raw_metadata.items() if key not in _PRIOR_ATTESTATION_METADATA_KEYS}
+    metadata["attestationStatus"] = "unsigned"
+    claim["metadata"] = metadata
+    return claim
+
+
+def trust_claim_hash(claim: Mapping[str, object], *, require_layer_identity: bool) -> str:
+    """Hash the complete proof-free local claim shown to attestation consumers."""
+
+    normalized = _validated_local_trust_claim(dict(claim), require_layer_identity=require_layer_identity)
+    if normalized is None:
+        raise ValueError("Trust claim is not locally derived or has invalid evidence")
+    return guard_evidence_hash(normalized)
+
+
+_ATTESTATION_PAYLOAD_REQUIRED_FIELDS = frozenset(
+    {
+        "payloadVersion",
+        "domainSeparator",
+        "agentId",
+        "itemId",
+        "itemKind",
+        "contentHash",
+        "capturedAt",
+        "claimHash",
+        "evidenceHash",
+        "scope",
+    }
+)
+_ATTESTATION_PAYLOAD_OPTIONAL_STRING_FIELDS = frozenset(
+    {
+        "adapterId",
+        "adapterVersion",
+        "analyzerId",
+        "analyzerSpecVersion",
+        "analyzerVersion",
+        "challengeId",
+        "configPathHash",
+        "deviceId",
+        "evidenceSchemaVersion",
+        "expiresAt",
+        "installationId",
+        "layerId",
+        "layerType",
+        "nonce",
+        "policyVersion",
+        "repositoryId",
+        "signedAt",
+        "uploadId",
+        "workspaceId",
+    }
+)
+_ATTESTATION_PAYLOAD_ALLOWED_FIELDS = (
+    _ATTESTATION_PAYLOAD_REQUIRED_FIELDS | _ATTESTATION_PAYLOAD_OPTIONAL_STRING_FIELDS | {"sequence"}
+)
+_ATTESTATION_SUBJECT_BINDING_FIELDS = frozenset(
+    {"adapterId", "adapterVersion", "configPathHash", "policyVersion", "repositoryId"}
+)
+
+
+def _parse_attestation_timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip()
+    if normalized.endswith(("Z", "z")):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def _validate_attestation_payload(
+    payload: Mapping[str, object],
+    *,
+    require_signed_at: bool,
+    require_nonce: bool = False,
+    require_subject_bindings: bool = False,
+) -> dict[str, object]:
+    normalized = {str(key): value for key, value in payload.items()}
+    unknown = set(normalized) - _ATTESTATION_PAYLOAD_ALLOWED_FIELDS
+    if unknown:
+        raise ValueError(f"Unknown trust attestation payload fields: {', '.join(sorted(unknown))}")
+    missing = _ATTESTATION_PAYLOAD_REQUIRED_FIELDS - set(normalized)
+    if missing:
+        raise ValueError(f"Missing trust attestation payload fields: {', '.join(sorted(missing))}")
+    for field in _ATTESTATION_PAYLOAD_REQUIRED_FIELDS | _ATTESTATION_PAYLOAD_OPTIONAL_STRING_FIELDS:
+        if field not in normalized:
+            continue
+        value = normalized[field]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"Trust attestation payload field {field} must be a non-empty string")
+        normalized[field] = value.strip()
+    if normalized.get("payloadVersion") != GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V3:
+        raise ValueError("Unsupported trust attestation payload version")
+    if normalized.get("domainSeparator") != GUARD_TRUST_ATTESTATION_DOMAIN:
+        raise ValueError("Trust attestation domain separator mismatch")
+    if normalized.get("scope") not in {"trust_resolution", "trust_layer"}:
+        raise ValueError("Unsupported trust attestation scope")
+    if _parse_attestation_timestamp(normalized.get("capturedAt")) is None:
+        raise ValueError("Trust attestation capturedAt is invalid")
+    if "expiresAt" in normalized and _parse_attestation_timestamp(normalized["expiresAt"]) is None:
+        raise ValueError("Trust attestation expiresAt is invalid")
+    if require_signed_at and _parse_attestation_timestamp(normalized.get("signedAt")) is None:
+        raise ValueError("Trust attestation signedAt is invalid")
+    if not require_signed_at and "signedAt" in normalized:
+        raise ValueError("Trust attestation builder cannot accept signedAt")
+    if require_nonce and "nonce" not in normalized:
+        raise ValueError("Trust attestation nonce is required")
+    if require_subject_bindings:
+        missing_bindings = _ATTESTATION_SUBJECT_BINDING_FIELDS - set(normalized)
+        if missing_bindings:
+            raise ValueError(f"Missing trust attestation subject bindings: {', '.join(sorted(missing_bindings))}")
+    if "sequence" in normalized and (
+        not isinstance(normalized["sequence"], int)
+        or isinstance(normalized["sequence"], bool)
+        or int(normalized["sequence"]) < 0
+    ):
+        raise ValueError("Trust attestation sequence must be a non-negative integer")
+    if normalized.get("scope") == "trust_layer":
+        if "layerId" not in normalized or "layerType" not in normalized:
+            raise ValueError("Trust layer attestation requires layer identity")
+    elif "layerId" in normalized or "layerType" in normalized:
+        raise ValueError("Trust resolution attestation cannot contain layer identity")
+    return normalized
 
 
 def sign_trust_attestation(
@@ -462,7 +725,13 @@ def sign_trust_attestation(
     signed_at: str,
 ) -> dict[str, object]:
     private_key = _load_private_key(config.private_key_pem)
-    canonical_payload = canonical_trust_attestation_payload(_payload_with_signed_at(payload, signed_at))
+    validated_payload = _validate_attestation_payload(
+        _payload_with_signed_at(payload, signed_at),
+        require_signed_at=True,
+        require_nonce=True,
+        require_subject_bindings=True,
+    )
+    canonical_payload = canonical_trust_attestation_payload(validated_payload)
     signature = _sign_payload(
         private_key=private_key,
         canonical_payload=canonical_payload,
@@ -474,7 +743,7 @@ def sign_trust_attestation(
         public_jwk_thumbprint=config.public_jwk_thumbprint,
     )
     return {
-        "payloadVersion": str(payload.get("payloadVersion") or GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION),
+        "payloadVersion": str(validated_payload["payloadVersion"]),
         "payloadHash": hashlib.sha256(canonical_payload).hexdigest(),
         "signature": base64.b64encode(signature).decode("ascii"),
         "signatureAlgorithm": config.signature_algorithm,
@@ -495,7 +764,23 @@ def verify_trust_attestation(
     payload: Mapping[str, object],
     envelope: Mapping[str, object],
     trusted_keys: tuple[GuardTrustAttestationVerificationKey, ...] | None = None,
-) -> None:
+    policy: GuardTrustAttestationVerificationPolicy | None = None,
+    claim: Mapping[str, object] | None = None,
+) -> str:
+    allowed_envelope_fields = {
+        "payloadVersion",
+        "payloadHash",
+        "signature",
+        "signatureAlgorithm",
+        "signedAt",
+        "keyId",
+        "publicKeyPem",
+        "fingerprintSha256",
+        "publicJwkThumbprint",
+    }
+    unknown_envelope_fields = {str(key) for key in envelope} - allowed_envelope_fields
+    if unknown_envelope_fields:
+        raise ValueError(f"Unknown trust attestation envelope fields: {', '.join(sorted(unknown_envelope_fields))}")
     raw_payload_hash = envelope.get("payloadHash")
     raw_signature_algorithm = envelope.get("signatureAlgorithm")
     raw_key_id = envelope.get("keyId")
@@ -503,6 +788,7 @@ def verify_trust_attestation(
     raw_fingerprint_sha256 = envelope.get("fingerprintSha256")
     raw_public_jwk_thumbprint = envelope.get("publicJwkThumbprint")
     raw_signature = envelope.get("signature")
+    raw_payload_version = envelope.get("payloadVersion")
     if not isinstance(raw_payload_hash, str) or not raw_payload_hash:
         raise ValueError("Trust attestation envelope is incomplete")
     if not isinstance(raw_signature_algorithm, str) or not raw_signature_algorithm:
@@ -515,6 +801,8 @@ def verify_trust_attestation(
         raise ValueError("Trust attestation envelope is incomplete")
     if not isinstance(raw_signature, str) or not raw_signature:
         raise ValueError("Trust attestation envelope is incomplete")
+    if raw_payload_version != GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V3:
+        raise ValueError("Unsupported trust attestation envelope version")
     payload_hash: str = raw_payload_hash
     signature_algorithm: str = raw_signature_algorithm
     key_id: str = raw_key_id
@@ -527,7 +815,17 @@ def verify_trust_attestation(
         GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
     }:
         raise ValueError("Unsupported trust attestation signature algorithm")
-    canonical_payload = canonical_trust_attestation_payload(_payload_with_signed_at(payload, envelope.get("signedAt")))
+    validated_payload = _validate_attestation_payload(
+        _payload_with_signed_at(payload, envelope.get("signedAt")),
+        require_signed_at=True,
+        require_nonce=True,
+        require_subject_bindings=True,
+    )
+    if claim is not None:
+        require_layer_identity = validated_payload.get("scope") == "trust_layer"
+        if trust_claim_hash(claim, require_layer_identity=require_layer_identity) != validated_payload["claimHash"]:
+            raise ValueError("Trust attestation claim hash mismatch")
+    canonical_payload = canonical_trust_attestation_payload(validated_payload)
     if hashlib.sha256(canonical_payload).hexdigest() != payload_hash:
         raise ValueError("Trust attestation payload hash mismatch")
     if _public_key_fingerprint(public_key_pem) != fingerprint_sha256:
@@ -540,6 +838,36 @@ def verify_trust_attestation(
         for trusted_key in trusted_keys
     ):
         raise ValueError("Trust attestation key is not trusted")
+    verification_policy = policy or GuardTrustAttestationVerificationPolicy(require_nonce=False)
+    if key_id in verification_policy.revoked_key_ids:
+        raise ValueError("Trust attestation key is revoked")
+    signed_at = _parse_attestation_timestamp(validated_payload.get("signedAt"))
+    captured_at = _parse_attestation_timestamp(validated_payload.get("capturedAt"))
+    if signed_at is None or captured_at is None or captured_at > signed_at:
+        raise ValueError("Trust attestation timestamp ordering is invalid")
+    key_not_before = dict(verification_policy.key_not_before).get(key_id)
+    parsed_key_not_before = _parse_attestation_timestamp(key_not_before)
+    if key_not_before is not None and (parsed_key_not_before is None or signed_at < parsed_key_not_before):
+        raise ValueError("Trust attestation predates the trusted key activation")
+    if verification_policy.now is not None:
+        current = _parse_attestation_timestamp(verification_policy.now)
+        if current is None:
+            raise ValueError("Trust attestation verification time is invalid")
+        if signed_at > current:
+            raise ValueError("Trust attestation is signed in the future")
+        expires_at = _parse_attestation_timestamp(validated_payload.get("expiresAt"))
+        if expires_at is not None and expires_at <= current:
+            raise ValueError("Trust attestation is expired")
+    sequence = validated_payload.get("sequence")
+    if verification_policy.minimum_sequence is not None and (
+        not isinstance(sequence, int) or sequence <= verification_policy.minimum_sequence
+    ):
+        raise ValueError("Trust attestation sequence is not monotonic")
+    if verification_policy.require_nonce and "nonce" not in validated_payload:
+        raise ValueError("Trust attestation nonce is required")
+    replay_key = trust_attestation_replay_key(validated_payload)
+    if replay_key in verification_policy.seen_replay_keys:
+        raise ValueError("Trust attestation replay detected")
     public_key = serialization.load_pem_public_key(public_key_pem.encode("utf-8"))
     if not isinstance(public_key, (RSAPublicKey, EllipticCurvePublicKey)):
         raise ValueError("Trust attestation public key must be RSA or EC")
@@ -547,11 +875,28 @@ def verify_trust_attestation(
         _verify_signature(
             public_key=public_key,
             canonical_payload=canonical_payload,
-            signature=base64.b64decode(signature),
+            signature=base64.b64decode(signature, validate=True),
             signature_algorithm=signature_algorithm,
         )
     except InvalidSignature as exc:
         raise ValueError("Trust attestation signature verification failed") from exc
+    return replay_key
+
+
+def trust_attestation_replay_key(payload: Mapping[str, object]) -> str:
+    """Return the stable verifier-side replay identity for an attestation."""
+
+    return guard_evidence_hash(
+        {
+            "domainSeparator": payload.get("domainSeparator"),
+            "nonce": payload.get("nonce"),
+            "itemId": payload.get("itemId"),
+            "scope": payload.get("scope"),
+            "layerId": payload.get("layerId"),
+            "workspaceId": payload.get("workspaceId"),
+            "repositoryId": payload.get("repositoryId"),
+        }
+    )
 
 
 def _load_private_key(private_key_pem: str) -> RSAPrivateKey | EllipticCurvePrivateKey:

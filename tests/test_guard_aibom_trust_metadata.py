@@ -109,6 +109,32 @@ def _assert_local_trust(
     return trust, metadata
 
 
+def _attestation_binding_kwargs(metadata: dict[str, object]) -> dict[str, Any]:
+    bindings = metadata.get("attestationBindings")
+    assert isinstance(bindings, dict)
+    mapping = {
+        "adapterId": "adapter_id",
+        "adapterVersion": "adapter_version",
+        "analyzerId": "analyzer_id",
+        "analyzerSpecVersion": "analyzer_spec_version",
+        "analyzerVersion": "analyzer_version",
+        "challengeId": "challenge_id",
+        "claimHash": "claim_hash",
+        "configPathHash": "config_path_hash",
+        "deviceId": "device_id",
+        "evidenceSchemaVersion": "evidence_schema_version",
+        "expiresAt": "expires_at",
+        "installationId": "installation_id",
+        "nonce": "nonce",
+        "policyVersion": "policy_version",
+        "repositoryId": "repository_id",
+        "sequence": "sequence",
+        "uploadId": "upload_id",
+        "workspaceId": "workspace_id",
+    }
+    return {argument: bindings[field] for field, argument in mapping.items() if field in bindings}
+
+
 def _install_test_attestation_key(monkeypatch) -> GuardTrustAttestationVerificationKey:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     private_key_pem = private_key.private_bytes(
@@ -513,9 +539,11 @@ def test_inventory_snapshot_signs_local_trust_metadata_when_configured(monkeypat
             captured_at=str(trust.get("capturedAt")),
             evidence_hash=str(metadata.get("evidenceHash")),
             scope="trust_resolution",
+            **_attestation_binding_kwargs(metadata),
         ),
         envelope=attestation,
         trusted_keys=(verification_key,),
+        claim=trust,
     )
 
 
@@ -570,46 +598,28 @@ def test_inventory_snapshot_signs_local_trust_metadata_with_workspace_device_bin
     assert isinstance(attestation, dict)
     assert attestation.get("signatureAlgorithm") == GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256
     assert attestation.get("publicJwkThumbprint") == dpop_key_material.public_jwk_thumbprint
-    assert metadata.get("attestationBindings") == {
-        "analyzerId": "hol-guard",
-        "analyzerSpecVersion": "guard-aibom-trust-spec.v1",
-        "analyzerVersion": "2.0.345",
-        "challengeId": "guard-aibom-challenge-1",
-        "deviceId": "device-alpha",
-        "evidenceSchemaVersion": "guard-aibom-trust-evidence.v1",
-        "expiresAt": "2026-06-10T12:15:00Z",
-        "installationId": "device-alpha",
-        "nonce": "nonce-alpha",
-        "policyVersion": "guard-aibom-trust-policy.v1",
-        "sequence": 7,
-        "uploadId": "guard-aibom-upload-1",
-        "workspaceId": "workspace-alpha",
-    }
+    bindings = metadata.get("attestationBindings")
+    assert isinstance(bindings, dict)
+    assert bindings.get("adapterId") == "codex"
+    assert bindings.get("configPathHash", "").startswith("sha256:")
+    assert bindings.get("repositoryId", "").startswith("sha256:")
+    assert bindings.get("nonce") == "nonce-alpha"
+    assert bindings.get("policyVersion") == "guard-aibom-trust-policy.v1"
+    assert bindings.get("workspaceId") == "workspace-alpha"
     verify_trust_attestation(
         payload=build_trust_attestation_payload(
             agent_id=snapshot.agent_id,
-            analyzer_id="hol-guard",
-            analyzer_spec_version="guard-aibom-trust-spec.v1",
-            analyzer_version="2.0.345",
-            challenge_id="guard-aibom-challenge-1",
             item_id=plugin_item.item_id,
             item_kind=plugin_item.item_kind,
             content_hash=plugin_item.content_hash,
             captured_at=str(trust.get("capturedAt")),
-            evidence_schema_version="guard-aibom-trust-evidence.v1",
-            expires_at="2026-06-10T12:15:00Z",
             evidence_hash=str(metadata.get("evidenceHash")),
-            installation_id="device-alpha",
-            nonce="nonce-alpha",
-            policy_version="guard-aibom-trust-policy.v1",
-            sequence=7,
             scope="trust_resolution",
-            upload_id="guard-aibom-upload-1",
-            workspace_id="workspace-alpha",
-            device_id="device-alpha",
+            **_attestation_binding_kwargs(metadata),
         ),
         envelope=attestation,
         trusted_keys=(verification_key,),
+        claim=trust,
     )
     trust_layers = plugin_item.metadata.get("trustLayers")
     assert isinstance(trust_layers, list)
@@ -624,30 +634,19 @@ def test_inventory_snapshot_signs_local_trust_metadata_with_workspace_device_bin
     verify_trust_attestation(
         payload=build_trust_attestation_payload(
             agent_id=snapshot.agent_id,
-            analyzer_id="hol-guard",
-            analyzer_spec_version="guard-aibom-trust-spec.v1",
-            analyzer_version="2.0.345",
-            challenge_id="guard-aibom-challenge-1",
             item_id=plugin_item.item_id,
             item_kind=plugin_item.item_kind,
             content_hash=plugin_item.content_hash,
             captured_at=str(local_layer.get("capturedAt")),
-            evidence_schema_version="guard-aibom-trust-evidence.v1",
-            expires_at="2026-06-10T12:15:00Z",
             evidence_hash=str(layer_metadata.get("evidenceHash")),
-            installation_id="device-alpha",
-            nonce="nonce-alpha",
-            policy_version="guard-aibom-trust-policy.v1",
-            sequence=7,
             scope="trust_layer",
-            upload_id="guard-aibom-upload-1",
-            workspace_id="workspace-alpha",
-            device_id="device-alpha",
             layer_id=str(local_layer.get("layerId")),
             layer_type=str(local_layer.get("layerType")),
+            **_attestation_binding_kwargs(layer_metadata),
         ),
         envelope=layer_attestation,
         trusted_keys=(verification_key,),
+        claim=local_layer,
     )
 
 
@@ -715,6 +714,13 @@ def test_p384_key_is_rejected_for_p256_attestation() -> None:
                 scope="trust_resolution",
                 workspace_id="workspace-alpha",
                 device_id="device-alpha",
+                adapter_id="test-adapter",
+                adapter_version="1.0.0",
+                config_path_hash="sha256:config",
+                claim_hash="sha256:claim",
+                repository_id="sha256:repository",
+                policy_version="guard-test-policy.v1",
+                nonce="nonce-p384",
             ),
             config=GuardTrustAttestationSigningConfig(
                 active_key_id="p384-key",
@@ -1012,9 +1018,11 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_
             captured_at=str(search_trust.get("capturedAt")),
             evidence_hash=str(search_metadata.get("evidenceHash")),
             scope="trust_resolution",
+            **_attestation_binding_kwargs(search_metadata),
         ),
         envelope=attestation,
         trusted_keys=(verification_key,),
+        claim=search_trust,
     )
     trust_layers = search_tool.metadata.get("trustLayers")
     assert isinstance(trust_layers, list)
@@ -1041,9 +1049,11 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_
             scope="trust_layer",
             layer_id=cisco_layer_id,
             layer_type=cisco_layer_type,
+            **_attestation_binding_kwargs(cisco_layer_metadata),
         ),
         envelope=cisco_attestation,
         trusted_keys=(verification_key,),
+        claim=cisco_layer,
     )
     assert search_trust.get("trustScore") is not None
 
