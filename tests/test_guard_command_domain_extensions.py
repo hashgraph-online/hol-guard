@@ -25,6 +25,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.container-runtime.forced-container-removal",
         ),
         (
+            "docker rm -f api",
+            "docker-sensitive command",
+            "command.container-runtime.forced-container-removal",
+        ),
+        (
+            "docker container rm -f api",
+            "docker-sensitive command",
+            "command.container-runtime.forced-container-removal",
+        ),
+        (
             "docker run --privileged alpine sh",
             "docker-sensitive command",
             "command.container-runtime.privileged-run",

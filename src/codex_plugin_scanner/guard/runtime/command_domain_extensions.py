@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypedDict
 
 from .command_rules import (
     AnyMatcher,
@@ -23,6 +24,20 @@ class DomainCommandExtensionSpec:
     action_classes: tuple[str, ...]
     risk_classes: tuple[str, ...]
     safer_alternatives: tuple[str, ...]
+    reference_urls: tuple[str, ...]
+
+
+class DomainCommandExtensionValues(TypedDict):
+    """Constructor values for one domain command extension."""
+
+    extension_id: str
+    version: str
+    name: str
+    description: str
+    action_classes: tuple[str, ...]
+    risk_classes: tuple[str, ...]
+    safer_alternatives: tuple[str, ...]
+    rules: tuple[CommandSafetyRule, ...]
     reference_urls: tuple[str, ...]
 
 
@@ -48,6 +63,23 @@ def _executable_matcher(
         required_flags=required_flags,
         allow_leading_options=bool(leading_options_with_values),
         leading_options_with_values=leading_options_with_values,
+    )
+
+
+def _flag_variants(
+    executables: frozenset[str],
+    *subcommands: str,
+    flags: frozenset[str],
+    leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
+) -> tuple[ExecutableMatcher, ...]:
+    return tuple(
+        _executable_matcher(
+            executables,
+            *subcommands,
+            required_flags=frozenset({flag}),
+            leading_options_with_values=leading_options_with_values,
+        )
+        for flag in sorted(flags)
     )
 
 
@@ -119,17 +151,17 @@ _DOCKER_SYSTEM_PRUNE = _executable_matcher(
 )
 _DOCKER_FORCE_REMOVE = AnyMatcher(
     matchers=(
-        _executable_matcher(
+        *_flag_variants(
             frozenset({"docker"}),
             "rm",
-            required_flags=frozenset({"--force"}),
+            flags=frozenset({"--force", "-f"}),
             leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
         ),
-        _executable_matcher(
+        *_flag_variants(
             frozenset({"docker"}),
             "container",
             "rm",
-            required_flags=frozenset({"--force"}),
+            flags=frozenset({"--force", "-f"}),
             leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
         ),
     )
@@ -369,3 +401,20 @@ DOMAIN_COMMAND_EXTENSION_SPECS = (
         ),
     ),
 )
+
+
+def domain_command_extension_values(spec: DomainCommandExtensionSpec) -> DomainCommandExtensionValues:
+    """Return typed registry constructor values for one domain spec."""
+
+    rules = tuple(rule for rule in DOMAIN_COMMAND_RULES if rule.rule_id.startswith(f"{spec.extension_id}."))
+    return {
+        "extension_id": spec.extension_id,
+        "version": "1.0.0",
+        "name": spec.name,
+        "description": spec.description,
+        "action_classes": spec.action_classes,
+        "risk_classes": spec.risk_classes,
+        "safer_alternatives": spec.safer_alternatives,
+        "rules": rules,
+        "reference_urls": spec.reference_urls,
+    }
