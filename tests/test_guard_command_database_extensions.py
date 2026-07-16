@@ -145,6 +145,50 @@ def test_database_observer_and_preview_commands_remain_safe(command: str, tmp_pa
     )
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "mongorestore --drop --dryRun=false --archive=backup.archive",
+        "mongorestore --drop --dryRun --dryRun=false --archive=backup.archive",
+    ],
+)
+def test_mongodb_false_or_overridden_dry_run_remains_live_execution(command: str, tmp_path: Path) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert (
+        extract_sensitive_tool_action_request(
+            "Shell",
+            {"command": command},
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+        is not None
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "mongorestore --drop --dryRun=true --archive=backup.archive",
+        "mongorestore --drop --dryRun=false --dryRun --archive=backup.archive",
+    ],
+)
+def test_mongodb_truthy_or_effective_dry_run_remains_quiet(command: str, tmp_path: Path) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "no_match"
+    assert (
+        extract_sensitive_tool_action_request(
+            "Shell",
+            {"command": command},
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+        is None
+    )
+
+
 def test_database_extensions_publish_official_references() -> None:
     for extension_id in (
         "command.database.postgresql",

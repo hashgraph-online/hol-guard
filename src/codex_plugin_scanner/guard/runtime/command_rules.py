@@ -14,6 +14,7 @@ CommandRuleMode = Literal["required", "enforce", "review", "monitor", "disabled"
 _VALID_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
 _VALID_MODES = frozenset({"required", "enforce", "review", "monitor", "disabled"})
 _EMPTY_STRING_SET: frozenset[str] = frozenset()
+_TRUTHY_FLAG_VALUES = frozenset({"1", "on", "true", "yes"})
 
 
 @final
@@ -366,14 +367,28 @@ def _present_flags(
     options_with_values: frozenset[str] = _EMPTY_STRING_SET,
 ) -> frozenset[str]:
     flags: set[str] = set()
+    # Safe variants honor the final long-option assignment, matching common CLI parsers.
+    effective_long_options: dict[str, tuple[str, str | None, bool]] = {}
     index = 0
     while index < len(arguments):
         argument = arguments[index]
         if argument == "--":
             break
-        flags.add(argument)
-        if argument.startswith("-") and "=" in argument:
-            flags.add(argument.split("=", 1)[0])
+        option_name, separator, option_value = argument.partition("=")
+        is_long_option = argument.startswith("--")
+        is_value_option = option_name in options_with_values
+        if is_long_option:
+            if is_value_option and not separator:
+                option_value = arguments[index + 1] if index + 1 < len(arguments) else ""
+            effective_long_options[option_name] = (
+                argument,
+                option_value if separator or is_value_option else None,
+                is_value_option,
+            )
+        else:
+            flags.add(argument)
+            if argument.startswith("-") and separator:
+                flags.add(option_name)
         if argument.startswith("-") and not argument.startswith("--") and len(argument) > 2:
             for character in argument[1:]:
                 if not character.isalnum():
@@ -382,8 +397,11 @@ def _present_flags(
                 flags.add(short_flag)
                 if short_flag in options_with_values:
                     break
-        option_name = argument.split("=", 1)[0]
         index += 2 if option_name in options_with_values and "=" not in argument else 1
+    for option_name, (argument, option_value, is_value_option) in effective_long_options.items():
+        flags.add(argument)
+        if is_value_option or option_value is None or option_value in _TRUTHY_FLAG_VALUES:
+            flags.add(option_name)
     return frozenset(flags)
 
 

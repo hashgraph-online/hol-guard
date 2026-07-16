@@ -143,6 +143,65 @@ def test_kubernetes_dry_run_none_remains_live_execution(command: str, tmp_path: 
     ) is not None
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "docker system prune --help=false",
+        "docker system prune --help --help=false",
+        "kubectl delete deployment api --help=false",
+        "kubectl delete deployment api --dry-run=client --dry-run=none",
+        "kubectl drain node-a --dry-run=server --dry-run=false",
+        "helm uninstall api --dry-run=false",
+        "helm uninstall api --dry-run --dry-run=false",
+        "terraform destroy --help=false",
+        "tofu destroy --help --help=false",
+        "pulumi destroy --preview-only=false",
+        "pulumi destroy --preview-only --preview-only=false",
+    ],
+)
+def test_false_or_overridden_safe_variants_remain_live_execution(command: str, tmp_path: Path) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert (
+        extract_sensitive_tool_action_request(
+            "Shell",
+            {"command": command},
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+        is not None
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "docker system prune --help=true",
+        "kubectl delete deployment api --help=true",
+        "kubectl delete deployment api --dry-run=none --dry-run=client",
+        "helm uninstall api --dry-run=true",
+        "terraform destroy --help=true",
+        "tofu destroy --help=false --help",
+        "pulumi destroy --preview-only=true",
+        "pulumi destroy --preview-only=false --preview-only=yes",
+    ],
+)
+def test_truthy_or_effective_safe_variants_remain_quiet(command: str, tmp_path: Path) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "no_match"
+    assert (
+        extract_sensitive_tool_action_request(
+            "Shell",
+            {"command": command},
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+        is None
+    )
+
+
 def test_container_argument_named_help_remains_runtime_execution(tmp_path: Path) -> None:
     payload = inspect_command("docker run alpine --help", cwd=tmp_path, home_dir=tmp_path)
 
