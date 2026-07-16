@@ -313,6 +313,8 @@ def _is_verified_read_only_typescript_check(
     tokens: tuple[str, ...],
     evidence: LocalPackageExecutionEvidence,
 ) -> bool:
+    if any(token == "--package" or token.startswith("--package=") for token in tokens[1:]):
+        return False
     if evidence.package_name not in {"tsc", "typescript"} or evidence.executable_name != "tsc":
         return False
     required_files = (evidence.manager, evidence.local_executable, *evidence.manifests, *evidence.lockfiles)
