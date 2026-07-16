@@ -69,6 +69,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "MinIO storage destructive command",
             "command.storage.minio.deletion",
         ),
+        (
+            "mc --config-dir /tmp/mc rm prod/archive/private.json",
+            "MinIO storage destructive command",
+            "command.storage.minio.deletion",
+        ),
+        (
+            "mc --json mirror --remove ./out prod/archive",
+            "MinIO storage destructive command",
+            "command.storage.minio.deletion",
+        ),
     ],
 )
 def test_storage_rules_feed_runtime_hooks(
@@ -105,6 +115,8 @@ def test_storage_rules_feed_runtime_hooks(
         "gcloud storage ls gs://archive",
         "az storage blob list --container-name archive",
         "mc ls prod/archive",
+        "mc --config-dir /tmp/mc ls prod/archive",
+        "mc --help rm prod/archive",
         "grep 's3 rm|storage rm|blob delete|mc rm' scripts/guard-test",
         "printf '%s\\n' 'aws s3 rm s3://archive/private.json'",
     ],

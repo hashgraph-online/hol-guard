@@ -59,6 +59,10 @@ _GCLOUD_GLOBAL_FLAGS = frozenset(
 )
 _AZURE_GLOBAL_OPTIONS = frozenset({"--output", "-o", "--query", "--subscription"})
 _AZURE_GLOBAL_FLAGS = frozenset({"--debug", "--only-show-errors", "--verbose"})
+_MINIO_GLOBAL_OPTIONS = frozenset({"--config-dir", "-C", "--custom-header", "-H", "--resolve"})
+_MINIO_GLOBAL_FLAGS = frozenset(
+    {"--debug", "--disable-pager", "--dp", "--dtrace", "--insecure", "--json", "--no-color", "--quiet"}
+)
 
 _AWS_STORAGE_DELETE = AnyMatcher(
     matchers=(
@@ -214,9 +218,19 @@ _AZURE_BATCH_DELETE = AnyMatcher(
 )
 _MINIO_STORAGE_DELETE = AnyMatcher(
     matchers=(
-        executable_matcher("mc", "rm"),
-        executable_matcher("mc", "rb"),
-        executable_matcher("mc", "mirror", required_flags=frozenset({"--remove"})),
+        executable_matcher(
+            "mc", "rm", global_options_with_values=_MINIO_GLOBAL_OPTIONS, global_flags=_MINIO_GLOBAL_FLAGS
+        ),
+        executable_matcher(
+            "mc", "rb", global_options_with_values=_MINIO_GLOBAL_OPTIONS, global_flags=_MINIO_GLOBAL_FLAGS
+        ),
+        executable_matcher(
+            "mc",
+            "mirror",
+            required_flags=frozenset({"--remove"}),
+            global_options_with_values=_MINIO_GLOBAL_OPTIONS,
+            global_flags=_MINIO_GLOBAL_FLAGS,
+        ),
     )
 )
 
