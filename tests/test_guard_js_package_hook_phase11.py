@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 from codex_plugin_scanner import install_integrity
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -247,7 +248,7 @@ def test_guard_hook_blocks_js_exec_flows_before_subprocess(
     assert evidence[0]["category"] == "supply-chain"
 
 
-def test_guard_hook_allows_verified_local_vitest_run(
+def test_guard_hook_requires_review_for_repository_local_vitest_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     home_dir = tmp_path / "home"
@@ -284,7 +285,66 @@ def test_guard_hook_allows_verified_local_vitest_run(
     )
     captured = capsys.readouterr()
 
+    payload = json.loads(captured.out)
     assert rc == 0
-    assert captured.out == ""
-    assert captured.err == ""
-    assert store.list_evidence() == []
+    assert "waiting for approval" in captured.err
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "review" in payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert store.list_approval_requests(limit=5)
+    evidence = store.list_evidence()
+    assert evidence
+    assert evidence[0]["category"] == "supply-chain"
+
+    request_id = str(store.list_approval_requests(limit=5)[0]["request_id"])
+    apply_approval_resolution(
+        store=store,
+        request_id=request_id,
+        action="allow",
+        scope="artifact",
+        workspace=None,
+        reason="reviewed exact local runner identity",
+    )
+
+    retry_rc = main(
+        [
+            "guard",
+            "hook",
+            "--harness",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--event-file",
+            str(payload_path),
+        ]
+    )
+    retry_capture = capsys.readouterr()
+
+    assert retry_rc == 0
+    assert retry_capture.out == ""
+    assert retry_capture.err == ""
+    assert store.list_approval_requests(status="pending", limit=5) == []
+
+    runner.write_text("#!/bin/sh\n# changed local runner\n", encoding="utf-8")
+    changed_rc = main(
+        [
+            "guard",
+            "hook",
+            "--harness",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--event-file",
+            str(payload_path),
+        ]
+    )
+    changed_capture = capsys.readouterr()
+    changed_payload = json.loads(changed_capture.out)
+
+    assert changed_rc == 0
+    assert changed_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "waiting for approval" in changed_capture.err
+    assert len(store.list_approval_requests(status="pending", limit=5)) == 1

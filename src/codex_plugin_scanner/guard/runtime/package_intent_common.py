@@ -15,6 +15,7 @@ from .mcp_protection import _split_package_token
 from .workspace_path_guard import existing_paths_within_workspace
 
 IntentKind = Literal["install", "execute", "sync"]
+EvidenceStatus = Literal["available", "missing", "not_regular", "unreadable", "unstable"]
 _EXTRAS_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)\[(?P<extras>[A-Za-z0-9_,.-]+)\]$")
 _EGG_FRAGMENT_RE = re.compile(r"(?:^|[#&])egg=([^&#]+)")
 _PYTHON_VERSION_RE = re.compile(r"(?P<name>[^<>=!~\s]+)(?P<op>===|==|~=|!=|<=|>=|<|>|=)?(?P<version>.*)")
@@ -38,6 +39,43 @@ class PackageIntentTarget:
 
 
 @dataclass(frozen=True, slots=True)
+class PackageExecutionFileEvidence:
+    """Stable identity evidence for one execution-relevant file."""
+
+    path: str
+    resolved_path: str | None
+    status: EvidenceStatus
+    file_identity: str | None = None
+    content_hash: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class LocalPackageExecutionEvidence:
+    """Exact local package-runner context included in approval identity."""
+
+    manager_name: str
+    path_source: str
+    effective_cwd: str
+    cwd_source: str
+    manager_is_guard_shim: bool
+    local_only_requested: bool
+    context_hash: str
+    package_name: str | None
+    executable_name: str | None
+    declared_version: str | None
+    manager: PackageExecutionFileEvidence | None
+    local_executable: PackageExecutionFileEvidence | None
+    manifests: tuple[PackageExecutionFileEvidence, ...] = ()
+    lockfiles: tuple[PackageExecutionFileEvidence, ...] = ()
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
 class PackageIntent:
     package_manager: str
     intent_kind: IntentKind
@@ -48,6 +86,7 @@ class PackageIntent:
     lockfile_paths: tuple[str, ...] = ()
     flags: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
+    local_executions: tuple[LocalPackageExecutionEvidence, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
@@ -88,6 +127,7 @@ def build_package_request_artifact(
                 "targets": [target.to_dict() for target in intent.targets],
                 "manifest_paths": list(manifest_paths),
                 "lockfile_paths": list(lockfile_paths),
+                "local_executions": [evidence.to_dict() for evidence in intent.local_executions],
             },
             sort_keys=True,
         ).encode("utf-8")
@@ -108,11 +148,13 @@ def build_package_request_artifact(
             "lockfile_paths": list(lockfile_paths),
             "flags": list(intent.flags),
             "notes": list(intent.notes),
+            "local_executions": [evidence.to_dict() for evidence in intent.local_executions],
             "redacted_command": intent.redacted_command,
             "request_summary": package_request_summary(intent),
             "runtime_request_signals": [f"invokes a package {intent.intent_kind} request via {intent.package_manager}"],
             "runtime_request_summary": package_runtime_summary(intent),
             "runtime_request_reason": package_runtime_reason(intent),
+            **_local_execution_runtime_metadata(intent),
         },
     )
 
@@ -156,6 +198,17 @@ def _is_true_global_flag(flag: str) -> bool:
 
 
 def package_request_summary(intent: PackageIntent) -> str:
+    if intent.local_executions:
+        execution = intent.local_executions[0]
+        executable = execution.executable_name or "an unresolved executable"
+        manager_path = (
+            execution.manager.resolved_path
+            if execution.manager is not None and execution.manager.resolved_path is not None
+            else "unresolved from the command's effective PATH"
+        )
+        return (
+            f"Requested local `{executable}` execution through `{execution.manager_name}`. Manager: `{manager_path}`."
+        )
     if intent.targets:
         target_names = ", ".join(target.package_name or target.raw_spec for target in intent.targets[:3])
         return f"Requested `{intent.package_manager}` {intent.intent_kind} for {target_names}."
@@ -168,6 +221,8 @@ def package_request_summary(intent: PackageIntent) -> str:
 
 
 def package_runtime_summary(intent: PackageIntent) -> str:
+    if intent.local_executions:
+        return f"Executes a project package through {intent.package_manager} using an exact local execution identity."
     if intent.intent_kind == "execute":
         return f"Executes a remote package through {intent.package_manager} before it is trusted locally."
     if intent.lockfile_paths:
@@ -179,10 +234,27 @@ def package_runtime_summary(intent: PackageIntent) -> str:
 
 
 def package_runtime_reason(intent: PackageIntent) -> str:
+    if intent.local_executions:
+        return (
+            "Guard requires review for the first local package-runner execution and binds reuse to the exact "
+            "manager, local executable, manifest, and lockfile evidence."
+        )
     return (
         f"Guard parsed this command as a package {intent.intent_kind} request and "
         "kept only package metadata plus a redacted command shape."
     )
+
+
+def _local_execution_runtime_metadata(intent: PackageIntent) -> dict[str, object]:
+    if not intent.local_executions:
+        return {}
+    return {
+        "runtime_request_reason_code": "local_package_execution_review",
+        "runtime_request_remediation_hint": (
+            "Review the resolved manager and local executable once. Unchanged exact executions reuse that scoped "
+            "approval; PATH, executable, manifest, or lockfile changes require review again."
+        ),
+    }
 
 
 def redacted_command(tokens: tuple[str, ...]) -> str:
