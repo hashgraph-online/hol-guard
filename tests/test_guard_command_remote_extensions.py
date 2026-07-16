@@ -38,6 +38,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "SSH configured execution command",
             "command.remote.ssh.configured-execution",
         ),
+        (
+            "ssh -oKnownHostsCommand='sh -c id' host.example",
+            "SSH configured execution command",
+            "command.remote.ssh.configured-execution",
+        ),
+        (
+            "ssh -oLocalCommand='sh -c id' -oPermitLocalCommand=yes host.example",
+            "SSH configured execution command",
+            "command.remote.ssh.configured-execution",
+        ),
         ("scp artifact.zip host.example:/srv/app/", "SCP overwrite command", "command.remote.scp.transfer"),
         ("scp -p artifact.zip host.example:/srv/app/", "SCP overwrite command", "command.remote.scp.transfer"),
         (
@@ -62,6 +72,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ),
         (
             "rsync -e 'sh -c id' ./out/ host.example:/srv/app/",
+            "Rsync remote shell command",
+            "command.remote.rsync.remote-shell",
+        ),
+        (
+            "RSYNC_RSH='sh -c id' rsync ./out/ host.example:/srv/app/",
+            "Rsync remote shell command",
+            "command.remote.rsync.remote-shell",
+        ),
+        (
+            "env RSYNC_RSH='sh -c id' rsync ./out/ host.example:/srv/app/",
             "Rsync remote shell command",
             "command.remote.rsync.remote-shell",
         ),
@@ -95,8 +115,17 @@ def test_remote_rules_feed_runtime_hooks(
         "ssh -G host.example uptime",
         "ssh -vG host.example uptime",
         "ssh -V",
+        "ssh -V host.example uptime",
+        "ssh -Q cipher host.example uptime",
+        "ssh -N host.example uptime",
+        "ssh -W jump.example:22 host.example uptime",
+        "ssh -O check host.example uptime",
         "ssh -o StrictHostKeyChecking=no host.example",
         "ssh -vo StrictHostKeyChecking=no host.example",
+        "ssh -G -oProxyCommand='sh -c id' host.example",
+        "ssh -oProxyCommand=none host.example",
+        "ssh -oLocalCommand='sh -c id' host.example",
+        "ssh -oPermitLocalCommand=no -oLocalCommand='sh -c id' host.example",
         "scp -h",
         "scp -vo StrictHostKeyChecking=no source",
         "rsync -av ./out/ host.example:/srv/app/",
@@ -147,6 +176,7 @@ def test_leading_operand_matcher_consumes_separate_long_option_value(tmp_path: P
         "rsync --delete --exclude -n src/ dst/",
         "rsync --delete --exclude=-n src/ dst/",
         "rsync --delete -f -n src/ dst/",
+        "rsync --delete --log-format -n src/ dst/",
     ],
 )
 def test_rsync_option_values_cannot_forge_dry_run(command: str, tmp_path: Path) -> None:

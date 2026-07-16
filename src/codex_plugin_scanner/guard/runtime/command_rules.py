@@ -212,28 +212,50 @@ class OptionValueKeyMatcher:
     executables: frozenset[str]
     option_names: frozenset[str]
     value_keys: frozenset[str]
+    forbidden_flags: frozenset[str] = frozenset()
+    ignored_values: frozenset[str] = frozenset()
+    required_key_values: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
         normalized_options = frozenset(value.strip() for value in self.option_names if value.strip())
         normalized_keys = frozenset(value.strip().lower() for value in self.value_keys if value.strip())
+        normalized_forbidden = frozenset(
+            _normalize_option_token(value) for value in self.forbidden_flags if value.strip()
+        )
+        normalized_ignored = frozenset(value.strip().lower() for value in self.ignored_values if value.strip())
+        normalized_required = tuple(
+            (key.strip().lower(), value.strip().lower())
+            for key, value in self.required_key_values
+            if key.strip() and value.strip()
+        )
         if not normalized_executables or not normalized_options or not normalized_keys:
             raise ValueError("OptionValueKeyMatcher requires executables, option names, and value keys")
         object.__setattr__(self, "executables", normalized_executables)
         object.__setattr__(self, "option_names", normalized_options)
         object.__setattr__(self, "value_keys", normalized_keys)
+        object.__setattr__(self, "forbidden_flags", normalized_forbidden)
+        object.__setattr__(self, "ignored_values", normalized_ignored)
+        object.__setattr__(self, "required_key_values", normalized_required)
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         evidence: list[MatcherEvidence] = []
         for index, segment in enumerate(command.segments):
             if not _segment_matches_executable(segment, self.executables):
                 continue
-            for value in _option_values(segment.arguments, self.option_names):
-                normalized_value = value.lstrip()
-                if not normalized_value:
-                    continue
-                key = normalized_value.split("=", 1)[0].split(None, 1)[0].lower()
-                if key not in self.value_keys:
+            present_flags = _present_flags(segment.arguments, options_with_values=self.option_names)
+            if self.forbidden_flags & present_flags:
+                continue
+            settings: dict[str, str] = {}
+            for option_value in _option_values(segment.arguments, self.option_names):
+                key, value = _split_option_setting(option_value)
+                if key:
+                    settings.setdefault(key, value)
+            if any(settings.get(key) != value for key, value in self.required_key_values):
+                continue
+            for key in self.value_keys:
+                value = settings.get(key)
+                if value is None or value in self.ignored_values:
                     continue
                 evidence.append(
                     MatcherEvidence(
@@ -243,6 +265,40 @@ class OptionValueKeyMatcher:
                     )
                 )
                 break
+        return tuple(evidence)
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class EnvironmentNameMatcher:
+    """Match command-local environment names without retaining their values."""
+
+    executables: frozenset[str]
+    environment_names: frozenset[str]
+
+    def __post_init__(self) -> None:
+        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
+        normalized_names = frozenset(value.strip().upper() for value in self.environment_names if value.strip())
+        if not normalized_executables or not normalized_names:
+            raise ValueError("EnvironmentNameMatcher requires executables and environment names")
+        object.__setattr__(self, "executables", normalized_executables)
+        object.__setattr__(self, "environment_names", normalized_names)
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        for index, segment in enumerate(command.segments):
+            if not _segment_matches_executable(segment, self.executables):
+                continue
+            present_names = frozenset(name.upper() for name in segment.environment_names)
+            if not self.environment_names & present_names:
+                continue
+            evidence.append(
+                MatcherEvidence(
+                    segment_index=index,
+                    executable=segment.executable,
+                    detail="Matched a command-selecting environment name.",
+                )
+            )
         return tuple(evidence)
 
 
@@ -492,12 +548,16 @@ def _leading_flags_and_operands(
             or short_option in options_with_values
             or clustered_value_option is not None
         )
-        has_attached_value = "=" in argument or (
-            argument.startswith("-")
-            and not argument.startswith("--")
-            and short_option in options_with_values
-            and len(argument) > 2
-        ) or clustered_value_attached
+        has_attached_value = (
+            "=" in argument
+            or (
+                argument.startswith("-")
+                and not argument.startswith("--")
+                and short_option in options_with_values
+                and len(argument) > 2
+            )
+            or clustered_value_attached
+        )
         if takes_value and not has_attached_value:
             index += 1
         index += 1
@@ -536,6 +596,18 @@ def _option_values(arguments: tuple[str, ...], option_names: frozenset[str]) -> 
 def _normalize_option_token(value: str) -> str:
     stripped = value.strip()
     return stripped.lower() if stripped.startswith("--") else stripped
+
+
+def _split_option_setting(value: str) -> tuple[str, str]:
+    normalized = value.strip()
+    if not normalized:
+        return "", ""
+    if "=" in normalized:
+        key, setting = normalized.split("=", 1)
+    else:
+        parts = normalized.split(None, 1)
+        key, setting = parts[0], parts[1] if len(parts) == 2 else ""
+    return key.lower(), setting.strip().lower()
 
 
 def _present_flags(

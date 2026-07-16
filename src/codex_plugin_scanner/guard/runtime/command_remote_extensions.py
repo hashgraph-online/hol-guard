@@ -10,6 +10,7 @@ from .command_rules import (
     CommandRuleSeverity,
     CommandSafetyRule,
     CommandSafeVariant,
+    EnvironmentNameMatcher,
     ExecutableMatcher,
     LeadingOperandCountMatcher,
     OptionValueKeyMatcher,
@@ -46,17 +47,31 @@ _SSH_REMOTE_EXECUTION = LeadingOperandCountMatcher(
     executables=executable_names("ssh"),
     minimum_operands=2,
     options_with_values=_SSH_OPTIONS_WITH_VALUES,
-    forbidden_flags=frozenset({"-G"}),
+    forbidden_flags=frozenset({"-G", "-N", "-O", "-Q", "-V", "-W"}),
 )
 _SCP_TRANSFER = LeadingOperandCountMatcher(
     executables=executable_names("scp"),
     minimum_operands=2,
     options_with_values=_SCP_OPTIONS_WITH_VALUES,
 )
-_SSH_CONFIGURED_EXECUTION = OptionValueKeyMatcher(
-    executables=executable_names("ssh"),
-    option_names=frozenset({"-o"}),
-    value_keys=frozenset({"localcommand", "proxycommand", "remotecommand"}),
+_SSH_CONFIGURED_EXECUTION = AnyMatcher(
+    matchers=(
+        OptionValueKeyMatcher(
+            executables=executable_names("ssh"),
+            option_names=frozenset({"-o"}),
+            value_keys=frozenset({"knownhostscommand", "proxycommand", "remotecommand"}),
+            forbidden_flags=frozenset({"-G", "-O", "-Q", "-V"}),
+            ignored_values=frozenset({"none"}),
+        ),
+        OptionValueKeyMatcher(
+            executables=executable_names("ssh"),
+            option_names=frozenset({"-o"}),
+            value_keys=frozenset({"localcommand"}),
+            forbidden_flags=frozenset({"-G", "-O", "-Q", "-V"}),
+            ignored_values=frozenset({"none"}),
+            required_key_values=(("permitlocalcommand", "yes"),),
+        ),
+    )
 )
 _RSYNC_DESTRUCTIVE_FLAGS = (
     "--del",
@@ -101,6 +116,7 @@ _RSYNC_OPTIONS_WITH_VALUES = frozenset(
         "--info",
         "--log-file",
         "--log-file-format",
+        "--log-format",
         "--link-dest",
         "--max-alloc",
         "--max-delete",
@@ -151,14 +167,20 @@ _RSYNC_MUTATION = AnyMatcher(
     )
 )
 _RSYNC_REMOTE_SHELL = AnyMatcher(
-    matchers=tuple(
-        ExecutableMatcher(
+    matchers=(
+        *(
+            ExecutableMatcher(
+                executables=executable_names("rsync"),
+                required_flags=frozenset({flag}),
+                options_with_values=_RSYNC_OPTIONS_WITH_VALUES,
+                required_flags_in_all_arguments=True,
+            )
+            for flag in ("--rsync-path", "--rsh", "-e")
+        ),
+        EnvironmentNameMatcher(
             executables=executable_names("rsync"),
-            required_flags=frozenset({flag}),
-            options_with_values=_RSYNC_OPTIONS_WITH_VALUES,
-            required_flags_in_all_arguments=True,
-        )
-        for flag in ("--rsync-path", "--rsh", "-e")
+            environment_names=frozenset({"RSYNC_RSH"}),
+        ),
     )
 )
 
@@ -202,7 +224,7 @@ REMOTE_COMMAND_RULES = (
     _remote_rule(
         rule_id="command.remote.ssh.configured-execution",
         title="SSH configured command execution",
-        description="Identifies SSH options that configure local, proxy, or remote shell commands.",
+        description="Identifies SSH options that configure local, host-key, proxy, or remote shell commands.",
         matcher=_SSH_CONFIGURED_EXECUTION,
         action_class="SSH configured execution command",
         safer_alternative=(
