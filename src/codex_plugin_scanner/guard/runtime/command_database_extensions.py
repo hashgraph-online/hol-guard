@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
+from .command_database_matchers import ArgumentCommandMatcher, CommandSequenceMatcher, LeadingSubcommandMatcher
 from .command_extension_matchers import executable_matcher, executable_names, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import (
     AnyMatcher,
-    ArgumentCommandMatcher,
     CommandMatcher,
     CommandSafetyRule,
     CommandSafeVariant,
-    CommandSequenceMatcher,
     ExecutableMatcher,
-    LeadingOperandCountMatcher,
-    LeadingSubcommandMatcher,
 )
+from .command_structured_matchers import LeadingOperandCountMatcher
 
 _POSTGRES_OPTIONS_WITH_VALUES = frozenset({"-h", "-p", "-U", "--host", "--maintenance-db", "--port", "--username"})
 _MYSQL_GLOBAL_OPTIONS = frozenset(

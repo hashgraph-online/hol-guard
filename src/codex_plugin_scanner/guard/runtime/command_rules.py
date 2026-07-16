@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Protocol, final
+from typing import Literal, final
 
+from .command_matcher_contracts import CommandMatcher, MatcherEvidence
 from .command_model import CanonicalCommand, CommandSegment
 
 CommandRuleSeverity = Literal["critical", "high", "medium", "low"]
@@ -13,28 +14,6 @@ CommandRuleMode = Literal["required", "enforce", "review", "monitor", "disabled"
 _VALID_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
 _VALID_MODES = frozenset({"required", "enforce", "review", "monitor", "disabled"})
 _EMPTY_STRING_SET: frozenset[str] = frozenset()
-
-
-@dataclass(frozen=True, slots=True)
-class MatcherEvidence:
-    """Redaction-safe location emitted by one structured matcher."""
-
-    segment_index: int
-    executable: str | None
-    detail: str
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "segment_index": self.segment_index,
-            "executable": self.executable,
-            "detail": self.detail,
-        }
-
-
-class CommandMatcher(Protocol):
-    """Side-effect-free structured command matcher."""
-
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]: ...
 
 
 @final
@@ -152,367 +131,6 @@ class ArgumentMatcher:
                     segment_index=index,
                     executable=segment.executable,
                     detail="Matched executable and required structured arguments.",
-                )
-            )
-        return tuple(evidence)
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class ArgumentPositionMatcher:
-    """Match an exact argument at one of a bounded set of positions."""
-
-    executables: frozenset[str]
-    required_argument: str
-    positions: frozenset[int]
-    forbidden_arguments: frozenset[str] = frozenset()
-
-    def __post_init__(self) -> None:
-        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
-        normalized_required = self.required_argument.strip().lower()
-        normalized_forbidden = frozenset(value.strip().lower() for value in self.forbidden_arguments if value.strip())
-        if not normalized_executables or not normalized_required or not self.positions:
-            raise ValueError("ArgumentPositionMatcher requires executables, an argument, and positions")
-        if any(position < 0 for position in self.positions):
-            raise ValueError("ArgumentPositionMatcher positions cannot be negative")
-        object.__setattr__(self, "executables", normalized_executables)
-        object.__setattr__(self, "required_argument", normalized_required)
-        object.__setattr__(self, "forbidden_arguments", normalized_forbidden)
-
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        evidence: list[MatcherEvidence] = []
-        for index, segment in enumerate(command.segments):
-            if not _segment_matches_executable(segment, self.executables):
-                continue
-            arguments = tuple(argument.lower() for argument in segment.arguments)
-            if self.forbidden_arguments & frozenset(arguments):
-                continue
-            if not any(
-                position < len(arguments) and arguments[position] == self.required_argument
-                for position in self.positions
-            ):
-                continue
-            evidence.append(
-                MatcherEvidence(
-                    segment_index=index,
-                    executable=segment.executable,
-                    detail="Matched an exact structured argument position.",
-                )
-            )
-        return tuple(evidence)
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class ArgumentCommandMatcher:
-    """Match a command-like argument and its payload without scanning free-form text."""
-
-    executables: frozenset[str]
-    command: str
-    minimum_abbreviation_length: int
-    minimum_position: int = 0
-
-    def __post_init__(self) -> None:
-        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
-        normalized_command = self.command.strip().lower()
-        if not normalized_executables or not normalized_command:
-            raise ValueError("ArgumentCommandMatcher requires executables and a command")
-        if not 1 <= self.minimum_abbreviation_length <= len(normalized_command):
-            raise ValueError("ArgumentCommandMatcher has an invalid minimum abbreviation length")
-        if self.minimum_position < 0:
-            raise ValueError("ArgumentCommandMatcher minimum position cannot be negative")
-        object.__setattr__(self, "executables", normalized_executables)
-        object.__setattr__(self, "command", normalized_command)
-
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        evidence: list[MatcherEvidence] = []
-        for index, segment in enumerate(command.segments):
-            if not _segment_matches_executable(segment, self.executables):
-                continue
-            for argument in segment.arguments[self.minimum_position :]:
-                parts = argument.strip().lower().split(None, 1)
-                if len(parts) != 2:
-                    continue
-                command_token = parts[0]
-                if len(command_token) < self.minimum_abbreviation_length or not self.command.startswith(command_token):
-                    continue
-                evidence.append(
-                    MatcherEvidence(
-                        segment_index=index,
-                        executable=segment.executable,
-                        detail="Matched a structured command argument and required payload.",
-                    )
-                )
-                break
-        return tuple(evidence)
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class CommandSequenceMatcher:
-    """Match target commands in a documented multi-command grammar."""
-
-    executables: frozenset[str]
-    command_arities: tuple[tuple[str, int], ...]
-    target_commands: frozenset[str]
-    options_with_values: frozenset[str] = frozenset()
-    forbidden_flags: frozenset[str] = frozenset()
-
-    def __post_init__(self) -> None:
-        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
-        normalized_arities = tuple((name.strip().lower(), arity) for name, arity in self.command_arities)
-        normalized_targets = frozenset(value.strip().lower() for value in self.target_commands if value.strip())
-        normalized_options = frozenset(
-            _normalize_option_token(value) for value in self.options_with_values if value.strip()
-        )
-        normalized_forbidden = frozenset(
-            _normalize_option_token(value) for value in self.forbidden_flags if value.strip()
-        )
-        command_names = tuple(name for name, _arity in normalized_arities)
-        if not normalized_executables or not command_names or not normalized_targets:
-            raise ValueError("CommandSequenceMatcher requires executables, commands, and targets")
-        if len(set(command_names)) != len(command_names) or any(arity < 0 for _name, arity in normalized_arities):
-            raise ValueError("CommandSequenceMatcher requires unique commands with non-negative arities")
-        if not normalized_targets <= frozenset(command_names):
-            raise ValueError("CommandSequenceMatcher targets must exist in the command grammar")
-        object.__setattr__(self, "executables", normalized_executables)
-        object.__setattr__(self, "command_arities", normalized_arities)
-        object.__setattr__(self, "target_commands", normalized_targets)
-        object.__setattr__(self, "options_with_values", normalized_options)
-        object.__setattr__(self, "forbidden_flags", normalized_forbidden)
-
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        evidence: list[MatcherEvidence] = []
-        arities = dict(self.command_arities)
-        command_names = tuple(arities)
-        for index, segment in enumerate(command.segments):
-            if not _segment_matches_executable(segment, self.executables):
-                continue
-            if any(
-                _normalize_option_token(argument.split("=", 1)[0]) in self.forbidden_flags
-                for argument in segment.arguments
-            ):
-                continue
-            _flags, operands = _leading_flags_and_operands(
-                segment.arguments,
-                options_with_values=self.options_with_values,
-            )
-            operand_index = 0
-            while operand_index < len(operands):
-                token = operands[operand_index].strip().lower()
-                candidates = tuple(name for name in command_names if name.startswith(token))
-                if len(candidates) != 1:
-                    break
-                resolved_command = candidates[0]
-                if resolved_command in self.target_commands:
-                    evidence.append(
-                        MatcherEvidence(
-                            segment_index=index,
-                            executable=segment.executable,
-                            detail="Matched a destructive command in a structured command sequence.",
-                        )
-                    )
-                    break
-                operand_index += 1 + arities[resolved_command]
-        return tuple(evidence)
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class LeadingOperandCountMatcher:
-    """Match commands with enough operands after documented leading options."""
-
-    executables: frozenset[str]
-    minimum_operands: int
-    options_with_values: frozenset[str] = frozenset()
-    forbidden_flags: frozenset[str] = frozenset()
-
-    def __post_init__(self) -> None:
-        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
-        normalized_options = frozenset(
-            _normalize_option_token(value) for value in self.options_with_values if value.strip()
-        )
-        normalized_forbidden = frozenset(
-            _normalize_option_token(value) for value in self.forbidden_flags if value.strip()
-        )
-        if not normalized_executables:
-            raise ValueError("LeadingOperandCountMatcher requires executables")
-        if self.minimum_operands < 1:
-            raise ValueError("LeadingOperandCountMatcher requires at least one operand")
-        object.__setattr__(self, "executables", normalized_executables)
-        object.__setattr__(self, "options_with_values", normalized_options)
-        object.__setattr__(self, "forbidden_flags", normalized_forbidden)
-
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        evidence: list[MatcherEvidence] = []
-        for index, segment in enumerate(command.segments):
-            if not _segment_matches_executable(segment, self.executables):
-                continue
-            leading_flags, operands = _leading_flags_and_operands(
-                segment.arguments,
-                options_with_values=self.options_with_values,
-            )
-            if self.forbidden_flags & leading_flags or len(operands) < self.minimum_operands:
-                continue
-            evidence.append(
-                MatcherEvidence(
-                    segment_index=index,
-                    executable=segment.executable,
-                    detail=f"Matched command with at least {self.minimum_operands} structured operands.",
-                )
-            )
-        return tuple(evidence)
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class LeadingSubcommandMatcher:
-    """Match subcommands after case-sensitive leading option parsing."""
-
-    executables: frozenset[str]
-    subcommands: tuple[str, ...]
-    options_with_values: frozenset[str] = frozenset()
-    forbidden_flags: frozenset[str] = frozenset()
-    required_flags_anywhere: frozenset[str] = frozenset()
-
-    def __post_init__(self) -> None:
-        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
-        normalized_subcommands = tuple(value.strip().lower() for value in self.subcommands if value.strip())
-        normalized_options = frozenset(
-            _normalize_option_token(value) for value in self.options_with_values if value.strip()
-        )
-        normalized_forbidden = frozenset(
-            _normalize_option_token(value) for value in self.forbidden_flags if value.strip()
-        )
-        normalized_required = frozenset(
-            value.strip().lower() for value in self.required_flags_anywhere if value.strip()
-        )
-        if not normalized_executables or not normalized_subcommands:
-            raise ValueError("LeadingSubcommandMatcher requires executables and subcommands")
-        object.__setattr__(self, "executables", normalized_executables)
-        object.__setattr__(self, "subcommands", normalized_subcommands)
-        object.__setattr__(self, "options_with_values", normalized_options)
-        object.__setattr__(self, "forbidden_flags", normalized_forbidden)
-        object.__setattr__(self, "required_flags_anywhere", normalized_required)
-
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        evidence: list[MatcherEvidence] = []
-        for index, segment in enumerate(command.segments):
-            if not _segment_matches_executable(segment, self.executables):
-                continue
-            leading_flags, operands = _leading_flags_and_operands(
-                segment.arguments,
-                options_with_values=self.options_with_values,
-            )
-            lowered_operands = tuple(value.lower() for value in operands)
-            if self.forbidden_flags & leading_flags or lowered_operands[: len(self.subcommands)] != self.subcommands:
-                continue
-            present_flags = _present_flags(tuple(argument.lower() for argument in segment.arguments))
-            if not self.required_flags_anywhere <= present_flags:
-                continue
-            evidence.append(
-                MatcherEvidence(
-                    segment_index=index,
-                    executable=segment.executable,
-                    detail="Matched executable and leading-option-aware subcommands.",
-                )
-            )
-        return tuple(evidence)
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class OptionValueKeyMatcher:
-    """Match documented option values whose leading key has execution semantics."""
-
-    executables: frozenset[str]
-    option_names: frozenset[str]
-    value_keys: frozenset[str]
-    forbidden_flags: frozenset[str] = frozenset()
-    ignored_values: frozenset[str] = frozenset()
-    required_key_values: tuple[tuple[str, str], ...] = ()
-
-    def __post_init__(self) -> None:
-        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
-        normalized_options = frozenset(value.strip() for value in self.option_names if value.strip())
-        normalized_keys = frozenset(value.strip().lower() for value in self.value_keys if value.strip())
-        normalized_forbidden = frozenset(
-            _normalize_option_token(value) for value in self.forbidden_flags if value.strip()
-        )
-        normalized_ignored = frozenset(value.strip().lower() for value in self.ignored_values if value.strip())
-        normalized_required = tuple(
-            (key.strip().lower(), value.strip().lower())
-            for key, value in self.required_key_values
-            if key.strip() and value.strip()
-        )
-        if not normalized_executables or not normalized_options or not normalized_keys:
-            raise ValueError("OptionValueKeyMatcher requires executables, option names, and value keys")
-        object.__setattr__(self, "executables", normalized_executables)
-        object.__setattr__(self, "option_names", normalized_options)
-        object.__setattr__(self, "value_keys", normalized_keys)
-        object.__setattr__(self, "forbidden_flags", normalized_forbidden)
-        object.__setattr__(self, "ignored_values", normalized_ignored)
-        object.__setattr__(self, "required_key_values", normalized_required)
-
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        evidence: list[MatcherEvidence] = []
-        for index, segment in enumerate(command.segments):
-            if not _segment_matches_executable(segment, self.executables):
-                continue
-            present_flags = _present_flags(segment.arguments, options_with_values=self.option_names)
-            if self.forbidden_flags & present_flags:
-                continue
-            settings: dict[str, str] = {}
-            for option_value in _option_values(segment.arguments, self.option_names):
-                key, value = _split_option_setting(option_value)
-                if key:
-                    settings.setdefault(key, value)
-            if any(settings.get(key) != value for key, value in self.required_key_values):
-                continue
-            for key in self.value_keys:
-                value = settings.get(key)
-                if value is None or value in self.ignored_values:
-                    continue
-                evidence.append(
-                    MatcherEvidence(
-                        segment_index=index,
-                        executable=segment.executable,
-                        detail="Matched a structured option value with command execution semantics.",
-                    )
-                )
-                break
-        return tuple(evidence)
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class EnvironmentNameMatcher:
-    """Match command-local environment names without retaining their values."""
-
-    executables: frozenset[str]
-    environment_names: frozenset[str]
-
-    def __post_init__(self) -> None:
-        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
-        normalized_names = frozenset(value.strip().upper() for value in self.environment_names if value.strip())
-        if not normalized_executables or not normalized_names:
-            raise ValueError("EnvironmentNameMatcher requires executables and environment names")
-        object.__setattr__(self, "executables", normalized_executables)
-        object.__setattr__(self, "environment_names", normalized_names)
-
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        evidence: list[MatcherEvidence] = []
-        for index, segment in enumerate(command.segments):
-            if not _segment_matches_executable(segment, self.executables):
-                continue
-            present_names = frozenset(name.upper() for name in segment.environment_names)
-            if not self.environment_names & present_names:
-                continue
-            evidence.append(
-                MatcherEvidence(
-                    segment_index=index,
-                    executable=segment.executable,
-                    detail="Matched a command-selecting environment name.",
                 )
             )
         return tuple(evidence)
@@ -703,26 +321,17 @@ def matcher_index_hints(matcher: CommandMatcher) -> MatcherIndexHints:
             executables=matcher.executables,
             keywords=matcher.required_arguments,
         )
-    if isinstance(matcher, ArgumentCommandMatcher):
-        return MatcherIndexHints(
-            executables=matcher.executables,
-            keywords=frozenset({matcher.command}),
-        )
-    if isinstance(matcher, ArgumentPositionMatcher):
-        return MatcherIndexHints(
-            executables=matcher.executables,
-            keywords=frozenset({matcher.required_argument}),
-        )
-    if isinstance(matcher, CommandSequenceMatcher):
-        return MatcherIndexHints(executables=matcher.executables, keywords=matcher.target_commands)
-    if isinstance(matcher, LeadingOperandCountMatcher):
-        return MatcherIndexHints(executables=matcher.executables)
-    if isinstance(matcher, LeadingSubcommandMatcher):
-        return MatcherIndexHints(executables=matcher.executables, keywords=frozenset(matcher.subcommands))
-    if isinstance(matcher, OptionValueKeyMatcher):
-        return MatcherIndexHints(executables=matcher.executables, keywords=matcher.option_names)
-    if isinstance(matcher, EnvironmentNameMatcher):
-        return MatcherIndexHints(executables=matcher.executables, keywords=matcher.environment_names)
+    from .command_database_matchers import database_matcher_index_hints
+    from .command_structured_matchers import structured_matcher_index_hints
+
+    database_hints = database_matcher_index_hints(matcher)
+    if database_hints is not None:
+        executables, keywords = database_hints
+        return MatcherIndexHints(executables=executables, keywords=keywords)
+    structured_hints = structured_matcher_index_hints(matcher)
+    if structured_hints is not None:
+        executables, keywords = structured_hints
+        return MatcherIndexHints(executables=executables, keywords=keywords)
     if isinstance(matcher, PipelineMatcher):
         return _merge_matcher_hints((matcher.producer, matcher.consumer))
     if isinstance(matcher, (AnyMatcher, AllMatcher)):
@@ -746,100 +355,9 @@ def _segment_matches_executable(segment: CommandSegment, executables: frozenset[
     return executable in executables
 
 
-def _leading_flags_and_operands(
-    arguments: tuple[str, ...],
-    *,
-    options_with_values: frozenset[str],
-) -> tuple[frozenset[str], tuple[str, ...]]:
-    flags: set[str] = set()
-    index = 0
-    while index < len(arguments):
-        argument = arguments[index]
-        if argument == "--":
-            index += 1
-            break
-        if not argument.startswith("-") or argument == "-":
-            break
-        option_name = _normalize_option_token(argument.split("=", 1)[0])
-        flags.add(option_name)
-        short_option = argument[:2] if argument.startswith("-") and not argument.startswith("--") else option_name
-        clustered_value_option: str | None = None
-        clustered_value_attached = False
-        if argument.startswith("-") and not argument.startswith("--") and len(argument) > 2:
-            for offset, character in enumerate(argument[1:], start=1):
-                if not character.isalpha():
-                    break
-                clustered_flag = f"-{character}"
-                flags.add(clustered_flag)
-                if clustered_flag in options_with_values:
-                    clustered_value_option = clustered_flag
-                    clustered_value_attached = offset < len(argument) - 1
-                    break
-        takes_value = (
-            option_name in options_with_values
-            or short_option in options_with_values
-            or clustered_value_option is not None
-        )
-        has_attached_value = (
-            "=" in argument
-            or (
-                argument.startswith("-")
-                and not argument.startswith("--")
-                and short_option in options_with_values
-                and len(argument) > 2
-            )
-            or clustered_value_attached
-        )
-        if takes_value and not has_attached_value:
-            index += 1
-        index += 1
-    return frozenset(flags), arguments[index:]
-
-
-def _option_values(arguments: tuple[str, ...], option_names: frozenset[str]) -> tuple[str, ...]:
-    values: list[str] = []
-    index = 0
-    while index < len(arguments):
-        argument = arguments[index]
-        matched_option = next(
-            (
-                option
-                for option in option_names
-                if argument == option or argument.startswith(f"{option}=") or argument.startswith(option)
-            ),
-            None,
-        )
-        if matched_option is None:
-            index += 1
-            continue
-        if argument == matched_option:
-            if index + 1 < len(arguments):
-                values.append(arguments[index + 1])
-                index += 2
-                continue
-        elif argument.startswith(f"{matched_option}="):
-            values.append(argument[len(matched_option) + 1 :])
-        elif matched_option.startswith("-") and not matched_option.startswith("--"):
-            values.append(argument[len(matched_option) :])
-        index += 1
-    return tuple(values)
-
-
 def _normalize_option_token(value: str) -> str:
     stripped = value.strip()
     return stripped.lower() if stripped.startswith("--") else stripped
-
-
-def _split_option_setting(value: str) -> tuple[str, str]:
-    normalized = value.strip()
-    if not normalized:
-        return "", ""
-    if "=" in normalized:
-        key, setting = normalized.split("=", 1)
-    else:
-        parts = normalized.split(None, 1)
-        key, setting = parts[0], parts[1] if len(parts) == 2 else ""
-    return key.lower(), setting.strip().lower()
 
 
 def _present_flags(
@@ -858,7 +376,7 @@ def _present_flags(
             flags.add(argument.split("=", 1)[0])
         if argument.startswith("-") and not argument.startswith("--") and len(argument) > 2:
             for character in argument[1:]:
-                if not character.isalpha():
+                if not character.isalnum():
                     continue
                 short_flag = f"-{character}"
                 flags.add(short_flag)
