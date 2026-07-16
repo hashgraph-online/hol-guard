@@ -47,6 +47,33 @@ def _isolate_trust_attestation_env(monkeypatch: pytest.MonkeyPatch) -> None:
     ):
         monkeypatch.delenv(key, raising=False)
 
+
+@pytest.fixture(autouse=True)
+def _isolate_daemon_background_refresh_workers(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Start daemon refresh workers only in tests that exercise them."""
+    from codex_plugin_scanner.guard.daemon import server as daemon_server
+
+    worker_markers = {
+        "daemon_aibom_refresh": "_start_aibom_inventory_refresh",
+        "daemon_bundle_refresh": "_start_supply_chain_bundle_refresh",
+        "daemon_headless_refresh": "_start_headless_cloud_sync",
+    }
+    for marker, method_name in worker_markers.items():
+        if request.node.get_closest_marker(marker) is None:
+            monkeypatch.setattr(daemon_server.GuardDaemonServer, method_name, lambda _self: None)
+    if request.node.get_closest_marker("daemon_headless_queue") is None:
+        monkeypatch.setattr(
+            daemon_server,
+            "_queue_headless_cloud_sync",
+            lambda *, store: {
+                "status": "not_configured",
+                "message": "Cloud sync is isolated for this test.",
+            },
+        )
+
 class _FakeSystemKeyringModule:
     def __init__(self) -> None:
         self._secrets: dict[tuple[str, str], str] = {}

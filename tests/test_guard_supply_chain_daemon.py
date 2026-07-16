@@ -44,6 +44,7 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
     }
 
 
+@pytest.mark.daemon_bundle_refresh
 def test_daemon_refreshes_supply_chain_bundle_on_start_and_interval(
     tmp_path: Path,
     monkeypatch,
@@ -84,6 +85,7 @@ def test_daemon_refreshes_supply_chain_bundle_on_start_and_interval(
     assert summary["workspace_id"] == "workspace-alpha"
 
 
+@pytest.mark.daemon_bundle_refresh
 def test_daemon_bundle_refresh_stays_quiet_when_not_configured(
     tmp_path: Path,
     monkeypatch,
@@ -115,6 +117,7 @@ def test_daemon_bundle_refresh_stays_quiet_when_not_configured(
     assert store.list_events(limit=5) == []
 
 
+@pytest.mark.daemon_bundle_refresh
 def test_daemon_bundle_refresh_reports_auth_expired(
     tmp_path: Path,
     monkeypatch,
@@ -147,6 +150,7 @@ def test_daemon_bundle_refresh_reports_auth_expired(
     assert "hol-guard connect" in str(summary["message"])
 
 
+@pytest.mark.daemon_bundle_refresh
 def test_daemon_bundle_refresh_reports_retryable_error(
     tmp_path: Path,
     monkeypatch,
@@ -191,6 +195,7 @@ def _wait_for_aibom_status(store, *, expected: str, timeout: float = 5.0) -> dic
     return payload
 
 
+@pytest.mark.daemon_aibom_refresh
 def test_daemon_aibom_refresh_records_synced_on_success(
     tmp_path: Path,
     monkeypatch,
@@ -239,6 +244,7 @@ def test_daemon_aibom_refresh_records_synced_on_success(
     }
 
 
+@pytest.mark.daemon_aibom_refresh
 def test_daemon_aibom_refresh_records_skipped_when_not_due(
     tmp_path: Path,
     monkeypatch,
@@ -273,6 +279,7 @@ def test_daemon_aibom_refresh_records_skipped_when_not_due(
     assert summary["skipped"] is True
 
 
+@pytest.mark.daemon_aibom_refresh
 def test_daemon_aibom_refresh_uses_workspace_bound_persisted_context(
     tmp_path: Path,
     monkeypatch,
@@ -312,6 +319,7 @@ def test_daemon_aibom_refresh_uses_workspace_bound_persisted_context(
     assert summary["synced"] is True
 
 
+@pytest.mark.daemon_aibom_refresh
 def test_daemon_aibom_refresh_rejects_mismatched_persisted_context(
     tmp_path: Path,
     monkeypatch,
@@ -351,6 +359,7 @@ def test_daemon_aibom_refresh_rejects_mismatched_persisted_context(
     assert summary["reason"] == "missing_workspace_context"
 
 
+@pytest.mark.daemon_aibom_refresh
 def test_daemon_aibom_refresh_rejects_explicit_context_after_repair(
     tmp_path: Path,
     monkeypatch,
@@ -386,6 +395,7 @@ def test_daemon_aibom_refresh_rejects_explicit_context_after_repair(
     assert store.get_sync_payload("aibom_inventory_context") is None
 
 
+@pytest.mark.daemon_aibom_refresh
 def test_daemon_aibom_refresh_skips_without_workspace_context(
     tmp_path: Path,
     monkeypatch,
@@ -418,6 +428,7 @@ def test_daemon_aibom_refresh_skips_without_workspace_context(
     assert summary["reason"] == "missing_workspace_context"
 
 
+@pytest.mark.daemon_aibom_refresh
 def test_daemon_aibom_refresh_retries_returned_error_on_backoff(
     tmp_path: Path,
     monkeypatch,
@@ -454,6 +465,7 @@ def test_daemon_aibom_refresh_retries_returned_error_on_backoff(
     assert summary["synced"] is True
 
 
+@pytest.mark.daemon_aibom_refresh
 def test_daemon_aibom_refresh_retries_not_configured_on_backoff(
     tmp_path: Path,
     monkeypatch,
@@ -490,6 +502,7 @@ def test_daemon_aibom_refresh_retries_not_configured_on_backoff(
     assert summary["synced"] is True
 
 
+@pytest.mark.daemon_aibom_refresh
 def test_daemon_aibom_refresh_records_error_on_exception(
     tmp_path: Path,
     monkeypatch,
@@ -523,6 +536,7 @@ def test_daemon_aibom_refresh_records_error_on_exception(
     assert "mirror node timeout" in str(summary["error"])
 
 
+@pytest.mark.daemon_aibom_refresh
 def test_daemon_aibom_refresh_stops_cleanly(
     tmp_path: Path,
     monkeypatch,
@@ -555,6 +569,7 @@ def test_daemon_aibom_refresh_stops_cleanly(
     assert daemon._aibom_refresh_thread is None
 
 
+@pytest.mark.daemon_aibom_refresh
 def test_daemon_retains_blocked_aibom_refresh_thread_during_shutdown(
     tmp_path: Path,
     monkeypatch,
@@ -593,3 +608,77 @@ def test_daemon_retains_blocked_aibom_refresh_thread_during_shutdown(
     release.set()
     refresh_thread.join(timeout=1)
     assert not refresh_thread.is_alive()
+
+
+@pytest.mark.daemon_headless_refresh
+def test_daemon_headless_refresh_stops_cleanly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    synced = threading.Event()
+
+    def _fake_sync(*, store: GuardStore) -> dict[str, object]:
+        synced.set()
+        return {"status": "synced"}
+
+    monkeypatch.setattr(guard_daemon_module, "_run_headless_cloud_sync", _fake_sync)
+    daemon = guard_daemon_module.GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=60)
+    daemon._headless_cloud_sync_interval_seconds = 0.05
+
+    daemon.start()
+    assert synced.wait(timeout=1)
+    daemon.stop()
+
+    assert daemon._headless_cloud_sync_thread is None
+
+
+@pytest.mark.daemon_aibom_refresh
+@pytest.mark.daemon_bundle_refresh
+@pytest.mark.daemon_headless_refresh
+def test_daemon_start_composes_all_periodic_refresh_workers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started: list[str] = []
+    monkeypatch.setattr(
+        guard_daemon_module.GuardDaemonServer,
+        "_start_aibom_inventory_refresh",
+        lambda _self: started.append("aibom"),
+    )
+    monkeypatch.setattr(
+        guard_daemon_module.GuardDaemonServer,
+        "_start_supply_chain_bundle_refresh",
+        lambda _self: started.append("bundle"),
+    )
+    monkeypatch.setattr(
+        guard_daemon_module.GuardDaemonServer,
+        "_start_headless_cloud_sync",
+        lambda _self: started.append("headless"),
+    )
+    daemon = guard_daemon_module.GuardDaemonServer(
+        GuardStore(tmp_path / "guard-home"),
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=60,
+    )
+
+    daemon.start()
+    try:
+        assert started == ["headless", "bundle", "aibom"]
+    finally:
+        daemon.stop()
+
+
+def test_unmarked_daemon_does_not_start_periodic_refresh_workers(tmp_path: Path) -> None:
+    daemon = guard_daemon_module.GuardDaemonServer(
+        GuardStore(tmp_path / "guard-home"),
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=60,
+    )
+
+    daemon.start()
+    try:
+        assert daemon._headless_cloud_sync_thread is None
+        assert daemon._bundle_refresh_thread is None
+        assert daemon._aibom_refresh_thread is None
+    finally:
+        daemon.stop()
