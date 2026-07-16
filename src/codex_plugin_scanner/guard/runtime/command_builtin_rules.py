@@ -37,6 +37,8 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "destructive shell command": ("destructive_shell",),
     "guard approval self-authorization command": ("policy_bypass",),
     "github pr body shell substitution": ("execution",),
+    "github remote mutation command": ("destructive_shell", "network_egress"),
+    "unverified github command capability": ("destructive_shell", "network_egress"),
     "filesystem destructive command": ("destructive_shell",),
     "git destructive command": ("destructive_shell",),
     "system destructive command": ("destructive_shell",),
@@ -229,6 +231,25 @@ BUILT_IN_COMMAND_RULES = (
         description="Identifies writes that can replace or expose sensitive local state.",
         action_class="sensitive local file write",
         safer_alternative="Write to a scoped temporary path and review the final destination.",
+    ),
+    _compatibility_rule(
+        rule_id="command.github.remote-mutation",
+        title="GitHub remote mutation",
+        description="Identifies GitHub CLI operations that can change GitHub-hosted state.",
+        action_class="GitHub remote mutation command",
+        safer_alternative=(
+            "Inspect the target with a read-only `gh view`, `gh list`, or explicit API GET before confirming "
+            "the mutation."
+        ),
+    ),
+    _compatibility_rule(
+        rule_id="command.github.capability-unknown",
+        title="Unverified GitHub command capability",
+        description=(
+            "Identifies GitHub CLI operations or pipeline compositions that are not statically proven read-only."
+        ),
+        action_class="Unverified GitHub command capability",
+        safer_alternative="Use a built-in read-only GitHub command or an explicit API GET with static arguments.",
     ),
     _compatibility_rule(
         rule_id="command.shell-mutations.github-body-substitution",

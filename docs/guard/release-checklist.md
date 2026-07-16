@@ -15,6 +15,8 @@ Before each Guard harness release:
 - Verify trust attestation consumers support the v3 domain-separated subject bindings, key revocation, and replay policy described in `trust-attestation-security.md`.
 - For Grok releases, complete the trusted executable checks in `docs/guard/grok-executable-security.md`, including
   workspace PATH collision, explicit custom registration, executable replacement, and sanitized-environment coverage.
+- Verify known read-only `gh` commands remain prompt-free and remote mutations still require approval when piped
+  through output formatters; see [GitHub CLI Capability Boundary](github-command-capability-security.md).
 
 For GitHub Action pin updates, keep Dependabot updates as individual pull requests. Review the upstream changelog
 between the old and new commits, verify permission and runtime changes, retain the full commit SHA, and require the
