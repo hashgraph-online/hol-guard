@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,6 @@ from ..shims import install_guard_shim, remove_guard_shim
 from .base import (
     HarnessAdapter,
     HarnessContext,
-    _command_available,
     _ensure_path_within_root,
     _json_payload,
     _run_command_probe,
@@ -41,6 +41,12 @@ from .grok_config import (
     build_pretool_hook_json,
     degraded_mode_warnings,
     remove_managed_block,
+)
+from .grok_executable import (
+    GrokExecutableResolution,
+    register_trusted_grok_executable,
+    resolve_trusted_grok_executable,
+    sanitized_grok_launch_environment,
 )
 
 tomllib: Any
@@ -120,8 +126,60 @@ class GrokHarnessAdapter(HarnessAdapter):
         return payload if isinstance(payload, dict) else {}
 
     @staticmethod
-    def _version_probe() -> dict[str, object]:
-        return _run_command_probe(["grok", "--no-auto-update", "--version"], timeout_seconds=8)
+    def _version_probe(
+        context: HarnessContext,
+        resolution: GrokExecutableResolution,
+    ) -> dict[str, object]:
+        executable = resolution.executable
+        if executable is None:
+            return {
+                "command": [],
+                "ok": False,
+                "return_code": None,
+                "stdout": "",
+                "stderr": resolution.error or "trusted Grok executable not found",
+            }
+        probe_cwd = context.guard_home / "runtime" / "grok-probe"
+        try:
+            probe_cwd.mkdir(parents=True, exist_ok=True, mode=0o700)
+            if os.name != "nt":
+                probe_cwd.chmod(0o700)
+        except OSError as error:
+            return {
+                "command": [str(executable.path), "--no-auto-update", "--version"],
+                "ok": False,
+                "return_code": None,
+                "stdout": "",
+                "stderr": f"trusted probe directory unavailable: {error}",
+            }
+        return _run_command_probe(
+            [str(executable.path), "--no-auto-update", "--version"],
+            timeout_seconds=8,
+            cwd=probe_cwd,
+            env=sanitized_grok_launch_environment(context, os.environ),
+        )
+
+    def resolved_executable(self, context: HarnessContext) -> str | None:
+        executable = resolve_trusted_grok_executable(context).executable
+        return str(executable.path) if executable is not None else None
+
+    def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
+        resolution = resolve_trusted_grok_executable(context)
+        executable = resolution.executable
+        if executable is None:
+            raise FileNotFoundError(resolution.error or "Trusted Grok executable not found.")
+        if executable.source == "explicit":
+            executable = register_trusted_grok_executable(context, executable)
+        return [str(executable.path), *passthrough_args]
+
+    def prepare_launch_environment(
+        self,
+        context: HarnessContext,
+        inherited: Mapping[str, str],
+    ) -> dict[str, str]:
+        environment = sanitized_grok_launch_environment(context, inherited)
+        environment.update(self.launch_environment(context))
+        return environment
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         artifacts: list[GuardArtifact] = []
@@ -230,9 +288,12 @@ class GrokHarnessAdapter(HarnessAdapter):
                         )
                     )
 
-        version_probe = self._version_probe()
-        command_available = _command_available(self.executable) or bool(version_probe.get("ok"))
+        executable_resolution = resolve_trusted_grok_executable(context)
+        version_probe = self._version_probe(context, executable_resolution)
+        command_available = executable_resolution.executable is not None or bool(version_probe.get("ok"))
         installed = bool(found_paths) or command_available
+        if executable_resolution.error is not None:
+            warnings.append(executable_resolution.error)
         if self._has_stale_guard_entries(context):
             warnings.append("Stale or duplicate Guard-managed Grok entries detected.")
 
