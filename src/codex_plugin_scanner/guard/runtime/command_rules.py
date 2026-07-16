@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import cache
 from typing import Literal, final
 
 from .command_matcher_contracts import CommandMatcher, MatcherEvidence
 from .command_model import CanonicalCommand, CommandSegment
+from .command_option_parsing import flags_present_in_all_option_parses, matches_subcommands_conservatively
 
 CommandRuleSeverity = Literal["critical", "high", "medium", "low"]
 CommandRuleMode = Literal["required", "enforce", "review", "monitor", "disabled"]
@@ -83,7 +83,7 @@ class ExecutableMatcher:
                 and subcommand_arguments[: len(self.subcommands)] != self.subcommands
                 and (
                     not self.fail_secure_unknown_options
-                    or not _matches_subcommands_conservatively(
+                    or not matches_subcommands_conservatively(
                         lowered_arguments,
                         self.subcommands,
                         options_with_values=(
@@ -110,7 +110,7 @@ class ExecutableMatcher:
             )
             required_flags_present = self.required_flags <= present_flags
             if self.fail_secure_unknown_options and self.required_flags_in_all_arguments:
-                required_flags_present = _flags_present_in_all_option_parses(
+                required_flags_present = flags_present_in_all_option_parses(
                     lowered_arguments,
                     self.required_flags,
                     options_with_values=(
@@ -463,108 +463,3 @@ def _without_options(
         is_attached_short = attached_short_option is not None and option_name not in options_with_values
         index += 1 if "=" in argument or is_attached_short else 2
     return tuple(retained)
-
-
-def _matches_subcommands_conservatively(
-    arguments: tuple[str, ...],
-    subcommands: tuple[str, ...],
-    *,
-    options_with_values: frozenset[str],
-    known_flags: frozenset[str],
-) -> bool:
-    """Match a destructive prefix under any plausible unknown-option shape."""
-
-    @cache
-    def matches(argument_index: int, subcommand_index: int) -> bool:
-        if subcommand_index == len(subcommands):
-            return True
-        if argument_index >= len(arguments):
-            return False
-        argument = arguments[argument_index]
-        if argument == "--":
-            remaining = len(subcommands) - subcommand_index
-            return arguments[argument_index + 1 : argument_index + 1 + remaining] == subcommands[subcommand_index:]
-        if _is_option(argument):
-            option_name = argument.split("=", 1)[0]
-            attached_short_option = _attached_short_value_option(argument, options_with_values)
-            if option_name in options_with_values:
-                advance = 1 if "=" in argument else 2
-                return matches(argument_index + advance, subcommand_index)
-            if (
-                attached_short_option is not None
-                or "=" in argument
-                or (len(argument) > 2 and not argument.startswith("--"))
-            ):
-                return matches(argument_index + 1, subcommand_index)
-            if option_name in known_flags:
-                return matches(argument_index + 1, subcommand_index)
-            return matches(argument_index + 1, subcommand_index) or matches(
-                argument_index + 2,
-                subcommand_index,
-            )
-        if argument != subcommands[subcommand_index]:
-            return False
-        return matches(argument_index + 1, subcommand_index + 1)
-
-    return matches(0, 0)
-
-
-def _flags_present_in_all_option_parses(
-    arguments: tuple[str, ...],
-    required_flags: frozenset[str],
-    *,
-    options_with_values: frozenset[str],
-    known_flags: frozenset[str],
-) -> bool:
-    return all(
-        _flag_present_in_all_option_parses(
-            arguments,
-            required_flag,
-            options_with_values=options_with_values,
-            known_flags=known_flags,
-        )
-        for required_flag in required_flags
-    )
-
-
-def _flag_present_in_all_option_parses(
-    arguments: tuple[str, ...],
-    required_flag: str,
-    *,
-    options_with_values: frozenset[str],
-    known_flags: frozenset[str],
-) -> bool:
-    @cache
-    def present(argument_index: int, seen: bool) -> bool:
-        if argument_index >= len(arguments):
-            return seen
-        argument = arguments[argument_index]
-        if argument == "--":
-            return seen
-        if not _is_option(argument):
-            return present(argument_index + 1, seen)
-        option_name = argument.split("=", 1)[0]
-        attached_short_option = _attached_short_value_option(argument, options_with_values)
-        if option_name in options_with_values:
-            advance = 1 if "=" in argument else 2
-            return present(argument_index + advance, seen)
-        if attached_short_option is not None:
-            return present(argument_index + 1, seen)
-        token_flags = _present_flags((argument,), options_with_values=options_with_values)
-        next_seen = seen or required_flag in token_flags
-        if option_name in known_flags or "=" in argument or (len(argument) > 2 and not argument.startswith("--")):
-            return present(argument_index + 1, next_seen)
-        return present(argument_index + 1, next_seen) and present(argument_index + 2, seen)
-
-    return present(0, False)
-
-
-def _is_option(argument: str) -> bool:
-    return len(argument) > 1 and argument.startswith("-")
-
-
-def _attached_short_value_option(argument: str, options_with_values: frozenset[str]) -> str | None:
-    if len(argument) <= 2 or not argument.startswith("-") or argument.startswith("--"):
-        return None
-    option = argument[:2]
-    return option if option in options_with_values else None

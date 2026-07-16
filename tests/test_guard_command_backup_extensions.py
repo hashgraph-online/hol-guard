@@ -36,6 +36,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "Rclone destructive command",
             "command.backup.rclone.mutation",
         ),
+        (
+            "rclone -ab value purge remote:archive",
+            "Rclone destructive command",
+            "command.backup.rclone.mutation",
+        ),
+        (
+            "rclone -ab --dry-run purge remote:archive",
+            "Rclone destructive command",
+            "command.backup.rclone.mutation",
+        ),
         ("restic -r s3:archive forget latest --prune", "Restic destructive command", "command.backup.restic.mutation"),
         (
             "restic --compression max forget latest --prune",
@@ -139,6 +149,7 @@ def test_backup_rules_feed_runtime_hooks(
         "velero --future-global-option cluster backup delete release-1 --help",
         "rclone lsl remote:archive",
         "rclone --log-level DEBUG lsl remote:archive",
+        "rclone -ab value lsl remote:archive",
         "restic snapshots",
         "restic --compression max snapshots",
         "borg list /archive",
