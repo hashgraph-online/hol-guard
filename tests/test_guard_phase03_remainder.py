@@ -58,18 +58,19 @@ def test_update_is_skipped_when_managed_policy_is_invalid(monkeypatch: pytest.Mo
     assert payload["reason_code"] == "mdm_update_owned"
 
 
-def test_update_detects_uv_tool_install_and_plans_uv_upgrade(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_update_detects_uv_tool_install_and_pins_latest_version(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_commands.sys, "prefix", "/Users/test/.local/share/uv/tools/hol-guard")
     monkeypatch.setattr(update_commands.shutil, "which", lambda name: f"/Users/test/.local/bin/{name}")
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.0")
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.10")
 
     payload, exit_code = update_commands.run_guard_update(dry_run=True)
 
     assert exit_code == 0
     assert payload["installer"] == "uv"
-    assert payload["command"] == ["uv", "tool", "upgrade", "hol-guard"]
-    assert payload["retry_command"] == "uv tool upgrade hol-guard"
+    assert payload["command"] == ["uv", "tool", "install", "--force", "hol-guard==2.0.10"]
+    assert payload["retry_command"] == "uv tool install --force hol-guard==2.0.10"
     assert payload["binary_diagnostics"]["path_status"] == "uv_tool_shim_detected"
 
 
