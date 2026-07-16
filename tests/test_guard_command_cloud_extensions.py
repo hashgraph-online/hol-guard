@@ -92,6 +92,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.cloud.gcp.resource-deletion",
         ),
         (
+            "gcloud -q compute instances delete api-1",
+            "Google Cloud destructive command",
+            "command.cloud.gcp.resource-deletion",
+        ),
+        (
+            "gcloud --no-log-http sql instances delete app-db",
+            "Google Cloud destructive command",
+            "command.cloud.gcp.resource-deletion",
+        ),
+        (
             "az.cmd vm --subscription app-prod delete --resource-group app --name api-1 --yes",
             "Azure destructive command",
             "command.cloud.azure.resource-deletion",
