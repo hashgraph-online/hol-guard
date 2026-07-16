@@ -557,6 +557,7 @@ def test_workspace_audit_lockfile_evaluation_preserves_dependency_path_and_fix_v
     assert transitive["recommendedFixVersion"] == "1.2.9"
 
 
+@pytest.mark.daemon_headless_queue
 def test_daemon_workspace_audit_persists_receipt_and_queues_cloud_sync(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
