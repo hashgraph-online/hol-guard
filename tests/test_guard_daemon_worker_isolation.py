@@ -17,7 +17,7 @@ def test_daemon_headless_refresh_stops_cleanly(tmp_path: Path, monkeypatch: pyte
     synced = threading.Event()
 
     def _fake_sync(*, store: GuardStore) -> dict[str, object]:
-        del store
+        assert store.guard_home == tmp_path / "guard-home"
         synced.set()
         return {"status": "synced"}
 
@@ -41,6 +41,21 @@ def test_daemon_start_composes_all_background_workers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     started: list[str] = []
+
+    def _start_command_queue(
+        _store: GuardStore,
+        existing: threading.Thread | None,
+    ) -> threading.Thread | None:
+        started.append("command-queue")
+        return existing
+
+    def _start_live_request_sync(
+        _store: GuardStore,
+        existing: threading.Thread | None,
+    ) -> threading.Thread | None:
+        started.append("live-request-sync")
+        return existing
+
     monkeypatch.setattr(
         guard_daemon_module.GuardDaemonServer,
         "_start_aibom_inventory_refresh",
@@ -59,12 +74,12 @@ def test_daemon_start_composes_all_background_workers(
     monkeypatch.setattr(
         guard_daemon_module,
         "start_command_queue_worker",
-        lambda _store, existing: started.append("command-queue") or existing,
+        _start_command_queue,
     )
     monkeypatch.setattr(
         guard_daemon_module,
         "start_cloud_sync_sync_worker",
-        lambda _store, existing: started.append("live-request-sync") or existing,
+        _start_live_request_sync,
     )
     daemon = guard_daemon_module.GuardDaemonServer(
         GuardStore(tmp_path / "guard-home"),
