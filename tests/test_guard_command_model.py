@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime.command_model import MAX_COMMAND_BYTES, parse_shell_command
 from codex_plugin_scanner.guard.runtime.command_rules import (
     AllMatcher,
@@ -105,6 +107,57 @@ def test_executable_matcher_normalizes_flag_value_and_windows_path_forms() -> No
     assert matcher.match(parsed)
 
 
+@pytest.mark.parametrize(
+    ("arguments", "matches"),
+    [
+        ("--help", True),
+        ("--help=true", True),
+        ("--help=1", True),
+        ("--help=yes", True),
+        ("--help=on", True),
+        ("--help=false", False),
+        ("--help=0", False),
+        ("--help=no", False),
+        ("--help=off", False),
+        ("--help=auto", False),
+        ("--help --help=false", False),
+        ("--help=false --help", True),
+        ("--help=true --help=off --help=yes", True),
+    ],
+)
+def test_executable_matcher_uses_effective_boolean_flag_value(arguments: str, matches: bool) -> None:
+    matcher = ExecutableMatcher(
+        executables=frozenset({"tool"}),
+        subcommands=("delete",),
+        required_flags=frozenset({"--help"}),
+    )
+
+    evidence = matcher.match(parse_shell_command(f"tool delete target {arguments}"))
+
+    assert bool(evidence) is matches
+
+
+@pytest.mark.parametrize(
+    ("arguments", "matches"),
+    [
+        ("--dry-run=client", True),
+        ("--dry-run=client --dry-run=none", False),
+        ("--dry-run=none --dry-run=client", True),
+        ("--dry-run=client --dry-run=false", False),
+    ],
+)
+def test_executable_matcher_uses_effective_exact_option_value(arguments: str, matches: bool) -> None:
+    matcher = ExecutableMatcher(
+        executables=frozenset({"tool"}),
+        subcommands=("delete",),
+        required_flags=frozenset({"--dry-run=client"}),
+    )
+
+    evidence = matcher.match(parse_shell_command(f"tool delete target {arguments}"))
+
+    assert bool(evidence) is matches
+
+
 def test_executable_matcher_can_skip_declared_global_options() -> None:
     parsed = parse_shell_command("git --no-pager -C repo push origin main --force")
     matcher = ExecutableMatcher(
@@ -147,6 +200,17 @@ def test_executable_matcher_does_not_treat_option_values_as_flags() -> None:
         subcommands=("clean",),
         required_flags=frozenset({"-f"}),
         options_with_values=frozenset({"-e"}),
+    )
+
+    assert matcher.match(parsed) == ()
+
+
+def test_executable_matcher_does_not_unpack_attached_short_option_value() -> None:
+    parsed = parse_shell_command("tool delete -d=client")
+    matcher = ExecutableMatcher(
+        executables=frozenset({"tool"}),
+        subcommands=("delete",),
+        required_flags=frozenset({"-c"}),
     )
 
     assert matcher.match(parsed) == ()
