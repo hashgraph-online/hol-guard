@@ -26,6 +26,13 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ("vercel rollback deployment-id", "Vercel production command", "command.platform.vercel.production-change"),
         ("vercel deploy --prod", "Vercel production command", "command.platform.vercel.production-change"),
         ("vercel deploy -p", "Vercel production command", "command.platform.vercel.production-change"),
+        ("vercel --prod", "Vercel production command", "command.platform.vercel.production-change"),
+        ("vercel -p", "Vercel production command", "command.platform.vercel.production-change"),
+        (
+            "vercel --scope team --prod",
+            "Vercel production command",
+            "command.platform.vercel.production-change",
+        ),
         (
             "netlify sites:delete --site site-id",
             "Netlify destructive command",
@@ -78,6 +85,7 @@ def test_platform_rules_feed_inspection_and_runtime_hooks(
     "command",
     [
         "vercel remove --help",
+        "vercel --prod --help",
         "vercel promote status web",
         "vercel project inspect web",
         "vercel list --prod",
@@ -114,6 +122,19 @@ def test_platform_safe_variant_does_not_hide_destructive_segment(tmp_path: Path)
     )
 
     assert [rule["rule_id"] for rule in payload["rules"]] == ["command.platform.heroku.app-destruction"]
+
+
+def test_default_production_deploy_does_not_hide_later_destructive_segment(tmp_path: Path) -> None:
+    payload = inspect_command(
+        "vercel --prod && netlify sites:delete site-id",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert [rule["rule_id"] for rule in payload["rules"]] == [
+        "command.platform.netlify.site-deletion",
+        "command.platform.vercel.production-change",
+    ]
 
 
 def test_platform_extensions_publish_primary_references() -> None:

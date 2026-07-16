@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher, safe_flag_variant
+from dataclasses import dataclass
+from typing import final
+
+from .command_extension_matchers import executable_matcher, executable_names, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
+from .command_matcher_contracts import MatcherEvidence
+from .command_model import CanonicalCommand
 from .command_rules import AnyMatcher, CommandRuleSeverity, CommandSafetyRule, CommandSafeVariant
+from .command_structured_matchers import leading_flags_and_operands
 
 _VERCEL_GLOBAL_OPTIONS = frozenset(
     {
@@ -26,6 +32,38 @@ _NETLIFY_GLOBAL_OPTIONS = frozenset({"--auth", "--config", "--filter", "--site"}
 _NETLIFY_GLOBAL_FLAGS = frozenset({"--debug", "--help", "-h"})
 _HEROKU_GLOBAL_OPTIONS = frozenset({"--app", "-a", "--remote", "-r"})
 _HEROKU_GLOBAL_FLAGS = frozenset({"--help", "-h", "--prompt"})
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class _ZeroOperandFlagMatcher:
+    """Match default deployment syntax without matching flagged subcommands."""
+
+    executables: frozenset[str]
+    required_flags: frozenset[str]
+    options_with_values: frozenset[str]
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        for index, segment in enumerate(command.segments):
+            executable = segment.executable
+            if executable is None or executable.replace("\\", "/").rsplit("/", 1)[-1].lower() not in self.executables:
+                continue
+            flags, operands = leading_flags_and_operands(
+                segment.arguments,
+                options_with_values=self.options_with_values,
+            )
+            if operands or not self.required_flags <= flags:
+                continue
+            evidence.append(
+                MatcherEvidence(
+                    segment_index=index,
+                    executable=executable,
+                    detail="Matched documented default production deployment syntax.",
+                )
+            )
+        return tuple(evidence)
+
 
 _VERCEL_DELETION = AnyMatcher(
     matchers=tuple(
@@ -56,6 +94,36 @@ _VERCEL_PRODUCTION_CHANGE = AnyMatcher(
                 required_flags=frozenset({flag}),
                 global_options_with_values=_VERCEL_GLOBAL_OPTIONS,
                 global_flags=_VERCEL_GLOBAL_FLAGS,
+            )
+            for flag in ("--prod", "-p")
+        ),
+        *(
+            _ZeroOperandFlagMatcher(
+                executables=executable_names("vercel"),
+                required_flags=frozenset({flag}),
+                options_with_values=_VERCEL_GLOBAL_OPTIONS,
+            )
+            for flag in ("--prod", "-p")
+        ),
+    )
+)
+_VERCEL_PRODUCTION_HELP = AnyMatcher(
+    matchers=(
+        *(
+            executable_matcher(
+                "vercel",
+                *operation,
+                required_flags=frozenset({"--help"}),
+                global_options_with_values=_VERCEL_GLOBAL_OPTIONS,
+                global_flags=_VERCEL_GLOBAL_FLAGS,
+            )
+            for operation in (("promote",), ("rollback",), ("deploy",))
+        ),
+        *(
+            _ZeroOperandFlagMatcher(
+                executables=executable_names("vercel"),
+                required_flags=frozenset({flag, "--help"}),
+                options_with_values=_VERCEL_GLOBAL_OPTIONS,
             )
             for flag in ("--prod", "-p")
         ),
@@ -162,7 +230,11 @@ PLATFORM_COMMAND_RULES = (
                 title="Promotion status inspection",
                 matcher=_VERCEL_PRODUCTION_STATUS,
             ),
-            safe_flag_variant(_VERCEL_PRODUCTION_CHANGE, variant_id="help", title="Command help", flag="--help"),
+            CommandSafeVariant(
+                variant_id="help",
+                title="Command help",
+                matcher=_VERCEL_PRODUCTION_HELP,
+            ),
         ),
     ),
     _platform_rule(
