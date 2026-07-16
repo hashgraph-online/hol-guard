@@ -65,6 +65,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.storage.azure-blob.deletion",
         ),
         (
+            "az -otable storage blob delete --container-name archive --name private.json",
+            "Azure storage destructive command",
+            "command.storage.azure-blob.deletion",
+        ),
+        (
             "mc.exe mirror --remove ./out prod/archive",
             "MinIO storage destructive command",
             "command.storage.minio.deletion",
@@ -76,6 +81,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ),
         (
             "mc --json mirror --remove ./out prod/archive",
+            "MinIO storage destructive command",
+            "command.storage.minio.deletion",
+        ),
+        (
+            "mc -C/tmp/mc rm prod/archive/private.json",
             "MinIO storage destructive command",
             "command.storage.minio.deletion",
         ),
