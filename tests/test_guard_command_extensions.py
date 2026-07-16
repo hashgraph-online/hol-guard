@@ -172,7 +172,9 @@ def test_structured_core_rules_feed_runtime_classification(
     [
         "git clean -nfdx",
         "git clean --dry-run -fdx",
+        "git clean --no-dry-run -nfdx",
         "git push origin main --force --dry-run",
+        "git push origin main --force --no-dry-run --dry-run",
         "shutdown --help",
         "mkfs --version",
         "Format-Volume -DriveLetter D -WhatIf",
@@ -187,6 +189,28 @@ def test_structured_safe_variants_remain_runtime_safe(command: str, tmp_path: Pa
     )
 
     assert match is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git clean -nfdx --no-dry-run",
+        "git clean --dry-run -fdx --no-dry-run",
+        "git push origin main --force --dry-run --no-dry-run",
+    ],
+)
+def test_disabled_git_preview_aliases_remain_runtime_sensitive(command: str, tmp_path: Path) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+    match = extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert payload["status"] == "review"
+    assert match is not None
+    assert match.action_class == "git destructive command"
 
 
 def test_git_clean_exclude_value_is_not_treated_as_preview_flag(tmp_path: Path) -> None:

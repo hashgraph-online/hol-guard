@@ -39,7 +39,7 @@ def executable_matcher(
     )
 
 
-def with_required_flag(matcher: AnyMatcher, flag: str) -> AnyMatcher:
+def with_required_flag(matcher: AnyMatcher, flag: str, *, inverse_flag: str | None = None) -> AnyMatcher:
     """Clone executable children while adding one required flag."""
 
     if not all(isinstance(child, ExecutableMatcher) for child in matcher.matchers):
@@ -56,6 +56,12 @@ def with_required_flag(matcher: AnyMatcher, flag: str) -> AnyMatcher:
                 interspersed_options_with_values=child.interspersed_options_with_values,
                 interspersed_flags=child.interspersed_flags,
                 options_with_values=child.options_with_values,
+                inverse_flag_pairs=(
+                    child.inverse_flag_pairs | {(flag, inverse_flag)}
+                    if inverse_flag is not None
+                    else child.inverse_flag_pairs
+                ),
+                required_option_values=child.required_option_values,
                 required_flags_in_all_arguments=True,
             )
             for child in matcher.matchers
@@ -70,11 +76,52 @@ def safe_flag_variant(
     variant_id: str,
     title: str,
     flag: str,
+    inverse_flag: str | None = None,
 ) -> CommandSafeVariant:
     """Build a safe variant requiring one documented side-effect-free flag."""
 
     return CommandSafeVariant(
         variant_id=variant_id,
         title=title,
-        matcher=with_required_flag(matcher, flag),
+        matcher=with_required_flag(matcher, flag, inverse_flag=inverse_flag),
+    )
+
+
+def safe_option_variant(
+    matcher: AnyMatcher,
+    *,
+    variant_id: str,
+    title: str,
+    option: str,
+    allowed_values: frozenset[str],
+) -> CommandSafeVariant:
+    """Build a safe variant requiring one declared value-taking option."""
+
+    if not allowed_values:
+        raise ValueError("Safe option variants require at least one allowed value")
+    if not all(isinstance(child, ExecutableMatcher) for child in matcher.matchers):
+        raise ValueError("Safe variants require executable matcher children")
+    return CommandSafeVariant(
+        variant_id=variant_id,
+        title=title,
+        matcher=AnyMatcher(
+            matchers=tuple(
+                ExecutableMatcher(
+                    executables=child.executables,
+                    subcommands=child.subcommands,
+                    required_flags=child.required_flags,
+                    forbidden_flags=child.forbidden_flags,
+                    allow_leading_options=child.allow_leading_options,
+                    leading_options_with_values=child.leading_options_with_values,
+                    interspersed_options_with_values=child.interspersed_options_with_values,
+                    interspersed_flags=child.interspersed_flags,
+                    options_with_values=child.options_with_values | {option},
+                    inverse_flag_pairs=child.inverse_flag_pairs,
+                    required_option_values=(*child.required_option_values, (option, allowed_values)),
+                    required_flags_in_all_arguments=True,
+                )
+                for child in matcher.matchers
+                if isinstance(child, ExecutableMatcher)
+            )
+        ),
     )

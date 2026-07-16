@@ -137,6 +137,8 @@ def test_remote_rules_feed_runtime_hooks(
         "rsync -av ./out/ host.example:/srv/app/",
         "rsync -av --delete ./out/ host.example:/srv/app/ --dry-run",
         "rsync -avn --delete ./out/ host.example:/srv/app/",
+        "rsync -av --delete ./out/ host.example:/srv/app/ --no-dry-run --dry-run",
+        "rsync -av --delete ./out/ host.example:/srv/app/ --no-dry-run -n",
         "grep 'ssh host command|scp source target|rsync --delete' docs",
         "echo ssh host.example uptime",
     ],
@@ -154,6 +156,27 @@ def test_remote_observer_and_preview_commands_remain_safe(command: str, tmp_path
         )
         is None
     )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "rsync -av --delete ./out/ host.example:/srv/app/ --dry-run --no-dry-run",
+        "rsync -avn --delete ./out/ host.example:/srv/app/ --no-dry-run",
+    ],
+)
+def test_rsync_disabled_preview_aliases_remain_live_execution(command: str, tmp_path: Path) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    runtime_match = extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    assert runtime_match is not None
+    assert runtime_match.action_class == "Rsync destructive command"
 
 
 def test_remote_extensions_publish_official_references() -> None:
