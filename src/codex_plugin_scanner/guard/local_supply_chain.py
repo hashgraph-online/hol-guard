@@ -68,6 +68,15 @@ _MANIFEST_CANDIDATES = (
     "composer.json",
     "Gemfile",
 )
+_PACKAGE_MANAGER_CONFIG_CANDIDATES = (
+    ".npmrc",
+    ".yarnrc",
+    ".yarnrc.yml",
+    ".pnpmfile.cjs",
+    ".pnpmfile.js",
+    ".npm-init.js",
+)
+
 _LOCKFILE_CANDIDATES = (
     "package-lock.json",
     "pnpm-lock.yaml",
@@ -1696,31 +1705,27 @@ def _package_request_artifact_hash(
 ) -> str:
     policy_gate = _package_policy_gate_context(store, artifact, evaluation)
     metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
-    targets = metadata.get("targets")
     manifest_paths = _string_items(metadata.get("manifest_paths"))
     lockfile_paths = _string_items(metadata.get("lockfile_paths"))
-    has_targets = isinstance(targets, list) and any(isinstance(item, dict) for item in targets)
-    if has_targets or (not manifest_paths and not lockfile_paths):
-        return stable_digest_hex(
-            json.dumps(
-                {
-                    "artifact_id": artifact.artifact_id,
-                    "policy_gate": policy_gate,
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
+    config_paths = existing_relative_paths(workspace_dir, _PACKAGE_MANAGER_CONFIG_CANDIDATES)
+    fingerprint_material: dict[str, object] = {
+        "artifact_id": artifact.artifact_id,
+        "config_hashes": _hash_existing_paths(workspace_dir, config_paths),
+        "config_paths": list(config_paths),
+        "policy_gate": policy_gate,
+    }
+    if manifest_paths or lockfile_paths:
+        fingerprint_material.update(
+            {
+                "manifest_hashes": _hash_existing_paths(workspace_dir, manifest_paths),
+                "manifest_paths": list(manifest_paths),
+                "lockfile_hashes": _hash_existing_paths(workspace_dir, lockfile_paths),
+                "lockfile_paths": list(lockfile_paths),
+            }
         )
     return stable_digest_hex(
         json.dumps(
-            {
-                "artifact_id": artifact.artifact_id,
-                "manifest_paths": list(manifest_paths),
-                "lockfile_paths": list(lockfile_paths),
-                "manifest_hashes": _hash_existing_paths(workspace_dir, manifest_paths),
-                "lockfile_hashes": _hash_existing_paths(workspace_dir, lockfile_paths),
-                "policy_gate": policy_gate,
-            },
+            fingerprint_material,
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
