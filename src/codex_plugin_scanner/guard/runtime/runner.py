@@ -87,6 +87,7 @@ from .supply_chain_bundle_models import SupplyChainVerificationKey
 from .supply_chain_support import ecosystem_support_matrix
 
 _POLICY_DOCUMENT_VERSIONS = ("guard.hashgraphonline.com/v1alpha1",)
+_POLICY_BUNDLE_VERSIONS = ("guard-policy-bundle.v1", "guard-policy-bundle.v2")
 _POLICY_YAML_IMPORT_ENV = "HOL_GUARD_POLICY_YAML_IMPORT"
 _POLICY_CANONICAL_ENFORCEMENT_ENV = "HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT"
 
@@ -2493,6 +2494,7 @@ def _local_guard_runtime_session() -> dict[str, object]:
         "workspace": "local-machine",
         "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon"],
         "policy_document_versions": list(_POLICY_DOCUMENT_VERSIONS),
+        "policy_bundle_versions": list(_POLICY_BUNDLE_VERSIONS),
         "yaml_import": os.environ.get(_POLICY_YAML_IMPORT_ENV) == "1",
     }
     if os.environ.get(_POLICY_CANONICAL_ENFORCEMENT_ENV) == "1":
@@ -4580,6 +4582,9 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
     policy_document_versions = list(
         _string_items(session.get("policy_document_versions") or session.get("policyDocumentVersions"))
     )
+    policy_bundle_versions = list(
+        _string_items(session.get("policy_bundle_versions") or session.get("policyBundleVersions"))
+    )
     yaml_import = session.get("yaml_import") is True or session.get("yamlImport") is True
     canonical_policy_enforcement = (
         session.get("canonical_policy_enforcement") is True or session.get("canonicalPolicyEnforcement") is True
@@ -4612,6 +4617,8 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
     }
     if policy_document_versions:
         payload["policyDocumentVersions"] = policy_document_versions
+    if policy_bundle_versions:
+        payload["policyBundleVersions"] = policy_bundle_versions
     payload["yamlImport"] = yaml_import
     if canonical_policy_enforcement:
         payload["canonicalPolicyEnforcement"] = True
