@@ -48,6 +48,7 @@ from .models import (
 from .package_execution_context import package_execution_context_from_scanner_evidence
 from .redaction import redact_text
 from .risk import artifact_risk_signals, artifact_risk_summary
+from .runtime.command_capability import command_capability_status
 from .store import (
     GuardStore,
     _runtime_scoped_exact_match_key,
@@ -1146,6 +1147,7 @@ def build_runtime_snapshot(
         "items": pending_requests,
         "latest_receipts": latest_receipts,
         "managed_installs": store.list_managed_installs(),
+        "cloud_command_capability": command_capability_status(store, now=snapshot_now),
         "supply_chain": build_local_supply_chain_posture(store, config, now=snapshot_now),
         **cloud_context,
         "trust_status": trust_status,

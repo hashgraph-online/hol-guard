@@ -386,6 +386,29 @@ export type SupplyChainSnapshot = {
   package_manager_protection: PackageManagerProtection;
 };
 
+export type GuardCloudCommandPending = {
+  id: string;
+  operation: string;
+  issuer: string;
+  expiresAt: string;
+  approveCommand: string;
+};
+
+export type GuardCloudCommandCapability = {
+  enabled: boolean;
+  capability_valid?: boolean;
+  reason: string | null;
+  issuer: string | null;
+  issued_at?: string | null;
+  expires_at: string | null;
+  device_id?: string | null;
+  workspace_id?: string | null;
+  operations: string[];
+  pending_commands: GuardCloudCommandPending[];
+  enable_command: string;
+  revoke_command: string;
+};
+
 export type GuardRuntimeSnapshot = {
   generated_at: string;
   approval_center_url: string | null;
@@ -421,6 +444,7 @@ export type GuardRuntimeSnapshot = {
   latest_receipts: GuardReceipt[];
   managed_installs?: GuardManagedInstall[];
   inventory?: GuardInventoryItem[];
+  cloud_command_capability?: GuardCloudCommandCapability;
   security_level?: "balanced" | "strict" | "custom";
   supply_chain?: SupplyChainSnapshot;
 };

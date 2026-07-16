@@ -246,6 +246,9 @@ class StoreOAuthConnectMixin:
                     with suppress(OSError):
                         legacy_path.unlink()
         self.delete_sync_payload(self._oauth_local_credentials_state_key)
+        # A capability is bound to one exact OAuth device/workspace grant. It
+        # must never survive disconnect and silently authorize a later grant.
+        self.delete_sync_payloads(list(_GUARD_CLOUD_COMMAND_STATE_KEYS))
 
     def get_oauth_local_credential_health(self) -> dict[str, object]:
         payload = self.get_sync_payload(self._oauth_local_credentials_state_key)

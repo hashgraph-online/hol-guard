@@ -163,6 +163,50 @@ def _configure_guard_cloud_parsers(
     )
     _add_guard_common_args(commands_status_parser)
     commands_status_parser.add_argument("--json", action="store_true")
+    commands_enable_parser = commands_subparsers.add_parser(
+        "enable",
+        help="Opt this device into an exact set of Guard Cloud command operations",
+    )
+    _add_guard_common_args(commands_enable_parser)
+    commands_enable_parser.add_argument(
+        "--operations",
+        action="append",
+        required=True,
+        metavar="OPERATION[,OPERATION...]",
+        help="Use 'read-only' or list exact operation names; may be repeated",
+    )
+    commands_enable_parser.add_argument(
+        "--expires-in-days",
+        type=int,
+        default=30,
+        help="Capability lifetime from 1 through 365 days (default: 30)",
+    )
+    commands_enable_parser.add_argument("--json", action="store_true")
+    commands_approve_parser = commands_subparsers.add_parser(
+        "approve",
+        help="Approve one pending state-changing Cloud command on this device",
+    )
+    _add_guard_common_args(commands_approve_parser)
+    commands_approve_parser.add_argument("job_id", metavar="JOB_ID")
+    commands_approve_parser.add_argument(
+        "--confirm",
+        required=True,
+        metavar="JOB_ID",
+        help="Repeat the exact job id to prevent accidental approval",
+    )
+    commands_approve_parser.add_argument("--json", action="store_true")
+    commands_revoke_parser = commands_subparsers.add_parser(
+        "revoke",
+        help="Revoke this device's Guard Cloud command capability",
+    )
+    _add_guard_common_args(commands_revoke_parser)
+    commands_revoke_parser.add_argument(
+        "--confirm",
+        required=True,
+        choices=("revoke",),
+        help="Confirm local command capability revocation",
+    )
+    commands_revoke_parser.add_argument("--json", action="store_true")
 
     cloud_parser = guard_subparsers.add_parser(
         "cloud",
