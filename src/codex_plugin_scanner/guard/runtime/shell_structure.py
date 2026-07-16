@@ -35,7 +35,8 @@ class ShellCommandSubstitution:
 
 
 _HEREDOC_OPERATOR_PATTERN = re.compile(
-    r"(?<!<)(?P<operator><<-?)[ \t]*(?P<quote>['\"]?)(?P<delimiter>[A-Za-z_][A-Za-z0-9_]*)(?P=quote)"
+    r"(?<!<)(?P<operator><<-?)[ \t]*(?P<quote>['\"]?)"
+    r"(?P<delimiter>(?:[A-Za-z_][A-Za-z0-9_]*|--[A-Za-z0-9][A-Za-z0-9_-]*))(?P=quote)"
 )
 
 

@@ -38,6 +38,22 @@ MAX_COMMAND_TOKENS = 2_048
 _SHELL_SCRIPT_EXECUTABLES = frozenset({"ash", "bash", "dash", "sh", "zsh"})
 
 
+def _shell_tokens_without_redirects(
+    command: str,
+    *,
+    source_offset: int,
+    redirects: tuple[CommandRedirect, ...],
+) -> tuple[str, ...]:
+    masked = list(command)
+    for redirect in redirects:
+        local_start = redirect.start - source_offset
+        local_end = redirect.end - source_offset
+        if local_start < 0 or local_end > len(masked):
+            continue
+        masked[local_start:local_end] = " " * (local_end - local_start)
+    return shell_tokens("".join(masked))[0]
+
+
 @dataclass(frozen=True, slots=True)
 class CommandSegment:
     """One executable segment from a normalized command string."""
@@ -187,7 +203,9 @@ def parse_shell_command(
         uncertainty_reason = "wrapper_normalization_limit_exceeded"
 
     heredocs = extract_heredocs(normalized_text)
-    segment_texts = _execution_segment_texts(mask_heredoc_bodies(normalized_text, heredocs))
+    masked_command = mask_heredoc_bodies(normalized_text, heredocs)
+    command_redirects = extract_command_redirects(masked_command, heredocs)
+    segment_texts = _execution_segment_texts(masked_command)
     if len(segment_texts) > MAX_COMMAND_SEGMENTS:
         return CanonicalCommand(
             raw_text=raw_text,
@@ -227,12 +245,6 @@ def parse_shell_command(
         if not exact and confidence == "exact":
             confidence = "fallback"
             uncertainty_reason = "malformed_shell_quoting"
-        environment_names, executable_index, wrappers = leading_environment(tokens)
-        for wrapper in wrappers:
-            if wrapper not in segment_wrappers:
-                segment_wrappers.append(wrapper)
-        executable = tokens[executable_index] if executable_index < len(tokens) else None
-        arguments = tokens[executable_index + 1 :] if executable is not None else ()
         start = normalized_text.find(segment_text, max(cursor, source_offset))
         if start < 0:
             start = normalized_text.find(segment_text)
@@ -240,6 +252,17 @@ def parse_shell_command(
             start = min(cursor, len(normalized_text))
         end = min(start + len(segment_text), len(normalized_text))
         cursor = end
+        command_tokens = _shell_tokens_without_redirects(
+            segment_text,
+            source_offset=start,
+            redirects=command_redirects,
+        )
+        environment_names, executable_index, wrappers = leading_environment(command_tokens)
+        for wrapper in wrappers:
+            if wrapper not in segment_wrappers:
+                segment_wrappers.append(wrapper)
+        executable = command_tokens[executable_index] if executable_index < len(command_tokens) else None
+        arguments = command_tokens[executable_index + 1 :] if executable is not None else ()
         segments.append(
             CommandSegment(
                 text=segment_text,
@@ -275,7 +298,7 @@ def parse_shell_command(
         extraction_provenance=extraction_provenance,
         wrapper_chain=(*normalization.wrapper_chain, *segment_wrappers),
         segments=tuple(segments),
-        redirects=extract_command_redirects(mask_heredoc_bodies(normalized_text, heredocs), heredocs),
+        redirects=command_redirects,
         embedded_commands=embedded_commands,
         confidence=confidence,
         uncertainty_reason=uncertainty_reason,
@@ -449,14 +472,24 @@ def _segments_for_embedded(
 ) -> tuple[CommandSegment, ...]:
     results: list[CommandSegment] = []
     normalization = normalize_transparent_shell_command(command, cwd=cwd, home_dir=home_dir)
+    heredocs = extract_heredocs(normalization.normalized_command)
+    redirects = extract_command_redirects(
+        mask_heredoc_bodies(normalization.normalized_command, heredocs),
+        heredocs,
+    )
     for context, pipeline_index, segment_text, local_offset in _execution_segment_texts(
         normalization.normalized_command,
         context_prefix=execution_context,
     ):
         tokens, _exact = shell_tokens(segment_text)
-        environment_names, executable_index, wrappers = leading_environment(tokens)
-        executable = tokens[executable_index] if executable_index < len(tokens) else None
-        arguments = tokens[executable_index + 1 :] if executable is not None else ()
+        command_tokens = _shell_tokens_without_redirects(
+            segment_text,
+            source_offset=local_offset,
+            redirects=redirects,
+        )
+        environment_names, executable_index, wrappers = leading_environment(command_tokens)
+        executable = command_tokens[executable_index] if executable_index < len(command_tokens) else None
+        arguments = command_tokens[executable_index + 1 :] if executable is not None else ()
         original_offset = command.find(segment_text)
         start = source_offset + (original_offset if original_offset >= 0 else local_offset)
         results.append(

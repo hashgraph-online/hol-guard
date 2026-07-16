@@ -299,7 +299,13 @@ STORAGE_COMMAND_RULES = (
         action_class="AWS storage destructive command",
         safe_variants=(
             safe_flag_variant(_AWS_STORAGE_DELETE, variant_id="help", title="AWS storage command help", flag="--help"),
-            safe_flag_variant(_AWS_STORAGE_DRY_RUN, variant_id="dry-run", title="AWS S3 dry run", flag="--dryrun"),
+            safe_flag_variant(
+                _AWS_STORAGE_DRY_RUN,
+                variant_id="dry-run",
+                title="AWS S3 dry run",
+                flag="--dryrun",
+                inverse_flag="--no-dryrun",
+            ),
         ),
     ),
     _storage_rule(

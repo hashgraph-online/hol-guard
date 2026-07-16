@@ -85,7 +85,12 @@ _GIT_FORCE_REFSPEC = SubcommandOperandPrefixMatcher(
 )
 
 
-def _git_matcher(subcommand: str, *, required_flags: frozenset[str]) -> ExecutableMatcher:
+def _git_matcher(
+    subcommand: str,
+    *,
+    required_flags: frozenset[str],
+    inverse_flag_pairs: frozenset[tuple[str, str]] = frozenset(),
+) -> ExecutableMatcher:
     return ExecutableMatcher(
         executables=frozenset({"git"}),
         subcommands=(subcommand,),
@@ -93,6 +98,7 @@ def _git_matcher(subcommand: str, *, required_flags: frozenset[str]) -> Executab
         allow_leading_options=True,
         leading_options_with_values=_GIT_GLOBAL_OPTIONS_WITH_VALUES,
         options_with_values=_GIT_SUBCOMMAND_OPTIONS_WITH_VALUES.get(subcommand, frozenset()),
+        inverse_flag_pairs=inverse_flag_pairs,
     )
 
 
@@ -274,8 +280,16 @@ BUILT_IN_COMMAND_RULES = (
                 title="Git clean preview",
                 matcher=AnyMatcher(
                     matchers=(
-                        _git_matcher("clean", required_flags=frozenset({"-n"})),
-                        _git_matcher("clean", required_flags=frozenset({"--dry-run"})),
+                        _git_matcher(
+                            "clean",
+                            required_flags=frozenset({"-n"}),
+                            inverse_flag_pairs=frozenset({("-n", "--no-dry-run")}),
+                        ),
+                        _git_matcher(
+                            "clean",
+                            required_flags=frozenset({"--dry-run"}),
+                            inverse_flag_pairs=frozenset({("--dry-run", "--no-dry-run")}),
+                        ),
                     )
                 ),
             ),
@@ -300,8 +314,16 @@ BUILT_IN_COMMAND_RULES = (
                 title="Git push preview",
                 matcher=AnyMatcher(
                     matchers=(
-                        _git_matcher("push", required_flags=frozenset({"-n"})),
-                        _git_matcher("push", required_flags=frozenset({"--dry-run"})),
+                        _git_matcher(
+                            "push",
+                            required_flags=frozenset({"-n"}),
+                            inverse_flag_pairs=frozenset({("-n", "--no-dry-run")}),
+                        ),
+                        _git_matcher(
+                            "push",
+                            required_flags=frozenset({"--dry-run"}),
+                            inverse_flag_pairs=frozenset({("--dry-run", "--no-dry-run")}),
+                        ),
                     )
                 ),
             ),

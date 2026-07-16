@@ -263,8 +263,20 @@ REMOTE_COMMAND_RULES = (
         safer_alternative="Run the same rsync command with --dry-run and inspect every deletion first.",
         severity="critical",
         safe_variants=(
-            safe_flag_variant(_RSYNC_MUTATION, variant_id="dry-run", title="Rsync dry run", flag="--dry-run"),
-            safe_flag_variant(_RSYNC_MUTATION, variant_id="short-dry-run", title="Rsync short dry run", flag="-n"),
+            safe_flag_variant(
+                _RSYNC_MUTATION,
+                variant_id="dry-run",
+                title="Rsync dry run",
+                flag="--dry-run",
+                inverse_flag="--no-dry-run",
+            ),
+            safe_flag_variant(
+                _RSYNC_MUTATION,
+                variant_id="short-dry-run",
+                title="Rsync short dry run",
+                flag="-n",
+                inverse_flag="--no-dry-run",
+            ),
         ),
     ),
 )

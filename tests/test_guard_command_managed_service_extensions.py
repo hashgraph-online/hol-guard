@@ -186,6 +186,33 @@ def test_safe_managed_variant_does_not_hide_destructive_segment(tmp_path: Path) 
     assert payload["controlling_rule_id"] == "command.payment.delete"
 
 
+@pytest.mark.parametrize(
+    ("command", "rule_id"),
+    [
+        ("aws route53 delete-hosted-zone --id Z123 > --help", "command.dns.delete"),
+        ("aws route53 delete-hosted-zone --id Z123 >--help", "command.dns.delete"),
+        ("stripe products delete prod_123 2> --help", "command.payment.delete"),
+        ("stripe products delete prod_123 2>--help", "command.payment.delete"),
+        ("aws route53 delete-hosted-zone --id Z123 << --help\npayload\n--help", "command.dns.delete"),
+    ],
+)
+def test_help_redirection_target_does_not_hide_destructive_command(
+    command: str,
+    rule_id: str,
+    tmp_path: Path,
+) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert rule_id in {rule["rule_id"] for rule in payload["rules"]}
+    assert extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    ) is not None
+
+
 def test_managed_service_extensions_publish_official_references() -> None:
     for extension_id in (
         "command.dns",
