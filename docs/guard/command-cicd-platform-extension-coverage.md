@@ -9,7 +9,7 @@ Guard evaluates remote pipeline and hosting operations from the canonical parsed
 | `command.cicd.github` | Cancel or delete workflow runs; disable workflows | Help, run view, workflow view |
 | `command.cicd.gitlab` | Cancel one or more pipelines | Dry run, help |
 | `command.cicd.circleci` | Start a remote pipeline | Help, local configuration validation |
-| `command.platform.vercel` | Remove deployments or projects; promote or roll back production | Help, project inspection, promotion status |
+| `command.platform.vercel` | Remove deployments or projects; deploy, promote, or roll back production | Help, project inspection, promotion status |
 | `command.platform.netlify` | Delete sites; deploy to production | Help, draft deploys, dry builds |
 | `command.platform.heroku` | Destroy apps; promote pipelines; roll back releases | Help, app and release inspection |
 

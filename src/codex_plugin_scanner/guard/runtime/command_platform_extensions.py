@@ -6,9 +6,23 @@ from .command_extension_matchers import executable_matcher, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandRuleSeverity, CommandSafetyRule, CommandSafeVariant
 
-_VERCEL_GLOBAL_OPTIONS = frozenset({"--cwd", "--global-config", "--local-config", "--scope", "--token"})
+_VERCEL_GLOBAL_OPTIONS = frozenset(
+    {
+        "--cwd",
+        "--global-config",
+        "--local-config",
+        "-A",
+        "--project",
+        "--scope",
+        "-S",
+        "--team",
+        "-T",
+        "--token",
+        "-t",
+    }
+)
 _VERCEL_GLOBAL_FLAGS = frozenset({"--debug", "--help", "--no-color"})
-_NETLIFY_GLOBAL_OPTIONS = frozenset({"--config", "--filter", "--site"})
+_NETLIFY_GLOBAL_OPTIONS = frozenset({"--auth", "--config", "--filter", "--site"})
 _NETLIFY_GLOBAL_FLAGS = frozenset({"--debug", "--help", "-h"})
 _HEROKU_GLOBAL_OPTIONS = frozenset({"--app", "-a", "--remote", "-r"})
 _HEROKU_GLOBAL_FLAGS = frozenset({"--help", "-h", "--prompt"})
@@ -21,18 +35,30 @@ _VERCEL_DELETION = AnyMatcher(
             global_options_with_values=_VERCEL_GLOBAL_OPTIONS,
             global_flags=_VERCEL_GLOBAL_FLAGS,
         )
-        for operation in (("remove",), ("project", "rm"))
+        for operation in (("remove",), ("rm",), ("project", "rm"))
     )
 )
 _VERCEL_PRODUCTION_CHANGE = AnyMatcher(
-    matchers=tuple(
-        executable_matcher(
-            "vercel",
-            *operation,
-            global_options_with_values=_VERCEL_GLOBAL_OPTIONS,
-            global_flags=_VERCEL_GLOBAL_FLAGS,
-        )
-        for operation in (("promote",), ("rollback",))
+    matchers=(
+        *(
+            executable_matcher(
+                "vercel",
+                *operation,
+                global_options_with_values=_VERCEL_GLOBAL_OPTIONS,
+                global_flags=_VERCEL_GLOBAL_FLAGS,
+            )
+            for operation in (("promote",), ("rollback",))
+        ),
+        *(
+            executable_matcher(
+                "vercel",
+                "deploy",
+                required_flags=frozenset({flag}),
+                global_options_with_values=_VERCEL_GLOBAL_OPTIONS,
+                global_flags=_VERCEL_GLOBAL_FLAGS,
+            )
+            for flag in ("--prod", "-p")
+        ),
     )
 )
 _VERCEL_PRODUCTION_STATUS = executable_matcher(
@@ -125,7 +151,7 @@ PLATFORM_COMMAND_RULES = (
     _platform_rule(
         rule_id="command.platform.vercel.production-change",
         title="Vercel production change",
-        description="Identifies promotion or rollback of a Vercel production deployment.",
+        description="Identifies deployment, promotion, or rollback of a Vercel production deployment.",
         matcher=_VERCEL_PRODUCTION_CHANGE,
         action_class="Vercel production command",
         safer_alternative="Inspect deployment state or promotion status before changing production.",
@@ -198,7 +224,7 @@ PLATFORM_COMMAND_EXTENSION_SPECS = (
     CommandExtensionSpec(
         extension_id="command.platform.vercel",
         name="Vercel command protection",
-        description="Reviews deployment and project deletion plus production promotion and rollback.",
+        description="Reviews deployment and project deletion plus production deployment, promotion, and rollback.",
         action_classes=("Vercel destructive command", "Vercel production command"),
         risk_classes=("destructive_shell", "network_egress"),
         safer_alternatives=("Inspect deployment, project, and promotion state before remote changes.",),
