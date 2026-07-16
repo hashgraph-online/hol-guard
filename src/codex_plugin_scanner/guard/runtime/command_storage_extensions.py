@@ -20,6 +20,18 @@ _AWS_GLOBAL_OPTIONS = frozenset(
         "--region",
     }
 )
+_AWS_GLOBAL_FLAGS = frozenset(
+    {
+        "--cli-auto-prompt",
+        "--debug",
+        "--no-cli-auto-prompt",
+        "--no-cli-pager",
+        "--no-color",
+        "--no-paginate",
+        "--no-sign-request",
+        "--no-verify-ssl",
+    }
+)
 _GCLOUD_GLOBAL_OPTIONS = frozenset(
     {
         "--access-token-file",
@@ -34,46 +46,102 @@ _GCLOUD_GLOBAL_OPTIONS = frozenset(
         "--verbosity",
     }
 )
+_GCLOUD_GLOBAL_FLAGS = frozenset(
+    {
+        "--help",
+        "--log-http",
+        "--no-log-http",
+        "--no-user-output-enabled",
+        "--quiet",
+        "--user-output-enabled",
+        "-q",
+    }
+)
 _AZURE_GLOBAL_OPTIONS = frozenset({"--output", "-o", "--query", "--subscription"})
+_AZURE_GLOBAL_FLAGS = frozenset({"--debug", "--only-show-errors", "--verbose"})
+_MINIO_GLOBAL_OPTIONS = frozenset({"--config-dir", "-C", "--custom-header", "-H", "--resolve"})
+_MINIO_GLOBAL_FLAGS = frozenset(
+    {"--debug", "--disable-pager", "--dp", "--dtrace", "--insecure", "--json", "--no-color", "--quiet"}
+)
 
 _AWS_STORAGE_DELETE = AnyMatcher(
     matchers=(
-        executable_matcher("aws", "s3", "rm", global_options_with_values=_AWS_GLOBAL_OPTIONS),
-        executable_matcher("aws", "s3", "rb", global_options_with_values=_AWS_GLOBAL_OPTIONS),
+        executable_matcher(
+            "aws", "s3", "rm", global_options_with_values=_AWS_GLOBAL_OPTIONS, global_flags=_AWS_GLOBAL_FLAGS
+        ),
+        executable_matcher(
+            "aws", "s3", "rb", global_options_with_values=_AWS_GLOBAL_OPTIONS, global_flags=_AWS_GLOBAL_FLAGS
+        ),
         executable_matcher(
             "aws",
             "s3",
             "sync",
             required_flags=frozenset({"--delete"}),
             global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
         ),
-        executable_matcher("aws", "s3api", "delete-object", global_options_with_values=_AWS_GLOBAL_OPTIONS),
-        executable_matcher("aws", "s3api", "delete-objects", global_options_with_values=_AWS_GLOBAL_OPTIONS),
-        executable_matcher("aws", "s3api", "delete-bucket", global_options_with_values=_AWS_GLOBAL_OPTIONS),
+        executable_matcher(
+            "aws",
+            "s3api",
+            "delete-object",
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
+        ),
+        executable_matcher(
+            "aws",
+            "s3api",
+            "delete-objects",
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
+        ),
+        executable_matcher(
+            "aws",
+            "s3api",
+            "delete-bucket",
+            global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
+        ),
     )
 )
 _AWS_STORAGE_DRY_RUN = AnyMatcher(
     matchers=(
-        executable_matcher("aws", "s3", "rm", global_options_with_values=_AWS_GLOBAL_OPTIONS),
+        executable_matcher(
+            "aws", "s3", "rm", global_options_with_values=_AWS_GLOBAL_OPTIONS, global_flags=_AWS_GLOBAL_FLAGS
+        ),
         executable_matcher(
             "aws",
             "s3",
             "sync",
             required_flags=frozenset({"--delete"}),
             global_options_with_values=_AWS_GLOBAL_OPTIONS,
+            global_flags=_AWS_GLOBAL_FLAGS,
         ),
     )
 )
 _GCS_STORAGE_DELETE = AnyMatcher(
     matchers=(
-        executable_matcher("gcloud", "storage", "rm", global_options_with_values=_GCLOUD_GLOBAL_OPTIONS),
-        executable_matcher("gcloud", "storage", "buckets", "delete", global_options_with_values=_GCLOUD_GLOBAL_OPTIONS),
+        executable_matcher(
+            "gcloud",
+            "storage",
+            "rm",
+            global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
+            global_flags=_GCLOUD_GLOBAL_FLAGS,
+        ),
+        executable_matcher(
+            "gcloud",
+            "storage",
+            "buckets",
+            "delete",
+            global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
+            global_flags=_GCLOUD_GLOBAL_FLAGS,
+        ),
         executable_matcher(
             "gcloud",
             "storage",
             "rsync",
             required_flags=frozenset({"--delete-unmatched-destination-objects"}),
             global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
+            global_flags=_GCLOUD_GLOBAL_FLAGS,
         ),
         executable_matcher("gsutil", "rm", allow_leading_options=True, leading_options_with_values=frozenset({"-o"})),
         executable_matcher(
@@ -93,6 +161,7 @@ _GCLOUD_RSYNC_DELETE = AnyMatcher(
             "rsync",
             required_flags=frozenset({"--delete-unmatched-destination-objects"}),
             global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
+            global_flags=_GCLOUD_GLOBAL_FLAGS,
         ),
     )
 )
@@ -109,21 +178,59 @@ _GSUTIL_RSYNC_DELETE = AnyMatcher(
 )
 _AZURE_STORAGE_DELETE = AnyMatcher(
     matchers=(
-        executable_matcher("az", "storage", "blob", "delete", global_options_with_values=_AZURE_GLOBAL_OPTIONS),
-        executable_matcher("az", "storage", "blob", "delete-batch", global_options_with_values=_AZURE_GLOBAL_OPTIONS),
-        executable_matcher("az", "storage", "container", "delete", global_options_with_values=_AZURE_GLOBAL_OPTIONS),
+        executable_matcher(
+            "az",
+            "storage",
+            "blob",
+            "delete",
+            global_options_with_values=_AZURE_GLOBAL_OPTIONS,
+            global_flags=_AZURE_GLOBAL_FLAGS,
+        ),
+        executable_matcher(
+            "az",
+            "storage",
+            "blob",
+            "delete-batch",
+            global_options_with_values=_AZURE_GLOBAL_OPTIONS,
+            global_flags=_AZURE_GLOBAL_FLAGS,
+        ),
+        executable_matcher(
+            "az",
+            "storage",
+            "container",
+            "delete",
+            global_options_with_values=_AZURE_GLOBAL_OPTIONS,
+            global_flags=_AZURE_GLOBAL_FLAGS,
+        ),
     )
 )
 _AZURE_BATCH_DELETE = AnyMatcher(
     matchers=(
-        executable_matcher("az", "storage", "blob", "delete-batch", global_options_with_values=_AZURE_GLOBAL_OPTIONS),
+        executable_matcher(
+            "az",
+            "storage",
+            "blob",
+            "delete-batch",
+            global_options_with_values=_AZURE_GLOBAL_OPTIONS,
+            global_flags=_AZURE_GLOBAL_FLAGS,
+        ),
     )
 )
 _MINIO_STORAGE_DELETE = AnyMatcher(
     matchers=(
-        executable_matcher("mc", "rm"),
-        executable_matcher("mc", "rb"),
-        executable_matcher("mc", "mirror", required_flags=frozenset({"--remove"})),
+        executable_matcher(
+            "mc", "rm", global_options_with_values=_MINIO_GLOBAL_OPTIONS, global_flags=_MINIO_GLOBAL_FLAGS
+        ),
+        executable_matcher(
+            "mc", "rb", global_options_with_values=_MINIO_GLOBAL_OPTIONS, global_flags=_MINIO_GLOBAL_FLAGS
+        ),
+        executable_matcher(
+            "mc",
+            "mirror",
+            required_flags=frozenset({"--remove"}),
+            global_options_with_values=_MINIO_GLOBAL_OPTIONS,
+            global_flags=_MINIO_GLOBAL_FLAGS,
+        ),
     )
 )
 

@@ -30,6 +30,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.storage.aws-s3.deletion",
         ),
         (
+            "aws --no-cli-pager s3 rm s3://archive/private.json",
+            "AWS storage destructive command",
+            "command.storage.aws-s3.deletion",
+        ),
+        (
             "gcloud storage --project app-prod rm --recursive gs://archive/old",
             "Google storage destructive command",
             "command.storage.google-cloud.deletion",
@@ -45,12 +50,42 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.storage.google-cloud.deletion",
         ),
         (
+            "gcloud --quiet storage rm gs://archive/private.json",
+            "Google storage destructive command",
+            "command.storage.google-cloud.deletion",
+        ),
+        (
             "az.cmd storage blob delete-batch --subscription app-prod --source archive",
             "Azure storage destructive command",
             "command.storage.azure-blob.deletion",
         ),
         (
+            "az --debug storage blob delete --container-name archive --name private.json",
+            "Azure storage destructive command",
+            "command.storage.azure-blob.deletion",
+        ),
+        (
+            "az -otable storage blob delete --container-name archive --name private.json",
+            "Azure storage destructive command",
+            "command.storage.azure-blob.deletion",
+        ),
+        (
             "mc.exe mirror --remove ./out prod/archive",
+            "MinIO storage destructive command",
+            "command.storage.minio.deletion",
+        ),
+        (
+            "mc --config-dir /tmp/mc rm prod/archive/private.json",
+            "MinIO storage destructive command",
+            "command.storage.minio.deletion",
+        ),
+        (
+            "mc --json mirror --remove ./out prod/archive",
+            "MinIO storage destructive command",
+            "command.storage.minio.deletion",
+        ),
+        (
+            "mc -C/tmp/mc rm prod/archive/private.json",
             "MinIO storage destructive command",
             "command.storage.minio.deletion",
         ),
@@ -90,6 +125,8 @@ def test_storage_rules_feed_runtime_hooks(
         "gcloud storage ls gs://archive",
         "az storage blob list --container-name archive",
         "mc ls prod/archive",
+        "mc --config-dir /tmp/mc ls prod/archive",
+        "mc --help rm prod/archive",
         "grep 's3 rm|storage rm|blob delete|mc rm' scripts/guard-test",
         "printf '%s\\n' 'aws s3 rm s3://archive/private.json'",
     ],
