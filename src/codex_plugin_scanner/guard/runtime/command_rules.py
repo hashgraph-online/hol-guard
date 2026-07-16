@@ -159,6 +159,53 @@ class ArgumentMatcher:
 
 @final
 @dataclass(frozen=True, slots=True)
+class LeadingOperandCountMatcher:
+    """Match commands with enough operands after documented leading options."""
+
+    executables: frozenset[str]
+    minimum_operands: int
+    options_with_values: frozenset[str] = frozenset()
+    forbidden_flags: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
+        normalized_options = frozenset(
+            _normalize_option_token(value) for value in self.options_with_values if value.strip()
+        )
+        normalized_forbidden = frozenset(
+            _normalize_option_token(value) for value in self.forbidden_flags if value.strip()
+        )
+        if not normalized_executables:
+            raise ValueError("LeadingOperandCountMatcher requires executables")
+        if self.minimum_operands < 1:
+            raise ValueError("LeadingOperandCountMatcher requires at least one operand")
+        object.__setattr__(self, "executables", normalized_executables)
+        object.__setattr__(self, "options_with_values", normalized_options)
+        object.__setattr__(self, "forbidden_flags", normalized_forbidden)
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        for index, segment in enumerate(command.segments):
+            if not _segment_matches_executable(segment, self.executables):
+                continue
+            leading_flags, operands = _leading_flags_and_operands(
+                segment.arguments,
+                options_with_values=self.options_with_values,
+            )
+            if self.forbidden_flags & leading_flags or len(operands) < self.minimum_operands:
+                continue
+            evidence.append(
+                MatcherEvidence(
+                    segment_index=index,
+                    executable=segment.executable,
+                    detail=f"Matched command with at least {self.minimum_operands} structured operands.",
+                )
+            )
+        return tuple(evidence)
+
+
+@final
+@dataclass(frozen=True, slots=True)
 class PipelineMatcher:
     """Match an ordered producer-to-consumer pipeline."""
 
@@ -342,6 +389,8 @@ def matcher_index_hints(matcher: CommandMatcher) -> MatcherIndexHints:
             executables=matcher.executables,
             keywords=matcher.required_arguments,
         )
+    if isinstance(matcher, LeadingOperandCountMatcher):
+        return MatcherIndexHints(executables=matcher.executables)
     if isinstance(matcher, PipelineMatcher):
         return _merge_matcher_hints((matcher.producer, matcher.consumer))
     if isinstance(matcher, (AnyMatcher, AllMatcher)):
@@ -363,6 +412,49 @@ def _segment_matches_executable(segment: CommandSegment, executables: frozenset[
         return False
     executable = segment.executable.replace("\\", "/").rsplit("/", 1)[-1].lower()
     return executable in executables
+
+
+def _leading_flags_and_operands(
+    arguments: tuple[str, ...],
+    *,
+    options_with_values: frozenset[str],
+) -> tuple[frozenset[str], tuple[str, ...]]:
+    flags: set[str] = set()
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == "--":
+            index += 1
+            break
+        if not argument.startswith("-") or argument == "-":
+            break
+        option_name = _normalize_option_token(argument.split("=", 1)[0])
+        flags.add(option_name)
+        short_option = argument[:2] if argument.startswith("-") and not argument.startswith("--") else option_name
+        if argument.startswith("-") and not argument.startswith("--") and len(argument) > 2:
+            for character in argument[1:]:
+                if not character.isalpha():
+                    break
+                clustered_flag = f"-{character}"
+                flags.add(clustered_flag)
+                if clustered_flag in options_with_values:
+                    break
+        takes_value = option_name in options_with_values or short_option in options_with_values
+        has_attached_value = "=" in argument or (
+            argument.startswith("-")
+            and not argument.startswith("--")
+            and short_option in options_with_values
+            and len(argument) > 2
+        )
+        if takes_value and not has_attached_value:
+            index += 1
+        index += 1
+    return frozenset(flags), arguments[index:]
+
+
+def _normalize_option_token(value: str) -> str:
+    stripped = value.strip()
+    return stripped.lower() if stripped.startswith("--") else stripped
 
 
 def _present_flags(
