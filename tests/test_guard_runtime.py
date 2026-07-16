@@ -18648,6 +18648,46 @@ def test_policy_bundle_downgrade_check_ignores_mixed_timezone_formats():
     )
 
 
+def test_policy_bundle_v2_downgrade_check_uses_monotonic_bundle_version():
+    current = {
+        "contractVersion": "guard-policy-bundle.v2",
+        "bundleVersion": 8,
+        "bundleHash": "a" * 64,
+        "issuedAt": "2026-06-05T13:30:00Z",
+    }
+
+    assert guard_runner_module._policy_bundle_is_version_downgrade(
+        current,
+        {
+            "contractVersion": "guard-policy-bundle.v2",
+            "bundleVersion": 7,
+            "bundleHash": "b" * 64,
+            "issuedAt": "2026-06-05T13:31:00Z",
+        },
+    )
+    assert guard_runner_module._policy_bundle_is_version_downgrade(
+        current,
+        {
+            "contractVersion": "guard-policy-bundle.v2",
+            "bundleVersion": 8,
+            "bundleHash": "b" * 64,
+            "issuedAt": "2026-06-05T13:31:00Z",
+        },
+    )
+    assert (
+        guard_runner_module._policy_bundle_is_version_downgrade(
+            current,
+            {
+                "contractVersion": "guard-policy-bundle.v2",
+                "bundleVersion": 9,
+                "bundleHash": "b" * 64,
+                "issuedAt": "2026-06-05T13:31:00Z",
+            },
+        )
+        is False
+    )
+
+
 def test_sync_receipts_uploads_policy_bundle_acknowledgement(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
