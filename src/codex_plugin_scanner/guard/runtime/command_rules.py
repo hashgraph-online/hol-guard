@@ -7,16 +7,17 @@ from typing import Literal, final
 
 from .command_matcher_contracts import CommandMatcher, MatcherEvidence
 from .command_model import CanonicalCommand, CommandSegment
-from .command_option_parsing import flags_present_in_all_option_parses, matches_subcommands_conservatively
+from .command_option_parsing import (
+    argument_semantics,
+    flags_present_in_all_option_parses,
+    matches_subcommands_conservatively,
+)
 
 CommandRuleSeverity = Literal["critical", "high", "medium", "low"]
 CommandRuleMode = Literal["required", "enforce", "review", "monitor", "disabled"]
 
 _VALID_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
 _VALID_MODES = frozenset({"required", "enforce", "review", "monitor", "disabled"})
-_EMPTY_STRING_SET: frozenset[str] = frozenset()
-_TRUTHY_FLAG_VALUES = frozenset({"1", "on", "true", "yes"})
-_FALSEY_FLAG_VALUES = frozenset({"0", "false", "no", "off"})
 
 
 @final
@@ -134,7 +135,7 @@ class ExecutableMatcher:
                 flag_arguments = subcommand_arguments[len(self.subcommands) :]
             else:
                 flag_arguments = subcommand_arguments
-            semantics = _argument_semantics(
+            semantics = argument_semantics(
                 flag_arguments,
                 options_with_values=(
                     self.options_with_values | self.leading_options_with_values | self.interspersed_options_with_values
@@ -202,7 +203,7 @@ class ArgumentMatcher:
         for index, segment in enumerate(command.segments):
             if not _segment_matches_executable(segment, self.executables):
                 continue
-            present_arguments = _argument_semantics(
+            present_arguments = argument_semantics(
                 tuple(argument.lower() for argument in segment.arguments)
             ).present_flags
             if not self.required_arguments <= present_arguments:
@@ -441,112 +442,6 @@ def _segment_matches_executable(segment: CommandSegment, executables: frozenset[
 def _normalize_option_token(value: str) -> str:
     stripped = value.strip()
     return stripped.lower() if stripped.startswith("--") else stripped
-
-
-@dataclass(frozen=True, slots=True)
-class _EffectiveOption:
-    name: str
-    token: str
-    value: str | None
-    is_value_option: bool
-    positive_flag: str | None = None
-    negative_flag: str | None = None
-    positive_polarity: bool = True
-
-
-@dataclass(frozen=True, slots=True)
-class _ArgumentSemantics:
-    present_flags: frozenset[str]
-    effective_options: tuple[tuple[str, str, str | None], ...]
-
-    def option_value(self, option: str) -> str | None:
-        return next((value for name, _token, value in self.effective_options if name == option), None)
-
-    def option_token(self, option: str) -> str | None:
-        return next((token for name, token, _value in self.effective_options if name == option), None)
-
-
-def _argument_semantics(
-    arguments: tuple[str, ...],
-    *,
-    options_with_values: frozenset[str] = _EMPTY_STRING_SET,
-    inverse_flag_pairs: frozenset[tuple[str, str]] = frozenset(),
-) -> _ArgumentSemantics:
-    flags: set[str] = set()
-    inverse_aliases = {
-        alias: (positive, negative, alias == positive)
-        for positive, negative in inverse_flag_pairs
-        for alias in (positive, negative)
-    }
-    effective_options: dict[str, _EffectiveOption] = {}
-    index = 0
-    while index < len(arguments):
-        argument = arguments[index]
-        if argument == "--":
-            break
-        option_name, separator, option_value = argument.partition("=")
-        is_long_option = argument.startswith("--")
-        is_value_option = option_name in options_with_values
-        inverse_alias = inverse_aliases.get(option_name)
-        if is_long_option or inverse_alias is not None:
-            if is_value_option and not separator:
-                option_value = arguments[index + 1] if index + 1 < len(arguments) else ""
-            effective_name = inverse_alias[0] if inverse_alias is not None else option_name
-            effective_options[effective_name] = _EffectiveOption(
-                name=effective_name,
-                token=argument,
-                value=option_value if separator or is_value_option else None,
-                is_value_option=is_value_option,
-                positive_flag=inverse_alias[0] if inverse_alias is not None else None,
-                negative_flag=inverse_alias[1] if inverse_alias is not None else None,
-                positive_polarity=inverse_alias[2] if inverse_alias is not None else True,
-            )
-        else:
-            flags.add(argument)
-            if argument.startswith("-") and separator:
-                flags.add(option_name)
-        if inverse_alias is None and option_name.startswith("-") and not option_name.startswith("--"):
-            for character in option_name[1:]:
-                if not character.isalnum():
-                    continue
-                short_flag = f"-{character}"
-                short_alias = inverse_aliases.get(short_flag)
-                if short_alias is None:
-                    flags.add(short_flag)
-                else:
-                    effective_options[short_alias[0]] = _EffectiveOption(
-                        name=short_alias[0],
-                        token=short_flag,
-                        value=None,
-                        is_value_option=False,
-                        positive_flag=short_alias[0],
-                        negative_flag=short_alias[1],
-                        positive_polarity=short_alias[2],
-                    )
-                if short_flag in options_with_values:
-                    break
-        index += 2 if option_name in options_with_values and "=" not in argument else 1
-    for option in effective_options.values():
-        flags.add(option.token)
-        if option.positive_flag is not None and option.negative_flag is not None:
-            assigned_value = _boolean_flag_value(option.value)
-            if assigned_value is not None:
-                enabled = assigned_value if option.positive_polarity else not assigned_value
-                flags.add(option.positive_flag if enabled else option.negative_flag)
-        elif option.is_value_option or option.value is None or option.value in _TRUTHY_FLAG_VALUES:
-            flags.add(option.name)
-    return _ArgumentSemantics(
-        present_flags=frozenset(flags),
-        effective_options=tuple((name, option.token, option.value) for name, option in effective_options.items()),
-    )
-
-
-def _boolean_flag_value(value: str | None) -> bool | None:
-    if value is None or value in _TRUTHY_FLAG_VALUES:
-        return True
-    if value in _FALSEY_FLAG_VALUES:
-        return False
-    return None
 
 
 def _after_leading_options(arguments: tuple[str, ...], options_with_values: frozenset[str]) -> tuple[str, ...]:
