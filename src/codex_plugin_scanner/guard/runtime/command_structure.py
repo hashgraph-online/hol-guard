@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from .shell_structure import ShellHeredoc
+from .shell_structure import ShellHeredoc, ShellScanState
 
 _REDIRECT_PATTERN = re.compile(
     r"(?<![<>])(?P<operator>(?:\d*)>>?|(?:\d*)<)(?![<>&])\s*(?P<target>\"[^\"]+\"|'[^']+'|[^ \t\r\n;&|<>]+)"
@@ -110,8 +110,19 @@ def extract_command_redirects(
 
     redirects: list[CommandRedirect] = []
     heredoc_operator_starts = {item.operator_start for item in heredocs}
-    for match in _REDIRECT_PATTERN.finditer(command):
-        if match.start() in heredoc_operator_starts:
+    state = ShellScanState()
+    index = 0
+    while index < len(command):
+        next_index = state.advance(command, index)
+        if next_index != index + 1:
+            index = next_index
+            continue
+        if not state.is_top_level:
+            index += 1
+            continue
+        match = _REDIRECT_PATTERN.match(command, index)
+        if match is None or match.start() in heredoc_operator_starts:
+            index += 1
             continue
         redirects.append(
             CommandRedirect(
@@ -121,6 +132,7 @@ def extract_command_redirects(
                 end=match.end(),
             )
         )
+        index = match.end()
     redirects.extend(
         CommandRedirect(
             operator="<<-" if heredoc.strip_tabs else "<<",
