@@ -73,6 +73,10 @@ def _isolate_daemon_background_refresh_workers(
                 "message": "Cloud sync is isolated for this test.",
             },
         )
+    if request.node.get_closest_marker("daemon_service_workers") is None:
+        monkeypatch.setattr(daemon_server, "start_command_queue_worker", lambda _store, existing: existing)
+        monkeypatch.setattr(daemon_server, "start_cloud_sync_sync_worker", lambda _store, existing: existing)
+
 
 class _FakeSystemKeyringModule:
     def __init__(self) -> None:
