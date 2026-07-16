@@ -838,6 +838,8 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("HOL_GUARD_POLICY_YAML_IMPORT", raising=False)
+    monkeypatch.delenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", raising=False)
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
     workspace_dir = tmp_path / "workspace"
