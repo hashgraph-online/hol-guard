@@ -132,6 +132,7 @@ def test_storage_rules_feed_runtime_hooks(
     [
         "aws s3 rm s3://archive/private.json --dryrun",
         "aws s3 sync ./out s3://archive --delete --dryrun",
+        "aws s3 rm s3://archive/private.json --no-dryrun --dryrun",
         "gcloud storage rsync ./out gs://archive --delete-unmatched-destination-objects --dry-run",
         "gsutil -m rsync -d -n ./out gs://archive",
         "az storage blob delete-batch --source archive --dryrun",
@@ -165,6 +166,21 @@ def test_storage_preview_and_read_commands_remain_safe(command: str, tmp_path: P
         )
         is None
     )
+
+
+def test_storage_disabled_dry_run_alias_remains_runtime_sensitive(tmp_path: Path) -> None:
+    command = "aws s3 rm s3://archive/private.json --dryrun --no-dryrun"
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+    runtime_match = extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert payload["status"] == "review"
+    assert runtime_match is not None
+    assert runtime_match.action_class == "AWS storage destructive command"
 
 
 def test_storage_safe_segment_does_not_hide_later_deletion(tmp_path: Path) -> None:

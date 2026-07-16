@@ -187,6 +187,102 @@ def test_executable_matcher_uses_effective_exact_option_value(arguments: str, ma
     assert bool(evidence) is matches
 
 
+@pytest.mark.parametrize(
+    ("arguments", "matches"),
+    [
+        ("--dry-run", True),
+        ("--dry-run --no-dry-run", False),
+        ("--no-dry-run --dry-run", True),
+        ("--dry-run=true --no-dry-run=true", False),
+        ("--dry-run=false --no-dry-run=false", True),
+        ("--no-dry-run=false --dry-run=false", False),
+        ("--unknown --dry-run", False),
+    ],
+)
+def test_executable_matcher_uses_effective_inverse_boolean_alias(arguments: str, matches: bool) -> None:
+    matcher = ExecutableMatcher(
+        executables=frozenset({"tool"}),
+        subcommands=("delete",),
+        required_flags=frozenset({"--dry-run"}),
+        inverse_flag_pairs=frozenset({("--dry-run", "--no-dry-run")}),
+        required_flags_in_all_arguments=True,
+        fail_secure_unknown_options=True,
+    )
+
+    evidence = matcher.match(parse_shell_command(f"tool delete target {arguments}"))
+
+    assert bool(evidence) is matches
+
+
+@pytest.mark.parametrize(
+    ("arguments", "matches"),
+    [
+        ("-an", True),
+        ("-an --no-dry-run", False),
+        ("--no-dry-run -an", True),
+    ],
+)
+def test_executable_matcher_orders_short_flag_and_long_inverse(arguments: str, matches: bool) -> None:
+    matcher = ExecutableMatcher(
+        executables=frozenset({"tool"}),
+        subcommands=("delete",),
+        required_flags=frozenset({"-n"}),
+        inverse_flag_pairs=frozenset({("-n", "--no-dry-run")}),
+    )
+
+    evidence = matcher.match(parse_shell_command(f"tool delete target {arguments}"))
+
+    assert bool(evidence) is matches
+
+
+@pytest.mark.parametrize(
+    ("arguments", "matches"),
+    [
+        ("--generate-cli-skeleton input", True),
+        ("--generate-cli-skeleton=output", True),
+        ("--generate-cli-skeleton=yaml-input", True),
+        ("--generate-cli-skeleton=bogus", False),
+        ("--generate-cli-skeleton=output --generate-cli-skeleton=bogus", False),
+        ("--generate-cli-skeleton=bogus --generate-cli-skeleton=output", True),
+        ("--unknown --generate-cli-skeleton=output", False),
+    ],
+)
+def test_executable_matcher_requires_allowed_effective_option_value(arguments: str, matches: bool) -> None:
+    matcher = ExecutableMatcher(
+        executables=frozenset({"tool"}),
+        subcommands=("delete",),
+        options_with_values=frozenset({"--generate-cli-skeleton"}),
+        required_option_values=(("--generate-cli-skeleton", frozenset({"input", "output", "yaml-input"})),),
+        required_flags_in_all_arguments=True,
+        fail_secure_unknown_options=True,
+    )
+
+    evidence = matcher.match(parse_shell_command(f"tool delete target {arguments}"))
+
+    assert bool(evidence) is matches
+
+
+def test_executable_matcher_rejects_ambiguous_option_semantics() -> None:
+    with pytest.raises(ValueError, match="cannot reuse an option name"):
+        ExecutableMatcher(
+            executables=frozenset({"tool"}),
+            inverse_flag_pairs=frozenset(
+                {
+                    ("--dry-run", "--no-dry-run"),
+                    ("--preview", "--no-dry-run"),
+                }
+            ),
+        )
+    with pytest.raises(ValueError, match="cannot declare an option more than once"):
+        ExecutableMatcher(
+            executables=frozenset({"tool"}),
+            required_option_values=(
+                ("--format", frozenset({"json"})),
+                ("--format", frozenset({"yaml"})),
+            ),
+        )
+
+
 def test_executable_matcher_can_skip_declared_global_options() -> None:
     parsed = parse_shell_command("git --no-pager -C repo push origin main --force")
     matcher = ExecutableMatcher(

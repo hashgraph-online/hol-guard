@@ -7,15 +7,17 @@ from typing import Literal, final
 
 from .command_matcher_contracts import CommandMatcher, MatcherEvidence
 from .command_model import CanonicalCommand, CommandSegment
-from .command_option_parsing import flags_present_in_all_option_parses, matches_subcommands_conservatively
+from .command_option_parsing import (
+    argument_semantics,
+    flags_present_in_all_option_parses,
+    matches_subcommands_conservatively,
+)
 
 CommandRuleSeverity = Literal["critical", "high", "medium", "low"]
 CommandRuleMode = Literal["required", "enforce", "review", "monitor", "disabled"]
 
 _VALID_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
 _VALID_MODES = frozenset({"required", "enforce", "review", "monitor", "disabled"})
-_EMPTY_STRING_SET: frozenset[str] = frozenset()
-_TRUTHY_FLAG_VALUES = frozenset({"1", "on", "true", "yes"})
 
 
 @final
@@ -32,6 +34,8 @@ class ExecutableMatcher:
     interspersed_options_with_values: frozenset[str] = frozenset()
     interspersed_flags: frozenset[str] = frozenset()
     options_with_values: frozenset[str] = frozenset()
+    inverse_flag_pairs: frozenset[tuple[str, str]] = frozenset()
+    required_option_values: tuple[tuple[str, frozenset[str]], ...] = ()
     required_flags_in_all_arguments: bool = False
     fail_secure_unknown_options: bool = False
 
@@ -53,6 +57,24 @@ class ExecutableMatcher:
             value.strip().lower() for value in self.interspersed_flags if value.strip()
         )
         normalized_options = frozenset(value.strip().lower() for value in self.options_with_values if value.strip())
+        normalized_inverse_pairs = frozenset(
+            (positive.strip().lower(), negative.strip().lower())
+            for positive, negative in self.inverse_flag_pairs
+            if positive.strip() and negative.strip()
+        )
+        normalized_required_option_values = tuple(
+            sorted(
+                [
+                    (
+                        option.strip().lower(),
+                        frozenset(value.strip().lower() for value in values if value.strip()),
+                    )
+                    for option, values in self.required_option_values
+                    if option.strip()
+                ],
+                key=lambda item: item[0],
+            )
+        )
         object.__setattr__(self, "subcommands", normalized_subcommands)
         object.__setattr__(self, "required_flags", normalized_required_flags)
         object.__setattr__(self, "forbidden_flags", normalized_forbidden_flags)
@@ -60,8 +82,18 @@ class ExecutableMatcher:
         object.__setattr__(self, "interspersed_options_with_values", normalized_interspersed_options)
         object.__setattr__(self, "interspersed_flags", normalized_interspersed_flags)
         object.__setattr__(self, "options_with_values", normalized_options)
+        object.__setattr__(self, "inverse_flag_pairs", normalized_inverse_pairs)
+        object.__setattr__(self, "required_option_values", normalized_required_option_values)
         if normalized_required_flags & normalized_forbidden_flags:
             raise ValueError("A matcher flag cannot be both required and forbidden")
+        inverse_names = [name for pair in normalized_inverse_pairs for name in pair]
+        if len(inverse_names) != len(set(inverse_names)):
+            raise ValueError("Inverse flag pairs cannot reuse an option name")
+        required_option_names = [option for option, _values in normalized_required_option_values]
+        if len(required_option_names) != len(set(required_option_names)):
+            raise ValueError("Required option values cannot declare an option more than once")
+        if any(not values for _option, values in normalized_required_option_values):
+            raise ValueError("Required option values cannot be empty")
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         evidence: list[MatcherEvidence] = []
@@ -103,25 +135,42 @@ class ExecutableMatcher:
                 flag_arguments = subcommand_arguments[len(self.subcommands) :]
             else:
                 flag_arguments = subcommand_arguments
-            present_flags = _present_flags(
+            semantics = argument_semantics(
                 flag_arguments,
                 options_with_values=(
                     self.options_with_values | self.leading_options_with_values | self.interspersed_options_with_values
                 ),
+                inverse_flag_pairs=self.inverse_flag_pairs,
             )
-            required_flags_present = self.required_flags <= present_flags
+            required_semantics_present = self.required_flags <= semantics.present_flags and not any(
+                semantics.option_value(option) not in allowed_values
+                for option, allowed_values in self.required_option_values
+            )
             if self.fail_secure_unknown_options and self.required_flags_in_all_arguments:
-                required_flags_present = flags_present_in_all_option_parses(
+                conservative_requirements = set(self.required_flags)
+                for positive, negative in self.inverse_flag_pairs:
+                    if not conservative_requirements.intersection({positive, negative}):
+                        continue
+                    conservative_requirements.difference_update({positive, negative})
+                    effective_token = semantics.option_token(positive)
+                    if effective_token is not None:
+                        conservative_requirements.add(effective_token.split("=", 1)[0])
+                required_semantics_present = required_semantics_present and flags_present_in_all_option_parses(
                     lowered_arguments,
-                    self.required_flags,
+                    frozenset(conservative_requirements) | {option for option, _values in self.required_option_values},
                     options_with_values=(
                         self.options_with_values
                         | self.leading_options_with_values
                         | self.interspersed_options_with_values
                     ),
-                    known_flags=self.interspersed_flags | self.required_flags | self.forbidden_flags,
+                    known_flags=(
+                        self.interspersed_flags
+                        | self.required_flags
+                        | self.forbidden_flags
+                        | {name for pair in self.inverse_flag_pairs for name in pair}
+                    ),
                 )
-            if not required_flags_present or self.forbidden_flags & present_flags:
+            if not required_semantics_present or self.forbidden_flags & semantics.present_flags:
                 continue
             evidence.append(
                 MatcherEvidence(
@@ -154,7 +203,9 @@ class ArgumentMatcher:
         for index, segment in enumerate(command.segments):
             if not _segment_matches_executable(segment, self.executables):
                 continue
-            present_arguments = _present_flags(tuple(argument.lower() for argument in segment.arguments))
+            present_arguments = argument_semantics(
+                tuple(argument.lower() for argument in segment.arguments)
+            ).present_flags
             if not self.required_arguments <= present_arguments:
                 continue
             evidence.append(
@@ -345,7 +396,9 @@ def matcher_index_hints(matcher: CommandMatcher) -> MatcherIndexHints:
     if isinstance(matcher, ExecutableMatcher):
         return MatcherIndexHints(
             executables=matcher.executables,
-            keywords=frozenset((*matcher.subcommands, *matcher.required_flags)),
+            keywords=frozenset(
+                (*matcher.subcommands, *matcher.required_flags, *(name for name, _ in matcher.required_option_values))
+            ),
         )
     if isinstance(matcher, ArgumentMatcher):
         return MatcherIndexHints(
@@ -389,50 +442,6 @@ def _segment_matches_executable(segment: CommandSegment, executables: frozenset[
 def _normalize_option_token(value: str) -> str:
     stripped = value.strip()
     return stripped.lower() if stripped.startswith("--") else stripped
-
-
-def _present_flags(
-    arguments: tuple[str, ...],
-    *,
-    options_with_values: frozenset[str] = _EMPTY_STRING_SET,
-) -> frozenset[str]:
-    flags: set[str] = set()
-    # Safe variants honor the final long-option assignment, matching common CLI parsers.
-    effective_long_options: dict[str, tuple[str, str | None, bool]] = {}
-    index = 0
-    while index < len(arguments):
-        argument = arguments[index]
-        if argument == "--":
-            break
-        option_name, separator, option_value = argument.partition("=")
-        is_long_option = argument.startswith("--")
-        is_value_option = option_name in options_with_values
-        if is_long_option:
-            if is_value_option and not separator:
-                option_value = arguments[index + 1] if index + 1 < len(arguments) else ""
-            effective_long_options[option_name] = (
-                argument,
-                option_value if separator or is_value_option else None,
-                is_value_option,
-            )
-        else:
-            flags.add(argument)
-            if argument.startswith("-") and separator:
-                flags.add(option_name)
-        if option_name.startswith("-") and not option_name.startswith("--") and len(option_name) > 2:
-            for character in option_name[1:]:
-                if not character.isalnum():
-                    continue
-                short_flag = f"-{character}"
-                flags.add(short_flag)
-                if short_flag in options_with_values:
-                    break
-        index += 2 if option_name in options_with_values and "=" not in argument else 1
-    for option_name, (argument, option_value, is_value_option) in effective_long_options.items():
-        flags.add(argument)
-        if is_value_option or option_value is None or option_value in _TRUTHY_FLAG_VALUES:
-            flags.add(option_name)
-    return frozenset(flags)
 
 
 def _after_leading_options(arguments: tuple[str, ...], options_with_values: frozenset[str]) -> tuple[str, ...]:
