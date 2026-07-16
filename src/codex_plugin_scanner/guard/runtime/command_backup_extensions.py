@@ -8,6 +8,21 @@ from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 
 _RCLONE_GLOBAL_OPTIONS = frozenset({"--config", "--log-file", "--password-command", "--rc-addr"})
 _RESTIC_GLOBAL_OPTIONS = frozenset({"-r", "--repo", "--password-file", "--cache-dir", "-o", "--option"})
+_BORG_GLOBAL_OPTIONS = frozenset(
+    {
+        "-r",
+        "--repo",
+        "--debug-profile",
+        "--debug-topic",
+        "--lock-wait",
+        "--remote-path",
+        "--rsh",
+        "--socket",
+        "--umask",
+        "--upload-buffer",
+        "--upload-ratelimit",
+    }
+)
 _VELERO_GLOBAL_OPTIONS = frozenset(
     {
         "--features",
@@ -79,11 +94,25 @@ _RESTIC_MUTATION = AnyMatcher(
 )
 _BORG_MUTATION = AnyMatcher(
     matchers=tuple(
-        executable_matcher("borg", command, allow_leading_options=True) for command in ("delete", "prune", "recreate")
+        executable_matcher(
+            "borg",
+            command,
+            allow_leading_options=True,
+            leading_options_with_values=_BORG_GLOBAL_OPTIONS,
+        )
+        for command in ("delete", "prune", "recreate")
     )
 )
 _BORG_DRY_RUN = AnyMatcher(
-    matchers=tuple(executable_matcher("borg", command, allow_leading_options=True) for command in ("prune", "recreate"))
+    matchers=tuple(
+        executable_matcher(
+            "borg",
+            command,
+            allow_leading_options=True,
+            leading_options_with_values=_BORG_GLOBAL_OPTIONS,
+        )
+        for command in ("prune", "recreate")
+    )
 )
 _VELERO_DELETE = AnyMatcher(
     matchers=tuple(
