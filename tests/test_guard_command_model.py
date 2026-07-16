@@ -40,6 +40,27 @@ def test_parse_shell_command_tracks_sudo_and_nested_environment_wrapper() -> Non
     assert parsed.path_overridden is True
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "aws route53 delete-hosted-zone --id Z123 > --help",
+        "stripe products delete prod_123 2>--help",
+    ],
+)
+def test_parse_shell_command_excludes_redirects_from_cli_arguments(command: str) -> None:
+    parsed = parse_shell_command(command)
+
+    assert "--help" not in parsed.segments[0].arguments
+    assert parsed.redirects[0].target == "--help"
+    assert any("--help" in token for token in parsed.segments[0].tokens)
+
+
+def test_parse_shell_command_preserves_quoted_heredoc_like_argument() -> None:
+    parsed = parse_shell_command("tool delete target '<<--help'")
+
+    assert parsed.segments[0].arguments == ("delete", "target", "<<--help")
+
+
 def test_parse_shell_command_skips_all_sudo_options_with_values() -> None:
     parsed = parse_shell_command(
         "sudo --command-timeout 10 --login-class staff git --config-env token=TOKEN push --force"
