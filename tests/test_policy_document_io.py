@@ -133,7 +133,7 @@ def test_export_requires_privileged_intent_for_workspace_selectors() -> None:
                     "decision_id": 8,
                     "harness": "codex",
                     "scope": "workspace",
-                    "workspace": "/Users/private/repository",
+                    "workspace": "/workspace/repository",
                     "action": "allow",
                 }
             ]
