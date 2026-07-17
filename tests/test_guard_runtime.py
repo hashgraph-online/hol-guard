@@ -18177,6 +18177,33 @@ def test_receipt_sync_context_uploads_policy_bundle_acknowledgement(tmp_path):
     }
 
 
+def test_receipt_sync_context_uploads_v2_policy_bundle_acknowledgement(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    acknowledgement = {
+        "contractVersion": "guard-policy-bundle.v2",
+        "workspaceId": "workspace-1",
+        "deviceId": "device-1",
+        "bundleVersion": 3,
+        "bundleHash": "a" * 64,
+        "sequence": 1,
+        "status": "applied",
+        "observedAt": "2026-04-19T00:00:11Z",
+    }
+    store.set_sync_payload(
+        "policy_bundle_ack",
+        acknowledgement,
+        "2026-04-19T00:00:11+00:00",
+    )
+
+    context = guard_runner_module._receipt_sync_context(
+        store,
+        local_guard_online_at="2026-04-19T00:01:00+00:00",
+    )
+
+    assert context["policyBundleAcknowledgementV2"] == acknowledgement
+    assert "policyBundleAcknowledgement" not in context
+
+
 def test_policy_bundle_validation_rejects_missing_rules_field():
     bundle = {
         "contractVersion": "guard-policy-bundle.v1",
