@@ -159,6 +159,12 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
             "The command changes GitHub credentials or secrets.",
         )
     if top_level in _ROUTINE_MUTATING_GROUPS:
+        if _group_subcommand(normalized[1:]) == "delete":
+            return _assessment(
+                "mutate_remote",
+                "github.command.high-impact-mutation",
+                "The command deletes GitHub-hosted state.",
+            )
         return _assessment(
             "maintain_remote",
             "github.command.routine-mutation",
@@ -211,6 +217,8 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
 
 
 def _is_high_impact_command(top_level: str, subcommand: str, args: Sequence[str]) -> bool:
+    if subcommand == "delete":
+        return True
     if subcommand in _HIGH_IMPACT_SUBCOMMANDS.get(top_level, frozenset()):
         return True
     if top_level == "pr" and subcommand == "merge":
