@@ -28,10 +28,10 @@ POLICY_BUNDLE_V2_ENVELOPE_VERSION = 2
 POLICY_BUNDLE_V2_CANONICALIZATION = {"algorithm": "rfc8785", "version": "1"}
 POLICY_BUNDLE_V2_ACK_STATUSES = frozenset({"received", "validated", "applied", "failed", "offline"})
 
-_MAX_BUNDLE_BYTES = 2_097_152
-_MAX_DEPTH = 40
-_MAX_COLLECTION_ITEMS = 2_048
-_MAX_STRING_LENGTH = 1_048_576
+POLICY_BUNDLE_MAX_BYTES = 2_097_152
+POLICY_BUNDLE_MAX_DEPTH = 40
+POLICY_BUNDLE_MAX_COLLECTION_ITEMS = 2_048
+POLICY_BUNDLE_MAX_STRING_LENGTH = 1_048_576
 _SHA256_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 _ALLOWED_TOP_LEVEL = frozenset(
     {
@@ -94,7 +94,7 @@ def _is_object_mapping(value: object) -> TypeGuard[dict[str, object]]:
     return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
-def _non_empty_string(value: object, *, maximum: int = _MAX_STRING_LENGTH) -> str | None:
+def _non_empty_string(value: object, *, maximum: int = POLICY_BUNDLE_MAX_STRING_LENGTH) -> str | None:
     if not isinstance(value, str):
         return None
     normalized = value.strip()
@@ -116,10 +116,10 @@ def _strict_utc_timestamp(value: object) -> datetime | None:
 
 
 def _json_value(value: object, *, depth: int = 0) -> JsonValue:
-    if depth > _MAX_DEPTH:
+    if depth > POLICY_BUNDLE_MAX_DEPTH:
         raise ValueError("limit_depth")
     if value is None or isinstance(value, (bool, str)):
-        if isinstance(value, str) and len(value.encode("utf-8")) > _MAX_STRING_LENGTH:
+        if isinstance(value, str) and len(value.encode("utf-8")) > POLICY_BUNDLE_MAX_STRING_LENGTH:
             raise ValueError("limit_string")
         return value
     if isinstance(value, int):
@@ -127,11 +127,11 @@ def _json_value(value: object, *, depth: int = 0) -> JsonValue:
     if isinstance(value, float):
         raise ValueError("unsupported_number")
     if _is_object_list(value):
-        if len(value) > _MAX_COLLECTION_ITEMS:
+        if len(value) > POLICY_BUNDLE_MAX_COLLECTION_ITEMS:
             raise ValueError("limit_collection")
         return [_json_value(item, depth=depth + 1) for item in value]
     if _is_object_mapping(value):
-        if len(value) > _MAX_COLLECTION_ITEMS:
+        if len(value) > POLICY_BUNDLE_MAX_COLLECTION_ITEMS:
             raise ValueError("limit_collection")
         result: dict[str, JsonValue] = {}
         for key, item in value.items():
@@ -288,7 +288,7 @@ def validated_policy_bundle_v2_payload(
         encoded = canonical_json_bytes(_json_value(policy_bundle))
     except ValueError as error:
         return None, str(error)
-    if len(encoded) > _MAX_BUNDLE_BYTES:
+    if len(encoded) > POLICY_BUNDLE_MAX_BYTES:
         return None, "limit_bytes"
     if not _validate_keys(policy_bundle, _ALLOWED_TOP_LEVEL):
         return None, "unknown_field"
