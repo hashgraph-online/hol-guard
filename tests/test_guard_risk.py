@@ -1154,7 +1154,7 @@ def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trai
     assert request is None
 
 
-def test_tool_action_request_classifier_requires_confirmation_for_gh_pr_create_body_file():
+def test_tool_action_request_classifier_allows_gh_pr_create_body_file():
     request = extract_sensitive_tool_action_request(
         "bash",
         {
@@ -1166,11 +1166,10 @@ def test_tool_action_request_classifier_requires_confirmation_for_gh_pr_create_b
         },
     )
 
-    assert request is not None
-    assert request.action_class == "GitHub remote mutation command"
+    assert request is None
 
 
-def test_tool_action_request_classifier_requires_confirmation_for_single_quoted_gh_pr_create_markdown_body():
+def test_tool_action_request_classifier_allows_single_quoted_gh_pr_create_markdown_body():
     request = extract_sensitive_tool_action_request(
         "bash",
         {
@@ -1184,8 +1183,7 @@ def test_tool_action_request_classifier_requires_confirmation_for_single_quoted_
         },
     )
 
-    assert request is not None
-    assert request.action_class == "GitHub remote mutation command"
+    assert request is None
 
 
 def test_tool_action_request_classifier_explains_gh_pr_create_double_quoted_markdown_substitution():
@@ -1241,7 +1239,7 @@ def test_tool_action_request_classifier_explains_wrapped_gh_pr_create_body_subst
     assert request.action_class == "GitHub PR body shell substitution"
 
 
-def test_tool_action_request_classifier_requires_confirmation_for_pr_create_with_unrelated_substitution():
+def test_tool_action_request_classifier_allows_pr_create_with_unrelated_substitution():
     request = extract_sensitive_tool_action_request(
         "bash",
         {
@@ -1254,11 +1252,10 @@ def test_tool_action_request_classifier_requires_confirmation_for_pr_create_with
         },
     )
 
-    assert request is not None
-    assert request.action_class == "GitHub remote mutation command"
+    assert request is None
 
 
-def test_tool_action_request_classifier_requires_confirmation_for_pr_create_with_attached_body_flag():
+def test_tool_action_request_classifier_allows_pr_create_with_attached_body_flag():
     request = extract_sensitive_tool_action_request(
         "bash",
         {
@@ -1271,8 +1268,7 @@ def test_tool_action_request_classifier_requires_confirmation_for_pr_create_with
         },
     )
 
-    assert request is not None
-    assert request.action_class == "GitHub remote mutation command"
+    assert request is None
 
 
 def test_tool_action_request_classifier_ignores_single_quoted_env_split_string_body():

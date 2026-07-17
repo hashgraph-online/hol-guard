@@ -14297,7 +14297,7 @@ def test_guard_runtime_allows_lean_ctx_wrapped_gh_graphql_pipeline(tmp_path):
     assert match is None
 
 
-def test_guard_hook_blocks_github_remote_mutation_before_execution(tmp_path, capsys, monkeypatch):
+def test_guard_hook_allows_routine_github_repository_update(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -14326,8 +14326,7 @@ def test_guard_hook_blocks_github_remote_mutation_before_execution(tmp_path, cap
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["permissionDecision"] == "deny"
-    assert "approve it in hol guard, then retry." in output["permissionDecisionReason"].lower()
+    assert output == {"permissionDecision": "allow"}
 
 
 def test_guard_runtime_blocks_unsafe_cd_before_pytest_module_invocation(tmp_path):
