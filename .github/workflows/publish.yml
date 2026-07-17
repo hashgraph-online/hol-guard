@@ -215,7 +215,7 @@ jobs:
         run: uv run --no-sync pytest --tb=short
       - name: Run Windows release suite
         if: runner.os == 'Windows'
-        run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py tests/test_policy_document_cli.py tests/test_policy_document_yaml.py tests/test_policy_bundle_v2.py --tb=short
+        run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py tests/test_policy_document_yaml.py tests/test_policy_bundle_v2.py --tb=short
 
   publish-testpypi:
     name: Publish to TestPyPI (Manual)
