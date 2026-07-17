@@ -82,6 +82,7 @@ def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
 def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     ci_workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     publish_workflow = (ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
+    release_workflow = (ROOT / ".github/workflows/create-python-release.yml").read_text(encoding="utf-8")
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
     docker_requirements = (ROOT / "docker-requirements.txt").read_text(encoding="utf-8")
@@ -91,7 +92,7 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "uv sync --frozen --extra dev --extra cisco --group cisco-mcp --python 3.13" in ci_workflow
     assert "uv sync --frozen --extra dev --python ${{ matrix.python-version }}" in ci_workflow
     assert "uv sync --frozen --extra dev --extra publish --extra cisco" in publish_workflow
-    assert 'uv tool install "hol-guard[cisco]==' in publish_workflow
+    assert 'uv tool install "hol-guard[cisco]==' in release_workflow
     assert "COPY docker-requirements.txt LICENSE README.md /app/" in dockerfile
     assert "FROM python:3.13-slim@" in dockerfile
     assert "FROM python:3.14-slim" not in dockerfile
