@@ -29,7 +29,7 @@ hol-guard init
 
 `hol-guard init` discovers compatible AI agents, explains each setup change before applying it, and guides you through your first protected action.
 
-[Install guide](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/get-started.md) · [Supported agents](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/harness-support.md) · [Local vs. cloud](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/local-vs-cloud.md) · [Security policy](https://github.com/hashgraph-online/hol-guard/blob/main/SECURITY.md)
+[Install guide](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/get-started.md) · [GuardPolicy v1alpha1](https://github.com/hashgraph-online/hol-guard/blob/main/spec/guard-policy/v1alpha1/README.md) · [Supported agents](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/harness-support.md) · [Local vs. cloud](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/local-vs-cloud.md) · [Security policy](https://github.com/hashgraph-online/hol-guard/blob/main/SECURITY.md)
 
 ## What HOL Guard Protects
 
