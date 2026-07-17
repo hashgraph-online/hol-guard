@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/schemas/guard/local-integrity-snapshot-v1.schema.json",
+  "title": "HOL Guard local integrity snapshot v1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "scope",
+    "healthy",
+    "assuranceLevel",
+    "installOwner",
+    "platform",
+    "architecture",
+    "identifiers",
+    "product",
+    "components",
+    "harnessCoverage",
+    "continuity",
+    "reasonCodes",
+    "remediationClass"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "local-integrity-snapshot.v1"},
+    "generatedAt": {"type": "string", "format": "date-time"},
+    "scope": {"const": "machine"},
+    "healthy": {"type": "boolean"},
+    "assuranceLevel": {"enum": ["user-managed", "mdm-managed-unverified", "mdm-managed"]},
+    "installOwner": {"enum": ["user", "mdm"]},
+    "platform": {"type": "string", "minLength": 1, "maxLength": 64},
+    "architecture": {"type": "string", "minLength": 1, "maxLength": 64},
+    "identifiers": {
+      "type": "object",
+      "required": ["workspaceId", "deviceId", "machineInstallationId", "installationGeneration"],
+      "properties": {
+        "workspaceId": {"type": ["string", "null"], "maxLength": 256},
+        "deviceId": {"type": ["string", "null"], "maxLength": 256},
+        "machineInstallationId": {"type": ["string", "null"], "maxLength": 256},
+        "installationGeneration": {"type": ["string", "null"], "maxLength": 256}
+      },
+      "additionalProperties": false
+    },
+    "product": {
+      "type": "object",
+      "required": ["version", "buildId", "sourceCommit", "packageIdentity", "manifestHash", "policyHash"],
+      "properties": {
+        "version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "buildId": {"type": ["string", "null"], "maxLength": 256},
+        "sourceCommit": {"type": ["string", "null"], "maxLength": 128},
+        "packageIdentity": {"type": "string", "minLength": 1, "maxLength": 256},
+        "manifestHash": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "policyHash": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "components": {
+      "type": "object",
+      "required": [
+        "manifest",
+        "nativePackage",
+        "managedPolicy",
+        "ownershipAndAcl",
+        "supervisor",
+        "deviceKey",
+        "harnessCoverage",
+        "installationIdentity",
+        "leaseContinuity",
+        "daemon",
+        "commandShadowing",
+        "update"
+      ],
+      "properties": {
+        "manifest": {"$ref": "#/$defs/component"},
+        "nativePackage": {"$ref": "#/$defs/component"},
+        "managedPolicy": {"$ref": "#/$defs/component"},
+        "ownershipAndAcl": {"$ref": "#/$defs/component"},
+        "supervisor": {"$ref": "#/$defs/component"},
+        "deviceKey": {
+          "$ref": "#/$defs/keyComponent"
+        },
+        "harnessCoverage": {"$ref": "#/$defs/component"},
+        "installationIdentity": {"$ref": "#/$defs/component"},
+        "leaseContinuity": {"$ref": "#/$defs/component"},
+        "daemon": {"$ref": "#/$defs/component"},
+        "commandShadowing": {"$ref": "#/$defs/component"},
+        "update": {"$ref": "#/$defs/component"}
+      },
+      "additionalProperties": false
+    },
+    "harnessCoverage": {
+      "type": "object",
+      "required": ["required", "protected", "degraded", "missing"],
+      "properties": {
+        "required": {"type": ["integer", "null"], "minimum": 0},
+        "protected": {"type": ["integer", "null"], "minimum": 0},
+        "degraded": {"type": ["integer", "null"], "minimum": 0},
+        "missing": {"type": ["integer", "null"], "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "continuity": {
+      "type": "object",
+      "required": ["monotonicUptimeSeconds", "sequence", "previousLeaseDigest", "bootSessionId"],
+      "properties": {
+        "monotonicUptimeSeconds": {"type": ["number", "null"], "minimum": 0},
+        "sequence": {"type": ["integer", "null"], "minimum": 0},
+        "previousLeaseDigest": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "bootSessionId": {"type": ["string", "null"], "maxLength": 256}
+      },
+      "additionalProperties": false
+    },
+    "reasonCodes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/reasonCode"}
+    },
+    "remediationClass": {"enum": ["none", "user-reinstall", "mdm-repair", "administrator-action"]}
+  },
+  "$defs": {
+    "component": {
+      "type": "object",
+      "required": ["state", "healthy", "reasonCode"],
+      "properties": {
+        "state": {"enum": ["healthy", "degraded", "absent", "tampered", "unsupported", "unknown", "running", "stopped", "disabled"]},
+        "healthy": {"type": "boolean"},
+        "reasonCode": {"$ref": "#/$defs/reasonCode"}
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"state": {"enum": ["healthy", "running"]}}, "required": ["state"]},
+          "then": {"properties": {"healthy": {"const": true}}},
+          "else": {"properties": {"healthy": {"const": false}}}
+        }
+      ]
+    },
+    "keyComponent": {
+      "type": "object",
+      "required": ["state", "healthy", "reasonCode", "level"],
+      "properties": {
+        "state": {"enum": ["healthy", "degraded", "absent", "tampered", "unsupported", "unknown"]},
+        "healthy": {"type": "boolean"},
+        "reasonCode": {"$ref": "#/$defs/reasonCode"},
+        "level": {"enum": ["hardware-backed", "os-protected", "file-backed", "unavailable", "unknown"]}
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"state": {"const": "healthy"}}, "required": ["state"]},
+          "then": {"properties": {"healthy": {"const": true}}},
+          "else": {"properties": {"healthy": {"const": false}}}
+        }
+      ]
+    },
+    "healthyComponent": {
+      "type": "object",
+      "required": ["healthy"],
+      "properties": {"healthy": {"const": true}}
+    },
+    "reasonCode": {
+      "enum": [
+        "release_manifest_absent",
+        "release_manifest_architecture_mismatch",
+        "release_manifest_hash_mismatch",
+        "release_manifest_insecure_permissions",
+        "release_manifest_invalid",
+        "release_manifest_path_escape",
+        "release_manifest_platform_mismatch",
+        "release_manifest_unsigned",
+        "release_manifest_untrusted_key",
+        "release_manifest_valid",
+        "release_manifest_wrong_owner",
+        "release_runtime_insecure_permissions",
+        "release_runtime_wrong_owner",
+        "native_install_valid",
+        "native_package_identity_absent",
+        "native_package_receipt_absent",
+        "native_platform_unsupported",
+        "native_publisher_signature_invalid",
+        "managed_policy_active",
+        "managed_policy_absent",
+        "managed_policy_cache_invalid",
+        "managed_policy_cache_tampered",
+        "managed_policy_inaccessible",
+        "managed_policy_invalid",
+        "managed_policy_profile_removed_cached",
+        "ownership_acl_verification_unavailable",
+        "supervisor_verification_unavailable",
+        "device_key_verification_unavailable",
+        "harness_coverage_verification_unavailable",
+        "installation_identity_verification_unavailable",
+        "lease_continuity_verification_unavailable",
+        "daemon_verification_unavailable",
+        "command_shadowing_verification_unavailable",
+        "update_verification_unavailable",
+        "integrity_reason_unrecognized",
+        "release_manifest_probe_failed",
+        "native_install_probe_failed",
+        "managed_policy_probe_failed"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {"properties": {"healthy": {"const": true}}, "required": ["healthy"]},
+      "then": {
+        "properties": {
+          "components": {
+            "properties": {
+              "manifest": {"$ref": "#/$defs/healthyComponent"},
+              "nativePackage": {"$ref": "#/$defs/healthyComponent"},
+              "managedPolicy": {"$ref": "#/$defs/healthyComponent"},
+              "ownershipAndAcl": {"$ref": "#/$defs/healthyComponent"},
+              "supervisor": {"$ref": "#/$defs/healthyComponent"},
+              "deviceKey": {"$ref": "#/$defs/healthyComponent"},
+              "harnessCoverage": {"$ref": "#/$defs/healthyComponent"},
+              "installationIdentity": {"$ref": "#/$defs/healthyComponent"},
+              "leaseContinuity": {"$ref": "#/$defs/healthyComponent"},
+              "daemon": {"$ref": "#/$defs/healthyComponent"},
+              "commandShadowing": {"$ref": "#/$defs/healthyComponent"},
+              "update": {"$ref": "#/$defs/healthyComponent"}
+            }
+          },
+          "reasonCodes": {"maxItems": 0},
+          "remediationClass": {"const": "none"}
+        }
+      }
+    }
+  ]
+}

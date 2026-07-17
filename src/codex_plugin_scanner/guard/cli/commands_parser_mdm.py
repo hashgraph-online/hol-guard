@@ -27,6 +27,14 @@ def _configure_guard_mdm_parsers(
     status.add_argument("--machine-root", help="Machine runtime root override for test and remediation scripts")
     _add_json(status)
 
+    integrity_snapshot = commands.add_parser(
+        "integrity-snapshot", help="Read a fail-honest local machine integrity snapshot"
+    )
+    integrity_snapshot.add_argument("--scope", required=True, choices=("machine",))
+    integrity_snapshot.add_argument(
+        "--json", required=True, action="store_true", help="Emit the versioned JSON automation contract"
+    )
+
     for name in ("activate", "repair"):
         command = commands.add_parser(name, help=f"Idempotently {name} Guard for one user")
         _add_user(command, require_user=True)

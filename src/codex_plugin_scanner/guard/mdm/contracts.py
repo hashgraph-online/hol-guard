@@ -7,15 +7,192 @@ import json
 import platform
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypedDict
 
 MDM_POLICY_SCHEMA_VERSION = "hol-guard-mdm-policy.v1"
 MDM_STATUS_SCHEMA_VERSION = "hol-guard-mdm-status.v1"
 RELEASE_MANIFEST_SCHEMA_VERSION = "hol-guard-release-manifest.v1"
+LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION = "local-integrity-snapshot.v1"
 
 InstallOwner = Literal["user", "mdm"]
 ProxyMode = Literal["system", "explicit", "none"]
 ManagedPolicyStatus = Literal["absent", "active", "invalid", "inaccessible", "tampered"]
+AssuranceLevel = Literal["user-managed", "mdm-managed-unverified", "mdm-managed"]
+IntegrityState = Literal["healthy", "degraded", "absent", "tampered", "unsupported", "unknown"]
+KeyProtectionLevel = Literal["hardware-backed", "os-protected", "file-backed", "unavailable", "unknown"]
+SupervisorState = Literal["running", "stopped", "disabled", "absent", "unsupported", "unknown"]
+RemediationClass = Literal["none", "user-reinstall", "mdm-repair", "administrator-action"]
+IntegrityReasonCode = Literal[
+    "release_manifest_absent",
+    "release_manifest_architecture_mismatch",
+    "release_manifest_hash_mismatch",
+    "release_manifest_insecure_permissions",
+    "release_manifest_invalid",
+    "release_manifest_path_escape",
+    "release_manifest_platform_mismatch",
+    "release_manifest_unsigned",
+    "release_manifest_untrusted_key",
+    "release_manifest_valid",
+    "release_manifest_wrong_owner",
+    "release_runtime_insecure_permissions",
+    "release_runtime_wrong_owner",
+    "native_install_valid",
+    "native_package_identity_absent",
+    "native_package_receipt_absent",
+    "native_platform_unsupported",
+    "native_publisher_signature_invalid",
+    "managed_policy_active",
+    "managed_policy_absent",
+    "managed_policy_cache_invalid",
+    "managed_policy_cache_tampered",
+    "managed_policy_inaccessible",
+    "managed_policy_invalid",
+    "managed_policy_profile_removed_cached",
+    "ownership_acl_verification_unavailable",
+    "supervisor_verification_unavailable",
+    "device_key_verification_unavailable",
+    "harness_coverage_verification_unavailable",
+    "installation_identity_verification_unavailable",
+    "lease_continuity_verification_unavailable",
+    "daemon_verification_unavailable",
+    "command_shadowing_verification_unavailable",
+    "update_verification_unavailable",
+    "integrity_reason_unrecognized",
+    "release_manifest_probe_failed",
+    "native_install_probe_failed",
+    "managed_policy_probe_failed",
+]
+
+
+class SnapshotComponent(TypedDict):
+    state: IntegrityState
+    healthy: bool
+    reasonCode: IntegrityReasonCode
+
+
+class SnapshotKeyComponent(TypedDict):
+    state: IntegrityState
+    healthy: bool
+    level: KeyProtectionLevel
+    reasonCode: IntegrityReasonCode
+
+
+class SnapshotSupervisorComponent(TypedDict):
+    state: SupervisorState
+    healthy: bool
+    reasonCode: IntegrityReasonCode
+
+
+@dataclass(frozen=True, slots=True)
+class IntegrityComponent:
+    state: IntegrityState
+    reason_code: IntegrityReasonCode
+
+    @property
+    def healthy(self) -> bool:
+        return self.state == "healthy"
+
+    def to_dict(self) -> SnapshotComponent:
+        return {"state": self.state, "healthy": self.healthy, "reasonCode": self.reason_code}
+
+
+@dataclass(frozen=True, slots=True)
+class KeyProtectionStatus:
+    state: IntegrityState
+    level: KeyProtectionLevel
+    reason_code: IntegrityReasonCode
+
+    @property
+    def healthy(self) -> bool:
+        return self.state == "healthy"
+
+    def to_dict(self) -> SnapshotKeyComponent:
+        return {
+            "state": self.state,
+            "healthy": self.healthy,
+            "level": self.level,
+            "reasonCode": self.reason_code,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class SupervisorStatus:
+    state: SupervisorState
+    reason_code: IntegrityReasonCode
+
+    @property
+    def healthy(self) -> bool:
+        return self.state == "running"
+
+    def to_dict(self) -> SnapshotSupervisorComponent:
+        return {
+            "state": self.state,
+            "healthy": self.healthy,
+            "reasonCode": self.reason_code,
+        }
+
+
+class SnapshotProduct(TypedDict):
+    version: str
+    buildId: str | None
+    sourceCommit: str | None
+    packageIdentity: str
+    manifestHash: str | None
+    policyHash: str | None
+
+
+class SnapshotIdentifiers(TypedDict):
+    workspaceId: str | None
+    deviceId: str | None
+    machineInstallationId: str | None
+    installationGeneration: str | None
+
+
+class SnapshotContinuity(TypedDict):
+    monotonicUptimeSeconds: float | None
+    sequence: int | None
+    previousLeaseDigest: str | None
+    bootSessionId: str | None
+
+
+class HarnessCoverage(TypedDict):
+    required: int | None
+    protected: int | None
+    degraded: int | None
+    missing: int | None
+
+
+class SnapshotComponents(TypedDict):
+    manifest: SnapshotComponent
+    nativePackage: SnapshotComponent
+    managedPolicy: SnapshotComponent
+    ownershipAndAcl: SnapshotComponent
+    supervisor: SnapshotSupervisorComponent
+    deviceKey: SnapshotKeyComponent
+    harnessCoverage: SnapshotComponent
+    installationIdentity: SnapshotComponent
+    leaseContinuity: SnapshotComponent
+    daemon: SnapshotComponent
+    commandShadowing: SnapshotComponent
+    update: SnapshotComponent
+
+
+class LocalIntegritySnapshot(TypedDict):
+    schemaVersion: Literal["local-integrity-snapshot.v1"]
+    generatedAt: str
+    scope: Literal["machine"]
+    healthy: bool
+    assuranceLevel: AssuranceLevel
+    installOwner: InstallOwner
+    platform: str
+    architecture: str
+    identifiers: SnapshotIdentifiers
+    product: SnapshotProduct
+    components: SnapshotComponents
+    harnessCoverage: HarnessCoverage
+    continuity: SnapshotContinuity
+    reasonCodes: list[IntegrityReasonCode]
+    remediationClass: RemediationClass
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,15 +339,34 @@ def canonical_payload_hash(payload: dict[str, object]) -> str:
 
 
 __all__ = [
+    "LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION",
     "MDM_POLICY_SCHEMA_VERSION",
     "MDM_STATUS_SCHEMA_VERSION",
     "RELEASE_MANIFEST_SCHEMA_VERSION",
+    "AssuranceLevel",
+    "HarnessCoverage",
     "InstallOwner",
+    "IntegrityComponent",
+    "IntegrityReasonCode",
+    "IntegrityState",
+    "KeyProtectionLevel",
+    "KeyProtectionStatus",
+    "LocalIntegritySnapshot",
     "MachinePaths",
     "ManagedNetworkPolicy",
     "ManagedPolicy",
     "ManagedPolicyState",
     "ManagedUpdatePolicy",
+    "RemediationClass",
+    "SnapshotComponent",
+    "SnapshotComponents",
+    "SnapshotContinuity",
+    "SnapshotIdentifiers",
+    "SnapshotKeyComponent",
+    "SnapshotProduct",
+    "SnapshotSupervisorComponent",
+    "SupervisorState",
+    "SupervisorStatus",
     "canonical_payload_hash",
     "default_machine_paths",
 ]
