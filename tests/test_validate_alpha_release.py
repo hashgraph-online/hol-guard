@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 import yaml
 
-from scripts.validate_alpha_release import ALPHA_BRANCH, validate_alpha_release
+from scripts.validate_alpha_release import ALPHA_BRANCH, main, validate_alpha_release
 
 
 def test_accepts_public_guard_3_alpha_version_from_v3_branch() -> None:
@@ -18,6 +19,7 @@ def test_accepts_public_guard_3_alpha_version_from_v3_branch() -> None:
 @pytest.mark.parametrize(
     "version",
     [
+        "1!3.0.0a1",
         "2.1.0a1",
         "3.0.0b1",
         "3.0.0rc1",
@@ -37,10 +39,26 @@ def test_rejects_alpha_release_from_any_other_branch() -> None:
         validate_alpha_release("3.0.0a1", "refs/heads/main")
 
 
+def test_cli_reports_invalid_alpha_without_traceback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["validate_alpha_release.py", "--version", "3.0.0", "--git-ref", ALPHA_BRANCH],
+    )
+
+    assert main() == 1
+    captured = capsys.readouterr()
+    assert "Error: Alpha releases require" in captured.err
+    assert "Traceback" not in captured.err
+
+
 def test_release_workflows_keep_stable_and_alpha_channels_isolated() -> None:
     root = Path(__file__).parent.parent
     publish = yaml.safe_load((root / ".github/workflows/publish.yml").read_text(encoding="utf-8"))
-    inputs = publish[True]["workflow_dispatch"]["inputs"]
+    on_section = publish.get(True) or publish.get("on")
+    inputs = on_section["workflow_dispatch"]["inputs"]
 
     assert inputs["release_channel"]["options"] == ["stable", "alpha"]
     assert inputs["alpha_version"]["required"] is False
@@ -64,6 +82,7 @@ def test_v3_branch_runs_standard_cross_platform_ci() -> None:
     root = Path(__file__).parent.parent
     ci = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
 
-    assert "feat/guard-policy-v3" in ci[True]["push"]["branches"]
-    assert "feat/guard-policy-v3" in ci[True]["pull_request"]["branches"]
+    on_section = ci.get(True) or ci.get("on")
+    assert "feat/guard-policy-v3" in on_section["push"]["branches"]
+    assert "feat/guard-policy-v3" in on_section["pull_request"]["branches"]
     assert "windows-latest" in ci["jobs"]["cross-platform"]["strategy"]["matrix"]["os"]

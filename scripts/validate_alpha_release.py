@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
-from typing import cast
 
 from packaging.version import Version
 
@@ -21,7 +21,8 @@ def validate_alpha_release(version_text: str, git_ref: str) -> AlphaRelease:
 
     version = Version(version_text)
     if (
-        version.major != 3
+        version.epoch != 0
+        or version.major != 3
         or version.pre is None
         or version.pre[0] != "a"
         or version.dev is not None
@@ -38,9 +39,15 @@ def main() -> int:
     _ = parser.add_argument("--version", required=True)
     _ = parser.add_argument("--git-ref", required=True)
     args = parser.parse_args()
-    version_text = cast(str, args.version)
-    git_ref = cast(str, args.git_ref)
-    release = validate_alpha_release(version_text, git_ref)
+    version_text = getattr(args, "version", None)
+    git_ref = getattr(args, "git_ref", None)
+    if not isinstance(version_text, str) or not isinstance(git_ref, str):
+        parser.error("--version and --git-ref must be strings")
+    try:
+        release = validate_alpha_release(version_text, git_ref)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     print(release.version)
     return 0
 
