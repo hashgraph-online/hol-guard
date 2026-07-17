@@ -2,20 +2,22 @@
 
 This tracker implements the [self-protection and deletion detection PRD](./self-protection-prd.md). Tasks are ordered by dependency. Checked boxes require merged code, tests, operational evidence, and documentation; prototype-only behavior does not count.
 
-## P0: 3.1 alpha release train
+## P0: 3.1 release-line integration
 
-- [ ] **SP-T087:** Protect `release/3.1` and require self-protection PRs to use it as their base and merge target.
-- [ ] **SP-T088:** Update the publish workflow to recognize only the matching release branch for 3.1 alpha publication.
-- [ ] **SP-T089:** Compute the next unique PEP 440 `3.1.0aN` version from published PyPI versions and matching GitHub alpha tags; reject reuse, rollback, or line mismatch.
-- [ ] **SP-T090:** Publish same-repository PR canaries to TestPyPI with unique development versions and show the exact install command in the job summary.
-- [ ] **SP-T091:** Build the post-merge alpha again from the merged `release/3.1` commit and publish `hol-guard` to PyPI through trusted publishing.
-- [ ] **SP-T092:** Explicitly exclude unapproved package variants, stable containers, stable tags, and stable updater metadata from alpha publication.
-- [ ] **SP-T093:** Create a matching `alpha/v3.1.0aN` GitHub prerelease with source commit, provenance, checksums, SBOM, and exact installation instructions.
-- [ ] **SP-T094:** Smoke-install the exact PyPI alpha on the supported alpha Python matrix and assert the CLI version, import health, and one self-protection status command.
-- [ ] **SP-T095:** Prove stable `hol-guard update` and unconstrained installs ignore alpha releases while explicit exact-version installs succeed.
-- [ ] **SP-T096:** Add release concurrency, idempotency, partial-publish recovery, and immutable-version handling; retries after publication use a new alpha serial.
-- [ ] **SP-T097:** Update the PR review runbook so the final merge targets `release/3.1`, waits for alpha publication, installs the exact PyPI alpha, and records the version and source SHA.
-- [ ] **SP-T098:** Define forward-port, backport, stabilization, and promotion rules between `release/3.1`, future release branches, and `main` without merging alpha-only metadata into stable channels.
+Release automation is a separately owned dependency. These items verify and consume that service; they do not authorize self-protection PRs to edit workflow or publication infrastructure.
+
+- [ ] **SP-T087:** Confirm `release/3.1` is protected and record it as the base and merge target for every 3.1 self-protection PR.
+- [ ] **SP-T088:** Confirm the release owner has enabled a branch-bound 3.1 alpha service before the first implementation merge; link its contract and responsible owner from the implementation epic.
+- [ ] **SP-T089:** Before each PR, update the feature worktree from the current `release/3.1` head and verify the diff contains only the scoped self-protection change.
+- [ ] **SP-T090:** Complete the repository review loop against `release/3.1`: focused local verification, required checks, TestPyPI canary when provided by the release service, thread-level bot review, and the final quiet window.
+- [ ] **SP-T091:** After merge, wait for the separately owned release service to publish a new, unique PEP 440 `3.1.0aN` `hol-guard` artifact built from the merged release-branch SHA.
+- [ ] **SP-T092:** Verify the published alpha maps to the merged SHA and has matching provenance, checksums, SBOM, and GitHub prerelease evidence.
+- [ ] **SP-T093:** Install the exact PyPI alpha in a clean environment and assert the CLI version, import health, and the self-protection behavior changed by the PR.
+- [ ] **SP-T094:** Verify stable `hol-guard update`, unconstrained installs, stable tags, stable containers, and stable updater metadata remain isolated from the alpha.
+- [ ] **SP-T095:** Record the PR, merge SHA, PyPI version and URL, prerelease/provenance URL, exact install command, smoke result, and stable-isolation result in the completion evidence.
+- [ ] **SP-T096:** If publication or smoke verification fails, leave the self-protection item incomplete and hand the failure to the release owner; do not patch release automation inside the feature PR.
+- [ ] **SP-T097:** Keep the PR review runbook explicit that completion means merge into `release/3.1` plus verified PyPI alpha evidence, not merely a green PR or merged commit.
+- [ ] **SP-T098:** Define forward-port, backport, stabilization, and promotion rules between `release/3.1`, future release branches, and `main` without carrying alpha-only metadata into stable channels.
 
 ## P0: contracts and threat model
 
@@ -150,3 +152,4 @@ Guard Cloud counterpart working set: Guard API routes, database schema/migration
 - All schemas, APIs, UI states, events, runbooks, SLOs, migrations, and real-device evidence are versioned and published.
 - The release gates and acceptance criteria in the PRD pass in CI and the certified endpoint lab.
 - The merged release-branch commit is available as a verified PyPI `3.1.0aN` artifact, while stable installations remain on the stable channel.
+- Release automation remains outside the self-protection implementation diff unless a separate release-infrastructure task explicitly scopes it in.

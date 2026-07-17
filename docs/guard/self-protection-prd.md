@@ -7,6 +7,7 @@
 - **Owners:** Guard runtime, Guard Cloud, release engineering, and endpoint management
 - **Platforms:** macOS and Windows first; Linux contracts must remain portable
 - **Delivery line:** `release/3.1`, published as PEP 440 alpha releases on PyPI
+- **Release dependency:** The repository's 3.1 release automation owns build and publication; this work consumes and verifies that contract but does not implement it.
 - **Implementation tracker:** [Self-protection TODO](./self-protection-todo.md)
 - **Related work:** [MDM managed-install ADR](./adr/0001-mdm-managed-install-contract.md), [MDM GA roadmap](./mdm-general-availability-roadmap.md), [MDM deployment](./mdm-deployment.md)
 - **Last updated:** July 17, 2026
@@ -264,10 +265,12 @@ State transitions MUST be deterministic, idempotent, workspace-scoped, and recor
 - Workspace policy must support staged rings, per-device exemptions with expiry, and an emergency server-side pause for remediation requests.
 - Health ingestion and state evaluation must be horizontally scalable, replay-safe, rate-limited, and observable.
 
-### SP-R013: Release branch and PyPI alpha delivery
+### SP-R013: Release-branch integration and PyPI alpha evidence
 
+- The 3.1 release train owns branch protection, version selection, TestPyPI/PyPI publication, provenance, prerelease creation, and stable-channel isolation. Self-protection changes consume that release service as an external delivery dependency.
 - Self-protection implementation PRs for the 3.1 release line MUST branch from and target `release/3.1`, not `main`.
 - Every PR MUST complete the repository's review loop against its release-branch head: local verification, TestPyPI canary when available, all required checks, thread-level bot review, and a quiet window after the final push.
+- A self-protection PR MUST NOT add or modify release automation unless release-infrastructure work is separately requested and reviewed. Release failures are handed to the release owner rather than repaired inside an unrelated feature or documentation PR.
 - Merges into `release/3.1` MUST be eligible to produce a unique, monotonically increasing PEP 440 prerelease in the `3.1.0aN` series.
 - Alpha publication MUST use PyPI trusted publishing, retain build provenance, and create a matching GitHub prerelease/tag such as `alpha/v3.1.0aN` targeting the published source commit.
 - The workflow MUST reject publication from any other branch, a dirty or mismatched source ref, a reused version, a non-alpha version, or an alpha outside the branch's declared `3.1` line.
@@ -277,6 +280,7 @@ State transitions MUST be deterministic, idempotent, workspace-scoped, and recor
 - The release workflow MUST smoke-test the exact PyPI artifact on the supported alpha Python matrix and verify `hol-guard --version` reports the published version.
 - A failed alpha publication, install, or smoke test blocks completion of the PR review loop. The repair MUST use a new commit and new alpha serial; published versions are immutable and never overwritten.
 - Promotion from `release/3.1` to a stable line requires a separate, explicit release decision. Alpha merges MUST NOT update stable tags, stable GitHub release markers, stable containers, or stable updater metadata.
+- Completion evidence for each self-protection merge MUST record the merged source SHA, published alpha version, PyPI project URL, provenance or prerelease URL, exact-version install result, and stable-channel isolation result.
 
 ## Cloud data model
 
@@ -329,7 +333,7 @@ All mutation APIs require explicit workspace authorization, bounded schemas, ide
 8. User-managed silence is clearly labeled unknown unless corroborated.
 9. Every transition and remediation attempt appears in redacted incident and export evidence.
 10. A real-device certification matrix passes across install, tamper, deletion, offline, authorized removal, repair, upgrade, downgrade, snapshot restore, and device retirement scenarios.
-11. The final review-loop merge targets `release/3.1`, publishes a new `3.1.0aN` artifact to PyPI, and passes an exact-version installation smoke test without changing the stable channel.
+11. The final review-loop merge targets `release/3.1`; the release service publishes a new `3.1.0aN` artifact from that merged SHA; and the self-protection completion record proves exact-version installation without changing the stable channel.
 
 ## Release gates
 
@@ -339,7 +343,7 @@ All mutation APIs require explicit workspace authorization, bounded schemas, ide
 - Incident, webhook/SIEM, retention, RBAC, and deletion workflows pass security review.
 - Red-team tests cover local deletion, service disablement, key theft attempts, lease replay, observer spoofing, identity collision, and remediation abuse.
 - Pilot evidence demonstrates the success metrics before enforcement defaults on.
-- The `release/3.1` workflow enforces branch/version coupling, trusted publishing, immutable alpha serials, prerelease isolation, and exact-artifact smoke tests.
+- The separately owned `release/3.1` release service enforces branch/version coupling, trusted publishing, immutable alpha serials, prerelease isolation, and exact-artifact smoke tests before self-protection work can claim completion.
 
 ## Open decisions
 
