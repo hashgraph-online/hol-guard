@@ -126,6 +126,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "github.graphql.remote-mutation",
         ),
         (("api", "graphql", "--input", "-"), "unknown", "github.api.input-body"),
+        (
+            ("api", "repos/example/project/issues/17/comments", "-X", "POST", "-F", "body=@body.md"),
+            "unknown",
+            "github.api.external-field-value",
+        ),
         (("project-alias",), "unknown", "github.command.extension-or-alias"),
     ),
 )

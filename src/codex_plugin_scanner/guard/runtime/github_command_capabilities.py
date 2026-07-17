@@ -308,6 +308,12 @@ def _classify_api(args: Sequence[str]) -> GitHubCommandAssessment:
     method = parsed.method.upper() if parsed.method is not None else None
     if parsed.endpoint.lower() == "graphql":
         return _classify_graphql(parsed, method=method)
+    if any(_field_value_is_external(value) for _name, value in parsed.fields):
+        return _assessment(
+            "unknown",
+            "github.api.external-field-value",
+            "A GitHub API field loaded from external data cannot be classified statically.",
+        )
     if method is not None and method not in {"GET", "HEAD"}:
         if _api_request_is_high_impact(parsed, method=method):
             return _assessment(
@@ -319,12 +325,6 @@ def _classify_api(args: Sequence[str]) -> GitHubCommandAssessment:
             "maintain_remote",
             "github.api.routine-mutation",
             "The GitHub API request performs a statically understood routine mutation.",
-        )
-    if any(_field_value_is_external(value) for _name, value in parsed.fields):
-        return _assessment(
-            "unknown",
-            "github.api.external-field-value",
-            "A GitHub API field loaded from external data cannot be classified statically.",
         )
     if parsed.fields and method is None:
         if _api_request_is_high_impact(parsed, method="POST"):
