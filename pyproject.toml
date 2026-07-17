@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "2.0.1105"
+version = "2.0.1113"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -53,7 +53,7 @@ dependencies = [
     "requests>=2.32,<3",
     "tomli>=2.0; python_version < '3.11'",
     "cisco-ai-skill-scanner~=2.0.11; python_version < '3.14'",
-    "mcp>=1.27.0,<2; python_version >= '3.10'",
+    "mcp>=1.28.1,<2; python_version >= '3.10'",
 ]
 
 [project.optional-dependencies]

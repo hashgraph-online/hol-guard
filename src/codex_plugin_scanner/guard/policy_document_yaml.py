@@ -11,7 +11,7 @@ from datetime import datetime
 from functools import lru_cache
 from importlib import resources
 from pathlib import Path
-from typing import TypeAlias
+from typing import TypeAlias, cast
 
 import yaml
 from jsonschema import Draft202012Validator
@@ -38,8 +38,10 @@ MAX_POLICY_RULES = 1_000
 MAX_COLLECTION_ITEMS = 256
 MAX_STRING_LENGTH = 4_096
 MAX_DIAGNOSTICS = 20
+MAX_POLICY_TOKENS = 200_000
 
 JsonPath: TypeAlias = tuple[str | int, ...]
+JsonSchemaValue: TypeAlias = str | int | float | bool | None | list["JsonSchemaValue"] | dict[str, "JsonSchemaValue"]
 
 _JSON_BOOL = re.compile(r"^(?:true|false)$")
 _JSON_NULL = re.compile(r"^null$")
@@ -78,13 +80,13 @@ class PolicyDiagnostic:
 
 class PolicyDocumentError(ValueError):
     """Bounded policy diagnostics that never include policy values."""
+
     diagnostics: tuple[PolicyDiagnostic, ...]
 
     def __init__(self, diagnostics: tuple[PolicyDiagnostic, ...]):
         self.diagnostics = diagnostics[:MAX_DIAGNOSTICS]
         summary = "; ".join(
-            f"{item.code}@{_format_path(item.path)}:{item.line or 0}:{item.column or 0}"
-            for item in self.diagnostics
+            f"{item.code}@{_format_path(item.path)}:{item.line or 0}:{item.column or 0}" for item in self.diagnostics
         )
         super().__init__((summary or "invalid_policy_document")[:4_096])
 
@@ -93,10 +95,7 @@ def _format_path(path: JsonPath) -> str:
     if not path:
         return "$"
     return "$" + "".join(
-        f"[{item}]"
-        if isinstance(item, int)
-        else f"[{json.dumps(item[:80], ensure_ascii=True)}]"
-        for item in path
+        f"[{item}]" if isinstance(item, int) else f"[{json.dumps(item[:80], ensure_ascii=True)}]" for item in path
     )
 
 
@@ -191,8 +190,8 @@ _PolicyDumper.add_representer(str, _represent_policy_string)
 
 @lru_cache(maxsize=1)
 def _load_policy_document_schema() -> dict[str, object]:
-    schema_path = resources.files("codex_plugin_scanner.guard").joinpath("schemas").joinpath(
-        "guard-policy-v1alpha1.schema.json"
+    schema_path = (
+        resources.files("codex_plugin_scanner.guard").joinpath("schemas").joinpath("guard-policy-v1alpha1.schema.json")
     )
     value = json.loads(schema_path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
@@ -212,6 +211,7 @@ def _policy_document_validator() -> Draft202012Validator:
 
 def _scan_restricted_tokens(text: str) -> None:
     depth = 0
+    token_count = 0
     collection_starts = (
         BlockMappingStartToken,
         BlockSequenceStartToken,
@@ -221,6 +221,17 @@ def _scan_restricted_tokens(text: str) -> None:
     collection_ends = (BlockEndToken, FlowMappingEndToken, FlowSequenceEndToken)
     try:
         for token in yaml.scan(text, Loader=_PolicyLoader):
+            token_count += 1
+            if token_count > MAX_POLICY_TOKENS:
+                raise PolicyDocumentError(
+                    (
+                        PolicyDiagnostic(
+                            "limit_tokens",
+                            line=token.start_mark.line + 1,
+                            column=token.start_mark.column + 1,
+                        ),
+                    )
+                )
             if isinstance(token, collection_starts):
                 depth += 1
                 if depth > MAX_POLICY_DEPTH + 1:
@@ -246,11 +257,7 @@ def _scan_restricted_tokens(text: str) -> None:
                             ),
                         )
                     )
-                if (
-                    token.style is None
-                    and _JSON_INT.fullmatch(token.value)
-                    and len(token.value.removeprefix("-")) > 16
-                ):
+                if token.style is None and _JSON_INT.fullmatch(token.value) and len(token.value.removeprefix("-")) > 16:
                     raise PolicyDocumentError(
                         (
                             PolicyDiagnostic(
@@ -381,7 +388,7 @@ def _schema_diagnostics(text: str, value: object) -> tuple[PolicyDiagnostic, ...
         source_node = None
     diagnostics: list[PolicyDiagnostic] = []
     errors = sorted(
-        _policy_document_validator().iter_errors(value),
+        _policy_document_validator().iter_errors(cast(JsonSchemaValue, value)),
         key=lambda item: tuple(str(part) for part in item.path),
     )
     for error in errors[:MAX_DIAGNOSTICS]:

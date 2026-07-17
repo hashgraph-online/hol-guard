@@ -20,7 +20,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -68,7 +68,10 @@ from ..policy_bundle_trusted_keys import (
 from ..policy_bundle_v2 import (
     POLICY_BUNDLE_V2_CONTRACT,
     validate_policy_bundle_v2_transition,
+    validated_policy_bundle_v2_acknowledgement,
 )
+from ..policy_document import GuardPolicyDocument
+from ..policy_document_io import PolicyCompilationError, compile_policy_document
 from ..redaction import redact_sensitive_text
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
@@ -88,8 +91,35 @@ from .supply_chain_support import ecosystem_support_matrix
 
 _POLICY_DOCUMENT_VERSIONS = ("guard.hashgraphonline.com/v1alpha1",)
 _POLICY_BUNDLE_VERSIONS = ("guard-policy-bundle.v1", "guard-policy-bundle.v2")
+_POLICY_CONTRACTS = ("guard-policy-bundle/v1", "guard-policy-bundle/v2")
 _POLICY_YAML_IMPORT_ENV = "HOL_GUARD_POLICY_YAML_IMPORT"
 _POLICY_CANONICAL_ENFORCEMENT_ENV = "HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT"
+
+
+def _canonical_policy_rollout_percentage() -> int:
+    raw = os.environ.get(_POLICY_CANONICAL_ENFORCEMENT_ENV, "").strip().lower()
+    if raw in {"", "0", "false", "off", "legacy"}:
+        return 0
+    if raw in {"1", "true", "on", "canonical"}:
+        return 100
+    try:
+        percentage = int(raw)
+    except ValueError:
+        return 0
+    return percentage if 1 <= percentage <= 100 else 0
+
+
+def _canonical_policy_enforcement_enabled(
+    *,
+    device_id: str,
+    workspace_id: str | None,
+) -> bool:
+    percentage = _canonical_policy_rollout_percentage()
+    if percentage in {0, 100}:
+        return percentage == 100
+    cohort_key = f"{workspace_id or 'local'}:{device_id}".encode()
+    cohort = int.from_bytes(hashlib.sha256(cohort_key).digest()[:8], "big") % 100
+    return cohort < percentage
 
 
 def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
@@ -1021,15 +1051,57 @@ def _policy_bundle_acknowledgement_payload(
     device_name: str,
     policy_bundle: dict[str, object],
     synced_at: str,
+    status: Literal["validated", "applied"] = "applied",
+    previous: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    return {
-        "appliedAt": synced_at,
-        "bundleHash": policy_bundle["bundleHash"],
-        "bundleVersion": policy_bundle["bundleVersion"],
+    if policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT:
+        return {
+            "appliedAt": synced_at,
+            "bundleHash": policy_bundle["bundleHash"],
+            "bundleVersion": policy_bundle["bundleVersion"],
+            "deviceId": device_id,
+            "deviceName": device_name,
+            "status": "synced",
+        }
+
+    identity_fields = ("workspaceId", "deviceId", "bundleVersion", "bundleHash")
+    candidate_identity = {
+        "workspaceId": policy_bundle["workspaceId"],
         "deviceId": device_id,
-        "deviceName": device_name,
-        "status": "synced",
+        "bundleVersion": policy_bundle["bundleVersion"],
+        "bundleHash": policy_bundle["bundleHash"],
     }
+    matching_previous = (
+        previous
+        if previous is not None and all(previous.get(field) == candidate_identity[field] for field in identity_fields)
+        else None
+    )
+    previous_sequence = matching_previous.get("sequence") if matching_previous is not None else None
+    resolved_status = (
+        "applied"
+        if status == "applied" or (matching_previous is not None and matching_previous.get("status") == "applied")
+        else "validated"
+    )
+    parsed_synced_at = _parse_iso_timestamp(synced_at)
+    observed_at = (
+        parsed_synced_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        if parsed_synced_at is not None
+        else synced_at
+    )
+    acknowledgement = {
+        "contractVersion": POLICY_BUNDLE_V2_CONTRACT,
+        **candidate_identity,
+        "sequence": previous_sequence + 1 if isinstance(previous_sequence, int) else 1,
+        "status": resolved_status,
+        "observedAt": observed_at,
+    }
+    validated, error = validated_policy_bundle_v2_acknowledgement(
+        acknowledgement,
+        previous=matching_previous,
+    )
+    if validated is None:
+        raise ValueError(error or "invalid_policy_bundle_acknowledgement")
+    return validated
 
 
 def _version_tuple(value: str) -> tuple[int, ...] | None:
@@ -1053,10 +1125,18 @@ def _daemon_version_supported(policy_bundle: dict[str, object]) -> bool:
 def _policy_bundle_is_version_downgrade(
     existing_bundle: dict[str, object] | None,
     next_bundle: dict[str, object],
+    *,
+    expected_last_good_bundle: dict[str, object] | None = None,
 ) -> bool:
     if next_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
         current_version = existing_bundle.get("bundleVersion") if isinstance(existing_bundle, dict) else None
         current_hash = existing_bundle.get("bundleHash") if isinstance(existing_bundle, dict) else None
+        expected_version = (
+            expected_last_good_bundle.get("bundleVersion") if isinstance(expected_last_good_bundle, dict) else None
+        )
+        expected_hash = (
+            expected_last_good_bundle.get("bundleHash") if isinstance(expected_last_good_bundle, dict) else None
+        )
         return (
             validate_policy_bundle_v2_transition(
                 next_bundle,
@@ -1066,6 +1146,12 @@ def _policy_bundle_is_version_downgrade(
                     else None
                 ),
                 current_bundle_hash=(current_hash if isinstance(current_hash, str) else None),
+                expected_last_good_bundle_version=(
+                    expected_version
+                    if isinstance(expected_version, int) and not isinstance(expected_version, bool)
+                    else None
+                ),
+                expected_last_good_bundle_hash=(expected_hash if isinstance(expected_hash, str) else None),
             )
             is not None
         )
@@ -1291,12 +1377,75 @@ def _policy_bundle_rule_has_browser_scope(rule: dict[str, object]) -> bool:
     return False
 
 
-def _build_policy_bundle_decisions(
+def _build_canonical_policy_bundle_decisions(
     policy_bundle: dict[str, object],
     *,
     device_id: str,
     device_name: str,
 ) -> list[PolicyDecision]:
+    payload = policy_bundle.get("payload")
+    if not isinstance(payload, dict):
+        raise PolicyCompilationError("missing_policy_bundle_payload", "policy-bundle")
+    local_document = json.loads(json.dumps(payload))
+    spec = local_document.get("spec")
+    if not isinstance(spec, dict):
+        raise PolicyCompilationError("invalid_policy_spec", "policy-bundle")
+    rules = spec.get("rules")
+    if not isinstance(rules, list):
+        raise PolicyCompilationError("invalid_policy_rules", "policy-bundle")
+    local_rules: list[object] = []
+    for raw_rule in rules:
+        if not isinstance(raw_rule, dict):
+            continue
+        match = raw_rule.get("match")
+        if not isinstance(match, dict):
+            local_rules.append(raw_rule)
+            continue
+        devices = match.get("devices")
+        if isinstance(devices, list) and devices:
+            device_selectors = {str(value) for value in devices}
+            if device_id not in device_selectors and device_name not in device_selectors:
+                continue
+            match.pop("devices", None)
+        local_rules.append(raw_rule)
+    spec["rules"] = local_rules
+    document = GuardPolicyDocument.from_mapping(local_document)
+    decisions: list[PolicyDecision] = []
+    for row in compile_policy_document(document):
+        decision = row.decision
+        decisions.append(
+            PolicyDecision(
+                harness=decision.harness,
+                scope=decision.scope,
+                action=decision.action,
+                artifact_id=decision.artifact_id,
+                artifact_hash=decision.artifact_hash,
+                workspace=decision.workspace,
+                publisher=decision.publisher,
+                reason=decision.reason,
+                owner=row.rule_id,
+                source="policy-bundle-canonical",
+                expires_at=decision.expires_at,
+            )
+        )
+    return decisions
+
+
+def _build_policy_bundle_decisions(
+    policy_bundle: dict[str, object],
+    *,
+    device_id: str,
+    device_name: str,
+    canonical_enforcement: bool = False,
+) -> list[PolicyDecision]:
+    if policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
+        if not canonical_enforcement:
+            return []
+        return _build_canonical_policy_bundle_decisions(
+            policy_bundle,
+            device_id=device_id,
+            device_name=device_name,
+        )
     decisions: list[PolicyDecision] = []
     rules = policy_bundle.get("rules")
     if not isinstance(rules, list):
@@ -1379,6 +1528,43 @@ def _build_policy_bundle_decisions(
                         )
                     )
     return decisions
+
+
+def _policy_shadow_mismatch_reason_codes(
+    legacy: list[PolicyDecision],
+    canonical: list[PolicyDecision],
+) -> tuple[str, ...]:
+    if not legacy:
+        return ("legacy_unavailable",)
+
+    def keyed(
+        decisions: list[PolicyDecision],
+    ) -> dict[tuple[str, str, str | None, str | None, str | None, str | None], PolicyDecision]:
+        return {
+            (
+                decision.harness,
+                decision.scope,
+                decision.artifact_id,
+                decision.artifact_hash,
+                decision.workspace,
+                decision.publisher,
+            ): decision
+            for decision in decisions
+        }
+
+    reasons: list[str] = []
+    legacy_by_key = keyed(legacy)
+    canonical_by_key = keyed(canonical)
+    if len(legacy) != len(canonical):
+        reasons.append("row_count")
+    if legacy_by_key.keys() != canonical_by_key.keys():
+        reasons.append("selector_set")
+    shared_keys = legacy_by_key.keys() & canonical_by_key.keys()
+    if any(legacy_by_key[key].action != canonical_by_key[key].action for key in shared_keys):
+        reasons.append("action")
+    if any(legacy_by_key[key].expires_at != canonical_by_key[key].expires_at for key in shared_keys):
+        reasons.append("expiration")
+    return tuple(reasons[:4])
 
 
 def _parse_policy_simulation_timestamp(value: object) -> datetime | None:
@@ -1677,6 +1863,12 @@ def sync_receipts(
         store.set_sync_payload("policy", policy_payload, now)
     else:
         store.set_sync_payload("policy", {}, now)
+    cloud_workspace_id = store.get_cloud_workspace_id()
+    canonical_enforcement = _canonical_policy_enforcement_enabled(
+        device_id=device_id,
+        workspace_id=cloud_workspace_id,
+    )
+    candidate_policy_decisions: list[PolicyDecision] = []
     validated_policy_bundle: dict[str, object] | None = None
     if policy_bundle_payload is not None:
         validated_policy_bundle, policy_bundle_rejection_reason, trusted_policy_bundle_keys = (
@@ -1691,11 +1883,20 @@ def sync_receipts(
         existing_policy_bundle = (
             existing_policy_bundle_payload if isinstance(existing_policy_bundle_payload, dict) else None
         )
+        canonical_last_good_payload = store.get_sync_payload("policy_bundle_canonical_last_good")
+        canonical_previous_good_payload = store.get_sync_payload("policy_bundle_canonical_previous_good")
+        policy_bundle_for_version_check = (
+            canonical_last_good_payload if isinstance(canonical_last_good_payload, dict) else existing_policy_bundle
+        )
         if validated_policy_bundle is not None and not _daemon_version_supported(validated_policy_bundle):
             validated_policy_bundle = None
             policy_bundle_rejection_reason = "unsupported_daemon_version"
         if validated_policy_bundle is not None and _policy_bundle_is_version_downgrade(
-            existing_policy_bundle, validated_policy_bundle
+            policy_bundle_for_version_check,
+            validated_policy_bundle,
+            expected_last_good_bundle=(
+                canonical_previous_good_payload if isinstance(canonical_previous_good_payload, dict) else None
+            ),
         ):
             validated_policy_bundle = None
             policy_bundle_rejection_reason = "bundle_version_downgrade"
@@ -1711,9 +1912,103 @@ def sync_receipts(
         ):
             validated_policy_bundle = None
             policy_bundle_rejection_reason = "wrong_workspace"
+        shadow_mismatch_reasons: tuple[str, ...] = ()
+        shadow_legacy_rows = 0
+        shadow_canonical_rows = 0
+        validated_bundle_is_v2 = (
+            validated_policy_bundle is not None
+            and validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
+        )
         if validated_policy_bundle is not None:
-            store.set_sync_payload("policy_bundle", validated_policy_bundle, now)
-            store.set_sync_payload("policy_bundle_last_good", validated_policy_bundle, now)
+            try:
+                if validated_bundle_is_v2:
+                    canonical_decisions = _build_canonical_policy_bundle_decisions(
+                        validated_policy_bundle,
+                        device_id=device_id,
+                        device_name=device_name,
+                    )
+                    legacy_decisions = (
+                        _build_policy_bundle_decisions(
+                            existing_policy_bundle,
+                            device_id=device_id,
+                            device_name=device_name,
+                        )
+                        if isinstance(existing_policy_bundle, dict)
+                        and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
+                        else []
+                    )
+                    shadow_legacy_rows = len(legacy_decisions)
+                    shadow_canonical_rows = len(canonical_decisions)
+                    shadow_mismatch_reasons = _policy_shadow_mismatch_reason_codes(
+                        legacy_decisions,
+                        canonical_decisions,
+                    )
+                    blocking_shadow_mismatch_reasons = tuple(
+                        reason for reason in shadow_mismatch_reasons if reason != "legacy_unavailable"
+                    )
+                    candidate_policy_decisions = (
+                        canonical_decisions
+                        if canonical_enforcement and not blocking_shadow_mismatch_reasons
+                        else legacy_decisions
+                    )
+                    if canonical_enforcement and blocking_shadow_mismatch_reasons:
+                        validated_policy_bundle = None
+                        policy_bundle_rejection_reason = "canonical_shadow_mismatch"
+                        canonical_enforcement = False
+                else:
+                    candidate_policy_decisions = _build_policy_bundle_decisions(
+                        validated_policy_bundle,
+                        device_id=device_id,
+                        device_name=device_name,
+                    )
+            except PolicyCompilationError as error:
+                validated_policy_bundle = None
+                policy_bundle_rejection_reason = f"canonical_compile_{error.code}"
+        if shadow_mismatch_reasons:
+            store.add_event(
+                "policy_bundle/shadow_mismatch",
+                {
+                    "canonicalRows": shadow_canonical_rows,
+                    "legacyRows": shadow_legacy_rows,
+                    "reasonCodes": list(shadow_mismatch_reasons),
+                    "status": "mismatch",
+                },
+                now,
+            )
+        if validated_policy_bundle is not None:
+            if validated_bundle_is_v2:
+                if isinstance(canonical_last_good_payload, dict) and canonical_last_good_payload.get(
+                    "bundleHash"
+                ) != validated_policy_bundle.get("bundleHash"):
+                    store.set_sync_payload(
+                        "policy_bundle_canonical_previous_good",
+                        canonical_last_good_payload,
+                        now,
+                    )
+                store.set_sync_payload(
+                    "policy_bundle_canonical_last_good",
+                    validated_policy_bundle,
+                    now,
+                )
+                if canonical_enforcement:
+                    store.set_sync_payload("policy_bundle", validated_policy_bundle, now)
+                    store.set_sync_payload(
+                        "policy_bundle_last_good",
+                        validated_policy_bundle,
+                        now,
+                    )
+            else:
+                store.set_sync_payload("policy_bundle", validated_policy_bundle, now)
+                store.set_sync_payload(
+                    "policy_bundle_last_good",
+                    validated_policy_bundle,
+                    now,
+                )
+                store.set_sync_payload(
+                    "policy_bundle_legacy_last_good",
+                    validated_policy_bundle,
+                    now,
+                )
             store.set_sync_payload(
                 "policy_bundle_keyring",
                 policy_bundle_keyring_payload(
@@ -1735,19 +2030,30 @@ def sync_receipts(
                     level=cloud_redaction_level,
                     synced_at=now,
                 )
-            remote_decisions.update(
-                _build_policy_bundle_decisions(
-                    validated_policy_bundle,
-                    device_id=device_id,
-                    device_name=device_name,
-                )
-            )
+            remote_decisions.update(candidate_policy_decisions)
         else:
+            canonical_fallback = (
+                canonical_last_good_payload
+                if canonical_enforcement
+                and isinstance(canonical_last_good_payload, dict)
+                and canonical_last_good_payload
+                else None
+            )
+            legacy_last_good_payload = store.get_sync_payload("policy_bundle_legacy_last_good")
+            legacy_fallback = (
+                legacy_last_good_payload
+                if not canonical_enforcement and isinstance(legacy_last_good_payload, dict) and legacy_last_good_payload
+                else None
+            )
             last_good_bundle_payload = store.get_sync_payload("policy_bundle_last_good")
             preserved_bundle_payload = (
-                last_good_bundle_payload
-                if isinstance(last_good_bundle_payload, dict) and last_good_bundle_payload
-                else existing_policy_bundle
+                canonical_fallback
+                or legacy_fallback
+                or (
+                    last_good_bundle_payload
+                    if isinstance(last_good_bundle_payload, dict) and last_good_bundle_payload
+                    else existing_policy_bundle
+                )
             )
             if isinstance(preserved_bundle_payload, dict) and preserved_bundle_payload:
                 remote_decisions.update(
@@ -1755,7 +2061,24 @@ def sync_receipts(
                         preserved_bundle_payload,
                         device_id=device_id,
                         device_name=device_name,
+                        canonical_enforcement=canonical_enforcement,
                     )
+                )
+                store.add_event(
+                    "policy_bundle/rollback",
+                    {
+                        "reason": policy_bundle_rejection_reason or "invalid_policy_bundle",
+                        "restored": (
+                            "policy_bundle_canonical_last_good"
+                            if canonical_fallback is not None
+                            else (
+                                "policy_bundle_legacy_last_good"
+                                if legacy_fallback is not None
+                                else "policy_bundle_last_good"
+                            )
+                        ),
+                    },
+                    now,
                 )
             store.set_sync_payload(
                 "policy_bundle_last_error",
@@ -1769,12 +2092,25 @@ def sync_receipts(
             )
     else:
         existing_bundle_payload = store.get_sync_payload("policy_bundle")
+        canonical_cached_payload = store.get_sync_payload("policy_bundle_canonical_last_good")
+        legacy_cached_payload = store.get_sync_payload("policy_bundle_legacy_last_good")
+        if canonical_enforcement and isinstance(canonical_cached_payload, dict) and canonical_cached_payload:
+            existing_bundle_payload = canonical_cached_payload
+        elif (
+            not canonical_enforcement
+            and isinstance(existing_bundle_payload, dict)
+            and existing_bundle_payload.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
+            and isinstance(legacy_cached_payload, dict)
+            and legacy_cached_payload
+        ):
+            existing_bundle_payload = legacy_cached_payload
         if isinstance(existing_bundle_payload, dict) and existing_bundle_payload:
             remote_decisions.update(
                 _build_policy_bundle_decisions(
                     existing_bundle_payload,
                     device_id=device_id,
                     device_name=device_name,
+                    canonical_enforcement=canonical_enforcement,
                 )
             )
     if not isinstance(store.get_sync_payload("policy_bundle_last_error"), dict):
@@ -1801,6 +2137,7 @@ def sync_receipts(
     try:
         store.replace_remote_policies(list(remote_decisions), now, remote_write_authorized=True)
         if validated_policy_bundle is not None:
+            previous_ack_payload = store.get_sync_payload("policy_bundle_ack")
             store.set_sync_payload(
                 "policy_bundle_ack",
                 _policy_bundle_acknowledgement_payload(
@@ -1808,6 +2145,8 @@ def sync_receipts(
                     device_name=device_name,
                     policy_bundle=validated_policy_bundle,
                     synced_at=now,
+                    status=("applied" if canonical_enforcement else "validated"),
+                    previous=(previous_ack_payload if isinstance(previous_ack_payload, dict) else None),
                 ),
                 now,
             )
@@ -2483,7 +2822,11 @@ def sync_runtime_session(
     return summary
 
 
-def _local_guard_runtime_session() -> dict[str, object]:
+def _local_guard_runtime_session(
+    *,
+    device_id: str = "local-machine",
+    workspace_id: str | None = None,
+) -> dict[str, object]:
     session: dict[str, object] = {
         "harness": "hol-guard",
         "surface": "cli",
@@ -2495,9 +2838,13 @@ def _local_guard_runtime_session() -> dict[str, object]:
         "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon"],
         "policy_document_versions": list(_POLICY_DOCUMENT_VERSIONS),
         "policy_bundle_versions": list(_POLICY_BUNDLE_VERSIONS),
+        "policy_contracts": list(_POLICY_CONTRACTS),
         "yaml_import": os.environ.get(_POLICY_YAML_IMPORT_ENV) == "1",
     }
-    if os.environ.get(_POLICY_CANONICAL_ENFORCEMENT_ENV) == "1":
+    if _canonical_policy_enforcement_enabled(
+        device_id=device_id,
+        workspace_id=workspace_id,
+    ):
         session["canonical_policy_enforcement"] = True
     return session
 
@@ -2516,9 +2863,14 @@ def sync_local_guard_cloud_proof(
     with store.hold_cloud_sync_lock():
         reconcile_connect_state_with_oauth_entitlement(store, now=resolved_now)
         resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
+        device_id = store.get_or_create_installation_id()
+        workspace_id = store.get_cloud_workspace_id()
         runtime_summary = sync_runtime_session(
             store,
-            session=_local_guard_runtime_session(),
+            session=_local_guard_runtime_session(
+                device_id=device_id,
+                workspace_id=workspace_id,
+            ),
             auth_context=resolved_auth_context,
         )
         receipts_summary = sync_receipts(
@@ -4585,6 +4937,7 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
     policy_bundle_versions = list(
         _string_items(session.get("policy_bundle_versions") or session.get("policyBundleVersions"))
     )
+    policy_contracts = list(_string_items(session.get("policy_contracts") or session.get("policyContracts")))
     yaml_import = session.get("yaml_import") is True or session.get("yamlImport") is True
     canonical_policy_enforcement = (
         session.get("canonical_policy_enforcement") is True or session.get("canonicalPolicyEnforcement") is True
@@ -4619,6 +4972,8 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         payload["policyDocumentVersions"] = policy_document_versions
     if policy_bundle_versions:
         payload["policyBundleVersions"] = policy_bundle_versions
+    if policy_contracts:
+        payload["policyContracts"] = policy_contracts
     payload["yamlImport"] = yaml_import
     if canonical_policy_enforcement:
         payload["canonicalPolicyEnforcement"] = True

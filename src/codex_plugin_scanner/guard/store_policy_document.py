@@ -85,7 +85,11 @@ class StorePolicyDocumentMixin:
                 if row.get("source") != "policy-yaml-import" or key in incoming_by_key:
                     continue
                 rule_id = row.get("policy_rule_id")
-                removals.append(str(rule_id) if rule_id is not None else f"local-{int(row.get('decision_id', 0))}")
+                decision_id = row.get("decision_id")
+                local_decision_id = (
+                    decision_id if isinstance(decision_id, int) and not isinstance(decision_id, bool) else 0
+                )
+                removals.append(str(rule_id) if rule_id is not None else f"local-{local_decision_id}")
         return PolicyDocumentImportPlan(
             additions=tuple(additions),
             replacements=tuple(replacements),

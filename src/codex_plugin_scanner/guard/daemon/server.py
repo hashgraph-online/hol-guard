@@ -125,6 +125,8 @@ from ..policy_bundle_trusted_keys import (
     policy_bundle_keyring_payload,
     validate_synced_policy_bundle,
 )
+from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
+from ..policy_document_io import PolicyCompilationError
 from ..receipts.manager import build_receipt
 from ..review_contracts import (
     GuardReviewContractError,
@@ -139,11 +141,13 @@ from ..runtime.runner import (
     GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
     _build_policy_bundle_decisions,
+    _canonical_policy_enforcement_enabled,
     _daemon_version_supported,
     _guard_device_metadata,
     _persist_cloud_exceptions,
     _policy_bundle_acknowledgement_payload,
     _policy_bundle_is_version_downgrade,
+    _policy_shadow_mismatch_reason_codes,
     _resolve_guard_sync_auth_context,
     prepare_guard_cloud_connect_authorization,
     repair_guard_cloud_connect_storage,
@@ -2307,27 +2311,156 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             existing_policy_bundle = (
                 existing_policy_bundle_payload if isinstance(existing_policy_bundle_payload, dict) else None
             )
+            canonical_last_good = self.server.store.get_sync_payload(  # type: ignore[attr-defined]
+                "policy_bundle_canonical_last_good"
+            )
+            canonical_previous_good = self.server.store.get_sync_payload(  # type: ignore[attr-defined]
+                "policy_bundle_canonical_previous_good"
+            )
+            transition_baseline = existing_policy_bundle
+            if (
+                validated_policy_bundle is not None
+                and validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
+                and isinstance(canonical_last_good, dict)
+            ):
+                transition_baseline = canonical_last_good
             if validated_policy_bundle is None:
                 self._write_json({"error": rejection_reason or "invalid_policy_bundle"}, status=400)
                 return
             if not _daemon_version_supported(validated_policy_bundle):
                 self._write_json({"error": "unsupported_daemon_version"}, status=400)
                 return
-            if _policy_bundle_is_version_downgrade(existing_policy_bundle, validated_policy_bundle):
+            if _policy_bundle_is_version_downgrade(
+                transition_baseline,
+                validated_policy_bundle,
+                expected_last_good_bundle=(
+                    canonical_previous_good if isinstance(canonical_previous_good, dict) else None
+                ),
+            ):
                 self._write_json({"error": "bundle_version_downgrade"}, status=400)
                 return
             applied_at = _now()
-            self.server.store.set_sync_payload("policy_bundle", validated_policy_bundle, applied_at)  # type: ignore[attr-defined]
-            self.server.store.set_sync_payload("policy_bundle_last_good", validated_policy_bundle, applied_at)  # type: ignore[attr-defined]
+            device_id, device_name = _guard_device_metadata(self.server.store)  # type: ignore[attr-defined]
+            workspace_id = self.server.store.get_cloud_workspace_id() or ""  # type: ignore[attr-defined]
+            canonical_enforcement = _canonical_policy_enforcement_enabled(
+                workspace_id=workspace_id,
+                device_id=device_id,
+            )
+            bundle_is_v2 = validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
+            try:
+                if bundle_is_v2:
+                    canonical_decisions = _build_policy_bundle_decisions(
+                        validated_policy_bundle,
+                        device_id=device_id,
+                        device_name=device_name,
+                        canonical_enforcement=True,
+                    )
+                    legacy_payload = self.server.store.get_sync_payload(  # type: ignore[attr-defined]
+                        "policy_bundle_legacy_last_good"
+                    )
+                    if not isinstance(legacy_payload, dict):
+                        legacy_payload = (
+                            existing_policy_bundle
+                            if isinstance(existing_policy_bundle, dict)
+                            and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
+                            else None
+                        )
+                    legacy_decisions = (
+                        _build_policy_bundle_decisions(
+                            legacy_payload,
+                            device_id=device_id,
+                            device_name=device_name,
+                        )
+                        if isinstance(legacy_payload, dict)
+                        else []
+                    )
+                    mismatch_reasons = _policy_shadow_mismatch_reason_codes(
+                        legacy_decisions,
+                        canonical_decisions,
+                    )
+                    blocking_mismatch_reasons = tuple(
+                        reason for reason in mismatch_reasons if reason != "legacy_unavailable"
+                    )
+                    candidate_policy_decisions = (
+                        canonical_decisions
+                        if canonical_enforcement and not blocking_mismatch_reasons
+                        else legacy_decisions
+                    )
+                    if mismatch_reasons:
+                        self.server.store.add_event(  # type: ignore[attr-defined]
+                            "policy_bundle/semantic_mismatch",
+                            {
+                                "canonicalRuleCount": len(canonical_decisions),
+                                "legacyRuleCount": len(legacy_decisions),
+                                "reasonCodes": mismatch_reasons,
+                                "schemaVersion": 1,
+                            },
+                            applied_at,
+                        )
+                    if canonical_enforcement and blocking_mismatch_reasons:
+                        self._write_json({"error": "canonical_shadow_mismatch"}, status=409)
+                        return
+                else:
+                    candidate_policy_decisions = _build_policy_bundle_decisions(
+                        validated_policy_bundle,
+                        device_id=device_id,
+                        device_name=device_name,
+                    )
+            except PolicyCompilationError as error:
+                self._write_json({"error": f"canonical_compile_{error.code}"}, status=400)
+                return
+            if bundle_is_v2:
+                if isinstance(canonical_last_good, dict) and canonical_last_good.get(
+                    "bundleHash"
+                ) != validated_policy_bundle.get("bundleHash"):
+                    self.server.store.set_sync_payload(  # type: ignore[attr-defined]
+                        "policy_bundle_canonical_previous_good",
+                        canonical_last_good,
+                        applied_at,
+                    )
+                self.server.store.set_sync_payload(  # type: ignore[attr-defined]
+                    "policy_bundle_canonical_last_good",
+                    validated_policy_bundle,
+                    applied_at,
+                )
+                if canonical_enforcement:
+                    self.server.store.set_sync_payload(  # type: ignore[attr-defined]
+                        "policy_bundle",
+                        validated_policy_bundle,
+                        applied_at,
+                    )
+                    self.server.store.set_sync_payload(  # type: ignore[attr-defined]
+                        "policy_bundle_last_good",
+                        validated_policy_bundle,
+                        applied_at,
+                    )
+            else:
+                self.server.store.set_sync_payload(  # type: ignore[attr-defined]
+                    "policy_bundle",
+                    validated_policy_bundle,
+                    applied_at,
+                )
+                self.server.store.set_sync_payload(  # type: ignore[attr-defined]
+                    "policy_bundle_last_good",
+                    validated_policy_bundle,
+                    applied_at,
+                )
+                self.server.store.set_sync_payload(  # type: ignore[attr-defined]
+                    "policy_bundle_legacy_last_good",
+                    validated_policy_bundle,
+                    applied_at,
+                )
             self.server.store.set_sync_payload(  # type: ignore[attr-defined]
                 "policy_bundle_keyring",
                 policy_bundle_keyring_payload(
                     trusted_policy_bundle_keys,
-                    workspace_id=self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
+                    workspace_id=workspace_id,
                 ),
                 applied_at,
             )
-            device_id, device_name = _guard_device_metadata(self.server.store)  # type: ignore[attr-defined]
+            previous_policy_bundle_ack = self.server.store.get_sync_payload(  # type: ignore[attr-defined]
+                "policy_bundle_ack"
+            )
             self.server.store.set_sync_payload(  # type: ignore[attr-defined]
                 "policy_bundle_ack",
                 _policy_bundle_acknowledgement_payload(
@@ -2335,6 +2468,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     device_name=device_name,
                     policy_bundle=validated_policy_bundle,
                     synced_at=applied_at,
+                    status=("applied" if canonical_enforcement else "validated"),
+                    previous=(previous_policy_bundle_ack if isinstance(previous_policy_bundle_ack, dict) else None),
                 ),
                 applied_at,
             )
@@ -2357,13 +2492,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 if _is_decision_scope(scope := self._optional_string(item.get("scope")) or "")
                 if _is_guard_action(action := self._optional_string(item.get("action")) or "")
             ]
-            existing_remote_decisions.extend(
-                _build_policy_bundle_decisions(
-                    validated_policy_bundle,
-                    device_id=device_id,
-                    device_name=device_name,
-                )
-            )
+            existing_remote_decisions.extend(candidate_policy_decisions)
             self.server.store.replace_remote_policies(  # type: ignore[attr-defined]
                 existing_remote_decisions,
                 applied_at,

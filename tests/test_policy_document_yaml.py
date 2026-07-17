@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.policy_document import (
 )
 from codex_plugin_scanner.guard.policy_document_yaml import (
     MAX_POLICY_BYTES,
+    MAX_POLICY_TOKENS,
     PolicyDocumentError,
     format_policy_document_yaml,
     parse_policy_document_yaml,
@@ -69,6 +70,30 @@ def test_valid_conformance_fixtures_are_stable() -> None:
         assert format_policy_document_yaml(reparsed) == formatted
         assert canonical_policy_document_bytes(reparsed) == canonical_policy_document_bytes(document)
         assert policy_document_digest(reparsed) == policy_document_digest(document)
+
+
+def test_provenance_update_and_import_fields_round_trip() -> None:
+    mapping = _basic_mapping()
+    spec = mapping["spec"]
+    assert isinstance(spec, dict)
+    rules = spec["rules"]
+    assert isinstance(rules, list)
+    first_rule = rules[0]
+    assert isinstance(first_rule, dict)
+    provenance = first_rule["provenance"]
+    assert isinstance(provenance, dict)
+    provenance.update(
+        {
+            "updatedAt": "2026-07-16T12:00:00Z",
+            "updatedBy": "editor@example.com",
+            "importSourceDigest": "sha256:canonical-import",
+            "previousRuleRevision": 4,
+        }
+    )
+
+    document = parse_policy_document_yaml(_yaml(mapping))
+
+    assert document.rules[0].provenance.to_mapping() == provenance
 
 
 def test_yaml_11_ambiguous_scalars_remain_strings() -> None:
@@ -154,6 +179,15 @@ def test_encoded_size_limit_runs_before_yaml_parsing() -> None:
 
     assert error.value.diagnostics == (error.value.diagnostics[0],)
     assert error.value.diagnostics[0].code == "limit_bytes"
+
+
+def test_token_limit_stops_large_yaml_before_object_construction() -> None:
+    source = "items:\n" + ("- value\n" * (MAX_POLICY_TOKENS // 2 + 1))
+
+    with pytest.raises(PolicyDocumentError) as error:
+        parse_policy_document_yaml(source)
+
+    assert error.value.diagnostics[0].code == "limit_tokens"
 
 
 @pytest.mark.parametrize(
@@ -308,8 +342,6 @@ def test_canonical_object_keys_use_utf16_order() -> None:
     value = _basic_mapping()
     value["x-sort"] = {"\ue000": "bmp", "😀": "astral"}
 
-    canonical = canonical_policy_document_bytes(
-        parse_policy_document_yaml(_yaml(value))
-    ).decode("utf-8")
+    canonical = canonical_policy_document_bytes(parse_policy_document_yaml(_yaml(value))).decode("utf-8")
 
     assert canonical.index('"😀"') < canonical.index('"\ue000"')

@@ -10,6 +10,7 @@ from typing import cast
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
+from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
     policy_bundle_verification_key_from_public_key,
@@ -26,6 +27,7 @@ from codex_plugin_scanner.guard.policy_bundle_v2 import (
     validated_policy_bundle_v2_payload,
 )
 from codex_plugin_scanner.guard.policy_document_yaml import load_policy_document
+from codex_plugin_scanner.guard.runtime import runner as guard_runner
 
 _FIXTURE = Path(__file__).parents[1] / "spec" / "guard-policy" / "v1alpha1" / "fixtures" / "valid" / "basic.yaml"
 
@@ -286,6 +288,37 @@ def test_v2_bundle_rejects_unanchored_rotated_key() -> None:
     assert reason == "untrusted_signing_key"
 
 
+def test_v2_bundle_rejects_malformed_rollback_hashes() -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verification_key = _verification_key(private_key)
+    rollback = {
+        "rollbackOfBundleHash": "sha256:not-a-digest",
+        "rollbackOfBundleVersion": 8,
+        "lastGoodBundleHash": f"sha256:{'a' * 64}",
+        "lastGoodBundleVersion": 6,
+        "reason": "Restore the last verified policy.",
+        "actor": "operator-alpha",
+        "createdAt": "2026-07-15T12:02:00Z",
+        "authorization": "approval-receipt-alpha",
+    }
+    bundle = _signed_bundle(
+        private_key,
+        verification_key,
+        bundle_version=9,
+        rollback=rollback,
+    )
+
+    validated, reason = validated_policy_bundle_v2_payload(
+        bundle,
+        trusted_verification_keys=(verification_key,),
+        anchored_verification_keys=(verification_key,),
+        now=datetime(2026, 7, 16, tzinfo=timezone.utc),
+    )
+
+    assert validated is None
+    assert reason == "invalid_rollback"
+
+
 def test_v2_transition_rejects_replay_and_same_version_substitution() -> None:
     assert (
         validate_policy_bundle_v2_transition(
@@ -330,6 +363,18 @@ def test_v2_transition_accepts_only_authorized_monotonic_rollback() -> None:
         )
         is None
     )
+    rollback["lastGoodBundleHash"] = "sha256:unexpected"
+    assert (
+        validate_policy_bundle_v2_transition(
+            incoming,
+            current_bundle_version=8,
+            current_bundle_hash="sha256:current",
+            expected_last_good_bundle_version=6,
+            expected_last_good_bundle_hash="sha256:historical-good",
+        )
+        == "rollback_last_good_mismatch"
+    )
+    rollback["lastGoodBundleHash"] = "sha256:historical-good"
     rollback["rollbackOfBundleHash"] = "sha256:other"
     assert (
         validate_policy_bundle_v2_transition(
@@ -376,3 +421,114 @@ def test_v2_acknowledgement_rejects_sequence_conflicts_and_terminal_reapply() ->
         retried,
         previous=applied,
     ) == (None, "acknowledgement_transition_rejected")
+
+
+def test_runtime_canonical_enforcement_compiles_signed_v2_payload() -> None:
+    policy_bundle = {
+        "contractVersion": POLICY_BUNDLE_V2_CONTRACT,
+        "payload": {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {
+                "id": "policy.runtime",
+                "name": "Runtime policy",
+                "revision": 1,
+            },
+            "spec": {
+                "defaults": {"mode": "prompt", "defaultAction": "warn"},
+                "rules": [
+                    {
+                        "id": "rule.block-command",
+                        "enabled": True,
+                        "effect": "block",
+                        "match": {
+                            "artifacts": ["command:npm-test"],
+                            "harnesses": ["codex"],
+                        },
+                        "lifetime": {"mode": "permanent", "expiresAt": None},
+                        "provenance": {
+                            "source": "suggested-memory",
+                            "receiptIds": ["receipt-1"],
+                            "suggestionId": "suggestion-1",
+                            "createdAt": "2026-07-15T12:00:00Z",
+                            "createdBy": "owner-1",
+                        },
+                    }
+                ],
+            },
+        },
+    }
+
+    legacy = guard_runner._build_policy_bundle_decisions(
+        policy_bundle,
+        device_id="device-1",
+        device_name="Mac",
+    )
+    canonical = guard_runner._build_policy_bundle_decisions(
+        policy_bundle,
+        device_id="device-1",
+        device_name="Mac",
+        canonical_enforcement=True,
+    )
+
+    assert legacy == []
+    assert [decision.to_dict() for decision in canonical] == [
+        {
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "block",
+            "artifact_id": "command:npm-test",
+            "artifact_hash": None,
+            "workspace": None,
+            "publisher": None,
+            "reason": None,
+            "owner": "rule.block-command",
+            "source": "policy-bundle-canonical",
+            "expires_at": None,
+        }
+    ]
+
+
+def test_policy_shadow_comparison_uses_bounded_semantic_reason_codes() -> None:
+    legacy = [
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="block",
+            artifact_id="command:npm-test",
+            source="policy-bundle",
+        )
+    ]
+    equivalent = [
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="block",
+            artifact_id="command:npm-test",
+            source="policy-bundle-canonical",
+        )
+    ]
+    changed = [
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id="command:npm-test",
+            source="policy-bundle-canonical",
+        ),
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="block",
+            artifact_id="command:pnpm-test",
+            source="policy-bundle-canonical",
+        ),
+    ]
+
+    assert guard_runner._policy_shadow_mismatch_reason_codes([], equivalent) == ("legacy_unavailable",)
+    assert guard_runner._policy_shadow_mismatch_reason_codes(legacy, equivalent) == ()
+    assert guard_runner._policy_shadow_mismatch_reason_codes(legacy, changed) == (
+        "row_count",
+        "selector_set",
+        "action",
+    )

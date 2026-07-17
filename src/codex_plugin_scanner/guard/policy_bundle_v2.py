@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import re
 from datetime import datetime, timezone
 from typing import TypeGuard, cast
 
@@ -27,10 +28,11 @@ POLICY_BUNDLE_V2_ENVELOPE_VERSION = 2
 POLICY_BUNDLE_V2_CANONICALIZATION = {"algorithm": "rfc8785", "version": "1"}
 POLICY_BUNDLE_V2_ACK_STATUSES = frozenset({"received", "validated", "applied", "failed", "offline"})
 
-_MAX_BUNDLE_BYTES = 2_097_152
-_MAX_DEPTH = 40
-_MAX_COLLECTION_ITEMS = 2_048
-_MAX_STRING_LENGTH = 1_048_576
+POLICY_BUNDLE_MAX_BYTES = 2_097_152
+POLICY_BUNDLE_MAX_DEPTH = 40
+POLICY_BUNDLE_MAX_COLLECTION_ITEMS = 2_048
+POLICY_BUNDLE_MAX_STRING_LENGTH = 1_048_576
+_SHA256_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 _ALLOWED_TOP_LEVEL = frozenset(
     {
         "envelopeVersion",
@@ -92,7 +94,7 @@ def _is_object_mapping(value: object) -> TypeGuard[dict[str, object]]:
     return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
-def _non_empty_string(value: object, *, maximum: int = _MAX_STRING_LENGTH) -> str | None:
+def _non_empty_string(value: object, *, maximum: int = POLICY_BUNDLE_MAX_STRING_LENGTH) -> str | None:
     if not isinstance(value, str):
         return None
     normalized = value.strip()
@@ -114,10 +116,10 @@ def _strict_utc_timestamp(value: object) -> datetime | None:
 
 
 def _json_value(value: object, *, depth: int = 0) -> JsonValue:
-    if depth > _MAX_DEPTH:
+    if depth > POLICY_BUNDLE_MAX_DEPTH:
         raise ValueError("limit_depth")
     if value is None or isinstance(value, (bool, str)):
-        if isinstance(value, str) and len(value.encode("utf-8")) > _MAX_STRING_LENGTH:
+        if isinstance(value, str) and len(value.encode("utf-8")) > POLICY_BUNDLE_MAX_STRING_LENGTH:
             raise ValueError("limit_string")
         return value
     if isinstance(value, int):
@@ -125,11 +127,11 @@ def _json_value(value: object, *, depth: int = 0) -> JsonValue:
     if isinstance(value, float):
         raise ValueError("unsupported_number")
     if _is_object_list(value):
-        if len(value) > _MAX_COLLECTION_ITEMS:
+        if len(value) > POLICY_BUNDLE_MAX_COLLECTION_ITEMS:
             raise ValueError("limit_collection")
         return [_json_value(item, depth=depth + 1) for item in value]
     if _is_object_mapping(value):
-        if len(value) > _MAX_COLLECTION_ITEMS:
+        if len(value) > POLICY_BUNDLE_MAX_COLLECTION_ITEMS:
             raise ValueError("limit_collection")
         result: dict[str, JsonValue] = {}
         for key, item in value.items():
@@ -191,6 +193,10 @@ def _validate_keys(value: dict[str, object], allowed: frozenset[str]) -> bool:
     return all(key in allowed or key.startswith("x-") for key in value)
 
 
+def _is_sha256_digest(value: object) -> bool:
+    return isinstance(value, str) and _SHA256_DIGEST_PATTERN.fullmatch(value) is not None
+
+
 def _validate_rollback(value: object) -> str | None:
     if value is None:
         return None
@@ -205,6 +211,10 @@ def _validate_rollback(value: object) -> str | None:
         "authorization",
     )
     if any(_non_empty_string(value.get(key)) is None for key in required_strings):
+        return "invalid_rollback"
+    if not _is_sha256_digest(value.get("rollbackOfBundleHash")) or not _is_sha256_digest(
+        value.get("lastGoodBundleHash")
+    ):
         return "invalid_rollback"
     versions = (value.get("rollbackOfBundleVersion"), value.get("lastGoodBundleVersion"))
     if any(not isinstance(version, int) or isinstance(version, bool) or version < 1 for version in versions):
@@ -278,7 +288,7 @@ def validated_policy_bundle_v2_payload(
         encoded = canonical_json_bytes(_json_value(policy_bundle))
     except ValueError as error:
         return None, str(error)
-    if len(encoded) > _MAX_BUNDLE_BYTES:
+    if len(encoded) > POLICY_BUNDLE_MAX_BYTES:
         return None, "limit_bytes"
     if not _validate_keys(policy_bundle, _ALLOWED_TOP_LEVEL):
         return None, "unknown_field"
@@ -339,6 +349,8 @@ def validate_policy_bundle_v2_transition(
     *,
     current_bundle_version: int | None,
     current_bundle_hash: str | None,
+    expected_last_good_bundle_version: int | None = None,
+    expected_last_good_bundle_hash: str | None = None,
 ) -> str | None:
     """Reject replay, same-version substitution, and unsigned rollback semantics."""
 
@@ -375,6 +387,11 @@ def validate_policy_bundle_v2_transition(
         return "rollback_target_mismatch"
     if _non_empty_string(rollback.get("lastGoodBundleHash"), maximum=128) is None:
         return "rollback_target_mismatch"
+    if expected_last_good_bundle_version is not None and last_good_version != expected_last_good_bundle_version:
+        return "rollback_last_good_mismatch"
+    last_good_hash = rollback.get("lastGoodBundleHash")
+    if expected_last_good_bundle_hash is not None and last_good_hash != expected_last_good_bundle_hash:
+        return "rollback_last_good_mismatch"
     if _non_empty_string(rollback.get("authorization")) is None:
         return "rollback_authorization_missing"
     return None
