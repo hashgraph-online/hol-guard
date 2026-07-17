@@ -900,6 +900,8 @@ def extract_sensitive_tool_action_request(
 
     command_texts = _candidate_command_texts(arguments)
     normalized_tool_name = _normalize_tool_name(tool_name)
+    if normalized_tool_name in _FILE_WRITE_TOOL_NAMES:
+        return None
     if normalized_tool_name is None and not command_texts:
         return None
     requested_tool_name = str(tool_name).strip() if isinstance(tool_name, str) and str(tool_name).strip() else "Shell"
