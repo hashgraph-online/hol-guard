@@ -115,10 +115,14 @@ assert(
   validateBulkApproveCredentials(totpGate, { password: "", totpCode: "123456" }) === null,
   "T-BULK-11: validateBulkApproveCredentials accepts totp without password when MFA is enabled",
 );
-const totpCredentials = buildBulkGateCredentials(totpGate, "", "123456");
-assert(totpCredentials?.approval_totp_code === "123456", "T-BULK-12: buildBulkGateCredentials includes totp when MFA is enabled");
-assert(!("approval_password" in (totpCredentials ?? {})), "T-BULK-13: buildBulkGateCredentials omits password when MFA is enabled");
+assert(
+  validateBulkApproveCredentials(totpGate, { password: "secret", totpCode: "123456" }) === null,
+  "T-BULK-12: validateBulkApproveCredentials ignores password when MFA is enabled",
+);
+const totpCredentials = buildBulkGateCredentials(totpGate, "secret", "123456");
+assert(totpCredentials?.approval_totp_code === "123456", "T-BULK-13: buildBulkGateCredentials includes totp when MFA is enabled");
+assert(!("approval_password" in (totpCredentials ?? {})), "T-BULK-14: buildBulkGateCredentials omits password when MFA is enabled");
 
-assert(buildBulkGateCredentials(null, "secret", "") === undefined, "T-BULK-14: buildBulkGateCredentials omits credentials when gate is not ready");
+assert(buildBulkGateCredentials(null, "secret", "") === undefined, "T-BULK-15: buildBulkGateCredentials omits credentials when gate is not ready");
 
 console.log("queue-bulk-approve.test.ts: all tests passed");

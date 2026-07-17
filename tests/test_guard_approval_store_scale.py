@@ -233,6 +233,25 @@ class TestQueueScaleTargets:
         assert result["next_selectable_request_id"] == "req-099998"
         assert elapsed < 0.1
 
+    def test_resolving_duplicates_stays_within_oauth_source(self) -> None:
+        conn = _make_conn()
+        request = _make_request(artifact_id="codex:project:shared-tool")
+        first_id = add_approval_request(conn, request, "2026-01-01T00:00:00Z", oauth_source="source-a")
+        second = dataclasses.replace(request, request_id=str(uuid.uuid4()))
+        second_id = add_approval_request(conn, second, "2026-01-01T00:00:01Z", oauth_source="source-b")
+
+        result = resolve_request_with_queue_result(
+            conn,
+            first_id,
+            resolution_action="allow",
+            resolution_scope="artifact",
+            reason="reviewed",
+            resolved_at="2026-01-02T00:00:00Z",
+        )
+
+        assert result["resolved_duplicate_ids"] == []
+        assert get_approval_request(conn, second_id)["status"] == "pending"
+
     def test_listing_queue_page_without_totals_skips_count_queries(self) -> None:
         conn = _make_conn()
         _bulk_insert_pending(conn, 50)

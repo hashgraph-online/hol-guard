@@ -206,7 +206,7 @@ artifact and policy pipeline as existing command classifications.
 - `kimi`
   Guard installs managed `PreToolUse` and `UserPromptSubmit` hooks in `~/.kimi-code/config.toml`, blocks with exit code `2` and a JSON `permissionDecision: "deny"` response, and fails open on hook crash or timeout.
 - `grok`
-  Guard installs managed Grok hook JSON under `~/.grok/hooks/` plus permission deny rules in `~/.grok/managed_config.toml`, blocks with exit code `2` and a Grok-native `{"decision":"deny"}` response, and never reads `~/.grok/auth`.
+  Guard installs managed Grok hook JSON under `~/.grok/hooks/` plus permission deny rules in `~/.grok/managed_config.toml`, blocks with exit code `2` and a Grok-native `{"decision":"deny"}` response, never reads `~/.grok/auth`, and launches only a trusted absolute Grok executable. Custom install roots can be selected once with `hol-guard run grok --grok-executable /absolute/path/to/grok`.
 - `pi`
   Guard scans `~/.pi/agent/` and project `.pi/` packages, extensions, skills, prompts, and themes; installs a managed Pi extension that reviews `input` and `tool_call` events inline; and blocks with a Pi-native `{"decision":"deny"}` response when Guard policy says no.
 - `zcode`
@@ -270,7 +270,7 @@ hol-guard settings approval-password enable \
 hol-guard settings approval-password status
 ```
 
-Use cooldown only for ordinary non-global allow decisions. Guard still requires fresh proof for global allow, policy clear, settings import/reset, disabling the gate, disabling TOTP, and recovery. When TOTP is enabled, cooldown is disabled so every protected action requires both factors. To unlock or lock the current password-only approval window from a terminal:
+Use cooldown only for ordinary non-global allow decisions. Guard still requires fresh proof for global allow, policy clear, settings import/reset, disabling the gate, disabling TOTP, and recovery. When TOTP is enabled, it replaces password proof and cooldown is disabled, so every protected action requires a current authenticator code. To unlock or lock the current password-only approval window from a terminal:
 
 ```bash
 hol-guard approvals unlock --duration 15m
@@ -285,7 +285,9 @@ hol-guard settings approval-totp verify --current-password '<password>' --code 1
 hol-guard settings approval-totp status
 ```
 
-TOTP uses SHA-1, 6 digits, 30-second steps, and a Base32 `otpauth://totp/HOL%20Guard:<device>` provisioning URI. Guard stores the seed encrypted locally, rejects replayed steps, and never includes the seed in settings export, receipts, or public status. Disabling TOTP or the password gate requires fresh password proof plus a current TOTP code when TOTP is enabled.
+TOTP uses SHA-1, 6 digits, 30-second steps, and a Base32 `otpauth://totp/HOL%20Guard:<device>` provisioning URI. Guard stores the seed encrypted locally, rejects replayed steps, and never includes the seed in settings export, receipts, or public status. When TOTP is enabled, disabling TOTP or the password gate requires a current authenticator code instead of the password.
+
+Approval proof creates only a 30-second, transaction-local grant for the exact action, scope, subject, and session nonce being processed. The grant is never returned to the browser or reused as a general login session. Guard tracks password and authenticator failures independently and locks the active factor after five failed attempts; rotating either factor revokes outstanding grants and any saved recovery, session, or trusted-device state.
 
 ## Guard: Advisory Sync Privacy
 

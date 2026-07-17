@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .runtime.package_execution_policy import is_execution_permitted
+
 SHIM_PROBE_ENV_VAR = "HOL_GUARD_SHIM_PROBE"
 SHIM_PROBE_ENV_VALUE = "1"
 
@@ -67,10 +69,14 @@ def protect_evaluator_evidence(payload: dict[str, Any]) -> dict[str, object]:
         evaluator_source = verdict_dict.get("source")
     if not isinstance(evaluator_source, str) or not evaluator_source.strip():
         evaluator_source = "local-heuristic"
+    policy_action = supply_chain_dict.get("policy_action")
+    if not isinstance(policy_action, str):
+        policy_action = verdict_dict.get("action")
     return {
         "evaluator_invoked": "supply_chain_evaluation" in payload or "verdict" in payload,
         "evaluator_source": evaluator_source,
         "protect_decision": verdict_dict.get("action"),
+        "execution_permitted": is_execution_permitted(policy_action),
         "evidence_ids": normalized_evidence_ids,
         "dry_run": payload.get("dry_run"),
     }

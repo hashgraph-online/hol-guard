@@ -12,6 +12,11 @@ from ..adapters.base import HarnessContext
 from ..approvals import approval_center_hint, attach_primary_approval_link, queue_blocked_approvals
 from ..config import load_guard_config
 from ..models import GuardArtifact, HarnessDetection
+from ..package_execution_context import (
+    changed_package_execution_context_components,
+    package_execution_context_from_evidence,
+    package_execution_context_from_scanner_evidence,
+)
 from ..shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from ..store import GuardStore
 
@@ -34,6 +39,7 @@ def _queue_local_protect_approvals(
     approval_item = _protect_approval_item(response_payload, workspace=workspace, artifact=artifact)
     if approval_item is None:
         return
+    _annotate_package_execution_context_change(approval_item, store=store, artifact_id=artifact.artifact_id)
     try:
         approval_center_url = ensure_approval_daemon(guard_home)
     except RuntimeError:
@@ -147,6 +153,9 @@ def _protect_approval_item(
         return None
     user_copy = supply_chain_evaluation.get("user_copy")
     user_copy_map = user_copy if isinstance(user_copy, dict) else {}
+    request = response_payload.get("request")
+    package_context = request.get("package_execution_context") if isinstance(request, dict) else None
+    scanner_evidence = [dict(package_context)] if isinstance(package_context, dict) else []
     return {
         "artifact_id": artifact.artifact_id,
         "artifact_name": artifact.name,
@@ -169,7 +178,42 @@ def _protect_approval_item(
             "summary": _optional_string(user_copy_map.get("summary")) or _optional_string(verdict.get("reason")) or "",
             "harness_message": _optional_string(user_copy_map.get("harness_message")) or "",
         },
+        "scanner_evidence": scanner_evidence,
     }
+
+
+def _annotate_package_execution_context_change(
+    approval_item: dict[str, object],
+    *,
+    store: GuardStore,
+    artifact_id: str,
+) -> None:
+    scanner_evidence = approval_item.get("scanner_evidence")
+    current = package_execution_context_from_scanner_evidence(scanner_evidence)
+    if current is None:
+        return
+    previous = None
+    for request in store.list_approval_requests(status="resolved", limit=200):
+        if request.get("artifact_id") != artifact_id:
+            continue
+        previous = package_execution_context_from_scanner_evidence(request.get("scanner_evidence"))
+        if previous is not None:
+            break
+    if previous is None or previous.digest == current.digest:
+        return
+    changed_components = changed_package_execution_context_components(previous, current)
+    if not changed_components:
+        return
+    changed_fields = _string_list(approval_item.get("changed_fields"))
+    changed_fields.extend(f"package_context_{component}" for component in changed_components)
+    approval_item["changed_fields"] = list(dict.fromkeys(changed_fields))
+    if not isinstance(scanner_evidence, list):
+        return
+    for index, evidence in enumerate(scanner_evidence):
+        parsed = package_execution_context_from_evidence(evidence)
+        if parsed is not None and parsed.digest == current.digest and isinstance(evidence, dict):
+            scanner_evidence[index] = {**evidence, "changed_components": list(changed_components)}
+            break
 
 
 def _protect_target_labels(response_payload: dict[str, object]) -> list[str]:

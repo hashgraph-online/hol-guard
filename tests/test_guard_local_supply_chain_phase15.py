@@ -333,7 +333,9 @@ def test_guard_protect_receipt_keeps_matched_policy_rule_metadata(tmp_path: Path
 
     assert exit_code == 0
     assert payload["supply_chain_evaluation"]["matched_rule_id"] == "policy-rule-1"
-    assert payload["receipt"]["action_envelope_json"] == {
+    action_envelope = dict(payload["receipt"]["action_envelope_json"])
+    package_context = action_envelope.pop("package_execution_context")
+    assert action_envelope == {
         "bundle_version": "1747612800000-deadbeef",
         "matched_rule_id": "policy-rule-1",
         "package_manager": "npm",
@@ -341,8 +343,12 @@ def test_guard_protect_receipt_keeps_matched_policy_rule_metadata(tmp_path: Path
         "policy_version": "policy-hash-1",
         "redacted_command": "npm install minimist@1.2.5",
     }
+    assert package_context["kind"] == "package_execution_context"
+    assert package_context["schema_version"] == 2
+    assert str(workspace_dir) not in json.dumps(package_context, sort_keys=True)
     stored_receipt = store.list_receipts(limit=1)[0]
     assert stored_receipt["action_envelope_json"]["matched_rule_id"] == "policy-rule-1"
+    assert stored_receipt["action_envelope_json"]["package_execution_context"] == package_context
 
 
 def test_guard_doctor_includes_supply_chain_posture(tmp_path: Path, capsys) -> None:

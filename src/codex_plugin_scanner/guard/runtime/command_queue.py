@@ -15,6 +15,17 @@ from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..store import GuardStore
 from .auto_update import maybe_auto_update
+from .command_capability import (
+    CommandCapabilityError,
+    audit_command_decision,
+    authorize_command_job,
+    command_capability_operations,
+    command_capability_status,
+    command_environment_allows_queue,
+    consume_local_command_approval,
+    mark_command_job_consumed,
+    register_pending_command,
+)
 from .command_executors import (
     COMMAND_OPERATION_SCHEMA_VERSIONS,
     SUPPORTED_COMMAND_OPERATIONS,
@@ -62,18 +73,25 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def command_queue_enabled(environ: dict[str, str] | None = None) -> bool:
-    source = os.environ if environ is None else environ
-    value = source.get(COMMAND_QUEUE_ENABLED_ENV)
-    if value is None:
-        return True
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"", "0", "false", "no", "off", "disabled"}:
+def command_queue_enabled(
+    store: GuardStore | None = None,
+    environ: dict[str, str] | None = None,
+) -> bool:
+    """Return whether a valid local capability permits Cloud command polling.
+
+    The environment variable is an emergency opt-out only. It cannot grant a
+    capability or restore an expired/revoked capability.
+    """
+
+    if not command_environment_allows_queue(environ):
+        value = (os.environ if environ is None else environ).get(COMMAND_QUEUE_ENABLED_ENV)
+        if isinstance(value, str) and value.strip().lower() not in {"", "0", "false", "no", "off", "disabled"}:
+            _LOGGER.warning(
+                "Ignoring unrecognized %s value; command queue disabled.",
+                COMMAND_QUEUE_ENABLED_ENV,
+            )
         return False
-    _LOGGER.warning("Ignoring unrecognized %s value; command queue disabled.", COMMAND_QUEUE_ENABLED_ENV)
-    return False
+    return store is not None and bool(command_capability_operations(store))
 
 
 def _env_float(name: str, default: float) -> float:
@@ -200,8 +218,9 @@ def _pending_result_is_stale(job: dict[str, object]) -> bool:
 def command_queue_status(store: GuardStore) -> dict[str, object]:
     state = _load_state(store)
     profile = store.get_cloud_sync_profile()
+    capability = command_capability_status(store)
     return {
-        "enabled": command_queue_enabled(),
+        "enabled": command_queue_enabled(store),
         "configured": profile is not None,
         "state": state.get("state", "idle"),
         "last_poll_at": state.get("last_poll_at"),
@@ -212,6 +231,8 @@ def command_queue_status(store: GuardStore) -> dict[str, object]:
         "last_poll_was_empty": bool(state.get("last_poll_was_empty")),
         "active_job": state.get("active_job"),
         "pending_result": state.get("pending_result"),
+        "capability": capability,
+        "granted_operations": capability.get("operations", []),
         "supported_operations": list(SUPPORTED_COMMAND_OPERATIONS),
     }
 
@@ -258,13 +279,16 @@ def _oauth_metadata(store: GuardStore) -> tuple[str, str]:
 
 def _lease_payload(store: GuardStore) -> dict[str, object]:
     machine_id, workspace_id = _oauth_metadata(store)
+    operations = command_capability_operations(store)
+    if not operations:
+        raise CommandCapabilityError("command_capability_required")
     return {
         "workspaceId": workspace_id,
         "deviceId": machine_id,
         "daemonVersion": __version__,
         "capabilities": {
-            "operations": list(SUPPORTED_COMMAND_OPERATIONS),
-            "schemaVersions": dict(COMMAND_OPERATION_SCHEMA_VERSIONS),
+            "operations": list(operations),
+            "schemaVersions": {operation: COMMAND_OPERATION_SCHEMA_VERSIONS[operation] for operation in operations},
         },
         "localRequestsSnapshot": _local_requests_snapshot(store),
         "maxJobs": 1,
@@ -443,6 +467,17 @@ def _resolve_command_queue_auth_context(
 
 
 def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[str, object]:
+    if not command_queue_enabled(store):
+        state = _load_state(store)
+        state.update(
+            {
+                "state": "disabled",
+                "last_error": None,
+                "active_job": None,
+            }
+        )
+        _save_state(store, state)
+        return command_queue_status(store)
     auth_context = _resolve_command_queue_auth_context(store)
     state = _load_state(store)
     state.update(
@@ -507,14 +542,62 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         _save_state(store, state)
         raise
     try:
-        _LOGGER.info("Guard command leased: job_id=%s operation=%s", _job_id(item), command_job_operation(item))
-        execution: dict[str, object] = _execute_job(item, context, store)
-    except Exception as error:
-        _LOGGER.warning("Guard command execution failed: job_id=%s error=%s", _job_id(item), _redacted_error(error))
-        execution = {
-            "failureCode": "execution_error",
-            "failureMessage": _redacted_error(error),
+        authorized = authorize_command_job(
+            store,
+            item,
+            schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
+        )
+    except CommandCapabilityError as error:
+        audit_command_decision(
+            store,
+            "cloud_command.rejected",
+            job=item,
+            reason=error.code,
+        )
+        execution: dict[str, object] = {
+            "failureCode": error.code,
+            "failureMessage": "The local Guard command capability rejected this job.",
         }
+    else:
+        if not consume_local_command_approval(store, authorized):
+            pending = register_pending_command(store, authorized, item)
+            execution = {
+                "waitingLocalConfirm": True,
+                "operation": authorized.operation,
+                "jobId": authorized.identity["id"],
+                "approveCommand": pending["approveCommand"],
+            }
+            audit_command_decision(
+                store,
+                "cloud_command.waiting_local_approval",
+                job=item,
+                reason="local_approval_required",
+            )
+        else:
+            mark_command_job_consumed(store, authorized)
+            audit_command_decision(
+                store,
+                "cloud_command.accepted",
+                job=item,
+                reason="capability_and_job_valid",
+            )
+            try:
+                _LOGGER.info(
+                    "Guard command leased: job_id=%s operation=%s",
+                    _job_id(item),
+                    command_job_operation(item),
+                )
+                execution = _execute_job(item, context, store)
+            except Exception as error:
+                _LOGGER.warning(
+                    "Guard command execution failed: job_id=%s error=%s",
+                    _job_id(item),
+                    _redacted_error(error),
+                )
+                execution = {
+                    "failureCode": "execution_error",
+                    "failureMessage": _redacted_error(error),
+                }
     payload = _result_payload(item, execution)
     try:
         _heartbeat(auth_context, item)
@@ -561,6 +644,12 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
     state.pop("pending_result", None)
     state.update({"state": "idle", "last_result_at": _now(), "last_poll_was_empty": False})
     _save_state(store, state)
+    audit_command_decision(
+        store,
+        "cloud_command.result",
+        job=item,
+        reason=str(payload.get("status") or "unknown"),
+    )
     _LOGGER.info("Guard command completed: job_id=%s status=%s", _job_id(item), payload.get("status"))
     return command_queue_status(store)
 
@@ -571,7 +660,7 @@ def command_queue_loop(
     *,
     stop_event: Any,
 ) -> None:
-    if not command_queue_enabled():
+    if not command_queue_enabled(store):
         return
     poll_interval = _env_float(COMMAND_QUEUE_POLL_INTERVAL_ENV, _DEFAULT_POLL_INTERVAL_SECONDS)
     error_backoff = _env_float(COMMAND_QUEUE_ERROR_BACKOFF_ENV, _DEFAULT_ERROR_BACKOFF_SECONDS)

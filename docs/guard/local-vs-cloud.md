@@ -78,6 +78,22 @@ hol-guard supply-chain sync
 `hol-guard login` remains only as a redirecting compatibility alias. These
 commands add sync and visibility; they do not unlock core local protection.
 
+Pairing also does not authorize Cloud commands on the device. That channel is
+off by default and separate from read-only synchronization. Inspect its status
+or opt into the read-only operation set explicitly:
+
+```bash
+hol-guard commands status
+hol-guard commands enable --operations read-only
+hol-guard daemon repair
+```
+
+Capabilities are signed, device/workspace-bound, limited to exact operations,
+and expire. State-changing jobs remain paused for one-job local approval. Use
+`hol-guard commands revoke --confirm revoke` to disable commands immediately
+without disconnecting Cloud sync. See the full
+[Cloud command capability contract](./cloud-command-capability.md).
+
 ## Guard Cloud for teams
 
 Team plans add shared ownership, routing, RBAC, billing, and evidence exports

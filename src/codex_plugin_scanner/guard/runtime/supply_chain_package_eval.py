@@ -418,35 +418,32 @@ def evaluate_package_request_artifact(
         workspace_dir=workspace_dir,
     )
     if heuristic is None:
-        fallback_packages = _fallback_monitor_packages(targets=targets, artifact=artifact, workspace_dir=workspace_dir)
-        has_bun_binary_fallback = any(
-            reason["code"] == "bun_lockfile_binary_fallback"
-            for package in fallback_packages
-            for reason in _dict_items(package.get("reasons"))
+        fail_closed_unidentified = _unidentified_packages_fail_closed(store=store, workspace_dir=workspace_dir)
+        fallback_packages = _fallback_package_results(
+            targets=targets,
+            artifact=artifact,
+            workspace_dir=workspace_dir,
+            fail_closed_unidentified=fail_closed_unidentified,
+        )
+        fallback_decision = max(
+            (str(package.get("decision") or "monitor") for package in fallback_packages),
+            key=_decision_rank,
+            default="monitor",
+        )
+        fallback_reasons = tuple(
+            reason for package in fallback_packages for reason in _dict_items(package.get("reasons"))
         )
         heuristic = _EvaluationDraft(
-            decision="monitor",
+            decision=fallback_decision,
             enforcement="free_local" if workspace_id is None else "local_fallback",
             entitlement_state="free" if workspace_id is None else "premium",
             cache_status="miss",
             packages=fallback_packages,
-            reasons=(
-                {
-                    "code": "bun_lockfile_binary_fallback" if has_bun_binary_fallback else "no_cached_match",
-                    "message": (
-                        "Guard could not parse bun.lockb because Bun stores it as a binary "
-                        "lockfile, so this request fell back to manifest-only monitoring."
-                        if has_bun_binary_fallback
-                        else "Guard recorded this package request and will keep watching for new intelligence."
-                    ),
-                    "severity": "low" if has_bun_binary_fallback else "unknown",
-                    "source": "guard-local",
-                },
-            ),
+            reasons=fallback_reasons,
             matched_rule_id=None,
             exception_id=None,
             refresh_required=False,
-            record_monitor_evidence=True,
+            record_monitor_evidence=fallback_decision == "monitor",
             bundle_version=None,
             policy_version=bundle_meta["policy_hash"] if bundle_meta is not None else "local:none",
         )
@@ -1105,7 +1102,12 @@ def _cloud_fail_closed_evaluation(
                 "decision": decision,
                 "reasons": (reason,),
             }
-            for package in _fallback_monitor_packages(targets=targets, artifact=artifact, workspace_dir=workspace_dir)
+            for package in _fallback_package_results(
+                targets=targets,
+                artifact=artifact,
+                workspace_dir=workspace_dir,
+                fail_closed_unidentified=fail_closed_decision == "block",
+            )
         )
     draft = _EvaluationDraft(
         decision=decision,
@@ -1180,6 +1182,25 @@ def _cloud_fail_closed_decision(*, store: GuardStore, workspace_dir: Path | None
     return "ask"
 
 
+def _unidentified_packages_fail_closed(*, store: GuardStore, workspace_dir: Path | None) -> bool:
+    config = load_guard_config(store.guard_home, workspace=workspace_dir)
+    return config.security_level in {"strict", "paranoid"}
+
+
+def _unidentified_package_decision(
+    ecosystem: str,
+    *,
+    fail_closed: bool,
+    identity_resolved: bool = False,
+) -> str:
+    support_level = ecosystem_support_metadata(ecosystem)["support_level"]
+    if support_level not in {"protected", "beta"}:
+        return "monitor"
+    if fail_closed:
+        return "block"
+    return "monitor" if identity_resolved else "ask"
+
+
 def _evaluate_with_bundle(
     *,
     artifact: GuardArtifact,
@@ -1215,9 +1236,8 @@ def _evaluate_with_bundle(
         package_match = (
             _bundle_package(
                 bundle_response,
-                package_name=str(target["normalized_name"]),
+                target=target,
                 package_version=resolved_version,
-                ecosystem=_optional_string(target.get("ecosystem")) or "npm",
             )
             if resolved_version is not None
             else None
@@ -2144,18 +2164,37 @@ def _package_from_cloud_result(item: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _unknown_package_result(target: dict[str, object]) -> dict[str, object]:
+def _unknown_package_result(
+    target: dict[str, object],
+    *,
+    fail_closed_unidentified: bool = False,
+    identity_resolved: bool = False,
+) -> dict[str, object]:
     ecosystem = _optional_string(target.get("ecosystem")) or "npm"
-    is_supported = ecosystem not in {"unsupported", "system"}
+    decision = _unidentified_package_decision(
+        ecosystem,
+        fail_closed=fail_closed_unidentified,
+        identity_resolved=identity_resolved,
+    )
+    requires_review = decision in {"ask", "block"}
+    package_name = str(target.get("name") or "this package")
+    no_match_message = (
+        (
+            f"Guard could not verify registry identity or package intelligence for {package_name}; "
+            "approval is required before install."
+        )
+        if requires_review
+        else "Guard recorded this package request and will keep watching for new intelligence."
+    )
     reasons: list[dict[str, object]] = [
         {
             "code": "no_cached_match",
-            "message": "Guard recorded this package request and will keep watching for new intelligence.",
-            "severity": "unknown",
+            "message": no_match_message,
+            "severity": "high" if decision == "block" else ("medium" if requires_review else "unknown"),
             "source": "guard-local",
         },
     ]
-    if is_supported:
+    if requires_review:
         reasons.append(
             {
                 "code": "unidentified_package",
@@ -2168,7 +2207,7 @@ def _unknown_package_result(target: dict[str, object]) -> dict[str, object]:
             }
         )
     return {
-        "decision": "monitor",
+        "decision": decision,
         "ecosystem": target["ecosystem"],
         "name": target["name"],
         "namespace": target["namespace"],
@@ -2185,20 +2224,35 @@ def _unknown_package_result(target: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _fallback_monitor_packages(
+def _fallback_package_results(
     *,
     targets: tuple[dict[str, object], ...],
     artifact: GuardArtifact,
     workspace_dir: Path | None,
+    fail_closed_unidentified: bool = False,
 ) -> tuple[dict[str, object], ...]:
     bun_fallback_packages = _bun_lockfile_binary_fallback_packages(
         targets=targets,
         artifact=artifact,
         workspace_dir=workspace_dir,
+        fail_closed_unidentified=fail_closed_unidentified,
     )
     if bun_fallback_packages:
         return tuple(bun_fallback_packages)
-    return tuple(_unknown_package_result(target) for target in targets)
+    lockfile_versions = _lockfile_dependency_versions(workspace_dir, artifact, targets)
+    flags = set(_string_tuple(artifact.metadata.get("flags")))
+    return tuple(
+        _unknown_package_result(
+            target,
+            fail_closed_unidentified=fail_closed_unidentified,
+            identity_resolved=(
+                _optional_string(target.get("ecosystem")) == "npm"
+                and "--ignore-scripts" in flags
+                and _lockfile_target_key(target) in lockfile_versions
+            ),
+        )
+        for target in targets
+    )
 
 
 def _bun_lockfile_binary_fallback_packages(
@@ -2206,6 +2260,7 @@ def _bun_lockfile_binary_fallback_packages(
     targets: tuple[dict[str, object], ...],
     artifact: GuardArtifact,
     workspace_dir: Path | None,
+    fail_closed_unidentified: bool = False,
 ) -> list[dict[str, object]]:
     if workspace_dir is None:
         return []
@@ -2224,28 +2279,29 @@ def _bun_lockfile_binary_fallback_packages(
     )
     if bun_lock_path is None:
         return []
-    message = (
-        "Guard detected bun.lockb but Bun stores it as a binary lockfile, so this request fell back to "
-        "manifest-only monitoring."
-    )
+    message = "Guard could not verify package identity from Bun's binary lockfile (bun.lockb)."
     if targets:
         return [
             _heuristic_package_result(
                 target=target,
-                decision="monitor",
+                decision=_unidentified_package_decision(
+                    _optional_string(target.get("ecosystem")) or "npm",
+                    fail_closed=fail_closed_unidentified,
+                ),
                 code="bun_lockfile_binary_fallback",
-                message=message,
-                severity="low",
+                message=f"{message} Approval is required before install.",
+                severity="high" if fail_closed_unidentified else "medium",
             )
             for target in targets
         ]
+    decision = _unidentified_package_decision("npm", fail_closed=fail_closed_unidentified)
     return [
         _heuristic_package_result(
             target={"ecosystem": "npm", "name": "workspace", "namespace": None, "package_manager": "bun"},
-            decision="monitor",
+            decision=decision,
             code="bun_lockfile_binary_fallback",
-            message=message,
-            severity="low",
+            message=f"{message} Approval is required before install.",
+            severity="high" if decision == "block" else "medium",
         )
     ]
 
@@ -3797,22 +3853,11 @@ def _selector_matches_version(selector: str, target: dict[str, object]) -> bool:
 def _bundle_package(
     bundle_response: SupplyChainBundleResponse,
     *,
-    package_name: str,
+    target: dict[str, object],
     package_version: str,
-    ecosystem: str | None = None,
 ) -> SupplyChainBundlePackage | None:
-    normalized = _normalize_package_name(ecosystem, package_name) if ecosystem is not None else None
     for item in bundle_response.bundle.packages:
-        if ecosystem is not None and item.ecosystem != ecosystem:
-            continue
-        target_name = normalized or _normalize_package_name(item.ecosystem, package_name)
-        full_name = (
-            _normalize_package_name(item.ecosystem, f"{item.namespace}/{item.name}")
-            if item.namespace is not None
-            else _normalize_package_name(item.ecosystem, item.name)
-        )
-        normalized_item_name = _normalize_package_name(item.ecosystem, item.name)
-        if target_name not in {normalized_item_name, full_name}:
+        if not _bundle_package_name_matches(item, target):
             continue
         if item.version == package_version:
             return item

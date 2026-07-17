@@ -295,6 +295,15 @@ def _run_guard_run_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    grok_executable = getattr(args, "grok_executable", None)
+    if isinstance(grok_executable, str) and grok_executable.strip():
+        try:
+            selected_harness = get_adapter(str(args.harness)).harness
+        except ValueError:
+            selected_harness = str(args.harness)
+        if selected_harness != "grok":
+            print("Error: --grok-executable can only be used with the Grok harness.", file=sys.stderr)
+            return 2
     store = _require_guard_store(store)
     context = _require_guard_context(context)
     config = _require_guard_config(config)

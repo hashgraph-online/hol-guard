@@ -724,6 +724,7 @@ def allow_tool_call(
     risk_categories: tuple[str, ...] = (),
     approval_gate_grant: ApprovalGateGrant | None = None,
     arguments: object = None,
+    policy_workspace: str | None = None,
 ) -> GuardReceipt:
     if remember:
         store.upsert_policy(
@@ -733,7 +734,7 @@ def allow_tool_call(
                 action="allow",
                 artifact_id=artifact.artifact_id,
                 artifact_hash=artifact_hash,
-                workspace=None,
+                workspace=policy_workspace,
                 reason=f"Approved via Guard runtime ({decision_source})",
                 source="runtime-inline",
             ),

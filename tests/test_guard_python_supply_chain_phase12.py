@@ -306,7 +306,8 @@ def test_evaluate_package_request_artifact_does_not_allow_fix_versions_from_othe
     artifact = artifact_from_command_fixture("pip install requests==2.32.0", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "monitor"
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
 
 
 def test_transitive_lockfile_results_scope_python_matches_to_python_ecosystem(

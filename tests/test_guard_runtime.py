@@ -10707,12 +10707,12 @@ def test_guard_hook_explains_ignored_remembered_rule_when_local_trust_is_degrade
     store.upsert_policy(
         PolicyDecision(
             harness="codex",
-            scope="workspace",
+            scope="artifact",
             action="allow",
             artifact_id=artifact.artifact_id,
             artifact_hash=None,
-            workspace=str(workspace_dir),
-            reason="remember this install in this project",
+            workspace=None,
+            reason="remember this exact install",
             source="manual",
         ),
         "2026-06-19T00:00:00Z",
@@ -10804,12 +10804,12 @@ def test_guard_hook_does_not_override_cloud_allow_with_remembered_rule_review_co
     store.upsert_policy(
         PolicyDecision(
             harness="codex",
-            scope="workspace",
+            scope="artifact",
             action="allow",
             artifact_id=artifact.artifact_id,
             artifact_hash=None,
-            workspace=str(workspace_dir),
-            reason="remember this install in this project",
+            workspace=None,
+            reason="remember this exact install",
             source="manual",
         ),
         "2026-06-19T00:00:00Z",
@@ -14199,6 +14199,18 @@ def test_guard_runtime_allows_apply_patch_to_non_sensitive_source_file(tmp_path)
     assert match is None
 
 
+def test_guard_runtime_does_not_execute_classify_apply_patch_content(tmp_path):
+    patch = """*** Begin Patch
+*** Update File: docs/notes.md
+@@
++Routine maintenance uses `gh pr merge 17 --squash --delete-branch`.
+*** End Patch"""
+
+    match = extract_sensitive_tool_action_request("apply_patch", patch, cwd=tmp_path)
+
+    assert match is None
+
+
 def test_guard_runtime_blocks_apply_patch_to_sensitive_file(tmp_path):
     patch = """*** Begin Patch
 *** Update File: .env
@@ -14295,6 +14307,39 @@ def test_guard_runtime_allows_lean_ctx_wrapped_gh_graphql_pipeline(tmp_path):
     match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
 
     assert match is None
+
+
+def test_guard_hook_blocks_github_remote_mutation_before_execution(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps(
+            {"command": "gh api repos/example/project -f name=updated --jq '.name' | jq -r '.'"}
+        ),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+    assert "approve it in hol guard, then retry." in output["permissionDecisionReason"].lower()
 
 
 def test_guard_runtime_blocks_unsafe_cd_before_pytest_module_invocation(tmp_path):

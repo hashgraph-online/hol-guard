@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -9,7 +10,13 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+from codex_plugin_scanner.guard.daemon.discovery import (
+    daemon_discovery_key_path,
+    load_authenticated_daemon_state,
+)
 
 
 def _disable_daemon_adoption(monkeypatch) -> None:
@@ -35,14 +42,17 @@ def test_write_guard_daemon_state_keeps_auth_token_out_of_state_file(tmp_path):
 
     state_path = daemon_manager_module._state_path(guard_home)
     token_path = daemon_manager_module._auth_token_path(guard_home)
+    discovery_key_path = daemon_discovery_key_path(guard_home)
     state_payload = json.loads(state_path.read_text(encoding="utf-8"))
 
     assert state_payload["port"] == 4781
     assert "auth_token" not in state_payload
     assert daemon_manager_module.load_guard_daemon_auth_token(guard_home) == "secret-token"
     assert token_path.read_text(encoding="utf-8") == "secret-token"
+    assert load_authenticated_daemon_state(guard_home) == state_payload
     assert stat.S_IMODE(state_path.stat().st_mode) & 0o077 == 0
     assert stat.S_IMODE(token_path.stat().st_mode) & 0o077 == 0
+    assert stat.S_IMODE(discovery_key_path.stat().st_mode) & 0o077 == 0
 
 
 def test_clear_guard_daemon_state_preserves_auth_token_file(tmp_path):
@@ -53,6 +63,49 @@ def test_clear_guard_daemon_state_preserves_auth_token_file(tmp_path):
 
     assert json.loads(daemon_manager_module._state_path(guard_home).read_text(encoding="utf-8")) == {}
     assert daemon_manager_module._auth_token_path(guard_home).read_text(encoding="utf-8") == "secret-token"
+
+
+def test_load_guard_daemon_auth_token_never_uses_legacy_mutable_state(tmp_path):
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    daemon_manager_module._state_path(guard_home).write_text(
+        json.dumps({"port": 4781, "auth_token": "legacy-mutable-token"}),
+        encoding="utf-8",
+    )
+
+    assert daemon_manager_module.load_guard_daemon_auth_token(guard_home) is None
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode enforcement")
+def test_load_guard_daemon_auth_token_rejects_non_private_file(tmp_path):
+    guard_home = tmp_path / "guard-home"
+    daemon_manager_module.write_guard_daemon_state(guard_home, 4781, "secret-token")
+    os.chmod(daemon_manager_module._auth_token_path(guard_home), 0o644)
+
+    assert daemon_manager_module.load_guard_daemon_auth_token(guard_home) is None
+    assert daemon_manager_module._load_authenticated_daemon_identity(guard_home) is None
+
+
+def test_load_guard_daemon_url_rejects_unsigned_legacy_state_before_network(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(mode=0o700)
+    daemon_manager_module._state_path(guard_home).write_text(
+        json.dumps(
+            {
+                "port": 4781,
+                "pid": os.getpid(),
+                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        daemon_manager_module.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not probe unsigned state")),
+    )
+
+    assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
 
 
 def test_load_guard_daemon_url_rejects_live_port_when_state_pid_is_not_guard_daemon(tmp_path, monkeypatch):
@@ -156,8 +209,105 @@ def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_pat
 
     daemon_manager_module.write_guard_daemon_state(guard_home, 4781, "secret-token")
 
-    assert len(fchmod_calls) == 2
+    assert len(fchmod_calls) == 3
     assert all(mode == 0o600 for _, mode in fchmod_calls)
+
+
+def test_authenticated_daemon_state_rejects_post_write_tampering(tmp_path):
+    guard_home = tmp_path / "guard-home"
+    daemon_manager_module.write_guard_daemon_state(guard_home, 4781, "secret-token")
+    state_path = daemon_manager_module._state_path(guard_home)
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["port"] = 4782
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    os.chmod(state_path, 0o600)
+
+    assert load_authenticated_daemon_state(guard_home) is None
+
+
+def test_daemon_token_and_state_use_atomic_replacement(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    replacements: list[tuple[Path, Path]] = []
+    real_replace = daemon_manager_module.os.replace
+
+    def recording_replace(source, destination) -> None:
+        replacements.append((Path(source), Path(destination)))
+        real_replace(source, destination)
+
+    monkeypatch.setattr(daemon_manager_module.os, "replace", recording_replace)
+
+    daemon_manager_module.write_guard_daemon_state(guard_home, 4781, "secret-token")
+
+    destinations = {destination for _temporary_path, destination in replacements}
+    assert destinations == {
+        daemon_manager_module._auth_token_path(guard_home),
+        daemon_manager_module._state_path(guard_home),
+    }
+    assert all(temporary_path.parent == guard_home for temporary_path, _destination in replacements)
+    assert all(temporary_path != destination for temporary_path, destination in replacements)
+
+
+def test_concurrent_daemon_restarts_leave_matching_authenticated_state_and_token(tmp_path):
+    guard_home = tmp_path / "guard-home"
+    writer_count = 8
+    start = threading.Barrier(writer_count)
+
+    def write_generation(index: int) -> None:
+        start.wait()
+        daemon_manager_module.write_guard_daemon_state(
+            guard_home,
+            4781 + index,
+            f"restart-token-{index}",
+            pid=10_000 + index,
+            state_id=f"restart-state-{index}",
+        )
+
+    threads = [threading.Thread(target=write_generation, args=(index,)) for index in range(writer_count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert all(not thread.is_alive() for thread in threads)
+    state = load_authenticated_daemon_state(guard_home)
+    token = daemon_manager_module.load_guard_daemon_auth_token(guard_home)
+    assert state is not None
+    assert token is not None
+    assert state["auth_token_id"] == hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def test_ensure_guard_daemon_retires_unsigned_legacy_instance_before_adoption(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(mode=0o700)
+    daemon_manager_module._state_path(guard_home).write_text(
+        json.dumps(
+            {
+                "guard_home": str(guard_home),
+                "port": 4781,
+                "pid": 12345,
+                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+            }
+        ),
+        encoding="utf-8",
+    )
+    retired: list[dict[str, object]] = []
+    monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home: None)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_retire_guard_daemon_process",
+        lambda payload: retired.append(payload) or True,
+    )
+
+    def adopt_after_retirement(_guard_home: Path, **_kwargs: object) -> str:
+        assert retired and retired[0]["pid"] == 12345
+        assert json.loads(daemon_manager_module._state_path(guard_home).read_text(encoding="utf-8")) == {}
+        return "http://127.0.0.1:4782"
+
+    monkeypatch.setattr(daemon_manager_module, "_adopt_existing_guard_daemon", adopt_after_retirement)
+    monkeypatch.setattr(daemon_manager_module, "_retire_duplicate_guard_daemons", lambda *_args, **_kwargs: None)
+
+    assert daemon_manager_module.ensure_guard_daemon(guard_home) == "http://127.0.0.1:4782"
 
 
 def test_healthz_payload_is_current_accepts_redacted_public_healthz() -> None:

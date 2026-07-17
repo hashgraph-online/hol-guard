@@ -678,7 +678,7 @@ def test_evaluate_package_request_artifact_ignores_wildcard_scope_only_confusion
     artifact = _artifact_from_command("npm install left-pad@1.3.0", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "monitor"
+    assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "no_cached_match"
 
 
@@ -705,7 +705,7 @@ def test_evaluate_package_request_artifact_matches_js_package_names_exactly_for_
     good_result = evaluate_package_request_artifact(artifact=good_artifact, store=store, workspace_dir=workspace_dir)
 
     assert bad_result.decision == "block"
-    assert good_result.decision == "monitor"
+    assert good_result.decision == "ask"
     assert good_result.packages[0]["reasons"][0]["code"] == "no_cached_match"
 
 
@@ -720,7 +720,7 @@ def test_evaluate_package_request_artifact_records_bun_lockb_binary_fallback(tmp
     artifact = _artifact_from_command("bun add left-pad@1.3.0", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "monitor"
+    assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "bun_lockfile_binary_fallback"
     assert "binary lockfile" in result.reasons[0]["message"]
 
@@ -763,5 +763,5 @@ def test_evaluate_package_request_artifact_avoids_scoped_package_name_collisions
     artifact = _artifact_from_command(command, workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "monitor"
+    assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "no_cached_match"

@@ -94,6 +94,10 @@ assert(
   !isApprovalGateRequiredError(makeHarnessError(403, { error: "approval_gate_locked" })),
   "locked gate is not treated as missing password",
 );
+assert(
+  !isApprovalGateRequiredError(makeHarnessError(403, { error: "approval_gate_grant_expired" })),
+  "expired proof is not treated as missing password",
+);
 
 const withoutCredentials = resolveApprovalGateSyncFailure(
   makeHarnessError(403, {

@@ -441,6 +441,26 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
 
         {gateReady ? (
           <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+            {props.approvalGate?.totp_enabled !== true && (
+              <>
+                <div className="flex items-center gap-2">
+              <HiMiniKey className="h-4 w-4 text-brand-blue" aria-hidden="true" />
+              <label htmlFor="guard-bulk-approval-password" className="text-sm font-semibold text-brand-dark">
+                Approval password
+              </label>
+                </div>
+                <input
+              id="guard-bulk-approval-password"
+              type="password"
+              value={props.bulkApprovePassword}
+              onChange={props.onBulkApprovePasswordChange}
+              placeholder="Enter your approval password"
+              autoComplete="current-password"
+              disabled={props.step === "submitting"}
+              className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+                />
+              </>
+            )}
             {props.approvalGate?.totp_enabled === true && (
               <>
                 <div className="flex items-center gap-2">
@@ -457,26 +477,6 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
                   value={props.bulkApproveTotpCode}
                   onChange={props.onBulkApproveTotpCodeChange}
                   placeholder="6-digit code"
-                  disabled={props.step === "submitting"}
-                  className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
-                />
-              </>
-            )}
-            {props.approvalGate?.totp_enabled !== true && (
-              <>
-                <div className="flex items-center gap-2">
-                  <HiMiniKey className="h-4 w-4 text-brand-blue" aria-hidden="true" />
-                  <label htmlFor="guard-bulk-approval-password" className="text-sm font-semibold text-brand-dark">
-                    Approval password
-                  </label>
-                </div>
-                <input
-                  id="guard-bulk-approval-password"
-                  type="password"
-                  value={props.bulkApprovePassword}
-                  onChange={props.onBulkApprovePasswordChange}
-                  placeholder="Enter your approval password"
-                  autoComplete="current-password"
                   disabled={props.step === "submitting"}
                   className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
                 />

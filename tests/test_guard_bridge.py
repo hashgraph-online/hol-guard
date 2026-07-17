@@ -32,6 +32,7 @@ def test_guard_bridge_fetch_pending_requests_sends_guard_token_header(tmp_path, 
     token_path = store.guard_home / "daemon-auth-token"
     token_path.parent.mkdir(parents=True, exist_ok=True)
     token_path.write_text("bridge-token", encoding="utf-8")
+    token_path.chmod(0o600)
     bridge = GuardBridge(
         config=BridgeConfig(guard_url="http://127.0.0.1:4455", dry_run=False),
         store=store,

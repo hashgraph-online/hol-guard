@@ -16,6 +16,7 @@ from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from ..path_support import resolves_within_root
+from ..version import __version__
 
 InventoryItemKind = Literal[
     "agent",
@@ -180,6 +181,7 @@ _AIBOM_METADATA_KEYS = (
     "sourceOfTruth",
     "trustLayers",
     "trustResolution",
+    "unverifiedAdapterEvidence",
     "versionInfo",
 )
 
@@ -815,6 +817,10 @@ def _item_from_artifact(
         upload_id=upload_id,
         workspace_id=workspace_id,
         device_id=device_id,
+        adapter_id=harness,
+        adapter_version=__version__,
+        config_path_hash=_attestation_path_hash(getattr(artifact, "config_path", None), fallback=artifact_id),
+        repository_id=_attestation_repository_id(home_dir=home_dir, workspace_dir=workspace_dir),
         signing_config=signing_config,
     )
     publisher = getattr(artifact, "publisher", None)
@@ -939,6 +945,11 @@ def _mcp_tool_items_from_artifact(
             harness=harness,
             item_id=tool_item_id,
             content_hash=semantic_hash,
+            config_path_hash=_attestation_path_hash(
+                getattr(artifact, "config_path", None),
+                fallback=server_item.item_id,
+            ),
+            repository_id=_attestation_repository_id(home_dir=home_dir, workspace_dir=workspace_dir),
             trust_attestation_context=trust_attestation_context,
         )
         signed_tool_layers = metadata.get("trustLayers")
@@ -1009,6 +1020,8 @@ def _apply_tool_trust_attestation_metadata(
     harness: str,
     item_id: str,
     content_hash: str,
+    config_path_hash: str,
+    repository_id: str,
     trust_attestation_context: Mapping[str, object] | None,
 ) -> dict[str, object]:
     from .runtime.trust_attestation import (
@@ -1023,6 +1036,10 @@ def _apply_tool_trust_attestation_metadata(
             item_id=item_id,
             item_kind="mcp_tool",
             content_hash=content_hash,
+            adapter_id=harness,
+            adapter_version=__version__,
+            config_path_hash=config_path_hash,
+            repository_id=repository_id,
         )
 
     raw_signing_config = trust_attestation_context.get("signingConfig")
@@ -1048,8 +1065,30 @@ def _apply_tool_trust_attestation_metadata(
         upload_id=_optional_context_string(trust_attestation_context, "uploadId"),
         workspace_id=_optional_context_string(trust_attestation_context, "workspaceId"),
         device_id=_optional_context_string(trust_attestation_context, "deviceId"),
+        adapter_id=harness,
+        adapter_version=__version__,
+        config_path_hash=config_path_hash,
+        repository_id=repository_id,
         signing_config=signing_config,
     )
+
+
+def _attestation_path_hash(value: object, *, fallback: str) -> str:
+    raw = value if isinstance(value, str) and value else f"artifact:{fallback}"
+    try:
+        normalized = str(Path(raw).expanduser().resolve(strict=False))
+    except (OSError, RuntimeError, ValueError):
+        normalized = raw
+    return f"sha256:{hashlib.sha256(normalized.encode('utf-8')).hexdigest()}"
+
+
+def _attestation_repository_id(*, home_dir: Path, workspace_dir: Path | None) -> str:
+    root = workspace_dir if workspace_dir is not None else home_dir
+    try:
+        normalized = str(root.expanduser().resolve(strict=False))
+    except (OSError, RuntimeError, ValueError):
+        normalized = str(root)
+    return f"sha256:{hashlib.sha256(normalized.encode('utf-8')).hexdigest()}"
 
 
 def _optional_context_string(context: Mapping[str, object], key: str) -> str | None:
@@ -1611,6 +1650,9 @@ def _safe_artifact_metadata(
     metadata = _sanitize_paths(raw_metadata if isinstance(raw_metadata, dict) else {}, home_dir, workspace_dir)
     if not isinstance(metadata, dict):
         metadata = {}
+    from .trust_metadata_boundary import separate_untrusted_adapter_trust_metadata
+
+    metadata = separate_untrusted_adapter_trust_metadata(metadata)
     config_path = getattr(artifact, "config_path", None)
     command = getattr(artifact, "command", None)
     url = getattr(artifact, "url", None)

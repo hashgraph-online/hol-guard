@@ -47,15 +47,15 @@ export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
     <div className="space-y-3">
       {needsPassword ? (
         <label className="block">
-          <span className="text-sm font-semibold text-brand-dark">Approval password</span>
-          <input
-            ref={props.passwordRef}
-            type="password"
-            autoComplete="current-password"
-            value={props.approvalPassword}
-            onChange={props.onApprovalPasswordChange}
-            className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          />
+        <span className="text-sm font-semibold text-brand-dark">Approval password</span>
+        <input
+          ref={props.passwordRef}
+          type="password"
+          autoComplete="current-password"
+          value={props.approvalPassword}
+          onChange={props.onApprovalPasswordChange}
+          className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        />
         </label>
       ) : (
         <label className="block">

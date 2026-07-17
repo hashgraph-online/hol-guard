@@ -15,16 +15,20 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.approval_scope_support import package_request_runtime_workspace_scope
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
+from codex_plugin_scanner.guard.local_supply_chain import package_request_policy_hash
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
-from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
+from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.proxy.runtime_mcp import CodexMcpGuardProxy, RuntimeMcpGuardProxy
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     extract_package_intent_request,
 )
+from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -232,6 +236,39 @@ def _context_without_workspace(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
 
 
+def _package_policy_key(
+    *,
+    context: HarnessContext,
+    store: GuardStore,
+    artifact: GuardArtifact,
+) -> tuple[str, str]:
+    assert context.workspace_dir is not None
+    evaluation = evaluate_package_request_artifact(
+        artifact=artifact,
+        store=store,
+        workspace_dir=context.workspace_dir,
+    )
+    execution_context = build_package_execution_context(
+        workspace_dir=context.workspace_dir,
+        artifact=artifact,
+    )
+    digest = package_request_policy_hash(
+        artifact=artifact,
+        store=store,
+        workspace_dir=context.workspace_dir,
+        evaluation=evaluation,
+        execution_context=execution_context,
+    )
+    workspace = package_request_runtime_workspace_scope(
+        artifact_id=artifact.artifact_id,
+        artifact_hash=digest,
+        artifact_type=artifact.artifact_type,
+        execution_context=execution_context,
+    )
+    assert workspace is not None
+    return digest, workspace
+
+
 def _allow_mcp_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         runtime_mcp_module,
@@ -366,14 +403,19 @@ def test_phase14_runtime_mcp_proxy_rejects_stored_allow_when_current_package_blo
         config_path=str(context.workspace_dir / ".cursor" / "mcp.json"),
         source_scope="project",
     )
+    package_digest, policy_workspace = _package_policy_key(
+        context=context,
+        store=store,
+        artifact=package_artifact,
+    )
     store.upsert_policy(
         PolicyDecision(
             harness="cursor",
             scope="artifact",
             action="allow",
             artifact_id=package_artifact.artifact_id,
-            artifact_hash=artifact_hash(package_artifact),
-            workspace=None,
+            artifact_hash=package_digest,
+            workspace=policy_workspace,
             publisher=None,
             reason="verified false positive",
         ),
@@ -506,14 +548,19 @@ def test_phase14_runtime_mcp_proxy_skips_requeue_for_stored_package_block(
         config_path=str(context.workspace_dir / ".cursor" / "mcp.json"),
         source_scope="project",
     )
+    package_digest, policy_workspace = _package_policy_key(
+        context=context,
+        store=store,
+        artifact=package_artifact,
+    )
     store.upsert_policy(
         PolicyDecision(
             harness="cursor",
             scope="artifact",
             action="block",
             artifact_id=package_artifact.artifact_id,
-            artifact_hash=artifact_hash(package_artifact),
-            workspace=None,
+            artifact_hash=package_digest,
+            workspace=policy_workspace,
             publisher=None,
             reason="known blocked package",
         ),
@@ -749,6 +796,11 @@ def test_phase14_codex_package_inline_approval_is_remembered(
         config_path=str(context.workspace_dir / ".codex" / "config.toml"),
         source_scope="project",
     )
+    package_digest, policy_workspace = _package_policy_key(
+        context=context,
+        store=store,
+        artifact=package_artifact,
+    )
 
     def inline_approval(request: dict[str, object]) -> dict[str, object]:
         approvals.append(request)
@@ -795,8 +847,8 @@ def test_phase14_codex_package_inline_approval_is_remembered(
         store.resolve_policy(
             package_artifact.harness,
             package_artifact.artifact_id,
-            artifact_hash=artifact_hash(package_artifact),
-            workspace=None,
+            artifact_hash=package_digest,
+            workspace=policy_workspace,
         )
         == "allow"
     )
@@ -824,14 +876,19 @@ def test_phase14_runtime_mcp_proxy_normalizes_stored_review_for_package_approval
         config_path=str(context.workspace_dir / ".cursor" / "mcp.json"),
         source_scope="project",
     )
+    package_digest, policy_workspace = _package_policy_key(
+        context=context,
+        store=store,
+        artifact=package_artifact,
+    )
     store.upsert_policy(
         PolicyDecision(
             harness="cursor",
             scope="artifact",
             action="review",
             artifact_id=package_artifact.artifact_id,
-            artifact_hash=artifact_hash(package_artifact),
-            workspace=None,
+            artifact_hash=package_digest,
+            workspace=policy_workspace,
             publisher=None,
             reason="review exact package request",
         ),

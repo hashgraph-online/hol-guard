@@ -364,6 +364,14 @@ def test_command_extension_registry_rejects_duplicate_action_ownership() -> None
 def test_runtime_risk_class_mapping_remains_compatible() -> None:
     assert risk_classes_for_command_action("destructive shell command") == ("destructive_shell",)
     assert risk_classes_for_command_action("GitHub PR body shell substitution") == ("execution",)
+    assert risk_classes_for_command_action("GitHub remote mutation command") == (
+        "destructive_shell",
+        "network_egress",
+    )
+    assert risk_classes_for_command_action("Unverified GitHub command capability") == (
+        "destructive_shell",
+        "network_egress",
+    )
     assert risk_classes_for_command_action("Guard approval self-authorization command") == ("policy_bypass",)
 
 

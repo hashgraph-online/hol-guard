@@ -12583,6 +12583,9 @@ function isSupplyChainScannerEvidence(value) {
 function isSupplyChainAuditEvidence(value) {
   return isSupplyChainScannerEvidence(value) && value.operation === "audit";
 }
+function isPackageExecutionContextEvidence(value) {
+  return isScannerEvidenceRecord(value) && value.kind === "package_execution_context" && value.schema_version === 2 && typeof value.portable === "boolean" && typeof value.context_digest === "string";
+}
 var DefaultContext = {
   color: void 0,
   size: void 0,
@@ -15698,13 +15701,46 @@ function normalizeManagedInstalls(raw) {
   }
   return result;
 }
+function normalizeCloudCommandCapability(raw) {
+  if (!isRecord$1(raw)) {
+    return void 0;
+  }
+  const pending = Array.isArray(raw["pending_commands"]) ? raw["pending_commands"].flatMap((item) => {
+    if (!isRecord$1(item)) return [];
+    const id = item["id"];
+    const operation = item["operation"];
+    const issuer = item["issuer"];
+    const expiresAt = item["expiresAt"];
+    const approveCommand = item["approveCommand"];
+    if (typeof id !== "string" || typeof operation !== "string" || typeof issuer !== "string" || typeof expiresAt !== "string" || typeof approveCommand !== "string") {
+      return [];
+    }
+    return [{ id, operation, issuer, expiresAt, approveCommand }];
+  }) : [];
+  const operations = Array.isArray(raw["operations"]) ? raw["operations"].filter((operation) => typeof operation === "string") : [];
+  return {
+    enabled: raw["enabled"] === true,
+    capability_valid: raw["capability_valid"] === true || raw["enabled"] === true,
+    reason: typeof raw["reason"] === "string" ? raw["reason"] : null,
+    issuer: typeof raw["issuer"] === "string" ? raw["issuer"] : null,
+    issued_at: typeof raw["issued_at"] === "string" ? raw["issued_at"] : null,
+    expires_at: typeof raw["expires_at"] === "string" ? raw["expires_at"] : null,
+    device_id: typeof raw["device_id"] === "string" ? raw["device_id"] : null,
+    workspace_id: typeof raw["workspace_id"] === "string" ? raw["workspace_id"] : null,
+    operations,
+    pending_commands: pending,
+    enable_command: typeof raw["enable_command"] === "string" ? raw["enable_command"] : "hol-guard commands enable --operations read-only",
+    revoke_command: typeof raw["revoke_command"] === "string" ? raw["revoke_command"] : "hol-guard commands revoke --confirm revoke"
+  };
+}
 function normalizeRuntimeSnapshot(snapshot) {
   return {
     ...snapshot,
     items: normalizeApprovalRequests(snapshot.items),
     queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count),
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
-    managed_installs: normalizeManagedInstalls(snapshot.managed_installs)
+    managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
+    cloud_command_capability: normalizeCloudCommandCapability(snapshot.cloud_command_capability)
   };
 }
 function normalizeQueueCopy(raw) {
@@ -18189,6 +18225,57 @@ function TabBar(props) {
     },
     tab.value
   )) });
+}
+const ANALYTICS_CACHE_TTL_MS = 6e4;
+let analyticsCache = null;
+let analyticsInflight = null;
+async function loadReceiptAnalyticsCached(force = false) {
+  if (!force && analyticsCache && analyticsCache.expiresAt > Date.now()) {
+    return analyticsCache.data;
+  }
+  if (!force && analyticsInflight) {
+    return analyticsInflight;
+  }
+  analyticsInflight = fetchReceiptAnalytics().then((data) => {
+    analyticsCache = { data, expiresAt: Date.now() + ANALYTICS_CACHE_TTL_MS };
+    return data;
+  }).finally(() => {
+    analyticsInflight = null;
+  });
+  return analyticsInflight;
+}
+function invalidateReceiptAnalyticsCache() {
+  analyticsCache = null;
+  analyticsInflight = null;
+}
+function useReceiptAnalytics(enabled) {
+  const [state, setState] = reactExports.useState(
+    () => enabled ? { kind: "loading" } : { kind: "idle" }
+  );
+  reactExports.useEffect(() => {
+    if (!enabled) {
+      setState({ kind: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setState({ kind: "loading" });
+    loadReceiptAnalyticsCached().then((data) => {
+      if (!cancelled) {
+        setState({ kind: "ready", data });
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        setState({
+          kind: "error",
+          message: error instanceof Error ? error.message : "Unable to load analytics."
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+  return state;
 }
 function formatBlockedShare(blocked, total) {
   if (!(total > 0) || !(blocked > 0)) {
@@ -22671,7 +22758,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
   const [page, setPage] = reactExports.useState(0);
   const [exportOpen, setExportOpen] = reactExports.useState(false);
   const [clearOpen, setClearOpen] = reactExports.useState(false);
-  const [analyticsState, setAnalyticsState] = reactExports.useState({ kind: "idle" });
+  const analytics = useReceiptAnalytics(true);
   const urlSyncTimerRef = reactExports.useRef(null);
   const harnesses = reactExports.useMemo(
     () => Array.from(
@@ -22771,28 +22858,9 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
   }, []);
   const handleConfirmClear = reactExports.useCallback(() => {
     setFilters(DEFAULT_FILTER_STATE);
+    invalidateReceiptAnalyticsCache();
     if (onClearEvidence) onClearEvidence();
   }, [onClearEvidence]);
-  reactExports.useEffect(() => {
-    if (filters.view !== "insights") {
-      return;
-    }
-    let cancelled = false;
-    setAnalyticsState({ kind: "loading" });
-    fetchReceiptAnalytics().then((data) => {
-      if (!cancelled) setAnalyticsState({ kind: "ready", data });
-    }).catch((error) => {
-      if (!cancelled) {
-        setAnalyticsState({
-          kind: "error",
-          message: error instanceof Error ? error.message : "Could not load analytics"
-        });
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [filters.view, receiptItems.length]);
   const handleViewActions = reactExports.useCallback(() => {
     setFilters((prev) => ({ ...prev, view: "actions", day: "" }));
   }, []);
@@ -22828,12 +22896,13 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     );
   }
   const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
+  const totalReceiptCount = analytics.kind === "ready" ? analytics.data.total : receiptItems.length;
   const insightsHeaderDescription = reactExports.useMemo(() => {
     if (filters.view !== "insights") return void 0;
-    if (analyticsState.kind !== "ready") return "Loading analytics from your local evidence store.";
-    const total = analyticsState.data.total;
+    if (analytics.kind !== "ready") return "Loading analytics from your local evidence store.";
+    const total = analytics.data.total;
     return `${formatEvidenceCount(total)} actions in your full local store.`;
-  }, [filters.view, analyticsState]);
+  }, [filters.view, analytics]);
   const headerActions = reactExports.useMemo(
     () => /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -22872,7 +22941,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
         actions: headerActions
       }
     ),
-    filters.view !== "insights" && /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceHero, { totalCount: receiptItems.length, lastActivityAt: metrics.lastActivityAt }),
+    filters.view !== "insights" && /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceHero, { totalCount: totalReceiptCount, lastActivityAt: metrics.lastActivityAt }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-1", children: [
       filters.view === "actions" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "div",
@@ -22888,7 +22957,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
                 {
                   filters,
                   onChange: handleFilterChange,
-                  totalCount: receiptItems.length,
+                  totalCount: totalReceiptCount,
                   filteredCount: filtered.length,
                   harnesses
                 }
@@ -22927,10 +22996,10 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
           role: "tabpanel",
           "aria-labelledby": "tab-insights",
           className: "guard-fade-in",
-          children: analyticsState.kind === "loading" || analyticsState.kind === "idle" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-center py-16 text-sm text-slate-500", children: "Loading insights…" }) : analyticsState.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", children: analyticsState.message }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+          children: analytics.kind === "loading" || analytics.kind === "idle" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-center py-16 text-sm text-slate-500", children: "Loading insights…" }) : analytics.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", children: analytics.message }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
             EvidenceAnalyticsPanel,
             {
-              analytics: analyticsState.data,
+              analytics: analytics.data,
               runtime,
               sampleCount: receiptItems.length,
               onFilterHarness: handleFilterHarnessFromInsights,
@@ -22996,7 +23065,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       EvidenceClearModal,
       {
-        count: receiptItems.length,
+        count: totalReceiptCount,
         isOpen: clearOpen,
         onClose: handleCloseClear,
         onCleared: handleConfirmClear
@@ -23051,6 +23120,7 @@ function SkillSignalRow(props) {
 }
 function SupplyChainRiskCard(props) {
   const scSignals = deriveSupplyChainRiskSignals(props.item);
+  const packageContext = props.item.scanner_evidence?.find(isPackageExecutionContextEvidence) ?? null;
   const isSupplyChainArtifact = props.item.artifact_type === "supply_chain" || props.item.artifact_type === "package_request" || typeof props.item.artifact_type === "string" && props.item.artifact_type.endsWith("_package");
   if (scSignals.length === 0 && !isSupplyChainArtifact) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -23060,10 +23130,66 @@ function SupplyChainRiskCard(props) {
       "aria-label": "Supply-chain risk",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Supply-chain risk" }),
-        scSignals.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainSignalRow, { signal }, signal.signal_id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: "This action originates from a supply-chain artifact. Verify the publisher and version before approving." })
+        scSignals.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainSignalRow, { signal }, signal.signal_id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: "This action originates from a supply-chain artifact. Verify the publisher and version before approving." }),
+        packageContext !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PackageExecutionContextSummary, { context: packageContext }) : null
       ]
     }
   );
+}
+const PACKAGE_CONTEXT_LABELS = {
+  environment_policy: "registry and proxy environment",
+  exact_workspace: "project location",
+  lifecycle_hooks_overrides_and_patches: "lifecycle hooks, overrides, or patches",
+  manifests_and_lockfiles: "manifests or lockfiles",
+  package_manager_executable: "package manager executable",
+  registry_and_proxy_configuration: "registry or proxy configuration",
+  repository_identity: "Git repository identity",
+  workspace_configuration: "workspace configuration",
+  workspace_identity: "workspace location within the repository"
+};
+function packageContextLabel(value) {
+  return PACKAGE_CONTEXT_LABELS[value] ?? value.replaceAll("_", " ");
+}
+function nonPortableReason(value) {
+  switch (value) {
+    case "dynamic_manager_configuration":
+      return "the package manager loads configuration dynamically";
+    case "dynamic_lifecycle_hook":
+      return "the project defines a lifecycle hook that can load additional local inputs";
+    case "oversized_configuration":
+      return "a package configuration input is too large to bind safely";
+    case "package_manager_executable_unavailable":
+      return "the package manager executable could not be verified";
+    case "repository_identity_unavailable":
+      return "a linked Git repository identity could not be verified";
+    case "symlinked_configuration":
+      return "a package configuration file is symlinked";
+    case "unreadable_configuration":
+      return "a package configuration input could not be read";
+    case "unsupported_package_manager":
+    case "unsupported_configuration":
+      return "the package configuration is not safely portable";
+    default:
+      return "Guard could not verify every package execution input";
+  }
+}
+function packageExecutionContextMessages(context) {
+  const messages = [
+    context.portable ? "A project approval is reused only in linked Git worktrees when the repository, package manager executable, dependency files, settings, hooks, overrides, patches, and registry/proxy environment all match." : `This approval is limited to one retry because ${nonPortableReason(context.non_portable_reason)}.`
+  ];
+  const changedComponents = context.changed_components ?? [];
+  if (changedComponents.length > 0) {
+    messages.push(
+      `Guard asked again because the following changed: ${changedComponents.map(packageContextLabel).join(", ")}.`
+    );
+  }
+  return messages;
+}
+function PackageExecutionContextSummary(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 border-t border-brand-purple/10 pt-3", "aria-label": "Package approval reuse", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-brand-purple", children: "Approval reuse" }),
+    packageExecutionContextMessages(props.context).map((message) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: message }, message))
+  ] });
 }
 function SupplyChainSignalRow(props) {
   const { signal } = props;
@@ -23373,54 +23499,48 @@ function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, sele
   }
   return strictAllDecisions;
 }
-function approvalProofRequiresPassword(gate) {
-  return gate?.totp_enabled !== true;
+function approvalProofRequiresTotp(gate) {
+  return gate?.totp_enabled === true;
 }
 function isApprovalProofSubmitDisabled(gate, credentials, busy) {
   if (busy) {
     return true;
   }
-  if (approvalProofRequiresPassword(gate)) {
-    return credentials.approvalPassword.trim() === "";
-  }
-  return credentials.approvalTotpCode.trim() === "";
+  return approvalProofRequiresTotp(gate) ? credentials.approvalTotpCode.trim() === "" : credentials.approvalPassword.trim() === "";
 }
 function buildApprovalProofCredentials(gate, credentials) {
-  if (approvalProofRequiresPassword(gate)) {
-    return { approval_password: credentials.approvalPassword };
-  }
-  return { approval_totp_code: credentials.approvalTotpCode };
+  return approvalProofRequiresTotp(gate) ? { approval_totp_code: credentials.approvalTotpCode } : { approval_password: credentials.approvalPassword };
 }
 function ApprovalProofFieldInputs(props) {
-  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "input",
-      {
-        ref: props.passwordRef,
-        type: "password",
-        autoComplete: "current-password",
-        value: props.approvalPassword,
-        onChange: props.onApprovalPasswordChange,
-        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-      }
-    )
-  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "input",
-      {
-        type: "text",
-        inputMode: "numeric",
-        pattern: "[0-9]*",
-        autoComplete: "one-time-code",
-        value: props.approvalTotpCode,
-        onChange: props.onApprovalTotpCodeChange,
-        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-      }
-    )
-  ] }) });
+  const needsTotp = approvalProofRequiresTotp(props.approvalGate);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsTotp ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "text",
+          inputMode: "numeric",
+          pattern: "[0-9]*",
+          autoComplete: "one-time-code",
+          value: props.approvalTotpCode,
+          onChange: props.onApprovalTotpCodeChange,
+          className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        }
+      )
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          ref: props.passwordRef,
+          type: "password",
+          autoComplete: "current-password",
+          value: props.approvalPassword,
+          onChange: props.onApprovalPasswordChange,
+          className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        }
+      )
+    ] }) });
 }
 function ApprovalProofInline(props) {
   const passwordRef = reactExports.useRef(null);
@@ -23476,17 +23596,18 @@ function ApprovalProofInline(props) {
 function ApprovalPasswordModal(props) {
   const passwordRef = reactExports.useRef(null);
   const totpRef = reactExports.useRef(null);
-  const needsPassword = approvalProofRequiresPassword(props.gate);
+  const needsTotp = approvalProofRequiresTotp(props.gate);
+  const submitDisabled = needsTotp ? props.approvalTotpCode.trim() === "" : props.approvalPassword.trim() === "";
   reactExports.useEffect(() => {
     const timer = setTimeout(() => {
-      if (needsPassword) {
-        passwordRef.current?.focus();
-      } else {
+      if (needsTotp) {
         totpRef.current?.focus();
+      } else {
+        passwordRef.current?.focus();
       }
     }, 50);
     return () => clearTimeout(timer);
-  }, [needsPassword]);
+  }, [needsTotp]);
   const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
   const handleBackdropClick = reactExports.useCallback(
     (e) => {
@@ -23496,12 +23617,12 @@ function ApprovalPasswordModal(props) {
   );
   const handleKeyDown = reactExports.useCallback(
     (e) => {
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && !submitDisabled) {
         e.preventDefault();
         props.onSubmit();
       }
     },
-    [props.onSubmit]
+    [props.onSubmit, submitDisabled]
   );
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
@@ -23521,14 +23642,14 @@ function ApprovalPasswordModal(props) {
               {
                 id: "approval-password-modal-title",
                 className: "text-lg font-semibold tracking-tight text-brand-dark",
-                children: needsPassword ? "Approval password required" : "Authenticator code required"
+                children: needsTotp ? "Authenticator code required" : "Approval password required"
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "Guard needs a fresh proof before it can save this decision." })
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3", children: [
-          needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          !needsTotp ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "input",
@@ -23541,7 +23662,8 @@ function ApprovalPasswordModal(props) {
                 className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
-          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          ] }) : null,
+          needsTotp ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "input",
@@ -23556,7 +23678,7 @@ function ApprovalPasswordModal(props) {
                 className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
-          ] }),
+          ] }) : null,
           showCooldownOption && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-center gap-2 text-sm text-brand-dark", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "input",
@@ -23587,7 +23709,8 @@ function ApprovalPasswordModal(props) {
             {
               type: "button",
               onClick: props.onSubmit,
-              className: "rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90",
+              disabled: submitDisabled,
+              className: "rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50",
               children: props.submitLabel
             }
           )
@@ -23615,13 +23738,10 @@ function buildBulkGateCredentials(gate, password, totpCode) {
   if (!isBulkApproveGateReady(gate)) {
     return void 0;
   }
-  if (gate?.totp_enabled === true) {
-    return {
-      approval_totp_code: totpCode.trim(),
-      approval_gate_use_cooldown: false
-    };
-  }
-  return {
+  return gate?.totp_enabled === true ? {
+    approval_totp_code: totpCode.trim(),
+    approval_gate_use_cooldown: false
+  } : {
     approval_password: password.trim(),
     approval_gate_use_cooldown: false
   };
@@ -23927,6 +24047,25 @@ function QueueBulkDrawer(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-px flex-1 bg-slate-200", "aria-hidden": "true" })
       ] }),
       gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
+        props.approvalGate?.totp_enabled !== true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            id: "guard-bulk-approval-password",
+            type: "password",
+            value: props.bulkApprovePassword,
+            onChange: props.onBulkApprovePasswordChange,
+            placeholder: "Enter your approval password",
+            autoComplete: "current-password",
+            disabled: props.step === "submitting",
+            className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+          }
+          )
+        ] }),
         props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
@@ -23942,25 +24081,6 @@ function QueueBulkDrawer(props) {
               value: props.bulkApproveTotpCode,
               onChange: props.onBulkApproveTotpCodeChange,
               placeholder: "6-digit code",
-              disabled: props.step === "submitting",
-              className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
-            }
-          )
-        ] }),
-        props.approvalGate?.totp_enabled !== true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              id: "guard-bulk-approval-password",
-              type: "password",
-              value: props.bulkApprovePassword,
-              onChange: props.onBulkApprovePasswordChange,
-              placeholder: "Enter your approval password",
-              autoComplete: "current-password",
               disabled: props.step === "submitting",
               className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
             }
@@ -25322,7 +25442,7 @@ function ReviewDecisionCard(props) {
       setErrorMessage(null);
       try {
         const gate = props.approvalGate;
-        const needsPassword = approvalProofRequiresPassword(gate);
+        const needsTotp = approvalProofRequiresTotp(gate);
         const includeGateFields = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
         await props.onResolve({
           ...buildDecisionPayload({
@@ -25331,8 +25451,8 @@ function ReviewDecisionCard(props) {
             scope,
             reason: action === "allow" ? "approved in review" : "blocked in review"
           }),
-          ...includeGateFields && needsPassword ? { approval_password: approvalPassword } : {},
-          ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
+          ...includeGateFields && !needsTotp ? { approval_password: approvalPassword } : {},
+          ...includeGateFields && needsTotp ? { approval_totp_code: approvalTotpCode } : {},
           ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
         });
         setResolved(action);
@@ -27015,24 +27135,24 @@ export {
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,
-  fetchReceiptAnalytics as f,
+  formatNumber as f,
   getHeatmapLevel as g,
   harnessDisplayName as h,
   isDisplayableHarness as i,
   jsxRuntimeExports as j,
-  formatNumber as k,
-  HiMiniShieldCheck as l,
-  formatRelativeTime as m,
-  HiMiniSparkles as n,
-  HiMiniXMark as o,
-  HiMiniChevronUp as p,
-  HiMiniChevronDown as q,
+  HiMiniShieldCheck as k,
+  formatRelativeTime as l,
+  HiMiniSparkles as m,
+  HiMiniXMark as n,
+  HiMiniChevronUp as o,
+  HiMiniChevronDown as p,
+  resolveCloudIntelCopy as q,
   reactExports as r,
-  resolveCloudIntelCopy as s,
-  HiMiniCloud as t,
-  HiMiniQuestionMarkCircle as u,
+  HiMiniCloud as s,
+  HiMiniQuestionMarkCircle as t,
+  useReceiptAnalytics as u,
   useFocusTrap as v,
-  approvalProofRequiresPassword as w,
+  approvalProofRequiresTotp as w,
   HiMiniExclamationTriangle as x,
   HiMiniBolt as y,
   HiMiniChevronRight as z

@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import json
 import urllib.request
+from datetime import datetime
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput
+from codex_plugin_scanner.guard.approval_gate import (
+    ApprovalGateInput,
+    begin_totp_enrollment,
+    confirm_totp_enrollment,
+)
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.approvals import (
     bulk_allow_read_only_once,
@@ -17,6 +23,7 @@ from codex_plugin_scanner.guard.approvals import (
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.totp import totp_code_at_counter
 
 PASSWORD = "bulk-approve-password"
 
@@ -35,6 +42,26 @@ def _enable_gate(store: GuardStore) -> None:
             "cooldown_seconds": 0,
         },
     )
+
+
+def _enable_totp(store: GuardStore, *, now: str) -> str:
+    enrollment = begin_totp_enrollment(
+        store.guard_home,
+        approval_gate_input=ApprovalGateInput(password=PASSWORD),
+        device_label="bulk-test-device",
+        now=now,
+    )
+    values = parse_qs(urlparse(str(enrollment["otpauth_uri"])).query).get("secret")
+    if not values:
+        raise AssertionError("otpauth URI did not include a secret")
+    secret = values[0]
+    code = totp_code_at_counter(secret=secret, counter=int(datetime.fromisoformat(now).timestamp() // 30))
+    confirm_totp_enrollment(
+        store.guard_home,
+        approval_gate_input=ApprovalGateInput(password=PASSWORD, totp_code=code),
+        now=now,
+    )
+    return secret
 
 
 def _file_read_request(
@@ -339,6 +366,27 @@ def test_bulk_allow_read_only_once_resolves_multiple_plain_reads(tmp_path: Path)
     assert len(failed) == 0
     assert store.get_approval_request("req-plain-1")["status"] == "resolved"
     assert store.get_approval_request("req-plain-2")["status"] == "resolved"
+
+
+def test_bulk_allow_read_only_once_accepts_totp_without_password(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    enrollment_now = "2026-06-16T00:00:00+00:00"
+    secret = _enable_totp(store, now=enrollment_now)
+    approve_now = "2026-06-16T00:01:00+00:00"
+    code = totp_code_at_counter(secret=secret, counter=int(datetime.fromisoformat(approve_now).timestamp() // 30))
+    store.add_approval_request(_file_read_request("req-totp-bulk"), enrollment_now)
+
+    result = bulk_allow_read_only_once(
+        store=store,
+        request_ids=["req-totp-bulk"],
+        approval_gate_input=ApprovalGateInput(totp_code=code),
+        now=approve_now,
+    )
+
+    assert result["resolved_count"] == 1
+    assert result["failed"] == []
+    assert store.get_approval_request("req-totp-bulk")["status"] == "resolved"
 
 
 def test_bulk_allow_resolves_mixed_file_read_and_shell(tmp_path: Path) -> None:

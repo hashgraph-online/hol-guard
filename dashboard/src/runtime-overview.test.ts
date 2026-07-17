@@ -1,4 +1,4 @@
-import { resolveCloudIntelCopy, resolveCloudSyncHealthCopy, resolveProtectionLevelCopy, resolveApprovalCenterHealth, resolveProofStatusCopy, resolvePackageManagerProtectionCopy } from "./runtime-overview";
+import { resolveCloudCommandCapabilityCopy, resolveCloudIntelCopy, resolveCloudSyncHealthCopy, resolveProtectionLevelCopy, resolveApprovalCenterHealth, resolveProofStatusCopy, resolvePackageManagerProtectionCopy } from "./runtime-overview";
 import type { GuardCloudSyncHealth, GuardProofStatus, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
@@ -48,6 +48,37 @@ assert(pairedWaitingCopy.detail.includes("first shared proof"), "T508: paired_wa
 
 const pairedActiveSyncCopy = resolveCloudSyncHealthCopy(healthHealthy);
 assert(pairedActiveSyncCopy.label === healthHealthy.label, "T508: healthy sync label should match");
+
+const disabledCommands = resolveCloudCommandCapabilityCopy(undefined);
+assert(disabledCommands.label === "Commands off", "P09: absent capability should fail closed in dashboard copy");
+assert(disabledCommands.detail.includes("sync continues"), "P09: disabled command copy must preserve sync UX");
+
+const enabledCommands = resolveCloudCommandCapabilityCopy({
+  enabled: true,
+  capability_valid: true,
+  reason: null,
+  issuer: "local-cli",
+  expires_at: "2026-08-15T00:00:00+00:00",
+  operations: ["guard.packageShims.status"],
+  pending_commands: [],
+  enable_command: "hol-guard commands enable --operations read-only",
+  revoke_command: "hol-guard commands revoke --confirm revoke",
+});
+assert(enabledCommands.label === "Commands enabled", "P09: enabled capability should be visible");
+assert(enabledCommands.detail.includes("one-job local approval"), "P09: dashboard must explain mutation approval");
+
+const pausedCommands = resolveCloudCommandCapabilityCopy({
+  enabled: false,
+  capability_valid: true,
+  reason: "command_queue_environment_disabled",
+  issuer: "local-cli",
+  expires_at: "2026-08-15T00:00:00+00:00",
+  operations: ["guard.packageShims.status"],
+  pending_commands: [],
+  enable_command: "hol-guard commands enable --operations read-only",
+  revoke_command: "hol-guard commands revoke --confirm revoke",
+});
+assert(pausedCommands.label === "Commands paused", "P09: emergency opt-out should be visible");
 
 const protectionStrict = resolveProtectionLevelCopy("strict");
 assert(protectionStrict.includes("network"), "T508: strict description should mention network");

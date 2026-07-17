@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
+from .command_curl_parsing import curl_operations
 from .command_database_matchers import LeadingSubcommandMatcher
 from .command_extension_matchers import executable_names, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
@@ -55,8 +56,11 @@ class CurlElasticsearchDeleteMatcher:
             executable = (segment.executable or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
             if executable not in self.executables:
                 continue
-            method, targets = _curl_method_and_targets(segment.arguments)
-            if method != "delete" or not any(self._matches_target(target) for target in targets):
+            operations = curl_operations(segment.arguments)
+            if not any(
+                method == "delete" and any(self._matches_target(target) for target in targets)
+                for method, targets in operations
+            ):
                 continue
             evidence.append(
                 MatcherEvidence(
@@ -82,41 +86,6 @@ class CurlElasticsearchDeleteMatcher:
         recognizable_host = port in self.service_ports or "elasticsearch" in hostname.split(".")
         supported_scheme = parsed.scheme in {"http", "https"} if explicit_scheme else not parsed.scheme
         return supported_scheme and recognizable_host and parsed.path not in {"", "/"}
-
-
-def _curl_method_and_targets(arguments: tuple[str, ...]) -> tuple[str | None, tuple[str, ...]]:
-    method: str | None = None
-    targets: list[str] = []
-    index = 0
-    while index < len(arguments):
-        argument = arguments[index]
-        lowered = argument.lower()
-        if argument == "-x" or lowered == "--proxy":
-            index += 2
-            continue
-        if (argument.startswith("-x") and len(argument) > 2) or lowered.startswith("--proxy="):
-            index += 1
-            continue
-        if (argument == "-X" or lowered == "--request") and index + 1 < len(arguments):
-            method = arguments[index + 1].lower()
-            index += 2
-            continue
-        if lowered == "--url" and index + 1 < len(arguments):
-            targets.append(arguments[index + 1].strip("'\""))
-            index += 2
-            continue
-        if lowered.startswith("--url="):
-            targets.append(argument.split("=", 1)[1].strip("'\""))
-            index += 1
-            continue
-        if lowered.startswith("--request="):
-            method = lowered.split("=", 1)[1]
-        elif argument.startswith("-X") and len(argument) > 2:
-            method = argument[2:].lower()
-        if not argument.startswith("-"):
-            targets.append(argument.strip("'\""))
-        index += 1
-    return method, tuple(targets)
 
 
 def _safe_flag_variant(

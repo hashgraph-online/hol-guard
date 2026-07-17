@@ -1,4 +1,4 @@
-import { N as requireReact, O as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, v as useFocusTrap, Q as HiMiniKey, S as SectionLabel, A as ActionButton, l as HiMiniShieldCheck, R as HiMiniLockClosed, T as HiMiniBellAlert, U as HiMiniAdjustmentsHorizontal, V as HiMiniCog6Tooth, W as HiMiniCircleStack, X as TabBar, z as HiMiniChevronRight, Y as resolveProtectionLevelCopy, Z as fetchSettings, _ as fetchRuntimeSnapshot, $ as updateSettings, a0 as clearPolicy, a1 as clearReviewQueue, a2 as revokeApprovalGateCooldown, a3 as disableApprovalGateTotp, a4 as importSettings, a5 as resetSettings, a6 as enrollApprovalGateTotp, a7 as verifyApprovalGateTotp, a8 as clearEvidence, a9 as exportDiagnostics, aa as repairApprovalCenter, ab as exportSettings, ac as setupDesktopNotifications, b as EmptyState, e as GuardHero, ad as Tag, ae as HiMiniMagnifyingGlass, d as HiMiniCheckCircle, x as HiMiniExclamationTriangle, af as approvalGateCooldownLabel, o as HiMiniXMark } from "../guard-dashboard.js";
+import { N as requireReact, O as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, v as useFocusTrap, Q as HiMiniKey, S as SectionLabel, A as ActionButton, k as HiMiniShieldCheck, R as HiMiniLockClosed, T as HiMiniBellAlert, U as HiMiniAdjustmentsHorizontal, V as HiMiniCog6Tooth, W as HiMiniCircleStack, X as TabBar, z as HiMiniChevronRight, Y as resolveProtectionLevelCopy, Z as fetchSettings, _ as fetchRuntimeSnapshot, $ as updateSettings, a0 as clearPolicy, a1 as clearReviewQueue, a2 as revokeApprovalGateCooldown, a3 as disableApprovalGateTotp, a4 as importSettings, a5 as resetSettings, a6 as enrollApprovalGateTotp, a7 as verifyApprovalGateTotp, a8 as clearEvidence, a9 as exportDiagnostics, aa as repairApprovalCenter, ab as exportSettings, ac as setupDesktopNotifications, b as EmptyState, e as GuardHero, ad as Tag, ae as HiMiniMagnifyingGlass, d as HiMiniCheckCircle, x as HiMiniExclamationTriangle, af as approvalGateCooldownLabel, n as HiMiniXMark } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
 var lib = {};
 var propTypes = { exports: {} };
@@ -1374,13 +1374,7 @@ function isSettingsSaveProofSubmitDisabled(mode2, credentials, totpRequired) {
     }
     return totpRequired ? totp.length === 0 : current.length === 0;
   }
-  if (totpRequired) {
-    return totp.length === 0;
-  }
-  if (current.length === 0) {
-    return true;
-  }
-  return false;
+  return totpRequired ? totp.length === 0 : current.length === 0;
 }
 function SettingsSaveProofModal(props) {
   const dialogRef = reactExports.useRef(null);

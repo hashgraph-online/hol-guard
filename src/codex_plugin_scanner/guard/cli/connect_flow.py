@@ -1293,6 +1293,15 @@ def build_connect_status_payload(
     connect_url: str,
     action: str = "status",
 ) -> dict[str, object]:
+    live_request_binding = store.get_live_request_oauth_binding()
+    live_request_status = store.live_request_outbox_status(
+        now=datetime.now(timezone.utc).isoformat(),
+        **(
+            {key: value for key, value in live_request_binding.items() if key != "oauth_source"}
+            if live_request_binding is not None
+            else {}
+        ),
+    )
     latest_state = store.get_effective_guard_connect_state(now=datetime.now(timezone.utc).isoformat())
     cloud_profile = store.get_cloud_sync_profile()
     oauth_storage_health = store.get_oauth_local_credential_health()
@@ -1342,7 +1351,14 @@ def build_connect_status_payload(
         "recovery_command": recovery_command,
         "connect_status_command": CONNECT_STATUS_COMMAND,
         "connect_repair_command": CONNECT_REPAIR_COMMAND,
+        "live_request_outbox": live_request_status,
     }
+    if live_request_status.get("binding_state") == "legacy_ambiguous" and live_request_binding is not None:
+        source = live_request_binding["oauth_source"]
+        workspace_id = live_request_binding["workspace_id"]
+        payload["live_request_recovery_command"] = (
+            f"hol-guard connect reassign-quarantined --confirm-source {source} --confirm-workspace {workspace_id}"
+        )
     if action in {"repair", "re-pair"}:
         payload["repair_action"] = "rerun_connect"
         payload["repair_message"] = "Run hol-guard connect to start browser sign-in."

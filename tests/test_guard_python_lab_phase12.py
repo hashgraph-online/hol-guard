@@ -158,7 +158,8 @@ def test_python_simple_index_lab_blocks_vulnerable_version_and_serves_safe_wheel
             workspace_dir=workspace_dir,
         )
 
-        assert yanked_result.decision == "monitor"
+        assert yanked_result.decision == "ask"
+        assert yanked_result.policy_action == "require-reapproval"
 
         vcs_artifact = artifact_from_command_fixture(
             "pip install labdemo @ git+https://example.com/org/labdemo.git",

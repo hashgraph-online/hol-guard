@@ -113,6 +113,9 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
   const passwordRef = useRef<HTMLInputElement>(null);
   const totpRef = useRef<HTMLInputElement>(null);
   const needsPassword = approvalProofRequiresPassword(props.gate);
+  const submitDisabled = needsPassword
+    ? props.approvalPassword.trim() === ""
+    : props.approvalTotpCode.trim() === "";
   useEffect(() => {
     const timer = setTimeout(() => {
       if (needsPassword) {
@@ -138,12 +141,12 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && !submitDisabled) {
         e.preventDefault();
         props.onSubmit();
       }
     },
-    [props.onSubmit]
+    [props.onSubmit, submitDisabled]
   );
 
   return (
@@ -176,15 +179,15 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
         <div className="mt-5 space-y-3">
           {needsPassword ? (
             <label className="block">
-              <span className="text-sm font-semibold text-brand-dark">Approval password</span>
-              <input
-                ref={passwordRef}
-                type="password"
-                autoComplete="current-password"
-                value={props.approvalPassword}
-                onChange={props.onApprovalPasswordChange}
-                className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-              />
+            <span className="text-sm font-semibold text-brand-dark">Approval password</span>
+            <input
+              ref={passwordRef}
+              type="password"
+              autoComplete="current-password"
+              value={props.approvalPassword}
+              onChange={props.onApprovalPasswordChange}
+              className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            />
             </label>
           ) : (
             <label className="block">
@@ -225,7 +228,8 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
           <button
             type="button"
             onClick={props.onSubmit}
-            className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90"
+            disabled={submitDisabled}
+            className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {props.submitLabel}
           </button>

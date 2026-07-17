@@ -371,7 +371,10 @@ def test_claude_daemon_hook_command_uses_python_not_node(tmp_path):
 def test_claude_daemon_hook_bridge_sends_guard_token_header(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
-    (guard_home / "daemon-auth-token").write_text("secret-token", encoding="utf-8")
+    guard_home.chmod(0o700)
+    token_path = guard_home / "daemon-auth-token"
+    token_path.write_text("secret-token", encoding="utf-8")
+    token_path.chmod(0o600)
     captured_headers: dict[str, str] = {}
 
     class FakeResponse:

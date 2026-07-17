@@ -99,12 +99,13 @@ type ApprovalRequestListPayload = {
 
 type RuntimeSnapshotPayload = Omit<
   GuardRuntimeSnapshot,
-  "items" | "queue_summary" | "supply_chain" | "managed_installs"
+  "items" | "queue_summary" | "supply_chain" | "managed_installs" | "cloud_command_capability"
 > & {
   items?: RawGuardApprovalRequest[] | null;
   queue_summary?: unknown;
   supply_chain?: unknown;
   managed_installs?: unknown;
+  cloud_command_capability?: unknown;
 };
 
 type QueueResolutionPayload = Omit<
@@ -906,6 +907,55 @@ function normalizeManagedInstalls(raw: unknown): GuardManagedInstall[] {
   return result;
 }
 
+function normalizeCloudCommandCapability(raw: unknown): GuardRuntimeSnapshot["cloud_command_capability"] {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+  const pending = Array.isArray(raw["pending_commands"])
+    ? raw["pending_commands"].flatMap((item) => {
+        if (!isRecord(item)) return [];
+        const id = item["id"];
+        const operation = item["operation"];
+        const issuer = item["issuer"];
+        const expiresAt = item["expiresAt"];
+        const approveCommand = item["approveCommand"];
+        if (
+          typeof id !== "string" ||
+          typeof operation !== "string" ||
+          typeof issuer !== "string" ||
+          typeof expiresAt !== "string" ||
+          typeof approveCommand !== "string"
+        ) {
+          return [];
+        }
+        return [{ id, operation, issuer, expiresAt, approveCommand }];
+      })
+    : [];
+  const operations = Array.isArray(raw["operations"])
+    ? raw["operations"].filter((operation): operation is string => typeof operation === "string")
+    : [];
+  return {
+    enabled: raw["enabled"] === true,
+    capability_valid: raw["capability_valid"] === true || raw["enabled"] === true,
+    reason: typeof raw["reason"] === "string" ? raw["reason"] : null,
+    issuer: typeof raw["issuer"] === "string" ? raw["issuer"] : null,
+    issued_at: typeof raw["issued_at"] === "string" ? raw["issued_at"] : null,
+    expires_at: typeof raw["expires_at"] === "string" ? raw["expires_at"] : null,
+    device_id: typeof raw["device_id"] === "string" ? raw["device_id"] : null,
+    workspace_id: typeof raw["workspace_id"] === "string" ? raw["workspace_id"] : null,
+    operations,
+    pending_commands: pending,
+    enable_command:
+      typeof raw["enable_command"] === "string"
+        ? raw["enable_command"]
+        : "hol-guard commands enable --operations read-only",
+    revoke_command:
+      typeof raw["revoke_command"] === "string"
+        ? raw["revoke_command"]
+        : "hol-guard commands revoke --confirm revoke",
+  };
+}
+
 export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): GuardRuntimeSnapshot {
   return {
     ...snapshot,
@@ -913,6 +963,7 @@ export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): Guar
     queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count),
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
     managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
+    cloud_command_capability: normalizeCloudCommandCapability(snapshot.cloud_command_capability),
   };
 }
 
