@@ -136,6 +136,7 @@ def test_snapshot_normalizes_probe_failures(tmp_path: Path, monkeypatch: pytest.
     assert "native_install_probe_failed" in snapshot["reasonCodes"]
     assert "managed_policy_probe_failed" in snapshot["reasonCodes"]
     assert snapshot["installOwner"] == "mdm"
+    assert snapshot["components"]["managedPolicy"]["state"] == "degraded"
 
 
 def test_snapshot_loads_policy_without_writing_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -151,6 +152,10 @@ def test_snapshot_loads_policy_without_writing_cache(tmp_path: Path, monkeypatch
     integrity.machine_integrity_snapshot()
 
     assert calls == [{"write_cache": False}]
+
+
+def test_running_supervisor_counts_as_healthy_for_remediation() -> None:
+    assert integrity._remediation_class("mdm-managed", True, ["healthy", "running"]) == "none"
 
 
 def test_snapshot_does_not_promote_unverified_manifest_identity(

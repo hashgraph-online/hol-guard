@@ -51,14 +51,25 @@ def _assurance_level(*, update_owner: str) -> AssuranceLevel:
     return "user-managed"
 
 
-def _remediation_class(assurance_level: AssuranceLevel, states: list[str]) -> RemediationClass:
-    if all(state == "healthy" for state in states):
+def _remediation_class(assurance_level: AssuranceLevel, healthy: bool, states: list[str]) -> RemediationClass:
+    if healthy:
         return "none"
     if "tampered" in states:
         return "administrator-action"
     if assurance_level != "user-managed":
         return "mdm-repair"
     return "user-reinstall"
+
+
+def _trusted_product_version(
+    manifest: ManifestVerification,
+    native: NativeInstallVerification,
+) -> str:
+    if manifest.healthy and manifest.version is not None:
+        return manifest.version
+    if native.healthy and native.version is not None:
+        return native.version
+    return __version__
 
 
 def _bounded_file_hash(path: Path) -> str | None:
@@ -115,6 +126,8 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
     manifest_component = _component(manifest.status, manifest.reason_code)
     native_component = _component(native.status, native.reason_code)
     policy_state = "healthy" if policy.status == "active" else policy.status
+    if policy_state in {"invalid", "inaccessible"}:
+        policy_state = "degraded"
     if policy.reason_code == "managed_policy_profile_removed_cached":
         policy_state = "degraded"
     policy_component = _component(
@@ -177,7 +190,7 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
         list[IntegrityReasonCode],
         sorted({component.reason_code for component in component_results if not component.healthy}),
     )
-    healthy = all(state == "healthy" for state in states)
+    healthy = all(component.healthy for component in component_results)
     return {
         "schemaVersion": LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION,
         "generatedAt": _now(),
@@ -194,13 +207,7 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
             "installationGeneration": None,
         },
         "product": {
-            "version": (
-                manifest.version
-                if manifest.healthy and manifest.version is not None
-                else native.version
-                if native.healthy and native.version is not None
-                else __version__
-            ),
+            "version": _trusted_product_version(manifest, native),
             "buildId": manifest.build_id if manifest.healthy else None,
             "sourceCommit": None,
             "packageIdentity": native.package_identity,
@@ -216,7 +223,7 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
             "bootSessionId": None,
         },
         "reasonCodes": reason_codes,
-        "remediationClass": _remediation_class(assurance_level, states),
+        "remediationClass": _remediation_class(assurance_level, healthy, states),
     }
 
 
