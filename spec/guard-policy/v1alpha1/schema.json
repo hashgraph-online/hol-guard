@@ -438,6 +438,23 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 256
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "updatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "importSourceDigest": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "previousRuleRevision": {
+          "type": "integer",
+          "minimum": 1
         }
       },
       "patternProperties": {

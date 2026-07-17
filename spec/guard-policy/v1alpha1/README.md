@@ -9,7 +9,11 @@ GuardPolicy is HOL Guard's portable policy document. The alpha contract is inten
 - [`canonicalization.md`](canonicalization.md): YAML parsing profile, canonical JSON bytes, hashes, and signatures.
 - [`compatibility.md`](compatibility.md): alpha versioning, extension registration, unknown fields, and deprecation policy.
 - [`threat-model.md`](threat-model.md): trust boundaries, attacks, mitigations, and non-goals.
-- [`rfc.md`](rfc.md): open questions for action vocabulary, scope vocabulary, trust, and local precedence.
+- [`architecture-decision.md`](architecture-decision.md): accepted V3 alpha authority, transport, rollout, and compatibility decisions.
+- [`operator-runbook.md`](operator-runbook.md): validation, import, capability-gated rollout, observation, and stop conditions.
+- [`rollback-runbook.md`](rollback-runbook.md): legacy kill switch, previous-good restoration, and recovery verification.
+- [`schema-compatibility-runbook.md`](schema-compatibility-runbook.md): producer/consumer matrix, change procedure, and TestPyPI boundary.
+- [`rfc.md`](rfc.md): public alpha questions and stabilization criteria.
 - [`fixtures/manifest.json`](fixtures/manifest.json): valid, invalid, hash, and decision conformance vectors.
 
 ## Reference validation

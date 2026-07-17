@@ -58,7 +58,23 @@ def test_policy_export_validate_format_and_diff(tmp_path: Path, capsys: pytest.C
     assert validate_payload["valid"] is True
     assert format_rc == 0
     assert diff_rc == 0
-    assert diff_payload == {"changed": False, "diff": ""}
+    assert diff_payload == {
+        "changed": False,
+        "diff": "",
+        "additions": [],
+        "modifications": [],
+        "removals": [],
+        "impacted_scopes": [],
+        "impacted_harnesses": [],
+        "impacted_artifact_families": [],
+        "conflict_warnings": [],
+        "broadened_rules": [],
+        "narrowed_rules": [],
+        "unchanged_rules": [],
+        "effective_action_changes": [],
+        "broad_relaxing_changes": [],
+        "requires_high_risk_approval": False,
+    }
 
 
 def test_policy_import_is_feature_gated_and_dry_run_by_default(
@@ -117,6 +133,11 @@ def test_policy_import_is_feature_gated_and_dry_run_by_default(
     assert disabled_payload["error"] == "policy_import_disabled"
     assert dry_run_rc == 0
     assert dry_run_payload["dry_run"] is True
+    assert dry_run_payload["changed"] is False
+    assert dry_run_payload["compiled_rows"] == 0
+    assert dry_run_payload["additions"] == []
+    assert dry_run_payload["impacted_scopes"] == []
+    assert dry_run_payload["import_additions"] == []
     assert GuardStore(home).list_policy_decisions() == []
 
 

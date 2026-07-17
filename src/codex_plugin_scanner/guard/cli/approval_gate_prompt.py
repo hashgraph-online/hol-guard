@@ -13,6 +13,7 @@ def prompt_for_approval_gate(
     guard_home: Path,
     *,
     use_cooldown: bool = True,
+    summary: str | None = None,
 ) -> ApprovalGateInput | None:
     gate = public_config(guard_home)
     if not gate.enabled:
@@ -22,6 +23,8 @@ def prompt_for_approval_gate(
             "approval_gate_interactive_required",
             "Approval password is required from an interactive terminal.",
         )
+    if summary:
+        print(summary, file=sys.stderr)
     password = getpass.getpass("Approval password: ")
     totp_code = getpass.getpass("Authenticator code: ") if gate.totp_enabled else None
     return ApprovalGateInput(

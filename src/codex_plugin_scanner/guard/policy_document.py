@@ -201,6 +201,10 @@ class PolicyProvenance:
     receipt_ids: tuple[str, ...] = ()
     suggestion_id: str | None = None
     created_by: str | None = None
+    updated_at: str | None = None
+    updated_by: str | None = None
+    import_source_digest: str | None = None
+    previous_rule_revision: int | None = None
     extensions: EncodedExtensions = ()
 
     @classmethod
@@ -208,15 +212,35 @@ class PolicyProvenance:
         receipt_ids = value.get("receiptIds")
         suggestion_id = value.get("suggestionId")
         created_by = value.get("createdBy")
+        updated_at = value.get("updatedAt")
+        updated_by = value.get("updatedBy")
+        import_source_digest = value.get("importSourceDigest")
+        previous_rule_revision = value.get("previousRuleRevision")
         return cls(
             source=str(value["source"]),
             created_at=str(value["createdAt"]),
             receipt_ids=tuple(str(item) for item in _sequence(receipt_ids)) if isinstance(receipt_ids, list) else (),
             suggestion_id=suggestion_id if isinstance(suggestion_id, str) else None,
             created_by=created_by if isinstance(created_by, str) else None,
+            updated_at=updated_at if isinstance(updated_at, str) else None,
+            updated_by=updated_by if isinstance(updated_by, str) else None,
+            import_source_digest=import_source_digest if isinstance(import_source_digest, str) else None,
+            previous_rule_revision=previous_rule_revision if isinstance(previous_rule_revision, int) else None,
             extensions=_encode_extensions(
                 value,
-                frozenset({"source", "receiptIds", "suggestionId", "createdAt", "createdBy"}),
+                frozenset(
+                    {
+                        "source",
+                        "receiptIds",
+                        "suggestionId",
+                        "createdAt",
+                        "createdBy",
+                        "updatedAt",
+                        "updatedBy",
+                        "importSourceDigest",
+                        "previousRuleRevision",
+                    }
+                ),
             ),
         )
 
@@ -228,6 +252,14 @@ class PolicyProvenance:
             result["suggestionId"] = self.suggestion_id
         if self.created_by is not None:
             result["createdBy"] = self.created_by
+        if self.updated_at is not None:
+            result["updatedAt"] = self.updated_at
+        if self.updated_by is not None:
+            result["updatedBy"] = self.updated_by
+        if self.import_source_digest is not None:
+            result["importSourceDigest"] = self.import_source_digest
+        if self.previous_rule_revision is not None:
+            result["previousRuleRevision"] = self.previous_rule_revision
         return _with_extensions(result, self.extensions)
 
 

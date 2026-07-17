@@ -444,3 +444,145 @@ def test_document_diff_is_deterministic() -> None:
     assert first == second
     assert "-    effect: allow" in first.text
     assert "+    effect: block" in first.text
+    assert first.additions == ()
+    assert first.modifications == ("rule-1",)
+    assert first.removals == ()
+    assert first.impacted_scopes == ("artifacts",)
+    assert first.impacted_harnesses == ()
+    assert first.impacted_artifact_families == ("skill",)
+    assert first.conflict_warnings == ()
+    assert first.effective_action_changes == ("rule-1:allow->block",)
+    assert first.broadened_rules == ()
+    assert first.narrowed_rules == ()
+    assert first.broad_relaxing_changes == ()
+
+
+def test_document_diff_flags_broad_relaxing_changes() -> None:
+    baseline = _policy_document(effect="block")
+    mapping = baseline.to_mapping()
+    spec = mapping["spec"]
+    assert isinstance(spec, dict)
+    rules = spec["rules"]
+    assert isinstance(rules, list)
+    rule = rules[0]
+    assert isinstance(rule, dict)
+    rule["effect"] = "allow"
+    rule["match"] = {}
+    candidate = GuardPolicyDocument.from_mapping(mapping)
+
+    difference = diff_policy_documents(baseline, candidate)
+
+    assert difference.broadened_rules == ("rule-1",)
+    assert difference.narrowed_rules == ()
+    assert difference.effective_action_changes == ("rule-1:block->allow",)
+    assert difference.broad_relaxing_changes == ("rule-1",)
+
+
+def test_document_diff_flags_relaxed_defaults() -> None:
+    baseline_mapping = _policy_document(effect="block").to_mapping()
+    baseline_spec = baseline_mapping["spec"]
+    assert isinstance(baseline_spec, dict)
+    baseline_defaults = baseline_spec["defaults"]
+    assert isinstance(baseline_defaults, dict)
+    baseline_defaults["defaultAction"] = "block"
+    baseline_defaults["unknownPublisherAction"] = "review"
+    baseline = GuardPolicyDocument.from_mapping(baseline_mapping)
+    candidate_mapping = baseline.to_mapping()
+    candidate_spec = candidate_mapping["spec"]
+    assert isinstance(candidate_spec, dict)
+    candidate_defaults = candidate_spec["defaults"]
+    assert isinstance(candidate_defaults, dict)
+    candidate_defaults["defaultAction"] = "allow"
+    candidate_defaults["unknownPublisherAction"] = "allow"
+    candidate = GuardPolicyDocument.from_mapping(candidate_mapping)
+
+    difference = diff_policy_documents(baseline, candidate)
+
+    assert difference.effective_action_changes == (
+        "defaults.defaultAction:block->allow",
+        "defaults.unknownPublisherAction:review->allow",
+    )
+    assert difference.broad_relaxing_changes == (
+        "defaults.defaultAction",
+        "defaults.unknownPublisherAction",
+    )
+
+
+def test_document_diff_flags_shorter_restrictive_lifetime() -> None:
+    baseline = _policy_document(effect="block")
+    candidate_mapping = baseline.to_mapping()
+    candidate_spec = candidate_mapping["spec"]
+    assert isinstance(candidate_spec, dict)
+    candidate_rules = candidate_spec["rules"]
+    assert isinstance(candidate_rules, list)
+    candidate_rule = candidate_rules[0]
+    assert isinstance(candidate_rule, dict)
+    candidate_rule["lifetime"] = {
+        "mode": "until",
+        "expiresAt": "2026-07-17T10:00:00Z",
+    }
+    candidate = GuardPolicyDocument.from_mapping(candidate_mapping)
+
+    difference = diff_policy_documents(baseline, candidate)
+
+    assert difference.broad_relaxing_changes == ("rule-1",)
+
+
+def test_document_diff_flags_constrained_relaxing_addition() -> None:
+    baseline = _policy_document(effect="block")
+    candidate_mapping = baseline.to_mapping()
+    candidate_spec = candidate_mapping["spec"]
+    assert isinstance(candidate_spec, dict)
+    candidate_rules = candidate_spec["rules"]
+    assert isinstance(candidate_rules, list)
+    candidate_rules.append(
+        {
+            "id": "rule-2",
+            "enabled": True,
+            "effect": "allow",
+            "match": {"artifacts": ["skill:hol/deploy"]},
+            "lifetime": {"mode": "permanent", "expiresAt": None},
+            "provenance": {
+                "source": "import",
+                "createdAt": "2026-07-16T10:00:00Z",
+                "createdBy": "owner@example.com",
+            },
+        }
+    )
+    candidate = GuardPolicyDocument.from_mapping(candidate_mapping)
+
+    difference = diff_policy_documents(baseline, candidate)
+
+    assert difference.broad_relaxing_changes == ("rule-2",)
+    assert difference.conflict_warnings == ("overlapping_effects:rule-1:rule-2",)
+
+
+def test_document_diff_reports_overlapping_effect_conflicts() -> None:
+    baseline = _policy_document(effect="allow")
+    mapping = baseline.to_mapping()
+    spec = mapping["spec"]
+    assert isinstance(spec, dict)
+    rules = spec["rules"]
+    assert isinstance(rules, list)
+    rules.append(
+        {
+            "id": "rule-2",
+            "enabled": True,
+            "effect": "block",
+            "match": {"artifacts": ["skill:hol/deploy"]},
+            "lifetime": {"mode": "permanent", "expiresAt": None},
+            "provenance": {
+                "source": "import",
+                "createdAt": "2026-07-16T10:00:00Z",
+                "createdBy": "owner@example.com",
+            },
+        }
+    )
+    candidate = GuardPolicyDocument.from_mapping(mapping)
+
+    difference = diff_policy_documents(baseline, candidate)
+
+    assert difference.additions == ("rule-2",)
+    assert difference.impacted_scopes == ("artifacts",)
+    assert difference.impacted_artifact_families == ("skill",)
+    assert difference.conflict_warnings == ("overlapping_effects:rule-1:rule-2",)

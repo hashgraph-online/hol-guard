@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import re
 from datetime import datetime, timezone
 from typing import TypeGuard, cast
 
@@ -31,6 +32,7 @@ _MAX_BUNDLE_BYTES = 2_097_152
 _MAX_DEPTH = 40
 _MAX_COLLECTION_ITEMS = 2_048
 _MAX_STRING_LENGTH = 1_048_576
+_SHA256_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 _ALLOWED_TOP_LEVEL = frozenset(
     {
         "envelopeVersion",
@@ -191,6 +193,10 @@ def _validate_keys(value: dict[str, object], allowed: frozenset[str]) -> bool:
     return all(key in allowed or key.startswith("x-") for key in value)
 
 
+def _is_sha256_digest(value: object) -> bool:
+    return isinstance(value, str) and _SHA256_DIGEST_PATTERN.fullmatch(value) is not None
+
+
 def _validate_rollback(value: object) -> str | None:
     if value is None:
         return None
@@ -205,6 +211,10 @@ def _validate_rollback(value: object) -> str | None:
         "authorization",
     )
     if any(_non_empty_string(value.get(key)) is None for key in required_strings):
+        return "invalid_rollback"
+    if not _is_sha256_digest(value.get("rollbackOfBundleHash")) or not _is_sha256_digest(
+        value.get("lastGoodBundleHash")
+    ):
         return "invalid_rollback"
     versions = (value.get("rollbackOfBundleVersion"), value.get("lastGoodBundleVersion"))
     if any(not isinstance(version, int) or isinstance(version, bool) or version < 1 for version in versions):
@@ -339,6 +349,8 @@ def validate_policy_bundle_v2_transition(
     *,
     current_bundle_version: int | None,
     current_bundle_hash: str | None,
+    expected_last_good_bundle_version: int | None = None,
+    expected_last_good_bundle_hash: str | None = None,
 ) -> str | None:
     """Reject replay, same-version substitution, and unsigned rollback semantics."""
 
@@ -375,6 +387,11 @@ def validate_policy_bundle_v2_transition(
         return "rollback_target_mismatch"
     if _non_empty_string(rollback.get("lastGoodBundleHash"), maximum=128) is None:
         return "rollback_target_mismatch"
+    if expected_last_good_bundle_version is not None and last_good_version != expected_last_good_bundle_version:
+        return "rollback_last_good_mismatch"
+    last_good_hash = rollback.get("lastGoodBundleHash")
+    if expected_last_good_bundle_hash is not None and last_good_hash != expected_last_good_bundle_hash:
+        return "rollback_last_good_mismatch"
     if _non_empty_string(rollback.get("authorization")) is None:
         return "rollback_authorization_missing"
     return None
