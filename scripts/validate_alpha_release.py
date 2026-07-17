@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from packaging.version import Version
 
-ALPHA_BRANCHES = ("refs/heads/feat/guard-policy-v3", "refs/heads/release/3.1-policy-v3")
+ALPHA_BRANCHES = ("refs/heads/release/3.1",)
 
 
 @dataclass(frozen=True)
