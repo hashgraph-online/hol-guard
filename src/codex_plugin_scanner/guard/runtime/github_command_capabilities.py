@@ -15,6 +15,7 @@ from typing import Literal
 GitHubCommandCapability = Literal[
     "read_local",
     "read_remote",
+    "maintain_remote",
     "mutate_remote",
     "write_local",
     "unknown",
@@ -75,6 +76,7 @@ _MUTATING_SUBCOMMANDS: dict[str, frozenset[str]] = {
     "run": frozenset({"cancel", "delete", "rerun"}),
     "workflow": frozenset({"disable", "enable", "run"}),
 }
+_MAINTENANCE_SUBCOMMANDS: dict[str, frozenset[str]] = {"pr": frozenset({"merge"})}
 
 _ALWAYS_MUTATING_GROUPS = frozenset({"cache", "codespace", "gpg-key", "label", "secret", "ssh-key", "variable"})
 _READ_ONLY_TOP_LEVEL = frozenset({"search", "status"})
@@ -106,8 +108,6 @@ _API_OPTIONS_WITH_VALUES = frozenset(
 _API_BOOLEAN_OPTIONS = frozenset({"--include", "--paginate", "--silent", "--slurp", "--verbose", "-i"})
 _METHOD_OVERRIDE_HEADER = re.compile(r"\Ax-http-method-override\s*:", re.IGNORECASE)
 _STATIC_ENDPOINT = re.compile(r"\A[A-Za-z0-9_./{}:+,@=-]+\Z")
-_GRAPHQL_NAME = re.compile(r"\b[_A-Za-z][_0-9A-Za-z]*\b")
-_GRAPHQL_ALIAS = re.compile(r"\b(?P<name>[_A-Za-z][_0-9A-Za-z]*)\s*:")
 
 
 def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
@@ -166,6 +166,14 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
                 "read_remote",
                 "github.command.proven-read",
                 "The command is a known read-only GitHub operation.",
+            )
+        if subcommand in _MAINTENANCE_SUBCOMMANDS.get(top_level, frozenset()) and not any(
+            token == "--admin" or token.startswith("--admin=") for token in normalized[2:]
+        ):
+            return _assessment(
+                "maintain_remote",
+                "github.command.pr-maintenance",
+                "The command performs a statically proven pull-request maintenance operation.",
             )
         if subcommand in _MUTATING_SUBCOMMANDS[top_level]:
             return _assessment(
@@ -367,110 +375,10 @@ def _classify_graphql(parsed: _ApiArguments, *, method: str | None) -> GitHubCom
 
 
 def _classify_graphql_document(document: str) -> GitHubCommandAssessment:
-    sanitized = _strip_graphql_strings_and_comments(document)
-    suspicious_aliases = [
-        match.group("name")
-        for match in _GRAPHQL_ALIAS.finditer(sanitized)
-        if "mutation" in match.group("name").lower() or "subscription" in match.group("name").lower()
-    ]
-    if suspicious_aliases:
-        return _assessment(
-            "unknown",
-            "github.graphql.suspicious-alias",
-            "A GraphQL alias resembles an operation type and is not classified automatically.",
-        )
-    operations = _top_level_graphql_operations(sanitized)
-    if operations is None:
-        return _assessment("unknown", "github.graphql.invalid-document", "The GraphQL document is not balanced.")
-    if not operations:
-        return _assessment("unknown", "github.graphql.missing-operation", "No static GraphQL operation was found.")
-    if len(operations) != 1:
-        return _assessment(
-            "unknown",
-            "github.graphql.multiple-operations",
-            "Multiple GraphQL operations or a batched document cannot be classified automatically.",
-        )
-    operation = operations[0]
-    if operation in {"mutation", "subscription"}:
-        return _assessment(
-            "mutate_remote",
-            "github.graphql.remote-mutation",
-            "The GraphQL operation can change or subscribe to GitHub-hosted state.",
-        )
-    return _assessment("read_remote", "github.graphql.proven-query", "The GraphQL document is a single static query.")
+    from .github_graphql_capabilities import classify_graphql_document
 
-
-def _top_level_graphql_operations(document: str) -> list[str] | None:
-    operations: list[str] = []
-    depth = 0
-    pending_definition = False
-    index = 0
-    while index < len(document):
-        character = document[index]
-        if character == "{":
-            if depth == 0:
-                if not pending_definition:
-                    operations.append("query")
-                pending_definition = False
-            depth += 1
-            index += 1
-            continue
-        if character == "}":
-            if depth == 0:
-                return None
-            depth -= 1
-            index += 1
-            continue
-        if depth == 0:
-            name_match = _GRAPHQL_NAME.match(document, index)
-            if name_match is not None:
-                name = name_match.group(0).lower()
-                if name in {"query", "mutation", "subscription"}:
-                    operations.append(name)
-                    pending_definition = True
-                elif name == "fragment":
-                    pending_definition = True
-                index = name_match.end()
-                continue
-        index += 1
-    return operations if depth == 0 else None
-
-
-def _strip_graphql_strings_and_comments(document: str) -> str:
-    output: list[str] = []
-    index = 0
-    while index < len(document):
-        if document.startswith('"""', index):
-            end = document.find('"""', index + 3)
-            if end == -1:
-                return ""
-            output.extend(" " * (end + 3 - index))
-            index = end + 3
-            continue
-        character = document[index]
-        if character == '"':
-            output.append(" ")
-            index += 1
-            escaped = False
-            while index < len(document):
-                current = document[index]
-                output.append(" ")
-                index += 1
-                if escaped:
-                    escaped = False
-                elif current == "\\":
-                    escaped = True
-                elif current == '"':
-                    break
-            continue
-        if character == "#":
-            while index < len(document) and document[index] not in "\r\n":
-                output.append(" ")
-                index += 1
-            continue
-        output.append(character)
-        index += 1
-    return "".join(output)
+    capability, reason_code, detail = classify_graphql_document(document)
+    return _assessment(capability, reason_code, detail)
 
 
 def _field_value_is_external(value: str) -> bool:
