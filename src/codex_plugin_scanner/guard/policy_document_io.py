@@ -70,6 +70,8 @@ def _assert_windows_parent_unchanged(identities: tuple[tuple[Path, int, int], ..
             or (metadata.st_dev, metadata.st_ino) != (device, inode)
         ):
             raise PolicyFileTrustError("policy_parent_changed", path.parent)
+
+
 _LOCAL_SCOPES: Final = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 _PROVENANCE_SOURCES: Final = frozenset(
     {
