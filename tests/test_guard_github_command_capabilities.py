@@ -42,6 +42,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "github.graphql.proven-maintenance",
         ),
         (("pr", "merge", "17", "--squash", "--delete-branch"), "maintain_remote", "github.command.pr-maintenance"),
+        (("pr", "merge", "17", "--admin"), "mutate_remote", "github.command.remote-mutation"),
         (("pr", "edit", "17", "--title", "updated"), "mutate_remote", "github.command.remote-mutation"),
         (
             ("api", "repos/example/project", "-f", "name=updated"),
@@ -60,6 +61,17 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ),
         (
             ("api", "graphql", "-f", "query=subscription { eventStream { id } }"),
+            "mutate_remote",
+            "github.graphql.remote-mutation",
+        ),
+        (
+            (
+                "api",
+                "graphql",
+                "-f",
+                "query=mutation { resolveReviewThread(input: {threadId: \"T_1\"}) { thread { id } } "
+                "deleteRepository(input: {repositoryId: \"R_1\"}) { repository { id } } }",
+            ),
             "mutate_remote",
             "github.graphql.remote-mutation",
         ),
@@ -144,6 +156,7 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path, command):
             "GitHub remote mutation command",
         ),
         ("gh pr edit 17 --title updated | jq -r '.'", "GitHub remote mutation command"),
+        ("gh pr merge 17 --admin", "GitHub remote mutation command"),
         ("env GH_HOST=github.example command gh pr edit 17 --title updated", "GitHub remote mutation command"),
         ("sh -c 'gh pr edit 17 --title updated | jq -r .'", "GitHub remote mutation command"),
         ("gh project-alias | jq -r '.'", "Unverified GitHub command capability"),
