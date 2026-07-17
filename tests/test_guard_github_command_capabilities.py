@@ -130,6 +130,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "github.api.high-impact-mutation",
         ),
         (
+            ("api", "orgs/example/memberships/alice", "-X", "PUT", "-f", "role=admin"),
+            "mutate_remote",
+            "github.api.high-impact-mutation",
+        ),
+        (
+            ("api", "repos/example/project/pages", "-X", "POST", "-f", "source=main"),
+            "mutate_remote",
+            "github.api.high-impact-mutation",
+        ),
+        (
             (
                 "api",
                 "graphql",

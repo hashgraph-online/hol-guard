@@ -115,6 +115,26 @@ _API_OPTIONS_WITH_VALUES = frozenset(
 _API_BOOLEAN_OPTIONS = frozenset({"--include", "--paginate", "--silent", "--slurp", "--verbose", "-i"})
 _METHOD_OVERRIDE_HEADER = re.compile(r"\Ax-http-method-override\s*:", re.IGNORECASE)
 _STATIC_ENDPOINT = re.compile(r"\A[A-Za-z0-9_./{}:+,@=-]+\Z")
+_ROUTINE_API_ROOTS = frozenset({"gists", "notifications"})
+_ROUTINE_REPO_API_RESOURCES = frozenset(
+    {
+        "actions",
+        "check-runs",
+        "check-suites",
+        "comments",
+        "contents",
+        "deployments",
+        "dispatches",
+        "git",
+        "issues",
+        "labels",
+        "merges",
+        "milestones",
+        "pulls",
+        "releases",
+        "statuses",
+    }
+)
 
 
 def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
@@ -347,11 +367,11 @@ def _api_request_is_high_impact(parsed: _ApiArguments, *, method: str) -> bool:
     if method == "DELETE":
         return True
     if len(segments) < 3 or segments[0] != "repos":
-        return any(segment in {"secrets", "keys"} for segment in segments)
+        return not segments or segments[0] not in _ROUTINE_API_ROOTS
     resource = segments[3:]
     if not resource:
         return method == "PATCH"
-    if resource[0] in {"keys", "rulesets", "secrets"}:
+    if resource[0] == "rulesets" or any(segment in {"keys", "secrets"} for segment in resource):
         return True
     if resource[:2] in {("actions", "permissions"), ("git", "refs")}:
         return True
@@ -359,7 +379,7 @@ def _api_request_is_high_impact(parsed: _ApiArguments, *, method: str) -> bool:
         return True
     if resource[0] in {"collaborators", "hooks"}:
         return True
-    return resource[0] == "transfer"
+    return resource[0] == "transfer" or resource[0] not in _ROUTINE_REPO_API_RESOURCES
 
 
 def _parse_api_arguments(args: Sequence[str]) -> _ApiArguments | GitHubCommandAssessment:
