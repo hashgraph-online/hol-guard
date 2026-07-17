@@ -250,6 +250,11 @@ class StoreConnectionSchemaMixin:
               owner text,
               source text not null default 'local',
               expires_at text,
+              policy_document_schema_version text,
+              policy_document_id text,
+              policy_document_digest text,
+              policy_rule_id text,
+              policy_provenance_json text,
               updated_at text not null
             )
             """,
@@ -490,6 +495,11 @@ class StoreConnectionSchemaMixin:
             self._ensure_policy_column(connection, "payload_mac", "text")
             self._ensure_policy_column(connection, "integrity_key_id", "text")
             self._ensure_policy_column(connection, "signed_at", "text")
+            self._ensure_policy_column(connection, "policy_document_schema_version", "text")
+            self._ensure_policy_column(connection, "policy_document_id", "text")
+            self._ensure_policy_column(connection, "policy_document_digest", "text")
+            self._ensure_policy_column(connection, "policy_rule_id", "text")
+            self._ensure_policy_column(connection, "policy_provenance_json", "text")
             self._ensure_runtime_receipts_column(connection, "capabilities_summary", "text not null default ''")
             self._ensure_runtime_receipts_column(connection, "scanner_evidence_json", "text not null default '[]'")
             self._ensure_runtime_receipts_column(connection, "diff_summary", "text")

@@ -19,6 +19,12 @@ from .policy_bundle_trusted_keys import (
     signing_key_is_current,
     signing_key_is_trusted,
 )
+from .policy_bundle_v2 import (
+    POLICY_BUNDLE_MAX_BYTES,
+    POLICY_BUNDLE_MAX_COLLECTION_ITEMS,
+    POLICY_BUNDLE_MAX_DEPTH,
+    POLICY_BUNDLE_MAX_STRING_LENGTH,
+)
 
 _POLICY_BUNDLE_CORE_KEYS = (
     "contractVersion",
@@ -78,6 +84,43 @@ _POLICY_BUNDLE_RULE_MATCHER_FAMILIES = frozenset(
     {"file-read", "mcp", "mcp-tool", "package-request", "prompt", "prompt-env-read", "tool-action"}
 )
 _POLICY_BUNDLE_DEFAULT_ENVIRONMENTS = frozenset({"development"})
+
+
+def _policy_bundle_resource_limit_error(value: object) -> str | None:
+    stack: list[tuple[object, int]] = [(value, 0)]
+    while stack:
+        current, depth = stack.pop()
+        if depth > POLICY_BUNDLE_MAX_DEPTH:
+            return "limit_depth"
+        if isinstance(current, str):
+            if len(current.encode("utf-8")) > POLICY_BUNDLE_MAX_STRING_LENGTH:
+                return "limit_string"
+            continue
+        if current is None or isinstance(current, (bool, int, float)):
+            continue
+        if isinstance(current, dict):
+            if len(current) > POLICY_BUNDLE_MAX_COLLECTION_ITEMS:
+                return "limit_collection"
+            if not all(isinstance(key, str) for key in current):
+                return "invalid_json_value"
+            stack.extend((item, depth + 1) for item in current.values())
+            continue
+        if isinstance(current, list):
+            if len(current) > POLICY_BUNDLE_MAX_COLLECTION_ITEMS:
+                return "limit_collection"
+            stack.extend((item, depth + 1) for item in current)
+            continue
+        return "invalid_json_value"
+    try:
+        encoded = json.dumps(
+            value,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (RecursionError, TypeError, ValueError):
+        return "invalid_json_value"
+    return "limit_bytes" if len(encoded) > POLICY_BUNDLE_MAX_BYTES else None
 
 
 def _stable_serialize(value: object) -> str:
@@ -282,6 +325,9 @@ def validated_policy_bundle_payload(
     trusted_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
     anchored_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
 ) -> tuple[dict[str, object] | None, str | None]:
+    resource_error = _policy_bundle_resource_limit_error(policy_bundle)
+    if resource_error is not None:
+        return None, resource_error
     required_top_level = (*_POLICY_BUNDLE_CORE_KEYS, "bundleHash", "acknowledgements")
     if any(key not in policy_bundle for key in required_top_level):
         return None, "missing_required_field"

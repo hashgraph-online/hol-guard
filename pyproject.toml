@@ -48,6 +48,8 @@ dependencies = [
     "cryptography>=49.0.0",
     "keyring>=25.0",
     "packaging>=24.0",
+    "jsonschema>=4.26.0",
+    "pyyaml>=6.0.3",
     "requests>=2.32,<3",
     "tomli>=2.0; python_version < '3.11'",
     "cisco-ai-skill-scanner~=2.0.11; python_version < '3.14'",
@@ -61,8 +63,6 @@ cisco = [
 dev = [
     "basedpyright>=1.39.8",
     "build>=1.5.0",
-    "jsonschema>=4.26.0",
-    "pyyaml>=6.0.3",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.15",
@@ -118,7 +118,10 @@ line-length = 120
 packages = ["src/codex_plugin_scanner"]
 
 [tool.hatch.build]
-artifacts = ["src/codex_plugin_scanner/guard/daemon/static/**"]
+artifacts = [
+    "src/codex_plugin_scanner/guard/daemon/static/**",
+    "src/codex_plugin_scanner/guard/schemas/**",
+]
 exclude = [
     ".guard-live/**",
     ".guard-package-venv/**",

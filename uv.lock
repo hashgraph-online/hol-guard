@@ -1176,9 +1176,11 @@ source = { editable = "." }
 dependencies = [
     { name = "cisco-ai-skill-scanner" },
     { name = "cryptography" },
+    { name = "jsonschema" },
     { name = "keyring" },
     { name = "mcp" },
     { name = "packaging" },
+    { name = "pyyaml" },
     { name = "requests" },
     { name = "rich" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
@@ -1191,10 +1193,8 @@ cisco = [
 dev = [
     { name = "basedpyright" },
     { name = "build" },
-    { name = "jsonschema" },
     { name = "pytest" },
     { name = "pytest-cov" },
-    { name = "pyyaml" },
     { name = "ruff" },
 ]
 mdm-build = [
@@ -1215,7 +1215,7 @@ requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "cisco-ai-skill-scanner", marker = "python_full_version < '3.14'", specifier = "~=2.0.11" },
     { name = "cryptography", specifier = ">=49.0.0" },
-    { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.26.0" },
+    { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "keyring", specifier = ">=25.0" },
     { name = "litellm", marker = "python_full_version >= '3.11' and python_full_version < '3.14' and extra == 'cisco'", specifier = "==1.91.3" },
     { name = "mcp", marker = "python_full_version >= '3.10'", specifier = ">=1.28.1,<2" },
@@ -1223,7 +1223,7 @@ requires-dist = [
     { name = "pyinstaller", marker = "extra == 'mdm-build'", specifier = ">=6.16,<7" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
-    { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "requests", specifier = ">=2.32,<3" },
     { name = "rich", specifier = ">=14.0,<15" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.15" },

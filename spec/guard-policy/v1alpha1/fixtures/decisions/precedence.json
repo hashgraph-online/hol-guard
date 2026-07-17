@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "description": "Frozen current-runtime precedence; representation changes must not alter these outcomes.",
+  "vectors": [
+    {
+      "name": "exact artifact beats newer global",
+      "request": { "harness": "codex", "artifactId": "pkg:npm/example" },
+      "persisted": [
+        { "id": "global-new", "scope": "global", "action": "allow", "source": "local", "updatedAt": "2026-07-15T12:05:00Z" },
+        { "id": "artifact-old", "scope": "artifact", "artifactId": "pkg:npm/example", "action": "block", "source": "policy-bundle", "updatedAt": "2026-07-15T12:00:00Z" }
+      ],
+      "expected": "artifact-old"
+    },
+    {
+      "name": "expired exact row is excluded",
+      "request": { "harness": "codex", "artifactId": "pkg:npm/example", "now": "2026-07-15T12:10:00Z" },
+      "persisted": [
+        { "id": "artifact-expired", "scope": "artifact", "artifactId": "pkg:npm/example", "action": "block", "source": "policy-bundle", "updatedAt": "2026-07-15T12:00:00Z", "expiresAt": "2026-07-15T12:09:00Z" },
+        { "id": "global-active", "scope": "global", "action": "allow", "source": "local", "updatedAt": "2026-07-15T12:05:00Z" }
+      ],
+      "expected": "global-active"
+    },
+    {
+      "name": "eligible local once beats persisted",
+      "request": { "harness": "codex", "artifactId": "pkg:npm/example" },
+      "once": { "id": "once-local", "scope": "once", "action": "allow", "source": "local" },
+      "persisted": [
+        { "id": "artifact-cloud", "scope": "artifact", "artifactId": "pkg:npm/example", "action": "block", "source": "policy-bundle", "updatedAt": "2026-07-15T12:05:00Z" }
+      ],
+      "expected": "once-local"
+    },
+    {
+      "name": "newer remote wins equal specificity",
+      "request": { "harness": "codex", "artifactId": "pkg:npm/example" },
+      "persisted": [
+        { "id": "local-old", "scope": "artifact", "artifactId": "pkg:npm/example", "action": "allow", "source": "local", "updatedAt": "2026-07-15T12:00:00Z" },
+        { "id": "remote-new", "scope": "artifact", "artifactId": "pkg:npm/example", "action": "review", "source": "policy-bundle", "updatedAt": "2026-07-15T12:05:00Z" }
+      ],
+      "expected": "remote-new"
+    },
+    {
+      "name": "newer local wins equal specificity",
+      "request": { "harness": "codex", "artifactId": "pkg:npm/example" },
+      "persisted": [
+        { "id": "remote-old", "scope": "artifact", "artifactId": "pkg:npm/example", "action": "block", "source": "policy-bundle", "updatedAt": "2026-07-15T12:00:00Z" },
+        { "id": "local-new", "scope": "artifact", "artifactId": "pkg:npm/example", "action": "allow", "source": "local", "updatedAt": "2026-07-15T12:05:00Z" }
+      ],
+      "expected": "local-new"
+    }
+  ]
+}

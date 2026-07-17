@@ -3645,6 +3645,18 @@ clearer UX and an implementation plan with technical references.
                 "client_version": guard_runner_module.__version__,
                 "workspace": "local-machine",
                 "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon"],
+                "policy_bundle_versions": [
+                    "guard-policy-bundle.v1",
+                    "guard-policy-bundle.v2",
+                ],
+                "policy_contracts": [
+                    "guard-policy-bundle/v1",
+                    "guard-policy-bundle/v2",
+                ],
+                "policy_document_versions": [
+                    "guard.hashgraphonline.com/v1alpha1",
+                ],
+                "yaml_import": False,
             }
             return {
                 "synced_at": "2026-06-05T12:00:00+00:00",
@@ -18209,6 +18221,33 @@ def test_receipt_sync_context_uploads_policy_bundle_acknowledgement(tmp_path):
     }
 
 
+def test_receipt_sync_context_uploads_v2_policy_bundle_acknowledgement(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    acknowledgement = {
+        "contractVersion": "guard-policy-bundle.v2",
+        "workspaceId": "workspace-1",
+        "deviceId": "device-1",
+        "bundleVersion": 3,
+        "bundleHash": "a" * 64,
+        "sequence": 1,
+        "status": "applied",
+        "observedAt": "2026-04-19T00:00:11Z",
+    }
+    store.set_sync_payload(
+        "policy_bundle_ack",
+        acknowledgement,
+        "2026-04-19T00:00:11+00:00",
+    )
+
+    context = guard_runner_module._receipt_sync_context(
+        store,
+        local_guard_online_at="2026-04-19T00:01:00+00:00",
+    )
+
+    assert context["policyBundleAcknowledgementV2"] == acknowledgement
+    assert "policyBundleAcknowledgement" not in context
+
+
 def test_policy_bundle_validation_rejects_missing_rules_field():
     bundle = {
         "contractVersion": "guard-policy-bundle.v1",
@@ -18692,6 +18731,146 @@ def test_policy_bundle_downgrade_check_ignores_mixed_timezone_formats():
     )
 
 
+def test_policy_bundle_v2_downgrade_check_uses_monotonic_bundle_version():
+    current = {
+        "contractVersion": "guard-policy-bundle.v2",
+        "bundleVersion": 8,
+        "bundleHash": "a" * 64,
+        "issuedAt": "2026-06-05T13:30:00Z",
+    }
+
+    assert guard_runner_module._policy_bundle_is_version_downgrade(
+        current,
+        {
+            "contractVersion": "guard-policy-bundle.v2",
+            "bundleVersion": 7,
+            "bundleHash": "b" * 64,
+            "issuedAt": "2026-06-05T13:31:00Z",
+        },
+    )
+    assert guard_runner_module._policy_bundle_is_version_downgrade(
+        current,
+        {
+            "contractVersion": "guard-policy-bundle.v2",
+            "bundleVersion": 8,
+            "bundleHash": "b" * 64,
+            "issuedAt": "2026-06-05T13:31:00Z",
+        },
+    )
+    assert (
+        guard_runner_module._policy_bundle_is_version_downgrade(
+            current,
+            {
+                "contractVersion": "guard-policy-bundle.v2",
+                "bundleVersion": 9,
+                "bundleHash": "b" * 64,
+                "issuedAt": "2026-06-05T13:31:00Z",
+            },
+        )
+        is False
+    )
+
+
+def test_policy_bundle_v2_acknowledgement_sequence_is_monotonic_per_bundle():
+    bundle = {
+        "contractVersion": "guard-policy-bundle.v2",
+        "workspaceId": "workspace-a",
+        "bundleVersion": 7,
+        "bundleHash": "a" * 64,
+    }
+    first = guard_runner_module._policy_bundle_acknowledgement_payload(
+        device_id="device-a",
+        device_name="Guard",
+        policy_bundle=bundle,
+        synced_at="2026-06-05T13:30:00+00:00",
+    )
+    second = guard_runner_module._policy_bundle_acknowledgement_payload(
+        device_id="device-a",
+        device_name="Guard",
+        policy_bundle=bundle,
+        synced_at="2026-06-05T14:31:00+01:00",
+        previous=first,
+    )
+    third = guard_runner_module._policy_bundle_acknowledgement_payload(
+        device_id="device-a",
+        device_name="Guard",
+        policy_bundle=bundle,
+        synced_at="2026-06-05T13:32:00Z",
+        previous=second,
+    )
+
+    assert first == {
+        "contractVersion": "guard-policy-bundle.v2",
+        "workspaceId": "workspace-a",
+        "deviceId": "device-a",
+        "bundleVersion": 7,
+        "bundleHash": "a" * 64,
+        "sequence": 1,
+        "status": "applied",
+        "observedAt": "2026-06-05T13:30:00Z",
+    }
+    assert second["sequence"] == 2
+    assert second["observedAt"] == "2026-06-05T13:31:00Z"
+    assert third["sequence"] == 3
+    assert third["observedAt"] == "2026-06-05T13:32:00Z"
+
+
+def test_policy_bundle_v2_acknowledgement_distinguishes_shadow_validation() -> None:
+    bundle = {
+        "contractVersion": "guard-policy-bundle.v2",
+        "workspaceId": "workspace-a",
+        "bundleVersion": 7,
+        "bundleHash": "a" * 64,
+    }
+    validated = guard_runner_module._policy_bundle_acknowledgement_payload(
+        device_id="device-a",
+        device_name="Guard",
+        policy_bundle=bundle,
+        synced_at="2026-06-05T13:30:00+00:00",
+        status="validated",
+    )
+    applied = guard_runner_module._policy_bundle_acknowledgement_payload(
+        device_id="device-a",
+        device_name="Guard",
+        policy_bundle=bundle,
+        synced_at="2026-06-05T13:31:00+00:00",
+        status="applied",
+        previous=validated,
+    )
+
+    assert validated["status"] == "validated"
+    assert applied["status"] == "applied"
+    assert applied["sequence"] == 2
+
+
+def test_policy_bundle_v2_acknowledgement_resets_sequence_for_new_bundle():
+    previous = {
+        "contractVersion": "guard-policy-bundle.v2",
+        "workspaceId": "workspace-a",
+        "deviceId": "device-a",
+        "bundleVersion": 7,
+        "bundleHash": "a" * 64,
+        "sequence": 8,
+        "status": "applied",
+        "observedAt": "2026-06-05T13:30:00Z",
+    }
+    acknowledgement = guard_runner_module._policy_bundle_acknowledgement_payload(
+        device_id="device-a",
+        device_name="Guard",
+        policy_bundle={
+            "contractVersion": "guard-policy-bundle.v2",
+            "workspaceId": "workspace-a",
+            "bundleVersion": 8,
+            "bundleHash": "b" * 64,
+        },
+        synced_at="2026-06-05T13:31:00+00:00",
+        previous=previous,
+    )
+
+    assert acknowledgement["sequence"] == 1
+    assert acknowledgement["bundleVersion"] == 8
+
+
 def test_sync_receipts_uploads_policy_bundle_acknowledgement(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
@@ -18907,6 +19086,308 @@ def test_sync_receipts_rejects_policy_bundle_for_the_wrong_workspace(tmp_path, m
     assert store.get_sync_payload("policy_bundle") is None
     assert store.get_sync_payload("policy_bundle_last_good") is None
     assert store.get_sync_payload("policy_bundle_last_error") == {"reason": "wrong_workspace"}
+
+
+def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failure(
+    tmp_path,
+    monkeypatch,
+):
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-a")
+    monkeypatch.setenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", "1")
+    last_good = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "policy-2026-06-05.4",
+        "bundleHash": "sha256:last-good",
+        "issuedAt": "2026-06-05T13:29:00+00:00",
+        "rules": [
+            {
+                "ruleId": "legacy-last-good",
+                "action": "block",
+                "artifactId": "command:npm-test",
+                "scope": {"harnesses": ["codex"], "devices": []},
+            }
+        ],
+    }
+    store.set_sync_payload("policy_bundle", last_good, "2026-06-05T13:29:00+00:00")
+    store.set_sync_payload("policy_bundle_last_good", last_good, "2026-06-05T13:29:00+00:00")
+    candidate = {
+        "contractVersion": "guard-policy-bundle.v2",
+        "bundleVersion": 5,
+        "bundleHash": "sha256:candidate",
+        "issuedAt": "2026-06-05T13:30:00+00:00",
+        "workspaceId": "workspace-a",
+        "payload": {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {
+                "id": "policy.unsupported",
+                "name": "Unsupported policy",
+                "revision": 1,
+            },
+            "spec": {
+                "defaults": {"mode": "prompt", "defaultAction": "warn"},
+                "rules": [
+                    {
+                        "id": "rule.unsupported-operation",
+                        "enabled": True,
+                        "effect": "block",
+                        "match": {"operations": ["browser.navigate"]},
+                        "lifetime": {"mode": "permanent", "expiresAt": None},
+                        "provenance": {
+                            "source": "manual",
+                            "receiptIds": [],
+                            "createdAt": "2026-06-05T13:30:00Z",
+                            "createdBy": "owner-1",
+                        },
+                    }
+                ],
+            },
+        },
+    }
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        return _Response(
+            {
+                "syncedAt": "2026-06-05T13:30:01+00:00",
+                "receiptsStored": 0,
+                "policyBundle": candidate,
+            }
+        )
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(
+        guard_runner_module,
+        "validate_synced_policy_bundle",
+        lambda *args, **kwargs: (candidate, None, ()),
+    )
+    monkeypatch.setattr(
+        guard_runner_module,
+        "sync_pain_signals",
+        lambda _store, auth_context=None: 0,
+    )
+
+    guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy_bundle") == last_good
+    assert store.get_sync_payload("policy_bundle_last_good") == last_good
+    assert store.get_sync_payload("policy_bundle_last_error") == {
+        "reason": "canonical_compile_unsupported_policy_match"
+    }
+    assert [decision["owner"] for decision in store.list_policy_decisions()] == ["legacy-last-good"]
+    rollback_events = store.list_events(event_name="policy_bundle/rollback")
+    assert rollback_events[-1]["payload"] == {
+        "reason": "canonical_compile_unsupported_policy_match",
+        "restored": "policy_bundle_last_good",
+    }
+
+
+def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(
+    tmp_path,
+    monkeypatch,
+):
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-a")
+    monkeypatch.setenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", "1")
+    legacy = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "policy-2026-06-05.4",
+        "bundleHash": "sha256:legacy",
+        "issuedAt": "2026-06-05T13:29:00+00:00",
+        "rules": [
+            {
+                "ruleId": "legacy-rule",
+                "action": "block",
+                "artifactId": "skill:hol/deploy",
+                "scope": {"harnesses": ["codex"], "devices": []},
+            }
+        ],
+    }
+    store.set_sync_payload("policy_bundle", legacy, "2026-06-05T13:29:00+00:00")
+    store.set_sync_payload("policy_bundle_legacy_last_good", legacy, "2026-06-05T13:29:00+00:00")
+    candidate = {
+        "contractVersion": "guard-policy-bundle.v2",
+        "bundleVersion": 5,
+        "bundleHash": "a" * 64,
+        "issuedAt": "2026-06-05T13:30:00Z",
+        "workspaceId": "workspace-a",
+        "payload": {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {
+                "id": "policy.shadow-mismatch",
+                "name": "Shadow mismatch",
+                "revision": 1,
+            },
+            "spec": {
+                "defaults": {"mode": "prompt", "defaultAction": "warn"},
+                "rules": [
+                    {
+                        "id": "rule.canonical",
+                        "enabled": True,
+                        "effect": "allow",
+                        "match": {
+                            "artifacts": ["skill:hol/deploy"],
+                            "harnesses": ["codex"],
+                        },
+                        "lifetime": {"mode": "permanent", "expiresAt": None},
+                        "provenance": {
+                            "source": "manual",
+                            "receiptIds": [],
+                            "createdAt": "2026-06-05T13:30:00Z",
+                            "createdBy": "owner-1",
+                        },
+                    }
+                ],
+            },
+        },
+    }
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        return _Response(
+            {
+                "syncedAt": "2026-06-05T13:30:01+00:00",
+                "receiptsStored": 0,
+                "policyBundle": candidate,
+            }
+        )
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(
+        guard_runner_module,
+        "validate_synced_policy_bundle",
+        lambda *args, **kwargs: (candidate, None, ()),
+    )
+    monkeypatch.setattr(
+        guard_runner_module,
+        "sync_pain_signals",
+        lambda _store, auth_context=None: 0,
+    )
+
+    guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy_bundle") == legacy
+    assert store.get_sync_payload("policy_bundle_canonical_last_good") is None
+    assert store.get_sync_payload("policy_bundle_last_error") == {"reason": "canonical_shadow_mismatch"}
+    assert [decision["action"] for decision in store.list_policy_decisions()] == ["block"]
+    mismatch_events = store.list_events(event_name="policy_bundle/shadow_mismatch")
+    assert mismatch_events[-1]["payload"] == {
+        "canonicalRows": 1,
+        "legacyRows": 1,
+        "reasonCodes": ["action"],
+        "status": "mismatch",
+    }
+
+
+def test_sync_receipts_restores_legacy_last_good_when_canonical_flag_is_disabled(
+    tmp_path,
+    monkeypatch,
+):
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-a")
+    monkeypatch.delenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", raising=False)
+    canonical_bundle = {
+        "contractVersion": "guard-policy-bundle.v2",
+        "bundleVersion": 5,
+        "bundleHash": "sha256:canonical",
+        "issuedAt": "2026-06-05T13:30:00+00:00",
+        "workspaceId": "workspace-a",
+        "payload": {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {
+                "id": "policy.canonical",
+                "name": "Canonical policy",
+                "revision": 5,
+            },
+            "spec": {"defaults": {"mode": "prompt", "defaultAction": "warn"}, "rules": []},
+        },
+    }
+    legacy_bundle = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "policy-2026-06-05.4",
+        "bundleHash": "sha256:legacy",
+        "issuedAt": "2026-06-05T13:29:00+00:00",
+        "rules": [
+            {
+                "ruleId": "legacy-last-good",
+                "action": "block",
+                "artifactId": "command:npm-test",
+                "scope": {"harnesses": ["codex"], "devices": []},
+            }
+        ],
+    }
+    store.set_sync_payload("policy_bundle", canonical_bundle, "2026-06-05T13:30:00+00:00")
+    store.set_sync_payload(
+        "policy_bundle_canonical_last_good",
+        canonical_bundle,
+        "2026-06-05T13:30:00+00:00",
+    )
+    store.set_sync_payload(
+        "policy_bundle_legacy_last_good",
+        legacy_bundle,
+        "2026-06-05T13:29:00+00:00",
+    )
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "syncedAt": "2026-06-05T13:31:00+00:00",
+                    "receiptsStored": 0,
+                }
+            ).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        return _Response()
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(
+        guard_runner_module,
+        "sync_pain_signals",
+        lambda _store, auth_context=None: 0,
+    )
+
+    guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy_bundle") == canonical_bundle
+    assert [decision["owner"] for decision in store.list_policy_decisions()] == ["legacy-last-good"]
 
 
 def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, monkeypatch):
