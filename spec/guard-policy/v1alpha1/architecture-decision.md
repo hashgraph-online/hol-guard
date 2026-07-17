@@ -24,7 +24,7 @@ Portal Policy Builder, Suggested Memory, signed cloud bundles, and local HOL Gua
 - Unsupported semantics fail closed rather than silently downgrade.
 - Policy parsing and compilation occur at write, import, or sync time rather than interception time.
 - Observability is limited to bounded reason codes, counts, versions, and hashes; raw policy content is excluded.
-- Promotion means merge into `feat/guard-policy-v3` plus TestPyPI verification. Integration into `main`, stable PyPI publication, and default runtime activation remain separate decisions.
+- Promotion means merge into `release/3.1` plus alpha artifact verification. Integration into `main`, stable PyPI publication, and default runtime activation remain separate decisions.
 - Removing bundle v1, legacy reads, or legacy storage requires capability coverage, a clean observation window, exercised rollback, and a separately approved proposal.
 
 ## Rejected alternatives

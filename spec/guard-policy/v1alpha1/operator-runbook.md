@@ -63,4 +63,4 @@ Stop expansion on any unexplained decision mismatch, invalid signature acceptanc
 
 ## Release boundary
 
-This alpha release is promoted only by merging the Guard change into `feat/guard-policy-v3` and verifying its artifact from TestPyPI against that V3 dependency chain. It must not merge directly into `main`, publish to stable PyPI, or enable canonical enforcement by default. Those actions belong to the later consolidated V3 release.
+This alpha release is promoted only by merging the Guard change into `release/3.1` and verifying its published alpha artifact against that release branch. It must not merge directly into `main`, publish a stable release, or enable canonical enforcement by default. Those actions belong to the later consolidated V3 release.

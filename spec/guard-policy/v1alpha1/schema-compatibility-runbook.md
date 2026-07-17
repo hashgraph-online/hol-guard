@@ -39,7 +39,7 @@
 3. Update the compatibility table and capability response.
 4. Preserve the legacy path until the measured compatibility window closes.
 5. Use a new API version for incompatible semantics; never silently reinterpret an existing field.
-6. Verify the Guard artifact from TestPyPI against `feat/guard-policy-v3`. The alpha artifact depends on that V3 integration branch and is not a stable `main` or PyPI release.
+6. Verify the Guard alpha artifact against `release/3.1`. The alpha artifact depends on that V3 release branch and is not a stable `main` release.
 
 ## Deprecation gate
 

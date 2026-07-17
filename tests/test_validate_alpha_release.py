@@ -35,13 +35,13 @@ def test_rejects_versions_that_are_not_public_guard_3_alphas(version: str) -> No
 
 
 def test_rejects_alpha_release_from_any_other_branch() -> None:
-    with pytest.raises(ValueError, match="feat/guard-policy-v3"):
+    with pytest.raises(ValueError, match=r"release/3\.1"):
         validate_alpha_release("3.0.0a1", "refs/heads/main")
 
 
-def test_accepts_release_31_policy_branch() -> None:
-    release = validate_alpha_release("3.0.0a1", "refs/heads/release/3.1-policy-v3")
-    assert release.git_ref == "refs/heads/release/3.1-policy-v3"
+def test_accepts_release_31_branch() -> None:
+    release = validate_alpha_release("3.0.0a1", "refs/heads/release/3.1")
+    assert release.git_ref == "refs/heads/release/3.1"
 
 
 def test_cli_reports_invalid_alpha_without_traceback(
@@ -72,7 +72,7 @@ def test_release_workflows_keep_stable_and_alpha_channels_isolated() -> None:
     alpha_matrix = jobs["alpha-cross-platform"]["strategy"]["matrix"]["os"]
     assert alpha_matrix == ["ubuntu-latest", "windows-latest"]
     publish_if = jobs["publish-pypi"]["if"]
-    assert any(branch in publish_if for branch in ("feat/guard-policy-v3", "release/3.1-policy-v3"))
+    assert "release/3.1" in publish_if
     assert jobs["publish-pypi"]["needs"] == ["build", "alpha-cross-platform"]
     assert jobs["release-alpha"]["needs"] == ["build", "publish-pypi"]
 
@@ -84,11 +84,11 @@ def test_release_workflows_keep_stable_and_alpha_channels_isolated() -> None:
     assert "plugin_scanner" in prune_step["run"]
 
 
-def test_v3_branch_runs_standard_cross_platform_ci() -> None:
+def test_release_31_branch_runs_standard_cross_platform_ci() -> None:
     root = Path(__file__).parent.parent
     ci = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
 
     on_section = ci.get(True) or ci.get("on")
-    assert "feat/guard-policy-v3" in on_section["push"]["branches"]
-    assert "feat/guard-policy-v3" in on_section["pull_request"]["branches"]
+    assert "release/3.1" in on_section["push"]["branches"]
+    assert "release/3.1" in on_section["pull_request"]["branches"]
     assert "windows-latest" in ci["jobs"]["cross-platform"]["strategy"]["matrix"]["os"]
