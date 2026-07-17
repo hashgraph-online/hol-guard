@@ -228,3 +228,23 @@ def test_removed_profile_retains_last_valid_machine_floor(tmp_path: Path, monkey
     assert cached.reason_code == "managed_policy_profile_removed_cached"
     assert cached.policy is not None
     assert cached.policy.content_hash == active.policy.content_hash
+
+
+def test_read_only_policy_load_does_not_refresh_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    native_path = tmp_path / "managed-policy.json"
+    paths = MachinePaths(
+        tmp_path / "runtime",
+        tmp_path / "state",
+        native_path,
+        tmp_path / "logs",
+        tmp_path / "manifest",
+    )
+    writes: list[tuple[dict[str, object], str]] = []
+    native_path.write_text(json.dumps(_policy()))
+    monkeypatch.setattr(policy_module, "default_machine_paths", lambda **_kwargs: paths)
+    monkeypatch.setattr(policy_module, "_write_policy_cache", lambda payload, system: writes.append((payload, system)))
+
+    state = load_managed_policy(system_name="Linux", write_cache=False)
+
+    assert state.status == "active"
+    assert writes == []

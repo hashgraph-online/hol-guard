@@ -170,4 +170,16 @@ def test_trusted_key_loader_skips_only_malformed_entries(tmp_path: Path) -> None
     path = tmp_path / "release-trusted-keys.json"
     path.write_text(json.dumps({"valid": "a2V5", "invalid": "%%%"}))
 
-    assert lifecycle._load_trusted_keys(path) == {"valid": b"key"}
+    assert lifecycle.load_trusted_public_keys(path) == {"valid": b"key"}
+
+
+def test_trusted_key_loader_rejects_symlinks_and_oversized_files(tmp_path: Path) -> None:
+    target = tmp_path / "target.json"
+    target.write_text(json.dumps({"valid": "a2V5"}))
+    symlink = tmp_path / "keys.json"
+    symlink.symlink_to(target)
+    oversized = tmp_path / "oversized.json"
+    oversized.write_bytes(b"x" * (64 * 1024 + 1))
+
+    assert lifecycle.load_trusted_public_keys(symlink) == {}
+    assert lifecycle.load_trusted_public_keys(oversized) == {}

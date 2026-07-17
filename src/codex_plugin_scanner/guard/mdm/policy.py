@@ -231,7 +231,12 @@ def _load_policy_cache(system_name: str) -> ManagedPolicyState | None:
         )
 
 
-def load_managed_policy(*, policy_path: Path | None = None, system_name: str | None = None) -> ManagedPolicyState:
+def load_managed_policy(
+    *,
+    policy_path: Path | None = None,
+    system_name: str | None = None,
+    write_cache: bool = True,
+) -> ManagedPolicyState:
     """Load machine authority only from an explicit test path or native machine source."""
 
     resolved_system = system_name or platform.system()
@@ -256,7 +261,7 @@ def load_managed_policy(*, policy_path: Path | None = None, system_name: str | N
                 return cached or ManagedPolicyState("absent", source, reason_code="managed_policy_absent")
             payload = _read_policy_file(native_path)
         policy = parse_managed_policy(payload)
-        if policy_path is None:
+        if policy_path is None and write_cache:
             _write_policy_cache(payload, resolved_system)
         return ManagedPolicyState("active", source, policy=policy)
     except PermissionError:

@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from ..mdm.integrity import machine_integrity_snapshot
 from ..mdm.lifecycle import (
     activate_user,
     authorize_deactivation,
@@ -52,6 +53,8 @@ def _run_guard_mdm_command(
             payload["healthy"] = all(
                 isinstance(result, dict) and result.get("reasonCode") == "endpoint_reachable" for result in results
             )
+        elif command == "integrity-snapshot":
+            payload = machine_integrity_snapshot()
         elif command == "status" and args.scope == "machine":
             root = Path(args.machine_root).resolve() if getattr(args, "machine_root", None) else None
             payload = machine_status(machine_root=root)
