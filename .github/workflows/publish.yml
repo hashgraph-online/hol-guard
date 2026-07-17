@@ -234,7 +234,7 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
-          uv-version: "0.9.26"
+          version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
       - name: Run Linux release suite
