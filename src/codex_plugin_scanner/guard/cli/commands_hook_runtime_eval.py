@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._commands_shared import _now
-    from .commands_support_hook_payload import _coalesce_string
     from .commands_support_hook_state import _cursor_native_shell_is_approved
     from .commands_support_interaction import _emit, _record_harness_usage_for_hook
     from .commands_support_permission_store import (
@@ -32,6 +31,12 @@ if TYPE_CHECKING:
     )
 
 
+from ..action_lattice import (
+    GuardActionNormalization,
+    coerce_guard_action,
+    normalize_guard_action,
+    normalize_guard_action_result,
+)
 from ..approval_scope_support import package_request_runtime_workspace_scope
 from ..models import GuardAction
 from ..package_execution_context import PackageExecutionContext, build_package_execution_context
@@ -42,19 +47,21 @@ from .commands_support_runtime_policy import _remembered_rule_rejection_reason, 
 
 
 def _resolved_guard_action(value: object, fallback: GuardAction) -> GuardAction:
-    if value == "allow":
-        return "allow"
-    if value == "warn":
-        return "warn"
-    if value == "review":
-        return "review"
-    if value == "block":
-        return "block"
-    if value == "sandbox-required":
-        return "sandbox-required"
-    if value == "require-reapproval":
-        return "require-reapproval"
-    return fallback
+    return coerce_guard_action(value) or fallback
+
+
+def _requested_policy_action_normalization(
+    cli_action: object | None,
+    stored_action: object | None,
+    payload: Mapping[str, object],
+) -> GuardActionNormalization | None:
+    if cli_action is not None:
+        return normalize_guard_action_result(cli_action, unknown_action="require-reapproval")
+    if stored_action is not None:
+        return normalize_guard_action_result(stored_action, unknown_action="require-reapproval")
+    if "policy_action" in payload:
+        return normalize_guard_action_result(payload.get("policy_action"), unknown_action="require-reapproval")
+    return None
 
 
 def _evaluate_runtime_artifact_hook(
@@ -168,23 +175,16 @@ def _evaluate_runtime_artifact_hook(
                 artifact_hash=artifact_hash(legacy_artifact),
                 workspace=str(runtime_workspace) if runtime_workspace else None,
             )
-    requested_policy_action = _coalesce_string(
+    requested_action_normalization = _requested_policy_action_normalization(
         getattr(args, "policy_action", None),
         stored_policy_action,
-        payload_map.get("policy_action"),
+        payload_map,
     )
-    if requested_policy_action == "allow":
-        policy_action: GuardAction = "allow"
-    elif requested_policy_action == "warn":
-        policy_action = "warn"
-    elif requested_policy_action == "review":
-        policy_action = "review"
-    elif requested_policy_action == "block":
-        policy_action = "block"
-    elif requested_policy_action == "sandbox-required":
-        policy_action = "sandbox-required"
-    elif requested_policy_action == "require-reapproval":
-        policy_action = "require-reapproval"
+    requested_policy_action = (
+        requested_action_normalization.original_action if requested_action_normalization is not None else None
+    )
+    if requested_action_normalization is not None:
+        policy_action = requested_action_normalization.action
     else:
         policy_action = _resolved_guard_action(
             _runtime_artifact_policy_action(config, runtime_artifact, args.harness),
@@ -251,10 +251,21 @@ def _evaluate_runtime_artifact_hook(
         else ()
     )
     scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
+    if requested_action_normalization is not None and not requested_action_normalization.recognized:
+        scanner_evidence_payload.append(
+            {
+                "source": "guard_action_normalizer",
+                "input_source": "runtime_hook_requested_policy",
+                "reason_code": requested_action_normalization.reason_code,
+                "original_action": requested_action_normalization.original_action,
+                "original_type": requested_action_normalization.original_type,
+                "normalized_action": requested_action_normalization.action,
+            }
+        )
     if package_execution_context is not None:
         scanner_evidence_payload.append(package_execution_context.to_evidence())
     package_policy_action: GuardAction | None = (
-        _resolved_guard_action(package_evaluation.policy_action, "warn") if package_evaluation is not None else None
+        normalize_guard_action(package_evaluation.policy_action) if package_evaluation is not None else None
     )
     if package_policy_action is not None and guard_action_severity(package_policy_action) > guard_action_severity(
         policy_action
@@ -438,4 +449,5 @@ def _evaluate_runtime_artifact_hook(
 
 __all__ = [
     "_evaluate_runtime_artifact_hook",
+    "_requested_policy_action_normalization",
 ]

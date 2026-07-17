@@ -27,9 +27,10 @@ else:  # pragma: no cover - runtime compatibility
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
+from ..action_lattice import normalize_guard_action_result
 from ..config import load_guard_config, resolve_risk_action
 from ..mdm.network import managed_urlopen
-from ..models import GuardArtifact
+from ..models import GuardAction, GuardArtifact
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
@@ -92,6 +93,13 @@ _REGISTRY_DEFAULT_RANGES = {
     "pypi": ">=0",
 }
 _DIST_TAG_RANGE_ECOSYSTEMS = {"npm"}
+_DECISION_TO_GUARD_ACTION: dict[str, GuardAction] = {
+    "allow": "allow",
+    "monitor": "allow",
+    "warn": "warn",
+    "ask": "require-reapproval",
+    "block": "block",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,7 +123,7 @@ class SupplyChainUserCopy:
 @dataclass(frozen=True, slots=True)
 class PackageRequestEvaluation:
     decision: str
-    policy_action: str
+    policy_action: GuardAction
     enforcement: str
     entitlement_state: str
     cache_status: str
@@ -173,7 +181,23 @@ class PackageRequestEvaluation:
         user_copy = payload.get("user_copy")
         user_copy_map = user_copy if isinstance(user_copy, dict) else {}
         cached_packages = tuple(_with_support_metadata(item) for item in _dict_items(payload.get("packages")))
-        policy_action = str(payload.get("policy_action") or "allow")
+        policy_action_normalization = normalize_guard_action_result(
+            payload.get("policy_action"),
+            unknown_action="require-reapproval",
+        )
+        policy_action = policy_action_normalization.action
+        cached_reasons = _dict_items(payload.get("reasons"))
+        if not policy_action_normalization.recognized:
+            normalization_reason: dict[str, object] = {
+                "code": policy_action_normalization.reason_code,
+                "message": "Cached package policy action was missing or unknown; Guard requires review.",
+                "original_action": policy_action_normalization.original_action,
+                "normalized_action": policy_action,
+            }
+            cached_reasons = (
+                *cached_reasons,
+                normalization_reason,
+            )
         normalized_user_copy = _normalize_package_user_copy(
             SupplyChainUserCopy(
                 title=str(user_copy_map.get("title") or "Monitoring this package"),
@@ -194,7 +218,7 @@ class PackageRequestEvaluation:
             policy_version=policy_version,
             bundle_version=bundle_version,
             workspace_fingerprint=workspace_fingerprint,
-            reasons=_dict_items(payload.get("reasons")),
+            reasons=cached_reasons,
             packages=cached_packages,
             risk_summary=str(payload.get("risk_summary") or "HOL Guard recorded this package request."),
             user_copy=normalized_user_copy,
@@ -711,23 +735,11 @@ def _finalize_evaluation(
             dashboard_url=None,
             harness_message=" ".join(part.strip() for part in harness_parts if part.strip()),
         ),
-        policy_action={
-            "allow": "allow",
-            "monitor": "allow",
-            "warn": "warn",
-            "ask": "require-reapproval",
-            "block": "block",
-        }[draft.decision],
+        policy_action=_DECISION_TO_GUARD_ACTION[draft.decision],
     )
     return PackageRequestEvaluation(
         decision=draft.decision,
-        policy_action={
-            "allow": "allow",
-            "monitor": "allow",
-            "warn": "warn",
-            "ask": "require-reapproval",
-            "block": "block",
-        }[draft.decision],
+        policy_action=_DECISION_TO_GUARD_ACTION[draft.decision],
         enforcement=draft.enforcement,
         entitlement_state=draft.entitlement_state,
         cache_status=draft.cache_status,
@@ -1007,14 +1019,14 @@ def _evaluate_with_cloud(
     return evaluation, None
 
 
-def _normalize_package_user_copy(user_copy: SupplyChainUserCopy, *, policy_action: str) -> SupplyChainUserCopy:
+def _normalize_package_user_copy(user_copy: SupplyChainUserCopy, *, policy_action: GuardAction) -> SupplyChainUserCopy:
     dashboard_url = user_copy.dashboard_url
     if _looks_like_cloud_inbox_url(dashboard_url):
         dashboard_url = None
     harness_message = _CLOUD_INBOX_URL_RE.sub("", user_copy.harness_message or "").strip()
     harness_message = " ".join(harness_message.split())
     harness_message = _strip_review_evidence_tail(harness_message)
-    needs_local_review = policy_action in {"require-reapproval", "block"}
+    needs_local_review = policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     if needs_local_review and _LOCAL_REVIEW_INSTRUCTION.lower() not in harness_message.lower():
         harness_message = f"{harness_message} {_LOCAL_REVIEW_INSTRUCTION}".strip()
     return replace(user_copy, dashboard_url=dashboard_url, harness_message=harness_message)

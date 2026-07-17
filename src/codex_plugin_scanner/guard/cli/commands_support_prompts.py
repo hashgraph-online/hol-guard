@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from ._commands_shared import _NAMED_SECURITY_LEVELS, _SETTINGS_POLICY_RISK_ACTIONS, _guard_risk_action_key
 
 
+from ..action_lattice import coerce_guard_action
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -47,18 +48,9 @@ def _copilot_hook_permission_decision(policy_action: str) -> str:
 
 def _guard_action_from_cli(value: object) -> GuardAction:
     normalized = str(value).strip()
-    if normalized == "allow":
-        return "allow"
-    if normalized == "warn":
-        return "warn"
-    if normalized == "review":
-        return "review"
-    if normalized == "block":
-        return "block"
-    if normalized == "sandbox-required":
-        return "sandbox-required"
-    if normalized == "require-reapproval":
-        return "require-reapproval"
+    action = coerce_guard_action(normalized)
+    if action is not None:
+        return action
     raise ValueError(f"Unsupported Guard action '{normalized}'.")
 
 def _run_approval_password_settings_command(*, args: argparse.Namespace, guard_home: Path) -> dict[str, object]:

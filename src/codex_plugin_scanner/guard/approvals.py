@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TypeGuard
 from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
+from .action_lattice import normalize_guard_action_result
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
@@ -37,9 +38,7 @@ from .local_supply_chain import build_local_supply_chain_posture
 from .memory_decision_outbox import enqueue_memory_decision_event
 from .models import (
     DECISION_SCOPE_VALUES,
-    GUARD_ACTION_VALUES,
     DecisionScope,
-    GuardAction,
     GuardApprovalRequest,
     GuardArtifact,
     HarnessDetection,
@@ -114,10 +113,6 @@ def _normalize_harness_slug(harness: str | None) -> str | None:
     if normalized in {"claude", "claude-code"}:
         return "claude-code"
     return normalized or None
-
-
-def _is_guard_action(value: object) -> TypeGuard[GuardAction]:
-    return isinstance(value, str) and value in GUARD_ACTION_VALUES
 
 
 def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
@@ -408,13 +403,29 @@ def queue_blocked_approvals(
     for item in artifacts:
         if not isinstance(item, dict):
             continue
-        policy_action = item.get("policy_action")
-        if not _is_guard_action(policy_action) or policy_action not in {
+        normalization = normalize_guard_action_result(
+            item.get("policy_action"),
+            unknown_action="require-reapproval",
+        )
+        policy_action = normalization.action
+        if policy_action not in {
             "block",
             "sandbox-required",
             "require-reapproval",
         }:
             continue
+        scanner_evidence = _item_scanner_evidence(item)
+        if not normalization.recognized:
+            normalization_evidence: dict[str, object] = {
+                "source": "guard_action_normalizer",
+                "reason_code": normalization.reason_code,
+                "original_action": normalization.original_action,
+                "normalized_action": normalization.action,
+            }
+            scanner_evidence = (
+                *scanner_evidence,
+                normalization_evidence,
+            )
         artifact_id = str(item.get("artifact_id") or "")
         if not artifact_id:
             continue
@@ -469,7 +480,7 @@ def queue_blocked_approvals(
             risk_headline=incident["risk_headline"],
             action_envelope_json=_item_action_envelope_json(item),
             decision_v2_json=_item_decision_v2_json(item),
-            scanner_evidence=_item_scanner_evidence(item),
+            scanner_evidence=scanner_evidence,
             raw_command_text=raw_command_text,
         )
         persisted_request_id = store.add_approval_request(request, timestamp)

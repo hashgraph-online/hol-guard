@@ -1222,6 +1222,49 @@ def test_codex_guard_proxy_treats_non_blocking_policy_actions_as_pass_through(mo
     assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
 
 
+def test_codex_guard_proxy_never_forwards_unknown_stored_policy_action(monkeypatch, tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(store, "resolve_policy", lambda *_args, **_kwargs: "future-action")
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+            },
+        ]
+    )
+
+    assert result["responses"][1]["error"]["code"] == -32001
+    assert marker_path.exists() is False
+    assert store.count_approval_requests() == 1
+    approval = store.list_approval_requests(limit=1)[0]
+    assert approval["policy_action"] == "require-reapproval"
+    assert approval["scanner_evidence"][-1] == {
+        "source": "guard_action_normalizer",
+        "input_source": "stored_tool_policy",
+        "reason_code": "guard_action_unknown",
+        "original_action": "future-action",
+        "normalized_action": "require-reapproval",
+    }
+
+
 def test_codex_guard_proxy_reuses_server_identity_with_env_keys(monkeypatch, tmp_path):
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)

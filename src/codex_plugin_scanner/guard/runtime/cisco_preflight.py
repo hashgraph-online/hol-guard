@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
+from codex_plugin_scanner.guard.action_lattice import most_restrictive_guard_action
 from codex_plugin_scanner.guard.config import GuardConfig, resolve_risk_action
 from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
@@ -15,14 +16,6 @@ from codex_plugin_scanner.integrations.cisco_skill_scanner import CiscoIntegrati
 from codex_plugin_scanner.models import Finding
 
 _DEFAULT_SCANNER_TIMEOUT_SECONDS = 5.0
-_ACTION_RANK: dict[GuardAction, int] = {
-    "allow": 0,
-    "warn": 1,
-    "review": 2,
-    "require-reapproval": 3,
-    "sandbox-required": 4,
-    "block": 5,
-}
 _SOURCE_RISK_CLASS: dict[str, str] = {
     "cisco_skill": "malicious_skill",
     "cisco_mcp": "mcp_dangerous_tool",
@@ -241,8 +234,8 @@ def policy_action_for_cisco_signals(
     for signal in signals:
         risk_class = _SOURCE_RISK_CLASS.get(signal.source, "mcp_dangerous_tool")
         resolved = resolve_risk_action(config, risk_class, harness=harness)
-        if resolved is not None and _ACTION_RANK[resolved] > _ACTION_RANK[action]:
-            action = resolved
+        if resolved is not None:
+            action = most_restrictive_guard_action(action, resolved)
     return action
 
 
