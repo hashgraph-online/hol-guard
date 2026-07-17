@@ -128,7 +128,7 @@ from ..mcp_tool_calls import (
     build_tool_call_hash,
     evaluate_tool_call,
 )
-from ..models import SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
+from ..models import GUARD_ACTION_VALUES, SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
     package_firewall_available_actions,

@@ -9,9 +9,10 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import PurePath
 
+from .action_lattice import normalize_guard_action_result
 from .approval_gate import ApprovalGateGrant
 from .config import DEFAULT_SECURITY_LEVEL, GuardConfig, resolve_risk_action
-from .models import GUARD_ACTION_VALUES, GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
+from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .receipts import build_receipt
 from .runtime.browser_mcp_intent import normalize_browser_mcp_intent
 from .runtime.mcp_protection import (
@@ -33,6 +34,8 @@ class ToolCallDecision:
     signals: tuple[str, ...]
     summary: str
     risk_categories: tuple[str, ...] = ()
+    normalization_reason_code: str | None = None
+    original_action: str | None = None
 
 
 _MCP_COMMAND_ARGUMENT_KEYS: tuple[str, ...] = (
@@ -175,15 +178,23 @@ def evaluate_tool_call(
     )
     if override is None:
         override = config.resolve_action_override(artifact.harness, artifact.artifact_id, artifact.publisher)
-    action = _coerce_guard_action(override) if isinstance(override, str) else None
-    if action is not None:
+    normalized_override = (
+        normalize_guard_action_result(override, unknown_action="require-reapproval") if override is not None else None
+    )
+    if normalized_override is not None:
         risk_categories = tool_call_risk_categories(artifact, arguments)
         return ToolCallDecision(
-            action=action,
-            source="policy",
+            action=normalized_override.action,
+            source="policy" if normalized_override.recognized else "policy-invalid",
             signals=tool_call_risk_signals(artifact, arguments),
-            summary="Local Guard policy matched this exact tool call.",
+            summary=(
+                "Local Guard policy matched this exact tool call."
+                if normalized_override.recognized
+                else "Local Guard found an unknown policy action and requires reapproval."
+            ),
             risk_categories=risk_categories,
+            normalization_reason_code=normalized_override.reason_code,
+            original_action=normalized_override.original_action,
         )
 
     signals = tool_call_risk_signals(artifact, arguments)
@@ -862,10 +873,3 @@ def _risk_match_text(value: str) -> str:
 
 def _camel_token_normalized(value: str) -> str:
     return re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", value)
-
-
-def _coerce_guard_action(value: str) -> GuardAction | None:
-    for action in GUARD_ACTION_VALUES:
-        if value == action:
-            return action
-    return None

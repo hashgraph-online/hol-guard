@@ -27,6 +27,7 @@ from typing import Any, TypedDict, TypeGuard, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
+from ..action_lattice import is_guard_action as _is_guard_action
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..aibom_cli import _AIBOM_AUTO_SYNC_INTERVAL_SECONDS, sync_aibom_snapshots_if_due
@@ -110,7 +111,7 @@ from ..local_supply_chain import (
     resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
-from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, DecisionScope, GuardAction, PolicyDecision
+from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -238,10 +239,6 @@ def _build_snapshot_payload(context: HarnessContext) -> dict[str, object]:
 
 def _is_decision_scope(value: str) -> TypeGuard[DecisionScope]:
     return value in DECISION_SCOPE_VALUES
-
-
-def _is_guard_action(value: str) -> TypeGuard[GuardAction]:
-    return value in GUARD_ACTION_VALUES
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:

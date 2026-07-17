@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, TypedDict, TypeGuard
 
 from ...models import ScanOptions
+from ..action_lattice import is_guard_action as _is_guard_action
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateGrant
 from ..capabilities import compute_capability_delta, normalize_artifact_capabilities, severity_from_deltas
@@ -17,7 +18,6 @@ from ..config import GuardConfig
 from ..incident import build_incident_context
 from ..models import (
     DECISION_SCOPE_VALUES,
-    GUARD_ACTION_VALUES,
     DecisionScope,
     GuardAction,
     GuardArtifact,
@@ -73,10 +73,6 @@ class ArtifactDiff(TypedDict):
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _is_guard_action(value: object) -> TypeGuard[GuardAction]:
-    return isinstance(value, str) and value in GUARD_ACTION_VALUES
 
 
 def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:

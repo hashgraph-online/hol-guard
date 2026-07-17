@@ -20,10 +20,11 @@ if TYPE_CHECKING:
 else:  # pragma: no cover - runtime compatibility
     tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
 
+from .action_lattice import coerce_guard_action, normalize_guard_action
 from .approval_gate import ApprovalGateGrant, public_config, require_settings_write
 from .mdm.contracts import ManagedPolicy, ManagedPolicyState
 from .mdm.policy import apply_managed_policy, fail_closed_managed_policy, load_managed_policy
-from .models import GuardAction, GuardMode
+from .models import GUARD_ACTION_VALUES, GuardAction, GuardMode
 
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
 LEGACY_GUARD_DIRNAMES = (".config/.ai-plugin-scanner-guard", ".ai-plugin-scanner-guard", ".holguard")
@@ -74,7 +75,7 @@ def hook_fast_path_shadow_enabled() -> bool:
     return os.environ.get(HOOK_FAST_PATH_SHADOW_ENV, "0") == "1"
 
 
-VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
+VALID_GUARD_ACTIONS = frozenset(GUARD_ACTION_VALUES)
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
 VALID_SECURITY_LEVELS = {"relaxed", "gentle", "balanced", "strict", "paranoid", "custom"}
 VALID_RISK_ACTION_KEYS = {
@@ -248,16 +249,9 @@ def _coerce_action_map(payload: object) -> dict[str, GuardAction]:
     for key, value in payload.items():
         if not isinstance(key, str):
             continue
-        action = (
-            value
-            if isinstance(value, str)
-            else (value.get("action") or value.get("default_action"))
-            if isinstance(value, dict)
-            else None
-        )
-        resolved_action = _coerce_loaded_guard_action(action, None)
-        if resolved_action is not None:
-            action_map[key] = resolved_action
+        action = _action_map_value(value)
+        resolved_action = normalize_guard_action(action, unknown_action="require-reapproval")
+        action_map[key] = resolved_action
     return action_map
 
 
@@ -268,17 +262,20 @@ def _coerce_risk_action_map(payload: object) -> dict[str, GuardAction]:
     for key, value in payload.items():
         if not isinstance(key, str) or key not in VALID_RISK_ACTION_KEYS:
             continue
-        action = (
-            value
-            if isinstance(value, str)
-            else (value.get("action") or value.get("default_action"))
-            if isinstance(value, dict)
-            else None
-        )
-        resolved_action = _coerce_loaded_guard_action(action, None)
-        if resolved_action is not None:
-            action_map[key] = resolved_action
+        action = _action_map_value(value)
+        resolved_action = normalize_guard_action(action, unknown_action="require-reapproval")
+        action_map[key] = resolved_action
     return action_map
+
+
+def _action_map_value(value: object) -> object:
+    if not isinstance(value, dict):
+        return value
+    if "action" in value:
+        return value.get("action")
+    if "default_action" in value:
+        return value.get("default_action")
+    return value
 
 
 def _coerce_harness_risk_action_map(payload: object) -> dict[str, dict[str, GuardAction]]:
@@ -615,19 +612,9 @@ def _coerce_loaded_guard_mode(value: object, fallback: GuardMode) -> GuardMode:
 
 
 def _coerce_loaded_guard_action(value: object, fallback: GuardAction | None) -> GuardAction | None:
-    if value == "allow":
-        return "allow"
-    if value == "warn":
-        return "warn"
-    if value == "review":
-        return "review"
-    if value == "block":
-        return "block"
-    if value == "sandbox-required":
-        return "sandbox-required"
-    if value == "require-reapproval":
-        return "require-reapproval"
-    return fallback
+    if value is None:
+        return fallback
+    return normalize_guard_action(value, unknown_action="require-reapproval")
 
 
 def _coerce_loaded_guard_action_or_default(value: object, fallback: GuardAction) -> GuardAction:
@@ -693,7 +680,7 @@ def _coerce_risk_action_payload(value: object) -> dict[str, GuardAction]:
     for key, action in value.items():
         if not isinstance(key, str) or key not in VALID_RISK_ACTION_KEYS:
             raise ValueError("Invalid Guard risk action.")
-        resolved_action = _coerce_loaded_guard_action(action, None)
+        resolved_action = coerce_guard_action(action)
         if resolved_action is None:
             raise ValueError("Invalid Guard risk action.")
         action_map[key] = resolved_action
