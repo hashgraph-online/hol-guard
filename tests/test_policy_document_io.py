@@ -289,7 +289,8 @@ def test_trusted_file_round_trip_and_atomic_private_output(tmp_path: Path) -> No
     write_private_policy_text(destination, format_policy_document_yaml(document))
 
     assert policy_document_digest(load_trusted_policy_document(destination)) == policy_document_digest(document)
-    assert destination.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert destination.stat().st_mode & 0o777 == 0o600
 
 
 def test_trusted_read_rejects_symlink(tmp_path: Path) -> None:
@@ -329,6 +330,7 @@ def test_trusted_read_rejects_hardlink(tmp_path: Path) -> None:
         read_trusted_policy_text(link)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows file modes do not expose POSIX group permissions")
 def test_trusted_read_rejects_group_writable_file(tmp_path: Path) -> None:
     directory = _private_directory(tmp_path / "private")
     source = directory / "policy.yaml"
@@ -339,6 +341,7 @@ def test_trusted_read_rejects_group_writable_file(tmp_path: Path) -> None:
         read_trusted_policy_text(source)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows directory modes do not expose POSIX world permissions")
 def test_trusted_read_rejects_world_writable_parent(tmp_path: Path) -> None:
     directory = _private_directory(tmp_path / "private")
     source = directory / "policy.yaml"
