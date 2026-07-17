@@ -60,6 +60,18 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "github.graphql.remote-mutation",
         ),
         (
+            (
+                "api",
+                "graphql",
+                "-f",
+                "query=fragment Maint on Mutation { resolveReviewThread(input: {threadId: \"T_1\"}) "
+                "{ thread { id } } } mutation { deleteRepository(input: {repositoryId: \"R_1\"}) "
+                "{ repository { id } } }",
+            ),
+            "mutate_remote",
+            "github.graphql.remote-mutation",
+        ),
+        (
             ("api", "graphql", "-f", "query=subscription { eventStream { id } }"),
             "mutate_remote",
             "github.graphql.remote-mutation",

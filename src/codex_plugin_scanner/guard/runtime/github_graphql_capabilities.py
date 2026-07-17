@@ -28,6 +28,13 @@ def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
             "github.graphql.suspicious-alias",
             "A GraphQL alias resembles an operation type and is not classified automatically.",
         )
+    has_fragment_definition = re.search(r"\bfragment\b", sanitized) is not None
+    if has_fragment_definition and re.search(r"\bmutation\b", sanitized) is not None:
+        return (
+            "mutate_remote",
+            "github.graphql.remote-mutation",
+            "GraphQL mutations with fragment definitions require confirmation.",
+        )
     operations = _top_level_operations(sanitized)
     if operations is None:
         return "unknown", "github.graphql.invalid-document", "The GraphQL document is not balanced."
@@ -42,7 +49,7 @@ def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
     operation = operations[0]
     if operation == "mutation":
         root_fields = _root_fields(sanitized)
-        if root_fields and frozenset(root_fields) <= _MAINTENANCE_MUTATIONS:
+        if not has_fragment_definition and root_fields and frozenset(root_fields) <= _MAINTENANCE_MUTATIONS:
             return (
                 "maintain_remote",
                 "github.graphql.proven-maintenance",
