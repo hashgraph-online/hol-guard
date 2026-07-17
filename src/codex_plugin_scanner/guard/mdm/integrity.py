@@ -65,6 +65,8 @@ def _trusted_product_version(
     manifest: ManifestVerification,
     native: NativeInstallVerification,
 ) -> str:
+    """Return public installed-version metadata only after its verification boundary passes."""
+
     if manifest.healthy and manifest.version is not None:
         return manifest.version
     if native.healthy and native.version is not None:

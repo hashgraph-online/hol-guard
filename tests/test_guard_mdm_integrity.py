@@ -94,6 +94,7 @@ def test_snapshot_never_upgrades_incomplete_managed_evidence(tmp_path: Path, mon
     assert snapshot["assuranceLevel"] == "user-managed"
     assert snapshot["healthy"] is False
     assert snapshot["remediationClass"] == "user-reinstall"
+    assert snapshot["product"]["version"] == "3.1.0a1"
 
 
 def test_snapshot_preserves_cached_managed_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
