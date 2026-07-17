@@ -37,6 +37,8 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "destructive shell command": ("destructive_shell",),
     "guard approval self-authorization command": ("policy_bypass",),
     "github pr body shell substitution": ("execution",),
+    "github remote mutation command": ("destructive_shell", "network_egress"),
+    "unverified github command capability": ("destructive_shell", "network_egress"),
     "filesystem destructive command": ("destructive_shell",),
     "git destructive command": ("destructive_shell",),
     "system destructive command": ("destructive_shell",),
@@ -80,10 +82,17 @@ _GIT_FORCE_REFSPEC = SubcommandOperandPrefixMatcher(
     operand_prefixes=frozenset({"+"}),
     leading_options_with_values=_GIT_GLOBAL_OPTIONS_WITH_VALUES,
     options_with_values=_GIT_SUBCOMMAND_OPTIONS_WITH_VALUES["push"],
+    leading_operands_to_skip=1,
+    options_supplying_leading_operands=frozenset({"--repo"}),
 )
 
 
-def _git_matcher(subcommand: str, *, required_flags: frozenset[str]) -> ExecutableMatcher:
+def _git_matcher(
+    subcommand: str,
+    *,
+    required_flags: frozenset[str],
+    inverse_flag_pairs: frozenset[tuple[str, str]] = frozenset(),
+) -> ExecutableMatcher:
     return ExecutableMatcher(
         executables=frozenset({"git"}),
         subcommands=(subcommand,),
@@ -91,6 +100,7 @@ def _git_matcher(subcommand: str, *, required_flags: frozenset[str]) -> Executab
         allow_leading_options=True,
         leading_options_with_values=_GIT_GLOBAL_OPTIONS_WITH_VALUES,
         options_with_values=_GIT_SUBCOMMAND_OPTIONS_WITH_VALUES.get(subcommand, frozenset()),
+        inverse_flag_pairs=inverse_flag_pairs,
     )
 
 
@@ -223,6 +233,25 @@ BUILT_IN_COMMAND_RULES = (
         safer_alternative="Write to a scoped temporary path and review the final destination.",
     ),
     _compatibility_rule(
+        rule_id="command.github.remote-mutation",
+        title="GitHub remote mutation",
+        description="Identifies GitHub CLI operations that can change GitHub-hosted state.",
+        action_class="GitHub remote mutation command",
+        safer_alternative=(
+            "Inspect the target with a read-only `gh view`, `gh list`, or explicit API GET before confirming "
+            "the mutation."
+        ),
+    ),
+    _compatibility_rule(
+        rule_id="command.github.capability-unknown",
+        title="Unverified GitHub command capability",
+        description=(
+            "Identifies GitHub CLI operations or pipeline compositions that are not statically proven read-only."
+        ),
+        action_class="Unverified GitHub command capability",
+        safer_alternative="Use a built-in read-only GitHub command or an explicit API GET with static arguments.",
+    ),
+    _compatibility_rule(
         rule_id="command.shell-mutations.github-body-substitution",
         title="Command substitution in remote body",
         description="Identifies shell substitution used to construct a remote request body.",
@@ -272,8 +301,16 @@ BUILT_IN_COMMAND_RULES = (
                 title="Git clean preview",
                 matcher=AnyMatcher(
                     matchers=(
-                        _git_matcher("clean", required_flags=frozenset({"-n"})),
-                        _git_matcher("clean", required_flags=frozenset({"--dry-run"})),
+                        _git_matcher(
+                            "clean",
+                            required_flags=frozenset({"-n"}),
+                            inverse_flag_pairs=frozenset({("-n", "--no-dry-run")}),
+                        ),
+                        _git_matcher(
+                            "clean",
+                            required_flags=frozenset({"--dry-run"}),
+                            inverse_flag_pairs=frozenset({("--dry-run", "--no-dry-run")}),
+                        ),
                     )
                 ),
             ),
@@ -296,7 +333,20 @@ BUILT_IN_COMMAND_RULES = (
             CommandSafeVariant(
                 variant_id="dry-run",
                 title="Git push preview",
-                matcher=_git_matcher("push", required_flags=frozenset({"--dry-run"})),
+                matcher=AnyMatcher(
+                    matchers=(
+                        _git_matcher(
+                            "push",
+                            required_flags=frozenset({"-n"}),
+                            inverse_flag_pairs=frozenset({("-n", "--no-dry-run")}),
+                        ),
+                        _git_matcher(
+                            "push",
+                            required_flags=frozenset({"--dry-run"}),
+                            inverse_flag_pairs=frozenset({("--dry-run", "--no-dry-run")}),
+                        ),
+                    )
+                ),
             ),
         ),
     ),

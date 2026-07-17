@@ -27,6 +27,31 @@ def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=guard_home)
 
 
+def test_daemon_refresh_after_update_uses_fresh_interpreter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    context = _context(tmp_path)
+    context.guard_home.mkdir(parents=True)
+    (context.guard_home / "daemon-state.json").write_text("{}", encoding="utf-8")
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert command[-2:] == ["-c", update_commands._DAEMON_REFRESH_SCRIPT]
+        assert json.loads(str(kwargs["input"])) == {"guard_home": str(context.guard_home)}
+        return subprocess.CompletedProcess(command, 0, '{"status":"restarted","retired":[123]}', "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, note = update_commands.refresh_guard_daemon_after_update(context)
+
+    assert payload == {"status": "restarted", "retired": [123]}
+    assert note == "Restarted the Guard daemon to load the updated package."
+
+
+def test_daemon_refresh_after_update_skips_when_daemon_is_not_running(tmp_path: Path) -> None:
+    payload, note = update_commands.refresh_guard_daemon_after_update(_context(tmp_path))
+
+    assert payload is None
+    assert note is None
+
+
 def test_update_failure_redacts_output_and_returns_retry_command(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.0")
     monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.0")

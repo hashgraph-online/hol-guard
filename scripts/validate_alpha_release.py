@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from packaging.version import Version
 
-ALPHA_BRANCH = "refs/heads/feat/guard-policy-v3"
+ALPHA_BRANCHES = ("refs/heads/feat/guard-policy-v3", "refs/heads/release/3.1-policy-v3")
 
 
 @dataclass(frozen=True)
@@ -16,8 +16,8 @@ class AlphaRelease:
 
 
 def validate_alpha_release(version_text: str, git_ref: str) -> AlphaRelease:
-    if git_ref != ALPHA_BRANCH:
-        raise ValueError(f"Alpha releases must run from {ALPHA_BRANCH}")
+    if git_ref not in ALPHA_BRANCHES:
+        raise ValueError(f"Alpha releases must run from one of: {', '.join(ALPHA_BRANCHES)}")
 
     version = Version(version_text)
     if (

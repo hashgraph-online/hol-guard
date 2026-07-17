@@ -8,6 +8,14 @@ from tests.test_guard_command_queue import FakeStore, _context
 
 def test_poll_once_drops_stale_pending_result_before_leasing(tmp_path: Path, monkeypatch) -> None:
     store = FakeStore(tmp_path / "guard-home")
+    # This transport-state regression intentionally exercises an enabled queue;
+    # signed capability behavior is covered in test_guard_command_capability.py.
+    monkeypatch.setattr(command_queue, "command_queue_enabled", lambda _store: True)
+    monkeypatch.setattr(
+        command_queue,
+        "command_capability_operations",
+        lambda _store: ("guard.packageShims.status",),
+    )
     stale_job = {
         "id": "job-3",
         "leaseId": "lease-3",

@@ -10,12 +10,16 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 APPROVAL_GATE_STATE_FILE = "approval-gate.json"
 APPROVAL_GATE_MAX_COOLDOWN_SECONDS = 3600
 APPROVAL_GATE_ALLOWED_COOLDOWNS = (0, 900, APPROVAL_GATE_MAX_COOLDOWN_SECONDS)
 APPROVAL_GATE_LOCKOUT_FAILURES = 5
 APPROVAL_GATE_LOCKOUT_SECONDS = 300
+APPROVAL_GATE_COMBINED_LOCKOUT_FAILURES = 5
+
+ApprovalGateFactor = Literal["password", "totp"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +69,9 @@ def default_state() -> dict[str, object]:
         "cooldown_seconds": 0,
         "strict_all_decisions": False,
         "failed_attempts": 0,
+        "password_failed_attempts": 0,
+        "totp_failed_attempts": 0,
+        "factor_generation": 0,
         "totp_enabled": False,
     }
 
@@ -93,14 +100,37 @@ def enabled(state: dict[str, object]) -> bool:
     return state.get("enabled") is True or state.get("fail_closed") is True
 
 
-def record_failed_attempt(guard_home: Path, state: dict[str, object], *, now: str | None) -> None:
+def record_failed_attempt(
+    guard_home: Path,
+    state: dict[str, object],
+    *,
+    factor: ApprovalGateFactor,
+    now: str | None,
+) -> None:
     now_epoch = epoch(now)
-    attempts = (optional_int(state.get("failed_attempts")) or 0) + 1
-    state["failed_attempts"] = attempts
-    if attempts >= APPROVAL_GATE_LOCKOUT_FAILURES:
+    factor_key = f"{factor}_failed_attempts"
+    factor_attempts = (optional_int(state.get(factor_key)) or 0) + 1
+    combined_attempts = (optional_int(state.get("failed_attempts")) or 0) + 1
+    state[factor_key] = factor_attempts
+    state["failed_attempts"] = combined_attempts
+    if (
+        factor_attempts >= APPROVAL_GATE_LOCKOUT_FAILURES
+        or combined_attempts >= APPROVAL_GATE_COMBINED_LOCKOUT_FAILURES
+    ):
         state["locked_until"] = iso_from_epoch(now_epoch + APPROVAL_GATE_LOCKOUT_SECONDS)
         state["failed_attempts"] = 0
+        state["password_failed_attempts"] = 0
+        state["totp_failed_attempts"] = 0
     write_state(guard_home, state, now=now)
+
+
+def reset_failed_attempts(state: dict[str, object]) -> None:
+    """Reset every factor budget only after the required factor set succeeds."""
+
+    state["failed_attempts"] = 0
+    state["password_failed_attempts"] = 0
+    state["totp_failed_attempts"] = 0
+    state.pop("locked_until", None)
 
 
 def cooldown_active(state: dict[str, object], now_epoch: float) -> bool:

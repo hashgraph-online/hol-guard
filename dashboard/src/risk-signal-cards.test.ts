@@ -3,7 +3,13 @@ import {
   deriveSupplyChainRiskSignals,
   deriveEncodedLayerSignals,
 } from "./approval-center-utils";
-import type { GuardApprovalRequest, GuardDecisionV2, RiskSignalV2 } from "./guard-types";
+import { packageExecutionContextMessages } from "./risk-signal-cards";
+import type {
+  GuardApprovalRequest,
+  GuardDecisionV2,
+  PackageExecutionContextEvidence,
+  RiskSignalV2,
+} from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -136,6 +142,44 @@ assert(
 assert(
   deriveEncodedLayerSignals(requestNoDecision).length === 0,
   "T349: deriveEncodedLayerSignals returns empty array when decision_v2_json absent"
+);
+
+const packageContext: PackageExecutionContextEvidence = {
+  kind: "package_execution_context",
+  schema_version: 2,
+  portable: true,
+  context_digest: "a".repeat(64),
+  components: [],
+  portable_summary: "Portable only when the context matches.",
+  changed_components: ["registry_and_proxy_configuration", "package_manager_executable"],
+};
+const packageMessages = packageExecutionContextMessages(packageContext);
+assert(
+  packageMessages[0].includes("linked Git worktrees"),
+  "P05: package approval copy explains the narrow portable boundary"
+);
+assert(
+  packageMessages[1].includes("registry or proxy configuration") &&
+    packageMessages[1].includes("package manager executable"),
+  "P05: package approval copy identifies the exact context components that changed"
+);
+assert(
+  packageExecutionContextMessages({
+    ...packageContext,
+    portable: false,
+    non_portable_reason: "dynamic_manager_configuration",
+    changed_components: [],
+  })[0].includes("limited to one retry"),
+  "P05: non-portable package context copy documents the DX limitation"
+);
+assert(
+  packageExecutionContextMessages({
+    ...packageContext,
+    portable: false,
+    non_portable_reason: "dynamic_lifecycle_hook",
+    changed_components: [],
+  })[0].includes("lifecycle hook"),
+  "P05: lifecycle-hook context copy explains why reuse is limited"
 );
 
 const multiSkillRequest: GuardApprovalRequest = {

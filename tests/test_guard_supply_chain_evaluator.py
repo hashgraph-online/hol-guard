@@ -844,7 +844,8 @@ def test_evaluate_package_request_artifact_skips_cached_eval_when_workspace_fing
 
     assert initial.decision == "block"
     assert any("react/node_modules/minimist" in reason["message"] for reason in initial.reasons)
-    assert refreshed.decision == "monitor"
+    assert refreshed.decision == "ask"
+    assert refreshed.policy_action == "require-reapproval"
     assert refreshed.cache_status != "hit"
     assert all("react/node_modules/minimist" not in reason["message"] for reason in refreshed.reasons)
 
@@ -1866,6 +1867,31 @@ def test_resolved_target_version_uses_registry_metadata_for_npm_ranges(monkeypat
     assert resolved == "1.4.2"
 
 
+def test_evaluate_package_request_artifact_requires_review_for_malformed_registry_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(
+        evaluator_module,
+        "_urlopen_json_with_timeout_retry",
+        lambda **_kwargs: {"versions": ["1.0.0"]},
+    )
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("private-demo@^1.0.0"),
+        store=store,
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert any(reason["code"] == "unidentified_package" for reason in result.reasons)
+
+
 def test_evaluate_package_request_artifact_blocks_hoisted_lockfile_match(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1939,8 +1965,8 @@ def test_evaluate_package_request_artifact_handles_invalid_lockfile_bytes_withou
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "monitor"
-    assert result.policy_action == "allow"
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
 
 
 def test_evaluate_package_request_artifact_handles_unreadable_workspace_paths_without_crashing(
@@ -2111,8 +2137,8 @@ def test_evaluate_package_request_artifact_range_only_timeout_falls_back_safely(
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "monitor"
-    assert result.policy_action == "allow"
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
     assert result.enforcement in {"local_fallback", "offline_cached"}
     assert any(reason["code"] == "cloud_timeout" for reason in result.reasons)
 

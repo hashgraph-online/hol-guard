@@ -8,6 +8,7 @@ const APPROVAL_GATE_REQUIRED_CODES = new Set([
 
 const APPROVAL_GATE_NON_CREDENTIAL_CODES = new Set([
   "approval_gate_locked",
+  "approval_gate_grant_expired",
   "approval_gate_invalid_password",
   "approval_gate_totp_invalid",
   "approval_gate_recovery_required",

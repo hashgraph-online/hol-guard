@@ -109,10 +109,15 @@ def run_guard_command(
     home_override = getattr(args, "home", None)
     guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
     workspace = _resolve_guard_workspace(args, guard_home=guard_home)
+    executable_overrides: dict[str, str] = {}
+    grok_executable = getattr(args, "grok_executable", None)
+    if isinstance(grok_executable, str) and grok_executable.strip():
+        executable_overrides["grok"] = grok_executable.strip()
     context = HarnessContext(
         home_dir=Path(home_override).resolve() if home_override else Path.home().resolve(),
         workspace_dir=workspace,
         guard_home=guard_home,
+        executable_overrides=executable_overrides,
     )
 
     handler = _resolve_guard_handler(_PRESTORE_HANDLERS, args.guard_command)

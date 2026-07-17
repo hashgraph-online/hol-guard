@@ -33,6 +33,7 @@ from .false_positive_rules import (
     split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
+from .github_command_capabilities import GitHubCommandAssessment, classify_github_cli
 from .interpreter_options import shell_interpreter_command_payload as _shell_interpreter_command_payload
 from .kubernetes_commands import kubernetes_secret_read_source
 from .secret_sensitivity import SecretPathMatch as SensitivePathMatch
@@ -899,6 +900,8 @@ def extract_sensitive_tool_action_request(
 
     command_texts = _candidate_command_texts(arguments)
     normalized_tool_name = _normalize_tool_name(tool_name)
+    if normalized_tool_name in _FILE_WRITE_TOOL_NAMES:
+        return None
     if normalized_tool_name is None and not command_texts:
         return None
     requested_tool_name = str(tool_name).strip() if isinstance(tool_name, str) and str(tool_name).strip() else "Shell"
@@ -997,6 +1000,7 @@ def extract_sensitive_tool_action_request(
                 if candidate_canonical is not None and candidate_canonical.normalized_text == command_text
                 else None
             ),
+            raw_command_text=raw_command_text,
         )
         if destructive_shell_request is not None:
             if wrapper_chain:
@@ -1014,6 +1018,7 @@ def extract_sensitive_tool_action_request(
                 cwd=cwd,
                 home_dir=home_dir,
                 canonical_command=candidate_canonical,
+                raw_command_text=raw_command_text,
             )
             if destructive_shell_request is not None:
                 destructive_shell_request = _request_with_wrapper_context(
@@ -1113,6 +1118,7 @@ def _destructive_shell_tool_action_request(
     cwd: Path | None,
     home_dir: Path | None,
     canonical_command: CanonicalCommand | None = None,
+    raw_command_text: str | None = None,
 ) -> ToolActionRequestMatch | None:
     if normalized_tool_name not in _SHELL_TOOL_NAMES:
         return None
@@ -1163,7 +1169,11 @@ def _destructive_shell_tool_action_request(
             ),
             canonical_command=canonical_command,
         )
-    if _gh_pr_create_body_has_shell_command_substitution(detection_command_text):
+    if _gh_pr_create_body_has_shell_command_substitution(detection_command_text) or (
+        raw_command_text is not None
+        and raw_command_text != detection_command_text
+        and _gh_pr_create_body_has_shell_command_substitution(raw_command_text)
+    ):
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
@@ -1176,6 +1186,17 @@ def _destructive_shell_tool_action_request(
             ),
             canonical_command=canonical_command,
         )
+    for _extension, rule, _evidence in BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command):
+        if not rule.action_classes or rule.action_classes[0] != "GitHub Actions administrative command":
+            continue
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class=rule.action_classes[0],
+            reason=rule.description,
+            canonical_command=canonical_command,
+        )
     if _looks_destructive_shell_command(detection_command_text, cwd=cwd, home_dir=home_dir):
         return ToolActionRequestMatch(
             tool_name=tool_name,
@@ -1185,6 +1206,30 @@ def _destructive_shell_tool_action_request(
             reason=(
                 "Guard treats destructive shell writes and delete operations as sensitive because they can mutate "
                 "the local machine before the user confirms the action."
+            ),
+            canonical_command=canonical_command,
+        )
+    github_assessment = _github_shell_capability_assessment(
+        detection_command_text,
+        cwd=cwd,
+        home_dir=home_dir,
+    )
+    if github_assessment is not None:
+        is_remote_mutation = github_assessment.capability == "mutate_remote"
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class=(
+                "GitHub remote mutation command" if is_remote_mutation else "Unverified GitHub command capability"
+            ),
+            reason=(
+                f"{github_assessment.detail} Guard requires confirmation because the operation "
+                + (
+                    "can mutate GitHub-hosted state."
+                    if is_remote_mutation
+                    else "is not a statically proven read-only composition."
+                )
             ),
             canonical_command=canonical_command,
         )
@@ -1200,6 +1245,157 @@ def _destructive_shell_tool_action_request(
             canonical_command=canonical_command,
         )
     return None
+
+
+def _github_shell_capability_assessment(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    depth: int = 0,
+) -> GitHubCommandAssessment | None:
+    """Return the first GitHub capability that requires confirmation."""
+
+    if depth > 3 or _looks_like_safe_graphql_query_file_workflow(command_text.strip()):
+        return None
+    for nested_command in _shell_command_substitution_payloads(command_text):
+        assessment = _github_shell_capability_assessment(
+            nested_command,
+            cwd=cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+        )
+        if assessment is not None:
+            return assessment
+
+    parts = _split_shell_parts(command_text)
+    for nested_command in (*_env_split_string_payloads(parts), *_shell_command_scripts(parts)):
+        assessment = _github_shell_capability_assessment(
+            nested_command,
+            cwd=cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+        )
+        if assessment is not None:
+            return assessment
+
+    for pipeline in _iter_shell_pipelines(parts):
+        contains_github_read = False
+        for segment in pipeline:
+            if _shell_segment_is_command_builtin_lookup(segment):
+                continue
+            command_name, command_index = _shell_segment_primary_command(segment)
+            if command_name != "gh" or command_index is None:
+                continue
+            assessment = _classify_github_shell_segment(segment, command_index)
+            if assessment.capability not in {"read_local", "read_remote", "maintain_remote"}:
+                return assessment
+            contains_github_read = True
+        if not contains_github_read or len(pipeline) < 2:
+            continue
+        for segment in pipeline:
+            command_name, _command_index = _shell_segment_primary_command(segment)
+            if command_name == "gh":
+                continue
+            if not _github_pipeline_companion_is_read_only(segment, home_dir=home_dir):
+                return GitHubCommandAssessment(
+                    capability="unknown",
+                    reason_code="github.pipeline.unverified-companion",
+                    detail="A GitHub read is composed with a pipeline stage that has not been proven read-only.",
+                )
+    return None
+
+
+def _shell_segment_is_command_builtin_lookup(segment: list[str]) -> bool:
+    contextual_segment = [_ShellTokenWithQuoteContext(raw=token, plain=token) for token in segment]
+    for index, token in enumerate(segment):
+        command_name = _normalized_shell_command_name(_shell_command_token_without_attached_redirection(token))
+        if command_name == "command":
+            return _command_builtin_options_are_lookup_only(contextual_segment, index + 1)
+    return False
+
+
+def _classify_github_shell_segment(segment: list[str], command_index: int) -> GitHubCommandAssessment:
+    args: list[str] = []
+    index = command_index + 1
+    while index < len(segment):
+        token = segment[index]
+        if token in {"2>&1", "1>&2"}:
+            index += 1
+            continue
+        if token in {">", ">>", ">|", "<", "<<", "<<<"} or any(marker in token for marker in (">", "<")):
+            return GitHubCommandAssessment(
+                capability="write_local",
+                reason_code="github.command.shell-redirection",
+                detail="The GitHub CLI invocation includes local input or output redirection.",
+            )
+        args.append(token)
+        index += 1
+    return classify_github_cli(args)
+
+
+def _github_pipeline_companion_is_read_only(
+    segment: list[str],
+    *,
+    home_dir: Path | None,
+) -> bool:
+    command_name, command_index = _shell_segment_primary_command(segment)
+    if command_name is None or command_index is None:
+        return False
+    if _is_python_interpreter_command(command_name):
+        scripts = list(_script_interpreter_texts(segment))
+        return bool(scripts) and all(_script_is_read_only_observer(script_text) for script_text in scripts)
+    if any(">" in token or "<" in token for token in segment[command_index + 1 :] if token not in {"2>&1", "1>&2"}):
+        return False
+    args = [token for token in segment[command_index + 1 :] if token not in {"2>&1", "1>&2"}]
+    if command_name == "jq":
+        return _github_jq_filter_args_are_safe(args)
+    if command_name in _READ_ONLY_LOOKUP_FILTERS:
+        return _read_only_lookup_filter_segment_is_safe(command_name, args, home_dir=home_dir)
+    return False
+
+
+def _github_jq_filter_args_are_safe(args: list[str]) -> bool:
+    boolean_options = {
+        "--ascii-output",
+        "--compact-output",
+        "--exit-status",
+        "--join-output",
+        "--monochrome-output",
+        "--raw-input",
+        "--raw-output",
+        "--slurp",
+        "--sort-keys",
+        "-C",
+        "-M",
+        "-R",
+        "-S",
+        "-a",
+        "-c",
+        "-e",
+        "-j",
+        "-r",
+        "-s",
+    }
+    value_options = {"--arg": 2, "--argjson": 2}
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token in {"2>&1", "1>&2"}:
+            index += 1
+            continue
+        if token in boolean_options:
+            index += 1
+            continue
+        if token in value_options:
+            index += 1 + value_options[token]
+            if index > len(args):
+                return False
+            continue
+        if token.startswith("-"):
+            return False
+        return index == len(args) - 1
+    return False
 
 
 def _gh_pr_create_body_has_shell_command_substitution(command_text: str, *, depth: int = 0) -> bool:

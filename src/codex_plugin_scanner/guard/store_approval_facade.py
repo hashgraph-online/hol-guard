@@ -11,7 +11,18 @@ from .store_base import *
 class StoreApprovalsMixin:
     def add_approval_request(self, request: GuardApprovalRequest, now: str) -> str:
         with self._connect() as connection:
-            return persist_approval_request(connection, request, now)
+            request_id = persist_approval_request(
+                connection,
+                request,
+                now,
+                oauth_source=self._guard_source,
+            )
+            bind_live_request_outbox_for_request(
+                connection,
+                request_id=request_id,
+                oauth_source=self._guard_source,
+            )
+            return request_id
 
     def list_approval_requests(
         self,
@@ -183,6 +194,7 @@ class StoreApprovalsMixin:
             return persist_duplicate_resolutions(
                 connection,
                 queue_group_id=queue_group_id,
+                oauth_source=self._guard_source,
                 request_id=request_id,
                 resolution_action=resolution_action,
                 resolution_scope=resolution_scope,

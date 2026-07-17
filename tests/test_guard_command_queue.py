@@ -4,6 +4,7 @@ import json
 import urllib.error
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -45,6 +46,42 @@ from tests.guard_review_signing_helpers import (
 @pytest.fixture(autouse=True)
 def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_legacy_queue_mechanics(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep existing transport/executor tests focused on their original layer.
+
+    Signed capability validation has dedicated integration coverage in
+    test_guard_command_capability.py.
+    """
+
+    monkeypatch.setattr(
+        command_queue,
+        "command_capability_operations",
+        lambda _store: command_executors.SUPPORTED_COMMAND_OPERATIONS,
+    )
+    monkeypatch.setattr(
+        command_queue,
+        "command_capability_status",
+        lambda _store: {
+            "enabled": True,
+            "operations": list(command_executors.SUPPORTED_COMMAND_OPERATIONS),
+            "pending_commands": [],
+        },
+    )
+    monkeypatch.setattr(
+        command_queue,
+        "authorize_command_job",
+        lambda _store, job, **_kwargs: SimpleNamespace(
+            identity={"id": job.get("id")},
+            operation=job.get("operation"),
+            requires_local_approval=False,
+        ),
+    )
+    monkeypatch.setattr(command_queue, "consume_local_command_approval", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(command_queue, "mark_command_job_consumed", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(command_queue, "audit_command_decision", lambda *_args, **_kwargs: None)
 
 
 class FakeStore:
@@ -125,7 +162,6 @@ class FakeStore:
     ) -> list[dict[str, object]]:
         del status, harness, limit, cursor, search
         return []
-
 
 
 def _approval_request_row(
@@ -982,17 +1018,23 @@ def _block_local_daemon_client(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(module, "load_guard_daemon_auth_token", fail)
 
 
-def test_command_queue_enabled_defaults_on(monkeypatch) -> None:
+def test_command_queue_enabled_defaults_off_without_local_capability(monkeypatch) -> None:
     monkeypatch.delenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, raising=False)
 
-    assert command_queue.command_queue_enabled() is True
+    assert command_queue.command_queue_enabled() is False
 
 
 @pytest.mark.parametrize("value", ["1", "true", "yes", "on"])
-def test_command_queue_enabled_allows_explicit_opt_in(value: str, monkeypatch) -> None:
+def test_command_queue_environment_cannot_grant_capability(value: str, monkeypatch) -> None:
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, value)
 
-    assert command_queue.command_queue_enabled() is True
+    assert command_queue.command_queue_enabled() is False
+
+
+def test_command_queue_requires_store_with_local_capability(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, raising=False)
+
+    assert command_queue.command_queue_enabled(FakeStore(tmp_path / "guard-home")) is True  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("value", ["", "0", "false", "no", "off", "disabled"])

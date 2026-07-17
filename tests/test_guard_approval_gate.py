@@ -7,6 +7,8 @@ import json
 import sys
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,7 +26,9 @@ from codex_plugin_scanner.guard.approval_gate import (
     confirm_totp_enrollment,
     disable_totp,
     public_config,
+    require_approval_decision,
     revoke_cooldown,
+    validate_grant,
 )
 from codex_plugin_scanner.guard.approval_gate import (
     update_settings as update_approval_gate_settings,
@@ -704,6 +708,49 @@ def test_approval_gate_cli_allow_policy_write_uses_active_cooldown_without_promp
     assert policy["artifact_id"] == "codex:project:allow-cli"
 
 
+def test_approval_gate_cli_policy_write_requires_totp_when_enabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    now = datetime.now(timezone.utc).isoformat()
+    code = totp_code_at_counter(secret=secret, counter=_counter(now))
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    responses = iter(("000000", code))
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.approval_gate_prompt.getpass.getpass",
+        lambda _prompt: next(responses),
+    )
+    args = SimpleNamespace(
+        guard_command="allow",
+        guard_home=str(store.guard_home),
+        home=str(tmp_path / "home"),
+        workspace=str(workspace),
+        harness="codex",
+        scope="artifact",
+        artifact_id="codex:project:two-factor-cli",
+        policy_action="allow",
+        publisher=None,
+        reason=None,
+        owner=None,
+        expires_in_hours=None,
+        json=True,
+        cisco_mode="off",
+    )
+
+    rejected = run_guard_command(args, output_stream=io.StringIO())
+    accepted = run_guard_command(args, output_stream=io.StringIO())
+
+    assert rejected == 4
+    assert accepted == 0
+    policy = GuardStore(store.guard_home).list_policy_decisions("codex")[0]
+    assert policy["artifact_id"] == "codex:project:two-factor-cli"
+
+
 def test_approval_password_cli_command_family_status_enable_change_disable(tmp_path: Path) -> None:
     store = _store(tmp_path)
     workspace = tmp_path / "workspace"
@@ -932,16 +979,16 @@ def test_approval_gate_disable_totp_requires_totp_only_when_enabled(tmp_path: Pa
         disable_totp(store.guard_home, approval_gate_input=ApprovalGateInput(), now="2026-04-11T00:00:31+00:00")
     assert missing_totp.value.code == "approval_gate_totp_required"
 
+    disable_now = "2026-04-11T00:01:31+00:00"
+    disable_code = totp_code_at_counter(secret=secret, counter=_counter(disable_now))
     with pytest.raises(ApprovalGateError) as invalid_totp:
         disable_totp(
             store.guard_home,
             approval_gate_input=ApprovalGateInput(totp_code="000000"),
-            now="2026-04-11T00:00:31+00:00",
+            now=disable_now,
         )
     assert invalid_totp.value.code == "approval_gate_totp_invalid"
 
-    disable_now = "2026-04-11T00:01:31+00:00"
-    disable_code = totp_code_at_counter(secret=secret, counter=_counter(disable_now))
     gate = disable_totp(
         store.guard_home,
         approval_gate_input=ApprovalGateInput(totp_code=disable_code),
@@ -950,7 +997,7 @@ def test_approval_gate_disable_totp_requires_totp_only_when_enabled(tmp_path: Pa
     assert gate.totp_enabled is False
 
 
-def test_approval_gate_password_disable_uses_totp_only_when_enabled(tmp_path: Path) -> None:
+def test_approval_gate_password_disable_requires_totp_when_enabled(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     workspace = tmp_path / "workspace"
@@ -1012,6 +1059,189 @@ def test_approval_gate_totp_overrides_password_for_reviews(tmp_path: Path) -> No
     )
 
     assert store.get_approval_request("req-totp-only")["status"] == "resolved"
+
+
+def test_approval_gate_totp_grant_is_context_bound_and_expires(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
+    issued_at = "2026-04-11T00:00:31+00:00"
+    code = totp_code_at_counter(secret=secret, counter=_counter(issued_at))
+
+    grant = require_approval_decision(
+        store.guard_home,
+        action="allow",
+        scope="artifact",
+        subject="approval-request:req-bound",
+        session_nonce="dashboard-session-1",
+        approval_gate_input=ApprovalGateInput(totp_code=code),
+        now=issued_at,
+    )
+
+    assert grant is not None
+    assert grant.password_verified is False
+    assert grant.totp_verified is True
+    assert grant.factor_set == ("totp",)
+    assert grant.action == "allow"
+    assert grant.scope == "artifact"
+    assert grant.subject == "approval-request:req-bound"
+    assert grant.session_nonce == "dashboard-session-1"
+    validate_grant(
+        store.guard_home,
+        grant,
+        purpose="approval_decision",
+        strict=False,
+        action="allow",
+        scope="artifact",
+        subject="approval-request:req-bound",
+        session_nonce="dashboard-session-1",
+        now="2026-04-11T00:00:45+00:00",
+    )
+
+    with pytest.raises(ApprovalGateError, match="does not match this subject"):
+        validate_grant(
+            store.guard_home,
+            grant,
+            purpose="approval_decision",
+            strict=False,
+            subject="approval-request:req-other",
+            now="2026-04-11T00:00:45+00:00",
+        )
+    with pytest.raises(ApprovalGateError, match="proof is invalid"):
+        validate_grant(
+            store.guard_home,
+            replace(grant, action="block"),
+            purpose="approval_decision",
+            strict=False,
+            now="2026-04-11T00:00:45+00:00",
+        )
+    with pytest.raises(ApprovalGateError) as expired:
+        validate_grant(
+            store.guard_home,
+            grant,
+            purpose="approval_decision",
+            strict=False,
+            now="2026-04-11T00:01:02+00:00",
+        )
+    assert expired.value.code == "approval_gate_grant_expired"
+
+
+def test_approval_gate_totp_disable_revokes_outstanding_grants_and_auth_state(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
+    grant_now = "2026-04-11T00:00:31+00:00"
+    grant_code = totp_code_at_counter(secret=secret, counter=_counter(grant_now))
+    grant = require_approval_decision(
+        store.guard_home,
+        action="allow",
+        scope="artifact",
+        approval_gate_input=ApprovalGateInput(password=PASSWORD, totp_code=grant_code),
+        now=grant_now,
+    )
+    assert grant is not None
+
+    state_path = store.guard_home / "approval-gate.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state.update(
+        {
+            "approval_sessions": ["stale-session"],
+            "recovery_code_hashes": ["stale-code"],
+            "trusted_devices": ["stale-device"],
+        }
+    )
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    disable_now = "2026-04-11T00:00:32+00:00"
+    next_counter_code = totp_code_at_counter(secret=secret, counter=_counter(disable_now) + 1)
+    disable_totp(
+        store.guard_home,
+        approval_gate_input=ApprovalGateInput(password=PASSWORD, totp_code=next_counter_code),
+        now=disable_now,
+    )
+
+    rotated_state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert rotated_state["factor_generation"] > state["factor_generation"]
+    assert "approval_sessions" not in rotated_state
+    assert "recovery_code_hashes" not in rotated_state
+    assert "trusted_devices" not in rotated_state
+    with pytest.raises(ApprovalGateError, match="Approval proof is required"):
+        validate_grant(
+            store.guard_home,
+            grant,
+            purpose="approval_decision",
+            strict=False,
+            now=disable_now,
+        )
+
+
+def test_approval_gate_tracks_active_totp_failures_and_locks(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
+    attempt_now = "2026-04-11T00:00:31+00:00"
+    _add_request(store, "req-factor-budget")
+
+    for _ in range(4):
+        with pytest.raises(ApprovalGateError) as error:
+            _approve(
+                store,
+                "req-factor-budget",
+                gate_input=ApprovalGateInput(totp_code="000000"),
+                now=attempt_now,
+            )
+        assert error.value.code == "approval_gate_totp_invalid"
+
+    state = json.loads((store.guard_home / "approval-gate.json").read_text(encoding="utf-8"))
+    assert state["password_failed_attempts"] == 0
+    assert state["totp_failed_attempts"] == 4
+    assert state["failed_attempts"] == 4
+
+    with pytest.raises(ApprovalGateError) as fifth_failure:
+        _approve(
+            store,
+            "req-factor-budget",
+            gate_input=ApprovalGateInput(totp_code="000000"),
+            now=attempt_now,
+        )
+    assert fifth_failure.value.code == "approval_gate_totp_invalid"
+    with pytest.raises(ApprovalGateError) as locked:
+        _approve(
+            store,
+            "req-factor-budget",
+            gate_input=ApprovalGateInput(totp_code=totp_code_at_counter(secret=secret, counter=_counter(attempt_now))),
+            now=attempt_now,
+        )
+    assert locked.value.code == "approval_gate_locked"
+
+
+def test_approval_gate_concurrent_totp_replay_allows_only_one_request(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
+    approve_now = "2026-04-11T00:00:31+00:00"
+    approve_code = totp_code_at_counter(secret=secret, counter=_counter(approve_now))
+    request_ids = ("req-concurrent-a", "req-concurrent-b")
+    for request_id in request_ids:
+        _add_request(store, request_id)
+
+    def approve(request_id: str) -> str:
+        try:
+            _approve(
+                store,
+                request_id,
+                gate_input=ApprovalGateInput(password=PASSWORD, totp_code=approve_code),
+                now=approve_now,
+            )
+        except ApprovalGateError as error:
+            return error.code
+        return "resolved"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = sorted(executor.map(approve, request_ids))
+
+    assert outcomes == ["approval_gate_totp_invalid", "resolved"]
+    statuses = sorted(str(store.get_approval_request(request_id)["status"]) for request_id in request_ids)
+    assert statuses == ["pending", "resolved"]
 
 
 def test_approval_gate_cli_totp_commands_round_trip(tmp_path: Path) -> None:
@@ -1166,7 +1396,7 @@ def test_approval_gate_settings_import_and_reset_require_totp_when_enabled(tmp_p
     assert reset_body["error"] == "approval_gate_totp_required"
 
 
-def test_approval_gate_settings_update_accepts_totp_without_password(tmp_path: Path) -> None:
+def test_approval_gate_settings_update_requires_totp_when_enabled(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
@@ -1175,7 +1405,22 @@ def test_approval_gate_settings_update_accepts_totp_without_password(tmp_path: P
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
-        update_request = urllib.request.Request(
+        missing_totp_request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/settings",
+            data=json.dumps(
+                {
+                    "settings": {"approval_wait_timeout_seconds": 90},
+                    "approval_password": PASSWORD,
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as totp_error:
+            urllib.request.urlopen(missing_totp_request, timeout=5)
+        totp_body = json.loads(totp_error.value.read().decode("utf-8"))
+
+        verified_request = urllib.request.Request(
             f"http://127.0.0.1:{daemon.port}/v1/settings",
             data=json.dumps(
                 {
@@ -1186,11 +1431,13 @@ def test_approval_gate_settings_update_accepts_totp_without_password(tmp_path: P
             headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
             method="POST",
         )
-        with urllib.request.urlopen(update_request, timeout=5) as update_response:
+        with urllib.request.urlopen(verified_request, timeout=5) as update_response:
             update_body = json.loads(update_response.read().decode("utf-8"))
     finally:
         daemon.stop()
 
+    assert totp_error.value.code == 403
+    assert totp_body["error"] == "approval_gate_totp_required"
     assert update_body["settings"]["approval_wait_timeout_seconds"] == 90
 
 
@@ -1271,7 +1518,6 @@ def test_approval_gate_daemon_totp_routes_round_trip(tmp_path: Path) -> None:
             f"http://127.0.0.1:{daemon.port}/v1/approval-gate/totp/disable",
             data=json.dumps(
                 {
-                    "approval_gate": {"password": PASSWORD},
                     "approval_totp_code": disable_code,
                 }
             ).encode("utf-8"),

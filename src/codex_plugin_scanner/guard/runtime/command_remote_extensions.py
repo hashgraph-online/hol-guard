@@ -60,6 +60,7 @@ _SSH_CONFIGURED_EXECUTION = AnyMatcher(
             value_keys=frozenset({"knownhostscommand", "proxycommand", "remotecommand"}),
             forbidden_flags=frozenset({"-G", "-O", "-Q", "-V"}),
             ignored_values=frozenset({"none"}),
+            cluster_options_with_values=_SSH_OPTIONS_WITH_VALUES,
         ),
         OptionValueKeyMatcher(
             executables=executable_names("ssh"),
@@ -68,6 +69,7 @@ _SSH_CONFIGURED_EXECUTION = AnyMatcher(
             forbidden_flags=frozenset({"-G", "-O", "-Q", "-V"}),
             ignored_values=frozenset({"none"}),
             required_key_values=(("permitlocalcommand", "yes"),),
+            cluster_options_with_values=_SSH_OPTIONS_WITH_VALUES,
         ),
     )
 )
@@ -261,8 +263,20 @@ REMOTE_COMMAND_RULES = (
         safer_alternative="Run the same rsync command with --dry-run and inspect every deletion first.",
         severity="critical",
         safe_variants=(
-            safe_flag_variant(_RSYNC_MUTATION, variant_id="dry-run", title="Rsync dry run", flag="--dry-run"),
-            safe_flag_variant(_RSYNC_MUTATION, variant_id="short-dry-run", title="Rsync short dry run", flag="-n"),
+            safe_flag_variant(
+                _RSYNC_MUTATION,
+                variant_id="dry-run",
+                title="Rsync dry run",
+                flag="--dry-run",
+                inverse_flag="--no-dry-run",
+            ),
+            safe_flag_variant(
+                _RSYNC_MUTATION,
+                variant_id="short-dry-run",
+                title="Rsync short dry run",
+                flag="-n",
+                inverse_flag="--no-dry-run",
+            ),
         ),
     ),
 )

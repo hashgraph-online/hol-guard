@@ -97,6 +97,17 @@ class TestDaemonRepairCommand:
         assert code1 == 0
         assert code2 == 0
 
+    def test_repair_removes_malformed_discovery_key_for_safe_regeneration(self, tmp_path: Path) -> None:
+        (tmp_path / "daemon-state.json").write_text("{}", encoding="utf-8")
+        key_path = tmp_path / "daemon-discovery-key"
+        key_path.write_text("not-a-valid-discovery-key", encoding="utf-8")
+
+        code, payload = _run(["daemon", "repair"], tmp_path)
+
+        assert code == 0
+        assert "daemon_discovery_key" in payload.get("cleared", [])
+        assert key_path.exists() is False
+
 
 class TestDaemonStopCommand:
     """L313: hol-guard daemon stop."""

@@ -86,7 +86,15 @@ assert(
     { newPassword: "next-secret", confirmPassword: "next-secret", totpCode: "123456" },
     true,
   ) === false,
-  "save-proof: change-password accepts totp without current password when enabled",
+  "save-proof: change-password accepts totp and matching new password when enabled",
+);
+assert(
+  isSettingsSaveProofSubmitDisabled(
+    "change-password",
+    { currentPassword: "old", newPassword: "next-secret", confirmPassword: "next-secret", totpCode: "123456" },
+    true,
+  ) === false,
+  "save-proof: change-password ignores current password when totp is enabled",
 );
 assert(
   isSettingsSaveProofSubmitDisabled("setup-gate", { newPassword: "alpha", confirmPassword: "beta" }, false) === true,

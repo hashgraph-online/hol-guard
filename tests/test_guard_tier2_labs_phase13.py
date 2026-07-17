@@ -24,7 +24,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "tier2"
     ("fixture_name", "command", "ecosystem", "package_name", "blocked_version", "expected_decision"),
     [
         ("cargo-vulnerable", "cargo add clap@^4.5", "cargo", "clap", "4.5.7", "block"),
-        ("cargo-safe", "cargo add clap@^4.5", "cargo", "clap", "4.5.7", "monitor"),
+        ("cargo-safe", "cargo add clap@^4.5", "cargo", "clap", "4.5.7", "ask"),
         (
             "go-vulnerable",
             "go get github.com/gin-gonic/gin",
@@ -39,7 +39,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "tier2"
             "go",
             "github.com/gin-gonic/gin",
             "v1.10.0",
-            "monitor",
+            "ask",
         ),
         (
             "maven-vulnerable",
@@ -55,7 +55,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "tier2"
             "maven",
             "org.example:demo",
             "1.2.3",
-            "monitor",
+            "ask",
         ),
         (
             "gradle-vulnerable",
@@ -71,7 +71,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "tier2"
             "maven",
             "org.example:demo",
             "1.2.3",
-            "monitor",
+            "ask",
         ),
         (
             "composer-vulnerable",
@@ -87,10 +87,10 @@ FIXTURES = Path(__file__).parent / "fixtures" / "tier2"
             "packagist",
             "laravel/framework",
             "11.1.0",
-            "monitor",
+            "ask",
         ),
         ("rubygems-vulnerable", "bundle add rspec", "rubygems", "rspec", "3.13.0", "block"),
-        ("rubygems-safe", "bundle add rspec", "rubygems", "rspec", "3.13.0", "monitor"),
+        ("rubygems-safe", "bundle add rspec", "rubygems", "rspec", "3.13.0", "ask"),
     ],
 )
 def test_tier2_fixture_labs_cover_safe_and_vulnerable_paths(
@@ -129,3 +129,5 @@ def test_tier2_fixture_labs_cover_safe_and_vulnerable_paths(
 
     assert result.decision == expected_decision
     assert result.packages[0]["supportLevel"] == "beta"
+    if expected_decision == "ask":
+        assert result.policy_action == "require-reapproval"

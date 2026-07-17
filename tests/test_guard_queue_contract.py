@@ -182,14 +182,14 @@ def _force_duplicate_row(connection: sqlite3.Connection, request_id: str, source
         """
         insert into approval_requests (
           request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
-          recommended_scope, changed_fields_json, source_scope, config_path, workspace,
+          recommended_scope, changed_fields_json, source_scope, oauth_source, config_path, workspace,
           launch_target, normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at,
           transport, risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
           launch_summary, risk_headline, action_envelope_json, decision_v2_json, fallback_cli_command,
           review_command, approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
         )
         select ?, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
-          recommended_scope, changed_fields_json, source_scope, config_path, workspace,
+          recommended_scope, changed_fields_json, source_scope, oauth_source, config_path, workspace,
           launch_target, normalized_identity_key, action_identity, queue_group_id, 1, last_seen_at,
           transport, risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
           launch_summary, risk_headline, action_envelope_json, decision_v2_json, fallback_cli_command,

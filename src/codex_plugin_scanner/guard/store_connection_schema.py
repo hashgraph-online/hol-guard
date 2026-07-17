@@ -533,13 +533,18 @@ class StoreConnectionSchemaMixin:
             self._ensure_approval_column(connection, "scanner_evidence_json", "text not null default '[]'")
             self._ensure_approval_column(connection, "desktop_notified_at", "text")
             self._ensure_approval_column(connection, "raw_command_text", "text")
+            self._ensure_approval_column(connection, "oauth_source", "text")
             if not self._schema_version_applied(connection, version=3):
                 _backfill_approval_queue_columns_compat(connection)
                 self._record_schema_version(connection, version=3)
+            if not self._schema_version_applied(connection, version=9):
+                connection.execute("drop index if exists idx_approval_group_status")
             for idx_stmt in approval_index_statements():
                 connection.execute(idx_stmt)
             ensure_live_request_outbox_schema(connection)
             seed_live_request_outbox(connection, datetime.now(timezone.utc).isoformat())
+            if not self._schema_version_applied(connection, version=9):
+                self._record_schema_version(connection, version=9)
             for idx_stmt in receipt_index_statements():
                 connection.execute(idx_stmt)
             for statement in receipt_rollup_schema_statements():

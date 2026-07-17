@@ -90,6 +90,7 @@ def test_gpfr243_reuses_package_shim_status_and_probe_helpers() -> None:
         "evaluator_invoked": True,
         "evaluator_source": "signed-bundle",
         "evidence_ids": ["evidence-1"],
+        "execution_permitted": False,
         "protect_decision": "block",
     }
 

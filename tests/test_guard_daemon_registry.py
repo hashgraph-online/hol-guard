@@ -49,7 +49,18 @@ class TestDaemonStateStartedAt:
         guard_home = tmp_path / "guard-home"
         daemon_manager_module.write_guard_daemon_state(guard_home, 4781, "tok")
         state = json.loads(daemon_manager_module._state_path(guard_home).read_text())
-        for field in ("pid", "port", "guard_home", "started_at"):
+        for field in (
+            "pid",
+            "port",
+            "host",
+            "guard_home",
+            "started_at",
+            "state_id",
+            "discovery_protocol_version",
+            "discovery_key_id",
+            "state_signature",
+            "auth_token_id",
+        ):
             assert field in state, f"state must contain {field}"
 
 

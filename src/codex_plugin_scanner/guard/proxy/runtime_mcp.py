@@ -12,11 +12,13 @@ from typing import IO, Any, TextIO
 
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
+from ..approval_scope_support import package_request_runtime_workspace_scope
 from ..approvals import approval_prompt_flow, build_approval_browser_url, first_approval_url, queue_blocked_approvals
 from ..config import GuardConfig
 from ..consumer.service import artifact_hash as compute_artifact_hash
 from ..daemon import ensure_guard_daemon
 from ..daemon.manager import load_guard_daemon_auth_token
+from ..local_supply_chain import package_request_policy_hash
 from ..mcp_tool_calls import (
     allow_tool_call,
     block_tool_call,
@@ -27,9 +29,11 @@ from ..mcp_tool_calls import (
     tool_call_risk_summary,
 )
 from ..models import GuardAction, HarnessDetection
+from ..package_execution_context import build_package_execution_context
 from ..policy.engine import build_decision_v2
 from ..runtime.browser_mcp_intent import normalize_browser_mcp_intent
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
+from ..runtime.package_execution_policy import is_execution_permitted
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
 from ..runtime.signals import RiskSeverityLabel, RiskSignalV2
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
@@ -648,24 +652,45 @@ class RuntimeMcpGuardProxy:
         remember_signals: tuple[str, ...] = (),
         remember_risk_categories: tuple[str, ...] = (),
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        artifact_digest = compute_artifact_hash(artifact)
-        stored_policy_action = self.store.resolve_policy(
-            artifact.harness,
-            artifact.artifact_id,
-            artifact_hash=artifact_digest,
-            workspace=str(self.context.workspace_dir) if self.context.workspace_dir is not None else None,
-        )
         package_evaluation = evaluate_package_request_artifact(
             artifact=artifact,
             store=self.store,
             workspace_dir=self.context.workspace_dir,
+        )
+        package_context = None
+        policy_workspace = str(self.context.workspace_dir) if self.context.workspace_dir is not None else None
+        if self.context.workspace_dir is not None:
+            package_context = build_package_execution_context(
+                workspace_dir=self.context.workspace_dir,
+                artifact=artifact,
+            )
+            artifact_digest = package_request_policy_hash(
+                artifact=artifact,
+                store=self.store,
+                workspace_dir=self.context.workspace_dir,
+                evaluation=package_evaluation,
+                execution_context=package_context,
+            )
+            policy_workspace = package_request_runtime_workspace_scope(
+                artifact_id=artifact.artifact_id,
+                artifact_hash=artifact_digest,
+                artifact_type=artifact.artifact_type,
+                execution_context=package_context,
+            )
+        else:
+            artifact_digest = compute_artifact_hash(artifact)
+        stored_policy_action = self.store.resolve_policy(
+            artifact.harness,
+            artifact.artifact_id,
+            artifact_hash=artifact_digest,
+            workspace=policy_workspace,
         )
         policy_action = _most_restrictive_package_policy_action(
             stored_policy_action if isinstance(stored_policy_action, str) else None,
             package_evaluation.policy_action,
         )
         queue_policy_action = "require-reapproval" if policy_action == "review" else policy_action
-        if queue_policy_action in {"allow", "warn"}:
+        if is_execution_permitted(queue_policy_action):
             if remember_allow and remember_decision_source is not None:
                 try:
                     allow_tool_call(
@@ -678,6 +703,7 @@ class RuntimeMcpGuardProxy:
                         risk_categories=remember_risk_categories,
                         remember=True,
                         arguments=params.get("arguments"),
+                        policy_workspace=policy_workspace,
                     )
                 except ApprovalGateError:
                     return self._queue_approval_center_response(
@@ -724,6 +750,7 @@ class RuntimeMcpGuardProxy:
                 decision_v2_payload=decision_v2_payload,
                 extra_fields={
                     "changed_fields": ["runtime_tool_call", "package_request"],
+                    "scanner_evidence": [package_context.to_evidence()] if package_context is not None else [],
                     "supply_chain_evaluation": package_evaluation.to_dict(),
                 },
             )
@@ -739,6 +766,7 @@ class RuntimeMcpGuardProxy:
                         risk_categories=remember_risk_categories,
                         remember=True,
                         arguments=params.get("arguments"),
+                        policy_workspace=policy_workspace,
                     )
                 except ApprovalGateError:
                     return self._queue_approval_center_response(
@@ -802,6 +830,9 @@ class RuntimeMcpGuardProxy:
                                 for item in package_evaluation.reasons
                             ],
                             "decision_v2_json": decision_v2_payload,
+                            "scanner_evidence": (
+                                [package_context.to_evidence()] if package_context is not None else []
+                            ),
                             "supply_chain_evaluation": package_evaluation.to_dict(),
                         }
                     ]

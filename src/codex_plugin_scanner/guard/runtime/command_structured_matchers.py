@@ -66,6 +66,8 @@ class SubcommandOperandPrefixMatcher:
     operand_prefixes: frozenset[str]
     leading_options_with_values: frozenset[str] = frozenset()
     options_with_values: frozenset[str] = frozenset()
+    leading_operands_to_skip: int = 0
+    options_supplying_leading_operands: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
@@ -73,6 +75,8 @@ class SubcommandOperandPrefixMatcher:
         normalized_prefixes = frozenset(value for value in self.operand_prefixes if value)
         if not normalized_executables or not normalized_subcommands or not normalized_prefixes:
             raise ValueError("SubcommandOperandPrefixMatcher requires executables, subcommands, and prefixes")
+        if self.leading_operands_to_skip < 0:
+            raise ValueError("SubcommandOperandPrefixMatcher cannot skip a negative operand count")
         object.__setattr__(self, "executables", normalized_executables)
         object.__setattr__(self, "subcommands", normalized_subcommands)
         object.__setattr__(self, "operand_prefixes", normalized_prefixes)
@@ -89,10 +93,20 @@ class SubcommandOperandPrefixMatcher:
             lowered = tuple(value.lower() for value in leading_operands)
             if lowered[: len(self.subcommands)] != self.subcommands:
                 continue
+            subcommand_arguments = leading_operands[len(self.subcommands) :]
             operands = _operands_without_options(
-                leading_operands[len(self.subcommands) :],
+                subcommand_arguments,
                 options_with_values=self.options_with_values,
             )
+            supplied_leading_operands = (
+                present_flags(
+                    subcommand_arguments,
+                    options_with_values=self.options_with_values,
+                )
+                & self.options_supplying_leading_operands
+            )
+            if not supplied_leading_operands:
+                operands = operands[self.leading_operands_to_skip :]
             if not any(
                 len(operand) > len(prefix) and operand.startswith(prefix)
                 for operand in operands
@@ -120,6 +134,7 @@ class OptionValueKeyMatcher:
     forbidden_flags: frozenset[str] = frozenset()
     ignored_values: frozenset[str] = frozenset()
     required_key_values: tuple[tuple[str, str], ...] = ()
+    cluster_options_with_values: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
@@ -142,17 +157,27 @@ class OptionValueKeyMatcher:
         object.__setattr__(self, "forbidden_flags", normalized_forbidden)
         object.__setattr__(self, "ignored_values", normalized_ignored)
         object.__setattr__(self, "required_key_values", normalized_required)
+        object.__setattr__(
+            self,
+            "cluster_options_with_values",
+            frozenset(value.strip() for value in self.cluster_options_with_values if value.strip()),
+        )
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         evidence: list[MatcherEvidence] = []
         for index, segment in enumerate(command.segments):
             if not _segment_matches_executable(segment, self.executables):
                 continue
-            matched_flags = present_flags(segment.arguments, options_with_values=self.option_names)
+            all_value_options = self.option_names | self.cluster_options_with_values
+            matched_flags = present_flags(segment.arguments, options_with_values=all_value_options)
             if self.forbidden_flags & matched_flags:
                 continue
             settings: dict[str, str] = {}
-            for option_value in _option_values(segment.arguments, self.option_names):
+            for option_value in _option_values(
+                segment.arguments,
+                self.option_names,
+                cluster_options_with_values=all_value_options,
+            ):
                 key, value = _split_option_setting(option_value)
                 if key:
                     settings.setdefault(key, value)
@@ -278,7 +303,12 @@ def leading_flags_and_operands(
     return frozenset(flags), arguments[index:]
 
 
-def _option_values(arguments: tuple[str, ...], option_names: frozenset[str]) -> tuple[str, ...]:
+def _option_values(
+    arguments: tuple[str, ...],
+    option_names: frozenset[str],
+    *,
+    cluster_options_with_values: frozenset[str] | None = None,
+) -> tuple[str, ...]:
     values: list[str] = []
     ordered_options = sorted(option_names, key=len, reverse=True)
     index = 0
@@ -292,16 +322,20 @@ def _option_values(arguments: tuple[str, ...], option_names: frozenset[str]) -> 
             ),
             None,
         )
-        clustered_match = _clustered_short_value(argument, option_names)
+        clustered_match = _clustered_short_value(
+            argument,
+            cluster_options_with_values or option_names,
+        )
         if matched_option is None:
             if clustered_match is not None:
-                _option, value = clustered_match
-                if value:
-                    values.append(value)
-                elif index + 1 < len(arguments):
-                    values.append(arguments[index + 1])
-                    index += 2
-                    continue
+                option, value = clustered_match
+                if option in option_names:
+                    if value:
+                        values.append(value)
+                    elif index + 1 < len(arguments):
+                        values.append(arguments[index + 1])
+                        index += 2
+                        continue
             index += 1
             continue
         if argument == matched_option:

@@ -40,7 +40,11 @@ def _configure_guard_cloud_parsers(
         "connect",
         help="Open browser OAuth, pair this runtime to HOL Guard, and send the first sync",
     )
-    connect_parser.add_argument("connect_command", nargs="?", choices=("status", "repair", "re-pair", "sources"))
+    connect_parser.add_argument(
+        "connect_command",
+        nargs="?",
+        choices=("status", "repair", "re-pair", "sources", "reassign-quarantined"),
+    )
     _add_guard_common_args(connect_parser)
     connect_parser.add_argument("--sync-url", default=DEFAULT_GUARD_SYNC_URL, type=_guard_http_url)
     connect_parser.add_argument("--connect-url", default=DEFAULT_GUARD_CONNECT_URL, type=_guard_http_url)
@@ -73,6 +77,14 @@ def _configure_guard_cloud_parsers(
         "--source",
         default="default",
         help="Named connection profile for multi-environment usage (e.g. 'staging'). Defaults to 'default'.",
+    )
+    connect_parser.add_argument(
+        "--confirm-source",
+        help="With reassign-quarantined, approve the exact destination source name.",
+    )
+    connect_parser.add_argument(
+        "--confirm-workspace",
+        help="With reassign-quarantined, approve the exact destination workspace ID.",
     )
     connect_parser.add_argument("--json", action="store_true")
 
@@ -151,6 +163,50 @@ def _configure_guard_cloud_parsers(
     )
     _add_guard_common_args(commands_status_parser)
     commands_status_parser.add_argument("--json", action="store_true")
+    commands_enable_parser = commands_subparsers.add_parser(
+        "enable",
+        help="Opt this device into an exact set of Guard Cloud command operations",
+    )
+    _add_guard_common_args(commands_enable_parser)
+    commands_enable_parser.add_argument(
+        "--operations",
+        action="append",
+        required=True,
+        metavar="OPERATION[,OPERATION...]",
+        help="Use 'read-only' or list exact operation names; may be repeated",
+    )
+    commands_enable_parser.add_argument(
+        "--expires-in-days",
+        type=int,
+        default=30,
+        help="Capability lifetime from 1 through 365 days (default: 30)",
+    )
+    commands_enable_parser.add_argument("--json", action="store_true")
+    commands_approve_parser = commands_subparsers.add_parser(
+        "approve",
+        help="Approve one pending state-changing Cloud command on this device",
+    )
+    _add_guard_common_args(commands_approve_parser)
+    commands_approve_parser.add_argument("job_id", metavar="JOB_ID")
+    commands_approve_parser.add_argument(
+        "--confirm",
+        required=True,
+        metavar="JOB_ID",
+        help="Repeat the exact job id to prevent accidental approval",
+    )
+    commands_approve_parser.add_argument("--json", action="store_true")
+    commands_revoke_parser = commands_subparsers.add_parser(
+        "revoke",
+        help="Revoke this device's Guard Cloud command capability",
+    )
+    _add_guard_common_args(commands_revoke_parser)
+    commands_revoke_parser.add_argument(
+        "--confirm",
+        required=True,
+        choices=("revoke",),
+        help="Confirm local command capability revocation",
+    )
+    commands_revoke_parser.add_argument("--json", action="store_true")
 
     cloud_parser = guard_subparsers.add_parser(
         "cloud",

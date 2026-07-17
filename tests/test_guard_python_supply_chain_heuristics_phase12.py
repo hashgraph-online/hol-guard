@@ -76,7 +76,8 @@ def test_evaluate_package_request_artifact_ignores_cross_ecosystem_bundle_matche
     artifact = artifact_from_command_fixture("pip install requests==2.31.0", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "monitor"
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
 
 
 @pytest.mark.parametrize(
@@ -164,7 +165,8 @@ build-backend = "setuptools.build_meta"
     artifact = artifact_from_command_fixture("pip install requests", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "monitor"
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
 
 
 def test_evaluate_package_request_artifact_expands_home_local_python_paths(
@@ -347,7 +349,8 @@ setup(name="local-demo", version="0.1.0")
     artifact = artifact_from_command_fixture("uv pip install -e .", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "monitor"
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
     assert marker_path.exists() is False
 
 

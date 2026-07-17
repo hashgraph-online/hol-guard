@@ -8,6 +8,11 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from .models import DecisionScope
+from .package_execution_context import (
+    PACKAGE_EXECUTION_CONTEXT_VERSION,
+    PackageExecutionContext,
+    package_execution_context_from_scanner_evidence,
+)
 
 _SCOPED_APPROVAL_FAMILIES = frozenset(
     {
@@ -24,6 +29,14 @@ _SCOPED_APPROVAL_FAMILIES = frozenset(
 
 
 def supported_request_scopes(request: Mapping[str, object]) -> tuple[DecisionScope, ...]:
+    if _is_package_request_artifact(
+        artifact_id=_string_or_none(request.get("artifact_id")),
+        artifact_type=_string_or_none(request.get("artifact_type")),
+    ):
+        package_context = package_execution_context_from_scanner_evidence(request.get("scanner_evidence"))
+        if package_context is not None and package_context.portable and _derived_workspace_scope_target(request):
+            return ("artifact", "workspace")
+        return ("artifact",)
     scopes: list[DecisionScope] = ["artifact"]
     if _string_or_none(request.get("publisher")) is not None:
         scopes.append("publisher")
@@ -54,19 +67,64 @@ def package_request_portable_workspace_scope(
     artifact_id: str | None,
     artifact_hash: str | None,
     artifact_type: str | None = None,
+    execution_context: PackageExecutionContext | None = None,
 ) -> str | None:
     if not _is_package_request_artifact(artifact_id=artifact_id, artifact_type=artifact_type):
         return None
     if artifact_hash is None or not artifact_hash.strip() or artifact_hash == "unknown":
         return None
+    if execution_context is None or not execution_context.portable:
+        return None
+    if execution_context.version != PACKAGE_EXECUTION_CONTEXT_VERSION:
+        return None
     material = {
         "artifact_hash": artifact_hash.strip(),
         "artifact_id": artifact_id.strip() if artifact_id is not None else None,
+        "execution_context": execution_context.digest,
         "scope": "package-request-workspace",
-        "version": 1,
+        "version": PACKAGE_EXECUTION_CONTEXT_VERSION,
     }
     digest = hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-    return f"package-request-workspace:v1:{digest}"
+    return f"package-request-workspace:v{PACKAGE_EXECUTION_CONTEXT_VERSION}:{digest}"
+
+
+def package_request_runtime_workspace_scope(
+    *,
+    artifact_id: str | None,
+    artifact_hash: str | None,
+    artifact_type: str | None = None,
+    execution_context: PackageExecutionContext | None,
+) -> str | None:
+    """Return the only workspace identity valid for a package-policy lookup.
+
+    Non-portable contexts receive an exact, context-bound sentinel.  It keeps
+    artifact-once decisions functional while ensuring legacy path-only and v1
+    workspace approvals cannot match.
+    """
+
+    if not _is_package_request_artifact(artifact_id=artifact_id, artifact_type=artifact_type):
+        return None
+    if artifact_hash is None or not artifact_hash.strip() or artifact_hash == "unknown":
+        return None
+    portable = package_request_portable_workspace_scope(
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+        artifact_type=artifact_type,
+        execution_context=execution_context,
+    )
+    if portable is not None:
+        return portable
+    if execution_context is None or execution_context.version != PACKAGE_EXECUTION_CONTEXT_VERSION:
+        return None
+    material = {
+        "artifact_hash": artifact_hash.strip(),
+        "artifact_id": artifact_id.strip() if artifact_id is not None else None,
+        "execution_context": execution_context.digest,
+        "scope": "package-request-workspace-exact",
+        "version": PACKAGE_EXECUTION_CONTEXT_VERSION,
+    }
+    digest = hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return f"package-request-workspace-exact:v{PACKAGE_EXECUTION_CONTEXT_VERSION}:{digest}"
 
 
 def _derived_workspace_scope_target(request: Mapping[str, object]) -> str | None:

@@ -6,14 +6,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.validate_alpha_release import ALPHA_BRANCH, main, validate_alpha_release
+from scripts.validate_alpha_release import ALPHA_BRANCHES, main, validate_alpha_release
 
 
 def test_accepts_public_guard_3_alpha_version_from_v3_branch() -> None:
-    release = validate_alpha_release("3.0.0a1", ALPHA_BRANCH)
+    release = validate_alpha_release("3.0.0a1", ALPHA_BRANCHES[0])
 
     assert release.version == "3.0.0a1"
-    assert release.git_ref == ALPHA_BRANCH
+    assert release.git_ref == ALPHA_BRANCHES[0]
 
 
 @pytest.mark.parametrize(
@@ -31,12 +31,17 @@ def test_accepts_public_guard_3_alpha_version_from_v3_branch() -> None:
 )
 def test_rejects_versions_that_are_not_public_guard_3_alphas(version: str) -> None:
     with pytest.raises(ValueError, match=r"3\.x alpha"):
-        validate_alpha_release(version, ALPHA_BRANCH)
+        validate_alpha_release(version, ALPHA_BRANCHES[0])
 
 
 def test_rejects_alpha_release_from_any_other_branch() -> None:
     with pytest.raises(ValueError, match="feat/guard-policy-v3"):
         validate_alpha_release("3.0.0a1", "refs/heads/main")
+
+
+def test_accepts_release_31_policy_branch() -> None:
+    release = validate_alpha_release("3.0.0a1", "refs/heads/release/3.1-policy-v3")
+    assert release.git_ref == "refs/heads/release/3.1-policy-v3"
 
 
 def test_cli_reports_invalid_alpha_without_traceback(
@@ -45,7 +50,7 @@ def test_cli_reports_invalid_alpha_without_traceback(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["validate_alpha_release.py", "--version", "3.0.0", "--git-ref", ALPHA_BRANCH],
+        ["validate_alpha_release.py", "--version", "3.0.0", "--git-ref", ALPHA_BRANCHES[0]],
     )
 
     assert main() == 1
@@ -66,7 +71,8 @@ def test_release_workflows_keep_stable_and_alpha_channels_isolated() -> None:
     jobs = publish["jobs"]
     alpha_matrix = jobs["alpha-cross-platform"]["strategy"]["matrix"]["os"]
     assert alpha_matrix == ["ubuntu-latest", "windows-latest"]
-    assert "refs/heads/feat/guard-policy-v3" in jobs["publish-pypi"]["if"]
+    publish_if = jobs["publish-pypi"]["if"]
+    assert any(branch in publish_if for branch in ("feat/guard-policy-v3", "release/3.1-policy-v3"))
     assert jobs["publish-pypi"]["needs"] == ["build", "alpha-cross-platform"]
     assert jobs["release-alpha"]["needs"] == ["build", "publish-pypi"]
 

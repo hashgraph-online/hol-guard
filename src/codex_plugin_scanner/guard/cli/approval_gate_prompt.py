@@ -19,13 +19,14 @@ def prompt_for_approval_gate(
     if not gate.enabled:
         return None
     if not sys.stdin.isatty():
+        proof_name = "Authenticator code" if gate.totp_enabled else "Approval password"
         raise ApprovalGateError(
             "approval_gate_interactive_required",
-            "Approval password is required from an interactive terminal.",
+            f"{proof_name} is required from an interactive terminal.",
         )
     if summary:
         print(summary, file=sys.stderr)
-    password = getpass.getpass("Approval password: ")
+    password = None if gate.totp_enabled else getpass.getpass("Approval password: ")
     totp_code = getpass.getpass("Authenticator code: ") if gate.totp_enabled else None
     return ApprovalGateInput(
         password=password,

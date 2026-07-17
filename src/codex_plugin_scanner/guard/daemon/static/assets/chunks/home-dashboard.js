@@ -1,4 +1,4 @@
-import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, f as fetchReceiptAnalytics, h as harnessDisplayName, i as isDisplayableHarness, b as EmptyState, A as ActionButton, c as EvidenceInsightsShareModal, d as HiMiniCheckCircle, e as GuardHero, k as formatNumber, l as HiMiniShieldCheck, D as DeviceProofCard, m as formatRelativeTime, n as HiMiniSparkles, o as HiMiniXMark, p as HiMiniChevronUp, q as HiMiniChevronDown, s as resolveCloudIntelCopy, t as HiMiniCloud, u as HiMiniQuestionMarkCircle, v as useFocusTrap, w as approvalProofRequiresPassword, x as HiMiniExclamationTriangle, y as HiMiniBolt, B as Badge, z as HiMiniChevronRight, C as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, u as useReceiptAnalytics, h as harnessDisplayName, i as isDisplayableHarness, b as EmptyState, A as ActionButton, c as EvidenceInsightsShareModal, d as HiMiniCheckCircle, e as GuardHero, f as formatNumber, k as HiMiniShieldCheck, D as DeviceProofCard, l as formatRelativeTime, m as HiMiniSparkles, n as HiMiniXMark, o as HiMiniChevronUp, p as HiMiniChevronDown, q as resolveCloudIntelCopy, s as HiMiniCloud, t as HiMiniQuestionMarkCircle, v as useFocusTrap, w as approvalProofRequiresTotp, x as HiMiniExclamationTriangle, y as HiMiniBolt, B as Badge, z as HiMiniChevronRight, C as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { H as HomeProtectionModule } from "./home-protection-module.js";
 function HomeInsightsSkeleton() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -65,53 +65,6 @@ function EvidenceInsightsHomePreview({
       }
     ) : analyticsLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-4 w-36 rounded" }) : null }) : null
   ] });
-}
-const ANALYTICS_CACHE_TTL_MS = 6e4;
-let analyticsCache = null;
-let analyticsInflight = null;
-async function loadReceiptAnalyticsCached(force = false) {
-  if (!force && analyticsCache && analyticsCache.expiresAt > Date.now()) {
-    return analyticsCache.data;
-  }
-  if (!force && analyticsInflight) {
-    return analyticsInflight;
-  }
-  analyticsInflight = fetchReceiptAnalytics().then((data) => {
-    analyticsCache = { data, expiresAt: Date.now() + ANALYTICS_CACHE_TTL_MS };
-    return data;
-  }).finally(() => {
-    analyticsInflight = null;
-  });
-  return analyticsInflight;
-}
-function useReceiptAnalytics(enabled) {
-  const [state, setState] = reactExports.useState(
-    () => enabled ? { kind: "loading" } : { kind: "idle" }
-  );
-  reactExports.useEffect(() => {
-    if (!enabled) {
-      setState({ kind: "idle" });
-      return;
-    }
-    let cancelled = false;
-    setState({ kind: "loading" });
-    loadReceiptAnalyticsCached().then((data) => {
-      if (!cancelled) {
-        setState({ kind: "ready", data });
-      }
-    }).catch((error) => {
-      if (!cancelled) {
-        setState({
-          kind: "error",
-          message: error instanceof Error ? error.message : "Unable to load analytics."
-        });
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled]);
-  return state;
 }
 const safeLocalStorage = {
   getItem(key) {
@@ -430,7 +383,8 @@ function ClearConfirmDialog(props) {
   const dialogRef = reactExports.useRef(null);
   useFocusTrap(true, dialogRef);
   const needsProof = props.approvalGate?.enabled === true && props.approvalGate.configured === true;
-  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
+  const needsTotp = approvalProofRequiresTotp(props.approvalGate);
+  const proofIncomplete = needsProof && (needsTotp ? props.clearTotpCode.trim() === "" : props.clearPassword.trim() === "");
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm", role: "dialog", "aria-modal": "true", "aria-label": "Confirm clear decisions", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: dialogRef, className: "guard-fade-in w-full max-w-md rounded-2xl border border-brand-attention/20 bg-white p-6 shadow-2xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
@@ -441,35 +395,38 @@ function ClearConfirmDialog(props) {
           props.clearConfirm.all ? "all saved approvals" : `decisions for ${props.clearConfirm.harness ?? "this app"}`,
           ". Guard will ask again next time matching actions run."
         ] }),
-        needsProof && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 grid gap-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "password",
-              autoComplete: "current-password",
-              value: props.clearPassword,
-              onChange: props.onClearPasswordChange,
-              className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            }
-          )
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Authenticator code" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "text",
-              inputMode: "numeric",
-              pattern: "[0-9]*",
-              maxLength: 6,
-              value: props.clearTotpCode,
-              onChange: props.onClearTotpCodeChange,
-              placeholder: "123456",
-              autoComplete: "one-time-code",
-              className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            }
-          )
-        ] }) }),
+        needsProof && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 grid gap-3", children: [
+          !needsTotp ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "password",
+                autoComplete: "current-password",
+                value: props.clearPassword,
+                onChange: props.onClearPasswordChange,
+                className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] }) : null,
+          needsTotp ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Authenticator code" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "text",
+                inputMode: "numeric",
+                pattern: "[0-9]*",
+                maxLength: 6,
+                value: props.clearTotpCode,
+                onChange: props.onClearTotpCodeChange,
+                placeholder: "123456",
+                autoComplete: "one-time-code",
+                className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] }) : null
+        ] }),
         props.clearError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-sm text-brand-dark", children: props.clearError })
       ] })
     ] }),
@@ -488,7 +445,7 @@ function ClearConfirmDialog(props) {
         {
           type: "button",
           onClick: props.onConfirmClear,
-          disabled: props.clearSubmitting,
+          disabled: props.clearSubmitting || proofIncomplete,
           className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-60",
           children: props.clearSubmitting ? "Clearing..." : "Clear decisions"
         }

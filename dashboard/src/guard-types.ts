@@ -71,7 +71,21 @@ export type GuardSupplyChainScannerEvidence = {
   package_findings?: unknown;
 };
 
-export type GuardScannerEvidence = RiskSignalV2 | GuardSupplyChainScannerEvidence;
+export type PackageExecutionContextEvidence = {
+  kind: "package_execution_context";
+  schema_version: 2;
+  portable: boolean;
+  context_digest: string;
+  components: Array<{ name: string; digest: string }>;
+  portable_summary: string;
+  non_portable_reason?: string;
+  changed_components?: string[];
+};
+
+export type GuardScannerEvidence =
+  | RiskSignalV2
+  | GuardSupplyChainScannerEvidence
+  | PackageExecutionContextEvidence;
 
 export type GuardDecisionV2 = {
   action: GuardDecisionV2Action;
@@ -155,6 +169,7 @@ export type GuardApprovalRequest = {
   dedupe_count?: number;
   last_seen_at?: string | null;
   display_status?: string;
+  scanner_evidence?: GuardScannerEvidence[];
 };
 
 export type GuardApprovalPageStatus = "pending" | "resolved" | "all";
@@ -371,6 +386,29 @@ export type SupplyChainSnapshot = {
   package_manager_protection: PackageManagerProtection;
 };
 
+export type GuardCloudCommandPending = {
+  id: string;
+  operation: string;
+  issuer: string;
+  expiresAt: string;
+  approveCommand: string;
+};
+
+export type GuardCloudCommandCapability = {
+  enabled: boolean;
+  capability_valid?: boolean;
+  reason: string | null;
+  issuer: string | null;
+  issued_at?: string | null;
+  expires_at: string | null;
+  device_id?: string | null;
+  workspace_id?: string | null;
+  operations: string[];
+  pending_commands: GuardCloudCommandPending[];
+  enable_command: string;
+  revoke_command: string;
+};
+
 export type GuardRuntimeSnapshot = {
   generated_at: string;
   approval_center_url: string | null;
@@ -406,6 +444,7 @@ export type GuardRuntimeSnapshot = {
   latest_receipts: GuardReceipt[];
   managed_installs?: GuardManagedInstall[];
   inventory?: GuardInventoryItem[];
+  cloud_command_capability?: GuardCloudCommandCapability;
   security_level?: "balanced" | "strict" | "custom";
   supply_chain?: SupplyChainSnapshot;
 };
@@ -449,6 +488,18 @@ export function isSupplyChainAuditEvidence(
   value: ReceiptScannerEvidence,
 ): value is GuardSupplyChainScannerEvidence & { operation: "audit" } {
   return isSupplyChainScannerEvidence(value) && value.operation === "audit";
+}
+
+export function isPackageExecutionContextEvidence(
+  value: GuardScannerEvidence,
+): value is PackageExecutionContextEvidence {
+  return (
+    isScannerEvidenceRecord(value) &&
+    value.kind === "package_execution_context" &&
+    value.schema_version === 2 &&
+    typeof value.portable === "boolean" &&
+    typeof value.context_digest === "string"
+  );
 }
 
 export type GuardReceiptAnalyticsBucket = {
