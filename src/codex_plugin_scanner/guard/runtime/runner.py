@@ -4686,7 +4686,12 @@ def _receipt_sync_context(
         "syncHealth": sync_health,
     }
     if isinstance(policy_bundle_ack, dict) and policy_bundle_ack:
-        context["policyBundleAcknowledgement"] = policy_bundle_ack
+        acknowledgement_key = (
+            "policyBundleAcknowledgementV2"
+            if policy_bundle_ack.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
+            else "policyBundleAcknowledgement"
+        )
+        context[acknowledgement_key] = policy_bundle_ack
     if runtime_synced_at is not None:
         context["lastRuntimeSyncAt"] = runtime_synced_at
     return context
