@@ -19,6 +19,8 @@ Related docs:
 - [MDM deployment and Intune contract](./mdm-deployment.md)
 - [MDM proxy, private CA, and endpoint contract](./mdm-networking.md)
 - [MDM release evidence template](./mdm-release-evidence-template.md)
+- [Self-protection and deletion detection PRD](./self-protection-prd.md)
+- [Self-protection implementation TODO](./self-protection-todo.md)
 
 ## Control maps
 
