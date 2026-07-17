@@ -14,6 +14,7 @@ _HIGH_IMPACT_MUTATIONS = frozenset(
     {
         "archiveRepository",
         "createBranchProtectionRule",
+        "createRef",
         "createRepositoryRuleset",
         "deleteRef",
         "deleteBranchProtectionRule",

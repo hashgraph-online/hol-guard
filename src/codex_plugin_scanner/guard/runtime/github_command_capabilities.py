@@ -350,7 +350,7 @@ def _api_request_is_high_impact(parsed: _ApiArguments, *, method: str) -> bool:
         return any(segment in {"secrets", "keys"} for segment in segments)
     resource = segments[3:]
     if not resource:
-        return method in {"DELETE", "PATCH"}
+        return method == "PATCH"
     if resource[0] in {"keys", "rulesets", "secrets"}:
         return True
     if resource[:2] in {("actions", "permissions"), ("git", "refs")}:
