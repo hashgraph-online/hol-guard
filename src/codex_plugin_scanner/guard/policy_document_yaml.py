@@ -441,6 +441,7 @@ def _validate_timestamps(value: dict[str, object]) -> None:
             timestamp_paths.append((("spec", "rules", index, "lifetime", "expiresAt"), lifetime.get("expiresAt")))
         if isinstance(provenance, dict):
             timestamp_paths.append((("spec", "rules", index, "provenance", "createdAt"), provenance.get("createdAt")))
+            timestamp_paths.append((("spec", "rules", index, "provenance", "updatedAt"), provenance.get("updatedAt")))
     for path, timestamp in timestamp_paths:
         if not isinstance(timestamp, str):
             continue

@@ -19231,6 +19231,13 @@ def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(
             },
         },
     }
+    prior_canonical = {
+        **candidate,
+        "bundleVersion": 4,
+        "bundleHash": "b" * 64,
+        "issuedAt": "2026-06-05T13:29:30Z",
+    }
+    store.set_sync_payload("policy_bundle", prior_canonical, "2026-06-05T13:29:30+00:00")
 
     class _Response:
         def __init__(self, payload: dict[str, object]) -> None:
@@ -19270,7 +19277,7 @@ def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(
 
     guard_runner_module.sync_receipts(store)
 
-    assert store.get_sync_payload("policy_bundle") == legacy
+    assert store.get_sync_payload("policy_bundle") == prior_canonical
     assert store.get_sync_payload("policy_bundle_canonical_last_good") is None
     assert store.get_sync_payload("policy_bundle_last_error") == {"reason": "canonical_shadow_mismatch"}
     assert [decision["action"] for decision in store.list_policy_decisions()] == ["block"]

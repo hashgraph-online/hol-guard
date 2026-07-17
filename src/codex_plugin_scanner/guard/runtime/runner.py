@@ -1927,14 +1927,21 @@ def sync_receipts(
                         device_id=device_id,
                         device_name=device_name,
                     )
+                    legacy_payload = store.get_sync_payload("policy_bundle_legacy_last_good")
+                    if not isinstance(legacy_payload, dict):
+                        legacy_payload = (
+                            existing_policy_bundle
+                            if isinstance(existing_policy_bundle, dict)
+                            and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
+                            else None
+                        )
                     legacy_decisions = (
                         _build_policy_bundle_decisions(
-                            existing_policy_bundle,
+                            legacy_payload,
                             device_id=device_id,
                             device_name=device_name,
                         )
-                        if isinstance(existing_policy_bundle, dict)
-                        and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
+                        if isinstance(legacy_payload, dict)
                         else []
                     )
                     shadow_legacy_rows = len(legacy_decisions)

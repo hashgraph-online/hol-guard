@@ -96,6 +96,25 @@ def test_provenance_update_and_import_fields_round_trip() -> None:
     assert document.rules[0].provenance.to_mapping() == provenance
 
 
+def test_provenance_updated_at_rejects_invalid_calendar_date() -> None:
+    mapping = _basic_mapping()
+    spec = mapping["spec"]
+    assert isinstance(spec, dict)
+    rules = spec["rules"]
+    assert isinstance(rules, list)
+    first_rule = rules[0]
+    assert isinstance(first_rule, dict)
+    provenance = first_rule["provenance"]
+    assert isinstance(provenance, dict)
+    provenance["updatedAt"] = "2026-02-31T12:00:00Z"
+
+    with pytest.raises(PolicyDocumentError) as error:
+        parse_policy_document_yaml(_yaml(mapping))
+
+    assert error.value.diagnostics[0].code == "invalid_timestamp"
+    assert error.value.diagnostics[0].path == ("spec", "rules", 0, "provenance", "updatedAt")
+
+
 def test_yaml_11_ambiguous_scalars_remain_strings() -> None:
     document = parse_policy_document_yaml((FIXTURES / "valid" / "extensions-and-scalars.yaml").read_bytes())
 

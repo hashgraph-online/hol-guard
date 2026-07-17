@@ -87,4 +87,4 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
-      - run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py --tb=short
+      - run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py tests/test_policy_document_io.py tests/test_policy_document_yaml.py --tb=short

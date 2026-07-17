@@ -36,6 +36,40 @@ _UTC_TIMESTAMP_RE: Final = re.compile(
 )
 _REDACTED_TIMESTAMP: Final = "1970-01-01T00:00:00Z"
 _SUPPORTED_MATCH_KEYS: Final = frozenset({"artifacts", "harnesses", "publishers", "workspaces"})
+_WINDOWS_REPARSE_POINT: Final = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
+
+
+def _is_windows_reparse_point(metadata: os.stat_result) -> bool:
+    attributes = int(getattr(metadata, "st_file_attributes", 0))
+    return bool(attributes & _WINDOWS_REPARSE_POINT)
+
+
+def _trusted_windows_parent_identity(path: Path) -> tuple[tuple[Path, int, int], ...]:
+    identities: list[tuple[Path, int, int]] = []
+    parent = path.parent
+    for component in (*reversed(parent.parents), parent):
+        try:
+            metadata = component.lstat()
+        except OSError as error:
+            raise PolicyFileTrustError("policy_parent_unavailable", parent) from error
+        if not stat.S_ISDIR(metadata.st_mode) or _is_windows_reparse_point(metadata):
+            raise PolicyFileTrustError("policy_parent_unavailable", parent)
+        identities.append((component, metadata.st_dev, metadata.st_ino))
+    return tuple(identities)
+
+
+def _assert_windows_parent_unchanged(identities: tuple[tuple[Path, int, int], ...], path: Path) -> None:
+    for component, device, inode in identities:
+        try:
+            metadata = component.lstat()
+        except OSError as error:
+            raise PolicyFileTrustError("policy_parent_unavailable", path.parent) from error
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or _is_windows_reparse_point(metadata)
+            or (metadata.st_dev, metadata.st_ino) != (device, inode)
+        ):
+            raise PolicyFileTrustError("policy_parent_changed", path.parent)
 _LOCAL_SCOPES: Final = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 _PROVENANCE_SOURCES: Final = frozenset(
     {
@@ -99,6 +133,10 @@ class PolicyDocumentDiff:
 def _assert_trusted_parent_metadata(path: Path, metadata: os.stat_result) -> None:
     if not stat.S_ISDIR(metadata.st_mode):
         raise PolicyFileTrustError("policy_parent_not_directory", path)
+    if os.name == "nt":
+        if _is_windows_reparse_point(metadata):
+            raise PolicyFileTrustError("policy_parent_unavailable", path)
+        return
     if metadata.st_uid != os.geteuid():
         raise PolicyFileTrustError("policy_parent_not_owned", path)
     if stat.S_IMODE(metadata.st_mode) & _POLICY_DIRECTORY_MODE_MASK:
@@ -133,6 +171,12 @@ def _open_trusted_parent(path: Path) -> int:
 def _assert_trusted_file_metadata(path: Path, metadata: os.stat_result) -> None:
     if not stat.S_ISREG(metadata.st_mode):
         raise PolicyFileTrustError("policy_file_not_regular", path)
+    if _is_windows_reparse_point(metadata):
+        raise PolicyFileTrustError("policy_file_not_regular", path)
+    if os.name == "nt":
+        if metadata.st_nlink != 1:
+            raise PolicyFileTrustError("policy_file_link_count", path)
+        return
     if metadata.st_uid != os.geteuid():
         raise PolicyFileTrustError("policy_file_not_owned", path)
     if stat.S_IMODE(metadata.st_mode) & 0o022:
@@ -145,6 +189,30 @@ def read_trusted_policy_bytes(path: Path, *, max_bytes: int = MAX_POLICY_BYTES) 
     """Read one bounded, owner-only regular file without following links."""
 
     candidate = path.expanduser().absolute()
+    if os.name == "nt":
+        parent_identity = _trusted_windows_parent_identity(candidate)
+        try:
+            before = candidate.lstat()
+        except OSError as error:
+            raise PolicyFileTrustError("policy_file_unavailable", candidate) from error
+        _assert_trusted_file_metadata(candidate, before)
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOINHERIT", 0)
+        try:
+            descriptor = os.open(candidate, flags)
+        except OSError as error:
+            raise PolicyFileTrustError("policy_file_open_failed", candidate) from error
+        try:
+            opened = os.fstat(descriptor)
+            _assert_trusted_file_metadata(candidate, opened)
+            _assert_windows_parent_unchanged(parent_identity, candidate)
+            if (before.st_dev, before.st_ino) != (opened.st_dev, opened.st_ino):
+                raise PolicyFileTrustError("policy_file_changed", candidate)
+            payload = os.read(descriptor, max_bytes + 1)
+            if len(payload) > max_bytes:
+                raise PolicyFileTrustError("policy_file_too_large", candidate)
+            return payload
+        finally:
+            os.close(descriptor)
     parent_descriptor = _open_trusted_parent(candidate)
     try:
         try:
@@ -199,6 +267,48 @@ def write_private_policy_text(path: Path, content: str) -> None:
     payload = content.encode("utf-8")
     if len(payload) > MAX_POLICY_BYTES:
         raise PolicyFileTrustError("policy_output_too_large", candidate)
+    if os.name == "nt":
+        parent_identity = _trusted_windows_parent_identity(candidate)
+        try:
+            existing = candidate.lstat()
+        except FileNotFoundError:
+            existing = None
+        except OSError as error:
+            raise PolicyFileTrustError("policy_output_unavailable", candidate) from error
+        if existing is not None:
+            _assert_trusted_file_metadata(candidate, existing)
+        temporary = candidate.with_name(f".{candidate.name}.{secrets.token_hex(12)}.tmp")
+        windows_descriptor: int | None = None
+        try:
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOINHERIT", 0)
+            windows_descriptor = os.open(temporary, flags, _POLICY_FILE_MODE)
+            view = memoryview(payload)
+            while view:
+                written = os.write(windows_descriptor, view)
+                if written <= 0:
+                    raise OSError("policy output write made no progress")
+                view = view[written:]
+            os.fsync(windows_descriptor)
+            os.close(windows_descriptor)
+            windows_descriptor = None
+            os.chmod(temporary, _POLICY_FILE_MODE)
+            _assert_windows_parent_unchanged(parent_identity, candidate)
+            os.replace(temporary, candidate)
+            _assert_windows_parent_unchanged(parent_identity, candidate)
+            return
+        except PolicyFileTrustError:
+            raise
+        except OSError as error:
+            raise PolicyFileTrustError("policy_output_write_failed", candidate) from error
+        finally:
+            if windows_descriptor is not None:
+                os.close(windows_descriptor)
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
     parent_descriptor = _open_trusted_parent(candidate)
     temporary_name = f".{candidate.name}.{secrets.token_hex(12)}.tmp"
     descriptor: int | None = None
