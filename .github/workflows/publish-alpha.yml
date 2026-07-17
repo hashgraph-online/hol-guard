@@ -146,42 +146,25 @@ jobs:
         (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi')
       )
     needs: [build, release-tests]
-    runs-on: ubuntu-latest
-    environment: testpypi
+    uses: ./.github/workflows/publish.yml
+    with:
+      alpha_publish_target: testpypi
+      alpha_version: ${{ needs.build.outputs.version }}
     permissions:
+      contents: read
       id-token: write
-    steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: alpha-distribution
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
-        with:
-          repository-url: https://test.pypi.org/legacy/
-          skip-existing: true
-      - name: Show canary install command
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          echo "## TestPyPI canary" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
-          echo "uv tool install --force --index https://test.pypi.org/simple --default-index https://pypi.org/simple 'hol-guard==$VERSION'" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
 
   publish-pypi:
     name: Publish 3.1 alpha to PyPI
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'pypi'
     needs: [build, release-tests]
-    runs-on: ubuntu-latest
-    environment: pypi
+    uses: ./.github/workflows/publish.yml
+    with:
+      alpha_publish_target: pypi
+      alpha_version: ${{ needs.build.outputs.version }}
     permissions:
+      contents: read
       id-token: write
-    steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: alpha-distribution
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
 
   release-alpha:
     name: Create 3.1 alpha prerelease

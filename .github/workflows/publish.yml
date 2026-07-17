@@ -1,6 +1,16 @@
 name: Publish to PyPI
 
 on:
+  workflow_call:
+    inputs:
+      alpha_publish_target:
+        description: "Trusted publisher target for an artifact built by publish-alpha.yml"
+        required: true
+        type: string
+      alpha_version:
+        description: "Alpha version being published"
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       publish_target:
@@ -27,7 +37,7 @@ concurrency:
 jobs:
   build:
     name: Build + Verify
-    if: github.event_name != 'push' || github.ref != 'refs/heads/main' || !contains(github.event.head_commit.message, '[skip release publish]')
+    if: inputs.alpha_publish_target == '' && (github.event_name != 'push' || github.ref != 'refs/heads/main' || !contains(github.event.head_commit.message, '[skip release publish]'))
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -191,6 +201,45 @@ jobs:
           name: release-toolchain-sbom
           path: release-metadata/*.cdx.json
           if-no-files-found: error
+
+  publish-alpha-testpypi:
+    name: Publish alpha artifact to TestPyPI
+    if: inputs.alpha_publish_target == 'testpypi'
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: alpha-distribution
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+      - name: Show canary install command
+        env:
+          VERSION: ${{ inputs.alpha_version }}
+        run: |
+          echo "## TestPyPI canary" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
+          echo "uv tool install --force --index https://test.pypi.org/simple --default-index https://pypi.org/simple 'hol-guard==$VERSION'" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+
+  publish-alpha-pypi:
+    name: Publish alpha artifact to PyPI
+    if: inputs.alpha_publish_target == 'pypi'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: alpha-distribution
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
 
   publish-testpypi:
     name: Publish to TestPyPI (Manual)
