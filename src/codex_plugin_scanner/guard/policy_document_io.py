@@ -12,6 +12,7 @@ import secrets
 import stat
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Final, cast, final
 
@@ -367,7 +368,11 @@ def _restrictive_lifetime_relaxed(previous: PolicyRule, current: PolicyRule) -> 
     current_expiry = current.lifetime.expires_at
     if previous_expiry is None:
         return current_expiry is not None
-    return current_expiry is None or current_expiry < previous_expiry
+    if current_expiry is None:
+        return False
+    return datetime.fromisoformat(current_expiry.replace("Z", "+00:00")) < datetime.fromisoformat(
+        previous_expiry.replace("Z", "+00:00")
+    )
 
 
 _DEFAULT_ENFORCEMENT_STRENGTH = {

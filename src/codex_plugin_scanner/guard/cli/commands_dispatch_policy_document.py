@@ -29,6 +29,7 @@ from ..store import GuardStore
 from ..store_policy_document import PolicyImportMode
 from .approval_gate_prompt import prompt_for_approval_gate
 
+
 _POLICY_IMPORT_FLAG = "HOL_GUARD_POLICY_YAML_IMPORT"
 
 
@@ -61,26 +62,6 @@ def _now() -> str:
 def _load_and_compile(path: Path):
     document = load_trusted_policy_document(path)
     return document, compile_policy_document(document)
-
-
-def _semantic_diff_payload(difference: PolicyDocumentDiff) -> dict[str, object]:
-    return {
-        "changed": difference.changed,
-        "diff": difference.text,
-        "additions": list(difference.additions),
-        "modifications": list(difference.modifications),
-        "removals": list(difference.removals),
-        "impacted_scopes": list(difference.impacted_scopes),
-        "impacted_harnesses": list(difference.impacted_harnesses),
-        "impacted_artifact_families": list(difference.impacted_artifact_families),
-        "conflict_warnings": list(difference.conflict_warnings),
-        "broadened_rules": list(difference.broadened_rules),
-        "narrowed_rules": list(difference.narrowed_rules),
-        "unchanged_rules": list(difference.unchanged_rules),
-        "effective_action_changes": list(difference.effective_action_changes),
-        "broad_relaxing_changes": list(difference.broad_relaxing_changes),
-        "requires_high_risk_approval": bool(difference.broad_relaxing_changes),
-    }
 
 
 def _run_guard_policy_document_command(
@@ -313,6 +294,26 @@ def _run_guard_policy_document_command(
             output_stream=output_stream,
         )
         return 4
+
+
+def _semantic_diff_payload(difference: PolicyDocumentDiff) -> dict[str, object]:
+    return {
+        "changed": difference.changed,
+        "diff": difference.text,
+        "additions": list(difference.additions),
+        "modifications": list(difference.modifications),
+        "removals": list(difference.removals),
+        "impacted_scopes": list(difference.impacted_scopes),
+        "impacted_harnesses": list(difference.impacted_harnesses),
+        "impacted_artifact_families": list(difference.impacted_artifact_families),
+        "conflict_warnings": list(difference.conflict_warnings),
+        "broadened_rules": list(difference.broadened_rules),
+        "narrowed_rules": list(difference.narrowed_rules),
+        "unchanged_rules": list(difference.unchanged_rules),
+        "effective_action_changes": list(difference.effective_action_changes),
+        "broad_relaxing_changes": list(difference.broad_relaxing_changes),
+        "requires_high_risk_approval": bool(difference.broad_relaxing_changes),
+    }
 
 
 __all__ = ["_run_guard_policy_document_command"]

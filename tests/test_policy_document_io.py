@@ -528,6 +528,37 @@ def test_document_diff_flags_shorter_restrictive_lifetime() -> None:
     assert difference.broad_relaxing_changes == ("rule-1",)
 
 
+def test_document_diff_compares_mixed_precision_lifetimes_chronologically() -> None:
+    baseline_mapping = _policy_document(effect="block").to_mapping()
+    baseline_spec = baseline_mapping["spec"]
+    assert isinstance(baseline_spec, dict)
+    baseline_rules = baseline_spec["rules"]
+    assert isinstance(baseline_rules, list)
+    baseline_rule = baseline_rules[0]
+    assert isinstance(baseline_rule, dict)
+    baseline_rule["lifetime"] = {
+        "mode": "until",
+        "expiresAt": "2026-07-17T10:00:00.500Z",
+    }
+    baseline = GuardPolicyDocument.from_mapping(baseline_mapping)
+    candidate_mapping = baseline.to_mapping()
+    candidate_spec = candidate_mapping["spec"]
+    assert isinstance(candidate_spec, dict)
+    candidate_rules = candidate_spec["rules"]
+    assert isinstance(candidate_rules, list)
+    candidate_rule = candidate_rules[0]
+    assert isinstance(candidate_rule, dict)
+    candidate_rule["lifetime"] = {
+        "mode": "until",
+        "expiresAt": "2026-07-17T10:00:00Z",
+    }
+    candidate = GuardPolicyDocument.from_mapping(candidate_mapping)
+
+    difference = diff_policy_documents(baseline, candidate)
+
+    assert difference.broad_relaxing_changes == ("rule-1",)
+
+
 def test_document_diff_flags_constrained_relaxing_addition() -> None:
     baseline = _policy_document(effect="block")
     candidate_mapping = baseline.to_mapping()

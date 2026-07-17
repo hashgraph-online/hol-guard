@@ -18717,8 +18717,15 @@ def test_policy_bundle_v2_acknowledgement_sequence_is_monotonic_per_bundle():
         device_id="device-a",
         device_name="Guard",
         policy_bundle=bundle,
-        synced_at="2026-06-05T13:31:00+00:00",
+        synced_at="2026-06-05T14:31:00+01:00",
         previous=first,
+    )
+    third = guard_runner_module._policy_bundle_acknowledgement_payload(
+        device_id="device-a",
+        device_name="Guard",
+        policy_bundle=bundle,
+        synced_at="2026-06-05T13:32:00Z",
+        previous=second,
     )
 
     assert first == {
@@ -18733,6 +18740,8 @@ def test_policy_bundle_v2_acknowledgement_sequence_is_monotonic_per_bundle():
     }
     assert second["sequence"] == 2
     assert second["observedAt"] == "2026-06-05T13:31:00Z"
+    assert third["sequence"] == 3
+    assert third["observedAt"] == "2026-06-05T13:32:00Z"
 
 
 def test_policy_bundle_v2_acknowledgement_distinguishes_shadow_validation() -> None:

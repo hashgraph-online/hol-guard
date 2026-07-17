@@ -11,7 +11,7 @@ from datetime import datetime
 from functools import lru_cache
 from importlib import resources
 from pathlib import Path
-from typing import TypeAlias
+from typing import TypeAlias, cast
 
 import yaml
 from jsonschema import Draft202012Validator
@@ -41,6 +41,7 @@ MAX_DIAGNOSTICS = 20
 MAX_POLICY_TOKENS = 200_000
 
 JsonPath: TypeAlias = tuple[str | int, ...]
+JsonSchemaValue: TypeAlias = str | int | float | bool | None | list["JsonSchemaValue"] | dict[str, "JsonSchemaValue"]
 
 _JSON_BOOL = re.compile(r"^(?:true|false)$")
 _JSON_NULL = re.compile(r"^null$")
@@ -387,7 +388,7 @@ def _schema_diagnostics(text: str, value: object) -> tuple[PolicyDiagnostic, ...
         source_node = None
     diagnostics: list[PolicyDiagnostic] = []
     errors = sorted(
-        _policy_document_validator().iter_errors(value),
+        _policy_document_validator().iter_errors(cast(JsonSchemaValue, value)),
         key=lambda item: tuple(str(part) for part in item.path),
     )
     for error in errors[:MAX_DIAGNOSTICS]:

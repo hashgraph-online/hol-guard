@@ -1082,12 +1082,18 @@ def _policy_bundle_acknowledgement_payload(
         if status == "applied" or (matching_previous is not None and matching_previous.get("status") == "applied")
         else "validated"
     )
+    parsed_synced_at = _parse_iso_timestamp(synced_at)
+    observed_at = (
+        parsed_synced_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        if parsed_synced_at is not None
+        else synced_at
+    )
     acknowledgement = {
         "contractVersion": POLICY_BUNDLE_V2_CONTRACT,
         **candidate_identity,
         "sequence": previous_sequence + 1 if isinstance(previous_sequence, int) else 1,
         "status": resolved_status,
-        "observedAt": synced_at.removesuffix("+00:00") + "Z",
+        "observedAt": observed_at,
     }
     validated, error = validated_policy_bundle_v2_acknowledgement(
         acknowledgement,
@@ -1125,6 +1131,12 @@ def _policy_bundle_is_version_downgrade(
     if next_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
         current_version = existing_bundle.get("bundleVersion") if isinstance(existing_bundle, dict) else None
         current_hash = existing_bundle.get("bundleHash") if isinstance(existing_bundle, dict) else None
+        expected_version = (
+            expected_last_good_bundle.get("bundleVersion") if isinstance(expected_last_good_bundle, dict) else None
+        )
+        expected_hash = (
+            expected_last_good_bundle.get("bundleHash") if isinstance(expected_last_good_bundle, dict) else None
+        )
         return (
             validate_policy_bundle_v2_transition(
                 next_bundle,
@@ -1135,17 +1147,11 @@ def _policy_bundle_is_version_downgrade(
                 ),
                 current_bundle_hash=(current_hash if isinstance(current_hash, str) else None),
                 expected_last_good_bundle_version=(
-                    expected_last_good_bundle.get("bundleVersion")
-                    if isinstance(expected_last_good_bundle, dict)
-                    and isinstance(expected_last_good_bundle.get("bundleVersion"), int)
+                    expected_version
+                    if isinstance(expected_version, int) and not isinstance(expected_version, bool)
                     else None
                 ),
-                expected_last_good_bundle_hash=(
-                    expected_last_good_bundle.get("bundleHash")
-                    if isinstance(expected_last_good_bundle, dict)
-                    and isinstance(expected_last_good_bundle.get("bundleHash"), str)
-                    else None
-                ),
+                expected_last_good_bundle_hash=(expected_hash if isinstance(expected_hash, str) else None),
             )
             is not None
         )
@@ -1528,6 +1534,9 @@ def _policy_shadow_mismatch_reason_codes(
     legacy: list[PolicyDecision],
     canonical: list[PolicyDecision],
 ) -> tuple[str, ...]:
+    if not legacy:
+        return ("legacy_unavailable",)
+
     def keyed(
         decisions: list[PolicyDecision],
     ) -> dict[tuple[str, str, str | None, str | None, str | None, str | None], PolicyDecision]:
@@ -1934,17 +1943,15 @@ def sync_receipts(
                         legacy_decisions,
                         canonical_decisions,
                     )
-                    if not legacy_decisions:
-                        shadow_mismatch_reasons = (
-                            "legacy_unavailable",
-                            *shadow_mismatch_reasons,
-                        )[:4]
+                    blocking_shadow_mismatch_reasons = tuple(
+                        reason for reason in shadow_mismatch_reasons if reason != "legacy_unavailable"
+                    )
                     candidate_policy_decisions = (
                         canonical_decisions
-                        if canonical_enforcement and not shadow_mismatch_reasons
+                        if canonical_enforcement and not blocking_shadow_mismatch_reasons
                         else legacy_decisions
                     )
-                    if canonical_enforcement and shadow_mismatch_reasons:
+                    if canonical_enforcement and blocking_shadow_mismatch_reasons:
                         validated_policy_bundle = None
                         policy_bundle_rejection_reason = "canonical_shadow_mismatch"
                         canonical_enforcement = False

@@ -2318,11 +2318,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "policy_bundle_canonical_previous_good"
             )
             transition_baseline = existing_policy_bundle
-            if validated_policy_bundle is not None and (
-                validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
+            if (
+                validated_policy_bundle is not None
+                and validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
+                and isinstance(canonical_last_good, dict)
             ):
-                if isinstance(canonical_last_good, dict):
-                    transition_baseline = canonical_last_good
+                transition_baseline = canonical_last_good
             if validated_policy_bundle is None:
                 self._write_json({"error": rejection_reason or "invalid_policy_bundle"}, status=400)
                 return
@@ -2377,10 +2378,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         legacy_decisions,
                         canonical_decisions,
                     )
-                    if not legacy_decisions:
-                        mismatch_reasons = ("legacy_unavailable", *mismatch_reasons)[:4]
+                    blocking_mismatch_reasons = tuple(
+                        reason for reason in mismatch_reasons if reason != "legacy_unavailable"
+                    )
                     candidate_policy_decisions = (
-                        canonical_decisions if canonical_enforcement and not mismatch_reasons else legacy_decisions
+                        canonical_decisions
+                        if canonical_enforcement and not blocking_mismatch_reasons
+                        else legacy_decisions
                     )
                     if mismatch_reasons:
                         self.server.store.add_event(  # type: ignore[attr-defined]
@@ -2393,7 +2397,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                             },
                             applied_at,
                         )
-                    if canonical_enforcement and mismatch_reasons:
+                    if canonical_enforcement and blocking_mismatch_reasons:
                         self._write_json({"error": "canonical_shadow_mismatch"}, status=409)
                         return
                 else:

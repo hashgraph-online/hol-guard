@@ -2448,29 +2448,32 @@ def test_headless_policy_sync_accepts_policy_bundle_and_returns_bundle_metadata(
     assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "block"
 
 
+@pytest.mark.parametrize("legacy_available", [True, False])
 def test_headless_policy_sync_enforces_canonical_v2_bundle(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    legacy_available: bool,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_payload(
-        "policy_bundle_legacy_last_good",
-        {
-            "contractVersion": "guard-policy-bundle.v1",
-            "bundleVersion": "policy-2026-07-16.7",
-            "bundleHash": "sha256:legacy",
-            "issuedAt": "2026-07-16T09:59:00Z",
-            "rules": [
-                {
-                    "ruleId": "rule-1",
-                    "action": "block",
-                    "artifactId": "skill:hol/deploy",
-                    "scope": {},
-                }
-            ],
-        },
-        "2026-07-16T09:59:00Z",
-    )
+    if legacy_available:
+        store.set_sync_payload(
+            "policy_bundle_legacy_last_good",
+            {
+                "contractVersion": "guard-policy-bundle.v1",
+                "bundleVersion": "policy-2026-07-16.7",
+                "bundleHash": "sha256:legacy",
+                "issuedAt": "2026-07-16T09:59:00Z",
+                "rules": [
+                    {
+                        "ruleId": "rule-1",
+                        "action": "block",
+                        "artifactId": "skill:hol/deploy",
+                        "scope": {},
+                    }
+                ],
+            },
+            "2026-07-16T09:59:00Z",
+        )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     bundle: dict[str, object] = {
