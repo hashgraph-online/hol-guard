@@ -1,22 +1,17 @@
 name: Publish 3.1 Alpha
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      publish_target:
-        description: "Target repository"
-        required: true
-        default: pypi
-        type: choice
-        options:
-          - testpypi
-          - pypi
       alpha_version:
         description: "Public alpha version, for example 3.1.0a1"
-        required: true
+        required: false
+        default: ""
         type: string
-  pull_request:
-    branches: ["release/3.1"]
+    outputs:
+      version:
+        description: "Computed alpha package version"
+        value: ${{ jobs.build.outputs.version }}
 
 permissions:
   contents: read
@@ -28,7 +23,6 @@ concurrency:
 jobs:
   build:
     name: Build 3.1 Alpha
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -57,7 +51,7 @@ jobs:
       - name: Compute alpha version
         id: version
         env:
-          ALPHA_VERSION: ${{ github.event.inputs.alpha_version }}
+          ALPHA_VERSION: ${{ inputs.alpha_version }}
           EVENT_NAME: ${{ github.event_name }}
           GIT_REF: ${{ github.ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -134,75 +128,3 @@ jobs:
       - name: Run Windows release suite
         if: runner.os == 'Windows'
         run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py tests/test_policy_document_yaml.py tests/test_policy_bundle_v2.py --tb=short
-
-  publish-testpypi:
-    name: Publish alpha to TestPyPI
-    if: >-
-      always() &&
-      needs.build.result == 'success' &&
-      (needs.release-tests.result == 'success' || needs.release-tests.result == 'skipped') &&
-      (
-        github.event_name == 'pull_request' ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi')
-      )
-    needs: [build, release-tests]
-    uses: ./.github/workflows/publish.yml
-    with:
-      alpha_publish_target: testpypi
-      alpha_version: ${{ needs.build.outputs.version }}
-    permissions:
-      contents: read
-      id-token: write
-
-  publish-pypi:
-    name: Publish 3.1 alpha to PyPI
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'pypi'
-    needs: [build, release-tests]
-    uses: ./.github/workflows/publish.yml
-    with:
-      alpha_publish_target: pypi
-      alpha_version: ${{ needs.build.outputs.version }}
-    permissions:
-      contents: read
-      id-token: write
-
-  release-alpha:
-    name: Create 3.1 alpha prerelease
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'pypi'
-    needs: [build, publish-pypi]
-    runs-on: ubuntu-latest
-    permissions:
-      attestations: write
-      contents: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: alpha-distribution
-          path: dist/
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: alpha-toolchain-sbom
-          path: dist/
-      - name: Attest alpha release assets
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
-        with:
-          subject-path: dist/*
-      - name: Create discoverable alpha prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          body_file=$(mktemp)
-          cat > "$body_file" <<EOF
-          Guard 3.1 alpha for opt-in evaluation. Stable installations remain on the stable channel.
-
-          Install this exact alpha:
-
-          \`\`\`bash
-          uv tool install --force "hol-guard==$VERSION"
-          \`\`\`
-          EOF
-          mapfile -d '' files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
-          gh release create "alpha/v${VERSION}" --repo "${{ github.repository }}" --target "$GITHUB_SHA" --title "Guard ${VERSION} alpha" --notes-file "$body_file" --prerelease "${files[@]}"

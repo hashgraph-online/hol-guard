@@ -1,16 +1,6 @@
 name: Publish to PyPI
 
 on:
-  workflow_call:
-    inputs:
-      alpha_publish_target:
-        description: "Trusted publisher target for an artifact built by publish-alpha.yml"
-        required: true
-        type: string
-      alpha_version:
-        description: "Alpha version being published"
-        required: true
-        type: string
   workflow_dispatch:
     inputs:
       publish_target:
@@ -21,11 +11,15 @@ on:
         options:
           - testpypi
           - pypi
+      alpha_version:
+        description: "Required on release/3.1; for example 3.1.0a1"
+        required: false
+        type: string
   push:
     branches: [main]
     tags: ["v*"]
   pull_request:
-    branches: [main]
+    branches: [main, "release/3.1"]
 
 permissions:
   contents: read
@@ -37,7 +31,10 @@ concurrency:
 jobs:
   build:
     name: Build + Verify
-    if: inputs.alpha_publish_target == '' && (github.event_name != 'push' || github.ref != 'refs/heads/main' || !contains(github.event.head_commit.message, '[skip release publish]'))
+    if: >-
+      (github.event_name != 'pull_request' || github.base_ref != 'release/3.1') &&
+      (github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/release/3.1') &&
+      (github.event_name != 'push' || github.ref != 'refs/heads/main' || !contains(github.event.head_commit.message, '[skip release publish]'))
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -202,9 +199,27 @@ jobs:
           path: release-metadata/*.cdx.json
           if-no-files-found: error
 
+  build-alpha:
+    name: Build + test 3.1 alpha
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'release/3.1' && github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release/3.1')
+    uses: ./.github/workflows/publish-alpha.yml
+    with:
+      alpha_version: ${{ github.event.inputs.alpha_version || '' }}
+    permissions:
+      contents: read
+
   publish-alpha-testpypi:
-    name: Publish alpha artifact to TestPyPI
-    if: inputs.alpha_publish_target == 'testpypi'
+    name: Publish 3.1 alpha to TestPyPI
+    if: >-
+      always() &&
+      needs.build-alpha.result == 'success' &&
+      (
+        (github.event_name == 'pull_request' && github.base_ref == 'release/3.1') ||
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release/3.1' && github.event.inputs.publish_target == 'testpypi')
+      )
+    needs: build-alpha
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
@@ -220,7 +235,7 @@ jobs:
           skip-existing: true
       - name: Show canary install command
         env:
-          VERSION: ${{ inputs.alpha_version }}
+          VERSION: ${{ needs.build-alpha.outputs.version }}
         run: |
           echo "## TestPyPI canary" >> "$GITHUB_STEP_SUMMARY"
           echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
@@ -228,8 +243,12 @@ jobs:
           echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
 
   publish-alpha-pypi:
-    name: Publish alpha artifact to PyPI
-    if: inputs.alpha_publish_target == 'pypi'
+    name: Publish 3.1 alpha to PyPI
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/release/3.1' &&
+      github.event.inputs.publish_target == 'pypi'
+    needs: build-alpha
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -273,7 +292,7 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'pypi')
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     needs: build
     runs-on: ubuntu-latest
     environment: pypi
@@ -292,131 +311,40 @@ jobs:
     name: Create GitHub Release
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     needs: [build, publish-pypi]
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/create-python-release.yml
+    with:
+      version: ${{ needs.build.outputs.version }}
+      channel: stable
+      distribution_artifact: distributions
+      sbom_artifact: release-toolchain-sbom
+      provenance_prefix: plugin-scanner
     permissions:
       attestations: write
       contents: write
       id-token: write
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          fetch-depth: 0
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: distributions
-          path: dist/
-      - name: Download release toolchain SBOM
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: release-toolchain-sbom
-          path: dist/
-      - name: Skip if release already exists
-        id: release_exists
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          if gh release view "v${VERSION}" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Generate changelog
-        if: steps.release_exists.outputs.exists == 'false'
-        id: changelog
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          # Get the range of commits since last tag
-          LAST_TAG=$(git describe --tags --abbrev=0 --exclude="v${VERSION}" 2>/dev/null || echo "")
 
-          if [ -n "$LAST_TAG" ]; then
-            LOG=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
-          else
-            LOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
-          fi
-
-          # Build release notes
-          cat > release-notes.md << EOF
-          ## v${VERSION}
-
-          ### What's Changed
-          ${LOG}
-
-          ### Installation
-          Base install:
-          \`\`\`bash
-          uv tool install hol-guard==${VERSION}
-          \`\`\`
-
-          \`\`\`bash
-          uv tool install plugin-scanner==${VERSION}
-          \`\`\`
-
-          Full Cisco coverage on Python 3.11+:
-          \`\`\`bash
-          uv tool install "hol-guard[cisco]==${VERSION}"
-          \`\`\`
-
-          \`\`\`bash
-          uv tool install "plugin-scanner[cisco]==${VERSION}"
-          \`\`\`
-
-          \`\`\`bash
-          docker pull ghcr.io/hashgraph-online/hol-guard:${VERSION}
-          \`\`\`
-
-          **Full Changelog**: https://github.com/hashgraph-online/hol-guard/compare/${LAST_TAG}...v${VERSION}
-          EOF
-
-          echo "notes_path=release-notes.md" >> $GITHUB_OUTPUT
-      - name: Attest GitHub release assets
-        if: steps.release_exists.outputs.exists == 'false'
-        id: provenance
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
-        with:
-          subject-path: |
-            dist/*
-      - name: Materialize provenance bundle
-        if: steps.release_exists.outputs.exists == 'false'
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          cp "${{ steps.provenance.outputs.bundle-path }}" "dist/plugin-scanner-v${VERSION}.intoto.jsonl"
-      - name: Collect release asset files
-        if: steps.release_exists.outputs.exists == 'false'
-        id: release_assets
-        run: |
-          mapfile -d '' ASSET_FILES < <(find dist -maxdepth 1 -type f -print0 | sort -z)
-          if [ "${#ASSET_FILES[@]}" -eq 0 ]; then
-            echo "No release asset files found in dist/" >&2
-            exit 1
-          fi
-          {
-            echo "files<<EOF"
-            for asset in "${ASSET_FILES[@]}"; do
-              printf '%s\n' "$asset"
-            done
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-      - name: Create release
-        if: steps.release_exists.outputs.exists == 'false'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          mapfile -t RELEASE_ASSETS <<'EOF'
-          ${{ steps.release_assets.outputs.files }}
-          EOF
-          gh release create "v${VERSION}" \
-            --title "v${VERSION}" \
-            --target main \
-            --notes-file ${{ steps.changelog.outputs.notes_path }} \
-            "${RELEASE_ASSETS[@]}"
+  release-alpha:
+    name: Create 3.1 alpha prerelease
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/release/3.1' &&
+      github.event.inputs.publish_target == 'pypi'
+    needs: [build-alpha, publish-alpha-pypi]
+    uses: ./.github/workflows/create-python-release.yml
+    with:
+      version: ${{ needs.build-alpha.outputs.version }}
+      channel: alpha
+      distribution_artifact: alpha-distribution
+      sbom_artifact: alpha-toolchain-sbom
+      provenance_prefix: hol-guard
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
 
   publish-container:
     name: Publish container image
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'pypi')
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     needs: [build, publish-pypi]
     runs-on: ubuntu-latest
     permissions:

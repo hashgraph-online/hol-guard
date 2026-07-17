@@ -57,24 +57,32 @@ def test_cli_reports_invalid_alpha_without_traceback(
 
 def test_release_workflow_keeps_stable_and_3_1_alpha_channels_isolated() -> None:
     root = Path(__file__).parent.parent
-    publish = yaml.safe_load((root / ".github/workflows/publish-alpha.yml").read_text(encoding="utf-8"))
+    publish_path = root / ".github/workflows/publish.yml"
+    publish_text = publish_path.read_text(encoding="utf-8")
+    publish = yaml.safe_load(publish_text)
     on_section = publish.get(True) or publish.get("on")
     inputs = on_section["workflow_dispatch"]["inputs"]
 
     assert inputs["publish_target"]["options"] == ["testpypi", "pypi"]
-    assert inputs["alpha_version"]["required"] is True
+    assert inputs["alpha_version"]["required"] is False
     assert "release/3.1" in on_section["pull_request"]["branches"]
 
     jobs = publish["jobs"]
-    alpha_matrix = jobs["release-tests"]["strategy"]["matrix"]["os"]
-    assert alpha_matrix == ["ubuntu-latest", "windows-latest"]
-    assert jobs["publish-pypi"]["needs"] == ["build", "release-tests"]
-    assert jobs["release-alpha"]["needs"] == ["build", "publish-pypi"]
-    assert "publish-container" not in jobs
+    assert jobs["build-alpha"]["uses"] == "./.github/workflows/publish-alpha.yml"
+    assert jobs["publish-alpha-pypi"]["needs"] == "build-alpha"
+    assert jobs["release"]["uses"] == "./.github/workflows/create-python-release.yml"
+    assert jobs["release"]["with"]["provenance_prefix"] == "plugin-scanner"
+    assert jobs["release-alpha"]["needs"] == ["build-alpha", "publish-alpha-pypi"]
+    assert jobs["release-alpha"]["with"]["provenance_prefix"] == "hol-guard"
+    assert "workflow_dispatch" not in jobs["publish-container"]["if"]
+    assert len(publish_text.splitlines()) <= 500
 
-    stable_publish = yaml.safe_load((root / ".github/workflows/publish.yml").read_text(encoding="utf-8"))
-    stable_on = stable_publish.get(True) or stable_publish.get("on")
-    assert stable_on["pull_request"]["branches"] == ["main"]
+    alpha = yaml.safe_load((root / ".github/workflows/publish-alpha.yml").read_text(encoding="utf-8"))
+    alpha_on = alpha.get(True) or alpha.get("on")
+    assert alpha_on["workflow_call"]["inputs"]["alpha_version"]["required"] is False
+    assert set(alpha["jobs"]) == {"build", "release-tests"}
+    alpha_matrix = alpha["jobs"]["release-tests"]["strategy"]["matrix"]["os"]
+    assert alpha_matrix == ["ubuntu-latest", "windows-latest"]
 
 
 def test_release_branch_runs_standard_cross_platform_ci() -> None:

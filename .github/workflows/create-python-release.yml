@@ -1,0 +1,146 @@
+name: Create Python Release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      channel:
+        required: true
+        type: string
+      distribution_artifact:
+        required: true
+        type: string
+      sbom_artifact:
+        required: true
+        type: string
+      provenance_prefix:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Create ${{ inputs.channel }} GitHub release
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ${{ inputs.distribution_artifact }}
+          path: dist/
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ${{ inputs.sbom_artifact }}
+          path: dist/
+      - name: Validate release channel
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          if [[ "$CHANNEL" != "stable" && "$CHANNEL" != "alpha" ]]; then
+            echo "Unsupported release channel: $CHANNEL" >&2
+            exit 1
+          fi
+      - name: Skip if release already exists
+        id: release_exists
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          TAG="v${VERSION}"
+          if [[ "$CHANNEL" == "alpha" ]]; then
+            TAG="alpha/v${VERSION}"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Generate release notes
+        if: steps.release_exists.outputs.exists == 'false'
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$CHANNEL" == "alpha" ]]; then
+            cat > release-notes.md <<EOF
+          Guard 3.1 alpha for opt-in evaluation. Stable installations remain on the stable channel.
+
+          Install this exact alpha:
+
+          \`\`\`bash
+          uv tool install --force "hol-guard==$VERSION"
+          \`\`\`
+          EOF
+            exit 0
+          fi
+
+          LAST_TAG=$(git describe --tags --abbrev=0 --exclude="v${VERSION}" 2>/dev/null || echo "")
+          if [[ -n "$LAST_TAG" ]]; then
+            LOG=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s (%h)" --no-merges)
+          else
+            LOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+          fi
+          cat > release-notes.md <<EOF
+          ## v${VERSION}
+
+          ### What's Changed
+          ${LOG}
+
+          ### Installation
+          \`\`\`bash
+          uv tool install hol-guard==${VERSION}
+          uv tool install plugin-scanner==${VERSION}
+          \`\`\`
+
+          Full Cisco coverage on Python 3.11+:
+          \`\`\`bash
+          uv tool install "hol-guard[cisco]==${VERSION}"
+          uv tool install "plugin-scanner[cisco]==${VERSION}"
+          \`\`\`
+
+          \`\`\`bash
+          docker pull ghcr.io/hashgraph-online/hol-guard:${VERSION}
+          \`\`\`
+
+          **Full Changelog**: https://github.com/hashgraph-online/hol-guard/compare/${LAST_TAG}...v${VERSION}
+          EOF
+      - name: Attest release assets
+        if: steps.release_exists.outputs.exists == 'false'
+        id: provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
+        with:
+          subject-path: dist/*
+      - name: Materialize provenance bundle
+        if: steps.release_exists.outputs.exists == 'false'
+        env:
+          PROVENANCE_PREFIX: ${{ inputs.provenance_prefix }}
+          VERSION: ${{ inputs.version }}
+        run: cp "${{ steps.provenance.outputs.bundle-path }}" "dist/${PROVENANCE_PREFIX}-v${VERSION}.intoto.jsonl"
+      - name: Create release
+        if: steps.release_exists.outputs.exists == 'false'
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          mapfile -d '' files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo "No release assets found" >&2
+            exit 1
+          fi
+          if [[ "$CHANNEL" == "alpha" ]]; then
+            gh release create "alpha/v${VERSION}" --target "$GITHUB_SHA" --title "Guard ${VERSION} alpha" --notes-file release-notes.md --prerelease "${files[@]}"
+          else
+            gh release create "v${VERSION}" --target main --title "v${VERSION}" --notes-file release-notes.md "${files[@]}"
+          fi
