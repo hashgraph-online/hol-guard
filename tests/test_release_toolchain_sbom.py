@@ -59,9 +59,12 @@ def test_release_toolchain_sbom_rejects_runtime_version_mismatch(tmp_path: Path)
 
 def test_publish_workflow_attests_toolchain_sbom_without_sending_it_to_pypi() -> None:
     workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8"))
+    release_workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "create-python-release.yml").read_text(encoding="utf-8")
+    )
     jobs = workflow["jobs"]
     build_steps = jobs["build"]["steps"]
-    release_steps = jobs["release"]["steps"]
+    release_steps = release_workflow["jobs"]["release"]["steps"]
 
     preflight_index = next(
         index
@@ -71,6 +74,8 @@ def test_publish_workflow_attests_toolchain_sbom_without_sending_it_to_pypi() ->
     install_index = next(index for index, step in enumerate(build_steps) if step.get("name") == "Install dependencies")
     assert preflight_index < install_index
     assert any(step.get("name") == "Upload release toolchain SBOM" for step in build_steps)
+    assert jobs["release"]["uses"] == "./.github/workflows/create-python-release.yml"
+    assert jobs["release"]["with"]["sbom_artifact"] == "release-toolchain-sbom"
     assert any(step.get("name") == "Download release toolchain SBOM" for step in release_steps)
     assert all(
         step.get("name") != "Download release toolchain SBOM"
