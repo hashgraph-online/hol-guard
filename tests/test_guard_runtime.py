@@ -14187,6 +14187,18 @@ def test_guard_runtime_allows_apply_patch_to_non_sensitive_source_file(tmp_path)
     assert match is None
 
 
+def test_guard_runtime_does_not_execute_classify_apply_patch_content(tmp_path):
+    patch = """*** Begin Patch
+*** Update File: docs/notes.md
+@@
++Routine maintenance uses `gh pr merge 17 --squash --delete-branch`.
+*** End Patch"""
+
+    match = extract_sensitive_tool_action_request("apply_patch", patch, cwd=tmp_path)
+
+    assert match is None
+
+
 def test_guard_runtime_blocks_apply_patch_to_sensitive_file(tmp_path):
     patch = """*** Begin Patch
 *** Update File: .env
