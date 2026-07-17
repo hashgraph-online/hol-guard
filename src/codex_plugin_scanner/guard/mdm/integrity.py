@@ -24,7 +24,7 @@ from .contracts import (
     SupervisorStatus,
     default_machine_paths,
 )
-from .lifecycle import load_trusted_keys
+from .lifecycle import load_trusted_public_keys
 from .manifest import ManifestVerification, verify_release_manifest
 from .native import NativeInstallVerification, verify_native_install
 from .policy import load_managed_policy
@@ -81,12 +81,13 @@ def _bounded_file_hash(path: Path) -> str | None:
         return None
 
 
-def _verify_manifest(paths: MachinePaths, trusted_keys: dict[str, bytes]) -> ManifestVerification:
+def _verify_manifest(paths: MachinePaths) -> ManifestVerification:
     try:
+        trusted_public_keys = load_trusted_public_keys(paths.runtime_root / "release-trusted-keys.json")
         return verify_release_manifest(
             paths.manifest_path,
             paths.runtime_root,
-            trusted_keys=trusted_keys,
+            trusted_keys=trusted_public_keys,
             expected_platform={"Darwin": "macos", "Windows": "windows"}.get(platform.system()),
             expected_architecture=platform.machine().lower(),
             expected_owner_uid=0 if platform.system() != "Windows" else None,
@@ -114,8 +115,7 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
 
     paths = default_machine_paths()
     runtime_root = paths.runtime_root
-    trusted_keys = load_trusted_keys(runtime_root / "release-trusted-keys.json")
-    manifest = _verify_manifest(paths, trusted_keys)
+    manifest = _verify_manifest(paths)
     native = _verify_native(runtime_root)
     policy = _load_policy()
     update_owner = policy.policy.install_owner if policy.policy is not None else "user"

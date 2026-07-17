@@ -213,7 +213,7 @@ def _activation_lock(guard_home: Path) -> Iterator[None]:
         os.close(descriptor)
 
 
-def load_trusted_keys(path: Path) -> dict[str, bytes]:
+def load_trusted_public_keys(path: Path) -> dict[str, bytes]:
     trusted_keys: dict[str, bytes] = {}
     try:
         if not path.is_file() or path.is_symlink() or path.stat().st_size > 64 * 1024:
@@ -240,7 +240,7 @@ def machine_status(
     runtime_root = (machine_root or paths.runtime_root).resolve()
     manifest_path = runtime_root / "release-manifest.json"
     trusted_keys_path = runtime_root / "release-trusted-keys.json"
-    trusted_keys = load_trusted_keys(trusted_keys_path)
+    trusted_keys = load_trusted_public_keys(trusted_keys_path)
     expected_platform = {"Darwin": "macos", "Windows": "windows"}.get(platform.system())
     verification = verify_release_manifest(
         manifest_path,
@@ -415,7 +415,7 @@ __all__ = [
     "activate_user",
     "authorize_deactivation",
     "deactivate_user",
-    "load_trusted_keys",
+    "load_trusted_public_keys",
     "machine_status",
     "repair_user",
     "user_status",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -200,6 +201,20 @@ def test_integrity_snapshot_cli_is_read_only_and_redacted(
     assert "home" not in serialized.casefold()
     assert "username" not in serialized.casefold()
     assert list(tmp_path.iterdir()) == []
+
+
+def test_snapshot_never_serializes_release_verification_keys(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    paths = _paths(tmp_path)
+    paths.runtime_root.mkdir(parents=True)
+    public_key = base64.b64encode(b"public-verification-key").decode()
+    (paths.runtime_root / "release-trusted-keys.json").write_text(json.dumps({"release-1": public_key}))
+    monkeypatch.setattr(integrity, "default_machine_paths", lambda: paths)
+
+    snapshot = integrity.machine_integrity_snapshot()
+    serialized = json.dumps(snapshot, sort_keys=True)
+
+    assert public_key not in serialized
+    assert "release-1" not in serialized
 
 
 def test_integrity_snapshot_cli_does_not_accept_machine_path_override(tmp_path: Path) -> None:
