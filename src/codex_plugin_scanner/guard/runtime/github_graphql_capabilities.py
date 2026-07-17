@@ -10,7 +10,44 @@ GitHubGraphQLAssessment = tuple[GitHubGraphQLCapability, str, str]
 
 _GRAPHQL_NAME = re.compile(r"\b[_A-Za-z][_0-9A-Za-z]*\b")
 _GRAPHQL_ALIAS = re.compile(r"\b(?P<name>[_A-Za-z][_0-9A-Za-z]*)\s*:")
-_MAINTENANCE_MUTATIONS = frozenset({"resolveReviewThread", "unresolveReviewThread"})
+_ROUTINE_MUTATIONS = frozenset(
+    {
+        "addComment",
+        "addProjectV2DraftIssue",
+        "addProjectV2ItemById",
+        "addPullRequestReview",
+        "addPullRequestReviewComment",
+        "addPullRequestReviewThread",
+        "closeDiscussion",
+        "closeIssue",
+        "convertPullRequestToDraft",
+        "createDiscussion",
+        "createIssue",
+        "createPullRequest",
+        "disablePullRequestAutoMerge",
+        "enablePullRequestAutoMerge",
+        "markDiscussionCommentAsAnswer",
+        "markPullRequestReadyForReview",
+        "mergePullRequest",
+        "minimizeComment",
+        "reopenDiscussion",
+        "reopenIssue",
+        "resolveReviewThread",
+        "submitPullRequestReview",
+        "unmarkDiscussionCommentAsAnswer",
+        "unminimizeComment",
+        "unresolveReviewThread",
+        "updateDiscussion",
+        "updateDiscussionComment",
+        "updateIssue",
+        "updateIssueComment",
+        "updateProjectV2ItemFieldValue",
+        "updatePullRequest",
+        "updatePullRequestBranch",
+        "updatePullRequestReview",
+        "updatePullRequestReviewComment",
+    }
+)
 
 
 def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
@@ -49,11 +86,11 @@ def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
     operation = operations[0]
     if operation == "mutation":
         root_fields = _root_fields(sanitized)
-        if not has_fragment_definition and root_fields and frozenset(root_fields) <= _MAINTENANCE_MUTATIONS:
+        if not has_fragment_definition and root_fields and frozenset(root_fields) <= _ROUTINE_MUTATIONS:
             return (
                 "maintain_remote",
-                "github.graphql.proven-maintenance",
-                "The GraphQL mutation performs only statically proven review-thread maintenance.",
+                "github.graphql.routine-mutation",
+                "The GraphQL mutation contains only statically understood routine root fields.",
             )
         return (
             "mutate_remote",
