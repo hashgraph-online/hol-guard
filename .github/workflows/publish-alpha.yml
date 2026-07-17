@@ -1,0 +1,225 @@
+name: Publish 3.1 Alpha
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_target:
+        description: "Target repository"
+        required: true
+        default: pypi
+        type: choice
+        options:
+          - testpypi
+          - pypi
+      alpha_version:
+        description: "Public alpha version, for example 3.1.0a1"
+        required: true
+        type: string
+  pull_request:
+    branches: ["release/3.1"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hol-guard-alpha-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build 3.1 Alpha
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Verify release uv before dependency install
+        env:
+          EXPECTED_UV_VERSION: "0.9.26"
+          SETUP_UV_ACTION_REF: fac544c07dec837d0ccb6301d7b5580bf5edae39
+        run: |
+          python3 scripts/write_release_toolchain_sbom.py \
+            --output "$RUNNER_TEMP/hol-guard-release-toolchain-preflight.cdx.json" \
+            --release-version preflight \
+            --expected-uv-version "$EXPECTED_UV_VERSION" \
+            --setup-action-ref "$SETUP_UV_ACTION_REF"
+      - run: uv sync --frozen --extra dev --extra publish --extra cisco
+      - name: Compute alpha version
+        id: version
+        env:
+          ALPHA_VERSION: ${{ github.event.inputs.alpha_version }}
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py --version "$ALPHA_VERSION" --git-ref "$GIT_REF")
+          else
+            VERSION=$(PR_NUMBER="$PR_NUMBER" RUN_NUMBER="$RUN_NUMBER" RUN_ATTEMPT="$RUN_ATTEMPT" python - <<'PY'
+          import os
+
+          def pair(left: int, right: int) -> int:
+              total = left + right
+              return total * (total + 1) // 2 + right
+
+          serial = pair(pair(int(os.environ["PR_NUMBER"]), int(os.environ["RUN_NUMBER"])), int(os.environ["RUN_ATTEMPT"]))
+          print(f"3.1.0a0.dev{serial}")
+          PY
+            )
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Computed alpha version: $VERSION"
+      - name: Write release toolchain SBOM
+        env:
+          EXPECTED_UV_VERSION: "0.9.26"
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          SETUP_UV_ACTION_REF: fac544c07dec837d0ccb6301d7b5580bf5edae39
+        run: |
+          python3 scripts/write_release_toolchain_sbom.py \
+            --output "release-metadata/hol-guard-v${RELEASE_VERSION}.toolchain.cdx.json" \
+            --release-version "$RELEASE_VERSION" \
+            --expected-uv-version "$EXPECTED_UV_VERSION" \
+            --setup-action-ref "$SETUP_UV_ACTION_REF"
+      - name: Stamp package version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: uv run --no-sync python scripts/sync_repo_version.py --version "$VERSION"
+      - name: Build Guard distribution
+        run: uv run --no-sync python -m build
+      - run: uv run --no-sync twine check dist/*
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: alpha-distribution
+          path: dist/hol_guard-*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: alpha-toolchain-sbom
+          path: release-metadata/*.cdx.json
+          if-no-files-found: error
+
+  release-tests:
+    name: Alpha release tests (${{ matrix.os }})
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Run Linux release suite
+        if: runner.os == 'Linux'
+        run: uv run --no-sync pytest --tb=short
+      - name: Run Windows release suite
+        if: runner.os == 'Windows'
+        run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py tests/test_policy_document_yaml.py tests/test_policy_bundle_v2.py --tb=short
+
+  publish-testpypi:
+    name: Publish alpha to TestPyPI
+    if: >-
+      always() &&
+      needs.build.result == 'success' &&
+      (needs.release-tests.result == 'success' || needs.release-tests.result == 'skipped') &&
+      (
+        github.event_name == 'pull_request' ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi')
+      )
+    needs: [build, release-tests]
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: alpha-distribution
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+      - name: Show canary install command
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          echo "## TestPyPI canary" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
+          echo "uv tool install --force --index https://test.pypi.org/simple --default-index https://pypi.org/simple 'hol-guard==$VERSION'" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+
+  publish-pypi:
+    name: Publish 3.1 alpha to PyPI
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'pypi'
+    needs: [build, release-tests]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: alpha-distribution
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+
+  release-alpha:
+    name: Create 3.1 alpha prerelease
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'pypi'
+    needs: [build, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: alpha-distribution
+          path: dist/
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: alpha-toolchain-sbom
+          path: dist/
+      - name: Attest alpha release assets
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
+        with:
+          subject-path: dist/*
+      - name: Create discoverable alpha prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          body_file=$(mktemp)
+          cat > "$body_file" <<EOF
+          Guard 3.1 alpha for opt-in evaluation. Stable installations remain on the stable channel.
+
+          Install this exact alpha:
+
+          \`\`\`bash
+          uv tool install --force "hol-guard==$VERSION"
+          \`\`\`
+          EOF
+          mapfile -d '' files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
+          gh release create "alpha/v${VERSION}" --repo "${{ github.repository }}" --target "$GITHUB_SHA" --title "Guard ${VERSION} alpha" --notes-file "$body_file" --prerelease "${files[@]}"

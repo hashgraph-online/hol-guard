@@ -11,23 +11,11 @@ on:
         options:
           - testpypi
           - pypi
-      release_channel:
-        description: "Release channel"
-        required: true
-        default: stable
-        type: choice
-        options:
-          - stable
-          - alpha
-      alpha_version:
-        description: "Required for alpha releases (for example 3.1.0a1)"
-        required: false
-        type: string
   push:
     branches: [main]
     tags: ["v*"]
   pull_request:
-    branches: [main, "release/3.1"]
+    branches: [main]
 
 permissions:
   contents: read
@@ -43,7 +31,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
-      channel: ${{ steps.version.outputs.channel }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -76,22 +63,10 @@ jobs:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_CHANNEL: ${{ github.event.inputs.release_channel }}
-          ALPHA_VERSION: ${{ github.event.inputs.alpha_version }}
         run: |
           BASE_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           VERSION="$BASE_VERSION"
-          CHANNEL="${RELEASE_CHANNEL:-stable}"
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$CHANNEL" == "alpha" ]]; then
-            if [[ -z "$ALPHA_VERSION" ]]; then
-              echo "alpha_version is required for alpha releases" >&2
-              exit 1
-            fi
-            VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py --version "$ALPHA_VERSION" --git-ref "$GITHUB_REF")
-          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "Stable manual releases must run from refs/heads/main" >&2
-            exit 1
-          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
           elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             VERSION=$(BASE_VERSION="$BASE_VERSION" PR_NUMBER="$PR_NUMBER" GITHUB_RUN_NUMBER="$GITHUB_RUN_NUMBER" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" python - <<'PY'
@@ -138,8 +113,7 @@ jobs:
             fi
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
-          echo "Computed $CHANNEL version: $VERSION"
+          echo "Computed version: $VERSION"
       - name: Verify release toolchain and write SBOM
         env:
           EXPECTED_UV_VERSION: "0.9.26"
@@ -218,42 +192,10 @@ jobs:
           path: release-metadata/*.cdx.json
           if-no-files-found: error
 
-  alpha-cross-platform:
-    name: Alpha release tests (${{ matrix.os }})
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_channel == 'alpha'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
-        with:
-          version: "0.9.26"
-          enable-cache: true
-      - run: uv sync --frozen --extra dev --python 3.12
-      - name: Run Linux release suite
-        if: runner.os == 'Linux'
-        run: uv run --no-sync pytest --tb=short
-      - name: Run Windows release suite
-        if: runner.os == 'Windows'
-        run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py tests/test_policy_document_yaml.py tests/test_policy_bundle_v2.py --tb=short
-
   publish-testpypi:
     name: Publish to TestPyPI (Manual)
-    if: >-
-      always() &&
-      needs.build.result == 'success' &&
-      (needs.alpha-cross-platform.result == 'success' || needs.alpha-cross-platform.result == 'skipped') &&
-      (
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi') ||
-        (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-      )
-    needs: [build, alpha-cross-platform]
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    needs: build
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
@@ -282,23 +224,8 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI
-    if: >-
-      always() &&
-      needs.build.result == 'success' &&
-      (needs.alpha-cross-platform.result == 'success' || needs.alpha-cross-platform.result == 'skipped') &&
-      (
-        github.ref == 'refs/heads/main' ||
-        startsWith(github.ref, 'refs/tags/') ||
-        (
-          github.event_name == 'workflow_dispatch' &&
-          github.event.inputs.publish_target == 'pypi' &&
-          (
-            (needs.build.outputs.channel == 'stable' && github.ref == 'refs/heads/main') ||
-            (needs.build.outputs.channel == 'alpha' && github.ref == 'refs/heads/release/3.1')
-          )
-        )
-      )
-    needs: [build, alpha-cross-platform]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'pypi')
+    needs: build
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -308,48 +235,9 @@ jobs:
         with:
           name: distributions
           path: dist/
-      - name: Keep only the Guard alpha distribution
-        if: needs.build.outputs.channel == 'alpha'
-        run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         with:
           skip-existing: true
-
-  release-alpha:
-    name: Create alpha GitHub prerelease
-    if: >-
-      github.event_name == 'workflow_dispatch' &&
-      github.event.inputs.publish_target == 'pypi' &&
-      needs.build.outputs.channel == 'alpha' &&
-      github.ref == 'refs/heads/release/3.1'
-    needs: [build, publish-pypi]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      - name: Create discoverable alpha prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          body_file=$(mktemp)
-          cat > "$body_file" <<EOF
-          Guard 3.1 alpha for opt-in evaluation. Stable installations remain on the stable channel.
-
-          Install this exact alpha:
-
-          \`\`\`bash
-          uv tool install --force "hol-guard==$VERSION"
-          \`\`\`
-
-          Return to the stable channel:
-
-          \`\`\`bash
-          uv tool install --force "hol-guard<3"
-          \`\`\`
-          EOF
-          gh release create "alpha/v${VERSION}" --repo "${{ github.repository }}" --target "$GITHUB_SHA" --title "Guard ${VERSION} alpha" --notes-file "$body_file" --prerelease
 
   release:
     name: Create GitHub Release

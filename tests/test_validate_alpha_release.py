@@ -57,27 +57,24 @@ def test_cli_reports_invalid_alpha_without_traceback(
 
 def test_release_workflow_keeps_stable_and_3_1_alpha_channels_isolated() -> None:
     root = Path(__file__).parent.parent
-    publish = yaml.safe_load((root / ".github/workflows/publish.yml").read_text(encoding="utf-8"))
+    publish = yaml.safe_load((root / ".github/workflows/publish-alpha.yml").read_text(encoding="utf-8"))
     on_section = publish.get(True) or publish.get("on")
     inputs = on_section["workflow_dispatch"]["inputs"]
 
-    assert inputs["release_channel"]["options"] == ["stable", "alpha"]
-    assert inputs["alpha_version"]["required"] is False
+    assert inputs["publish_target"]["options"] == ["testpypi", "pypi"]
+    assert inputs["alpha_version"]["required"] is True
     assert "release/3.1" in on_section["pull_request"]["branches"]
 
     jobs = publish["jobs"]
-    alpha_matrix = jobs["alpha-cross-platform"]["strategy"]["matrix"]["os"]
+    alpha_matrix = jobs["release-tests"]["strategy"]["matrix"]["os"]
     assert alpha_matrix == ["ubuntu-latest", "windows-latest"]
-    assert "refs/heads/release/3.1" in jobs["publish-pypi"]["if"]
-    assert jobs["publish-pypi"]["needs"] == ["build", "alpha-cross-platform"]
+    assert jobs["publish-pypi"]["needs"] == ["build", "release-tests"]
     assert jobs["release-alpha"]["needs"] == ["build", "publish-pypi"]
+    assert "publish-container" not in jobs
 
-    alpha_publish_steps = jobs["publish-pypi"]["steps"]
-    prune_step = next(
-        step for step in alpha_publish_steps if step.get("name") == "Keep only the Guard alpha distribution"
-    )
-    assert prune_step["if"] == "needs.build.outputs.channel == 'alpha'"
-    assert "plugin_scanner" in prune_step["run"]
+    stable_publish = yaml.safe_load((root / ".github/workflows/publish.yml").read_text(encoding="utf-8"))
+    stable_on = stable_publish.get(True) or stable_publish.get("on")
+    assert stable_on["pull_request"]["branches"] == ["main"]
 
 
 def test_release_branch_runs_standard_cross_platform_ci() -> None:
