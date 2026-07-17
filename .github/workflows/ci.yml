@@ -1,9 +1,9 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: [main, feat/guard-policy-v3]
   pull_request:
-    branches: [main]
+    branches: [main, feat/guard-policy-v3]
 
 permissions:
   contents: read

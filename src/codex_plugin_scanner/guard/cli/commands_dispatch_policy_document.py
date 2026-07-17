@@ -5,10 +5,9 @@ from __future__ import annotations
 import json
 import os
 import sys
-from argparse import Namespace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TextIO, cast
+from typing import Protocol, TextIO, cast
 
 from ..approval_gate import ApprovalGateError, require_high_risk
 from ..policy_authority import PolicyAuthorityError
@@ -29,8 +28,17 @@ from ..store import GuardStore
 from ..store_policy_document import PolicyImportMode
 from .approval_gate_prompt import prompt_for_approval_gate
 
-
 _POLICY_IMPORT_FLAG = "HOL_GUARD_POLICY_YAML_IMPORT"
+
+
+class PolicyDocumentCommandArgs(Protocol):
+    policy_command: str
+    file: str
+    check: bool
+    include_provenance: bool
+    mode: str
+    dry_run: bool
+    json: bool
 
 
 def _write_payload(
@@ -65,7 +73,7 @@ def _load_and_compile(path: Path):
 
 
 def _run_guard_policy_document_command(
-    args: Namespace,
+    args: PolicyDocumentCommandArgs,
     *,
     store: GuardStore | None = None,
     output_stream: TextIO | None = None,
