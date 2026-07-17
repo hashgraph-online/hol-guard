@@ -140,6 +140,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "github.api.high-impact-mutation",
         ),
         (
+            ("api", "repos/example/project/actions/runners/registration-token", "-X", "POST"),
+            "mutate_remote",
+            "github.api.high-impact-mutation",
+        ),
+        (
+            ("api", "repos/example/project/actions/runs/123/rerun", "-X", "POST"),
+            "maintain_remote",
+            "github.api.routine-mutation",
+        ),
+        (
             (
                 "api",
                 "graphql",

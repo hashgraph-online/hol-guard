@@ -116,6 +116,7 @@ _API_BOOLEAN_OPTIONS = frozenset({"--include", "--paginate", "--silent", "--slur
 _METHOD_OVERRIDE_HEADER = re.compile(r"\Ax-http-method-override\s*:", re.IGNORECASE)
 _STATIC_ENDPOINT = re.compile(r"\A[A-Za-z0-9_./{}:+,@=-]+\Z")
 _ROUTINE_API_ROOTS = frozenset({"gists", "notifications"})
+_ROUTINE_ACTIONS_API_RESOURCES = frozenset({"artifacts", "caches", "jobs", "runs", "workflows"})
 _ROUTINE_REPO_API_RESOURCES = frozenset(
     {
         "actions",
@@ -375,6 +376,8 @@ def _api_request_is_high_impact(parsed: _ApiArguments, *, method: str) -> bool:
         return True
     if resource[:2] in {("actions", "permissions"), ("git", "refs")}:
         return True
+    if resource[0] == "actions":
+        return len(resource) < 2 or resource[1] not in _ROUTINE_ACTIONS_API_RESOURCES
     if resource[0] == "branches" and "protection" in resource:
         return True
     if resource[0] in {"collaborators", "hooks"}:
