@@ -1,5 +1,4 @@
 name: Publish to PyPI
-
 on:
   workflow_dispatch:
     inputs:
@@ -20,14 +19,11 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main, "release/3.1"]
-
 permissions:
   contents: read
-
 concurrency:
   group: hol-guard-publish-${{ github.ref }}
   cancel-in-progress: false
-
 jobs:
   build:
     name: Build + Verify
@@ -198,7 +194,6 @@ jobs:
           name: release-toolchain-sbom
           path: release-metadata/*.cdx.json
           if-no-files-found: error
-
   build-alpha:
     name: Build + test 3.1 alpha
     if: >-
@@ -207,6 +202,9 @@ jobs:
     uses: ./.github/workflows/publish-alpha.yml
     with:
       alpha_version: ${{ github.event.inputs.alpha_version || '' }}
+      git_ref: ${{ github.ref }}
+      pr_number: ${{ github.event.pull_request.number || 0 }}
+      run_release_tests: ${{ github.event_name == 'workflow_dispatch' }}
     permissions:
       contents: read
 
@@ -262,7 +260,9 @@ jobs:
 
   publish-testpypi:
     name: Publish to TestPyPI (Manual)
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/release/3.1' && github.event.inputs.publish_target == 'testpypi') ||
+      (github.event_name == 'pull_request' && github.base_ref != 'release/3.1' && github.event.pull_request.head.repo.full_name == github.repository)
     needs: build
     runs-on: ubuntu-latest
     environment: testpypi

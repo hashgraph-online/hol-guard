@@ -19,6 +19,8 @@ class AlphaRelease:
 def validate_alpha_release(version_text: str, git_ref: str) -> AlphaRelease:
     if git_ref != ALPHA_BRANCH:
         raise ValueError(f"Alpha releases must run from {ALPHA_BRANCH}")
+    if not version_text.strip():
+        raise ValueError("Alpha releases require an explicit version such as 3.1.0a1")
 
     version = Version(version_text)
     if (

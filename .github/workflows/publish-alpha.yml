@@ -8,6 +8,17 @@ on:
         required: false
         default: ""
         type: string
+      git_ref:
+        required: true
+        type: string
+      pr_number:
+        required: false
+        default: 0
+        type: number
+      run_release_tests:
+        required: false
+        default: false
+        type: boolean
     outputs:
       version:
         description: "Computed alpha package version"
@@ -52,15 +63,18 @@ jobs:
         id: version
         env:
           ALPHA_VERSION: ${{ inputs.alpha_version }}
-          EVENT_NAME: ${{ github.event_name }}
-          GIT_REF: ${{ github.ref }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GIT_REF: ${{ inputs.git_ref }}
+          PR_NUMBER: ${{ inputs.pr_number }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           RUN_NUMBER: ${{ github.run_number }}
         run: |
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+          if [[ -n "$ALPHA_VERSION" ]]; then
             VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py --version "$ALPHA_VERSION" --git-ref "$GIT_REF")
           else
+            if [[ "$PR_NUMBER" -le 0 ]]; then
+              echo "An explicit alpha_version is required for a public alpha release" >&2
+              exit 1
+            fi
             VERSION=$(PR_NUMBER="$PR_NUMBER" RUN_NUMBER="$RUN_NUMBER" RUN_ATTEMPT="$RUN_ATTEMPT" python - <<'PY'
           import os
 
@@ -106,7 +120,7 @@ jobs:
 
   release-tests:
     name: Alpha release tests (${{ matrix.os }})
-    if: github.event_name == 'workflow_dispatch'
+    if: inputs.run_release_tests
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

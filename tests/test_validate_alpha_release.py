@@ -40,13 +40,19 @@ def test_rejects_alpha_release_from_any_other_branch() -> None:
         validate_alpha_release("3.1.0a1", "refs/heads/main")
 
 
+def test_rejects_empty_alpha_version_with_clear_error() -> None:
+    with pytest.raises(ValueError, match="explicit version"):
+        validate_alpha_release("", ALPHA_BRANCH)
+
+
+@pytest.mark.parametrize("version", ["3.1.0", ""])
 def test_cli_reports_invalid_alpha_without_traceback(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], version: str
 ) -> None:
     monkeypatch.setattr(
         sys,
         "argv",
-        ["validate_alpha_release.py", "--version", "3.1.0", "--git-ref", ALPHA_BRANCH],
+        ["validate_alpha_release.py", "--version", version, "--git-ref", ALPHA_BRANCH],
     )
 
     assert main() == 1
@@ -80,7 +86,9 @@ def test_release_workflow_keeps_stable_and_3_1_alpha_channels_isolated() -> None
     alpha = yaml.safe_load((root / ".github/workflows/publish-alpha.yml").read_text(encoding="utf-8"))
     alpha_on = alpha.get(True) or alpha.get("on")
     assert alpha_on["workflow_call"]["inputs"]["alpha_version"]["required"] is False
+    assert alpha_on["workflow_call"]["inputs"]["run_release_tests"]["type"] == "boolean"
     assert set(alpha["jobs"]) == {"build", "release-tests"}
+    assert alpha["jobs"]["release-tests"]["if"] == "inputs.run_release_tests"
     alpha_matrix = alpha["jobs"]["release-tests"]["strategy"]["matrix"]["os"]
     assert alpha_matrix == ["ubuntu-latest", "windows-latest"]
 
