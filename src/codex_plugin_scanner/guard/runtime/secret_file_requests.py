@@ -1286,7 +1286,7 @@ def _github_shell_capability_assessment(
             if command_name != "gh" or command_index is None:
                 continue
             assessment = _classify_github_shell_segment(segment, command_index)
-            if assessment.capability not in {"read_local", "read_remote"}:
+            if assessment.capability not in {"read_local", "read_remote", "maintain_remote"}:
                 return assessment
             contains_github_read = True
         if not contains_github_read or len(pipeline) < 2:

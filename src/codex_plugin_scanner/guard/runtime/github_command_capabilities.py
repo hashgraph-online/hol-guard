@@ -15,6 +15,7 @@ from typing import Literal
 GitHubCommandCapability = Literal[
     "read_local",
     "read_remote",
+    "maintain_remote",
     "mutate_remote",
     "write_local",
     "unknown",
@@ -75,6 +76,8 @@ _MUTATING_SUBCOMMANDS: dict[str, frozenset[str]] = {
     "run": frozenset({"cancel", "delete", "rerun"}),
     "workflow": frozenset({"disable", "enable", "run"}),
 }
+_MAINTENANCE_SUBCOMMANDS: dict[str, frozenset[str]] = {"pr": frozenset({"merge"})}
+_MAINTENANCE_GRAPHQL_MUTATIONS = frozenset({"resolveReviewThread", "unresolveReviewThread"})
 
 _ALWAYS_MUTATING_GROUPS = frozenset({"cache", "codespace", "gpg-key", "label", "secret", "ssh-key", "variable"})
 _READ_ONLY_TOP_LEVEL = frozenset({"search", "status"})
@@ -166,6 +169,12 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
                 "read_remote",
                 "github.command.proven-read",
                 "The command is a known read-only GitHub operation.",
+            )
+        if subcommand in _MAINTENANCE_SUBCOMMANDS.get(top_level, frozenset()):
+            return _assessment(
+                "maintain_remote",
+                "github.command.pr-maintenance",
+                "The command performs a statically proven pull-request maintenance operation.",
             )
         if subcommand in _MUTATING_SUBCOMMANDS[top_level]:
             return _assessment(
@@ -391,13 +400,95 @@ def _classify_graphql_document(document: str) -> GitHubCommandAssessment:
             "Multiple GraphQL operations or a batched document cannot be classified automatically.",
         )
     operation = operations[0]
-    if operation in {"mutation", "subscription"}:
+    if operation == "mutation":
+        root_fields = _graphql_root_fields(sanitized)
+        if root_fields and frozenset(root_fields) <= _MAINTENANCE_GRAPHQL_MUTATIONS:
+            return _assessment(
+                "maintain_remote",
+                "github.graphql.proven-maintenance",
+                "The GraphQL mutation performs only statically proven review-thread maintenance.",
+            )
+        return _assessment(
+            "mutate_remote",
+            "github.graphql.remote-mutation",
+            "The GraphQL operation can change GitHub-hosted state.",
+        )
+    if operation == "subscription":
         return _assessment(
             "mutate_remote",
             "github.graphql.remote-mutation",
             "The GraphQL operation can change or subscribe to GitHub-hosted state.",
         )
     return _assessment("read_remote", "github.graphql.proven-query", "The GraphQL document is a single static query.")
+
+
+def _graphql_root_fields(document: str) -> tuple[str, ...] | None:
+    selection_start = _graphql_selection_start(document)
+    if selection_start is None:
+        return None
+    fields: list[str] = []
+    depth = 1
+    parenthesis_depth = 0
+    index = selection_start + 1
+    while index < len(document) and depth > 0:
+        character = document[index]
+        if character == "(":
+            parenthesis_depth += 1
+            index += 1
+            continue
+        if character == ")":
+            if parenthesis_depth == 0:
+                return None
+            parenthesis_depth -= 1
+            index += 1
+            continue
+        if character == "{":
+            depth += 1
+            index += 1
+            continue
+        if character == "}":
+            depth -= 1
+            index += 1
+            continue
+        if depth != 1 or parenthesis_depth != 0 or character.isspace() or character == ",":
+            index += 1
+            continue
+        if document.startswith("...", index):
+            return None
+        name_match = _GRAPHQL_NAME.match(document, index)
+        if name_match is None:
+            return None
+        field_name = name_match.group(0)
+        index = name_match.end()
+        while index < len(document) and document[index].isspace():
+            index += 1
+        if index < len(document) and document[index] == ":":
+            index += 1
+            while index < len(document) and document[index].isspace():
+                index += 1
+            field_match = _GRAPHQL_NAME.match(document, index)
+            if field_match is None:
+                return None
+            field_name = field_match.group(0)
+            index = field_match.end()
+        fields.append(field_name)
+    if depth != 0 or parenthesis_depth != 0:
+        return None
+    return tuple(fields)
+
+
+def _graphql_selection_start(document: str) -> int | None:
+    parenthesis_depth = 0
+    for index, character in enumerate(document):
+        if character == "(":
+            parenthesis_depth += 1
+        elif character == ")":
+            if parenthesis_depth == 0:
+                return None
+            parenthesis_depth -= 1
+        elif character == "{" and parenthesis_depth == 0:
+            return index
+    return None
 
 
 def _top_level_graphql_operations(document: str) -> list[str] | None:
