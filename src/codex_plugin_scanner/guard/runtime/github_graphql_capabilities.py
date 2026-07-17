@@ -19,6 +19,7 @@ _HIGH_IMPACT_MUTATIONS = frozenset(
         "deleteBranchProtectionRule",
         "deleteRepository",
         "deleteRepositoryRuleset",
+        "deleteRelease",
         "transferRepository",
         "unarchiveRepository",
         "updateRef",
@@ -28,7 +29,7 @@ _HIGH_IMPACT_MUTATIONS = frozenset(
     }
 )
 _HIGH_IMPACT_MUTATION_NAME = re.compile(
-    r"(?:credential|deploykey|enterprise|hook|ipallowlist|secret|signingkey|token)",
+    r"(?:credential|deploykey|enterprise|gpg.*key|hook|ipallowlist|secret|signingkey|ssh.*key|token)",
     re.IGNORECASE,
 )
 
@@ -69,8 +70,10 @@ def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
     operation = operations[0]
     if operation == "mutation":
         root_fields = _root_fields(sanitized)
-        if not has_fragment_definition and root_fields and not any(
-            _mutation_is_high_impact(field) for field in root_fields
+        if (
+            not has_fragment_definition
+            and root_fields
+            and not any(_mutation_is_high_impact(field) for field in root_fields)
         ):
             return (
                 "maintain_remote",
@@ -92,7 +95,11 @@ def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
 
 
 def _mutation_is_high_impact(field: str) -> bool:
-    return field in _HIGH_IMPACT_MUTATIONS or _HIGH_IMPACT_MUTATION_NAME.search(field) is not None
+    return (
+        field.startswith("delete")
+        or field in _HIGH_IMPACT_MUTATIONS
+        or _HIGH_IMPACT_MUTATION_NAME.search(field) is not None
+    )
 
 
 def _root_fields(document: str) -> tuple[str, ...] | None:

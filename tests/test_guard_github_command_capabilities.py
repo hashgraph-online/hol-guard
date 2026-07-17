@@ -98,6 +98,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "github.graphql.remote-mutation",
         ),
         (
+            ("api", "graphql", "-f", "query=mutation { deleteIssue(input: {}) { clientMutationId } }"),
+            "mutate_remote",
+            "github.graphql.remote-mutation",
+        ),
+        (
+            ("api", "repos/example/project/issues/comments/123", "-X", "DELETE"),
+            "mutate_remote",
+            "github.api.high-impact-mutation",
+        ),
+        (
             (
                 "api",
                 "graphql",

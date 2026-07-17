@@ -336,6 +336,8 @@ def _classify_api(args: Sequence[str]) -> GitHubCommandAssessment:
 def _api_request_is_high_impact(parsed: _ApiArguments, *, method: str) -> bool:
     endpoint = parsed.endpoint.strip("/").lower()
     segments = tuple(segment for segment in endpoint.split("/") if segment)
+    if method == "DELETE":
+        return True
     if len(segments) < 3 or segments[0] != "repos":
         return any(segment in {"secrets", "keys"} for segment in segments)
     resource = segments[3:]
@@ -348,8 +350,6 @@ def _api_request_is_high_impact(parsed: _ApiArguments, *, method: str) -> bool:
     if resource[0] == "branches" and "protection" in resource:
         return True
     if resource[0] in {"collaborators", "hooks"}:
-        return True
-    if resource[0] == "releases" and method == "DELETE":
         return True
     return resource[0] == "transfer"
 

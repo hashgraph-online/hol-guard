@@ -78,7 +78,7 @@ if before.get("installed_managers"):
 after = package_shim_status(context)
 print(json.dumps({"before": before, "repair": repair, "after": after}))
 """.strip()
-_DAEMON_REFRESH_TIMEOUT_SECONDS = 20.0
+_DAEMON_REFRESH_TIMEOUT_SECONDS = 35.0
 _DAEMON_REFRESH_SCRIPT = """
 from __future__ import annotations
 
