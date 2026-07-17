@@ -123,7 +123,6 @@ _ROUTINE_REPO_API_RESOURCES = frozenset(
         "check-runs",
         "check-suites",
         "comments",
-        "contents",
         "deployments",
         "dispatches",
         "git",

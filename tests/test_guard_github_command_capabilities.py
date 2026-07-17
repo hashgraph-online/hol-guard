@@ -95,6 +95,20 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "github.api.high-impact-mutation",
         ),
         (
+            (
+                "api",
+                "repos/example/project/contents/.github/workflows/ci.yml",
+                "-X",
+                "PUT",
+                "-f",
+                "message=update workflow",
+                "-f",
+                "content=ZWNobyBvaw==",
+            ),
+            "mutate_remote",
+            "github.api.high-impact-mutation",
+        ),
+        (
             ("api", "graphql", "-f", "query=mutation { updateRepository(input: {}) { repository { id } } }"),
             "mutate_remote",
             "github.graphql.remote-mutation",
