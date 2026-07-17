@@ -162,6 +162,18 @@ def _run_guard_update_command(
         now=_now(),
         wheel=getattr(args, "wheel", None),
     )
+    if not dry_run and exit_code == 0 and context is not None:
+        from .update_commands import refresh_guard_daemon_after_update
+
+        daemon_refresh, daemon_refresh_note = refresh_guard_daemon_after_update(context)
+        if daemon_refresh is not None:
+            payload["daemon_refresh"] = daemon_refresh
+        if daemon_refresh_note is not None:
+            notes_value = payload.get("notes")
+            note_items = notes_value if isinstance(notes_value, list) else []
+            notes = [str(item) for item in note_items if isinstance(item, str)]
+            notes.append(daemon_refresh_note)
+            payload["notes"] = notes
     if update_store_error is not None:
         notes_value = payload.get("notes")
         notes = [str(item) for item in (notes_value if isinstance(notes_value, list) else []) if isinstance(item, str)]

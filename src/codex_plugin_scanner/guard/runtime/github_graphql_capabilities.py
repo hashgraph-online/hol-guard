@@ -10,7 +10,27 @@ GitHubGraphQLAssessment = tuple[GitHubGraphQLCapability, str, str]
 
 _GRAPHQL_NAME = re.compile(r"\b[_A-Za-z][_0-9A-Za-z]*\b")
 _GRAPHQL_ALIAS = re.compile(r"\b(?P<name>[_A-Za-z][_0-9A-Za-z]*)\s*:")
-_MAINTENANCE_MUTATIONS = frozenset({"resolveReviewThread", "unresolveReviewThread"})
+_HIGH_IMPACT_MUTATIONS = frozenset(
+    {
+        "archiveRepository",
+        "createBranchProtectionRule",
+        "createRepositoryRuleset",
+        "deleteRef",
+        "deleteBranchProtectionRule",
+        "deleteRepository",
+        "deleteRepositoryRuleset",
+        "transferRepository",
+        "unarchiveRepository",
+        "updateRef",
+        "updateBranchProtectionRule",
+        "updateRepository",
+        "updateRepositoryRuleset",
+    }
+)
+_HIGH_IMPACT_MUTATION_NAME = re.compile(
+    r"(?:credential|deploykey|enterprise|hook|ipallowlist|secret|signingkey|token)",
+    re.IGNORECASE,
+)
 
 
 def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
@@ -49,11 +69,13 @@ def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
     operation = operations[0]
     if operation == "mutation":
         root_fields = _root_fields(sanitized)
-        if not has_fragment_definition and root_fields and frozenset(root_fields) <= _MAINTENANCE_MUTATIONS:
+        if not has_fragment_definition and root_fields and not any(
+            _mutation_is_high_impact(field) for field in root_fields
+        ):
             return (
                 "maintain_remote",
-                "github.graphql.proven-maintenance",
-                "The GraphQL mutation performs only statically proven review-thread maintenance.",
+                "github.graphql.routine-mutation",
+                "The GraphQL mutation contains only statically understood routine root fields.",
             )
         return (
             "mutate_remote",
@@ -67,6 +89,10 @@ def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
             "The GraphQL operation can change or subscribe to GitHub-hosted state.",
         )
     return "read_remote", "github.graphql.proven-query", "The GraphQL document is a single static query."
+
+
+def _mutation_is_high_impact(field: str) -> bool:
+    return field in _HIGH_IMPACT_MUTATIONS or _HIGH_IMPACT_MUTATION_NAME.search(field) is not None
 
 
 def _root_fields(document: str) -> tuple[str, ...] | None:

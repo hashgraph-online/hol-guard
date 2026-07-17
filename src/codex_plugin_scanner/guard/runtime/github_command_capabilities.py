@@ -1,8 +1,8 @@
 """Classify GitHub CLI commands by their observable security capability.
 
-The classifier intentionally uses positive allowlists for prompt-free reads.  A
-new or aliased ``gh`` command therefore cannot inherit read-only status merely
-because it is followed by an output formatter in a shell pipeline.
+The classifier uses reviewed command sets for prompt-free reads and routine
+mutations. A new or aliased ``gh`` command therefore cannot inherit trusted
+status merely because it is followed by an output formatter in a shell pipeline.
 """
 
 from __future__ import annotations
@@ -78,7 +78,14 @@ _MUTATING_SUBCOMMANDS: dict[str, frozenset[str]] = {
 }
 _MAINTENANCE_SUBCOMMANDS: dict[str, frozenset[str]] = {"pr": frozenset({"merge"})}
 
-_ALWAYS_MUTATING_GROUPS = frozenset({"cache", "codespace", "gpg-key", "label", "secret", "ssh-key", "variable"})
+_HIGH_IMPACT_SUBCOMMANDS: dict[str, frozenset[str]] = {
+    "release": frozenset({"delete"}),
+    "repo": frozenset({"archive", "delete", "rename"}),
+    "workflow": frozenset({"disable"}),
+}
+
+_HIGH_IMPACT_GROUPS = frozenset({"gpg-key", "secret", "ssh-key"})
+_ROUTINE_MUTATING_GROUPS = frozenset({"cache", "codespace", "label", "variable"})
 _READ_ONLY_TOP_LEVEL = frozenset({"search", "status"})
 _LOCAL_TOP_LEVEL = frozenset({"completion", "help", "version"})
 _LOCAL_AUTH_SUBCOMMANDS = frozenset({"status", "token"})
@@ -145,11 +152,17 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
             "github.command.proven-read",
             "The command is a known read-only GitHub operation.",
         )
-    if top_level in _ALWAYS_MUTATING_GROUPS:
+    if top_level in _HIGH_IMPACT_GROUPS:
         return _assessment(
             "mutate_remote",
-            "github.command.remote-mutation",
-            "The command group can change GitHub-hosted state.",
+            "github.command.high-impact-mutation",
+            "The command changes GitHub credentials or secrets.",
+        )
+    if top_level in _ROUTINE_MUTATING_GROUPS:
+        return _assessment(
+            "maintain_remote",
+            "github.command.routine-mutation",
+            "The command performs a known routine GitHub mutation.",
         )
     if top_level in _READ_ONLY_SUBCOMMANDS:
         subcommand = _group_subcommand(normalized[1:])
@@ -167,9 +180,13 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
                 "github.command.proven-read",
                 "The command is a known read-only GitHub operation.",
             )
-        if subcommand in _MAINTENANCE_SUBCOMMANDS.get(top_level, frozenset()) and not any(
-            token == "--admin" or token.startswith("--admin=") for token in normalized[2:]
-        ):
+        if _is_high_impact_command(top_level, subcommand, normalized[2:]):
+            return _assessment(
+                "mutate_remote",
+                "github.command.high-impact-mutation",
+                "The command performs an explicitly high-impact GitHub mutation.",
+            )
+        if subcommand in _MAINTENANCE_SUBCOMMANDS.get(top_level, frozenset()):
             return _assessment(
                 "maintain_remote",
                 "github.command.pr-maintenance",
@@ -177,9 +194,9 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
             )
         if subcommand in _MUTATING_SUBCOMMANDS[top_level]:
             return _assessment(
-                "mutate_remote",
-                "github.command.remote-mutation",
-                "The command can change GitHub-hosted state.",
+                "maintain_remote",
+                "github.command.routine-mutation",
+                "The command performs a known routine GitHub mutation.",
             )
         return _assessment(
             "unknown",
@@ -191,6 +208,22 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
         "github.command.extension-or-alias",
         "The GitHub CLI command may be an extension or alias and cannot be classified statically.",
     )
+
+
+def _is_high_impact_command(top_level: str, subcommand: str, args: Sequence[str]) -> bool:
+    if subcommand in _HIGH_IMPACT_SUBCOMMANDS.get(top_level, frozenset()):
+        return True
+    if top_level == "pr" and subcommand == "merge":
+        return _has_option(args, "--admin")
+    if top_level == "repo" and subcommand == "edit":
+        return _has_option(args, "--visibility")
+    if top_level == "repo" and subcommand == "sync":
+        return _has_option(args, "--force")
+    return False
+
+
+def _has_option(args: Sequence[str], option: str) -> bool:
+    return any(token == option or token.startswith(f"{option}=") for token in args)
 
 
 def _strip_global_options(args: list[str]) -> list[str]:
@@ -265,14 +298,20 @@ def _classify_api(args: Sequence[str]) -> GitHubCommandAssessment:
             "An HTTP method-override header prevents reliable API capability classification.",
         )
     method = parsed.method.upper() if parsed.method is not None else None
-    if method is not None and method not in {"GET", "HEAD"}:
-        return _assessment(
-            "mutate_remote",
-            "github.api.mutating-method",
-            "The GitHub API request uses a method that can change remote state.",
-        )
     if parsed.endpoint.lower() == "graphql":
         return _classify_graphql(parsed, method=method)
+    if method is not None and method not in {"GET", "HEAD"}:
+        if _api_request_is_high_impact(parsed, method=method):
+            return _assessment(
+                "mutate_remote",
+                "github.api.high-impact-mutation",
+                "The GitHub API request performs an explicitly high-impact operation.",
+            )
+        return _assessment(
+            "maintain_remote",
+            "github.api.routine-mutation",
+            "The GitHub API request performs a statically understood routine mutation.",
+        )
     if any(_field_value_is_external(value) for _name, value in parsed.fields):
         return _assessment(
             "unknown",
@@ -280,12 +319,39 @@ def _classify_api(args: Sequence[str]) -> GitHubCommandAssessment:
             "A GitHub API field loaded from external data cannot be classified statically.",
         )
     if parsed.fields and method is None:
+        if _api_request_is_high_impact(parsed, method="POST"):
+            return _assessment(
+                "mutate_remote",
+                "github.api.high-impact-mutation",
+                "The GitHub API request performs an explicitly high-impact operation.",
+            )
         return _assessment(
-            "mutate_remote",
-            "github.api.implicit-write-method",
-            "GitHub API fields select a write-capable request method unless GET is explicit.",
+            "maintain_remote",
+            "github.api.routine-mutation",
+            "GitHub API fields select a statically understood routine mutation.",
         )
     return _assessment("read_remote", "github.api.proven-get", "The GitHub API request is a statically proven read.")
+
+
+def _api_request_is_high_impact(parsed: _ApiArguments, *, method: str) -> bool:
+    endpoint = parsed.endpoint.strip("/").lower()
+    segments = tuple(segment for segment in endpoint.split("/") if segment)
+    if len(segments) < 3 or segments[0] != "repos":
+        return any(segment in {"secrets", "keys"} for segment in segments)
+    resource = segments[3:]
+    if not resource:
+        return method in {"DELETE", "PATCH"}
+    if resource[0] in {"keys", "rulesets", "secrets"}:
+        return True
+    if resource[:2] in {("actions", "permissions"), ("git", "refs")}:
+        return True
+    if resource[0] == "branches" and "protection" in resource:
+        return True
+    if resource[0] in {"collaborators", "hooks"}:
+        return True
+    if resource[0] == "releases" and method == "DELETE":
+        return True
+    return resource[0] == "transfer"
 
 
 def _parse_api_arguments(args: Sequence[str]) -> _ApiArguments | GitHubCommandAssessment:

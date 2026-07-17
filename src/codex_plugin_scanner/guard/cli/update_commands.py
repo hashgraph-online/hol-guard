@@ -78,6 +78,38 @@ if before.get("installed_managers"):
 after = package_shim_status(context)
 print(json.dumps({"before": before, "repair": repair, "after": after}))
 """.strip()
+_DAEMON_REFRESH_TIMEOUT_SECONDS = 20.0
+_DAEMON_REFRESH_SCRIPT = """
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+from codex_plugin_scanner.guard.daemon.manager import (
+    clear_guard_daemon_state,
+    ensure_guard_daemon_after_update,
+    repair_approval_center_locator,
+    retire_all_guard_daemons_for_home,
+)
+
+payload = json.loads(sys.stdin.read())
+guard_home = Path(payload["guard_home"]).expanduser().resolve()
+state_path = guard_home / "daemon-state.json"
+if not state_path.is_file():
+    print(json.dumps({"status": "not_running"}))
+    raise SystemExit(0)
+try:
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError):
+    state = {}
+preferred_port = state.get("port") if isinstance(state.get("port"), int) else None
+retired = retire_all_guard_daemons_for_home(guard_home)
+clear_guard_daemon_state(guard_home)
+repair_approval_center_locator(guard_home)
+daemon_url = ensure_guard_daemon_after_update(guard_home, preferred_port=preferred_port)
+print(json.dumps({"status": "restarted", "retired": retired, "daemon_url": daemon_url}))
+""".strip()
 
 
 def _read_direct_url_dir_info(direct_url: dict[str, object] | None) -> dict[str, object]:
@@ -1224,6 +1256,42 @@ def _refresh_package_shims_after_update(
     if not installed_managers:
         return None, None
     return refresh_payload, _package_shim_refresh_note(refresh_payload)
+
+
+def refresh_guard_daemon_after_update(context: HarnessContext) -> tuple[dict[str, object] | None, str | None]:
+    """Restart a resident daemon in a fresh interpreter after a CLI package update."""
+
+    if not (context.guard_home / "daemon-state.json").is_file():
+        return None, None
+    try:
+        refresh_env = dict(os.environ)
+        refresh_env.pop("PYTHONPATH", None)
+        result = subprocess.run(
+            [sys.executable, *_trusted_python_flags(), "-c", _DAEMON_REFRESH_SCRIPT],
+            input=json.dumps({"guard_home": str(context.guard_home)}),
+            capture_output=True,
+            check=False,
+            cwd=str(_trusted_import_root()),
+            env=refresh_env,
+            text=True,
+            timeout=_DAEMON_REFRESH_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        return None, f"Could not restart the Guard daemon after update: {redact_sensitive_text(str(error))}"
+    stdout = _normalize_output_text(result.stdout)
+    stderr = _normalize_output_text(result.stderr)
+    if result.returncode != 0:
+        details = stderr or stdout or f"exit code {result.returncode}"
+        return None, f"Could not restart the Guard daemon after update: {details}"
+    try:
+        payload = json.loads(stdout) if stdout else {}
+    except json.JSONDecodeError as error:
+        return None, f"Could not parse the Guard daemon restart result after update: {error}"
+    if not isinstance(payload, dict):
+        return None, "Could not parse the Guard daemon restart result after update: invalid payload"
+    status = payload.get("status")
+    note = "Restarted the Guard daemon to load the updated package." if status == "restarted" else None
+    return payload, note
 
 
 def _package_shim_manifest_has_installed_managers(context: HarnessContext) -> bool:
