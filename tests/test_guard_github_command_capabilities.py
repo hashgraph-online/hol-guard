@@ -59,6 +59,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ),
         (
             ("api", "graphql", "-f", "query=mutation { updateThing(input: {}) { id } }"),
+            "mutate_remote",
+            "github.graphql.remote-mutation",
+        ),
+        (
+            ("api", "graphql", "-f", "query=mutation { closeIssue(input: {}) { issue { id } } }"),
             "maintain_remote",
             "github.graphql.routine-mutation",
         ),
@@ -106,6 +111,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ),
         (
             ("api", "graphql", "-f", "query=mutation { deleteIssue(input: {}) { clientMutationId } }"),
+            "mutate_remote",
+            "github.graphql.remote-mutation",
+        ),
+        (
+            (
+                "api",
+                "graphql",
+                "-f",
+                "query=mutation { removeOutsideCollaborator(input: {}) { clientMutationId } }",
+            ),
             "mutate_remote",
             "github.graphql.remote-mutation",
         ),

@@ -10,28 +10,43 @@ GitHubGraphQLAssessment = tuple[GitHubGraphQLCapability, str, str]
 
 _GRAPHQL_NAME = re.compile(r"\b[_A-Za-z][_0-9A-Za-z]*\b")
 _GRAPHQL_ALIAS = re.compile(r"\b(?P<name>[_A-Za-z][_0-9A-Za-z]*)\s*:")
-_HIGH_IMPACT_MUTATIONS = frozenset(
+_ROUTINE_MUTATIONS = frozenset(
     {
-        "archiveRepository",
-        "createBranchProtectionRule",
-        "createRef",
-        "createRepositoryRuleset",
-        "deleteRef",
-        "deleteBranchProtectionRule",
-        "deleteRepository",
-        "deleteRepositoryRuleset",
-        "deleteRelease",
-        "transferRepository",
-        "unarchiveRepository",
-        "updateRef",
-        "updateBranchProtectionRule",
-        "updateRepository",
-        "updateRepositoryRuleset",
+        "addComment",
+        "addProjectV2DraftIssue",
+        "addProjectV2ItemById",
+        "addPullRequestReview",
+        "addPullRequestReviewComment",
+        "addPullRequestReviewThread",
+        "closeDiscussion",
+        "closeIssue",
+        "convertPullRequestToDraft",
+        "createDiscussion",
+        "createIssue",
+        "createPullRequest",
+        "disablePullRequestAutoMerge",
+        "enablePullRequestAutoMerge",
+        "markDiscussionCommentAsAnswer",
+        "markPullRequestReadyForReview",
+        "mergePullRequest",
+        "minimizeComment",
+        "reopenDiscussion",
+        "reopenIssue",
+        "resolveReviewThread",
+        "submitPullRequestReview",
+        "unmarkDiscussionCommentAsAnswer",
+        "unminimizeComment",
+        "unresolveReviewThread",
+        "updateDiscussion",
+        "updateDiscussionComment",
+        "updateIssue",
+        "updateIssueComment",
+        "updateProjectV2ItemFieldValue",
+        "updatePullRequest",
+        "updatePullRequestBranch",
+        "updatePullRequestReview",
+        "updatePullRequestReviewComment",
     }
-)
-_HIGH_IMPACT_MUTATION_NAME = re.compile(
-    r"(?:credential|deploykey|enterprise|gpg.*key|hook|ipallowlist|secret|signingkey|ssh.*key|token)",
-    re.IGNORECASE,
 )
 
 
@@ -71,11 +86,7 @@ def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
     operation = operations[0]
     if operation == "mutation":
         root_fields = _root_fields(sanitized)
-        if (
-            not has_fragment_definition
-            and root_fields
-            and not any(_mutation_is_high_impact(field) for field in root_fields)
-        ):
+        if not has_fragment_definition and root_fields and frozenset(root_fields) <= _ROUTINE_MUTATIONS:
             return (
                 "maintain_remote",
                 "github.graphql.routine-mutation",
@@ -93,14 +104,6 @@ def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
             "The GraphQL operation can change or subscribe to GitHub-hosted state.",
         )
     return "read_remote", "github.graphql.proven-query", "The GraphQL document is a single static query."
-
-
-def _mutation_is_high_impact(field: str) -> bool:
-    return (
-        field.startswith("delete")
-        or field in _HIGH_IMPACT_MUTATIONS
-        or _HIGH_IMPACT_MUTATION_NAME.search(field) is not None
-    )
 
 
 def _root_fields(document: str) -> tuple[str, ...] | None:
