@@ -215,6 +215,19 @@ def test_macos_activation_preserves_spaced_home_paths() -> None:
     assert "awk '{print $2}'" not in script
 
 
+def test_platform_adapters_split_user_lifecycle_from_machine_coverage() -> None:
+    macos_register = Path("scripts/mdm/macos/register-current-user-coverage.sh").read_text(encoding="utf-8")
+    macos_deactivate = Path("scripts/mdm/macos/deactivate-user.sh").read_text(encoding="utf-8")
+    windows_register = Path("scripts/mdm/windows/register-user-coverage.ps1").read_text(encoding="utf-8")
+    windows_unregister = Path("scripts/mdm/windows/unregister-user-coverage.ps1").read_text(encoding="utf-8")
+
+    assert '[[ "$(id -u)" -eq 0 ]] || exit 3' in macos_register
+    assert "mdm harness-coverage-register" in macos_register
+    assert macos_deactivate.index("mdm deactivate") < macos_deactivate.index("mdm harness-coverage-unregister")
+    assert "mdm harness-coverage-register" in windows_register
+    assert "mdm harness-coverage-unregister" in windows_unregister
+
+
 def test_macos_signed_package_requires_inner_application_signature() -> None:
     script = Path("scripts/mdm/macos/build-pkg.sh").read_text(encoding="utf-8")
 

@@ -20,7 +20,9 @@ from ..mdm.lifecycle import (
     authorize_deactivation,
     deactivate_user,
     machine_status,
+    register_user_coverage,
     repair_user,
+    unregister_user_coverage,
     user_status,
     validate_user_home,
 )
@@ -94,13 +96,25 @@ def _run_guard_mdm_command(
         else:
             if command == "status" and not getattr(args, "home", None):
                 raise ValueError("mdm_home_required_for_user_scope")
-            home = validate_user_home(str(args.home), getattr(args, "user", None))
+            machine_coverage_command = command in {
+                "harness-coverage-register",
+                "harness-coverage-unregister",
+            }
+            home = validate_user_home(
+                str(args.home),
+                getattr(args, "user", None),
+                require_user_context=not machine_coverage_command,
+            )
             if command == "status":
                 payload = user_status(home)
             elif command == "activate":
                 payload = activate_user(home, str(args.user))
             elif command == "repair":
                 payload = repair_user(home, str(args.user))
+            elif command == "harness-coverage-register":
+                payload = register_user_coverage(home, str(args.user))
+            elif command == "harness-coverage-unregister":
+                payload = unregister_user_coverage(home, str(args.user))
             elif command == "deactivate":
                 if not args.authorization_file:
                     raise PermissionError("mdm_removal_authorization_required")
