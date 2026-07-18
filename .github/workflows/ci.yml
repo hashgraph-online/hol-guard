@@ -69,6 +69,21 @@ jobs:
           mapfile -t files <<< "$files_output"
           uv run --no-sync pytest "${files[@]}" --tb=short
 
+  ci-python-312:
+    name: ci (3.12)
+    if: always()
+    needs: [quality, tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verify Python CI dependencies
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          TESTS_RESULT: ${{ needs.tests.result }}
+        run: |
+          test "$QUALITY_RESULT" = "success"
+          test "$TESTS_RESULT" = "success"
+
   dashboard:
     runs-on: ubuntu-latest
     steps:
