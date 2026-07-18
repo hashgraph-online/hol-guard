@@ -1,5 +1,17 @@
 export type DecisionScope = "artifact" | "workspace" | "publisher" | "harness" | "global";
 
+export const GUARD_ACTIONS = [
+  "allow",
+  "warn",
+  "review",
+  "require-reapproval",
+  "sandbox-required",
+  "block",
+] as const;
+
+/** The authoritative enforcement actions emitted by Guard. */
+export type GuardAction = (typeof GUARD_ACTIONS)[number];
+
 export const GUARD_ACTION_TYPES = [
   "prompt",
   "shell_command",
@@ -88,6 +100,9 @@ export type GuardScannerEvidence =
   | PackageExecutionContextEvidence;
 
 export type GuardDecisionV2 = {
+  /** Exact six-valued enforcement action. */
+  guard_action: GuardAction;
+  /** Legacy product-facing projection retained for copy compatibility. */
   action: GuardDecisionV2Action;
   reason: string;
   user_title: string;
@@ -118,6 +133,12 @@ export type GuardActionEnvelope = {
   mcp_tool: string | null;
   package_manager: string | null;
   package_name: string | null;
+  package_intent_kind?: string | null;
+  package_targets?: string[];
+  /** Exact Guard action projected immediately before execution. */
+  pre_execution_result?: GuardAction | null;
+  /** Legacy receipt/approval projection when present. */
+  policy_action?: GuardAction | null;
   script_name: string | null;
   raw_payload_redacted: Record<string, unknown>;
 };
@@ -126,6 +147,7 @@ export type GuardHeadlineState =
   | "setup"
   | "protected"
   | "blocked"
+  | "needs_decision"
   | "local_only"
   | "connected";
 
@@ -137,7 +159,7 @@ export type GuardApprovalRequest = {
   artifact_type: string;
   artifact_hash: string;
   publisher: string | null;
-  policy_action: string;
+  policy_action: GuardAction;
   recommended_scope: DecisionScope;
   allowed_scopes?: DecisionScope[];
   risk_headline?: string;
@@ -162,6 +184,7 @@ export type GuardApprovalRequest = {
   resolved_at: string | null;
   action_envelope_json?: GuardActionEnvelope | null;
   decision_v2_json?: GuardDecisionV2 | null;
+  decision_contract_error?: string;
   fallback_cli_command?: string | null;
   raw_command_text?: string | null;
   action_identity?: string | null;
@@ -454,7 +477,7 @@ export type GuardReceipt = {
   harness: string;
   artifact_id: string;
   artifact_hash: string;
-  policy_decision: string;
+  policy_decision: GuardAction;
   capabilities_summary: string;
   changed_capabilities: string[];
   provenance_summary: string;
@@ -466,6 +489,7 @@ export type GuardReceipt = {
   diff_summary?: string | null;
   scanner_evidence?: GuardScannerEvidence[];
   action_envelope_json?: GuardActionEnvelope | null;
+  decision_contract_error?: string;
 };
 
 export type ReceiptScannerEvidence = NonNullable<GuardReceipt["scanner_evidence"]>[number];
@@ -717,8 +741,9 @@ export type GuardInventoryItem = {
   last_approved_at: string | null;
   removed_at: string | null;
   present: boolean;
-  last_policy_action: string;
+  last_policy_action: GuardAction;
   artifact_hash: string;
+  decision_contract_error?: string;
 };
 
 export type GuardApprovalGatePublicConfig = {

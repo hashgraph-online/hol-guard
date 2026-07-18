@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PureWindowsPath
 from typing import Literal, TypeGuard
 
+from ..action_lattice import is_action_bearing_key
 from ..redaction import redact_text
 from .secret_sensitivity import redacted_secret_path_context
 from .shell_command_wrappers import normalize_transparent_shell_command
@@ -208,13 +209,32 @@ class GuardActionEnvelope:
     def from_dict(cls, payload: Mapping[str, object]) -> GuardActionEnvelope:
         """Build an envelope from a persisted payload."""
 
+        for key in payload:
+            if not isinstance(key, str):
+                raise ValueError("Guard action envelope keys must be strings")
+            if is_action_bearing_key(key) and key not in {
+                "action_id",
+                "action_type",
+                "pre_execution_result",
+                "actionId",
+                "actionType",
+                "preExecutionResult",
+            }:
+                raise ValueError(f"Guard action envelope contains unknown action-bearing field: {key}")
+        action_id = _matching_aliased_value(payload, "action_id", "actionId")
+        action_type_value = _matching_aliased_value(payload, "action_type", "actionType")
+        pre_execution_result = _matching_aliased_value(
+            payload,
+            "pre_execution_result",
+            "preExecutionResult",
+        )
         schema_version = _required_int(payload, "schema_version")
         if schema_version != _SCHEMA_VERSION:
             raise ValueError(f"Guard action envelope schema_version {schema_version} is not supported.")
-        action_type = _required_action_type(payload.get("action_type"))
+        action_type = _required_action_type(action_type_value)
         return cls(
             schema_version=schema_version,
-            action_id=_string_value(payload.get("action_id")) or "",
+            action_id=_string_value(action_id) or "",
             harness=_required_string(payload, "harness"),
             event_name=_required_string(payload, "event_name"),
             action_type=action_type,
@@ -232,7 +252,7 @@ class GuardActionEnvelope:
             package_name=_string_value(payload.get("package_name")),
             package_intent_kind=_string_value(payload.get("package_intent_kind")),
             package_targets=_string_tuple(payload.get("package_targets")),
-            pre_execution_result=_string_value(payload.get("pre_execution_result")),
+            pre_execution_result=_string_value(pre_execution_result),
             script_name=_string_value(payload.get("script_name")),
             raw_payload_redacted=_dict_value(payload.get("raw_payload_redacted")),
         )
@@ -615,6 +635,12 @@ def _required_int(payload: Mapping[str, object], key: str) -> int:
     if not isinstance(value, int):
         raise ValueError(f"Guard action envelope missing required integer {key}.")
     return value
+
+
+def _matching_aliased_value(payload: Mapping[str, object], snake_key: str, camel_key: str) -> object:
+    if snake_key in payload and camel_key in payload and payload[snake_key] != payload[camel_key]:
+        raise ValueError(f"Guard action envelope {camel_key} must match {snake_key}.")
+    return payload.get(snake_key, payload.get(camel_key))
 
 
 def _required_string(payload: Mapping[str, object], key: str) -> str:

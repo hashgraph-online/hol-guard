@@ -574,7 +574,7 @@ def _persist_claude_native_permission_for_runtime_artifact(
             policy_action=authoritative_action,
             changed=False,
             now=now,
-            approved=authoritative_action == "allow",
+            approved=authoritative_action in {"allow", "warn"},
         )
     except (OSError, sqlite3.Error):
         return True, saved_policy

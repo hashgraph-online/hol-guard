@@ -813,7 +813,7 @@ def test_copilot_permission_postclaim_uses_fresh_authority_for_queue_and_evidenc
     authority = decision.post_claim_authority
     receipt = store.list_receipts(limit=1)[0]
     inventory = store.find_inventory_item(fresh_artifact.artifact_id)
-    event = store.list_events(limit=1, event_name="runtime_tool_call_blocked")[0]
+    event = store.list_events(limit=1, event_name="runtime_tool_call_reapproval_required")[0]
     evaluation = cast(dict[str, object], queue_call["evaluation"])
     queued_artifact = cast(list[dict[str, object]], evaluation["artifacts"])[0]
 
@@ -846,15 +846,12 @@ def test_copilot_permission_postclaim_uses_fresh_authority_for_queue_and_evidenc
     assert event["payload"]["policy_action"] == "require-reapproval"
 
 
+@pytest.mark.parametrize("flow", ("pretool", "permission"))
 @pytest.mark.parametrize(
-    ("flow", "action"),
-    (
-        ("pretool", "sandbox-required"),
-        ("permission", "sandbox-required"),
-        ("permission", "require-reapproval"),
-    ),
+    "action",
+    ("allow", "warn", "review", "require-reapproval", "sandbox-required", "block"),
 )
-def test_copilot_nonallow_action_is_consistent_across_native_receipt_inventory_and_event(
+def test_copilot_action_is_consistent_across_native_receipt_inventory_and_event(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     flow: str,
@@ -929,21 +926,42 @@ def test_copilot_nonallow_action_is_consistent_across_native_receipt_inventory_a
         )
 
     response = json.loads(output.getvalue())
-    receipt = store.list_receipts(limit=1)[0]
-    inventory = store.find_inventory_item(artifact.artifact_id)
-    event = store.list_events(limit=1, event_name="runtime_tool_call_blocked")[0]
     native_action = response.get("permissionDecision", response.get("behavior"))
 
     assert result == 0
-    assert native_action == "deny"
+    assert native_action == ("allow" if action in {"allow", "warn"} else "deny")
+
+    # A Copilot pre-tool review delegates persistence and queueing to the
+    # subsequent permissionRequest hook. Every path that records the decision
+    # must retain the exact action.
+    if flow == "pretool" and action in {"review", "require-reapproval"}:
+        assert store.list_receipts(limit=1) == []
+        assert store.find_inventory_item(artifact.artifact_id) is None
+        assert store.list_events(limit=1) == []
+        assert queued == []
+        return
+
+    receipt = store.list_receipts(limit=1)[0]
+    inventory = store.find_inventory_item(artifact.artifact_id)
+    event_name = {
+        "allow": "runtime_tool_call_allowed",
+        "warn": "runtime_tool_call_allowed",
+        "review": "runtime_tool_call_review_required",
+        "require-reapproval": "runtime_tool_call_reapproval_required",
+        "sandbox-required": "runtime_tool_call_sandbox_required",
+        "block": "runtime_tool_call_blocked",
+    }[action]
+    event = store.list_events(limit=1, event_name=event_name)[0]
     assert receipt["policy_decision"] == action
     assert receipt["artifact_hash"] == artifact_hash
     assert inventory is not None
     assert inventory["last_policy_action"] == action
     assert inventory["artifact_hash"] == artifact_hash
     assert event["payload"]["policy_action"] == action
+    if action not in {"allow", "warn"}:
+        assert event["payload"]["execution_outcome"] == "not-executed"
     assert event["payload"]["artifact_hash"] == artifact_hash
-    assert bool(queued) is (action == "require-reapproval")
+    assert bool(queued) is (flow == "permission" and action in {"review", "require-reapproval"})
 
 
 def _insert_tampered_broader_block(

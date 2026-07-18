@@ -6,6 +6,11 @@ import type {
 import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName, resolveActionEnvelopeDetailText } from "../approval-center-utils";
 import { detectCategory, type ReceiptCategory } from "./categories";
+import {
+  guardActionActivityCopy,
+  guardActionPresentation,
+  normalizeGuardAction,
+} from "../guard-action";
 
 function getArtifactType(receipt: GuardReceipt): string {
   return (receipt.artifact_type ?? "").toLowerCase();
@@ -205,20 +210,26 @@ export function plainEnglishDescription(receipt: GuardReceipt): string {
   const title = resolveActionTitle(receipt);
   const subtitle = resolveActionSubtitle(receipt);
 
-  if (receipt.policy_decision === "allow") {
+  const action = guardActionPresentation(receipt.policy_decision);
+  if (action.disposition === "allowed") {
+    const outcome = action.action === "warn" ? "allowed it with a warning" : "allowed it";
     if (receipt.user_override !== null) {
       return subtitle
-        ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} You reviewed and allowed it.`
-        : `${app} ${pastTenseVerb(type)} ${title}. You reviewed and allowed it.`;
+        ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} You reviewed and ${outcome}.`
+        : `${app} ${pastTenseVerb(type)} ${title}. You reviewed and ${outcome}.`;
     }
+    const automaticOutcome = action.action === "warn"
+      ? "Guard allowed it automatically with a warning."
+      : "Guard allowed it automatically.";
     return subtitle
-      ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} Guard allowed it automatically.`
-      : `${app} ${pastTenseVerb(type)} ${title}. Guard allowed it automatically.`;
+      ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} ${automaticOutcome}`
+      : `${app} ${pastTenseVerb(type)} ${title}. ${automaticOutcome}`;
   }
 
+  const enforcementCopy = `${guardActionActivityCopy(action.action, "Guard", "it")}.`;
   return subtitle
-    ? `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it: ${formatSubtitle(subtitle)}`
-    : `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it.`;
+    ? `${app} tried to ${infinitiveVerb(type)} ${title}. ${enforcementCopy} ${formatSubtitle(subtitle)}`
+    : `${app} tried to ${infinitiveVerb(type)} ${title}. ${enforcementCopy}`;
 }
 
 function pastTenseVerb(type: string): string {
@@ -297,7 +308,7 @@ export function plainEnglishRequestTitle(request: GuardApprovalRequest): string 
   const category = detectCategory({
     ...request,
     timestamp: request.created_at,
-    policy_decision: request.policy_action === "block" ? "block" : "allow",
+    policy_decision: normalizeGuardAction(request.policy_action),
     receipt_id: request.request_id,
   } as unknown as GuardReceipt);
   const app = harnessDisplayName(request.harness);
@@ -325,7 +336,7 @@ export function whyPaused(request: GuardApprovalRequest): string {
   const category = detectCategory({
     ...request,
     timestamp: request.created_at,
-    policy_decision: request.policy_action === "block" ? "block" : "allow",
+    policy_decision: normalizeGuardAction(request.policy_action),
     receipt_id: request.request_id,
   } as unknown as GuardReceipt);
 
