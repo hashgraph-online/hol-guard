@@ -6,6 +6,7 @@ import base64
 import ctypes
 import json
 import ntpath
+import os
 import subprocess
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -14,6 +15,7 @@ from .contracts import KeyProtectionLevel, MachinePaths
 
 _MAX_HELPER_OUTPUT_BYTES = 16 * 1024
 _HELPER_TIMEOUT_SECONDS = 15
+_SYSTEM_SID = "S-1-5-18"
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,4 +175,16 @@ def windows_current_user_sid() -> str:
         ctypes.windll.kernel32.CloseHandle(token)
 
 
-__all__ = ["NativeKeyEvidence", "run_helper", "windows_current_user_sid"]
+def require_machine_context(system_name: str) -> None:
+    if system_name == "Darwin":
+        if os.geteuid() != 0:
+            raise PermissionError("device_key_system_context_required")
+        return
+    if system_name == "Windows":
+        if windows_current_user_sid() != _SYSTEM_SID:
+            raise PermissionError("device_key_system_context_required")
+        return
+    raise OSError("device_key_platform_unsupported")
+
+
+__all__ = ["NativeKeyEvidence", "require_machine_context", "run_helper", "windows_current_user_sid"]

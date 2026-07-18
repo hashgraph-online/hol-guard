@@ -384,7 +384,7 @@ def test_device_key_cli_status_emits_only_component_state(
 
 def test_device_key_status_requires_machine_context(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(device_key.platform, "system", lambda: "Darwin")
-    monkeypatch.setattr(device_key.os, "geteuid", lambda: 501)
+    monkeypatch.setattr(device_key_native.os, "geteuid", lambda: 501)
 
     with pytest.raises(PermissionError, match="device_key_system_context_required"):
         device_key.machine_device_key_status()

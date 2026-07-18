@@ -25,17 +25,16 @@ from .device_key_native import (
     NativeKeyEvidence,
 )
 from .device_key_native import (
-    run_helper as _run_helper,
+    require_machine_context as require_machine_device_context,
 )
 from .device_key_native import (
-    windows_current_user_sid as _windows_current_user_sid,
+    run_helper as _run_helper,
 )
 
 _METADATA_SCHEMA = "hol-guard-device-key.v1"
 _METADATA_NAME = "device-key.json"
 _LOCK_NAME = ".device-key.lock"
 _MAX_METADATA_BYTES = 64 * 1024
-_SYSTEM_SID = "S-1-5-18"
 
 LifecycleState = Literal["pending", "active", "rotation_pending", "revoked"]
 
@@ -277,18 +276,6 @@ def _generation_from_evidence(generation: str, evidence: NativeKeyEvidence) -> K
         evidence.protection_level,
         _now(),
     )
-
-
-def require_machine_device_context(system_name: str) -> None:
-    if system_name == "Darwin":
-        if os.geteuid() != 0:
-            raise PermissionError("device_key_system_context_required")
-        return
-    if system_name == "Windows":
-        if _windows_current_user_sid() != _SYSTEM_SID:
-            raise PermissionError("device_key_system_context_required")
-        return
-    raise OSError("device_key_platform_unsupported")
 
 
 def _verify_generation(paths: MachinePaths, generation: KeyGeneration, system_name: str) -> KeyProtectionStatus:
