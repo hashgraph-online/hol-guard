@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -38,6 +39,38 @@ def test_loads_active_policy_and_redacts_network_secrets(tmp_path: Path) -> None
         "caBundleConfigured": False,
         "allowPublicRegistries": True,
     }
+
+
+def test_integrity_trust_parses_pins_without_disclosing_key_material(tmp_path: Path) -> None:
+    path = tmp_path / "policy.json"
+    key = base64.b64encode(b"k" * 32).decode()
+    path.write_text(
+        json.dumps(
+            _policy(
+                integrityTrust={
+                    "releasePublicKeys": {"release-1": key},
+                    "macosTeamId": "TEAM123",
+                    "windowsSignerThumbprints": ["01 23 45 67 89 AB CD EF 01 23 45 67 89 AB CD EF 01 23 45 67"],
+                }
+            )
+        )
+    )
+
+    state = load_managed_policy(policy_path=path)
+
+    assert state.policy is not None
+    assert state.policy.integrity_trust.release_public_keys == {"release-1": b"k" * 32}
+    assert state.policy.to_public_dict()["integrityTrust"] == {
+        "releaseKeyIds": ["release-1"],
+        "macosTeamIdConfigured": True,
+        "windowsSignerThumbprintsConfigured": True,
+    }
+
+
+@pytest.mark.parametrize("encoded", ["not-base64", base64.b64encode(b"short").decode()])
+def test_integrity_trust_rejects_invalid_release_keys(encoded: str) -> None:
+    with pytest.raises(ValueError, match="release public key"):
+        policy_module.parse_managed_policy(_policy(integrityTrust={"releasePublicKeys": {"release-1": encoded}}))
 
 
 def test_rejects_unknown_keys_and_proxy_credentials(tmp_path: Path) -> None:

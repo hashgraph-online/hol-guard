@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import platform
@@ -14,6 +16,7 @@ from typing import Literal, cast
 from .contracts import (
     MDM_POLICY_SCHEMA_VERSION,
     InstallOwner,
+    ManagedIntegrityTrust,
     ManagedNetworkPolicy,
     ManagedPolicy,
     ManagedPolicyState,
@@ -41,6 +44,7 @@ _TOP_LEVEL_KEYS = {
     "network",
     "update",
     "daemonStartup",
+    "integrityTrust",
 }
 
 
@@ -69,6 +73,37 @@ def _validate_settings(value: object) -> dict[str, object]:
     except (TypeError, ValueError) as exc:
         raise ManagedPolicyError("settings must contain only JSON values") from exc
     return settings
+
+
+def _parse_integrity_trust(value: object) -> ManagedIntegrityTrust:
+    raw = _expect_mapping(value, "integrityTrust")
+    unknown = set(raw) - {"releasePublicKeys", "macosTeamId", "windowsSignerThumbprints"}
+    if unknown:
+        raise ManagedPolicyError(f"unknown integrityTrust keys: {', '.join(sorted(unknown))}")
+    keys_raw = _expect_mapping(raw.get("releasePublicKeys", {}), "integrityTrust.releasePublicKeys")
+    release_keys: dict[str, bytes] = {}
+    for key_id, encoded in keys_raw.items():
+        if not key_id or not isinstance(encoded, str):
+            raise ManagedPolicyError("release public keys must map non-empty ids to base64 strings")
+        try:
+            decoded = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ManagedPolicyError("release public key is not valid base64") from exc
+        if len(decoded) != 32:
+            raise ManagedPolicyError("release public keys must be 32-byte Ed25519 keys")
+        release_keys[key_id] = decoded
+    thumbprints_raw = raw.get("windowsSignerThumbprints", [])
+    if not isinstance(thumbprints_raw, list) or not all(isinstance(item, str) and item for item in thumbprints_raw):
+        raise ManagedPolicyError("integrityTrust.windowsSignerThumbprints must be an array of strings")
+    thumbprints_raw = cast(list[str], thumbprints_raw)
+    thumbprints = tuple(sorted({item.replace(" ", "").upper() for item in thumbprints_raw}))
+    if any(len(item) != 40 or any(character not in "0123456789ABCDEF" for character in item) for item in thumbprints):
+        raise ManagedPolicyError("Windows signer thumbprints must be SHA-1 certificate thumbprints")
+    return ManagedIntegrityTrust(
+        release_public_keys=release_keys,
+        macos_team_id=_optional_string(raw.get("macosTeamId"), "integrityTrust.macosTeamId"),
+        windows_signer_thumbprints=thumbprints,
+    )
 
 
 def parse_managed_policy(payload: object) -> ManagedPolicy:
@@ -138,6 +173,7 @@ def parse_managed_policy(payload: object) -> ManagedPolicy:
     if daemon_startup not in {"on-demand", "login"}:
         raise ManagedPolicyError("daemonStartup is invalid")
     daemon_startup = cast(Literal["on-demand", "login"], daemon_startup)
+    integrity_trust = _parse_integrity_trust(root.get("integrityTrust", {}))
 
     canonical = dict(root)
     return ManagedPolicy(
@@ -147,6 +183,7 @@ def parse_managed_policy(payload: object) -> ManagedPolicy:
         required_harnesses=tuple(sorted(set(cast(list[str], harnesses_raw)))),
         network=network,
         update=update,
+        integrity_trust=integrity_trust,
         daemon_startup=daemon_startup,
         content_hash=canonical_payload_hash(canonical),
     )

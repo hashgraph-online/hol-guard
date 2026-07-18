@@ -11,9 +11,12 @@ $Out = Join-Path $Root 'dist/mdm/windows'
 $Runtime = Join-Path $Out 'runtime'
 Remove-Item -Recurse -Force $Out -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $Runtime | Out-Null
+$VersionFile = Join-Path $Out 'version-info.txt'
+python (Join-Path $PSScriptRoot 'write-version-info.py') --version $Version --output $VersionFile
 
 uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard `
     --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner `
+    --version-file $VersionFile `
     --distpath $Runtime --workpath (Join-Path $Out 'pyinstaller') --specpath $Out `
     (Join-Path $Root 'scripts/mdm/hol-guard-entry.py')
 $ManifestArgs = @(
@@ -22,9 +25,7 @@ $ManifestArgs = @(
     '--installer-identity', 'HOLGuardMachine', '--output', (Join-Path $Runtime 'release-manifest.json')
 )
 if (-not [string]::IsNullOrWhiteSpace($env:HOL_GUARD_MANIFEST_SIGNING_KEY)) {
-    if ([string]::IsNullOrWhiteSpace($env:HOL_GUARD_MANIFEST_KEY_ID) -or
-        [string]::IsNullOrWhiteSpace($env:HOL_GUARD_MANIFEST_PUBLIC_KEYS)) { throw 'Manifest key ID and public keys are required.' }
-    Copy-Item $env:HOL_GUARD_MANIFEST_PUBLIC_KEYS (Join-Path $Runtime 'release-trusted-keys.json')
+    if ([string]::IsNullOrWhiteSpace($env:HOL_GUARD_MANIFEST_KEY_ID)) { throw 'Manifest key ID is required.' }
     $ManifestArgs += @('--signing-key', $env:HOL_GUARD_MANIFEST_SIGNING_KEY, '--key-id', $env:HOL_GUARD_MANIFEST_KEY_ID)
 }
 if (-not [string]::IsNullOrWhiteSpace($env:HOL_GUARD_SIGNTOOL_CERT_SHA1)) {

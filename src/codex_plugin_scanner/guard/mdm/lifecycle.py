@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import getpass
 import hashlib
 import json
@@ -213,35 +212,27 @@ def _activation_lock(guard_home: Path) -> Iterator[None]:
         os.close(descriptor)
 
 
-def load_trusted_public_keys(path: Path) -> dict[str, bytes]:
-    trusted_keys: dict[str, bytes] = {}
-    try:
-        if not path.is_file() or path.is_symlink() or path.stat().st_size > 64 * 1024:
-            return trusted_keys
-        raw_keys = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return trusted_keys
-    if not isinstance(raw_keys, dict):
-        return trusted_keys
-    for key_id, value in raw_keys.items():
-        if not isinstance(key_id, str) or not isinstance(value, str):
-            continue
-        try:
-            trusted_keys[key_id] = base64.b64decode(value, validate=True)
-        except ValueError:
-            continue
-    return trusted_keys
-
-
 def machine_status(
     *, machine_root: Path | None = None, policy_path: Path | None = None, allow_unsigned: bool = False
 ) -> dict[str, object]:
     paths = default_machine_paths()
     runtime_root = (machine_root or paths.runtime_root).resolve()
     manifest_path = runtime_root / "release-manifest.json"
-    trusted_keys_path = runtime_root / "release-trusted-keys.json"
-    trusted_keys = load_trusted_public_keys(trusted_keys_path)
     expected_platform = {"Darwin": "macos", "Windows": "windows"}.get(platform.system())
+    policy = load_managed_policy(policy_path=policy_path)
+    live_policy = policy.policy if policy.reason_code != "managed_policy_profile_removed_cached" else None
+    trust = live_policy.integrity_trust if live_policy is not None else None
+    trusted_keys = trust.release_public_keys if trust is not None else {}
+    minimum_version = policy.policy.update.minimum_version if policy.policy is not None else None
+    native = (
+        verify_native_install(
+            runtime_root,
+            macos_team_id=trust.macos_team_id if trust is not None else None,
+            windows_signer_thumbprints=trust.windows_signer_thumbprints if trust is not None else (),
+        )
+        if machine_root is None
+        else NativeInstallVerification("fixture", "native_check_not_applicable", "fixture", "not-applicable")
+    )
     verification = verify_release_manifest(
         manifest_path,
         runtime_root,
@@ -250,12 +241,13 @@ def machine_status(
         expected_platform=expected_platform,
         expected_architecture=platform.machine().lower(),
         expected_owner_uid=0 if machine_root is None and platform.system() != "Windows" else None,
-    )
-    policy = load_managed_policy(policy_path=policy_path)
-    native = (
-        verify_native_install(runtime_root)
-        if machine_root is None
-        else NativeInstallVerification("fixture", "native_check_not_applicable", "fixture", "not-applicable")
+        expected_installer_identity=(
+            native.package_identity
+            if native.healthy
+            else {"Darwin": "org.hol.guard", "Windows": "HOLGuardMachine"}.get(platform.system())
+        ),
+        expected_native_version=native.version if native.healthy else None,
+        minimum_version=minimum_version,
     )
     payload = _base("status")
     healthy = (
@@ -415,7 +407,6 @@ __all__ = [
     "activate_user",
     "authorize_deactivation",
     "deactivate_user",
-    "load_trusted_public_keys",
     "machine_status",
     "repair_user",
     "user_status",
