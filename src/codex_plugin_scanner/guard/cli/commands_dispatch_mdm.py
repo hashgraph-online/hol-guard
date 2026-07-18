@@ -6,12 +6,12 @@ import argparse
 import json
 from pathlib import Path
 
-from ..mdm.contracts import LocalIntegritySnapshot, default_machine_paths
+from ..mdm.contracts import LocalIntegritySnapshot
 from ..mdm.device_key import (
+    machine_device_key_status,
     provision_machine_device_key,
     revoke_machine_device_key,
     rotate_machine_device_key,
-    verify_machine_device_key,
 )
 from ..mdm.integrity import machine_integrity_snapshot
 from ..mdm.lifecycle import (
@@ -69,7 +69,7 @@ def _run_guard_mdm_command(
         elif command == "device-key-provision":
             payload = provision_machine_device_key()
         elif command == "device-key-status":
-            status = verify_machine_device_key(default_machine_paths())
+            status = machine_device_key_status()
             payload = {
                 "schemaVersion": "hol-guard-mdm-status.v1",
                 "operation": command,

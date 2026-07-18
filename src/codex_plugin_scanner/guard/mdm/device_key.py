@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import base64
-import ctypes
 import hashlib
 import json
-import ntpath
 import os
 import platform
 import secrets
@@ -23,13 +21,20 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from .contracts import KeyProtectionLevel, KeyProtectionStatus, MachinePaths, default_machine_paths
+from .device_key_native import (
+    NativeKeyEvidence,
+)
+from .device_key_native import (
+    run_helper as _run_helper,
+)
+from .device_key_native import (
+    windows_current_user_sid as _windows_current_user_sid,
+)
 
 _METADATA_SCHEMA = "hol-guard-device-key.v1"
 _METADATA_NAME = "device-key.json"
 _LOCK_NAME = ".device-key.lock"
 _MAX_METADATA_BYTES = 64 * 1024
-_MAX_HELPER_OUTPUT_BYTES = 16 * 1024
-_HELPER_TIMEOUT_SECONDS = 15
 _SYSTEM_SID = "S-1-5-18"
 
 LifecycleState = Literal["pending", "active", "rotation_pending", "revoked"]
@@ -70,14 +75,6 @@ class DeviceKeyMetadata:
             "previous": self.previous.to_dict() if self.previous is not None else None,
             "updatedAt": self.updated_at,
         }
-
-
-@dataclass(frozen=True, slots=True)
-class NativeKeyEvidence:
-    state: Literal["active", "absent", "unknown", "tampered"]
-    protection_level: KeyProtectionLevel
-    public_key_x963: bytes | None
-    reason_code: str
 
 
 def _now() -> str:
@@ -266,124 +263,6 @@ def _read_metadata(paths: MachinePaths) -> DeviceKeyMetadata | None:
     return metadata
 
 
-def _windows_directory() -> str:
-    buffer = ctypes.create_unicode_buffer(32_768)
-    length = int(ctypes.windll.kernel32.GetSystemWindowsDirectoryW(buffer, len(buffer)))
-    if length == 0 or length >= len(buffer):
-        raise OSError("device_key_probe_failed")
-    return ntpath.normpath(str(buffer.value))
-
-
-def _run_helper(paths: MachinePaths, verb: str, generation: str, *, system_name: str) -> NativeKeyEvidence:
-    if verb not in {"create", "inspect", "delete"}:
-        raise ValueError("device_key_request_invalid")
-    if system_name == "Darwin":
-        command = [str(paths.runtime_root / "hol-guard-device-key"), verb, generation]
-        environment = {
-            "HOME": "/var/root",
-            "LC_ALL": "C",
-            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-            "TMPDIR": "/var/tmp",
-        }
-        cwd = "/"
-    elif system_name == "Windows":
-        windows_directory = _windows_directory()
-        system_directory = ntpath.join(windows_directory, "System32")
-        command = [
-            ntpath.join(system_directory, "WindowsPowerShell", "v1.0", "powershell.exe"),
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(paths.runtime_root / "hol-guard" / "device-key-helper.ps1"),
-            "-Verb",
-            verb,
-            "-Generation",
-            generation,
-        ]
-        drive, _ = ntpath.splitdrive(windows_directory)
-        if not drive:
-            raise OSError("device_key_probe_failed")
-        environment = {
-            "ComSpec": ntpath.join(system_directory, "cmd.exe"),
-            "SystemDrive": drive,
-            "SystemRoot": windows_directory,
-            "WINDIR": windows_directory,
-        }
-        cwd = system_directory
-    else:
-        return NativeKeyEvidence("unknown", "unavailable", None, "device_key_platform_unsupported")
-    result = subprocess.run(
-        command,
-        check=False,
-        capture_output=True,
-        cwd=cwd,
-        env=environment,
-        input="",
-        text=True,
-        timeout=_HELPER_TIMEOUT_SECONDS,
-    )
-    if len(result.stdout.encode("utf-8")) > _MAX_HELPER_OUTPUT_BYTES or len(result.stderr.encode("utf-8")) > 4096:
-        raise OSError("device_key_probe_failed")
-    try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise OSError("device_key_probe_failed") from exc
-    if not isinstance(payload, dict) or set(payload) != {
-        "ok",
-        "state",
-        "protectionLevel",
-        "publicKeyX963",
-        "reasonCode",
-    }:
-        raise OSError("device_key_probe_failed")
-    state = payload.get("state")
-    level = payload.get("protectionLevel")
-    reason = payload.get("reasonCode")
-    public_raw = payload.get("publicKeyX963")
-    ok = payload.get("ok")
-    if (
-        not isinstance(ok, bool)
-        or state not in {"active", "absent", "unknown", "tampered"}
-        or level not in {"hardware-backed", "os-protected", "unknown"}
-        or not isinstance(reason, str)
-        or reason
-        not in {
-            "device_key_active",
-            "device_key_absent",
-            "device_key_generation_collision",
-            "device_key_system_context_required",
-            "device_key_request_invalid",
-            "device_key_provider_unavailable",
-            "device_key_unusable",
-            "device_key_probe_failed",
-        }
-    ):
-        raise OSError("device_key_probe_failed")
-    public_key: bytes | None = None
-    if public_raw is not None:
-        if not isinstance(public_raw, str) or len(public_raw) > 256:
-            raise OSError("device_key_probe_failed")
-        try:
-            public_key = base64.b64decode(public_raw, validate=True)
-        except ValueError as exc:
-            raise OSError("device_key_probe_failed") from exc
-        if len(public_key) != 65 or public_key[0] != 4:
-            raise OSError("device_key_probe_failed")
-    successful = (verb in {"create", "inspect"} and state == "active") or (verb == "delete" and state == "absent")
-    expected_return_code = 0 if successful else 1 if verb == "inspect" and state == "absent" else 2
-    if result.returncode != expected_return_code or ok != successful:
-        raise OSError("device_key_probe_failed")
-    return NativeKeyEvidence(
-        cast(Literal["active", "absent", "unknown", "tampered"], state),
-        cast(KeyProtectionLevel, level),
-        public_key,
-        reason,
-    )
-
-
 def _generation_from_evidence(generation: str, evidence: NativeKeyEvidence) -> KeyGeneration:
     if evidence.state != "active" or evidence.public_key_x963 is None:
         raise OSError(evidence.reason_code)
@@ -410,32 +289,6 @@ def _require_machine_context(system_name: str) -> None:
             raise PermissionError("device_key_system_context_required")
         return
     raise OSError("device_key_platform_unsupported")
-
-
-def _windows_current_user_sid() -> str:
-    from ctypes import wintypes
-
-    token = wintypes.HANDLE()
-    if not ctypes.windll.advapi32.OpenProcessToken(
-        ctypes.windll.kernel32.GetCurrentProcess(), 0x0008, ctypes.byref(token)
-    ):
-        raise OSError("device_key_system_context_required")
-    try:
-        needed = wintypes.DWORD()
-        ctypes.windll.advapi32.GetTokenInformation(token, 1, None, 0, ctypes.byref(needed))
-        buffer = ctypes.create_string_buffer(needed.value)
-        if not ctypes.windll.advapi32.GetTokenInformation(token, 1, buffer, needed, ctypes.byref(needed)):
-            raise OSError("device_key_system_context_required")
-        sid_pointer = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_void_p))[0]
-        sid_string = wintypes.LPWSTR()
-        if not ctypes.windll.advapi32.ConvertSidToStringSidW(sid_pointer, ctypes.byref(sid_string)):
-            raise OSError("device_key_system_context_required")
-        try:
-            return str(sid_string.value)
-        finally:
-            ctypes.windll.kernel32.LocalFree(sid_string)
-    finally:
-        ctypes.windll.kernel32.CloseHandle(token)
 
 
 def _verify_generation(paths: MachinePaths, generation: KeyGeneration, system_name: str) -> KeyProtectionStatus:
@@ -469,11 +322,11 @@ def verify_machine_device_key(
         if metadata is None:
             return KeyProtectionStatus("absent", "unavailable", "device_key_absent")
         if metadata.state == "revoked":
-            generations = [item for item in (metadata.active, metadata.previous) if item is not None]
+            generations = [item.generation for item in (metadata.active, metadata.previous) if item is not None]
             if metadata.pending_generation is not None:
-                generations.append(KeyGeneration(metadata.pending_generation, "", "", "unknown", metadata.updated_at))
+                generations.append(metadata.pending_generation)
             for generation in generations:
-                evidence = _run_helper(paths, "inspect", generation.generation, system_name=resolved_system)
+                evidence = _run_helper(paths, "inspect", generation, system_name=resolved_system)
                 if evidence.state != "absent":
                     return KeyProtectionStatus("degraded", "unknown", "device_key_revocation_incomplete")
             return KeyProtectionStatus("absent", "unavailable", "device_key_revoked")
@@ -488,6 +341,14 @@ def verify_machine_device_key(
         return KeyProtectionStatus("unknown", "unknown", "device_key_probe_failed")
     except (ValueError, json.JSONDecodeError):
         return KeyProtectionStatus("tampered", "unknown", "device_key_metadata_invalid")
+
+
+def machine_device_key_status() -> KeyProtectionStatus:
+    """Return live device-key status from a privileged machine context."""
+
+    system_name = platform.system()
+    _require_machine_context(system_name)
+    return verify_machine_device_key(default_machine_paths(system_name=system_name), system_name=system_name)
 
 
 def _public_result(operation: str, metadata: DeviceKeyMetadata, status: KeyProtectionStatus) -> dict[str, object]:
@@ -606,6 +467,7 @@ def revoke_machine_device_key() -> dict[str, object]:
 __all__ = [
     "DeviceKeyMetadata",
     "KeyGeneration",
+    "machine_device_key_status",
     "provision_machine_device_key",
     "revoke_machine_device_key",
     "rotate_machine_device_key",

@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 
 from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli import commands_dispatch_mdm
-from codex_plugin_scanner.guard.mdm import device_key
+from codex_plugin_scanner.guard.mdm import device_key, device_key_native
 from codex_plugin_scanner.guard.mdm.contracts import MachinePaths
 
 
@@ -237,7 +237,7 @@ def test_native_helper_response_is_strict_and_bounded(tmp_path: Path, monkeypatc
             "",
         )
     )
-    monkeypatch.setattr(device_key.subprocess, "run", run)
+    monkeypatch.setattr(device_key_native.subprocess, "run", run)
 
     with pytest.raises(OSError, match="device_key_probe_failed"):
         device_key._run_helper(paths, "inspect", "a" * 32, system_name="Darwin")
@@ -282,7 +282,7 @@ def test_native_helper_absent_result_is_operation_aware(
             "",
         )
     )
-    monkeypatch.setattr(device_key.subprocess, "run", run)
+    monkeypatch.setattr(device_key_native.subprocess, "run", run)
 
     evidence = device_key._run_helper(paths, verb, "a" * 32, system_name="Darwin")
 
@@ -292,7 +292,7 @@ def test_native_helper_absent_result_is_operation_aware(
 def test_native_helper_rejects_inconsistent_success_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths = _paths(tmp_path)
     monkeypatch.setattr(
-        device_key.subprocess,
+        device_key_native.subprocess,
         "run",
         Mock(
             return_value=subprocess.CompletedProcess(
@@ -333,7 +333,7 @@ def test_native_helper_rejects_cross_operation_result_contracts(
     if state == "active":
         reason_code = "device_key_active"
     monkeypatch.setattr(
-        device_key.subprocess,
+        device_key_native.subprocess,
         "run",
         Mock(
             return_value=subprocess.CompletedProcess(
@@ -362,8 +362,8 @@ def test_device_key_cli_status_emits_only_component_state(
 ) -> None:
     monkeypatch.setattr(
         commands_dispatch_mdm,
-        "verify_machine_device_key",
-        lambda _paths: device_key.KeyProtectionStatus("healthy", "os-protected", "device_key_active"),
+        "machine_device_key_status",
+        lambda: device_key.KeyProtectionStatus("healthy", "os-protected", "device_key_active"),
     )
 
     exit_code = cli.main(["mdm", "device-key-status", "--json"])
@@ -377,6 +377,14 @@ def test_device_key_cli_status_emits_only_component_state(
         "protectionLevel": "os-protected",
         "reasonCodes": ["device_key_active"],
     }
+
+
+def test_device_key_status_requires_machine_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(device_key.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(device_key.os, "geteuid", lambda: 501)
+
+    with pytest.raises(PermissionError, match="device_key_system_context_required"):
+        device_key.machine_device_key_status()
 
 
 @pytest.mark.skipif(device_key.platform.system() != "Darwin", reason="Swift Security helper requires macOS")
@@ -476,6 +484,7 @@ def test_native_device_key_helpers_enforce_fixed_protected_providers() -> None:
     assert "kSecACLAuthorizationSign" in macos
     assert "SecTrustedApplicationCopyData" in macos
     assert "String(data:" not in macos
+    assert "unsafeBitCast" not in macos
     assert "SecureEnclave" not in macos
     assert "security " not in macos
     assert "Microsoft Platform Crypto Provider" in windows

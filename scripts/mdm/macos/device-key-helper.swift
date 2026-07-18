@@ -108,7 +108,7 @@ private func inspectKey(_ privateKey: SecKey) throws -> Data {
 
 private func inspectSigningAccess(_ privateKey: SecKey) throws {
     var access: SecAccess?
-    let keychainItem = unsafeBitCast(privateKey, to: SecKeychainItem.self)
+    let keychainItem = privateKey as AnyObject as! SecKeychainItem
     guard SecKeychainItemCopyAccess(keychainItem, &access) == errSecSuccess, let resolvedAccess = access else {
         throw HelperError.keyInvalid
     }
