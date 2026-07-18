@@ -131,6 +131,7 @@ def test_windows_installer_registers_system_machine_health_task() -> None:
     assert sequence["InstallMachineHealthTask"].attrib["After"] == "RollbackInstallMachineHealthTask"
     assert sequence["RollbackRemoveMachineHealthTask"].attrib["Before"] == "RemoveMachineHealthTask"
     assert sequence["RemoveMachineHealthTask"].attrib["Before"] == "RemoveFiles"
+    assert "RevokeMachineDeviceKey" not in actions
     assert install.attrib["Directory"] == "InstallFolder"
     assert "[InstallFolder]" in install.attrib["ExeCommand"]
     assert "[INSTALLFOLDER]" not in install.attrib["ExeCommand"]
@@ -187,6 +188,7 @@ def test_macos_installer_registers_machine_health_launch_daemon() -> None:
     assert 'install -o root -g wheel -m 0644 "${ROLLBACK_PLIST}" "${LAUNCH_DAEMON}"' in postinstall
     assert "/bin/launchctl enable system/org.hol.guard.machine-health" in postinstall
     assert postinstall.index("mdm device-key-provision") < postinstall.index("rollback_armed=1")
+    assert "device-key-revoke" not in postinstall
 
 
 def test_native_installers_stage_device_key_helpers_before_manifest() -> None:
