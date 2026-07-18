@@ -599,7 +599,11 @@ def _codex_yq_expression_and_targets(args: list[str]) -> tuple[str, tuple[str, .
     if skip_value or len(positional) < 2:
         return None
     expression, *targets = positional
-    if not expression.startswith(".") or _CODEX_YQ_EXTERNAL_READ_PATTERN.search(expression):
+    if (
+        not expression.startswith(".")
+        or any(marker in expression for marker in ("#", "\n", "\r"))
+        or _CODEX_YQ_EXTERNAL_READ_PATTERN.search(expression)
+    ):
         return None
     if any(target == "-" for target in targets):
         return None

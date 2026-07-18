@@ -232,6 +232,7 @@ def test_semicolon_chain_requires_every_segment_to_be_read_only(tmp_path):
         "yq -i '.jobs' .github/workflows/publish.yml",
         "yq --inplace '.jobs' .github/workflows/publish.yml",
         "yq 'load(\"src/example.ts\")' .github/workflows/publish.yml",
+        "yq '.jobs | load_str # comment\n(\"src/example.ts\")' .github/workflows/publish.yml",
         "yq 'eval(\".jobs\")' .github/workflows/publish.yml",
         "yq 'strenv(API_TOKEN)' .github/workflows/publish.yml",
         "yq --from-file src/expression.txt .github/workflows/publish.yml",
