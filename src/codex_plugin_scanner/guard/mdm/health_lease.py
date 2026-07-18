@@ -29,12 +29,11 @@ from .continuity import (
 from .contracts import LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION, LocalIntegritySnapshot, MachinePaths
 from .device_key import KeyGeneration
 from .device_key_access import verified_machine_device_key_by_id
+from .health_lease_ack import MAX_ACK_BYTES, HealthLeaseAck
 from .health_lease_contract import (
-    MAX_ACK_BYTES,
     MAX_LEASE_SECONDS,
     MAX_OUTBOX_BYTES,
     MAX_SNAPSHOT_BYTES,
-    HealthLeaseAck,
     HealthLeaseBinding,
     HealthLeaseClaims,
     HealthLeaseOutbox,
@@ -120,7 +119,10 @@ def _atomic_create(paths: MachinePaths, target: Path, payload: bytes, *, conflic
             handle.flush()
             os.fsync(handle.fileno())
         os.chmod(temporary, 0o600)
-        os.link(temporary, target, follow_symlinks=False)
+        if os.name == "nt":
+            os.link(temporary, target)
+        else:
+            os.link(temporary, target, follow_symlinks=False)
         _fsync_directory(parent)
     finally:
         with suppress(FileNotFoundError):
