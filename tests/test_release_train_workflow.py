@@ -50,6 +50,37 @@ def test_ordinary_pushes_and_tag_pushes_cannot_publish() -> None:
     assert "startsWith(github.ref, 'refs/tags/')" not in workflow_text
 
 
+def test_push_build_keeps_the_repository_version_without_restamping() -> None:
+    workflow = _workflow(PUBLISH_WORKFLOW)
+    build_steps = workflow["jobs"]["build"]["steps"]
+    compute_run = next(step["run"] for step in build_steps if step.get("name") == "Compute publish version")
+    stamp_step = next(step for step in build_steps if step.get("name") == "Stamp package version when needed")
+    stamp_run = stamp_step["run"]
+
+    assert 'VERSION="$BASE_VERSION"' in compute_run
+    assert 'CHANNEL="integration"' in compute_run
+    assert 'elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]' in compute_run
+    assert '[[ "$GITHUB_EVENT_NAME" == "push" ]]' not in compute_run
+    assert "if" not in stamp_step
+    assert "sync_repo_version.py --check" in stamp_run
+    assert '[[ "$CURRENT_VERSION" == "$VERSION" ]]' in stamp_run
+    assert 'sync_repo_version.py --version "$VERSION"' in stamp_run
+    assert stamp_run.index("--check") < stamp_run.index('CURRENT_VERSION" == "$VERSION')
+    assert stamp_run.index('CURRENT_VERSION" == "$VERSION') < stamp_run.index("--version")
+
+
+def test_stable_noop_and_pr_alpha_version_stamping_contracts() -> None:
+    workflow = _workflow(PUBLISH_WORKFLOW)
+    build_steps = workflow["jobs"]["build"]["steps"]
+    compute_run = next(step["run"] for step in build_steps if step.get("name") == "Compute publish version")
+    stamp_run = next(step["run"] for step in build_steps if step.get("name") == "Stamp package version when needed")
+
+    assert 'if [[ "$BASE_VERSION" != "$RELEASE_VERSION" ]]' in compute_run
+    assert "VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py" in compute_run
+    assert 'VERSION=$(BASE_VERSION="$BASE_VERSION" PR_NUMBER="$PR_NUMBER"' in compute_run
+    assert 'sync_repo_version.py --version "$VERSION"' in stamp_run
+
+
 def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     inputs = workflow[True]["workflow_dispatch"]["inputs"]
