@@ -16,7 +16,7 @@ from itertools import chain
 from pathlib import Path
 from typing import TypedDict, cast
 
-EVALUATION_WORKER_COUNT = 4
+EVALUATION_WORKER_COUNT = 2
 WORKER_TIMEOUT_SECONDS = 35
 REPO_ROOT = Path(__file__).parents[1]
 if str(REPO_ROOT) not in sys.path:
