@@ -6,7 +6,13 @@ import argparse
 import json
 from pathlib import Path
 
-from ..mdm.contracts import LocalIntegritySnapshot
+from ..mdm.contracts import LocalIntegritySnapshot, default_machine_paths
+from ..mdm.device_key import (
+    provision_machine_device_key,
+    revoke_machine_device_key,
+    rotate_machine_device_key,
+    verify_machine_device_key,
+)
 from ..mdm.integrity import machine_integrity_snapshot
 from ..mdm.lifecycle import (
     activate_user,
@@ -60,6 +66,22 @@ def _run_guard_mdm_command(
             payload = install_machine_supervisor()
         elif command == "supervisor-remove":
             payload = remove_machine_supervisor()
+        elif command == "device-key-provision":
+            payload = provision_machine_device_key()
+        elif command == "device-key-status":
+            status = verify_machine_device_key(default_machine_paths())
+            payload = {
+                "schemaVersion": "hol-guard-mdm-status.v1",
+                "operation": command,
+                "healthy": status.healthy,
+                "state": status.state,
+                "protectionLevel": status.level,
+                "reasonCodes": [status.reason_code],
+            }
+        elif command == "device-key-rotate":
+            payload = rotate_machine_device_key()
+        elif command == "device-key-revoke":
+            payload = revoke_machine_device_key()
         elif command == "status" and args.scope == "machine":
             root = Path(args.machine_root).resolve() if getattr(args, "machine_root", None) else None
             payload = machine_status(machine_root=root)

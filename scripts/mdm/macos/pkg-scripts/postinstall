@@ -30,6 +30,7 @@ chmod -R go-w "${RUNTIME}" "${STATE}" "${LOGS}"
 chmod 0755 "${RUNTIME}" "${STATE}" "${LOGS}"
 chown root:wheel "${LAUNCH_AGENT}" "${LAUNCH_DAEMON}"
 chmod 0644 "${LAUNCH_AGENT}" "${LAUNCH_DAEMON}"
+"${RUNTIME}/hol-guard/hol-guard" mdm device-key-provision --json >/dev/null
 rollback_armed=1
 trap restore_previous_supervisor ZERR EXIT
 /bin/launchctl bootout system/org.hol.guard.machine-health >/dev/null 2>&1 || true

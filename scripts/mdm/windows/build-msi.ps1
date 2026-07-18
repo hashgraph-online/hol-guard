@@ -19,6 +19,8 @@ uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard `
     --version-file $VersionFile `
     --distpath $Runtime --workpath (Join-Path $Out 'pyinstaller') --specpath $Out `
     (Join-Path $Root 'scripts/mdm/hol-guard-entry.py')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'device-key-helper.ps1') `
+    -Destination (Join-Path $Runtime 'hol-guard/device-key-helper.ps1')
 $ManifestArgs = @(
     '--runtime-root', $Runtime, '--version', $Version, '--build-id', $BuildId,
     '--platform', 'windows', '--architecture', $env:PROCESSOR_ARCHITECTURE,

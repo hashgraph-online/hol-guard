@@ -25,6 +25,7 @@ from .contracts import (
     SupervisorStatus,
     default_machine_paths,
 )
+from .device_key import verify_machine_device_key
 from .manifest import ManifestVerification, verify_release_manifest
 from .native import NativeInstallVerification, verify_native_install
 from .policy import load_managed_policy
@@ -147,6 +148,13 @@ def _verify_supervisor(paths: MachinePaths) -> SupervisorStatus:
         return SupervisorStatus("unknown", "supervisor_probe_failed")
 
 
+def _verify_device_key(paths: MachinePaths) -> KeyProtectionStatus:
+    try:
+        return verify_machine_device_key(paths)
+    except Exception:
+        return KeyProtectionStatus("unknown", "unknown", "device_key_probe_failed")
+
+
 def machine_integrity_snapshot() -> LocalIntegritySnapshot:
     """Return bounded machine evidence without trusting environment path overrides."""
 
@@ -173,6 +181,7 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
     assurance_level = _assurance_level(update_owner=update_owner)
     acl = _verify_ownership_acl(paths)
     supervisor = _verify_supervisor(paths)
+    device_key = _verify_device_key(paths)
 
     manifest_component = _component(manifest.status, manifest.reason_code)
     native_component = _component(native.status, native.reason_code)
@@ -186,7 +195,6 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
         policy.reason_code or ("managed_policy_active" if policy.status == "active" else "managed_policy_absent"),
     )
     ownership_acl = _component(acl.status, acl.reason_code)
-    device_key = KeyProtectionStatus("unsupported", "unavailable", "device_key_verification_unavailable")
     harness_coverage = IntegrityComponent("unsupported", "harness_coverage_verification_unavailable")
     installation_identity = IntegrityComponent("unsupported", "installation_identity_verification_unavailable")
     lease_continuity = IntegrityComponent("unsupported", "lease_continuity_verification_unavailable")

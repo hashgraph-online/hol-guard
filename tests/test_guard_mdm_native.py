@@ -111,17 +111,23 @@ def test_windows_installer_registers_system_machine_health_task() -> None:
     }
 
     install = actions["InstallMachineHealthTask"]
+    provision_key = actions["ProvisionMachineDeviceKey"]
     rollback_install = actions["RollbackInstallMachineHealthTask"]
     remove = actions["RemoveMachineHealthTask"]
     rollback_remove = actions["RollbackRemoveMachineHealthTask"]
     assert install.attrib["ExeCommand"].endswith("mdm supervisor-install --json")
+    assert provision_key.attrib["ExeCommand"].endswith("mdm device-key-provision --json")
+    assert provision_key.attrib["Execute"] == "deferred"
+    assert provision_key.attrib["Impersonate"] == "no"
+    assert provision_key.attrib["Return"] == "check"
     assert remove.attrib["ExeCommand"].endswith("mdm supervisor-remove --json")
     assert install.attrib["Execute"] == remove.attrib["Execute"] == "deferred"
     assert rollback_install.attrib["Execute"] == rollback_remove.attrib["Execute"] == "rollback"
     assert install.attrib["Return"] == remove.attrib["Return"] == "check"
     assert rollback_install.attrib["Return"] == rollback_remove.attrib["Return"] == "ignore"
     assert install.attrib["Impersonate"] == remove.attrib["Impersonate"] == "no"
-    assert sequence["RollbackInstallMachineHealthTask"].attrib["After"] == "InstallFiles"
+    assert sequence["ProvisionMachineDeviceKey"].attrib["After"] == "InstallFiles"
+    assert sequence["RollbackInstallMachineHealthTask"].attrib["After"] == "ProvisionMachineDeviceKey"
     assert sequence["InstallMachineHealthTask"].attrib["After"] == "RollbackInstallMachineHealthTask"
     assert sequence["RollbackRemoveMachineHealthTask"].attrib["Before"] == "RemoveMachineHealthTask"
     assert sequence["RemoveMachineHealthTask"].attrib["Before"] == "RemoveFiles"
@@ -140,6 +146,7 @@ def test_windows_builder_verifies_supervisor_actions_in_built_msi() -> None:
     assert "($Type -band 0xC00) -ne 0xC00" in verifier
     assert "($Type -band 0x100)" in verifier
     assert "($Type -band 0x40)" in verifier
+    assert "ProvisionMachineDeviceKey" in verifier
     assert "$Source -ne 'InstallFolder'" in verifier
 
 
@@ -179,6 +186,16 @@ def test_macos_installer_registers_machine_health_launch_daemon() -> None:
     assert postinstall.count("/bin/launchctl bootstrap") == 2
     assert 'install -o root -g wheel -m 0644 "${ROLLBACK_PLIST}" "${LAUNCH_DAEMON}"' in postinstall
     assert "/bin/launchctl enable system/org.hol.guard.machine-health" in postinstall
+    assert postinstall.index("mdm device-key-provision") < postinstall.index("rollback_armed=1")
+
+
+def test_native_installers_stage_device_key_helpers_before_manifest() -> None:
+    macos = Path("scripts/mdm/macos/build-pkg.sh").read_text(encoding="utf-8")
+    windows = Path("scripts/mdm/windows/build-msi.ps1").read_text(encoding="utf-8")
+
+    assert macos.index("device-key-helper.swift") < macos.index("generate-release-manifest.py")
+    assert macos.index("codesign --force --options runtime") < macos.index("generate-release-manifest.py")
+    assert windows.index("device-key-helper.ps1") < windows.index("generate-release-manifest.py")
 
 
 def test_macos_activation_preserves_spaced_home_paths() -> None:
