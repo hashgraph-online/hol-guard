@@ -70,7 +70,7 @@ def test_windows_installer_creates_machine_log_surface() -> None:
     directories = root.findall(f".//{namespace}Directory")
     component_refs = root.findall(f".//{namespace}ComponentRef")
 
-    assert any(item.attrib.get("Id") == "LOGSFOLDER" and item.attrib.get("Name") == "Logs" for item in directories)
+    assert any(item.attrib.get("Id") == "LogsFolder" and item.attrib.get("Name") == "Logs" for item in directories)
     assert any(item.attrib.get("Id") == "MachineLogs" for item in component_refs)
 
 
@@ -96,10 +96,51 @@ def test_windows_builder_verifies_acl_records_in_built_msi() -> None:
 
     assert "verify-msi-acls.ps1') -MsiPath $Msi" in builder
     assert "SELECT `LockObject`, `Table`, `SDDLText`, `Condition`" in verifier
-    assert "INSTALLFOLDER =" in verifier
-    assert "STATEFOLDER =" in verifier
-    assert "LOGSFOLDER =" in verifier
+    assert "InstallFolder =" in verifier
+    assert "StateFolder =" in verifier
+    assert "LogsFolder =" in verifier
     assert "$Expected.Remove($Row.LockObject)" in verifier
+
+
+def test_windows_installer_registers_system_machine_health_task() -> None:
+    root = ElementTree.parse("scripts/mdm/windows/hol-guard.wxs").getroot()
+    namespace = "{http://wixtoolset.org/schemas/v4/wxs}"
+    actions = {item.attrib["Id"]: item for item in root.findall(f".//{namespace}CustomAction")}
+    sequence = {
+        item.attrib["Action"]: item for item in root.findall(f".//{namespace}InstallExecuteSequence/{namespace}Custom")
+    }
+
+    install = actions["InstallMachineHealthTask"]
+    rollback_install = actions["RollbackInstallMachineHealthTask"]
+    remove = actions["RemoveMachineHealthTask"]
+    rollback_remove = actions["RollbackRemoveMachineHealthTask"]
+    assert install.attrib["ExeCommand"].endswith("mdm supervisor-install --json")
+    assert remove.attrib["ExeCommand"].endswith("mdm supervisor-remove --json")
+    assert install.attrib["Execute"] == remove.attrib["Execute"] == "deferred"
+    assert rollback_install.attrib["Execute"] == rollback_remove.attrib["Execute"] == "rollback"
+    assert install.attrib["Return"] == remove.attrib["Return"] == "check"
+    assert rollback_install.attrib["Return"] == rollback_remove.attrib["Return"] == "ignore"
+    assert install.attrib["Impersonate"] == remove.attrib["Impersonate"] == "no"
+    assert sequence["RollbackInstallMachineHealthTask"].attrib["After"] == "InstallFiles"
+    assert sequence["InstallMachineHealthTask"].attrib["After"] == "RollbackInstallMachineHealthTask"
+    assert sequence["RollbackRemoveMachineHealthTask"].attrib["Before"] == "RemoveMachineHealthTask"
+    assert sequence["RemoveMachineHealthTask"].attrib["Before"] == "RemoveFiles"
+    assert install.attrib["Directory"] == "InstallFolder"
+    assert "[InstallFolder]" in install.attrib["ExeCommand"]
+    assert "[INSTALLFOLDER]" not in install.attrib["ExeCommand"]
+
+
+def test_windows_builder_verifies_supervisor_actions_in_built_msi() -> None:
+    builder = Path("scripts/mdm/windows/build-msi.ps1").read_text(encoding="utf-8")
+    verifier = Path("scripts/mdm/windows/verify-msi-supervisor.ps1").read_text(encoding="utf-8")
+
+    assert "verify-msi-supervisor.ps1') -MsiPath $Msi" in builder
+    assert "FROM `CustomAction`" in verifier
+    assert "FROM `InstallExecuteSequence`" in verifier
+    assert "($Type -band 0xC00) -ne 0xC00" in verifier
+    assert "($Type -band 0x100)" in verifier
+    assert "($Type -band 0x40)" in verifier
+    assert "$Source -ne 'InstallFolder'" in verifier
 
 
 def test_macos_installer_stages_protected_state_and_log_surfaces() -> None:
@@ -109,6 +150,35 @@ def test_macos_installer_stages_protected_state_and_log_surfaces() -> None:
     assert 'readonly LOGS="${STAGE}/Library/Logs/HOL Guard"' in script
     assert 'mkdir -p "${RUNTIME}" "${STATE}" "${LOGS}"' in script
     assert "--ownership recommended" in script
+
+
+def test_macos_installer_registers_machine_health_launch_daemon() -> None:
+    build = Path("scripts/mdm/macos/build-pkg.sh").read_text(encoding="utf-8")
+    preinstall = Path("scripts/mdm/macos/pkg-scripts/preinstall").read_text(encoding="utf-8")
+    postinstall = Path("scripts/mdm/macos/pkg-scripts/postinstall").read_text(encoding="utf-8")
+    payload = plistlib.loads(Path("scripts/mdm/macos/org.hol.guard.machine-health.plist").read_bytes())
+
+    assert '"${STAGE}/Library/LaunchDaemons"' in build
+    assert "org.hol.guard.machine-health.plist" in build
+    assert payload["StartInterval"] == 300
+    assert payload["ProgramArguments"][-5:] == ["mdm", "integrity-snapshot", "--scope", "machine", "--json"]
+    assert "/bin/launchctl bootstrap system" in postinstall
+    assert "/bin/launchctl bootout" not in preinstall
+    assert 'install -o root -g wheel -m 0600 "${LAUNCH_DAEMON}" "${ROLLBACK_PLIST}"' in preinstall
+    assert postinstall.index("/bin/launchctl bootout") < postinstall.index("/bin/launchctl bootstrap")
+    assert "trap restore_previous_supervisor ZERR EXIT" in postinstall
+    assert "trap - ZERR EXIT" in postinstall
+    armed = postinstall.index("trap restore_previous_supervisor ZERR EXIT")
+    disarmed = postinstall.rindex("trap - ZERR EXIT")
+    for command in (
+        '/bin/launchctl bootstrap system "${LAUNCH_DAEMON}"',
+        "/bin/launchctl enable system/org.hol.guard.machine-health",
+        "/bin/launchctl kickstart -k system/org.hol.guard.machine-health",
+    ):
+        assert armed < postinstall.rindex(command) < disarmed
+    assert postinstall.count("/bin/launchctl bootstrap") == 2
+    assert 'install -o root -g wheel -m 0644 "${ROLLBACK_PLIST}" "${LAUNCH_DAEMON}"' in postinstall
+    assert "/bin/launchctl enable system/org.hol.guard.machine-health" in postinstall
 
 
 def test_macos_activation_preserves_spaced_home_paths() -> None:

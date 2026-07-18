@@ -13,6 +13,7 @@ from .contracts import (
 from .integrity import machine_integrity_snapshot
 from .manifest import verify_release_manifest
 from .policy import apply_managed_policy, load_managed_policy
+from .supervisor import install_machine_supervisor, remove_machine_supervisor, verify_machine_supervisor
 
 __all__ = [
     "LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION",
@@ -24,7 +25,10 @@ __all__ = [
     "ManagedPolicyState",
     "apply_managed_policy",
     "default_machine_paths",
+    "install_machine_supervisor",
     "load_managed_policy",
     "machine_integrity_snapshot",
+    "remove_machine_supervisor",
+    "verify_machine_supervisor",
     "verify_release_manifest",
 ]

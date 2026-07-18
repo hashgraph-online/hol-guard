@@ -13,7 +13,8 @@ readonly LOGS="${STAGE}/Library/Logs/HOL Guard"
 readonly PACKAGE_ID="org.hol.guard"
 
 rm -rf "${OUT}"
-mkdir -p "${RUNTIME}" "${STATE}" "${LOGS}" "${STAGE}/Library/LaunchAgents" "${OUT}"
+mkdir -p "${RUNTIME}" "${STATE}" "${LOGS}" "${STAGE}/Library/LaunchAgents" \
+  "${STAGE}/Library/LaunchDaemons" "${OUT}"
 
 typeset -a pyinstaller_args
 pyinstaller_args=(--clean --noconfirm --onedir --name hol-guard \
@@ -28,6 +29,8 @@ uv run --no-sync pyinstaller "${pyinstaller_args[@]}"
 
 cp "${ROOT}/scripts/mdm/macos/org.hol.guard.user-activation.plist" \
   "${STAGE}/Library/LaunchAgents/org.hol.guard.user-activation.plist"
+cp "${ROOT}/scripts/mdm/macos/org.hol.guard.machine-health.plist" \
+  "${STAGE}/Library/LaunchDaemons/org.hol.guard.machine-health.plist"
 cp "${ROOT}/scripts/mdm/macos/activate-current-user.sh" "${RUNTIME}/activate-current-user"
 typeset -a manifest_args
 manifest_args=(--runtime-root "${RUNTIME}" --version "${VERSION}" --build-id "${BUILD_ID}" \

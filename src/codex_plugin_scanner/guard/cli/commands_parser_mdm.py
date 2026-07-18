@@ -35,6 +35,10 @@ def _configure_guard_mdm_parsers(
         "--json", required=True, action="store_true", help="Emit the versioned JSON automation contract"
     )
 
+    for name in ("supervisor-install", "supervisor-remove"):
+        supervisor = commands.add_parser(name, help=argparse.SUPPRESS)
+        _add_json(supervisor)
+
     for name in ("activate", "repair"):
         command = commands.add_parser(name, help=f"Idempotently {name} Guard for one user")
         _add_user(command, require_user=True)

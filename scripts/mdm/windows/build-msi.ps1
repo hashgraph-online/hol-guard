@@ -39,6 +39,7 @@ python (Join-Path $Root 'scripts/mdm/generate-release-manifest.py') @ManifestArg
 $Msi = Join-Path $Out "hol-guard-$Version-x64.msi"
 & wix build (Join-Path $PSScriptRoot 'hol-guard.wxs') -arch x64 -d RuntimeRoot=$Runtime -o $Msi
 & (Join-Path $PSScriptRoot 'verify-msi-acls.ps1') -MsiPath $Msi
+& (Join-Path $PSScriptRoot 'verify-msi-supervisor.ps1') -MsiPath $Msi
 if (-not [string]::IsNullOrWhiteSpace($env:HOL_GUARD_SIGNTOOL_CERT_SHA1)) {
     & signtool sign /sha1 $env:HOL_GUARD_SIGNTOOL_CERT_SHA1 /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $Msi
 }
