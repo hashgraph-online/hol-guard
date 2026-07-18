@@ -243,6 +243,18 @@ def test_binds_manifest_to_verified_native_version(tmp_path: Path) -> None:
     assert result.reason_code == "release_manifest_native_version_mismatch"
 
 
+def test_rejects_non_pep440_manifest_version_with_stable_reason(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    manifest = _manifest(runtime)
+    manifest["version"] = "not-a-version"
+    manifest_path = runtime / "release-manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+
+    result = verify_release_manifest(manifest_path, runtime, require_signature=False)
+
+    assert result.reason_code == "release_manifest_version_invalid"
+
+
 def test_rejects_unlisted_runtime_symlink(tmp_path: Path) -> None:
     runtime = tmp_path / "runtime"
     manifest = _manifest(runtime)

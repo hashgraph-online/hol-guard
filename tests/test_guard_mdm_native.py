@@ -176,6 +176,24 @@ def test_macos_native_verification_rejects_missing_receipt_version(
     assert result.reason_code == "native_package_version_invalid"
 
 
+def test_macos_native_verification_rejects_missing_team_identifier(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = Mock(
+        side_effect=[
+            subprocess.CompletedProcess(["pkgutil"], 0, plistlib.dumps({"pkg-version": "3.1.0a1"}), b""),
+            subprocess.CompletedProcess(["codesign", "--verify"], 0, b"", b""),
+            subprocess.CompletedProcess(["codesign", "-d"], 0, "", "Executable=/path/hol-guard\n"),
+        ]
+    )
+    monkeypatch.setattr(native.subprocess, "run", run)
+
+    result = native._verify_macos(tmp_path, expected_team_id="TEAM123")
+
+    assert not result.healthy
+    assert result.reason_code == "native_publisher_signature_invalid"
+
+
 def test_windows_native_verification_rejects_unpinned_valid_signer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

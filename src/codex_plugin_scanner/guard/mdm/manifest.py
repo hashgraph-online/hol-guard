@@ -246,6 +246,12 @@ def verify_release_manifest(
         version = cast(str, version)
         build_id = cast(str, build_id)
         installer_identity = cast(str, installer_identity)
+        try:
+            manifest_version = Version(version)
+        except InvalidVersion:
+            return ManifestVerification(
+                "tampered", "release_manifest_version_invalid", version, build_id, installer_identity
+            )
         if expected_platform is not None and manifest_platform != expected_platform:
             return ManifestVerification(
                 "unsupported", "release_manifest_platform_mismatch", version, build_id, installer_identity
@@ -286,7 +292,9 @@ def verify_release_manifest(
                 installer_identity,
                 signature_state,
             )
-        if expected_native_version is not None and Version(version) != Version(expected_native_version):
+        # Both package builders stamp the exact release version into native metadata and this manifest.
+        # Equality prevents a validly signed native binary from authenticating a different release payload.
+        if expected_native_version is not None and manifest_version != Version(expected_native_version):
             return ManifestVerification(
                 "tampered",
                 "release_manifest_native_version_mismatch",
@@ -295,7 +303,7 @@ def verify_release_manifest(
                 installer_identity,
                 signature_state,
             )
-        if minimum_version is not None and Version(version) < Version(minimum_version):
+        if minimum_version is not None and manifest_version < Version(minimum_version):
             return ManifestVerification(
                 "tampered",
                 "release_manifest_version_rollback",

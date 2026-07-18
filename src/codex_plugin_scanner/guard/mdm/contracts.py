@@ -42,6 +42,7 @@ IntegrityReasonCode = Literal[
     "release_manifest_trust_anchor_absent",
     "release_manifest_valid",
     "release_manifest_version_rollback",
+    "release_manifest_version_invalid",
     "release_manifest_wrong_owner",
     "release_runtime_insecure_permissions",
     "release_runtime_wrong_owner",
