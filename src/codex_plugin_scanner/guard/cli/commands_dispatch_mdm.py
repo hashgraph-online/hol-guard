@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from ..mdm.contracts import LocalIntegritySnapshot
 from ..mdm.integrity import machine_integrity_snapshot
 from ..mdm.lifecycle import (
     activate_user,
@@ -21,7 +22,7 @@ from ..mdm.network import diagnose_endpoint
 from ..mdm.policy import load_managed_policy
 
 
-def _emit_mdm(payload: dict[str, object], as_json: bool) -> None:
+def _emit_mdm(payload: dict[str, object] | LocalIntegritySnapshot, as_json: bool) -> None:
     if as_json:
         print(json.dumps(payload, sort_keys=True))
     else:
@@ -33,7 +34,7 @@ def _run_guard_mdm_command(
 ) -> int:
     del input_text, output_stream
     command = str(args.mdm_command)
-    payload: dict[str, object]
+    payload: dict[str, object] | LocalIntegritySnapshot
     try:
         if command == "authorize-deactivation":
             payload = authorize_deactivation(
@@ -46,13 +47,12 @@ def _run_guard_mdm_command(
             payload = {
                 "schemaVersion": "hol-guard-mdm-status.v1",
                 "operation": command,
-                "healthy": True,
+                "healthy": all(
+                    isinstance(result, dict) and result.get("reasonCode") == "endpoint_reachable" for result in results
+                ),
                 "managedPolicy": policy_state.to_public_dict(),
                 "results": results,
             }
-            payload["healthy"] = all(
-                isinstance(result, dict) and result.get("reasonCode") == "endpoint_reachable" for result in results
-            )
         elif command == "integrity-snapshot":
             payload = dict(machine_integrity_snapshot())
         elif command == "status" and args.scope == "machine":
