@@ -59,9 +59,14 @@ jobs:
       - name: Run pytest shard ${{ matrix.shard-index }}
         shell: bash
         run: |
-          mapfile -t files < <(python scripts/ci/pytest_shard.py \
+          files_output="$(python scripts/ci/pytest_shard.py \
             --shard-index "${{ matrix.shard-index }}" \
-            --shard-count 4)
+            --shard-count 4)"
+          if [[ -z "$files_output" ]]; then
+            echo "pytest shard produced no test files" >&2
+            exit 1
+          fi
+          mapfile -t files <<< "$files_output"
           uv run --no-sync pytest "${files[@]}" --tb=short
 
   dashboard:
