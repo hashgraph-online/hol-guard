@@ -3817,8 +3817,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 else:
                     result = remove_registration(guard_home, adapter=adapter)
             elif action == "restart":
-                stop_tray(guard_home)
-                result = start_tray(guard_home)
+                # Match the CLI restart path: stop, then start with force=True
+                # so a failed/timed-out stop doesn't leave start_tray() returning
+                # already_running (which would report success without restarting).
+                stop_result = stop_tray(guard_home)
+                result = start_tray(guard_home, force=True)
+                if not result.ok and stop_result.reason.value:
+                    result = TrayLifecycleResult(
+                        ok=result.ok,
+                        state=result.state,
+                        reason=result.reason,
+                        message=f"{result.message} (stop_reason={stop_result.reason.value})",
+                        recovery_command=result.recovery_command,
+                    )
             else:
                 self._write_json({"error": "unknown_action", "action": action}, status=400)
                 return
