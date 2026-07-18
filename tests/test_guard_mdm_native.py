@@ -64,6 +64,53 @@ def test_windows_active_setup_expands_user_environment() -> None:
     assert stub_path.attrib["Type"] == "expandable"
 
 
+def test_windows_installer_creates_machine_log_surface() -> None:
+    root = ElementTree.parse("scripts/mdm/windows/hol-guard.wxs").getroot()
+    namespace = "{http://wixtoolset.org/schemas/v4/wxs}"
+    directories = root.findall(f".//{namespace}Directory")
+    component_refs = root.findall(f".//{namespace}ComponentRef")
+
+    assert any(item.attrib.get("Id") == "LOGSFOLDER" and item.attrib.get("Name") == "Logs" for item in directories)
+    assert any(item.attrib.get("Id") == "MachineLogs" for item in component_refs)
+
+
+def test_windows_installer_applies_protected_machine_acls() -> None:
+    root = ElementTree.parse("scripts/mdm/windows/hol-guard.wxs").getroot()
+    namespace = "{http://wixtoolset.org/schemas/v4/wxs}"
+    components = {item.attrib["Id"]: item for item in root.findall(f".//{namespace}Component")}
+    expected = {
+        "RuntimeAcl": "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)",
+        "MachineState": "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)",
+        "MachineLogs": "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)",
+    }
+
+    for component_id, sddl in expected.items():
+        permission = components[component_id].find(f"{namespace}CreateFolder/{namespace}PermissionEx")
+        assert permission is not None
+        assert permission.attrib["Sddl"] == sddl
+
+
+def test_windows_builder_verifies_acl_records_in_built_msi() -> None:
+    builder = Path("scripts/mdm/windows/build-msi.ps1").read_text(encoding="utf-8")
+    verifier = Path("scripts/mdm/windows/verify-msi-acls.ps1").read_text(encoding="utf-8")
+
+    assert "verify-msi-acls.ps1') -MsiPath $Msi" in builder
+    assert "SELECT `LockObject`, `Table`, `SDDLText`, `Condition`" in verifier
+    assert "INSTALLFOLDER =" in verifier
+    assert "STATEFOLDER =" in verifier
+    assert "LOGSFOLDER =" in verifier
+    assert "$Expected.Remove($Row.LockObject)" in verifier
+
+
+def test_macos_installer_stages_protected_state_and_log_surfaces() -> None:
+    script = Path("scripts/mdm/macos/build-pkg.sh").read_text(encoding="utf-8")
+
+    assert 'readonly STATE="${STAGE}/Library/Application Support/HOL Guard State"' in script
+    assert 'readonly LOGS="${STAGE}/Library/Logs/HOL Guard"' in script
+    assert 'mkdir -p "${RUNTIME}" "${STATE}" "${LOGS}"' in script
+    assert "--ownership recommended" in script
+
+
 def test_macos_activation_preserves_spaced_home_paths() -> None:
     script = Path("scripts/mdm/macos/activate-current-user.sh").read_text(encoding="utf-8")
 
