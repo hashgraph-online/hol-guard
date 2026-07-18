@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0.0",
+  "introduced_in_corpus": "1.0.0",
+  "expires_by": "release/2.2-runtime-gate",
+  "status": "known-unresolved",
+  "gaps": [
+    {"gap_id":"CDX-060-review-allow","owner":"CDX-060","kind":"underclassified","oracle_floor":"review","observed_floor":"allow","count":350,"case_ids_digest":"e463192f1d1fe0975b7592f4ebae510bfb33a974da728ca5b70131869e89019d"},
+    {"gap_id":"CDX-061-review-allow","owner":"CDX-061","kind":"underclassified","oracle_floor":"review","observed_floor":"allow","count":275,"case_ids_digest":"3fa9a427b95fe34c2d5ee94b48b4b6274c500b8c6d69ab54909e148d51da46f1"},
+    {"gap_id":"CDX-062-block-allow","owner":"CDX-062","kind":"underclassified","oracle_floor":"block","observed_floor":"allow","count":4167,"case_ids_digest":"25b21fd7c4aaa89c3a34c6e06071f33b602331b94118451ff4511305a20e33a1"},
+    {"gap_id":"CDX-062-review-allow","owner":"CDX-062","kind":"underclassified","oracle_floor":"review","observed_floor":"allow","count":100,"case_ids_digest":"9dd79a932e0e22e773f0886088c7e681d6766cf64257e8865b49c20179ee79d9"},
+    {"gap_id":"CDX-063-review-allow","owner":"CDX-063","kind":"underclassified","oracle_floor":"review","observed_floor":"allow","count":25,"case_ids_digest":"185ae6f2f8e1278e3a53f710a1b2e142ecce3d922baadd16a62e755f5c898fcb"},
+    {"gap_id":"CDX-064-block-allow","owner":"CDX-064","kind":"underclassified","oracle_floor":"block","observed_floor":"allow","count":4166,"case_ids_digest":"848963c2d0806c4e6777a726a3364a310d313577cba7abab6ae3ec6f1ae14102"},
+    {"gap_id":"CDX-064-block-review","owner":"CDX-064","kind":"underclassified","oracle_floor":"block","observed_floor":"review","count":12501,"case_ids_digest":"00fff9d744b652b813b4f7cb20f973ce7e2fb583bd7999423fb1f074b672519a"},
+    {"gap_id":"CDX-064-reapproval-allow","owner":"CDX-064","kind":"underclassified","oracle_floor":"require-reapproval","observed_floor":"allow","count":25,"case_ids_digest":"acc13ca6a4a9b95c2001915b48244707cf9cceee7a9460228598b6ddda400e8a"},
+    {"gap_id":"CDX-065-reapproval-allow","owner":"CDX-065","kind":"underclassified","oracle_floor":"require-reapproval","observed_floor":"allow","count":8333,"case_ids_digest":"152c3cdeb16ed57bcffba6ce3f3da17993ba9d59e0b781524649b38977c776e8"},
+    {"gap_id":"CDX-065-review-allow","owner":"CDX-065","kind":"underclassified","oracle_floor":"review","observed_floor":"allow","count":25,"case_ids_digest":"b94529a04beaa0341800ab4d5489a6c169cfcbd40f69f3982fdaf19e7da1b459"},
+    {"gap_id":"CDX-066-block-allow","owner":"CDX-066","kind":"underclassified","oracle_floor":"block","observed_floor":"allow","count":5207,"case_ids_digest":"0cfda2b072beaf4fb251ea5f3e32679c14c8f056eb5a2ec4f359e564029029e6"},
+    {"gap_id":"CDX-066-block-review","owner":"CDX-066","kind":"underclassified","oracle_floor":"block","observed_floor":"review","count":7293,"case_ids_digest":"ae28cea5bbaa01aaa542cdd0af1362bf927ae6d64365868e8baf93b038af00f0"},
+    {"gap_id":"CDX-066-reapproval-allow","owner":"CDX-066","kind":"underclassified","oracle_floor":"require-reapproval","observed_floor":"allow","count":8358,"case_ids_digest":"439f9d01178c0561734c9c6379ba1026097d0521a4d921a040560cd37943c3ef"},
+    {"gap_id":"CDX-066-review-allow","owner":"CDX-066","kind":"underclassified","oracle_floor":"review","observed_floor":"allow","count":175,"case_ids_digest":"1715dd357cd1a2c136069aebdd0f19666d991bdb52ff29a47a6c736476a8b1b8"}
+  ]
+}

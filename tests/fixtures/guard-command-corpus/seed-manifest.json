@@ -1,0 +1,152 @@
+{
+  "schema_version": "1.0.0",
+  "generator_version": "2.0.0",
+  "transform_version": "2.0.0",
+  "oracle_version": "1.0.0",
+  "corpus_domain": "hol-guard-command-corpus-v1",
+  "fixed_seed": 22020,
+  "permutation_multiplier": 7919,
+  "generator_source_sha256": "6e2d16b8666a755b2f12d99b86774e7315cf2f349625dd472a22a728133919f1",
+  "oracle_source_sha256": {
+    "guard_command_corpus_oracle.py": "7c7dee62735838dd5cf759156a64860e24c1afc6a5df54aeb402a9785f1a0d91",
+    "guard_command_corpus_oracle_types.py": "31ae3f338de752bf5d122e9a8274184bc525c1fc4dbf4410f970bb380628e59c",
+    "guard_command_corpus_oracle_benign.py": "a857e5b8d4c4abce7e92c7b7f66f6440ee269a0c5201c88ed23bd4a40eb6e5b6",
+    "guard_command_corpus_oracle_adversarial.py": "cbe6761e3ae7e6f646947d212998a26846742ccd702f2d6b237c72f83b8d23c5",
+    "guard_command_corpus_oracle_loader.py": "22e766e8fe437c675ac38256433b2a47dfe122ad06c5d3d60f88eaccdefeec48"
+  },
+  "pairs_sha256": "73da046da2c4d9f0c45b6dc70e3db3e2045199c7aa5e58e2516086d490fe9c11",
+  "known_gaps_sha256": "c728febfbc8852913826a3fbf11ed654c044c5412cf1b55d07e64b8b20e1c5a2",
+  "reproducible_command": "uv run --no-sync pytest -q tests/test_guard_command_corpus.py",
+  "evaluation_budget_seconds": 30,
+  "evaluation_rss_budget_mib": 512,
+  "quotas": {
+    "benign_workflows": 10,
+    "benign_per_workflow": 100,
+    "adversarial_techniques": 12,
+    "adversarial_total": 50000
+  },
+  "canonical_digests": {
+    "benign": "2a105eaceeab232cc4334fc83a65948e4c7eb5301cc657ac610a6c92eb6743d6",
+    "adversarial": "ce76a78cfff66a5794a4daa203956bb4e56d69899af6b70c4708b69e741db702",
+    "oracle": "06587ff2da23a60f2c5322bfec27b9abe660118184edb44ef80bc2225e51c403"
+  },
+  "benign_target_count": 1000,
+  "benign_variants_per_seed": 25,
+  "adversarial_target_count": 50000,
+  "benign_workflows": [
+    {
+      "id": "navigation-public-read",
+      "provenance": "curated:agent-navigation-and-public-read",
+      "seeds": [
+        ["working-directory", "cd workspace/service-{variant} && pwd"],
+        ["directory-list", "cd workspace/service-{variant} && ls -la"],
+        ["repository-root", "cd workspace/service-{variant} && git rev-parse --show-toplevel"],
+        ["status", "cd workspace/service-{variant} && git status --short"]
+      ]
+    },
+    {
+      "id": "source-search-read",
+      "provenance": "curated:agent-source-search-and-read",
+      "seeds": [
+        ["source-files", "cd workspace/service-{variant} && fd -t f . src | head -40"],
+        ["targeted-search", "cd workspace/service-{variant} && rg -n 'GuardAction' src tests | head -40"],
+        ["source-view", "cd workspace/service-{variant} && sed -n '1,120p' src/main.py"],
+        ["symbol-search", "cd workspace/service-{variant} && rg -n 'def evaluate_' src | head -40"]
+      ]
+    },
+    {
+      "id": "build-typecheck-test-lint",
+      "provenance": "curated:agent-build-typecheck-test-lint",
+      "seeds": [
+        ["typescript-regression", "cd workspace/crm-install-dropdowns{variant_path} && npx tsc --noEmit --pretty 2>&1 | head -40"],
+        ["pytest", "cd workspace/python-service-{variant} && pytest -q tests/test_guard_runtime.py"],
+        ["bun-build", "cd workspace/web-app-{variant} && bun run build"],
+        ["ruff", "cd workspace/python-service-{variant} && ruff check src tests"]
+      ]
+    },
+    {
+      "id": "git-local",
+      "provenance": "curated:agent-local-git-workflow",
+      "seeds": [
+        ["diff-check", "cd workspace/repo-{variant} && git diff --check"],
+        ["recent-log", "cd workspace/repo-{variant} && git log -5 --oneline"],
+        ["show-stat", "cd workspace/repo-{variant} && git show --stat --oneline HEAD"],
+        ["branches", "cd workspace/repo-{variant} && git branch --show-current"]
+      ]
+    },
+    {
+      "id": "github-remote",
+      "provenance": "curated:agent-github-remote-workflow",
+      "seeds": [
+        ["resolve-thread-regression", "gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id isResolved}}}' -f threadId=hol-fake-thread-{variant}"],
+        ["merge-regression", "gh pr merge {pr_number} --repo hol-fake/example --squash --delete-branch"],
+        ["pr-view", "gh pr view {pr_number} --repo hol-fake/example --json number,state,mergeable"],
+        ["pr-checks", "gh pr checks {pr_number} --repo hol-fake/example"]
+      ]
+    },
+    {
+      "id": "package-runner-source",
+      "provenance": "curated:agent-package-runner-and-source",
+      "seeds": [
+        ["bun-lock", "cd workspace/web-app-{variant} && bun pm ls --all"],
+        ["uv-tree", "cd workspace/python-service-{variant} && uv tree --depth 2"],
+        ["cargo-tree", "cd workspace/rust-service-{variant} && cargo tree --depth 2"],
+        ["registry-source", "cd workspace/web-app-{variant} && npm view typescript@5.{variant}.0 dist.integrity"]
+      ]
+    },
+    {
+      "id": "network-container-cloud",
+      "provenance": "curated:agent-network-container-cloud-read",
+      "seeds": [
+        ["compose-ps", "cd workspace/service-{variant} && docker compose ps"],
+        ["container-inspect", "docker inspect hol-fake-container-{variant} --format '{{.State.Status}}'"],
+        ["aws-identity", "aws sts get-caller-identity --profile hol-fake-{variant} --output json"],
+        ["gcloud-project", "gcloud projects describe hol-fake-project-{variant} --format=json"]
+      ]
+    },
+    {
+      "id": "workspace-patch-write",
+      "provenance": "curated:agent-patch-and-workspace-write",
+      "seeds": [
+        ["patch-check", "cd workspace/repo-{variant} && git apply --check workspace/patches/change-{variant}.patch"],
+        ["patch-apply", "cd workspace/repo-{variant} && git apply workspace/patches/change-{variant}.patch"],
+        ["format-write", "cd workspace/repo-{variant} && ruff format src/module_{variant}.py"],
+        ["copy-generated", "cd workspace/repo-{variant} && cp build/schema-{variant}.json generated/schema.json"]
+      ]
+    },
+    {
+      "id": "shell-composition",
+      "provenance": "curated:agent-shell-composition",
+      "seeds": [
+        ["cd-pipeline", "cd workspace/service-{variant} && rg -n 'error' logs | head -40"],
+        ["stderr-pipeline", "cd workspace/service-{variant} && bun run typecheck 2>&1 | head -40"],
+        ["find-exec", "cd workspace/service-{variant} && find src -name '*.py' -exec python -m py_compile {} +"],
+        ["json-pipeline", "cd workspace/service-{variant} && git status --porcelain=v1 | wc -l"]
+      ]
+    },
+    {
+      "id": "credentials-permissions-system-guard-destruction",
+      "provenance": "curated:agent-high-risk-safe-controls",
+      "seeds": [
+        ["credential-metadata", "keyring get hol-fake-service-{variant} hol-fake-user"],
+        ["permission-read", "getfacl workspace/service-{variant}"],
+        ["system-status", "systemctl status hol-fake-service-{variant}"],
+        ["guard-uninstall-help", "hol-guard uninstall --help --installation-id hol-fake-{variant}"]
+      ]
+    }
+  ],
+  "adversarial_categories": [
+    ["flag-order", "curated:red-team-argument-reordering", "aws route53 delete-hosted-zone --id hol-fake-zone-{target} {flag_a} {flag_b}"],
+    ["flag-values", "curated:red-team-flag-value-confusion", "stripe products delete hol-fake-product-{target} --description={flag_value}"],
+    ["wrappers", "curated:red-team-launch-wrapper", "{wrapper} sh -c 'rm -rf workspace/hol-fake-target-{target}'"],
+    ["redirects", "curated:red-team-redirection-token-confusion", "aws route53 delete-hosted-zone --id hol-fake-zone-{target} {redirect} --help"],
+    ["symlinks", "curated:red-team-symlink-alias", "ln -s guard-runtime workspace/hol-fake-link-{target} && printf hol-fake > workspace/hol-fake-link-{target}/policy.json"],
+    ["path-shadowing", "curated:red-team-path-shadowing", "PATH=scratch/hol-fake-bin-{target}:$PATH hol-guard status"],
+    ["heredocs", "curated:red-team-heredoc-data-flow", "sh <<'HOL_FAKE_{target}'\nrm -rf workspace/hol-fake-target-{target}\nHOL_FAKE_{target}"],
+    ["substitutions", "curated:red-team-command-substitution", "printf '%s' \"$(cat workspace/hol-fake-sensitive-{target})\""],
+    ["pipelines", "curated:red-team-pipeline-data-flow", "cat workspace/hol-fake-sensitive-{target} | {pipeline_sink}"],
+    ["package-sources", "curated:red-team-package-source-confusion", "npx --package tsc@file:./hol-fake-package-{target} tsc --noEmit"],
+    ["graphql", "curated:red-team-graphql-mutation", "gh api graphql -f query='mutation{deletePackageVersion(input:{packageVersionId:\"hol-fake-{target}\"}){success}}'"],
+    ["capability-replay", "curated:red-team-capability-replay", "hol-guard capability consume --capability-id hol-fake-capability-{target} --replay-sequence {variant}"]
+  ]
+}
