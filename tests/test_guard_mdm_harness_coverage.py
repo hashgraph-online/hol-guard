@@ -252,6 +252,27 @@ def test_same_digest_in_home_symlink_replacement_is_missing(tmp_path: Path) -> N
     assert verification.coverage == {"required": 1, "protected": 0, "degraded": 0, "missing": 1}
 
 
+def test_registered_in_home_symlink_repoint_never_becomes_protected(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    first = home / "first.toml"
+    second = home / "second.toml"
+    first.write_text("managed = true\n")
+    second.write_bytes(first.read_bytes())
+    artifact = home / "config.toml"
+    artifact.symlink_to(first)
+
+    harness_coverage.register_user_harnesses(paths, home, [_install("codex", artifact)])
+    artifact.unlink()
+    artifact.symlink_to(second)
+    verification = harness_coverage.verify_harness_coverage(paths, _policy("codex"))
+
+    assert verification.state == "degraded"
+    assert verification.reason_code == "harness_coverage_missing"
+    assert verification.coverage == {"required": 1, "protected": 0, "degraded": 0, "missing": 1}
+
+
 def test_artifact_replaced_by_out_of_home_symlink_is_degraded(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     home = tmp_path / "home"

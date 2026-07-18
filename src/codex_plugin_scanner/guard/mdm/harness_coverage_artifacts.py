@@ -148,18 +148,23 @@ def managed_manifest_paths(manifest: dict[str, object], home: Path, *, limit: in
             for item in items:
                 stack.append((item, depth + 1))
     resolved_home = home.resolve(strict=True)
-    resolved: list[Path] = []
+    manifest_paths: list[Path] = []
     for raw in candidates:
-        candidate = Path(raw).expanduser()
+        candidate = Path(raw)
+        if raw == "~":
+            candidate = resolved_home
+        elif raw.startswith("~/"):
+            candidate = resolved_home / raw[2:]
         if not candidate.is_absolute():
             candidate = resolved_home / candidate
+        candidate = Path(os.path.abspath(candidate))
         try:
             normalized = candidate.resolve(strict=False)
         except OSError:
             continue
         if normalized != resolved_home and normalized.is_relative_to(resolved_home):
-            resolved.append(normalized)
-    return sorted(set(resolved))[:limit]
+            manifest_paths.append(candidate)
+    return sorted(set(manifest_paths))[:limit]
 
 
 __all__ = ["artifact_digest", "managed_manifest_paths"]
