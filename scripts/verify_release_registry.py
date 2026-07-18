@@ -187,10 +187,14 @@ def _validated_download_url(url: object, filename: str, registry: Registry) -> s
         raise RegistryVerificationError("Registry distribution URL must be a string")
     parsed = urllib.parse.urlsplit(url)
     remote_filename = urllib.parse.unquote(parsed.path.rsplit("/", 1)[-1])
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise RegistryVerificationError("Registry distribution URL has an invalid port") from exc
     if (
         parsed.scheme != "https"
         or parsed.hostname != registry.file_host
-        or parsed.port not in (None, 443)
+        or port not in (None, 443)
         or parsed.username is not None
         or parsed.password is not None
         or parsed.query

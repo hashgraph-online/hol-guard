@@ -163,6 +163,20 @@ def test_inspects_exact_release_without_exposing_urls_in_cli(capsys: pytest.Capt
     assert "pythonhosted.org" not in output
 
 
+def test_inspect_release_rejects_an_invalid_distribution_port() -> None:
+    document = json.loads(
+        _release_payload(
+            Registry.TESTPYPI,
+            {WHEEL: (WHEEL_BYTES, None), SDIST: (SDIST_BYTES, None)},
+        )
+    )
+    document["urls"][0]["url"] = f"https://test-files.pythonhosted.org:invalid/{WHEEL}"
+    fetcher = FakeFetcher({_release_url(Registry.TESTPYPI): json.dumps(document).encode()})
+
+    with pytest.raises(RegistryVerificationError, match="invalid port"):
+        inspect_release(Registry.TESTPYPI, VERSION, fetcher=fetcher)
+
+
 def test_computes_local_guard_wheel_and_sdist_hashes(tmp_path: Path) -> None:
     dist = _local_dist(tmp_path)
     (dist / f"plugin_scanner-{VERSION}-py3-none-any.whl").write_bytes(b"scanner")

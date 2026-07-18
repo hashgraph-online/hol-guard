@@ -832,13 +832,23 @@ jobs:
           if release_json=$(gh release view "$tag" --json isDraft,isPrerelease 2>/dev/null); then
             jq -e '.isDraft == false and .isPrerelease == true' <<< "$release_json" >/dev/null
             existing_dir=$(mktemp -d)
-            gh release download "$tag" --pattern 'hol_guard-*' --dir "$existing_dir"
-            mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -name 'hol_guard-*' -print0 | sort -z)
-            mapfile -d '' remote_files < <(find "$existing_dir" -maxdepth 1 -type f -name 'hol_guard-*' -print0 | sort -z)
+            gh release download "$tag" --dir "$existing_dir"
+            mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
+            mapfile -d '' remote_files < <(find "$existing_dir" -maxdepth 1 -type f -print0 | sort -z)
             [[ "${#local_files[@]}" -gt 0 ]]
             [[ "${#local_files[@]}" == "${#remote_files[@]}" ]]
             for local_file in "${local_files[@]}"; do
-              cmp --silent "$local_file" "$existing_dir/$(basename "$local_file")"
+              remote_file="$existing_dir/$(basename "$local_file")"
+              [[ -f "$remote_file" ]]
+              if [[ "$remote_file" != *.intoto.jsonl ]]; then
+                cmp --silent "$local_file" "$remote_file"
+              fi
+            done
+            bundle="$existing_dir/hol-guard-v${VERSION}.intoto.jsonl"
+            [[ -s "$bundle" ]]
+            for remote_file in "$existing_dir"/hol_guard-*; do
+              gh attestation verify "$remote_file" --repo "$GITHUB_REPOSITORY" \
+                --bundle "$bundle" --source-digest "$SOURCE_SHA" >/dev/null
             done
             exit 0
           fi
@@ -978,13 +988,23 @@ jobs:
           if release_json=$(gh release view "$tag" --json isDraft,isPrerelease 2>/dev/null); then
             jq -e '.isDraft == false and .isPrerelease == false' <<< "$release_json" >/dev/null
             existing_dir=$(mktemp -d)
-            gh release download "$tag" --pattern 'hol_guard-*' --dir "$existing_dir"
-            mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -name 'hol_guard-*' -print0 | sort -z)
-            mapfile -d '' remote_files < <(find "$existing_dir" -maxdepth 1 -type f -name 'hol_guard-*' -print0 | sort -z)
+            gh release download "$tag" --dir "$existing_dir"
+            mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
+            mapfile -d '' remote_files < <(find "$existing_dir" -maxdepth 1 -type f -print0 | sort -z)
             [[ "${#local_files[@]}" -gt 0 ]]
             [[ "${#local_files[@]}" == "${#remote_files[@]}" ]]
             for local_file in "${local_files[@]}"; do
-              cmp --silent "$local_file" "$existing_dir/$(basename "$local_file")"
+              remote_file="$existing_dir/$(basename "$local_file")"
+              [[ -f "$remote_file" ]]
+              if [[ "$remote_file" != *.intoto.jsonl ]]; then
+                cmp --silent "$local_file" "$remote_file"
+              fi
+            done
+            bundle="$existing_dir/hol-guard-v${VERSION}.intoto.jsonl"
+            [[ -s "$bundle" ]]
+            for remote_file in "$existing_dir"/hol_guard-*; do
+              gh attestation verify "$remote_file" --repo "$GITHUB_REPOSITORY" \
+                --bundle "$bundle" --source-digest "$SOURCE_SHA" >/dev/null
             done
             exit 0
           fi

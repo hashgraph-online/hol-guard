@@ -232,12 +232,18 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
     assert 'gh release view "$tag" --json isDraft,isPrerelease' in release_run
     assert 'gh release download "$tag"' in release_run
     assert 'cmp --silent "$local_file"' in release_run
+    assert "mapfile -d '' local_files" in release_run
+    assert 'gh attestation verify "$remote_file"' in release_run
+    assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in release_run
     assert "--verify-tag" in release_run
 
     stable_release_run = next(step["run"] for step in jobs["release"]["steps"] if step.get("name") == "Create release")
     assert 'gh release view "$tag" --json isDraft,isPrerelease' in stable_release_run
     assert 'gh release download "$tag"' in stable_release_run
     assert 'cmp --silent "$local_file"' in stable_release_run
+    assert "mapfile -d '' local_files" in stable_release_run
+    assert 'gh attestation verify "$remote_file"' in stable_release_run
+    assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in stable_release_run
     assert "--verify-tag" in stable_release_run
 
 
