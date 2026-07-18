@@ -51,7 +51,11 @@ def _claims(key_id: str, **updates: object) -> dict[str, object]:
 
 def _signed_lease(private: ec.EllipticCurvePrivateKey, key_id: str) -> SignedHealthLease:
     claims = HealthLeaseClaims.parse(_claims(key_id))
-    return SignedHealthLease(claims, private.sign(claims.signing_payload(), ec.ECDSA(hashes.SHA256())))
+    signed = SignedHealthLease(
+        claims,
+        private.sign(claims.signing_payload(), ec.ECDSA(hashes.SHA256())),
+    )
+    return SignedHealthLease.parse(signed.canonical_bytes())
 
 
 def _snapshot() -> dict[str, object]:
