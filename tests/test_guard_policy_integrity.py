@@ -46,7 +46,12 @@ from codex_plugin_scanner.guard.local_trust_contract import (
 )
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.policy_authority import PolicyAuthorityError
+from codex_plugin_scanner.guard.policy_bundle_decisions import build_policy_bundle_decisions
+from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.store import GuardStore, SystemKeyringSecretStore
+from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+
+_POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
 
 
 @pytest.fixture(autouse=True)
@@ -61,6 +66,80 @@ def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _store(tmp_path: Path) -> GuardStore:
     return GuardStore(tmp_path / "guard-home")
+
+
+def _install_signed_exact_policy(
+    store: GuardStore,
+    *,
+    artifact_id: str,
+    action: str = "allow",
+    reason: str = "Authenticated policy-integrity test rule.",
+    now: str = "2026-06-14T00:00:00Z",
+) -> None:
+    bundle_version = f"integrity-{artifact_id.rsplit(':', 1)[-1]}"
+    bundle = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": bundle_version,
+            "bundleHash": "",
+            "issuedAt": now,
+            "expiresAt": None,
+            "rolloutState": "enforcing",
+            "policyDefaults": {
+                "mode": "observe",
+                "defaultAction": "allow",
+                "unknownPublisherAction": "allow",
+                "changedHashAction": "allow",
+                "newNetworkDomainAction": "allow",
+                "subprocessAction": "allow",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [
+                {
+                    "ruleId": f"integrity-rule-{artifact_id.rsplit(':', 1)[-1]}",
+                    "action": action,
+                    "reason": reason,
+                    "artifactId": artifact_id,
+                    "scope": {
+                        "agents": [],
+                        "devices": [],
+                        "ecosystems": [],
+                        "environments": [],
+                        "harnesses": ["codex"],
+                        "locations": [],
+                    },
+                }
+            ],
+            "cloudExceptions": [],
+            "acknowledgements": [],
+        },
+        workspace_id=_POLICY_BUNDLE_WORKSPACE_ID,
+    )
+    store.set_sync_payload(
+        "oauth_local_credentials",
+        {"workspace_id": _POLICY_BUNDLE_WORKSPACE_ID},
+        now,
+    )
+    device = store.get_device_metadata()
+    decisions = build_policy_bundle_decisions(
+        bundle,
+        device_id=str(device["installation_id"]),
+        device_name=str(device["device_label"]),
+    )
+    assert len(decisions) == 1
+    assert decisions[0].artifact_id == artifact_id
+    store.apply_policy_bundle_authority(
+        decisions,
+        now,
+        policy_bundle=bundle,
+        policy_bundle_keyring=policy_bundle_test_keyring(workspace_id=_POLICY_BUNDLE_WORKSPACE_ID),
+        cloud_exceptions=[],
+        policy_bundle_ack={"bundleVersion": bundle_version, "status": "applied"},
+        policy_bundle_checkpoint=policy_bundle_acceptance_checkpoint(bundle),
+        update_last_good=True,
+        remote_write_authorized=True,
+    )
 
 
 def _enable_macos_native_policy_integrity(
@@ -1212,10 +1291,9 @@ def test_tampered_signed_row_is_ignored_and_event_emitted(tmp_path: Path) -> Non
 
 def test_remote_policy_row_is_honored_without_local_mac(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    store.replace_remote_policies(
-        [_decision(artifact_id="codex:project:remote", artifact_hash="hash-remote", source="cloud-sync")],
-        "2026-06-14T00:00:00Z",
-        remote_write_authorized=True,
+    _install_signed_exact_policy(
+        store,
+        artifact_id="codex:project:remote",
     )
 
     resolved = store.resolve_policy(
@@ -1237,10 +1315,9 @@ def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(
     from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 
     store = _store(tmp_path)
-    store.replace_remote_policies(
-        [_decision(artifact_id="codex:project:remote-tampered", artifact_hash="hash-remote", source="cloud-sync")],
-        "2026-06-14T00:00:00Z",
-        remote_write_authorized=True,
+    _install_signed_exact_policy(
+        store,
+        artifact_id="codex:project:remote-tampered",
     )
     original_result = GuardStore._policy_integrity_result_for_row
 
@@ -1303,6 +1380,22 @@ def test_local_policy_write_cannot_impersonate_remote_policy_source(tmp_path: Pa
         [_decision(artifact_id="codex:project:valid-remote", artifact_hash="hash-valid", source="team-policy")],
         "2026-06-14T00:01:00Z",
         remote_write_authorized=True,
+    )
+
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:project:valid-remote",
+            "hash-valid",
+            now="2026-06-14T00:01:30Z",
+        )
+        is None
+    )
+
+    _install_signed_exact_policy(
+        store,
+        artifact_id="codex:project:valid-remote",
+        now="2026-06-14T00:01:45Z",
     )
 
     resolved = store.resolve_policy(

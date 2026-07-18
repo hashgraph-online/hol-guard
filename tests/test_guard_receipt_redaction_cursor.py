@@ -8,7 +8,14 @@ import pytest
 import codex_plugin_scanner.guard.runtime.runner as runner
 from codex_plugin_scanner.guard.config import update_guard_settings
 from codex_plugin_scanner.guard.models import GuardReceipt
+from codex_plugin_scanner.guard.policy_bundle_parser import (
+    computed_policy_bundle_hash,
+    payload_hash_for_policy_bundle,
+)
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
+from codex_plugin_scanner.guard.runtime.local_request_snapshots import (
+    _resolve_cloud_receipt_redaction_level as _resolve_snapshot_redaction_level,
+)
 from codex_plugin_scanner.guard.runtime.runner import (
     _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER,
     _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
@@ -16,8 +23,10 @@ from codex_plugin_scanner.guard.runtime.runner import (
     _persist_cloud_receipt_redaction_level,
     _receipt_sync_cursor_rowids_from_batch,
     _receipt_sync_rows_with_command_detail_backfill,
+    _resolve_cloud_receipt_redaction_level,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
 
 def _store_blocked_command_receipt(store: GuardStore, receipt_id: str = "guard-receipt-sync-auth") -> None:
@@ -73,6 +82,197 @@ def _sync_unauthorized_error() -> urllib.error.HTTPError:
         {},
         None,
     )
+
+
+def _signed_redaction_policy_bundle(
+    *,
+    level: str | None,
+    bundle_version: str = "policy-2026-07-01.1",
+    issued_at: str = "2026-07-01T00:00:00Z",
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": bundle_version,
+        "bundleHash": "",
+        "issuedAt": issued_at,
+        "expiresAt": None,
+        "verifier": {},
+        "rolloutState": "enforcing",
+        "policyDefaults": {
+            "mode": "enforce",
+            "defaultAction": "block",
+            "unknownPublisherAction": "review",
+            "changedHashAction": "require-reapproval",
+            "newNetworkDomainAction": "block",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": True,
+        },
+        "rules": [],
+        "acknowledgements": [],
+    }
+    if level is not None:
+        payload["receiptRedactionLevel"] = level
+    return sign_policy_bundle(payload, workspace_id="workspace-1")
+
+
+def _seed_policy_bundle_trust(store: GuardStore) -> None:
+    store.set_sync_payload(
+        "oauth_local_credentials",
+        {"workspace_id": "workspace-1"},
+        "2026-07-01T00:00:00Z",
+    )
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-1"),
+        "2026-07-01T00:00:00Z",
+    )
+
+
+def test_invalid_cached_bundle_cannot_retain_relaxed_receipt_redaction(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_policy_bundle_trust(store)
+    bundle = _signed_redaction_policy_bundle(level="none")
+    bundle["verifier"] = {
+        "algorithm": "sha256",
+        "keyId": "attacker-recomputed-digest",
+        "signature": None,
+    }
+    bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
+    bundle["payloadHash"] = payload_hash_for_policy_bundle(bundle)
+    bundle["verifier"]["signature"] = bundle["payloadHash"]
+    store.set_sync_payload("policy_bundle", bundle, "2026-07-01T00:00:00Z")
+    store.set_sync_payload(
+        "cloud_receipt_redaction_level",
+        {"level": "none", "updated_at": "2026-07-01T00:00:00Z"},
+        "2026-07-01T00:00:00Z",
+    )
+
+    assert _resolve_cloud_receipt_redaction_level(store) == "full"
+    assert _resolve_snapshot_redaction_level(store) == "full"
+
+
+def test_valid_signed_bundle_can_relax_receipt_redaction(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_policy_bundle_trust(store)
+    store.set_sync_payload(
+        "policy_bundle",
+        _signed_redaction_policy_bundle(level="none"),
+        "2026-07-01T00:00:00Z",
+    )
+
+    assert _resolve_cloud_receipt_redaction_level(store) == "none"
+    assert _resolve_snapshot_redaction_level(store) == "none"
+
+
+def test_signed_receipt_redaction_authority_can_clear_and_relax_again(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_policy_bundle_trust(store)
+    responses = iter(
+        [
+            {
+                "syncedAt": "2026-07-01T00:00:01Z",
+                "receiptsStored": 0,
+                "policyBundle": _signed_redaction_policy_bundle(
+                    level="none",
+                    bundle_version="policy-2026-07-01.1",
+                    issued_at="2026-07-01T00:00:01Z",
+                ),
+            },
+            {
+                "syncedAt": "2026-07-01T00:00:02Z",
+                "receiptsStored": 0,
+                "policyBundle": _signed_redaction_policy_bundle(
+                    level=None,
+                    bundle_version="policy-2026-07-01.2",
+                    issued_at="2026-07-01T00:00:02Z",
+                ),
+            },
+            {
+                "syncedAt": "2026-07-01T00:00:03Z",
+                "receiptsStored": 0,
+                "policyBundle": _signed_redaction_policy_bundle(
+                    level="none",
+                    bundle_version="policy-2026-07-01.3",
+                    issued_at="2026-07-01T00:00:03Z",
+                ),
+            },
+        ]
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "_urlopen_json_with_timeout_retry",
+        lambda **_kwargs: next(responses),
+    )
+    monkeypatch.setattr(runner, "sync_pain_signals", lambda _store, auth_context=None: 0)
+    monkeypatch.setattr(
+        runner,
+        "sync_guard_events",
+        lambda _store, auth_context=None: {"accepted": 0, "statuses": []},
+    )
+    auth_context = {
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "access_token": "test-access-token",
+        "dpop_key_material": None,
+    }
+
+    runner.sync_receipts(store, auth_context=auth_context)
+
+    assert _resolve_cloud_receipt_redaction_level(store) == "none"
+    assert _resolve_snapshot_redaction_level(store) == "none"
+    assert store.get_sync_payload(_RELAXED_RECEIPT_REDACTION_RESYNC_MARKER) == {
+        "level": "none",
+        "updated_at": "2026-07-01T00:00:01Z",
+    }
+    store.set_sync_payload(
+        "receipt_sync_cursor",
+        {"last_rowid": 41, "synced_at": "2026-07-01T00:00:01Z"},
+        "2026-07-01T00:00:01Z",
+    )
+    store.set_sync_payload(
+        _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER,
+        {
+            "level": "none",
+            "updated_at": "2026-07-01T00:00:01Z",
+            "complete": True,
+        },
+        "2026-07-01T00:00:01Z",
+    )
+
+    runner.sync_receipts(store, auth_context=auth_context)
+
+    assert _resolve_cloud_receipt_redaction_level(store) == "full"
+    assert _resolve_snapshot_redaction_level(store) == "full"
+    assert store.get_sync_payload("cloud_receipt_redaction_level") == {
+        "level": "full",
+        "updated_at": "2026-07-01T00:00:02Z",
+    }
+    assert store.get_sync_payload(_RELAXED_RECEIPT_REDACTION_RESYNC_MARKER) is None
+    assert store.get_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER) is None
+    assert store.get_sync_payload("receipt_sync_cursor") == {
+        "last_rowid": 41,
+        "synced_at": "2026-07-01T00:00:02Z",
+    }
+
+    runner.sync_receipts(store, auth_context=auth_context)
+
+    assert _resolve_cloud_receipt_redaction_level(store) == "none"
+    assert _resolve_snapshot_redaction_level(store) == "none"
+    assert store.get_sync_payload("receipt_sync_cursor") == {
+        "last_rowid": 0,
+        "synced_at": "2026-07-01T00:00:03Z",
+        "reason": "cloud_receipt_redaction_level_relaxed",
+        "receipt_redaction_level": "none",
+    }
+    assert store.get_sync_payload(_RELAXED_RECEIPT_REDACTION_RESYNC_MARKER) == {
+        "level": "none",
+        "updated_at": "2026-07-01T00:00:03Z",
+    }
+    assert store.get_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER) is None
 
 
 def test_cloud_receipt_redaction_relaxation_resets_receipt_cursor_before_storing_level(tmp_path) -> None:

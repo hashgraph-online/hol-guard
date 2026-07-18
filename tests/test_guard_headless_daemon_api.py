@@ -25,7 +25,8 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payload
 from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE
-from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.models import GuardApprovalRequest, PolicyDecision
+from codex_plugin_scanner.guard.policy_bundle_parser import payload_hash_for_policy_bundle
 from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
     guard_review_oauth_metadata,
@@ -38,11 +39,16 @@ from codex_plugin_scanner.guard.runtime.runner import (
 )
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.guard_review_signing_helpers import (
     REVIEW_SIGNING_KEY_ID,
     review_trusted_keyring_payload,
     review_verification_keys,
     sign_review_payload,
+)
+from tests.policy_bundle_signing_helpers import (
+    policy_bundle_test_keyring,
+    sign_policy_bundle,
 )
 from tests.test_guard_supply_chain_evaluator import WORKSPACE_ID, _bundle_response, _package
 
@@ -88,7 +94,7 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
         "dpop_key_material": None,
     }
     store.set_sync_payload(
-        "policy_bundle_keyring",
+        "guard_review_verification_keyring",
         review_trusted_keyring_payload(workspace_id=workspace_id),
         now,
     )
@@ -2388,6 +2394,12 @@ def test_headless_policy_sync_persists_policy_and_receipt(tmp_path: Path) -> Non
 
 def test_headless_policy_sync_accepts_policy_bundle_and_returns_bundle_metadata(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(),
+        "2026-05-19T00:00:00Z",
+    )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -2399,7 +2411,7 @@ def test_headless_policy_sync_accepts_policy_bundle_and_returns_bundle_metadata(
             "issuedAt": "2026-04-19T00:00:10+00:00",
             "expiresAt": None,
             "verifier": {
-                "algorithm": "sha256",
+                "algorithm": "rsa-pss-sha256",
                 "keyId": "guard-policy-bundle-v1",
                 "signature": None,
             },
@@ -2419,11 +2431,12 @@ def test_headless_policy_sync_accepts_policy_bundle_and_returns_bundle_metadata(
                     "ruleId": "pkg-block",
                     "action": "block",
                     "reason": "Block risky package installs.",
+                    "artifactType": "package_request",
                     "matcherFamilies": ["package-request"],
                     "scope": {
                         "agents": [],
                         "devices": [],
-                        "ecosystems": ["npm"],
+                        "ecosystems": [],
                         "environments": ["development"],
                         "harnesses": ["codex"],
                         "locations": [],
@@ -2432,7 +2445,7 @@ def test_headless_policy_sync_accepts_policy_bundle_and_returns_bundle_metadata(
             ],
             "acknowledgements": [],
         }
-        bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(bundle)
+        bundle = sign_policy_bundle(bundle)
         status, payload = _read_json_response(
             _request(
                 daemon.port,
@@ -2453,10 +2466,237 @@ def test_headless_policy_sync_accepts_policy_bundle_and_returns_bundle_metadata(
     assert payload["bundle_hash"] == bundle["bundleHash"]
     assert store.get_sync_payload("policy_bundle")["bundleVersion"] == "policy-2026-04-19.3"
     assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "block"
+    policy_bundle_ack = store.get_sync_payload("policy_bundle_ack")
+    assert isinstance(policy_bundle_ack, dict)
+    assert policy_bundle_ack["bundleHash"] == bundle["bundleHash"]
+    assert policy_bundle_ack["bundleVersion"] == "policy-2026-04-19.3"
+    assert policy_bundle_ack["status"] == "synced"
+
+
+def test_headless_policy_sync_passes_approval_gate_grant_to_atomic_activation(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(),
+        "2026-05-19T00:00:00Z",
+    )
+    update_approval_gate_settings(
+        store.guard_home,
+        {
+            "enabled": True,
+            "new_password": "policy-sync-password",
+            "confirm_password": "policy-sync-password",
+        },
+    )
+    bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
+    rules = bundle["rules"]
+    assert isinstance(rules, list)
+    rule = rules[0]
+    assert isinstance(rule, dict)
+    rule["action"] = "allow"
+    bundle = sign_policy_bundle(bundle)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "approval_password": "policy-sync-password",
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_bundle": json.dumps(bundle),
+                },
+            )
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200, payload
+    assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "allow"
+
+
+@pytest.mark.parametrize("rollout_state", ["draft", "simulated", "pending_approval"])
+def test_headless_policy_sync_rejects_authenticated_inactive_rollout(
+    tmp_path: Path,
+    rollout_state: str,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(),
+        "2026-05-19T00:00:00Z",
+    )
+    bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
+    bundle["rolloutState"] = rollout_state
+    bundle = sign_policy_bundle(bundle)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_bundle": json.dumps(bundle),
+                },
+            )
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "inactive_rollout_state"
+    assert "not active for local enforcement" in str(payload["message"])
+    assert store.get_sync_payload("policy_bundle") is None
+    assert store.list_policy_decisions() == []
+
+
+def test_headless_signed_empty_policy_bundle_clears_stale_remote_authority(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(),
+        "2026-07-17T00:00:00Z",
+    )
+    store.replace_remote_policies(
+        [
+            PolicyDecision(
+                harness="codex",
+                scope="artifact",
+                action="block",
+                artifact_id="stale-cloud-block",
+                source="cloud-sync",
+            ),
+            PolicyDecision(
+                harness="codex",
+                scope="artifact",
+                action="allow",
+                artifact_id="stale-team-allow",
+                source="team-policy",
+            ),
+        ],
+        "2026-07-17T00:00:00Z",
+        remote_write_authorized=True,
+    )
+    store.set_cloud_exceptions(
+        [
+            {
+                "id": "stale-receipt-sync-allow",
+                "effect": "allow",
+                "scope": "artifact",
+                "harness": "codex",
+                "owner": "attacker@example.com",
+                "expiry": "2099-01-01T00:00:00+00:00",
+                "provenance": "receipt-sync",
+            }
+        ],
+        "2026-07-17T00:00:00Z",
+    )
+    bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
+    bundle["bundleVersion"] = "policy-2026-07-18.empty"
+    bundle["issuedAt"] = "2026-07-18T00:00:00+00:00"
+    bundle["rules"] = []
+    bundle["cloudExceptions"] = []
+    bundle["acknowledgements"] = []
+    bundle = sign_policy_bundle(bundle)
+
+    assert {(item["source"], item["action"]) for item in store.list_policy_decisions()} == {
+        ("cloud-sync", "block"),
+        ("team-policy", "allow"),
+    }
+    # Upgrade-era unsigned receipt-sync rows are never exposed as current
+    # signed policy authority, even before the next successful sync cleans the
+    # stored cache.
+    assert store.list_cloud_exceptions() == []
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_bundle": json.dumps(bundle),
+                },
+            )
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["bundle_hash"] == bundle["bundleHash"]
+    assert store.list_policy_decisions() == []
+    assert store.get_sync_payload("cloud_exceptions") == []
+    assert store.list_cloud_exceptions() == []
+
+
+def test_headless_policy_sync_does_not_ack_failed_policy_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(),
+        "2026-05-19T00:00:00Z",
+    )
+    bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
+
+    def _fail_policy_replacement(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("injected policy replacement failure")
+
+    monkeypatch.setattr(store, "apply_policy_bundle_authority", _fail_policy_replacement)
+
+    class _Server:
+        store: GuardStore
+
+        def __init__(self, guard_store: GuardStore) -> None:
+            self.store = guard_store
+
+    server = _Server(store)
+    handler = object.__new__(daemon_server._GuardDaemonHandler)
+    object.__setattr__(handler, "server", server)
+
+    with pytest.raises(RuntimeError, match="injected policy replacement failure"):
+        handler._handle_headless_policy_sync(
+            {
+                "harness": "codex",
+                "operation": "policy_sync",
+                "policy_bundle": json.dumps(bundle),
+            }
+        )
+
+    assert store.get_sync_payload("policy_bundle") is None
+    assert store.get_sync_payload("policy_bundle_ack") is None
 
 
 def test_headless_policy_sync_rejects_unsupported_daemon_version(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(),
+        "2026-05-19T00:00:00Z",
+    )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -2469,7 +2709,7 @@ def test_headless_policy_sync_rejects_unsupported_daemon_version(tmp_path: Path)
             "expiresAt": None,
             "minDaemonVersion": "999.0.0",
             "verifier": {
-                "algorithm": "sha256",
+                "algorithm": "rsa-pss-sha256",
                 "keyId": "guard-policy-bundle-v1",
                 "signature": None,
             },
@@ -2487,7 +2727,7 @@ def test_headless_policy_sync_rejects_unsupported_daemon_version(tmp_path: Path)
             "rules": [],
             "acknowledgements": [],
         }
-        bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(bundle)
+        bundle = sign_policy_bundle(bundle)
         status, payload = _read_json_response(
             _request(
                 daemon.port,
@@ -2505,6 +2745,50 @@ def test_headless_policy_sync_rejects_unsupported_daemon_version(tmp_path: Path)
 
     assert status == 400
     assert payload["error"] == "unsupported_daemon_version"
+
+
+def test_headless_policy_sync_approval_cannot_authenticate_digest_only_bundle(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(),
+        "2026-05-19T00:00:00Z",
+    )
+    bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
+    bundle["verifier"] = {
+        "algorithm": "sha256",
+        "keyId": "approval-is-not-signing-authority",
+        "signature": None,
+    }
+    bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(bundle)
+    bundle["payloadHash"] = payload_hash_for_policy_bundle(bundle)
+    bundle["verifier"]["signature"] = bundle["payloadHash"]
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_bundle": json.dumps(bundle),
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "unsupported_signature_algorithm"
+    assert "Sync again" in payload["message"]
+    assert store.get_sync_payload("policy_bundle") is None
+    assert store.list_policy_decisions(harness="codex") == []
 
 
 def test_headless_policy_sync_rejects_global_allow_and_missing_scope_targets(
@@ -3129,17 +3413,48 @@ def test_policy_cloud_exceptions_endpoint(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.runtime.runner import _persist_cloud_exceptions
 
     store = GuardStore(tmp_path / "guard-home")
-    _persist_cloud_exceptions(
-        store,
-        sync_exceptions=[
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    device_metadata = store.get_device_metadata()
+    device_id = device_metadata["installation_id"]
+    bundle = build_cloud_exception_policy_bundle(
+        cloud_exceptions=[
             {
                 "exceptionId": "artifact:codex:demo",
+                "effect": "allow",
                 "scope": "artifact",
                 "harness": "codex",
+                "artifactId": "codex:project:demo",
                 "owner": "owner@example.com",
+                "approver": "approver@example.com",
                 "expiresAt": "2099-01-01T00:00:00Z",
+                "sourceReceiptId": "receipt-demo",
             }
         ],
+        workspace_id="workspace-1",
+        device_id=device_id,
+    )
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-1"),
+        "2026-06-13T00:00:00Z",
+    )
+    store.set_sync_payload("policy_bundle", bundle, "2026-06-13T00:00:00Z")
+    store.set_sync_payload(
+        "policy_bundle_ack",
+        {
+            "appliedAt": "2026-06-13T00:00:00Z",
+            "bundleHash": bundle["bundleHash"],
+            "bundleVersion": bundle["bundleVersion"],
+            "deviceId": device_id,
+            "deviceName": device_metadata["device_label"],
+            "status": "synced",
+        },
+        "2026-06-13T00:00:00Z",
+    )
+    _persist_cloud_exceptions(
+        store,
+        device_id=device_id,
+        policy_bundle=bundle,
         now="2026-06-13T00:00:00Z",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
