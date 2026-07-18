@@ -177,7 +177,7 @@ def test_guard_run_launches_cursor_agent_subcommand(
     )
 
     assert evaluation["launched"] is True
-    assert captured["command"] == ["/bin/sh", str(cursor_path), "agent", "--print", "hello"]
+    assert captured["command"] == [str(Path("/bin/sh").resolve()), str(cursor_path), "agent", "--print", "hello"]
 
 
 def test_cursor_cli_detected_without_shims_when_cursor_agent_subcommand_exists(

@@ -13,6 +13,7 @@ import pytest
 from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardAction, PolicyDecision
+from codex_plugin_scanner.guard.runtime import approval_context as approval_context_module
 from codex_plugin_scanner.guard.store import GuardStore
 
 _IGNORED_BENIGN_HINT_REASON = "untrusted_hook_payload_hint_ignored_guard_verified_benign"
@@ -176,7 +177,18 @@ def test_verified_benign_copilot_hint_cannot_lower_trusted_cli_block(tmp_path: P
     assert composition["authoritative_action"] == "block"
 
 
-def test_verified_benign_copilot_exact_stored_block_remains_terminal(tmp_path: Path) -> None:
+def test_verified_benign_copilot_exact_stored_block_remains_terminal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_which = approval_context_module.shutil.which
+
+    def which_without_external_cd(command: str, *args: object, **kwargs: object) -> str | None:
+        if command == "cd":
+            return None
+        return real_which(command, *args, **kwargs)
+
+    monkeypatch.setattr(approval_context_module.shutil, "which", which_without_external_cd)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     store = GuardStore(tmp_path / "guard-home")
@@ -211,6 +223,7 @@ def test_verified_benign_copilot_exact_stored_block_remains_terminal(tmp_path: P
     assert rc == 0
     assert response["permissionDecision"] == "deny"
     assert receipt["policy_decision"] == "block"
+    assert receipt["artifact_hash"] == first_receipt["artifact_hash"]
     composition = _receipt_evidence(receipt, "policy_composition")
     assert composition["current_composed_action"] == "warn"
     assert composition["saved_policy_action"] == "block"

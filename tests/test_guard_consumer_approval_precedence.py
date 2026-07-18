@@ -604,7 +604,7 @@ def test_codex_postclaim_setup_uses_authorized_canonical_prefix_after_symlink_sw
     assert marker.exists() is False
     assert result["blocked"] is False
     assert result["launched"] is True
-    assert result["launch_command"] == ["/bin/sh", str(safe_codex.resolve())]
+    assert result["launch_command"] == [str(Path("/bin/sh").resolve()), str(safe_codex.resolve())]
 
 
 def test_no_saved_codex_setup_uses_previewed_canonical_prefix_after_symlink_swap(

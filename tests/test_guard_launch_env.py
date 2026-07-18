@@ -236,7 +236,7 @@ def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path,
 
     assert rc == 0
     assert output["launched"] is True
-    assert captured_command[:2] == ["/bin/sh", str(local_copilot)]
+    assert captured_command[:2] == [str(Path("/bin/sh").resolve()), str(local_copilot)]
     assert captured_command[2:] == [
         "--additional-mcp-config",
         f"@{workspace_dir / '.mcp.json'}",

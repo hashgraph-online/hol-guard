@@ -76,6 +76,8 @@ from .commands_support_runtime_policy import _runtime_hook_effective_policy_conf
 # Bump when generic-hook classification or action-composition semantics change.
 _GENERIC_HOOK_EVALUATOR_POLICY_VERSION = "generic-hook-evaluation-v1"
 
+_GENERIC_HOOK_EXPLICIT_POSIX_SHELL_TOOLS = frozenset({"ash", "bash", "dash", "sh", "zsh"})
+
 _GENERIC_HOOK_NON_CONTENT_FIELDS = frozenset(
     {
         "action_id",
@@ -230,6 +232,10 @@ def _generic_hook_runtime_launch_identity(
 
     command_source: str | None = None
     command: str | None = None
+    tool_command = command_text_from_tool_payload(
+        payload.get("tool_name"),
+        payload.get("tool_input", payload.get("arguments")),
+    )
     if action_envelope is not None and isinstance(action_envelope.command, str) and action_envelope.command.strip():
         command_source = "action_envelope"
         command = action_envelope.command.strip()
@@ -239,22 +245,37 @@ def _generic_hook_runtime_launch_identity(
             command_source = "payload"
             command = payload_command.strip()
         else:
-            tool_command = command_text_from_tool_payload(
-                payload.get("tool_name"),
-                payload.get("tool_input", payload.get("arguments")),
-            )
             if isinstance(tool_command, str) and tool_command.strip():
                 command_source = "payload_tool_input"
                 command = tool_command.strip()
 
-    return {
-        "command": command,
-        "command_source": command_source,
-        "resolved_launch": build_runtime_launch_identity(
+    tool_name = payload.get("tool_name")
+    normalized_tool_name = tool_name.strip().lower() if isinstance(tool_name, str) else None
+    if (
+        normalized_tool_name in _GENERIC_HOOK_EXPLICIT_POSIX_SHELL_TOOLS
+        and isinstance(tool_command, str)
+        and tool_command.strip()
+    ):
+        command_source = "payload_tool_input_shell"
+        command = tool_command.strip()
+        resolved_launch = build_runtime_launch_identity(
+            normalized_tool_name,
+            args=("-c", command),
+            structured_command=True,
+            cwd=launch_cwd,
+            launch_env=os.environ,
+        )
+    else:
+        resolved_launch = build_runtime_launch_identity(
             command,
             cwd=launch_cwd,
             launch_env=os.environ,
-        ),
+        )
+
+    return {
+        "command": command,
+        "command_source": command_source,
+        "resolved_launch": resolved_launch,
     }
 
 

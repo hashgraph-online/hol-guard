@@ -1541,7 +1541,7 @@ def test_policy_expiry_is_utc_normalized_and_excluded_at_boundary(
         "codex",
         artifact_id,
         context_hash,
-        now="2026-07-17T18:59:59.999999Z",
+        now="2026-07-17T18:59:59Z",
         consume_one_shot=False,
     )
     assert before_expiry["decision"] is not None

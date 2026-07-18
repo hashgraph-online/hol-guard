@@ -9,6 +9,7 @@ import io
 import json
 import os
 import shlex
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -126,6 +127,22 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _make_pinnable_harness_executable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    executable: str,
+) -> Path:
+    """Install a native no-op executable whose launch identity can be pinned."""
+
+    fake_bin = tmp_path / "pinnable-harness-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    executable_path = fake_bin / executable
+    shutil.copyfile("/usr/bin/true", executable_path)
+    executable_path.chmod(executable_path.stat().st_mode | 0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
+    return executable_path.resolve()
 
 
 def _request_header(request: urllib.request.Request, name: str) -> str | None:
@@ -11478,10 +11495,11 @@ def test_guard_run_returns_structured_error_when_executable_missing(tmp_path, ca
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
     _write_json(home_dir / ".claude" / "settings.json", {})
     _write_json(workspace_dir / ".mcp.json", {"mcpServers": {}})
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, "claude")
     monkeypatch.setattr(
         guard_runner_module.subprocess,
         "run",
-        lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("codex not found")),
+        lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("claude not found")),
     )
 
     rc = main(
@@ -11503,13 +11521,14 @@ def test_guard_run_returns_structured_error_when_executable_missing(tmp_path, ca
     assert rc == 127
     assert output["launched"] is False
     assert output["return_code"] == 127
-    assert "codex not found" in output["launch_error"]
+    assert "claude not found" in output["launch_error"]
 
 
 def test_guard_run_prompt_allow_once_launches_and_records_override(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
     global_server = home_dir / "global-server.py"
     workspace_server = workspace_dir / "workspace-server.py"
     _write_text(global_server, "print('global server')\n")
@@ -11559,6 +11578,7 @@ def test_guard_run_prompt_allow_artifact_persists_for_next_run(tmp_path, capsys,
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
     global_server = home_dir / "global-server.py"
     workspace_server = workspace_dir / "workspace-server.py"
     _write_text(global_server, "print('global server')\n")
@@ -12654,6 +12674,7 @@ def test_guard_run_headless_allow_persists_state_when_approval_center_is_availab
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
     safe_detection = HarnessDetection(
         harness="codex",
         installed=True,
@@ -12719,6 +12740,7 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, "claude")
     _write_text(workspace_dir / "guard-pre.py", "pass\n")
     _write_json(
         workspace_dir / ".mcp.json",
