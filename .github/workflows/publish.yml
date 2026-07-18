@@ -205,10 +205,15 @@ jobs:
             --release-version "$RELEASE_VERSION" \
             --expected-uv-version "$EXPECTED_UV_VERSION" \
             --setup-action-ref "$SETUP_UV_ACTION_REF"
-      - name: Stamp package version
+      - name: Stamp package version when needed
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          CURRENT_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          if [[ "$CURRENT_VERSION" == "$VERSION" ]]; then
+            echo "Package metadata already matches $VERSION"
+            exit 0
+          fi
           uv run --no-sync python scripts/sync_repo_version.py --version "$VERSION"
       - name: Build Guard package (hol-guard)
         run: |
