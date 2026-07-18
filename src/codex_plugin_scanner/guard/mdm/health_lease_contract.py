@@ -26,12 +26,14 @@ from .contracts import (
 
 HEALTH_LEASE_SCHEMA: Final = "hol-guard-health-lease.v1"
 HEALTH_LEASE_OUTBOX_SCHEMA: Final = "hol-guard-health-lease-outbox.v1"
+HEALTH_LEASE_ACK_SCHEMA: Final = "hol-guard-health-lease-ack.v1"
 HEALTH_LEASE_SIGNING_DOMAIN: Final = b"HOL-GUARD-HEALTH-LEASE-V1\x00"
 SIGNATURE_ALGORITHM: Final = "ecdsa-p256-sha256"
 SIGNATURE_ENCODING: Final = "asn1-der"
 MAX_LEASE_BYTES: Final = 32 * 1024
 MAX_SNAPSHOT_BYTES: Final = 256 * 1024
 MAX_OUTBOX_BYTES: Final = 4 * ((MAX_SNAPSHOT_BYTES + 2) // 3) + MAX_LEASE_BYTES + 4096
+MAX_ACK_BYTES: Final = 4096
 MAX_LEASE_SECONDS: Final = 3600
 MAX_UINT64: Final = (1 << 64) - 1
 P256_ORDER: Final = int("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16)
@@ -41,6 +43,7 @@ _HEX_32 = re.compile(r"[0-9a-f]{32}\Z")
 _HEX_64 = re.compile(r"[0-9a-f]{64}\Z")
 _KEY_ID = re.compile(r"[A-Za-z0-9_-]{43}\Z")
 _TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
+_ACK_TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\Z")
 _CLAIM_KEYS = {
     "schemaVersion",
     "workspaceId",
@@ -145,6 +148,15 @@ def _reject_json_constant(_value: str) -> None:
     raise ValueError("health_lease_json_invalid")
 
 
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("health_lease_ack_invalid")
+        result[key] = value
+    return result
+
+
 def _exact_keys(raw: dict[str, object], expected: set[str], reason: str = "health_lease_invalid") -> None:
     if set(raw) != expected:
         raise ValueError(reason)
@@ -186,6 +198,98 @@ class HealthLeaseBinding:
     def __post_init__(self) -> None:
         _safe_id(self.workspace_id)
         _safe_id(self.device_id)
+
+
+@dataclass(frozen=True, slots=True)
+class HealthLeaseAck:
+    status: str
+    workspace_id: str
+    device_id: str
+    machine_installation_id: str
+    installation_generation: str
+    sequence: int
+    lease_digest: str
+    received_at: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schemaVersion": HEALTH_LEASE_ACK_SCHEMA,
+            "status": self.status,
+            "workspaceId": self.workspace_id,
+            "deviceId": self.device_id,
+            "machineInstallationId": self.machine_installation_id,
+            "installationGeneration": self.installation_generation,
+            "sequence": self.sequence,
+            "leaseDigest": self.lease_digest,
+            "receivedAt": self.received_at,
+        }
+
+    def canonical_bytes(self) -> bytes:
+        return canonical_json_bytes(self.to_dict())
+
+    @property
+    def received_datetime(self) -> datetime:
+        return datetime.strptime(self.received_at, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+
+    @classmethod
+    def parse(cls, payload: bytes) -> HealthLeaseAck:
+        if not payload or len(payload) > MAX_ACK_BYTES:
+            raise ValueError("health_lease_ack_invalid")
+        try:
+            raw = json.loads(
+                payload.decode("utf-8"),
+                parse_constant=_reject_json_constant,
+                object_pairs_hook=_unique_json_object,
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+            raise ValueError("health_lease_ack_invalid") from exc
+        if not isinstance(raw, dict):
+            raise ValueError("health_lease_ack_invalid")
+        expected = {
+            "schemaVersion",
+            "status",
+            "workspaceId",
+            "deviceId",
+            "machineInstallationId",
+            "installationGeneration",
+            "sequence",
+            "leaseDigest",
+            "receivedAt",
+        }
+        _exact_keys(raw, expected, "health_lease_ack_invalid")
+        if raw.get("schemaVersion") != HEALTH_LEASE_ACK_SCHEMA or raw.get("status") not in {"accepted", "replayed"}:
+            raise ValueError("health_lease_ack_invalid")
+        sequence = raw.get("sequence")
+        if not isinstance(sequence, int) or isinstance(sequence, bool) or not 1 <= sequence <= MAX_UINT64:
+            raise ValueError("health_lease_ack_invalid")
+        received_at = raw.get("receivedAt")
+        if not isinstance(received_at, str) or _ACK_TIMESTAMP.fullmatch(received_at) is None:
+            raise ValueError("health_lease_ack_invalid")
+        try:
+            parsed_received_at = datetime.strptime(received_at, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+        except ValueError as exc:
+            raise ValueError("health_lease_ack_invalid") from exc
+        canonical_received_at = parsed_received_at.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        if canonical_received_at != received_at:
+            raise ValueError("health_lease_ack_invalid")
+        try:
+            workspace_id = _safe_id(raw.get("workspaceId"))
+            device_id = _safe_id(raw.get("deviceId"))
+            machine_installation_id = _match(raw.get("machineInstallationId"), _HEX_32)
+            installation_generation = _match(raw.get("installationGeneration"), _HEX_32)
+            lease_digest = _match(raw.get("leaseDigest"), _HEX_64)
+        except ValueError as exc:
+            raise ValueError("health_lease_ack_invalid") from exc
+        return cls(
+            str(raw["status"]),
+            workspace_id,
+            device_id,
+            machine_installation_id,
+            installation_generation,
+            sequence,
+            lease_digest,
+            canonical_received_at,
+        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -11,7 +11,9 @@ from cryptography.hazmat.primitives.asymmetric import ec
 
 from codex_plugin_scanner.guard.mdm.health_lease_contract import (
     HEALTH_LEASE_SCHEMA,
+    MAX_ACK_BYTES,
     MAX_LEASE_BYTES,
+    HealthLeaseAck,
     HealthLeaseClaims,
     HealthLeaseOutbox,
     SignedHealthLease,
@@ -56,6 +58,22 @@ def _signed_lease(private: ec.EllipticCurvePrivateKey, key_id: str) -> SignedHea
         private.sign(claims.signing_payload(), ec.ECDSA(hashes.SHA256())),
     )
     return SignedHealthLease.parse(signed.canonical_bytes())
+
+
+def _ack(**updates: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schemaVersion": "hol-guard-health-lease-ack.v1",
+        "status": "accepted",
+        "workspaceId": "workspace-a",
+        "deviceId": "device-a",
+        "machineInstallationId": "1" * 32,
+        "installationGeneration": "2" * 32,
+        "sequence": 1,
+        "leaseDigest": "4" * 64,
+        "receivedAt": "2026-07-18T14:00:01.000Z",
+    }
+    payload.update(updates)
+    return payload
 
 
 def _snapshot() -> dict[str, object]:
@@ -167,6 +185,51 @@ def test_signed_lease_parser_rejects_invalid_base64() -> None:
 
     with pytest.raises(ValueError, match="health_lease_invalid"):
         SignedHealthLease.parse(canonical_json_bytes(payload))
+
+
+def test_ack_accepts_portal_field_order_and_canonicalizes_durable_marker() -> None:
+    payload = _ack()
+    portal_order = json.dumps(payload, separators=(",", ":")).encode()
+
+    ack = HealthLeaseAck.parse(portal_order)
+
+    assert ack.status == "accepted"
+    assert HealthLeaseAck.parse(ack.canonical_bytes()) == ack
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"status": "rejected"},
+        {"workspaceId": "../escape"},
+        {"sequence": True},
+        {"sequence": 0},
+        {"leaseDigest": "F" * 64},
+        {"receivedAt": "2026-07-18T14:00:01Z"},
+        {"receivedAt": "2026-07-18T14:00:01.000+00:00"},
+    ],
+)
+def test_ack_rejects_malformed_fields(updates: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="health_lease_ack_invalid"):
+        HealthLeaseAck.parse(canonical_json_bytes(_ack(**updates)))
+
+
+def test_ack_rejects_unknown_duplicate_and_oversized_input() -> None:
+    unknown = _ack(unexpected=True)
+    duplicate = (
+        b'{"schemaVersion":"hol-guard-health-lease-ack.v1","status":"accepted","status":"replayed",'
+        b'"workspaceId":"workspace-a","deviceId":"device-a","machineInstallationId":"'
+        + b"1" * 32
+        + b'","installationGeneration":"'
+        + b"2" * 32
+        + b'","sequence":1,"leaseDigest":"'
+        + b"4" * 64
+        + b'","receivedAt":"2026-07-18T14:00:01.000Z"}'
+    )
+
+    for payload in (canonical_json_bytes(unknown), duplicate, b"{" + b" " * MAX_ACK_BYTES + b"}"):
+        with pytest.raises(ValueError, match="health_lease_ack_invalid"):
+            HealthLeaseAck.parse(payload)
 
 
 def test_outbox_rejects_oversized_snapshot() -> None:
