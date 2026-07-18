@@ -61,7 +61,7 @@ def test_publish_workflow_attests_toolchain_sbom_without_sending_it_to_pypi() ->
     workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8"))
     jobs = workflow["jobs"]
     build_steps = jobs["build"]["steps"]
-    release_steps = jobs["release"]["steps"]
+    release_steps = jobs["release-alpha"]["steps"]
 
     preflight_index = next(
         index
@@ -78,8 +78,6 @@ def test_publish_workflow_attests_toolchain_sbom_without_sending_it_to_pypi() ->
             "publish-testpypi",
             "publish-alpha-testpypi",
             "publish-alpha-pypi",
-            "publish-stable-testpypi",
-            "publish-stable-pypi",
         )
         for step in jobs[job_name]["steps"]
     )

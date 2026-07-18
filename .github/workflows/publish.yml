@@ -645,7 +645,7 @@ jobs:
           Install this exact alpha:
 
           \`\`\`bash
-          uv tool install --force "hol-guard==${VERSION}"
+          uv tool install "hol-guard[cisco]==${VERSION}"
           \`\`\`
           EOF
           mapfile -d '' ASSET_FILES < <(find dist -maxdepth 1 -type f -print0 | sort -z)
