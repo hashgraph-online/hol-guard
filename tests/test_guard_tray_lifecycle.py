@@ -280,6 +280,10 @@ class TestStartTray:
 
         with (
             patch(
+                "codex_plugin_scanner.guard.tray.lifecycle.detect_capability",
+                return_value=_capability(),
+            ),
+            patch(
                 "codex_plugin_scanner.guard.tray.lifecycle.is_process_alive",
                 side_effect=_alive,
             ),
