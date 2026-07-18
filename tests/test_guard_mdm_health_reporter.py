@@ -25,14 +25,20 @@ def _paths(root: Path) -> MachinePaths:
     return MachinePaths(root / "runtime", root / "state", root / "policy", root / "logs", root / "manifest")
 
 
-def _policy(*, owner: str = "mdm", locked: bool = True) -> ManagedPolicyState:
+def _policy(
+    *,
+    owner: str = "mdm",
+    locked: bool = True,
+    workspace_id: str = "workspace-a",
+    device_id: str = "device-a",
+) -> ManagedPolicyState:
     locks = frozenset({"selfProtection.workspaceId", "selfProtection.deviceId"}) if locked else frozenset()
     return ManagedPolicyState(
         "active",
         "native",
         ManagedPolicy(
             schema_version=MDM_POLICY_SCHEMA_VERSION,
-            settings={"selfProtection": {"workspaceId": "workspace-a", "deviceId": "device-a"}},
+            settings={"selfProtection": {"workspaceId": workspace_id, "deviceId": device_id}},
             locked_settings=locks,
             update=ManagedUpdatePolicy(owner=cast(InstallOwner, owner)),
         ),
@@ -95,12 +101,13 @@ def test_machine_cadence_uses_only_locked_machine_policy_binding(tmp_path: Path)
         (ManagedPolicyState("absent", "native", reason_code="managed_policy_absent"), "managed_policy_absent"),
         (_policy(locked=False), "health_reporter_binding_unlocked"),
         (_policy(owner="user"), "health_reporter_machine_management_required"),
+        (_policy(workspace_id="   "), "health_reporter_binding_invalid"),
     ],
 )
 def test_machine_cadence_fails_closed_without_managed_locked_binding(
     tmp_path: Path, state: ManagedPolicyState, reason: str
 ) -> None:
-    with pytest.raises((OSError, PermissionError), match=reason):
+    with pytest.raises((OSError, PermissionError, ValueError), match=reason):
         run_machine_health_cadence(
             paths=_paths(tmp_path),
             system_name="Darwin",
