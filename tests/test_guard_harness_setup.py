@@ -424,10 +424,10 @@ def test_apps_connect_opens_guard_cloud_app_page(
     assert payload["cloud_app"]["app_url"] == "https://hol.org/guard/apps/codex"
     assert len(opened_urls) == 1
     opened_url = urllib.parse.urlparse(opened_urls[0])
-    opened_fragment = urllib.parse.parse_qs(opened_url.fragment)
     assert f"{opened_url.scheme}://{opened_url.netloc}{opened_url.path}" == "https://hol.org/guard/apps/codex"
-    assert opened_fragment["guardDaemon"] == ["http://127.0.0.1:5474"]
-    assert opened_fragment["guard-token"][0].startswith("gld1.")
+    assert opened_url.fragment == ""
+    assert "guardDaemon" not in opened_urls[0]
+    assert "guard-token" not in opened_urls[0]
     assert "local-daemon-token-1234567890" not in json.dumps(payload)
 
 
