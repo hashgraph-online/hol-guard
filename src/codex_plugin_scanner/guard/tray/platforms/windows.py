@@ -17,6 +17,7 @@ Security contract:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -96,11 +97,16 @@ def _build_task_xml(guard_home: Path) -> str:
     All interpolated values (executable path, guard_home path) are XML-escaped
     via ``xml.sax.saxutils.escape()`` — this is element content, not attribute
     content, so ``escape()`` is correct (not ``quoteattr()`` which adds quotes).
+    Double quotes in the guard_home path are escaped as ``&quot;`` because the
+    path is embedded inside a ``--guard-home "..."`` quoted argument; a raw
+    ``"`` would prematurely terminate the argument on the Windows side.
     """
     executable = _pythonw_path()
+    # escape() handles & < >. For " inside the quoted argument, use &quot;.
+    escaped_home = escape(str(guard_home)).replace('"', '&quot;')
     arguments = (
         f'-m codex_plugin_scanner.guard.tray.runtime '
-        f'--guard-home "{escape(str(guard_home))}"'
+        f'--guard-home "{escaped_home}"'
     )
     return TASK_XML_TEMPLATE.format(
         task_name=TASK_NAME,
@@ -174,13 +180,17 @@ class WindowsTrayAdapter:
 
         task_xml = _build_task_xml(guard_home)
 
+        xml_path: str | None = None
         try:
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".xml", delete=False, encoding="utf-16",
             ) as f:
+                xml_path = f.name  # assign before write so cleanup works on failure
                 f.write(task_xml)
-                xml_path = f.name
         except OSError as error:
+            if xml_path is not None:
+                with contextlib.suppress(OSError):
+                    Path(xml_path).unlink(missing_ok=True)
             return {
                 "installed": False,
                 "reason": "startup_registration_failed",

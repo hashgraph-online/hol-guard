@@ -136,6 +136,14 @@ class TestBuildTaskXml:
              patch("pathlib.Path.exists", return_value=True):
             assert "&amp;" in _build_task_xml(Path("/tmp/a&b"))
 
+    def test_xml_escapes_double_quote_in_path(self) -> None:
+        """Paths with \" must be escaped as &quot; to avoid breaking the
+        --guard-home \"...\" argument quoting on the Windows side."""
+        with patch("sys.executable", "/fake/python.exe"), \
+             patch("pathlib.Path.exists", return_value=True):
+            xml = _build_task_xml(Path('/tmp/a"b'))
+            assert "&quot;" in xml
+
 
 class TestInspectRegistration:
     def test_returns_absent_when_no_task(self, tmp_path: Path) -> None:
