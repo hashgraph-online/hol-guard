@@ -10,7 +10,6 @@ on:
         type: choice
         options:
           - alpha
-          - stable
       release_train:
         description: "Authorized release train"
         required: true
@@ -24,10 +23,6 @@ on:
       expected_sha:
         description: "Exact source commit authorized for publication"
         required: true
-        type: string
-      promotion_pr:
-        description: "Merged release-to-main PR number (required for stable)"
-        required: false
         type: string
   push:
     branches: [main, release/2.2]
@@ -43,8 +38,47 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  authorize-release:
+    name: Authorize release dispatch
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Enforce alpha release authority
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GITHUB_ACTOR_ID: ${{ github.actor_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_SHA: ${{ github.sha }}
+          RELEASE_CHANNEL: ${{ github.event.inputs.release_channel }}
+          RELEASE_TRAIN: ${{ github.event.inputs.release_train }}
+          EXPECTED_SHA: ${{ github.event.inputs.expected_sha }}
+        run: |
+          if [[ "$GITHUB_RUN_ATTEMPT" != "1" ]]; then
+            echo "Release workflow reruns are denied; create a fresh authorized dispatch" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" ]]; then
+            echo "Release dispatch actor is not an authorized maintainer" >&2
+            exit 1
+          fi
+          if [[ "$RELEASE_CHANNEL" != "alpha" || "$RELEASE_TRAIN" != "2.2" ]]; then
+            echo "Only the release/2.2 alpha train is authorized" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" != "refs/heads/release/2.2" ]]; then
+            echo "Alpha releases must run from refs/heads/release/2.2" >&2
+            exit 1
+          fi
+          if [[ "$EXPECTED_SHA" != "$GITHUB_SHA" ]]; then
+            echo "Expected source SHA does not match the dispatch source" >&2
+            exit 1
+          fi
+
   build:
     name: Build + Verify
+    if: github.event_name != 'workflow_dispatch' || github.run_attempt == 1
+    needs: authorize-release
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -82,12 +116,12 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_ACTOR_ID: ${{ github.actor_id }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_CHANNEL: ${{ github.event.inputs.release_channel }}
           RELEASE_TRAIN: ${{ github.event.inputs.release_train }}
           RELEASE_VERSION: ${{ github.event.inputs.release_version }}
           EXPECTED_SHA: ${{ github.event.inputs.expected_sha }}
-          PROMOTION_PR: ${{ github.event.inputs.promotion_pr }}
           RELEASE_PUBLISHING_ENABLED: ${{ vars.RELEASE_PUBLISHING_ENABLED }}
         run: |
           BASE_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
@@ -101,59 +135,28 @@ jobs:
               echo "Release publishing is disabled until protected environments are verified" >&2
               exit 1
             fi
+            if [[ "$GITHUB_RUN_ATTEMPT" != "1" ]]; then
+              echo "Release workflow reruns are denied; create a fresh authorized dispatch" >&2
+              exit 1
+            fi
+            if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" ]]; then
+              echo "Release dispatch actor is not an authorized maintainer" >&2
+              exit 1
+            fi
             CHANNEL="$RELEASE_CHANNEL"
             TRAIN="$RELEASE_TRAIN"
+            if [[ "$TRAIN" != "2.2" ]]; then
+              echo "Unsupported release train: ${TRAIN}" >&2
+              exit 1
+            fi
             TRAIN_REF="refs/heads/release/${TRAIN}"
 
-            if [[ "$CHANNEL" == "alpha" ]]; then
-              if [[ "$GITHUB_REF" != "$TRAIN_REF" ]]; then
-                echo "Alpha releases must run from ${TRAIN_REF}" >&2
-                exit 1
-              fi
-            elif [[ "$CHANNEL" == "stable" ]]; then
-              if [[ "$GITHUB_REF" != "refs/tags/v${RELEASE_VERSION}" ]]; then
-                echo "Stable releases must run from the exact protected version tag" >&2
-                exit 1
-              fi
-              if [[ "$BASE_VERSION" != "$RELEASE_VERSION" ]]; then
-                echo "Stable source metadata must already equal ${RELEASE_VERSION}" >&2
-                exit 1
-              fi
-              if [[ -z "$PROMOTION_PR" ]]; then
-                echo "Stable releases require the merged promotion PR number" >&2
-                exit 1
-              fi
-              git fetch --no-tags origin \
-                "+refs/heads/main:refs/remotes/origin/main" \
-                "+${TRAIN_REF}:refs/remotes/origin/release/${TRAIN}"
-              if ! git merge-base --is-ancestor "refs/remotes/origin/release/${TRAIN}" "$SOURCE_SHA"; then
-                echo "Stable source must contain the complete reviewed release train" >&2
-                exit 1
-              fi
-              if ! git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main; then
-                echo "Stable source must be contained by the protected main branch" >&2
-                exit 1
-              fi
-              remote_tag_sha=$(git ls-remote origin "refs/tags/v${RELEASE_VERSION}^{}" | awk '{print $1}' || true)
-              if [[ -z "$remote_tag_sha" ]]; then
-                remote_tag_sha=$(git ls-remote --exit-code origin "refs/tags/v${RELEASE_VERSION}" | awk '{print $1}')
-              fi
-              if [[ "$remote_tag_sha" != "$SOURCE_SHA" ]]; then
-                echo "Protected stable tag must target the authorized promotion SHA" >&2
-                exit 1
-              fi
-              promotion_json=$(gh pr view "$PROMOTION_PR" --repo "$GITHUB_REPOSITORY" \
-                --json state,baseRefName,headRefName,mergeCommit)
-              if ! jq -e \
-                --arg train "release/${TRAIN}" \
-                --arg sha "$SOURCE_SHA" \
-                '.state == "MERGED" and .baseRefName == "main" and .headRefName == $train and .mergeCommit.oid == $sha' \
-                <<< "$promotion_json" >/dev/null; then
-                echo "Stable source must equal the reviewed release-to-main promotion commit" >&2
-                exit 1
-              fi
-            else
-              echo "Unsupported release channel: ${CHANNEL}" >&2
+            if [[ "$CHANNEL" != "alpha" ]]; then
+              echo "The release/2.2 train is alpha-only" >&2
+              exit 1
+            fi
+            if [[ "$GITHUB_REF" != "$TRAIN_REF" ]]; then
+              echo "Alpha releases must run from ${TRAIN_REF}" >&2
               exit 1
             fi
 
@@ -287,7 +290,11 @@ jobs:
 
   alpha-cross-platform:
     name: Alpha release tests (${{ matrix.os }})
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_channel == 'alpha'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.run_attempt == 1 &&
+      github.event.inputs.release_channel == 'alpha'
+    needs: build
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -343,6 +350,7 @@ jobs:
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       github.event_name == 'workflow_dispatch' &&
+      github.run_attempt == 1 &&
       github.event.inputs.release_channel == 'alpha' &&
       needs.build.result == 'success' &&
       (needs.alpha-cross-platform.result == 'success' || needs.alpha-cross-platform.result == 'skipped')
@@ -437,6 +445,7 @@ jobs:
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       github.event_name == 'workflow_dispatch' &&
+      github.run_attempt == 1 &&
       github.event.inputs.release_channel == 'alpha' &&
       needs.build.result == 'success' &&
       needs.publish-alpha-testpypi.result == 'success' &&
@@ -545,240 +554,12 @@ jobs:
           [[ -n "$wheel" ]]
           [[ "$(uv tool run --from "$wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
 
-  publish-stable-testpypi:
-    name: Verify stable artifact on TestPyPI
-    if: >-
-      always() &&
-      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      github.event_name == 'workflow_dispatch' &&
-      github.event.inputs.release_channel == 'stable' &&
-      needs.build.result == 'success' &&
-      needs.alpha-cross-platform.result == 'skipped'
-    needs: [build, alpha-cross-platform]
-    runs-on: ubuntu-latest
-    environment: testpypi-stable
-    permissions:
-      contents: read
-      id-token: write
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.build.outputs.source_sha }}
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
-        with:
-          version: "0.9.26"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: distributions
-          path: dist/
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: distribution-sha256
-      - name: Verify immutable build artifact
-        run: sha256sum --check distribution-sha256.txt
-      - name: Keep only the Guard release distribution
-        run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
-      - name: Revalidate stable source before TestPyPI
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PROMOTION_PR: ${{ github.event.inputs.promotion_pr }}
-          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
-          TRAIN: ${{ needs.build.outputs.release_train }}
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          train_ref="refs/heads/release/${TRAIN}"
-          git fetch --no-tags origin \
-            "+refs/heads/main:refs/remotes/origin/main" \
-            "+${train_ref}:refs/remotes/origin/release/${TRAIN}"
-          remote_tag_sha=$(git ls-remote origin "refs/tags/v${VERSION}^{}" | awk '{print $1}' || true)
-          if [[ -z "$remote_tag_sha" ]]; then
-            remote_tag_sha=$(git ls-remote --exit-code origin "refs/tags/v${VERSION}" | awk '{print $1}')
-          fi
-          [[ "$remote_tag_sha" == "$SOURCE_SHA" ]]
-          git merge-base --is-ancestor "refs/remotes/origin/release/${TRAIN}" "$SOURCE_SHA"
-          git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main
-          promotion_json=$(gh pr view "$PROMOTION_PR" --repo "$GITHUB_REPOSITORY" \
-            --json state,baseRefName,headRefName,mergeCommit)
-          jq -e \
-            --arg train "release/${TRAIN}" \
-            --arg sha "$SOURCE_SHA" \
-            '.state == "MERGED" and .baseRefName == "main" and .headRefName == $train and .mergeCommit.oid == $sha' \
-            <<< "$promotion_json" >/dev/null
-      - name: Inspect TestPyPI release state
-        id: testpypi
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
-            verify-release --registry testpypi --version "$VERSION" --dist-dir dist)
-          status=$(jq -r '.status' <<< "$result")
-          if [[ "$status" == "absent" ]]; then
-            echo "upload=true" >> "$GITHUB_OUTPUT"
-          elif [[ "$status" == "exact" ]]; then
-            echo "upload=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Unexpected TestPyPI status: $status" >&2
-            exit 1
-          fi
-      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
-        if: steps.testpypi.outputs.upload == 'true'
-        with:
-          repository-url: https://test.pypi.org/legacy/
-      - name: Download and verify exact TestPyPI artifacts
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          for attempt in {1..12}; do
-            if ! result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
-              verify-release --registry testpypi --version "$VERSION" --dist-dir dist \
-              --download-dir verified-testpypi); then
-              exit 1
-            fi
-            status=$(jq -r '.status' <<< "$result")
-            if [[ "$status" == "exact" ]]; then
-              break
-            fi
-            if [[ "$status" != "absent" || "$attempt" == "12" ]]; then
-              echo "TestPyPI did not expose the exact release artifacts" >&2
-              exit 1
-            fi
-            sleep 5
-          done
-          wheel=$(jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$result")
-          [[ -n "$wheel" ]]
-          [[ "$(uv tool run --from "$wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
-
-  publish-stable-pypi:
-    name: Publish stable to PyPI
-    if: >-
-      always() &&
-      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      github.event_name == 'workflow_dispatch' &&
-      github.event.inputs.release_channel == 'stable' &&
-      needs.build.result == 'success' &&
-      needs.publish-stable-testpypi.result == 'success' &&
-      needs.alpha-cross-platform.result == 'skipped'
-    needs: [build, alpha-cross-platform, publish-stable-testpypi]
-    runs-on: ubuntu-latest
-    environment: pypi-stable
-    permissions:
-      contents: read
-      id-token: write
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.build.outputs.source_sha }}
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
-        with:
-          version: "0.9.26"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: distributions
-          path: dist/
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: distribution-sha256
-      - name: Verify the TestPyPI-proven artifact
-        run: sha256sum --check distribution-sha256.txt
-      - name: Keep only the Guard release distribution
-        run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
-      - name: Inspect PyPI release state
-        id: pypi
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
-            verify-release --registry pypi --version "$VERSION" --dist-dir dist)
-          status=$(jq -r '.status' <<< "$result")
-          if [[ "$status" == "absent" ]]; then
-            echo "upload=true" >> "$GITHUB_OUTPUT"
-          elif [[ "$status" == "exact" ]]; then
-            echo "upload=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Unexpected PyPI status: $status" >&2
-            exit 1
-          fi
-      - name: Revalidate stable publication authorization
-        env:
-          ACTUAL_REF: ${{ github.ref }}
-          EXPECTED_SHA: ${{ github.event.inputs.expected_sha }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PROMOTION_PR: ${{ github.event.inputs.promotion_pr }}
-          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
-          TRAIN: ${{ needs.build.outputs.release_train }}
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          train_ref="refs/heads/release/${TRAIN}"
-          git fetch --no-tags origin \
-            "+refs/heads/main:refs/remotes/origin/main" \
-            "+${train_ref}:refs/remotes/origin/release/${TRAIN}"
-          remote_tag_sha=$(git ls-remote origin "refs/tags/v${VERSION}^{}" | awk '{print $1}' || true)
-          if [[ -z "$remote_tag_sha" ]]; then
-            remote_tag_sha=$(git ls-remote --exit-code origin "refs/tags/v${VERSION}" | awk '{print $1}')
-          fi
-          if [[ "$remote_tag_sha" != "$SOURCE_SHA" ]]; then
-            echo "Protected stable tag moved after build authorization" >&2
-            exit 1
-          fi
-          git merge-base --is-ancestor "refs/remotes/origin/release/${TRAIN}" "$SOURCE_SHA"
-          git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main
-          promotion_json=$(gh pr view "$PROMOTION_PR" --repo "$GITHUB_REPOSITORY" \
-            --json state,baseRefName,headRefName,mergeCommit)
-          jq -e \
-            --arg train "release/${TRAIN}" \
-            --arg sha "$SOURCE_SHA" \
-            '.state == "MERGED" and .baseRefName == "main" and .headRefName == $train and .mergeCommit.oid == $sha' \
-            <<< "$promotion_json" >/dev/null
-          versions=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
-            list-versions --registry pypi)
-          mapfile -t existing_versions < <(jq -r --arg version "$VERSION" '.[] | select(. != $version)' <<< "$versions")
-          validator_args=(
-            --channel stable
-            --version "$VERSION"
-            --git-ref "$train_ref"
-            --actual-ref "$ACTUAL_REF"
-            --github-sha "$SOURCE_SHA"
-            --expected-sha "$EXPECTED_SHA"
-          )
-          for existing_version in "${existing_versions[@]}"; do
-            validator_args+=(--existing-version "$existing_version")
-          done
-          uv run --with packaging==25.0 python scripts/validate_alpha_release.py "${validator_args[@]}"
-      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
-        if: steps.pypi.outputs.upload == 'true'
-      - name: Download and verify exact PyPI artifacts
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          for attempt in {1..12}; do
-            if ! result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
-              verify-release --registry pypi --version "$VERSION" --dist-dir dist \
-              --download-dir verified-pypi); then
-              exit 1
-            fi
-            status=$(jq -r '.status' <<< "$result")
-            if [[ "$status" == "exact" ]]; then
-              break
-            fi
-            if [[ "$status" != "absent" || "$attempt" == "12" ]]; then
-              echo "PyPI did not expose the exact release artifacts" >&2
-              exit 1
-            fi
-            sleep 5
-          done
-          wheel=$(jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$result")
-          [[ -n "$wheel" ]]
-          [[ "$(uv tool run --from "$wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
-
   release-alpha:
     name: Create alpha GitHub prerelease
     if: >-
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       github.event_name == 'workflow_dispatch' &&
+      github.run_attempt == 1 &&
       needs.build.outputs.channel == 'alpha'
     needs: [build, publish-alpha-pypi]
     runs-on: ubuntu-latest
@@ -864,7 +645,7 @@ jobs:
           Install this exact alpha:
 
           \`\`\`bash
-          uv tool install --force "hol-guard==${VERSION}"
+          uv tool install "hol-guard[cisco]==${VERSION}"
           \`\`\`
           EOF
           mapfile -d '' ASSET_FILES < <(find dist -maxdepth 1 -type f -print0 | sort -z)
@@ -877,171 +658,18 @@ jobs:
             --verify-tag \
             "${ASSET_FILES[@]}"
 
-  release:
-    name: Create GitHub Release
-    if: >-
-      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      github.event_name == 'workflow_dispatch' &&
-      needs.build.outputs.channel == 'stable'
-    needs: [build, publish-stable-pypi]
-    runs-on: ubuntu-latest
-    permissions:
-      attestations: write
-      contents: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          fetch-depth: 0
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: distributions
-          path: dist/
-      - name: Download release toolchain SBOM
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: release-toolchain-sbom
-          path: dist/
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: distribution-sha256
-      - name: Verify and select release assets
-        run: |
-          sha256sum --check distribution-sha256.txt
-          rm -f dist/plugin_scanner-* dist/plugin-scanner-*
-      - name: Generate changelog
-        id: changelog
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          # Get the range of commits since last tag
-          LAST_TAG=$(git describe --tags --abbrev=0 --exclude="v${VERSION}" 2>/dev/null || echo "")
-
-          if [ -n "$LAST_TAG" ]; then
-            LOG=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
-          else
-            LOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
-          fi
-
-          # Build release notes
-          cat > release-notes.md << EOF
-          ## v${VERSION}
-
-          ### What's Changed
-          ${LOG}
-
-          ### Installation
-          Base install:
-          \`\`\`bash
-          uv tool install hol-guard==${VERSION}
-          \`\`\`
-
-          Full Cisco coverage on Python 3.11+:
-          \`\`\`bash
-          uv tool install "hol-guard[cisco]==${VERSION}"
-          \`\`\`
-
-          \`\`\`bash
-          docker pull ghcr.io/hashgraph-online/hol-guard:${VERSION}
-          \`\`\`
-
-          **Full Changelog**: https://github.com/hashgraph-online/hol-guard/compare/${LAST_TAG}...v${VERSION}
-          EOF
-
-          echo "notes_path=release-notes.md" >> $GITHUB_OUTPUT
-      - name: Attest GitHub release assets
-        id: provenance
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
-        with:
-          subject-path: |
-            dist/*
-      - name: Materialize provenance bundle
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          cp "${{ steps.provenance.outputs.bundle-path }}" "dist/hol-guard-v${VERSION}.intoto.jsonl"
-      - name: Collect release asset files
-        id: release_assets
-        run: |
-          mapfile -d '' ASSET_FILES < <(find dist -maxdepth 1 -type f -print0 | sort -z)
-          if [ "${#ASSET_FILES[@]}" -eq 0 ]; then
-            echo "No release asset files found in dist/" >&2
-            exit 1
-          fi
-          {
-            echo "files<<EOF"
-            for asset in "${ASSET_FILES[@]}"; do
-              printf '%s\n' "$asset"
-            done
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-      - name: Create release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          remote_tag_sha=$(git ls-remote origin "refs/tags/v${VERSION}^{}" | awk '{print $1}' || true)
-          if [[ -z "$remote_tag_sha" ]]; then
-            remote_tag_sha=$(git ls-remote --exit-code origin "refs/tags/v${VERSION}" | awk '{print $1}')
-          fi
-          if [[ "$remote_tag_sha" != "$SOURCE_SHA" ]]; then
-            echo "Protected stable tag no longer targets the validated source SHA" >&2
-            exit 1
-          fi
-          tag="v${VERSION}"
-          if release_json=$(gh release view "$tag" --json isDraft,isPrerelease 2>/dev/null); then
-            jq -e '.isDraft == false and .isPrerelease == false' <<< "$release_json" >/dev/null
-            existing_dir=$(mktemp -d)
-            gh release download "$tag" --dir "$existing_dir"
-            mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
-            mapfile -d '' remote_files < <(find "$existing_dir" -maxdepth 1 -type f -print0 | sort -z)
-            [[ "${#local_files[@]}" -gt 0 ]]
-            [[ "${#local_files[@]}" == "${#remote_files[@]}" ]]
-            for local_file in "${local_files[@]}"; do
-              remote_file="$existing_dir/$(basename "$local_file")"
-              [[ -f "$remote_file" ]]
-              if [[ "$remote_file" != *.intoto.jsonl ]]; then
-                cmp --silent "$local_file" "$remote_file"
-              fi
-            done
-            bundle="$existing_dir/hol-guard-v${VERSION}.intoto.jsonl"
-            [[ -s "$bundle" ]]
-            for remote_file in "$existing_dir"/hol_guard-*; do
-              gh attestation verify "$remote_file" --repo "$GITHUB_REPOSITORY" \
-                --bundle "$bundle" --source-digest "$SOURCE_SHA" >/dev/null
-            done
-            exit 0
-          fi
-          mapfile -t RELEASE_ASSETS <<'EOF'
-          ${{ steps.release_assets.outputs.files }}
-          EOF
-          gh release create "$tag" \
-            --title "v${VERSION}" \
-            --verify-tag \
-            --notes-file ${{ steps.changelog.outputs.notes_path }} \
-            "${RELEASE_ASSETS[@]}"
-
   publish-container:
     name: Publish container image
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       github.event_name == 'workflow_dispatch' &&
+      github.run_attempt == 1 &&
       needs.build.result == 'success' &&
-      (
-        (
-          needs.build.outputs.channel == 'alpha' &&
-          needs.publish-alpha-pypi.result == 'success' &&
-          needs.release-alpha.result == 'success'
-        ) ||
-        (
-          needs.build.outputs.channel == 'stable' &&
-          needs.publish-stable-pypi.result == 'success' &&
-          needs.release.result == 'success'
-        )
-      )
-    needs: [build, publish-alpha-pypi, publish-stable-pypi, release-alpha, release]
+      needs.build.outputs.channel == 'alpha' &&
+      needs.publish-alpha-pypi.result == 'success' &&
+      needs.release-alpha.result == 'success'
+    needs: [build, publish-alpha-pypi, release-alpha]
     runs-on: ubuntu-latest
     permissions:
       contents: read
