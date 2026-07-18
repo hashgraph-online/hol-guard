@@ -92,6 +92,106 @@ def test_import_persists_document_identity_and_provenance(tmp_path: Path) -> Non
     assert isinstance(listed[0]["signed_at"], str)
 
 
+def test_imported_tool_family_matches_only_the_selected_harness(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard")
+    document = GuardPolicyDocument.from_mapping(
+        {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {"id": "tool-policy", "name": "Tool policy", "revision": 1},
+            "spec": {
+                "defaults": {"mode": "prompt"},
+                "rules": [
+                    {
+                        "id": "allow-mcp",
+                        "enabled": True,
+                        "match": {"tools": ["mcp"], "harnesses": ["codex"]},
+                        "effect": "allow",
+                        "lifetime": {"mode": "permanent"},
+                        "provenance": {
+                            "source": "cli-import",
+                            "createdAt": "2026-07-16T12:00:00Z",
+                        },
+                    }
+                ],
+            },
+        }
+    )
+    store.import_policy_document(
+        document,
+        compile_policy_document(document),
+        mode="merge",
+        now="2026-07-16T12:00:00Z",
+        approval_gate_grant=None,
+    )
+
+    matching = store.resolve_policy_decision_lookup(
+        "codex",
+        "codex:project:mcp:safe-read",
+        now="2026-07-16T12:01:00Z",
+    )
+    nonmatching = store.resolve_policy_decision_lookup(
+        "cursor",
+        "cursor:project:mcp:safe-read",
+        now="2026-07-16T12:01:00Z",
+    )
+
+    assert matching["decision"] is not None
+    assert matching["decision"]["action"] == "allow"
+    assert nonmatching["decision"] is None
+
+
+def test_imported_tool_family_respects_workspace_selector(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard")
+    document = GuardPolicyDocument.from_mapping(
+        {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {"id": "workspace-tool-policy", "name": "Workspace tool policy", "revision": 1},
+            "spec": {
+                "defaults": {"mode": "prompt"},
+                "rules": [
+                    {
+                        "id": "allow-workspace-mcp",
+                        "enabled": True,
+                        "match": {"tools": ["mcp"], "workspaces": ["project"]},
+                        "effect": "allow",
+                        "lifetime": {"mode": "permanent"},
+                        "provenance": {
+                            "source": "cli-import",
+                            "createdAt": "2026-07-16T12:00:00Z",
+                        },
+                    }
+                ],
+            },
+        }
+    )
+    store.import_policy_document(
+        document,
+        compile_policy_document(document),
+        mode="merge",
+        now="2026-07-16T12:00:00Z",
+        approval_gate_grant=None,
+    )
+
+    matching = store.resolve_policy_decision_lookup(
+        "codex",
+        "codex:project:mcp:safe-read",
+        workspace="project",
+        now="2026-07-16T12:01:00Z",
+    )
+    nonmatching = store.resolve_policy_decision_lookup(
+        "codex",
+        "codex:other:mcp:safe-read",
+        workspace="other",
+        now="2026-07-16T12:01:00Z",
+    )
+
+    assert matching["decision"] is not None
+    assert matching["decision"]["action"] == "allow"
+    assert nonmatching["decision"] is None
+
+
 def test_replace_removes_only_prior_yaml_imports(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard")
     first = _document(document_id="first", rule_ids=("rule-1",))
