@@ -35,7 +35,18 @@ _UTC_TIMESTAMP_RE: Final = re.compile(
     r"^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T" + r"([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]{1,9})?Z$"
 )
 _REDACTED_TIMESTAMP: Final = "1970-01-01T00:00:00Z"
-_SUPPORTED_MATCH_KEYS: Final = frozenset({"artifacts", "harnesses", "publishers", "workspaces"})
+_SUPPORTED_MATCH_KEYS: Final = frozenset({"artifacts", "harnesses", "publishers", "tools", "workspaces"})
+_TOOL_SELECTOR_FAMILIES: Final = {
+    "file-read": "file-read",
+    "mcp": "mcp",
+    "mcp-tool": "mcp-tool",
+    "package-request": "package-request",
+    "prompt": "prompt",
+    "prompt-env-read": "prompt-env-read",
+    "prompt-file": "prompt-file",
+    "shell": "tool-action",
+    "tool-action": "tool-action",
+}
 _LOCAL_SCOPES: Final = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 _PROVENANCE_SOURCES: Final = frozenset(
     {
@@ -708,6 +719,25 @@ def _selector_values(
         raise PolicyCompilationError("invalid_policy_match_selector", rule_id)
     return tuple(cast(list[str], items))
 
+def _artifact_selector_values(
+    match: Mapping[str, object],
+    *,
+    rule_id: str,
+) -> tuple[str | None, ...]:
+    artifacts = _selector_values(match, "artifacts", rule_id=rule_id)
+    tools = _selector_values(match, "tools", rule_id=rule_id)
+    if artifacts != (None,) and tools != (None,):
+        raise PolicyCompilationError("unsupported_policy_match", rule_id)
+    if tools == (None,):
+        return artifacts
+    families: list[str] = []
+    for tool in tools:
+        family = _TOOL_SELECTOR_FAMILIES.get(cast(str, tool).lower())
+        if family is None:
+            raise PolicyCompilationError("unsupported_policy_match", rule_id)
+        families.append(f"family:{family}")
+    return tuple(families)
+
 
 def _local_scope(
     extension: Mapping[str, object],
@@ -720,6 +750,8 @@ def _local_scope(
     preferred = extension.get("scope")
     if isinstance(preferred, str) and preferred in _LOCAL_SCOPES:
         return cast(DecisionScope, preferred)
+    if artifact_id is not None and artifact_id.startswith("family:"):
+        return "workspace" if workspace is not None else "harness"
     if artifact_id is not None:
         return "artifact"
     if workspace is not None:
@@ -770,7 +802,7 @@ def compile_policy_document(document: GuardPolicyDocument) -> tuple[CompiledPoli
         local_extension = raw_rule.get("x-hol-local")
         extension = local_extension if isinstance(local_extension, Mapping) else {}
         selectors = itertools.product(
-            _selector_values(match, "artifacts", rule_id=rule_id),
+            _artifact_selector_values(match, rule_id=rule_id),
             _selector_values(match, "harnesses", rule_id=rule_id),
             _selector_values(match, "publishers", rule_id=rule_id),
             _selector_values(match, "workspaces", rule_id=rule_id),
