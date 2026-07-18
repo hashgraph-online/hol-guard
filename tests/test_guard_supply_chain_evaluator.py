@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
@@ -446,7 +447,7 @@ def test_evaluate_package_request_artifact_posts_cloud_request_and_maps_block_re
     assert result.user_copy.dashboard_url is None
     assert "minimist@1.2.8" in result.user_copy.harness_message
     assert "npm install minimist@1.2.9" in result.user_copy.harness_message
-    assert "Review this request in HOL Guard, then retry." in result.user_copy.harness_message
+    assert "Review this request in HOL Guard, then retry." not in result.user_copy.harness_message
 
 
 def test_evaluate_package_request_artifact_posts_latest_range_for_unversioned_scoped_npm_request(
@@ -795,7 +796,52 @@ def test_evaluate_package_request_artifact_uses_cached_eval_before_network(
     assert result.user_copy.dashboard_url is None
     assert "guard/inbox" not in result.user_copy.harness_message
     assert "Review evidence:" not in result.user_copy.harness_message
-    assert "Review this request in HOL Guard, then retry." in result.user_copy.harness_message
+    assert "Review this request in HOL Guard, then retry." not in result.user_copy.harness_message
+
+
+@pytest.mark.parametrize("policy_action", ["block", "sandbox-required"])
+def test_normalize_package_user_copy_removes_review_routing_for_terminal_actions(
+    policy_action: GuardAction,
+) -> None:
+    result = evaluator_module._normalize_package_user_copy(
+        SupplyChainUserCopy(
+            title="Terminal action",
+            summary="HOL Guard stopped this package request.",
+            next_step="npm install minimist@1.2.9",
+            dashboard_url="http://127.0.0.1:5474/requests/request-1",
+            harness_message=(
+                "HOL Guard stopped this package request. "
+                "Open HOL Guard to approve or keep this blocked: "
+                "http://127.0.0.1:5474/requests/request-1. "
+                "After you choose, retry the same Codex action. "
+                "Review this request in HOL Guard, then retry."
+            ),
+        ),
+        policy_action=policy_action,
+    )
+
+    assert result.dashboard_url is None
+    assert result.harness_message == "HOL Guard stopped this package request."
+    assert "/requests/" not in result.harness_message
+    assert "Review this request in HOL Guard, then retry." not in result.harness_message
+
+
+@pytest.mark.parametrize("policy_action", ["review", "require-reapproval"])
+def test_normalize_package_user_copy_keeps_review_instruction_for_review_actions(
+    policy_action: GuardAction,
+) -> None:
+    result = evaluator_module._normalize_package_user_copy(
+        SupplyChainUserCopy(
+            title="Review required",
+            summary="HOL Guard paused this package request.",
+            next_step=None,
+            dashboard_url=None,
+            harness_message="HOL Guard paused this package request.",
+        ),
+        policy_action=policy_action,
+    )
+
+    assert result.harness_message.endswith("Review this request in HOL Guard, then retry.")
 
 
 def test_evaluate_package_request_artifact_skips_cached_eval_when_workspace_fingerprint_changes(
@@ -1364,6 +1410,102 @@ def test_evaluate_package_request_artifact_applies_policy_rule_override(
     assert result.policy_action == "warn"
     assert result.enforcement == "policy_override"
     assert result.matched_rule_id == "policy-rule-1"
+
+
+@pytest.mark.parametrize("harness_selector", [None, "*"])
+def test_evaluate_package_request_artifact_policy_rule_matches_unset_or_wildcard_harness(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    harness_selector: str | None,
+) -> None:
+    _force_cloud_fallback(monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="minimist",
+                version="1.2.8",
+                default_action="block",
+                recommended_fix_version="1.2.9",
+            )
+        ],
+        policy_rules=[
+            {
+                "action": "warn",
+                "ruleId": "all-harnesses-policy-rule",
+                "ecosystemSelector": "npm",
+                "enabled": True,
+                "expiresAt": "2099-01-01T00:00:00Z",
+                "harnessSelector": harness_selector,
+                "packageSelector": "minimist",
+                "priority": 1,
+                "severityThreshold": "low",
+                "versionRangeSelector": "1.2.8",
+            }
+        ],
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("minimist@1.2.8", harness="gemini"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "warn"
+    assert result.policy_action == "warn"
+    assert result.enforcement == "policy_override"
+    assert result.matched_rule_id == "all-harnesses-policy-rule"
+
+
+def test_evaluate_package_request_artifact_policy_rule_rejects_different_harness(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _force_cloud_fallback(monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="minimist",
+                version="1.2.8",
+                default_action="block",
+                recommended_fix_version="1.2.9",
+            )
+        ],
+        policy_rules=[
+            {
+                "action": "warn",
+                "ruleId": "codex-only-policy-rule",
+                "ecosystemSelector": "npm",
+                "enabled": True,
+                "expiresAt": "2099-01-01T00:00:00Z",
+                "harnessSelector": "codex",
+                "packageSelector": "minimist",
+                "priority": 1,
+                "severityThreshold": "low",
+                "versionRangeSelector": "1.2.8",
+            }
+        ],
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("minimist@1.2.8", harness="gemini"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "block"
+    assert result.policy_action == "block"
+    assert result.enforcement == "offline_cached"
+    assert result.matched_rule_id is None
 
 
 def test_evaluate_package_request_artifact_respects_policy_severity_threshold(

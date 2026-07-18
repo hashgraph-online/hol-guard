@@ -6,10 +6,12 @@ import hashlib
 import os
 import shutil
 import stat
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
+from .runtime.approval_context import build_runtime_launch_identity, runtime_launch_identity_is_reusable
 from .runtime.workspace_path_guard import resolve_path_within_workspace
 
 _MAX_CONFIG_FILE_BYTES = 2 * 1024 * 1024
@@ -189,6 +191,7 @@ def executable_material(
     repository_root: Path | None,
     manager: str,
     executable: str | None,
+    arguments: Sequence[str] = (),
     environment: Mapping[str, str],
     files: ContextFiles,
 ) -> tuple[dict[str, object], str | None]:
@@ -215,12 +218,43 @@ def executable_material(
     except ContextUnavailableError as error:
         return {"manager": manager, "requested": Path(requested).name, "status": error.reason}, error.reason
     location = _canonical_executable_location(candidate, workspace=workspace, repository_root=repository_root)
-    return {
+    launch_identity = build_runtime_launch_identity(
+        requested,
+        args=arguments,
+        structured_command=True,
+        direct_executable=True,
+        search_path=environment.get("PATH"),
+        cwd=workspace,
+        launch_env=environment,
+    )
+    executable_identity = launch_identity.get("executable")
+    if (
+        not isinstance(executable_identity, Mapping)
+        or executable_identity.get("status") != "verified"
+        or executable_identity.get("sha256") != hashlib.sha256(payload).hexdigest()
+    ):
+        return {
+            "manager": manager,
+            "requested": Path(requested).name,
+            "status": "package_manager_launch_identity_unavailable",
+        }, "package_manager_launch_identity_unavailable"
+    material: dict[str, object] = {
         "content_digest": hashlib.sha256(payload).hexdigest(),
+        "launch_identity": _portable_launch_identity(
+            launch_identity,
+            workspace=workspace,
+            repository_root=repository_root,
+        ),
         "location": location,
         "manager": manager,
         "requested": Path(requested).name,
-    }, None
+    }
+    if not ("/" in requested or "\\" in requested):
+        material["search_path_digest"] = hashlib.sha256((environment.get("PATH") or "").encode("utf-8")).hexdigest()
+    if not runtime_launch_identity_is_reusable(launch_identity):
+        material["status"] = "package_manager_launch_identity_unavailable"
+        return material, "package_manager_launch_identity_unavailable"
+    return material, None
 
 
 def _canonical_executable_location(candidate: Path, *, workspace: Path, repository_root: Path | None) -> str:
@@ -234,6 +268,42 @@ def _canonical_executable_location(candidate: Path, *, workspace: Path, reposito
     return f"external:{candidate}"
 
 
+def _portable_launch_identity(
+    value: object,
+    *,
+    workspace: Path,
+    repository_root: Path | None,
+) -> object:
+    """Normalize local absolute paths while retaining only hashed argv data."""
+
+    if isinstance(value, Mapping):
+        typed_value = cast(Mapping[object, object], value)
+        normalized: dict[str, object] = {}
+        for raw_key, item in typed_value.items():
+            key = str(raw_key)
+            if key in {"path", "launch_cwd", "command"} and isinstance(item, str):
+                candidate = Path(item)
+                normalized[key] = (
+                    _canonical_executable_location(
+                        candidate,
+                        workspace=workspace,
+                        repository_root=repository_root,
+                    )
+                    if candidate.is_absolute()
+                    else item
+                )
+                continue
+            normalized[key] = _portable_launch_identity(
+                item,
+                workspace=workspace,
+                repository_root=repository_root,
+            )
+        return normalized
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_portable_launch_identity(item, workspace=workspace, repository_root=repository_root) for item in value]
+    return value
+
+
 def dependency_material(
     *,
     workspace: Path,
@@ -242,8 +312,15 @@ def dependency_material(
 ) -> tuple[dict[str, object], str | None]:
     entries: list[dict[str, str]] = []
     failure: str | None = None
+    manager = _string_value(metadata.get("package_manager")) or ""
     for kind, key in (("manifest", "manifest_paths"), ("lockfile", "lockfile_paths")):
-        for relative_path in _string_items(metadata.get(key)):
+        configured_paths = _string_items(metadata.get(key))
+        inferred_paths = (
+            tuple(path for path in _default_dependency_paths(manager, kind=kind) if (workspace / path).is_file())
+            if not configured_paths
+            else ()
+        )
+        for relative_path in configured_paths or inferred_paths:
             resolved = resolve_path_within_workspace(workspace, relative_path)
             if resolved is None or not resolved.exists():
                 entries.append({"kind": kind, "path": relative_path, "status": "missing"})
@@ -269,6 +346,39 @@ def _string_items(value: object) -> tuple[str, ...]:
     if not isinstance(value, list | tuple):
         return ()
     return tuple(item.strip() for item in value if isinstance(item, str) and item.strip())
+
+
+def _default_dependency_paths(manager: str, *, kind: str) -> tuple[str, ...]:
+    normalized = manager.strip().lower()
+    manifests: dict[str, tuple[str, ...]] = {
+        "bun": ("package.json",),
+        "bunx": ("package.json",),
+        "npm": ("package.json",),
+        "npx": ("package.json",),
+        "pnpm": ("package.json", "pnpm-workspace.yaml"),
+        "yarn": ("package.json",),
+        "pip": ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg"),
+        "pip3": ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg"),
+        "poetry": ("pyproject.toml",),
+        "uv": ("pyproject.toml", "requirements.txt"),
+    }
+    lockfiles: dict[str, tuple[str, ...]] = {
+        "bun": ("bun.lock", "bun.lockb"),
+        "bunx": ("bun.lock", "bun.lockb"),
+        "npm": ("package-lock.json", "npm-shrinkwrap.json"),
+        "npx": ("package-lock.json", "npm-shrinkwrap.json"),
+        "pnpm": ("pnpm-lock.yaml",),
+        "yarn": ("yarn.lock",),
+        "pip": ("uv.lock", "poetry.lock", "Pipfile.lock"),
+        "pip3": ("uv.lock", "poetry.lock", "Pipfile.lock"),
+        "poetry": ("poetry.lock",),
+        "uv": ("uv.lock",),
+    }
+    return (manifests if kind == "manifest" else lockfiles).get(normalized, ())
+
+
+def _string_value(value: object) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 __all__ = [

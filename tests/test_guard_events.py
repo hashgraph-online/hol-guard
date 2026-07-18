@@ -125,7 +125,7 @@ class TestGuardEvents:
             """
 [mcp_servers.shared_tools]
 command = "python"
-args = ["-m", "http.server", "9000"]
+args = ["-m", "shared_tools"]
 """.strip()
             + "\n",
         )

@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from ...path_support import iter_safe_matching_files, resolves_within_root
+from ..aibom_detection import enrich_mcp_server_metadata
 from ..models import GuardArtifact, HarnessDetection
 from ..runtime.harness_attribution import cursor_hook_query_extras
 from ..shims import install_guard_shim, remove_guard_shim
@@ -381,6 +382,44 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                         continue
                     command = server_config.get("command")
                     url = server_config.get("url")
+                    args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
+                    raw_env = server_config.get("env")
+                    environment = (
+                        {
+                            key.strip(): value
+                            for key, value in raw_env.items()
+                            if isinstance(key, str) and key.strip() and isinstance(value, str)
+                        }
+                        if isinstance(raw_env, dict)
+                        else {}
+                    )
+                    headers = server_config.get("headers")
+                    configured_headers = (
+                        {
+                            key.strip(): value
+                            for key, value in headers.items()
+                            if isinstance(key, str) and key.strip() and isinstance(value, str)
+                        }
+                        if isinstance(headers, dict)
+                        else {}
+                    )
+                    metadata = enrich_mcp_server_metadata(
+                        {
+                            "name": name,
+                            "env": environment,
+                            "env_keys": sorted(environment),
+                            "headers_keys": (
+                                sorted(key for key in headers if isinstance(key, str))
+                                if isinstance(headers, dict)
+                                else []
+                            ),
+                        },
+                        command=command if isinstance(command, str) else None,
+                        args=args,
+                        url=url if isinstance(url, str) else None,
+                        transport="http" if isinstance(url, str) else "stdio",
+                        configured_headers=configured_headers,
+                    )
                     artifacts.append(
                         GuardArtifact(
                             artifact_id=_claude_mcp_artifact_id(scope, name),
@@ -390,17 +429,10 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                             source_scope=scope,
                             config_path=str(config_path),
                             command=command if isinstance(command, str) else None,
-                            args=tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str)),
+                            args=args,
                             url=url if isinstance(url, str) else None,
                             transport="http" if isinstance(server_config.get("url"), str) else "stdio",
-                            metadata={
-                                "env_keys": sorted(key for key in server_config.get("env", {}))
-                                if isinstance(server_config.get("env"), dict)
-                                else [],
-                                "headers_keys": sorted(key for key in server_config.get("headers", {}))
-                                if isinstance(server_config.get("headers"), dict)
-                                else [],
-                            },
+                            metadata=metadata,
                         )
                     )
             hooks = payload.get("hooks")

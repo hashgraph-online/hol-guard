@@ -54,6 +54,7 @@ from .policy_integrity import (
     verify_local_policy_row,
 )
 from .runtime.actions import GuardActionEnvelope
+from .runtime.approval_context import parse_approval_context_token
 from .runtime.scanner_cache import scanner_cache_key
 from .schemas.guard_event_v1 import GuardEventV1
 from .sqlite_tuning import SQLITE_BUSY_TIMEOUT_MS, SQLITE_CONNECT_TIMEOUT_SECONDS, SQLITE_WAL_BUSY_TIMEOUT_MS
@@ -205,6 +206,7 @@ class PolicyDecisionLookupResult(TypedDict):
     decision: dict[str, object] | None
     ignored_local_integrity: dict[str, object] | None
     trust_status: dict[str, object]
+    authority_revision: int
 
 
 _POLICY_INTEGRITY_KEY_REF = "guard-policy-integrity-key"
@@ -1349,6 +1351,10 @@ def _is_runtime_scoped_exact_match_key(value: str | None) -> bool:
     return isinstance(value, str) and value.startswith(_RUNTIME_SCOPED_EXACT_MATCH_PREFIX)
 
 
+def _is_approval_context_token(value: object) -> bool:
+    return parse_approval_context_token(value) is not None
+
+
 def _scoped_runtime_row_requires_exact_match(
     *,
     scope: str,
@@ -1356,6 +1362,7 @@ def _scoped_runtime_row_requires_exact_match(
     stored_artifact_hash: str | None,
     source: str,
     requested_artifact_id: str | None,
+    requested_artifact_hash: str | None = None,
     requested_runtime_exact_match_key: str | None = None,
 ) -> bool:
     if scope not in {"harness", "global"}:
@@ -1368,6 +1375,7 @@ def _scoped_runtime_row_requires_exact_match(
     expected_exact_keys = {
         key
         for key in (
+            requested_artifact_hash if _is_approval_context_token(requested_artifact_hash) else None,
             _runtime_scoped_exact_match_key(requested_artifact_id),
             requested_runtime_exact_match_key,
         )
@@ -1464,8 +1472,33 @@ def _chunks(values: Sequence[_ChunkT], size: int) -> Iterator[list[_ChunkT]]:
         yield list(values[index : index + size])
 
 
+def _parse_utc_timestamp(value: str) -> datetime:
+    candidate = value.strip()
+    if not candidate:
+        raise ValueError("timestamp must not be empty")
+    parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _canonical_utc_timestamp(value: str) -> str:
+    """Normalize an ISO-8601 timestamp for safe storage and comparison."""
+
+    return _parse_utc_timestamp(value).isoformat(timespec="microseconds")
+
+
+def _timestamp_has_expired(expires_at: str, *, now: str) -> bool:
+    """Return true at the expiry boundary and for malformed legacy values."""
+
+    try:
+        return _parse_utc_timestamp(expires_at) <= _parse_utc_timestamp(now)
+    except (TypeError, ValueError):
+        return True
+
+
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return _canonical_utc_timestamp(datetime.now(timezone.utc).isoformat())
 
 
 def _lease_expiry(now: str, lease_seconds: int) -> str:

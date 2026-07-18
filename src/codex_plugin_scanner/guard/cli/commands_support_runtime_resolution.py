@@ -5,16 +5,20 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import os
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from ._commands_shared import _now
+    from .commands_support_connect import _synced_policy_payload
     from .commands_support_hook_payload import _action_envelope_json, _coalesce_string
     from .commands_support_runtime_artifacts import _CODEX_PROMPT_SECRET_KEY_MARKERS
 
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from ..runtime.approval_context import build_runtime_launch_identity
+from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 
 def _redact_codex_prompt_secret_assignments(value: str) -> str:
     output: list[str] = []
@@ -113,49 +117,92 @@ def _copilot_hook_stage(payload: dict[str, object]) -> str | None:
             return value.strip().lower()
     return None
 
+@dataclass(frozen=True, slots=True)
+class _CopilotMcpRuntimeServer:
+    server_name: str
+    source_scope: str
+    config_path: str
+    server_config: object
+
+@dataclass(frozen=True, slots=True)
+class _CopilotMcpRuntimeTool:
+    server: _CopilotMcpRuntimeServer
+    tool_name: str
+
 def _copilot_runtime_tool_call(
     *,
     payload: dict[str, object],
     home_dir: Path,
     workspace: Path | None,
+    config: GuardConfig | None = None,
     preferred_workspace_config: str | None = None,
 ) -> tuple[GuardArtifact, str, object] | None:
     tool_name = payload.get("tool_name")
     if not isinstance(tool_name, str) or not tool_name.strip():
         return None
-    server_name: str | None = None
-    runtime_tool_name: str | None = None
-    source_scope = _coalesce_string(payload.get("source_scope"), "project" if workspace is not None else "global")
-    config_path = str(_runtime_policy_path("copilot", home_dir, workspace))
+    resolution: _CopilotMcpRuntimeTool | None = None
     if "/" in tool_name:
         server_name, runtime_tool_name = tool_name.split("/", 1)
+        if server_name.strip() and runtime_tool_name.strip():
+            runtime_server = _resolve_copilot_mcp_runtime_server(
+                server_name=server_name.strip(),
+                home_dir=home_dir,
+                workspace=workspace,
+                preferred_workspace_config=preferred_workspace_config,
+            )
+            if runtime_server is None:
+                runtime_server = _CopilotMcpRuntimeServer(
+                    server_name=server_name.strip(),
+                    source_scope=_coalesce_string(
+                        payload.get("source_scope"),
+                        "project" if workspace is not None else "global",
+                    ),
+                    config_path=str(_runtime_policy_path("copilot", home_dir, workspace)),
+                    server_config=None,
+                )
+            resolution = _CopilotMcpRuntimeTool(
+                server=runtime_server,
+                tool_name=runtime_tool_name.strip(),
+            )
     elif tool_name.startswith("mcp_"):
-        resolved = _resolve_copilot_mcp_runtime_tool(
+        resolution = _resolve_copilot_mcp_runtime_tool(
             tool_name=tool_name,
             home_dir=home_dir,
             workspace=workspace,
             preferred_workspace_config=preferred_workspace_config,
         )
-        if resolved is None:
-            return None
-        server_name, runtime_tool_name, source_scope, config_path = resolved
-    if (
-        not isinstance(server_name, str)
-        or not server_name.strip()
-        or not isinstance(runtime_tool_name, str)
-        or not runtime_tool_name.strip()
-    ):
+    if resolution is None:
         return None
+    launch_cwd = workspace or Path.cwd()
+    server_identity, server_fingerprint, transport = _copilot_runtime_server_identity(
+        resolution.server,
+        launch_cwd=launch_cwd,
+    )
+    tool_schema, tool_description = _copilot_runtime_tool_metadata(
+        payload,
+        server_config=resolution.server.server_config,
+        requested_tool_name=tool_name,
+        runtime_tool_name=resolution.tool_name,
+    )
     artifact = build_tool_call_artifact(
         harness="copilot",
-        server_name=server_name.strip(),
-        tool_name=runtime_tool_name.strip(),
-        source_scope=source_scope,
-        config_path=config_path,
-        transport="stdio",
+        server_name=resolution.server.server_name,
+        tool_name=resolution.tool_name,
+        source_scope=resolution.server.source_scope,
+        config_path=resolution.server.config_path,
+        transport=transport,
+        server_fingerprint=server_fingerprint,
+        server_identity=server_identity,
+        tool_schema=tool_schema,
+        tool_description=tool_description,
     )
     arguments = payload.get("tool_input", payload.get("arguments"))
-    artifact_hash = build_tool_call_hash(artifact, arguments)
+    artifact_hash = build_tool_call_hash(
+        artifact,
+        arguments,
+        workspace=workspace or Path.cwd(),
+        config=config,
+    )
     return artifact, artifact_hash, arguments
 
 def _resolve_copilot_mcp_runtime_tool(
@@ -164,15 +211,15 @@ def _resolve_copilot_mcp_runtime_tool(
     home_dir: Path,
     workspace: Path | None,
     preferred_workspace_config: str | None = None,
-) -> tuple[str, str, str, str] | None:
+) -> _CopilotMcpRuntimeTool | None:
     if not tool_name.startswith("mcp_"):
         return None
     suffix = tool_name[len("mcp_") :]
     if not suffix:
         return None
-    matches: list[tuple[int, int, str, str, str, str]] = []
-    for server_name, source_scope, config_path in _copilot_runtime_server_entries(home_dir, workspace):
-        server_token = _copilot_mcp_tool_token(server_name)
+    matches: list[tuple[int, int, _CopilotMcpRuntimeServer, str]] = []
+    for server in _copilot_runtime_server_entries(home_dir, workspace):
+        server_token = _copilot_mcp_tool_token(server.server_name)
         if suffix.startswith(f"{server_token}_"):
             runtime_tool_name = suffix[len(server_token) + 1 :]
             if runtime_tool_name:
@@ -180,25 +227,48 @@ def _resolve_copilot_mcp_runtime_tool(
                     (
                         len(server_token),
                         _copilot_runtime_match_priority(
-                            config_path=config_path,
+                            config_path=server.config_path,
                             preferred_workspace_config=preferred_workspace_config,
                         ),
-                        server_name,
+                        server,
                         runtime_tool_name,
-                        source_scope,
-                        config_path,
                     )
                 )
     if matches:
-        _length, _priority, server_name, runtime_tool_name, source_scope, config_path = max(
+        _length, _priority, server, runtime_tool_name = max(
             matches,
-            key=lambda item: (item[0], item[1], item[5]),
+            key=lambda item: (item[0], item[1], item[2].config_path),
         )
-        return server_name, runtime_tool_name, source_scope, config_path
+        return _CopilotMcpRuntimeTool(server=server, tool_name=runtime_tool_name)
     return None
 
-def _copilot_runtime_server_entries(home_dir: Path, workspace: Path | None) -> list[tuple[str, str, str]]:
-    entries: list[tuple[str, str, str]] = []
+def _resolve_copilot_mcp_runtime_server(
+    *,
+    server_name: str,
+    home_dir: Path,
+    workspace: Path | None,
+    preferred_workspace_config: str | None,
+) -> _CopilotMcpRuntimeServer | None:
+    matches = [
+        entry
+        for entry in _copilot_runtime_server_entries(home_dir, workspace)
+        if entry.server_name == server_name
+    ]
+    if not matches:
+        return None
+    return max(
+        matches,
+        key=lambda entry: (
+            _copilot_runtime_match_priority(
+                config_path=entry.config_path,
+                preferred_workspace_config=preferred_workspace_config,
+            ),
+            entry.config_path,
+        ),
+    )
+
+def _copilot_runtime_server_entries(home_dir: Path, workspace: Path | None) -> list[_CopilotMcpRuntimeServer]:
+    entries: list[_CopilotMcpRuntimeServer] = []
     if workspace is not None:
         for path in (workspace / ".vscode" / "mcp.json", workspace / ".mcp.json"):
             entries.extend(_mcp_server_entries_from_path(path, source_scope="project"))
@@ -232,7 +302,7 @@ def _resolve_copilot_workspace_root(workspace: Path | None) -> Path | None:
             return candidate
     return workspace
 
-def _mcp_server_entries_from_path(path: Path, *, source_scope: str) -> list[tuple[str, str, str]]:
+def _mcp_server_entries_from_path(path: Path, *, source_scope: str) -> list[_CopilotMcpRuntimeServer]:
     if not path.exists():
         return []
     try:
@@ -245,8 +315,13 @@ def _mcp_server_entries_from_path(path: Path, *, source_scope: str) -> list[tupl
     if not isinstance(servers, dict):
         return []
     return [
-        (str(server_name), source_scope, str(path))
-        for server_name in servers
+        _CopilotMcpRuntimeServer(
+            server_name=server_name.strip(),
+            source_scope=source_scope,
+            config_path=str(path),
+            server_config=server_config,
+        )
+        for server_name, server_config in servers.items()
         if isinstance(server_name, str) and server_name.strip()
     ]
 
@@ -257,6 +332,195 @@ def _mcp_servers_payload(payload: dict[str, object]) -> dict[str, object] | None
     mcp_servers = payload.get("mcpServers")
     if isinstance(mcp_servers, dict):
         return mcp_servers
+    return None
+
+def _copilot_runtime_server_identity(
+    server: _CopilotMcpRuntimeServer,
+    *,
+    launch_cwd: Path,
+) -> tuple[McpServerIdentity, dict[str, object], str]:
+    """Build a non-secret, content-bound identity for a Copilot MCP server."""
+
+    server_config = (
+        cast(Mapping[str, object], server.server_config)
+        if isinstance(server.server_config, Mapping)
+        else None
+    )
+    command, launch_args = _copilot_runtime_server_command(server_config)
+    transport = _copilot_runtime_server_transport(server_config)
+    config_sha256 = _copilot_runtime_server_config_digest(server.server_config)
+    configured_env, env_keys = _copilot_runtime_server_environment(server_config)
+    launch_env = dict(os.environ)
+    launch_env.update(configured_env)
+    launch_identity = build_runtime_launch_identity(
+        command,
+        args=launch_args,
+        structured_command=True,
+        search_path=launch_env.get("PATH"),
+        cwd=launch_cwd,
+        launch_env=launch_env,
+    )
+    launch_identity["launch_args_sha256"] = hashlib.sha256(
+        json.dumps(list(launch_args), sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    launch_identity["server_config_sha256"] = config_sha256
+    launch_identity["transport"] = transport
+    remote_url = server_config.get("url") if server_config is not None else None
+    has_remote_url = isinstance(remote_url, str) and bool(remote_url.strip())
+    if server_config is None or (command is None and not has_remote_url) or config_sha256 is None:
+        launch_identity["reuse_nonce"] = secrets.token_hex(16)
+        launch_identity["status"] = (
+            "server_config_unresolved"
+            if server_config is None
+            else "server_command_unresolved"
+            if command is None and not has_remote_url
+            else "server_config_unhashable"
+        )
+    elif command is None:
+        launch_identity["status"] = "remote_transport"
+
+    server_identity = build_mcp_server_identity(
+        config_path=server.config_path,
+        command=command or ("<remote>" if has_remote_url else "<unresolved>"),
+        args=launch_args,
+        transport=transport,
+        env=configured_env,
+        env_keys=env_keys,
+    )
+    server_fingerprint: dict[str, object] = {
+        "config_sha256": config_sha256,
+        "launch_args_sha256": launch_identity["launch_args_sha256"],
+        # ``build_tool_call_hash`` carries this full mapping into the v1
+        # approval identity.  It therefore binds the selected server config
+        # as well as executable and interpreted-entrypoint bytes without
+        # persisting config secrets.
+        "resolved_executable": launch_identity,
+        "transport": transport,
+    }
+    return server_identity, server_fingerprint, transport
+
+def _copilot_runtime_server_environment(
+    server_config: Mapping[str, object] | None,
+) -> tuple[dict[str, str], tuple[str, ...]]:
+    if server_config is None:
+        return {}, ()
+    env_config = server_config.get("env")
+    if not isinstance(env_config, Mapping):
+        return {}, ()
+    env_keys = tuple(sorted(str(key) for key in env_config if str(key).strip()))
+    configured_env = {
+        str(key): value
+        for key, value in env_config.items()
+        if str(key).strip() and isinstance(value, str)
+    }
+    return configured_env, env_keys
+
+def _copilot_runtime_server_command(
+    server_config: Mapping[str, object] | None,
+) -> tuple[str | None, tuple[str, ...]]:
+    if server_config is None:
+        return None, ()
+    command_value = server_config.get("command")
+    command: str | None = None
+    launch_args: list[str] = []
+    if isinstance(command_value, str) and command_value.strip():
+        command = command_value.strip()
+    elif isinstance(command_value, list):
+        command_parts = [item for item in command_value if isinstance(item, str) and item]
+        if command_parts:
+            command = command_parts[0]
+            launch_args.extend(command_parts[1:])
+    args_value = server_config.get("args")
+    if isinstance(args_value, list):
+        launch_args.extend(item for item in args_value if isinstance(item, str))
+    return command, tuple(launch_args)
+
+def _copilot_runtime_server_transport(server_config: Mapping[str, object] | None) -> str:
+    if server_config is None:
+        return "stdio"
+    raw_transport = server_config.get("transport", server_config.get("type"))
+    if isinstance(raw_transport, str) and raw_transport.strip():
+        normalized = raw_transport.strip().lower().replace("_", "-")
+        if normalized in {"local", "stdio"}:
+            return "stdio"
+        if normalized in {"http", "https", "remote", "streamable-http"}:
+            return "http"
+        return normalized
+    if isinstance(server_config.get("url"), str) and str(server_config["url"]).strip():
+        return "http"
+    return "stdio"
+
+def _copilot_runtime_server_config_digest(server_config: object) -> str | None:
+    try:
+        encoded = json.dumps(
+            server_config,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError):
+        return None
+    return hashlib.sha256(encoded).hexdigest()
+
+_COPILOT_TOOL_METADATA_MISSING = object()
+
+def _copilot_runtime_tool_metadata(
+    payload: Mapping[str, object],
+    *,
+    server_config: object,
+    requested_tool_name: str,
+    runtime_tool_name: str,
+) -> tuple[object | None, str | None]:
+    schema: object = _COPILOT_TOOL_METADATA_MISSING
+    description: str | None = None
+    candidates: list[Mapping[str, object]] = [payload]
+    for key in ("tool", "tool_definition", "toolDefinition"):
+        value = payload.get(key)
+        if isinstance(value, Mapping):
+            candidates.append(value)
+    tool_calls = payload.get("toolCalls")
+    if isinstance(tool_calls, list):
+        for item in tool_calls:
+            if not isinstance(item, Mapping):
+                continue
+            candidate_name = item.get("name")
+            if candidate_name in {requested_tool_name, runtime_tool_name}:
+                candidates.append(item)
+    config_tool = _copilot_runtime_config_tool_definition(server_config, runtime_tool_name)
+    if config_tool is not None:
+        candidates.append(config_tool)
+
+    for candidate in candidates:
+        if schema is _COPILOT_TOOL_METADATA_MISSING:
+            for key in ("tool_schema", "toolSchema", "input_schema", "inputSchema", "schema"):
+                if key in candidate:
+                    schema = candidate[key]
+                    break
+        if description is None:
+            for key in ("tool_description", "toolDescription", "description"):
+                value = candidate.get(key)
+                if isinstance(value, str) and value.strip():
+                    description = value.strip()
+                    break
+        if schema is not _COPILOT_TOOL_METADATA_MISSING and description is not None:
+            break
+    return (None if schema is _COPILOT_TOOL_METADATA_MISSING else schema), description
+
+def _copilot_runtime_config_tool_definition(
+    server_config: object,
+    runtime_tool_name: str,
+) -> Mapping[str, object] | None:
+    if not isinstance(server_config, Mapping):
+        return None
+    tools = server_config.get("tools")
+    if isinstance(tools, Mapping):
+        definition = tools.get(runtime_tool_name)
+        return definition if isinstance(definition, Mapping) else None
+    if isinstance(tools, list):
+        for item in tools:
+            if isinstance(item, Mapping) and item.get("name") == runtime_tool_name:
+                return item
     return None
 
 def _copilot_mcp_tool_token(value: str) -> str:
@@ -495,6 +759,11 @@ def _run_hermes_mcp_proxy(
     if len(command) == 0:
         print(f"Hermes MCP server {args.server} is missing a launch command.", file=sys.stderr)
         return 2
+
+    def current_stdio_config() -> GuardConfig:
+        local_config = load_guard_config(context.guard_home, workspace=context.workspace_dir)
+        return overlay_synced_guard_policy(local_config, _synced_policy_payload(store))
+
     proxy = StdioGuardProxy(
         command=command,
         cwd=context.workspace_dir,
@@ -503,6 +772,7 @@ def _run_hermes_mcp_proxy(
         approval_center_url=approval_center_url,
         harness="hermes",
         env=_server_env(server),
+        current_config_provider=current_stdio_config,
     )
     return proxy.run_stream(
         input_stream=sys.stdin,

@@ -38,7 +38,7 @@ def _write_bun_workspace(workspace_dir: Path) -> None:
     )
 
 
-def test_bun_install_approval_replays_when_local_policy_integrity_is_degraded(tmp_path: Path) -> None:
+def test_bun_install_approval_never_lowers_current_block_when_integrity_is_degraded(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
@@ -116,16 +116,21 @@ def test_bun_install_approval_replays_when_local_policy_integrity_is_degraded(tm
         timeout_seconds=30,
     )
 
-    assert first_retry_rc == 0
-    assert second_retry_rc == 0
+    assert first_retry_rc == 2
+    assert second_retry_rc == 2
     for retry_payload in (first_retry_payload, second_retry_payload):
-        assert retry_payload["verdict"]["action"] == "allow"
+        assert retry_payload["verdict"]["action"] == "block"
         retry_receipt = retry_payload["receipt"]
         assert isinstance(retry_receipt, dict)
         assert retry_receipt["artifact_hash"] == receipt["artifact_hash"]
         evaluation = retry_payload["supply_chain_evaluation"]
         assert isinstance(evaluation, dict)
         assert any(
+            isinstance(reason, dict)
+            and reason.get("code") in {"approval_reuse_current_block", "approval_reuse_integrity_failure"}
+            for reason in evaluation.get("reasons", [])
+        )
+        assert not any(
             isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
             for reason in evaluation.get("reasons", [])
         )

@@ -81,7 +81,7 @@ def prepare_grok_hook_payload(payload: Mapping[str, object]) -> dict[str, object
 def grok_hook_response_from_guard(*, policy_action: str, reason: str) -> dict[str, object]:
     """Translate Guard policy action into Grok PreToolUse stdout JSON."""
 
-    if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+    if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
         cleaned_reason = _dedupe_grok_block_reason(reason.strip() if isinstance(reason, str) else "")
         return {
             "decision": "deny",
@@ -116,7 +116,7 @@ def emit_grok_hook_response(
 
 
 def grok_hook_should_block(*, policy_action: str) -> bool:
-    return policy_action in {"block", "sandbox-required", "require-reapproval"}
+    return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
 
 
 __all__ = [
