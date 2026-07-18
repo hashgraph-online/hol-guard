@@ -719,6 +719,7 @@ def _selector_values(
         raise PolicyCompilationError("invalid_policy_match_selector", rule_id)
     return tuple(cast(list[str], items))
 
+
 def _artifact_selector_values(
     match: Mapping[str, object],
     *,
