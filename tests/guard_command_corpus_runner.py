@@ -16,9 +16,9 @@ from itertools import chain
 from pathlib import Path
 from typing import TypedDict, cast
 
-EVALUATION_SHARD_COUNT = 2
-MAX_CONCURRENT_WORKERS = 1 + int(sys.version_info < (3, 11))
-WORKER_TIMEOUT_SECONDS = 35 if MAX_CONCURRENT_WORKERS > 1 else 20
+EVALUATION_SHARD_COUNT = 4
+MAX_CONCURRENT_WORKERS = 2
+WORKER_TIMEOUT_SECONDS = 15
 REPO_ROOT = Path(__file__).parents[1]
 SYNTHETIC_CWD = REPO_ROOT / "workspace"
 SYNTHETIC_HOME = REPO_ROOT / "home"
@@ -140,10 +140,6 @@ def _run_worker(worker_index: int) -> WorkerReport:
 
 
 def _iter_reports() -> Iterator[WorkerReport]:
-    if MAX_CONCURRENT_WORKERS == 1:
-        for worker_index in range(EVALUATION_SHARD_COUNT):
-            yield _run_worker(worker_index)
-        return
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_WORKERS) as executor:
         yield from executor.map(_run_worker, range(EVALUATION_SHARD_COUNT))
 
@@ -161,7 +157,7 @@ def _coordinator_report() -> dict[str, object]:
         for key, ids in groups.items()
     }
     worker_rss = [report["rss_mib"] for report in reports]
-    active_worker_rss = sum(worker_rss) if MAX_CONCURRENT_WORKERS > 1 else max(worker_rss, default=0.0)
+    active_worker_rss = sum(sorted(worker_rss, reverse=True)[:MAX_CONCURRENT_WORKERS])
     return {
         "actual": actual,
         "elapsed": elapsed,
