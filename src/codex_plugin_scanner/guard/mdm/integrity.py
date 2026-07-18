@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import platform
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast, get_args
@@ -30,7 +31,7 @@ from .device_key import verify_machine_device_key
 from .manifest import ManifestVerification, verify_release_manifest
 from .native import NativeInstallVerification, verify_native_install
 from .policy import load_managed_policy
-from .supervisor import verify_machine_supervisor
+from .supervisor import machine_executable, verify_machine_supervisor
 
 
 def _now() -> str:
@@ -163,6 +164,40 @@ def _verify_continuity(paths: MachinePaths) -> ContinuityVerification:
         return ContinuityVerification("unknown", "installation_identity_probe_failed", "lease_continuity_probe_failed")
 
 
+def _daemon_component(supervisor: SupervisorStatus) -> IntegrityComponent:
+    state, reason = {
+        "supervisor_running": ("healthy", "daemon_running"),
+        "supervisor_absent": ("absent", "daemon_absent"),
+        "supervisor_stopped": ("degraded", "daemon_stopped"),
+        "supervisor_disabled": ("tampered", "daemon_disabled"),
+        "supervisor_registration_invalid": ("tampered", "daemon_registration_invalid"),
+        "supervisor_executable_mismatch": ("tampered", "daemon_registration_invalid"),
+        "supervisor_schedule_invalid": ("tampered", "daemon_registration_invalid"),
+        "supervisor_probe_failed": ("unknown", "daemon_probe_failed"),
+    }.get(supervisor.reason_code, ("unsupported", "daemon_verification_unavailable"))
+    return _component(state, reason)
+
+
+def _command_shadowing_component(paths: MachinePaths) -> IntegrityComponent:
+    try:
+        resolved = shutil.which("hol-guard")
+        if resolved is None:
+            return _component("healthy", "command_shadowing_absent")
+        command_path = Path(resolved).resolve(strict=True)
+        expected_executable = machine_executable(paths, platform.system()).resolve(strict=False)
+        if command_path == expected_executable:
+            return _component("healthy", "command_shadowing_trusted")
+        return _component("tampered", "command_shadowing_detected")
+    except (OSError, RuntimeError):
+        return _component("unknown", "command_shadowing_probe_failed")
+
+
+def _update_component(manifest: ManifestVerification) -> IntegrityComponent:
+    if manifest.healthy:
+        return _component("healthy", "update_version_allowed")
+    return _component(manifest.status, manifest.reason_code)
+
+
 def _continuity_components(result: ContinuityVerification) -> tuple[IntegrityComponent, IntegrityComponent]:
     identity_state = {
         "installation_identity_active": "healthy",
@@ -229,9 +264,9 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
     ownership_acl = _component(acl.status, acl.reason_code)
     harness_coverage = IntegrityComponent("unsupported", "harness_coverage_verification_unavailable")
     installation_identity, lease_continuity = _continuity_components(continuity)
-    daemon = IntegrityComponent("unsupported", "daemon_verification_unavailable")
-    command_shadowing = IntegrityComponent("unsupported", "command_shadowing_verification_unavailable")
-    update = IntegrityComponent("unsupported", "update_verification_unavailable")
+    daemon = _daemon_component(supervisor)
+    command_shadowing = _command_shadowing_component(paths)
+    update = _update_component(manifest)
 
     components: SnapshotComponents = {
         "manifest": manifest_component.to_dict(),

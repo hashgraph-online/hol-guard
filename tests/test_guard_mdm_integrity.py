@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,7 @@ from codex_plugin_scanner.version import __version__
 
 @pytest.fixture(autouse=True)
 def _isolate_host_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(shutil, "which", lambda _command: None)
     monkeypatch.setattr(
         integrity,
         "load_managed_policy",
