@@ -256,7 +256,7 @@ def test_windows_supervisor_accepts_canonicalized_protected_sddl(monkeypatch: py
     xml_text = _mutate_windows_xml(
         _windows_xml(paths),
         "./task:RegistrationInfo/task:SecurityDescriptor",
-        "O:BAG:SYD:P(A;;FA;;;BA)(A;;FA;;;SY)",
+        "O:S-1-5-32-544G:S-1-5-18D:P(A;;FA;;;S-1-5-32-544)(A;;FA;;;S-1-5-18)",
     )
     monkeypatch.setattr(supervisor, "_run_schtasks", Mock(return_value=_completed(stdout=xml_text)))
 
@@ -324,6 +324,7 @@ def test_windows_probe_uses_pinned_schtasks_and_bounded_context(monkeypatch: pyt
     assert kwargs["cwd"] == r"D:\Windows\System32"
     assert kwargs["env"] == {
         "ComSpec": r"D:\Windows\System32\cmd.exe",
+        "SystemDrive": "D:",
         "SystemRoot": r"D:\Windows",
         "WINDIR": r"D:\Windows",
     }

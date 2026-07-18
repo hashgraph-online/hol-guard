@@ -179,9 +179,13 @@ def _windows_directory() -> str:
 
 def _windows_process_context() -> tuple[str, dict[str, str]]:
     windows_directory = _windows_directory()
+    system_drive, _ = ntpath.splitdrive(windows_directory)
+    if not system_drive:
+        raise OSError("windows_system_drive_unavailable")
     system_directory = ntpath.join(windows_directory, "System32")
     return system_directory, {
         "ComSpec": ntpath.join(system_directory, "cmd.exe"),
+        "SystemDrive": system_drive,
         "SystemRoot": windows_directory,
         "WINDIR": windows_directory,
     }
@@ -213,16 +217,25 @@ def _windows_security_descriptor_valid(descriptor: str | None) -> bool:
     if descriptor is None:
         return False
     match = re.fullmatch(
-        r"(?:O:(?:BA|SY))?(?:G:(?:BA|SY))?D:P(?P<aces>(?:\([^()]+\))+)",
+        r"(?:O:(?:BA|SY|S-1-5-32-544|S-1-5-18))?"
+        r"(?:G:(?:BA|SY|S-1-5-32-544|S-1-5-18))?"
+        r"D:P(?P<aces>(?:\([^()]+\))+)",
         descriptor,
         re.IGNORECASE,
     )
     if match is None:
         return False
-    aces = [ace.upper() for ace in re.findall(r"\([^()]+\)", match.group("aces"))]
-    return len(aces) == 2 and set(aces) == {
-        "(A;;FA;;;SY)",
-        "(A;;FA;;;BA)",
+    aliases = {"SY": "S-1-5-18", "BA": "S-1-5-32-544"}
+    normalized_aces: list[str] = []
+    for ace in re.findall(r"\(([^()]+)\)", match.group("aces")):
+        fields = ace.upper().split(";")
+        if len(fields) != 6:
+            return False
+        fields[5] = aliases.get(fields[5], fields[5])
+        normalized_aces.append(f"({';'.join(fields)})")
+    return len(normalized_aces) == 2 and set(normalized_aces) == {
+        "(A;;FA;;;S-1-5-18)",
+        "(A;;FA;;;S-1-5-32-544)",
     }
 
 
