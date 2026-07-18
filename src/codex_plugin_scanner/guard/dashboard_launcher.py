@@ -107,9 +107,10 @@ def open_dashboard(
 
     with _launch_lock:
         if _in_flight:
-            # Coalesce repeated activations while a launch is in progress
-            if _last_result is not None:
-                return _last_result
+            # Coalesce repeated activations: return a stable "in-flight"
+            # result rather than a stale _last_result from a previous launch.
+            # The caller can poll or wait; a prior result would be misleading
+            # because it describes a different invocation.
             return DashboardLaunchResult(
                 opened=False,
                 approval_center_url="",

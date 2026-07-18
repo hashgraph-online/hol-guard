@@ -99,7 +99,7 @@ def _build_task_xml(guard_home: Path) -> str:
     """
     executable = _pythonw_path()
     arguments = (
-        f'-m codex_plugin_scanner.guard.cli guard tray run '
+        f'-m codex_plugin_scanner.guard.tray.runtime '
         f'--guard-home "{escape(str(guard_home))}"'
     )
     return TASK_XML_TEMPLATE.format(
@@ -261,8 +261,7 @@ class WindowsTrayAdapter:
         executable = _pythonw_path()
         args = [
             executable,
-            "-m", "codex_plugin_scanner.guard.cli",
-            "guard", "tray", "run",
+            "-m", "codex_plugin_scanner.guard.tray.runtime",
             "--guard-home", str(guard_home),
         ]
 

@@ -1445,7 +1445,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/tray/status":
             self._handle_tray_status()
             return
-        if parsed.path == "/v1/update-status":
+        if parsed.path == "/v1/update/status":
             self._write_json(
                 merge_dashboard_update_progress(
                     store.guard_home,

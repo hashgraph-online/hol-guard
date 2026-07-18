@@ -94,7 +94,7 @@ class LinuxTrayAdapter:
         import sys
 
         executable = sys.executable
-        exec_command = f'"{executable}" -m codex_plugin_scanner.guard.cli guard tray run --guard-home "{guard_home}"'
+        exec_command = f'"{executable}" -m codex_plugin_scanner.guard.tray.runtime --guard-home "{guard_home}"'
 
         hidden = "false" if run_at_login else "true"
         autostart_enabled = "true" if run_at_login else "false"
@@ -167,8 +167,8 @@ class LinuxTrayAdapter:
 
         executable = sys.executable
         args = [
-            executable, "-m", "codex_plugin_scanner.guard.cli",
-            "guard", "tray", "run", "--guard-home", str(guard_home),
+            executable, "-m", "codex_plugin_scanner.guard.tray.runtime",
+            "--guard-home", str(guard_home),
         ]
 
         try:
