@@ -52,6 +52,8 @@ from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.totp import TotpSecretStore, _temporary_atomic_path, totp_code_at_counter
+from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
 
 @pytest.fixture(autouse=True)
@@ -1934,7 +1936,32 @@ def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashi
 ) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
-    _seed_guard_cloud(store, workspace_id=None)
+    workspace_id = "workspace-approval-gate"
+    _seed_guard_cloud(store, workspace_id=workspace_id)
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id=workspace_id),
+        "2026-04-19T00:00:00+00:00",
+    )
+    policy_bundle = build_cloud_exception_policy_bundle(workspace_id=workspace_id)
+    policy_bundle["cloudExceptions"] = []
+    policy_bundle["rules"] = [
+        {
+            "ruleId": "cloud-allow",
+            "action": "allow",
+            "reason": "Exercise approval-gated activation of signed remote policy.",
+            "artifactId": "codex:project:cloud-allow",
+            "scope": {
+                "agents": [],
+                "devices": [],
+                "ecosystems": [],
+                "environments": [],
+                "harnesses": ["codex"],
+                "locations": [],
+            },
+        }
+    ]
+    policy_bundle = sign_policy_bundle(policy_bundle, workspace_id=workspace_id)
     monkeypatch.setattr(
         guard_runner_module,
         "_guard_device_metadata",
@@ -1954,14 +1981,7 @@ def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashi
             return json.dumps(
                 {
                     "syncedAt": "2026-04-19T00:00:10+00:00",
-                    "exceptions": [
-                        {
-                            "scope": "artifact",
-                            "harness": "codex",
-                            "artifactId": "codex:project:cloud-allow",
-                            "action": "allow",
-                        }
-                    ],
+                    "policyBundle": policy_bundle,
                 }
             ).encode("utf-8")
 

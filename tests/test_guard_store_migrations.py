@@ -13,7 +13,8 @@ import types
 import pytest
 
 from codex_plugin_scanner.guard import store as guard_store_module
-from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.policy_bundle_decisions import build_policy_bundle_decisions
+from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.store import (
     EncryptedFileSecretStore,
     FallbackSecretStore,
@@ -23,6 +24,9 @@ from codex_plugin_scanner.guard.store import (
     _build_oauth_secret_store,
 )
 from codex_plugin_scanner.guard.store_evidence import EvidenceRecord
+from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+
+_POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
 
 
 def test_store_star_import_includes_guard_store() -> None:
@@ -536,18 +540,69 @@ def test_guard_store_migrates_historical_policy_columns_before_creating_indexes(
     assert historical_source == ("local",)
 
     current_artifact_id = "codex:project:tool-action:migrated-store"
-    store.replace_remote_policies(
-        [
-            PolicyDecision(
-                harness="codex",
-                scope="artifact",
-                action="allow",
-                artifact_id=current_artifact_id,
-                artifact_hash="sha256:current",
-                source="team-policy",
-            )
-        ],
-        "2026-07-18T12:00:00Z",
+    activated_at = "2026-07-18T12:00:00Z"
+    bundle_version = "migration-current-v1"
+    bundle = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": bundle_version,
+            "bundleHash": "",
+            "issuedAt": activated_at,
+            "expiresAt": None,
+            "rolloutState": "enforcing",
+            "policyDefaults": {
+                "mode": "observe",
+                "defaultAction": "allow",
+                "unknownPublisherAction": "allow",
+                "changedHashAction": "allow",
+                "newNetworkDomainAction": "allow",
+                "subprocessAction": "allow",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [
+                {
+                    "ruleId": "migrated-store-rule",
+                    "action": "allow",
+                    "reason": "Authenticated policy after historical schema migration.",
+                    "artifactId": current_artifact_id,
+                    "scope": {
+                        "agents": [],
+                        "devices": [],
+                        "ecosystems": [],
+                        "environments": [],
+                        "harnesses": ["codex"],
+                        "locations": [],
+                    },
+                }
+            ],
+            "cloudExceptions": [],
+            "acknowledgements": [],
+        },
+        workspace_id=_POLICY_BUNDLE_WORKSPACE_ID,
+    )
+    store.set_sync_payload(
+        "oauth_local_credentials",
+        {"workspace_id": _POLICY_BUNDLE_WORKSPACE_ID},
+        activated_at,
+    )
+    device = store.get_device_metadata()
+    decisions = build_policy_bundle_decisions(
+        bundle,
+        device_id=str(device["installation_id"]),
+        device_name=str(device["device_label"]),
+    )
+    assert len(decisions) == 1
+    assert decisions[0].artifact_id == current_artifact_id
+    store.apply_policy_bundle_authority(
+        decisions,
+        activated_at,
+        policy_bundle=bundle,
+        policy_bundle_keyring=policy_bundle_test_keyring(workspace_id=_POLICY_BUNDLE_WORKSPACE_ID),
+        cloud_exceptions=[],
+        policy_bundle_ack={"bundleVersion": bundle_version, "status": "applied"},
+        policy_bundle_checkpoint=policy_bundle_acceptance_checkpoint(bundle),
+        update_last_good=True,
         remote_write_authorized=True,
     )
 
@@ -560,7 +615,7 @@ def test_guard_store_migrates_historical_policy_columns_before_creating_indexes(
     )
 
     assert selected is not None
-    assert selected["source"] == "team-policy"
+    assert selected["source"] == "policy-bundle"
     assert selected["artifact_id"] == current_artifact_id
 
 

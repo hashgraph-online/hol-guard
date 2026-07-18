@@ -10,6 +10,41 @@
     "settings": {"type": "object"},
     "lockedSettings": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
     "requiredHarnesses": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "policyBundleKeyring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "purpose", "workspaceId", "keys"],
+      "properties": {
+        "contractVersion": {"const": "guard-policy-keyring.v1"},
+        "purpose": {"const": "policy_bundle"},
+        "workspaceId": {"type": "string", "minLength": 1},
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "keyId",
+              "publicKeyPem",
+              "fingerprintSha256",
+              "state",
+              "purpose",
+              "workspaceId"
+            ],
+            "properties": {
+              "keyId": {"type": "string", "minLength": 1},
+              "publicKeyPem": {"type": "string", "minLength": 1},
+              "fingerprintSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "state": {"enum": ["active", "grace", "revoked"]},
+              "purpose": {"const": "policy_bundle"},
+              "workspaceId": {"type": "string", "minLength": 1},
+              "validFrom": {"type": ["string", "null"]},
+              "validUntil": {"type": ["string", "null"]}
+            }
+          }
+        }
+      }
+    },
     "network": {
       "type": "object",
       "additionalProperties": false,
