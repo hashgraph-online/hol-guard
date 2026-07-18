@@ -59,6 +59,7 @@ IntegrityReasonCode = Literal[
     "managed_policy_cache_tampered",
     "managed_policy_inaccessible",
     "managed_policy_invalid",
+    "managed_policy_source_tampered",
     "managed_policy_profile_removed_cached",
     "ownership_acl_verification_unavailable",
     "ownership_acl_valid",
