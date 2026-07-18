@@ -273,6 +273,9 @@ def run_guard_update(
     active_display_command = command
     attempted_force_retry = False
     nonzero_success_note: str | None = None
+    # Stop the tray before updating so the old package's process doesn't
+    # hold files open on Windows or reference stale modules after cutover.
+    tray_was_running = _stop_tray_for_update(store)
     while True:
         try:
             result = subprocess.run(
@@ -405,6 +408,10 @@ def run_guard_update(
                 existing = payload.get("notes")
                 existing_notes = existing if isinstance(existing, list) else []
                 payload["notes"] = [*existing_notes, *sync_notes]
+    # Restart the tray if it was running before the update — the new package
+    # is now importable, so the tray will use the updated code.
+    if tray_was_running:
+        _restart_tray_after_update(store)
     return payload, 0
 
 
@@ -1551,6 +1558,50 @@ def build_guard_update_status_payload() -> dict[str, object]:
         "recovery_reinstall_available": recovery_reinstall_available,
         "recovery_reinstall_command": recovery_reinstall_command,
     }
+
+
+def _stop_tray_for_update(store: GuardStore | None) -> bool:
+    """Stop the tray process before a package update.
+
+    Returns True if the tray was running and was stopped, False if it was
+    not running or could not be stopped. Errors are swallowed — the update
+    must proceed even if the tray can't be stopped (e.g. on a fresh install
+    where no tray exists yet).
+    """
+    if store is None:
+        return False
+    try:
+        from ..tray.lifecycle import get_status, stop_tray
+
+        guard_home = store.guard_home
+        state, _capability, locator = get_status(guard_home)
+        if state != "running" or locator is None:
+            return False
+        stop_tray(guard_home)
+        return True
+    except Exception:
+        # Never block the update if tray stop fails — the old process will
+        # be replaced on next start or cleaned up by the OS on reboot.
+        return False
+
+
+def _restart_tray_after_update(store: GuardStore | None) -> None:
+    """Restart the tray process after a successful package update.
+
+    The new package is now importable, so the tray will use the updated code.
+    Errors are swallowed — the update has already succeeded and a tray
+    failure should not roll it back.
+    """
+    if store is None:
+        return
+    try:
+        from ..tray.lifecycle import start_tray
+
+        start_tray(store.guard_home)
+    except Exception:
+        # Update succeeded; tray restart failure is non-fatal. The user can
+        # manually start the tray via `hol-guard guard tray start`.
+        pass
 
 
 __all__ = ["build_guard_install_surface_payload", "build_guard_update_status_payload", "run_guard_update"]
