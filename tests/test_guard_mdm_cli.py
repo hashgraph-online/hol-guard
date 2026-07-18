@@ -21,16 +21,50 @@ def test_user_status_cli_is_versioned_read_only_and_nonhealthy(
     assert list(tmp_path.iterdir()) == []
 
 
-def test_mutating_cli_rejects_relative_or_wrong_user_home(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_mutating_cli_rejects_relative_or_wrong_user_home(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     del tmp_path
-    exit_code = cli.main(
-        ["mdm", "activate", "--home", "relative", "--user", "not-the-current-user", "--json"]
-    )
+    exit_code = cli.main(["mdm", "activate", "--home", "relative", "--user", "not-the-current-user", "--json"])
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 2
     assert payload["reasonCodes"] == ["mdm_home_must_be_absolute"]
+
+
+@pytest.mark.parametrize(
+    ("command", "handler_name"),
+    (
+        ("harness-coverage-register", "register_user_coverage"),
+        ("harness-coverage-unregister", "unregister_user_coverage"),
+    ),
+)
+def test_machine_coverage_commands_validate_owner_without_requiring_user_context(
+    command: str,
+    handler_name: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    validations: list[tuple[str, str | None, bool]] = []
+
+    def validate(home: str, user: str | None, *, require_user_context: bool = True) -> Path:
+        validations.append((home, user, require_user_context))
+        return tmp_path
+
+    monkeypatch.setattr(commands_dispatch_mdm, "validate_user_home", validate)
+    monkeypatch.setattr(
+        commands_dispatch_mdm,
+        handler_name,
+        lambda _home, _user: {
+            "schemaVersion": "hol-guard-mdm-status.v1",
+            "operation": command,
+            "healthy": True,
+        },
+    )
+
+    exit_code = cli.main(["mdm", command, "--home", str(tmp_path), "--user", "developer", "--json"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["operation"] == command
+    assert validations == [(str(tmp_path), "developer", False)]
 
 
 def test_cli_cannot_claim_managed_authority_from_a_policy_argument(tmp_path: Path) -> None:

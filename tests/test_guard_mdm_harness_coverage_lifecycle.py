@@ -29,11 +29,10 @@ def _managed_policy() -> ManagedPolicyState:
     return ManagedPolicyState("active", "native", policy, reason_code="managed_policy_active")
 
 
-def test_managed_activation_registers_aggregate_harness_evidence(
+def test_user_activation_never_mutates_machine_harness_registry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     installs = [{"active": True, "harness": "codex", "manifest": {"config_path": str(tmp_path / "config")}}]
-    registrations: list[tuple[Path, Path, list[dict[str, object]]]] = []
 
     class FakeStore:
         def __init__(self, _guard_home: Path) -> None:
@@ -42,20 +41,62 @@ def test_managed_activation_registers_aggregate_harness_evidence(
         def list_managed_installs(self) -> list[dict[str, object]]:
             return installs
 
-    paths = _machine_paths(tmp_path)
     monkeypatch.setattr(lifecycle, "GuardStore", FakeStore)
     monkeypatch.setattr(lifecycle, "apply_managed_install", lambda *_args, **_kwargs: {"managed_installs": installs})
+    monkeypatch.setattr(
+        lifecycle,
+        "register_user_harnesses",
+        lambda *_args: pytest.fail("user activation attempted a privileged registry mutation"),
+    )
+
+    lifecycle.activate_user(tmp_path, "developer")
+
+    assert (tmp_path / ".hol-guard" / "mdm-activation.json").is_file()
+    assert (tmp_path / ".hol-guard" / "mdm-harness-coverage-request.json").is_file()
+
+
+def test_device_context_registers_aggregate_harness_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    installs = [{"active": True, "harness": "codex", "manifest": {"config_path": str(tmp_path / "config")}}]
+    registrations: list[tuple[Path, Path, list[dict[str, object]]]] = []
+
+    paths = _machine_paths(tmp_path)
+    (tmp_path / ".hol-guard").mkdir()
+    lifecycle._write_coverage_request(tmp_path, installs)
+    monkeypatch.setattr(
+        lifecycle,
+        "GuardStore",
+        lambda *_args: pytest.fail("device reconciliation opened the user SQLite store"),
+    )
     monkeypatch.setattr(lifecycle, "load_managed_policy", _managed_policy)
     monkeypatch.setattr(lifecycle, "default_machine_paths", lambda: paths)
+    monkeypatch.setattr(lifecycle, "_audit", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         lifecycle,
         "register_user_harnesses",
         lambda machine_paths, home, active: registrations.append((machine_paths, home, active)),
     )
 
-    lifecycle.activate_user(tmp_path, "developer")
+    payload = lifecycle.register_user_coverage(tmp_path, "developer")
 
     assert registrations == [(paths, tmp_path, installs)]
+    assert payload["operation"] == "harness-coverage-register"
+
+
+def test_device_registration_rejects_symlinked_user_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    guard_home = tmp_path / ".hol-guard"
+    guard_home.mkdir()
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"schemaVersion":"hol-guard-harness-coverage-request.v1","installs":[]}')
+    lifecycle._coverage_request_path(tmp_path).symlink_to(outside)
+    monkeypatch.setattr(lifecycle, "load_managed_policy", _managed_policy)
+    monkeypatch.setattr(
+        lifecycle,
+        "register_user_harnesses",
+        lambda *_args: pytest.fail("symlinked request was registered"),
+    )
+
+    with pytest.raises(PermissionError, match="harness_coverage_request_acl_invalid"):
+        lifecycle.register_user_coverage(tmp_path, "developer")
 
 
 def test_partial_activation_rolls_back_new_harnesses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -88,35 +129,56 @@ def test_partial_activation_rolls_back_new_harnesses(tmp_path: Path, monkeypatch
     assert FakeStore.active is False
 
 
-def test_managed_activation_rolls_back_when_machine_registration_fails(
+def test_device_registration_failure_never_rolls_back_completed_user_activation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    class FakeStore:
-        active = False
-
-        def __init__(self, _guard_home: Path) -> None:
-            pass
-
-        def list_managed_installs(self) -> list[dict[str, object]]:
-            return [{"harness": "codex", "active": True, "manifest": {}}] if self.active else []
-
-    commands: list[str] = []
-
-    def fake_install(command: str, *_args: object, **_kwargs: object) -> dict[str, object]:
-        commands.append(command)
-        FakeStore.active = command == "install"
-        return {}
+    installs = [{"harness": "codex", "active": True, "manifest": {}}]
+    (tmp_path / ".hol-guard").mkdir()
+    lifecycle._write_coverage_request(tmp_path, installs)
 
     def fail_registration(*_args: object) -> None:
         raise OSError("machine registry unavailable")
 
-    monkeypatch.setattr(lifecycle, "GuardStore", FakeStore)
-    monkeypatch.setattr(lifecycle, "apply_managed_install", fake_install)
     monkeypatch.setattr(lifecycle, "load_managed_policy", _managed_policy)
     monkeypatch.setattr(lifecycle, "register_user_harnesses", fail_registration)
 
     with pytest.raises(OSError, match="machine registry unavailable"):
-        lifecycle.activate_user(tmp_path, "developer")
+        lifecycle.register_user_coverage(tmp_path, "developer")
 
-    assert commands == ["install", "uninstall"]
-    assert FakeStore.active is False
+    assert lifecycle._coverage_request_path(tmp_path).is_file()
+
+
+def test_device_context_unregisters_coverage_after_user_deactivation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    removals: list[tuple[Path, Path]] = []
+
+    paths = _machine_paths(tmp_path)
+    monkeypatch.setattr(lifecycle, "default_machine_paths", lambda: paths)
+    monkeypatch.setattr(lifecycle, "_audit", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        lifecycle,
+        "unregister_user_harnesses",
+        lambda machine_paths, home: removals.append((machine_paths.state_root, home)),
+    )
+
+    payload = lifecycle.unregister_user_coverage(tmp_path, "developer")
+
+    assert removals == [(paths.state_root, tmp_path)]
+    assert payload["operation"] == "harness-coverage-unregister"
+
+
+def test_device_context_refuses_to_unregister_active_user_coverage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    guard_home = tmp_path / ".hol-guard"
+    guard_home.mkdir()
+    (guard_home / "mdm-activation.json").write_text("{}")
+    monkeypatch.setattr(
+        lifecycle,
+        "unregister_user_harnesses",
+        lambda *_args: pytest.fail("active coverage was removed"),
+    )
+
+    with pytest.raises(RuntimeError, match="harness_coverage_deactivation_incomplete"):
+        lifecycle.unregister_user_coverage(tmp_path, "developer")

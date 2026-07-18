@@ -50,6 +50,10 @@ def _configure_guard_mdm_parsers(
         command = commands.add_parser(name, help=f"Idempotently {name} Guard for one user")
         _add_user(command, require_user=True)
 
+    for name in ("harness-coverage-register", "harness-coverage-unregister"):
+        command = commands.add_parser(name, help=argparse.SUPPRESS)
+        _add_user(command, require_user=True)
+
     deactivate = commands.add_parser("deactivate", help="Restore Guard-owned user integrations")
     _add_user(deactivate, require_user=True)
     deactivate.add_argument("--authorization-file", help="Short-lived MDM removal authorization file")

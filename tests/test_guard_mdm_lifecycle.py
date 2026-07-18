@@ -148,8 +148,9 @@ def test_deactivation_restores_integrations_and_removes_marker(tmp_path: Path, m
     guard_home = tmp_path / ".hol-guard"
     guard_home.mkdir()
     (guard_home / "mdm-activation.json").write_text("{}")
+    request = guard_home / "mdm-harness-coverage-request.json"
+    request.write_text("{}")
     commands: list[str] = []
-    unregistered: list[tuple[MachinePaths, Path]] = []
 
     def fake_install(command: str, *_args: object, **_kwargs: object) -> dict[str, object]:
         commands.append(command)
@@ -159,7 +160,7 @@ def test_deactivation_restores_integrations_and_removes_marker(tmp_path: Path, m
     monkeypatch.setattr(
         lifecycle,
         "unregister_user_harnesses",
-        lambda machine_paths, home: unregistered.append((machine_paths, home)),
+        lambda *_args: pytest.fail("user deactivation attempted a privileged registry mutation"),
     )
     monkeypatch.setattr(removal, "_authorization_owner_is_trusted", lambda _metadata: True)
     monkeypatch.setattr(removal, "_authorization_root_is_trusted", lambda _paths: True)
@@ -176,10 +177,10 @@ def test_deactivation_restores_integrations_and_removes_marker(tmp_path: Path, m
     )
 
     assert commands == ["uninstall"]
-    assert unregistered == [(paths, tmp_path)]
     assert payload["operation"] == "deactivate"
     assert payload["installationGeneration"] == INSTALLATION_GENERATION
     assert not (guard_home / "mdm-activation.json").exists()
+    assert not request.exists()
     tombstones = list((paths.state_root / "removal-tombstones").glob("*.json"))
     assert len(tombstones) == 1
     tombstone = json.loads(tombstones[0].read_text())
