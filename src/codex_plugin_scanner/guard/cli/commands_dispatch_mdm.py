@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Mapping
 from pathlib import Path
 
+from ..mdm.contracts import LocalIntegritySnapshot
 from ..mdm.integrity import machine_integrity_snapshot
 from ..mdm.lifecycle import (
     activate_user,
@@ -22,7 +22,7 @@ from ..mdm.network import diagnose_endpoint
 from ..mdm.policy import load_managed_policy
 
 
-def _emit_mdm(payload: Mapping[str, object], as_json: bool) -> None:
+def _emit_mdm(payload: dict[str, object] | LocalIntegritySnapshot, as_json: bool) -> None:
     if as_json:
         print(json.dumps(payload, sort_keys=True))
     else:
@@ -34,7 +34,7 @@ def _run_guard_mdm_command(
 ) -> int:
     del input_text, output_stream
     command = str(args.mdm_command)
-    payload: Mapping[str, object]
+    payload: dict[str, object] | LocalIntegritySnapshot
     try:
         if command == "authorize-deactivation":
             payload = authorize_deactivation(
