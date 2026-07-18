@@ -28,6 +28,7 @@ from .contracts import (
     default_machine_paths,
 )
 from .device_key import verify_machine_device_key
+from .harness_coverage import verify_harness_coverage
 from .manifest import ManifestVerification, verify_release_manifest
 from .native import NativeInstallVerification, verify_native_install
 from .policy import load_managed_policy
@@ -262,7 +263,8 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
         policy.reason_code or ("managed_policy_active" if policy.status == "active" else "managed_policy_absent"),
     )
     ownership_acl = _component(acl.status, acl.reason_code)
-    harness_coverage = IntegrityComponent("unsupported", "harness_coverage_verification_unavailable")
+    harness_verification = verify_harness_coverage(paths, policy)
+    harness_coverage = _component(harness_verification.state, harness_verification.reason_code)
     installation_identity, lease_continuity = _continuity_components(continuity)
     daemon = _daemon_component(supervisor)
     command_shadowing = _command_shadowing_component(paths)
@@ -343,7 +345,7 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
             "policyHash": policy.policy.content_hash if policy.policy is not None else None,
         },
         "components": components,
-        "harnessCoverage": {"required": None, "protected": None, "degraded": None, "missing": None},
+        "harnessCoverage": harness_verification.coverage,
         "continuity": {
             "monotonicUptimeSeconds": (
                 continuity.observation.monotonic_uptime_ns / 1_000_000_000

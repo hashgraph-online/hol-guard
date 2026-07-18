@@ -13,7 +13,14 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from jsonschema import Draft202012Validator
 
 from codex_plugin_scanner.guard.mdm import lifecycle, removal
-from codex_plugin_scanner.guard.mdm.contracts import MDM_STATUS_SCHEMA_VERSION, MachinePaths
+from codex_plugin_scanner.guard.mdm.contracts import (
+    MDM_POLICY_SCHEMA_VERSION,
+    MDM_STATUS_SCHEMA_VERSION,
+    MachinePaths,
+    ManagedPolicy,
+    ManagedPolicyState,
+    ManagedUpdatePolicy,
+)
 
 MACHINE_INSTALLATION_ID = "1" * 32
 INSTALLATION_GENERATION = "2" * 32
@@ -141,6 +148,46 @@ def test_activation_is_idempotent_and_writes_user_only_marker(tmp_path: Path, mo
     assert marker.stat().st_mode & 0o077 == 0
 
 
+def test_managed_activation_registers_aggregate_harness_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    installs = [{"active": True, "harness": "codex", "manifest": {"config_path": str(tmp_path / "config")}}]
+    registrations: list[tuple[Path, Path, list[dict[str, object]]]] = []
+    policy = ManagedPolicy(
+        schema_version=MDM_POLICY_SCHEMA_VERSION,
+        settings={},
+        locked_settings=frozenset(),
+        required_harnesses=("codex",),
+        update=ManagedUpdatePolicy(owner="mdm"),
+    )
+
+    class FakeStore:
+        def __init__(self, _guard_home: Path) -> None:
+            pass
+
+        def list_managed_installs(self) -> list[dict[str, object]]:
+            return installs
+
+    paths = _machine_paths(tmp_path)
+    monkeypatch.setattr(lifecycle, "GuardStore", FakeStore)
+    monkeypatch.setattr(lifecycle, "apply_managed_install", lambda *_args, **_kwargs: {"managed_installs": installs})
+    monkeypatch.setattr(
+        lifecycle,
+        "load_managed_policy",
+        lambda: ManagedPolicyState("active", "native", policy, reason_code="managed_policy_active"),
+    )
+    monkeypatch.setattr(lifecycle, "default_machine_paths", lambda: paths)
+    monkeypatch.setattr(
+        lifecycle,
+        "register_user_harnesses",
+        lambda machine_paths, home, active: registrations.append((machine_paths, home, active)),
+    )
+
+    lifecycle.activate_user(tmp_path, "developer")
+
+    assert registrations == [(paths, tmp_path, installs)]
+
+
 def test_partial_activation_rolls_back_new_harnesses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeStore:
         active = False
@@ -171,17 +218,68 @@ def test_partial_activation_rolls_back_new_harnesses(tmp_path: Path, monkeypatch
     assert FakeStore.active is False
 
 
+def test_managed_activation_rolls_back_when_machine_registration_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakeStore:
+        active = False
+
+        def __init__(self, _guard_home: Path) -> None:
+            pass
+
+        def list_managed_installs(self) -> list[dict[str, object]]:
+            return [{"harness": "codex", "active": True, "manifest": {}}] if self.active else []
+
+    commands: list[str] = []
+    policy = ManagedPolicy(
+        schema_version=MDM_POLICY_SCHEMA_VERSION,
+        settings={},
+        locked_settings=frozenset(),
+        required_harnesses=("codex",),
+        update=ManagedUpdatePolicy(owner="mdm"),
+    )
+
+    def fake_install(command: str, *_args: object, **_kwargs: object) -> dict[str, object]:
+        commands.append(command)
+        FakeStore.active = command == "install"
+        return {}
+
+    def fail_registration(*_args: object) -> None:
+        raise OSError("machine registry unavailable")
+
+    monkeypatch.setattr(lifecycle, "GuardStore", FakeStore)
+    monkeypatch.setattr(lifecycle, "apply_managed_install", fake_install)
+    monkeypatch.setattr(
+        lifecycle,
+        "load_managed_policy",
+        lambda: ManagedPolicyState("active", "native", policy, reason_code="managed_policy_active"),
+    )
+    monkeypatch.setattr(lifecycle, "register_user_harnesses", fail_registration)
+
+    with pytest.raises(OSError, match="machine registry unavailable"):
+        lifecycle.activate_user(tmp_path, "developer")
+
+    assert commands == ["install", "uninstall"]
+    assert FakeStore.active is False
+
+
 def test_deactivation_restores_integrations_and_removes_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     guard_home = tmp_path / ".hol-guard"
     guard_home.mkdir()
     (guard_home / "mdm-activation.json").write_text("{}")
     commands: list[str] = []
+    unregistered: list[tuple[MachinePaths, Path]] = []
 
     def fake_install(command: str, *_args: object, **_kwargs: object) -> dict[str, object]:
         commands.append(command)
         return {"managed_installs": []}
 
     monkeypatch.setattr(lifecycle, "apply_managed_install", fake_install)
+    monkeypatch.setattr(
+        lifecycle,
+        "unregister_user_harnesses",
+        lambda machine_paths, home: unregistered.append((machine_paths, home)),
+    )
     monkeypatch.setattr(removal, "_authorization_owner_is_trusted", lambda _metadata: True)
     monkeypatch.setattr(removal, "_authorization_root_is_trusted", lambda _paths: True)
     monkeypatch.setattr(removal, "_active_binding", lambda _paths: (MACHINE_INSTALLATION_ID, INSTALLATION_GENERATION))
@@ -197,6 +295,7 @@ def test_deactivation_restores_integrations_and_removes_marker(tmp_path: Path, m
     )
 
     assert commands == ["uninstall"]
+    assert unregistered == [(paths, tmp_path)]
     assert payload["operation"] == "deactivate"
     assert payload["installationGeneration"] == INSTALLATION_GENERATION
     assert not (guard_home / "mdm-activation.json").exists()

@@ -9,7 +9,7 @@ import os
 import platform
 import shutil
 import stat
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
@@ -20,6 +20,7 @@ from ..cli.install_commands import apply_managed_install
 from ..daemon.manager import retire_all_guard_daemons_for_home
 from ..store import GuardStore
 from .contracts import MDM_STATUS_SCHEMA_VERSION, default_machine_paths
+from .harness_coverage import register_user_harnesses, unregister_user_harnesses
 from .manifest import verify_release_manifest
 from .native import NativeInstallVerification, verify_native_install
 from .policy import load_managed_policy
@@ -77,7 +78,7 @@ def validate_user_home(home: str, user: str | None = None) -> Path:
 
 
 @contextmanager
-def _activation_lock(guard_home: Path) -> Iterator[None]:
+def _activation_lock(guard_home: Path) -> Generator[None, None, None]:
     guard_home.mkdir(mode=0o700, parents=True, exist_ok=True)
     lock_path = guard_home / "mdm-activation.lock"
     descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
@@ -241,16 +242,19 @@ def activate_user(home: Path, user: str) -> dict[str, object]:
         before = {str(item.get("harness")) for item in store.list_managed_installs() if bool(item.get("active"))}
         try:
             result = apply_managed_install("install", None, True, context, store, None, _now())
+            managed_policy = load_managed_policy()
+            if managed_policy.policy is not None and managed_policy.policy.install_owner == "mdm":
+                register_user_harnesses(default_machine_paths(), home, store.list_managed_installs())
         except (OSError, RuntimeError, ValueError):
             after = {str(item.get("harness")) for item in store.list_managed_installs() if bool(item.get("active"))}
             for harness in sorted(after - before):
                 try:
-                    apply_managed_install("uninstall", harness, False, context, store, None, _now())
+                    _ = apply_managed_install("uninstall", harness, False, context, store, None, _now())
                 except (OSError, RuntimeError, ValueError):
                     continue
             raise
         marker = guard_home / "mdm-activation.json"
-        marker.write_text(
+        _ = marker.write_text(
             json.dumps({"schemaVersion": MDM_STATUS_SCHEMA_VERSION, "user": user, "activatedAt": _now()}) + "\n",
             encoding="utf-8",
         )
@@ -287,6 +291,7 @@ def deactivate_user(
             store = GuardStore(guard_home)
             retired_pids = retire_all_guard_daemons_for_home(guard_home)
             result = apply_managed_install("uninstall", None, True, context, store, None, _now())
+            unregister_user_harnesses(paths, home)
             (guard_home / "mdm-activation.json").unlink(missing_ok=True)
             _audit(guard_home / "logs" / "mdm-lifecycle.log", operation="deactivate", status="complete", scope="user")
     except (OSError, RuntimeError, ValueError):
