@@ -226,6 +226,35 @@ class TestLoadIconBytes:
         assert isinstance(data, bytes)
         assert len(data) > 0
 
+    def test_dark_variant_differs_from_light(self) -> None:
+        """Dark variant (white icon) must differ from light (black icon)."""
+        light = _load_icon_bytes(TrayPlatform.MACOS, dark=False)
+        dark = _load_icon_bytes(TrayPlatform.MACOS, dark=True)
+        assert light[:8] == b"\x89PNG\r\n\x1a\n"
+        assert dark[:8] == b"\x89PNG\r\n\x1a\n"
+        assert light != dark, "light and dark icon variants must not be identical"
+
+    def test_dark_variant_loaded_for_each_platform(self) -> None:
+        for platform in (TrayPlatform.MACOS, TrayPlatform.WINDOWS, TrayPlatform.LINUX):
+            data = _load_icon_bytes(platform, dark=True)
+            assert data[:8] == b"\x89PNG\r\n\x1a\n"
+            assert len(data) > 100, f"{platform} dark icon too small: {len(data)} bytes"
+
+    def test_detect_dark_mode_returns_bool(self) -> None:
+        from codex_plugin_scanner.guard.tray.runtime import _detect_dark_mode
+
+        result = _detect_dark_mode()
+        assert isinstance(result, bool)
+
+    def test_select_initial_icon_returns_image(self) -> None:
+        from PIL import Image
+
+        from codex_plugin_scanner.guard.tray.runtime import _select_initial_icon
+
+        img = _select_initial_icon(TrayPlatform.MACOS)
+        assert isinstance(img, Image.Image)
+        assert img.size[0] > 0 and img.size[1] > 0
+
 
 class TestDetectCapability:
     def test_returns_supported_on_macos(self) -> None:

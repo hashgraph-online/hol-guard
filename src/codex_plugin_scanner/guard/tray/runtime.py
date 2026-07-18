@@ -5,6 +5,13 @@ menu, loads static icons, routes ``Open HOL Guard`` to the canonical
 ``dashboard_launcher.open_dashboard`` service, and provides a
 ``Start at Login`` toggle plus ``Quit``.
 
+Icon selection loads both a light variant (black icon for light menu
+bars) and a dark variant (white icon for dark menu bars). At startup
+the system appearance is detected and the matching icon is selected.
+pystray does not expose a unified appearance-change callback across
+all backends, so the icon is chosen once at startup; users who toggle
+system appearance after launch can restart the tray to refresh.
+
 Security contract:
     - Never logs auth tokens. The launcher returns only redacted URLs.
     - Error notifications use ``desktop_notifications`` helpers and
@@ -44,22 +51,107 @@ logger = logging.getLogger(__name__)
 # Icon loading
 # ---------------------------------------------------------------------------
 
+# Minimal 1x1 transparent PNG fallback (keeps the tray alive on minimal installs).
+_TRANSPARENT_PNG = bytes(
+    [
+        0x89,
+        0x50,
+        0x4E,
+        0x47,
+        0x0D,
+        0x0A,
+        0x1A,
+        0x0A,
+        0x00,
+        0x00,
+        0x00,
+        0x0D,
+        0x49,
+        0x48,
+        0x44,
+        0x52,
+        0x00,
+        0x00,
+        0x00,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x01,
+        0x08,
+        0x06,
+        0x00,
+        0x00,
+        0x00,
+        0x1F,
+        0x15,
+        0xC4,
+        0x89,
+        0x00,
+        0x00,
+        0x00,
+        0x0D,
+        0x49,
+        0x44,
+        0x41,
+        0x54,
+        0x78,
+        0x9C,
+        0x63,
+        0x00,
+        0x01,
+        0x00,
+        0x00,
+        0x05,
+        0x00,
+        0x01,
+        0x0D,
+        0x0A,
+        0x2D,
+        0xB4,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x49,
+        0x45,
+        0x4E,
+        0x44,
+        0xAE,
+        0x42,
+        0x60,
+        0x82,
+    ]
+)
 
-def _load_icon_bytes(platform: TrayPlatform) -> bytes:
+
+def _load_icon_bytes(platform: TrayPlatform, *, dark: bool = False) -> bytes:
     """Load the best-fit static icon for the platform.
 
     Uses ``importlib.resources`` so icons are read from the installed
     wheel, never from the working tree. Falls back to a 1x1 transparent
     PNG if no asset is available (keeps the tray alive on minimal
     installs).
+
+    When ``dark`` is True, loads the ``-dark.png`` variant (white icon
+    for dark menu bars). When False, loads the light variant (black
+    icon for light menu bars). If the requested variant is missing,
+    falls back to whichever exists.
     """
     from importlib.resources import files
 
-    size_hint = {TrayPlatform.MACOS: "22", TrayPlatform.WINDOWS: "16", TrayPlatform.LINUX: "22"}.get(platform, "22")
+    size_hint = {
+        TrayPlatform.MACOS: "22",
+        TrayPlatform.WINDOWS: "16",
+        TrayPlatform.LINUX: "22",
+    }.get(platform, "22")
+    suffix = "-dark" if dark else ""
     asset_root = files("codex_plugin_scanner.guard.tray.assets")
     candidates = [
-        f"hol-guard-tray-{size_hint}.png",
-        f"hol-guard-tray-{size_hint}@2x.png",
+        f"hol-guard-tray-{size_hint}{suffix}.png",
+        f"hol-guard-tray-{size_hint}{suffix}@2x.png",
+        # Cross-fallback: if dark requested but missing, try light (and vice versa)
+        f"hol-guard-tray-{size_hint}.png" if dark else f"hol-guard-tray-{size_hint}-dark.png",
         "hol-guard-tray-32.png",
         "hol-guard-tray-16.png",
     ]
@@ -70,78 +162,80 @@ def _load_icon_bytes(platform: TrayPlatform) -> bytes:
                 return resource.read_bytes()
         except (FileNotFoundError, AttributeError):
             continue
-    # Minimal 1x1 transparent PNG fallback
-    return bytes(
-        [
-            0x89,
-            0x50,
-            0x4E,
-            0x47,
-            0x0D,
-            0x0A,
-            0x1A,
-            0x0A,
-            0x00,
-            0x00,
-            0x00,
-            0x0D,
-            0x49,
-            0x48,
-            0x44,
-            0x52,
-            0x00,
-            0x00,
-            0x00,
-            0x01,
-            0x00,
-            0x00,
-            0x00,
-            0x01,
-            0x08,
-            0x06,
-            0x00,
-            0x00,
-            0x00,
-            0x1F,
-            0x15,
-            0xC4,
-            0x89,
-            0x00,
-            0x00,
-            0x00,
-            0x0D,
-            0x49,
-            0x44,
-            0x41,
-            0x54,
-            0x78,
-            0x9C,
-            0x63,
-            0x00,
-            0x01,
-            0x00,
-            0x00,
-            0x05,
-            0x00,
-            0x01,
-            0x0D,
-            0x0A,
-            0x2D,
-            0xB4,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x49,
-            0x45,
-            0x4E,
-            0x44,
-            0xAE,
-            0x42,
-            0x60,
-            0x82,
-        ]
-    )
+    return _TRANSPARENT_PNG
+
+
+def _load_icon_image(platform: TrayPlatform, *, dark: bool = False) -> Any:
+    """Load a single icon variant as a PIL Image.
+
+    Returns a transparent 16x16 image on load failure so the tray
+    stays alive.
+    """
+    from PIL import Image
+
+    raw = _load_icon_bytes(platform, dark=dark)
+    try:
+        img = Image.open(io.BytesIO(raw))
+        img.load()
+        return img
+    except Exception as error:
+        logger.warning("tray: %s icon load failed: %s", "dark" if dark else "light", error)
+        return Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+
+
+def _detect_dark_mode() -> bool:
+    """Best-effort detection of system dark-mode preference.
+
+    Returns False on any detection failure so the default is the light
+    variant (black icon), which is visible on the more common light
+    menu bars.
+    """
+    if sys.platform == "darwin":
+        try:
+            from subprocess import run
+
+            result = run(
+                ["defaults", "read", "-g", "AppleInterfaceStyle"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            return result.returncode == 0 and "Dark" in (result.stdout or "")
+        except Exception:
+            return False
+    if sys.platform.startswith("linux"):
+        try:
+            from subprocess import run
+
+            result = run(
+                ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            return result.returncode == 0 and "dark" in (result.stdout or "").lower()
+        except Exception:
+            return False
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            ) as key:
+                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                return value == 0  # 0 = dark mode
+        except Exception:
+            return False
+    return False
+
+
+def _select_initial_icon(platform: TrayPlatform) -> Any:
+    """Load both light/dark variants and return the one matching system appearance."""
+    light = _load_icon_image(platform, dark=False)
+    dark = _load_icon_image(platform, dark=True)
+    return dark if _detect_dark_mode() else light
 
 
 # ---------------------------------------------------------------------------
@@ -278,19 +372,13 @@ class TrayRuntime:
 
         try:
             import pystray
-            from PIL import Image
         except ImportError as error:
-            logger.error("tray: pystray/Pillow not available: %s", error)
+            logger.error("tray: pystray not available: %s", error)
             self._state = TrayState.UNSUPPORTED
             return 1
 
-        icon_bytes = _load_icon_bytes(self._capability.platform)
-        try:
-            image: Any = Image.open(io_bytes(icon_bytes))
-            image.load()
-        except Exception as error:
-            logger.error("tray: icon load failed: %s", error)
-            image = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+        # Load the icon matching the current system appearance (light or dark).
+        image = _select_initial_icon(self._capability.platform)
 
         menu = pystray.Menu(
             pystray.MenuItem(
