@@ -334,10 +334,20 @@ def activate_user(home: Path, user: str) -> dict[str, object]:
         context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home)
         store = GuardStore(guard_home)
         before = {str(item.get("harness")) for item in store.list_managed_installs() if bool(item.get("active"))}
+        marker = guard_home / "mdm-activation.json"
+        request = _coverage_request_path(home)
         try:
             result = apply_managed_install("install", None, True, context, store, None, _now())
+            _ = marker.write_text(
+                json.dumps({"schemaVersion": MDM_STATUS_SCHEMA_VERSION, "user": user, "activatedAt": _now()}) + "\n",
+                encoding="utf-8",
+            )
+            marker.chmod(stat.S_IRUSR | stat.S_IWUSR)
             _write_coverage_request(home, store.list_managed_installs())
+            _audit(guard_home / "logs" / "mdm-lifecycle.log", operation="activate", status="complete", scope="user")
         except (OSError, RuntimeError, ValueError):
+            request.unlink(missing_ok=True)
+            marker.unlink(missing_ok=True)
             after = {str(item.get("harness")) for item in store.list_managed_installs() if bool(item.get("active"))}
             for harness in sorted(after - before):
                 try:
@@ -345,13 +355,6 @@ def activate_user(home: Path, user: str) -> dict[str, object]:
                 except (OSError, RuntimeError, ValueError):
                     continue
             raise
-        marker = guard_home / "mdm-activation.json"
-        _ = marker.write_text(
-            json.dumps({"schemaVersion": MDM_STATUS_SCHEMA_VERSION, "user": user, "activatedAt": _now()}) + "\n",
-            encoding="utf-8",
-        )
-        marker.chmod(stat.S_IRUSR | stat.S_IWUSR)
-        _audit(guard_home / "logs" / "mdm-lifecycle.log", operation="activate", status="complete", scope="user")
     payload = _base("activate")
     payload.update({"scope": "user", "home": str(home), "user": user, "changed": True, "result": result})
     return payload
@@ -365,6 +368,18 @@ def register_user_coverage(home: Path, user: str) -> dict[str, object]:
     managed_policy = load_managed_policy()
     if managed_policy.policy is None or managed_policy.policy.install_owner != "mdm":
         raise PermissionError("harness_coverage_managed_policy_required")
+    marker = home / ".hol-guard" / "mdm-activation.json"
+    try:
+        marker_metadata = marker.lstat()
+    except FileNotFoundError as exc:
+        raise RuntimeError("harness_coverage_activation_incomplete") from exc
+    if (
+        not stat.S_ISREG(marker_metadata.st_mode)
+        or stat.S_ISLNK(marker_metadata.st_mode)
+        or marker_metadata.st_uid != home.stat().st_uid
+        or marker_metadata.st_mode & 0o077
+    ):
+        raise RuntimeError("harness_coverage_activation_incomplete")
     paths = default_machine_paths()
     installs = _read_coverage_request(home)
     register_user_harnesses(paths, home, installs)
