@@ -81,7 +81,7 @@ def _is_administrator() -> bool:
 
 
 def _authorization_owner_is_trusted(metadata: os.stat_result) -> bool:
-    return platform.system() == "Windows" or (metadata.st_uid == 0 and metadata.st_mode & 0o022 == 0)
+    return platform.system() == "Windows" or (metadata.st_uid == 0 and metadata.st_mode & 0o077 == 0)
 
 
 def _authorization_root_is_trusted(paths: MachinePaths) -> bool:
@@ -173,7 +173,7 @@ def authorize_deactivation(
     )
     try:
         _ = record_removal_tombstone(evidence, status="issued", machine_paths=paths)
-    except OSError:
+    except (OSError, ValueError):
         target.unlink(missing_ok=True)
         _fsync_directory(root)
         raise
@@ -207,14 +207,18 @@ def validate_removal_authorization(
         raise ValueError("mdm_removal_authorization_consumed_or_missing") from exc
     if not resolved.is_relative_to(resolved_root.resolve()) or not resolved.is_file():
         raise ValueError("mdm_removal_authorization_wrong_scope")
-    metadata = resolved.stat()
-    if metadata.st_size > 16 * 1024:
+    try:
+        content_bytes = resolved.read_bytes()
+        metadata = resolved.stat()
+    except OSError as exc:
+        raise ValueError("mdm_removal_authorization_invalid") from exc
+    if len(content_bytes) > 16 * 1024 or metadata.st_size != len(content_bytes):
         raise ValueError("mdm_removal_authorization_invalid")
     if not _authorization_owner_is_trusted(metadata):
         raise ValueError("mdm_removal_authorization_untrusted_owner")
     try:
-        raw_payload: object = json.loads(resolved.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raw_payload: object = json.loads(content_bytes.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError("mdm_removal_authorization_invalid") from exc
     if not isinstance(raw_payload, dict):
         raise ValueError("mdm_removal_authorization_invalid")
@@ -249,7 +253,7 @@ def validate_removal_authorization(
         raise ValueError("mdm_removal_authorization_expired")
     if (machine_installation_id, installation_generation) != _active_binding(paths):
         raise ValueError("mdm_removal_authorization_wrong_generation")
-    fingerprint = hashlib.sha256(resolved.read_bytes()).hexdigest()
+    fingerprint = hashlib.sha256(content_bytes).hexdigest()
     try:
         resolved.unlink()
         _fsync_directory(resolved.parent)
@@ -279,8 +283,11 @@ def record_removal_tombstone(
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     root.chmod(0o700)
     target = root / f"{evidence.fingerprint}.json"
-    if not target.exists() and sum(1 for item in root.iterdir() if item.is_file()) >= _MAX_TOMBSTONES:
-        raise OSError("mdm_removal_tombstone_capacity_exceeded")
+    if not target.exists():
+        with os.scandir(root) as entries:
+            file_count = sum(1 for entry in entries if entry.is_file(follow_symlinks=False))
+        if file_count >= _MAX_TOMBSTONES:
+            raise OSError("mdm_removal_tombstone_capacity_exceeded")
     static_payload = {
         "actor": evidence.actor,
         "authorizationExpiresAt": evidence.expires_at,

@@ -382,8 +382,9 @@ def test_authorization_creation_requires_admin_and_safe_name(tmp_path: Path, mon
         removal.record_removal_tombstone(evidence, status="failed", machine_paths=paths)
 
 
+@pytest.mark.parametrize("failure", [OSError("audit unavailable"), ValueError("audit unavailable")])
 def test_authorization_creation_removes_token_when_tombstone_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: Exception
 ) -> None:
     paths = _machine_paths(tmp_path)
     monkeypatch.setattr(removal, "default_machine_paths", lambda: paths)
@@ -393,10 +394,10 @@ def test_authorization_creation_removes_token_when_tombstone_fails(
     monkeypatch.setattr(removal, "_authorization_root_is_trusted", lambda _paths: True)
 
     def fail_tombstone(*_args: object, **_kwargs: object) -> Path:
-        raise OSError("audit unavailable")
+        raise failure
 
     monkeypatch.setattr(removal, "record_removal_tombstone", fail_tombstone)
-    with pytest.raises(OSError, match="audit unavailable"):
+    with pytest.raises((OSError, ValueError), match="audit unavailable"):
         lifecycle.authorize_deactivation(
             tmp_path,
             "developer",
