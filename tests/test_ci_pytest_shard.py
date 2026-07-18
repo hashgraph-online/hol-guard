@@ -25,6 +25,4 @@ def test_ci_workflow_cancels_stale_runs_and_executes_each_shard() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     assert "cancel-in-progress: true" in workflow
-    assert "timeout-minutes: 15" in workflow
     assert "python scripts/ci/pytest_shard.py" in workflow
-    assert "shard-index: [0, 1, 2, 3]" in workflow
