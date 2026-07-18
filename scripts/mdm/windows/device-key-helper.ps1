@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('create', 'inspect', 'delete')]
+    [ValidateSet('create', 'inspect', 'delete', 'sign-health-lease')]
     [string]$Verb,
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^[0-9a-f]{32}$')]
@@ -15,6 +15,8 @@ $KeyName = $KeyPrefix + $Generation
 $PlatformProvider = 'Microsoft Platform Crypto Provider'
 $SoftwareProvider = 'Microsoft Software Key Storage Provider'
 $ProtectedSddl = 'O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)'
+$HealthLeaseDomain = [System.Text.Encoding]::UTF8.GetBytes("HOL-GUARD-HEALTH-LEASE-V1`0")
+$MaximumClaimsBytes = 4096
 
 function Emit-Result {
     param(
@@ -33,6 +35,126 @@ function Emit-Result {
         reasonCode = $ReasonCode
     } | ConvertTo-Json -Compress
     exit $ExitCode
+}
+
+function Emit-SignatureResult {
+    param([byte[]]$Signature)
+    [ordered]@{
+        ok = $true
+        signature = [Convert]::ToBase64String($Signature)
+        signatureAlgorithm = 'ecdsa-p256-sha256'
+        signatureEncoding = 'asn1-der'
+    } | ConvertTo-Json -Compress
+    exit 0
+}
+
+function Convert-P1363ToDer {
+    param([byte[]]$Signature)
+    if ($Signature.Length -ne 64) { throw 'invalid' }
+    $EncodedIntegers = [System.Collections.Generic.List[byte]]::new()
+    foreach ($Offset in @(0, 32)) {
+        $First = $Offset
+        while ($First -lt ($Offset + 31) -and $Signature[$First] -eq 0) { $First++ }
+        $Length = ($Offset + 32) - $First
+        $NeedsPositivePrefix = ($Signature[$First] -band 0x80) -ne 0
+        $EncodedIntegers.Add(0x02)
+        $EncodedIntegers.Add([byte]($Length + $(if ($NeedsPositivePrefix) { 1 } else { 0 })))
+        if ($NeedsPositivePrefix) { $EncodedIntegers.Add(0) }
+        for ($Index = $First; $Index -lt ($Offset + 32); $Index++) {
+            $EncodedIntegers.Add($Signature[$Index])
+        }
+    }
+    if ($EncodedIntegers.Count -gt 127) { throw 'invalid' }
+    $Der = [System.Collections.Generic.List[byte]]::new()
+    $Der.Add(0x30)
+    $Der.Add([byte]$EncodedIntegers.Count)
+    $Der.AddRange($EncodedIntegers)
+    return $Der.ToArray()
+}
+
+function Get-SigningKeyId {
+    param([string]$PublicKeyX963)
+    $SpkiPrefix = [byte[]]@(
+        0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02, 0x01,
+        0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00
+    )
+    $PublicBytes = [Convert]::FromBase64String($PublicKeyX963)
+    if ($PublicBytes.Length -ne 65 -or $PublicBytes[0] -ne 4) { throw 'invalid' }
+    $Spki = [byte[]]::new($SpkiPrefix.Length + $PublicBytes.Length)
+    [Array]::Copy($SpkiPrefix, 0, $Spki, 0, $SpkiPrefix.Length)
+    [Array]::Copy($PublicBytes, 0, $Spki, $SpkiPrefix.Length, $PublicBytes.Length)
+    $Hasher = [System.Security.Cryptography.SHA256]::Create()
+    try { $Digest = $Hasher.ComputeHash($Spki) } finally { $Hasher.Dispose() }
+    return [Convert]::ToBase64String($Digest).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+}
+
+function Read-HealthLeaseClaims {
+    param([string]$ExpectedSigningKeyId)
+    $Buffer = [char[]]::new($MaximumClaimsBytes + 1)
+    $Count = [Console]::In.ReadBlock($Buffer, 0, $Buffer.Length)
+    if ($Count -eq 0 -or $Count -gt $MaximumClaimsBytes) { throw 'invalid' }
+    $Text = [string]::new($Buffer, 0, $Count)
+    $Utf8 = [System.Text.UTF8Encoding]::new($false, $true)
+    if ($Utf8.GetByteCount($Text) -gt $MaximumClaimsBytes) { throw 'invalid' }
+    $Claims = $Text | ConvertFrom-Json
+    $SequenceMatch = [regex]::Match($Text, '"sequence":([0-9]{1,20}),')
+    if (-not $SequenceMatch.Success) { throw 'invalid' }
+    $SequenceText = $SequenceMatch.Groups[1].Value
+    $Sequence = [decimal]::Parse($SequenceText, [Globalization.CultureInfo]::InvariantCulture)
+    $ExpectedKeys = @(
+        'deviceId', 'installationGeneration', 'issuedAt', 'leaseExpiresAt', 'machineInstallationId',
+        'previousLeaseDigest', 'previousLeaseKeyId', 'schemaVersion', 'sequence', 'signingKeyId',
+        'snapshotDigest', 'snapshotSchemaVersion', 'workspaceId'
+    )
+    $ActualKeys = @($Claims.PSObject.Properties.Name)
+    if (@(Compare-Object $ActualKeys $ExpectedKeys).Count -ne 0) { throw 'invalid' }
+    if ($Claims.schemaVersion -ne 'hol-guard-health-lease.v1' -or
+        $Claims.snapshotSchemaVersion -ne 'local-integrity-snapshot.v1' -or
+        $Claims.workspaceId -notmatch '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' -or
+        $Claims.deviceId -notmatch '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' -or
+        $Claims.machineInstallationId -notmatch '^[0-9a-f]{32}$' -or
+        $Claims.installationGeneration -notmatch '^[0-9a-f]{32}$' -or
+        $Claims.issuedAt -notmatch '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' -or
+        $Claims.leaseExpiresAt -notmatch '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' -or
+        $Claims.snapshotDigest -notmatch '^[0-9a-f]{64}$' -or
+        $Claims.signingKeyId -notmatch '^[A-Za-z0-9_-]{43}$' -or $Claims.signingKeyId -ne $ExpectedSigningKeyId -or
+        $Sequence -lt 1 -or
+        $Sequence -gt [decimal]::Parse('18446744073709551615', [Globalization.CultureInfo]::InvariantCulture)) {
+        throw 'invalid'
+    }
+    $TimestampStyle = [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal
+    $IssuedAt = [DateTime]::ParseExact(
+        $Claims.issuedAt, "yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture, $TimestampStyle
+    )
+    $ExpiresAt = [DateTime]::ParseExact(
+        $Claims.leaseExpiresAt, "yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture, $TimestampStyle
+    )
+    $LeaseSeconds = ($ExpiresAt - $IssuedAt).TotalSeconds
+    if ($LeaseSeconds -le 0 -or $LeaseSeconds -gt 3600) { throw 'invalid' }
+    if ($Sequence -eq 1) {
+        if ($null -ne $Claims.previousLeaseDigest -or $null -ne $Claims.previousLeaseKeyId) { throw 'invalid' }
+    } elseif ($Claims.previousLeaseDigest -notmatch '^[0-9a-f]{64}$' -or
+              $Claims.previousLeaseKeyId -notmatch '^[A-Za-z0-9_-]{43}$') {
+        throw 'invalid'
+    }
+    $Canonical = [ordered]@{
+        deviceId = $Claims.deviceId
+        installationGeneration = $Claims.installationGeneration
+        issuedAt = $Claims.issuedAt
+        leaseExpiresAt = $Claims.leaseExpiresAt
+        machineInstallationId = $Claims.machineInstallationId
+        previousLeaseDigest = $Claims.previousLeaseDigest
+        previousLeaseKeyId = $Claims.previousLeaseKeyId
+        schemaVersion = $Claims.schemaVersion
+        sequence = '!HOL_GUARD_SEQUENCE!'
+        signingKeyId = $Claims.signingKeyId
+        snapshotDigest = $Claims.snapshotDigest
+        snapshotSchemaVersion = $Claims.snapshotSchemaVersion
+        workspaceId = $Claims.workspaceId
+    } | ConvertTo-Json -Compress
+    $Canonical = $Canonical.Replace('"!HOL_GUARD_SEQUENCE!"', $SequenceText)
+    if (-not [string]::Equals($Canonical, $Text, [System.StringComparison]::Ordinal)) { throw 'invalid' }
+    return [System.Text.Encoding]::UTF8.GetBytes($Text)
 }
 
 function Get-SecurityDescriptorBytes {
@@ -162,10 +284,30 @@ try {
         $ProviderName = $Found.Provider
         $ProtectionLevel = if ($ProviderName -eq $PlatformProvider) { 'hardware-backed' } else { 'os-protected' }
     }
+    $HealthLeaseSignature = $null
     try {
         $PublicKey = Inspect-Key $Key $ProviderName
+        if ($Verb -eq 'sign-health-lease') {
+            $ClaimsBytes = Read-HealthLeaseClaims (Get-SigningKeyId $PublicKey)
+            $Message = [byte[]]::new($HealthLeaseDomain.Length + $ClaimsBytes.Length)
+            [Array]::Copy($HealthLeaseDomain, 0, $Message, 0, $HealthLeaseDomain.Length)
+            [Array]::Copy($ClaimsBytes, 0, $Message, $HealthLeaseDomain.Length, $ClaimsBytes.Length)
+            $Signer = [System.Security.Cryptography.ECDsaCng]::new($Key)
+            try {
+                $P1363 = $Signer.SignData($Message, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+                if (-not $Signer.VerifyData($Message, $P1363, [System.Security.Cryptography.HashAlgorithmName]::SHA256)) {
+                    throw 'invalid'
+                }
+                $HealthLeaseSignature = Convert-P1363ToDer $P1363
+            } finally {
+                $Signer.Dispose()
+            }
+        }
     } finally {
         $Key.Dispose()
+    }
+    if ($null -ne $HealthLeaseSignature) {
+        Emit-SignatureResult $HealthLeaseSignature
     }
     Emit-Result $true 'active' $ProtectionLevel $PublicKey 'device_key_active' 0
 } catch {

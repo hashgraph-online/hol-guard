@@ -41,6 +41,7 @@ class InstallationContinuityRecord:
     last_lease_boot_session_id: str | None
     last_lease_monotonic_uptime_ns: int | None
     updated_at: str
+    last_lease_key_id: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -53,6 +54,7 @@ class InstallationContinuityRecord:
             "lastLeaseDigest": self.last_lease_digest,
             "lastLeaseBootSessionId": self.last_lease_boot_session_id,
             "lastLeaseMonotonicUptimeNs": self.last_lease_monotonic_uptime_ns,
+            "lastLeaseKeyId": self.last_lease_key_id,
             "updatedAt": self.updated_at,
         }
 
@@ -162,9 +164,10 @@ def _parse_record(payload: bytes) -> InstallationContinuityRecord:
     boot_id = _optional_bounded_string(raw.get("lastLeaseBootSessionId"))
     uptime_raw = raw.get("lastLeaseMonotonicUptimeNs")
     uptime = None if uptime_raw is None else _uint64(uptime_raw)
-    if sequence == 0 and any(value is not None for value in (digest, boot_id, uptime)):
+    lease_key_id = _optional_bounded_string(raw.get("lastLeaseKeyId"))
+    if sequence == 0 and any(value is not None for value in (digest, boot_id, uptime, lease_key_id)):
         raise ValueError("installation_identity_invalid")
-    if sequence > 0 and any(value is None for value in (digest, boot_id, uptime)):
+    if sequence > 0 and any(value is None for value in (digest, boot_id, uptime, lease_key_id)):
         raise ValueError("installation_identity_invalid")
     key_id = raw.get("keyIdAtGenerationCreation")
     if not isinstance(key_id, str) or not key_id or len(key_id) > 256:
@@ -179,6 +182,7 @@ def _parse_record(payload: bytes) -> InstallationContinuityRecord:
         boot_id,
         uptime,
         _timestamp(raw.get("updatedAt")),
+        lease_key_id,
     )
 
 

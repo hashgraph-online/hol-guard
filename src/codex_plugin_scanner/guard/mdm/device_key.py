@@ -21,15 +21,9 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from .contracts import KeyProtectionLevel, KeyProtectionStatus, MachinePaths, default_machine_paths
-from .device_key_native import (
-    NativeKeyEvidence,
-)
-from .device_key_native import (
-    require_machine_context as require_machine_device_context,
-)
-from .device_key_native import (
-    run_helper as _run_helper,
-)
+from .device_key_native import NativeKeyEvidence
+from .device_key_native import require_machine_context as require_machine_device_context
+from .device_key_native import run_helper as _run_helper
 
 _METADATA_SCHEMA = "hol-guard-device-key.v1"
 _METADATA_NAME = "device-key.json"

@@ -67,6 +67,22 @@ def test_continuity_provision_is_idempotent_and_snapshot_read_is_immutable(
     assert verification.record is not None and verification.record.last_issued_sequence == 0
 
 
+def test_uninitialized_v1_state_without_lease_key_id_remains_compatible(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _prepare(tmp_path, monkeypatch)
+    continuity.provision_machine_continuity()
+    state_path = paths.state_root / "installation-continuity.json"
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    del payload["lastLeaseKeyId"]
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = continuity.verify_installation_continuity(paths, system_name="Darwin")
+
+    assert result.healthy is True
+    assert result.record is not None and result.record.last_lease_key_id is None
+
+
 def test_missing_state_creates_a_fresh_generation_without_inheriting_identity(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -149,6 +165,7 @@ def test_continuity_detects_same_boot_monotonic_regression(tmp_path: Path, monke
         lastLeaseDigest="a" * 64,
         lastLeaseBootSessionId="boot-a",
         lastLeaseMonotonicUptimeNs=20_000_000_000,
+        lastLeaseKeyId="active-key",
     )
     state_path.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -169,6 +186,7 @@ def test_continuity_allows_lower_uptime_after_reboot(tmp_path: Path, monkeypatch
         lastLeaseDigest="a" * 64,
         lastLeaseBootSessionId="boot-before",
         lastLeaseMonotonicUptimeNs=20_000_000_000,
+        lastLeaseKeyId="active-key",
     )
     state_path.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -223,6 +241,7 @@ def test_maximum_sequence_is_degraded_not_healthy(tmp_path: Path, monkeypatch: p
         lastLeaseDigest="a" * 64,
         lastLeaseBootSessionId="boot-before",
         lastLeaseMonotonicUptimeNs=1,
+        lastLeaseKeyId="active-key",
     )
     state_path.write_text(json.dumps(payload), encoding="utf-8")
 
