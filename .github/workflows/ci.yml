@@ -1,9 +1,9 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: [main, release/2.2]
   pull_request:
-    branches: [main]
+    branches: [main, release/2.2]
 
 permissions:
   contents: read
