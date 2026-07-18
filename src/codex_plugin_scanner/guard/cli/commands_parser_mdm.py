@@ -58,6 +58,8 @@ def _configure_guard_mdm_parsers(
         "authorize-deactivation", help="Create a short-lived machine-owned user removal authorization"
     )
     _add_user(authorize, require_user=True)
+    authorize.add_argument("--actor", required=True, help="Auditable MDM actor identity")
+    authorize.add_argument("--reason", required=True, help="Bounded removal reason")
     authorize.add_argument("--token-name", help="Machine-state token filename selected by the MDM wrapper")
 
     network = commands.add_parser("network-diagnose", help="Test managed DNS, proxy, and TLS without prompts")
