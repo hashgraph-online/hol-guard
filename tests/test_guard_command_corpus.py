@@ -295,37 +295,13 @@ def test_full_guard_evaluation_matches_exact_non_widening_known_gap_baseline() -
         assert count > 0 and re.fullmatch(r"[0-9a-f]{64}", digest)
         expected[key] = (count, digest)
 
-    script = """
-import hashlib,json,resource,sys,time
-from collections import defaultdict
-from itertools import chain
-from pathlib import Path
-from codex_plugin_scanner.guard.action_lattice import guard_action_severity
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
-from tests.guard_command_corpus import iter_benign_corpus,iter_adversarial_corpus
-from tests.guard_command_corpus_oracle import iter_benign_oracle,iter_adversarial_oracle
-def rank(value): return guard_action_severity('warn' if value == 'monitor' else value)
-groups=defaultdict(list); start=time.perf_counter()
-streams=chain(zip(iter_benign_corpus(),iter_benign_oracle(),strict=True),zip(iter_adversarial_corpus(),iter_adversarial_oracle(),strict=True))
-for case,oracle in streams:
-    observed=evaluate_command(case.command,cwd=Path('workspace'),home_dir=Path('home')).minimum_action
-    if rank(observed)==rank(oracle.minimum_floor): continue
-    kind='underclassified' if rank(observed)<rank(oracle.minimum_floor) else 'overclassified'
-    groups['|'.join((oracle.owner,kind,oracle.minimum_floor,observed))].append(case.case_id)
-actual={
-    key:[len(ids),hashlib.sha256(('\\n'.join(sorted(ids))+'\\n').encode()).hexdigest()]
-    for key,ids in groups.items()
-}
-rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-rss_mib=rss/(1024*1024 if sys.platform=='darwin' else 1024)
-print(json.dumps({'actual':actual,'elapsed':time.perf_counter()-start,'rss_mib':rss_mib},sort_keys=True))
-"""
+    runner_path = Path(__file__).with_name("guard_command_corpus_runner.py")
     completed = subprocess.run(
-        [sys.executable, "-c", script],
+        [sys.executable, str(runner_path)],
         check=True,
         capture_output=True,
         text=True,
-        timeout=40,
+        timeout=45,
         cwd=Path.cwd(),
     )
     report_value = cast(object, json.loads(completed.stdout))
