@@ -52,6 +52,8 @@ def _redact_arg(value: str) -> str:
 
 
 def _redact_metadata(value: object, key: str | None = None) -> object:
+    if key is not None and key.lower() in {"env", "environment"} and isinstance(value, dict):
+        return {item_key: "*****" for item_key in value}
     if key is not None and any(
         token in key.lower() for token in ("key", "token", "auth", "secret", "password", "credential")
     ):

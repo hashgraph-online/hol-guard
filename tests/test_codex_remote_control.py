@@ -8,7 +8,29 @@ import stat
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters import codex_remote_control
+
+
+def test_guarded_codex_launch_candidates_are_side_effect_free(tmp_path, monkeypatch):
+    def fail_subprocess(*_args, **_kwargs):
+        pytest.fail("launch preview must not start remote-control setup")
+
+    monkeypatch.setattr(codex_remote_control.subprocess, "run", fail_subprocess)
+    monkeypatch.setattr(codex_remote_control.subprocess, "Popen", fail_subprocess)
+
+    candidates = codex_remote_control.guarded_codex_launch_command_candidates(
+        executable="/usr/bin/codex",
+        home_dir=tmp_path / "home",
+        passthrough_args=["Fix it."],
+    )
+
+    socket_path = codex_remote_control.default_codex_control_socket(tmp_path / "home")
+    assert candidates == (
+        ["/usr/bin/codex", "--remote", f"unix://{socket_path}", "Fix it."],
+        ["/usr/bin/codex", "Fix it."],
+    )
 
 
 def test_guarded_codex_launch_starts_remote_control_and_connects_tui(
@@ -93,7 +115,7 @@ def test_guarded_codex_launch_starts_portable_app_server_when_managed_daemon_is_
     )
 
     socket_path = home_dir / ".codex" / "app-server-control" / "app-server-control.sock"
-    assert starts[0]["executable"] == "/usr/local/bin/codex"
+    assert starts[0]["executable_prefix"] == ["/usr/local/bin/codex"]
     assert starts[0]["socket_path"] == socket_path
     assert command == ["/usr/local/bin/codex", "--remote", f"unix://{socket_path}"]
 
@@ -217,17 +239,22 @@ def test_direct_app_server_uses_private_control_directory(
         pid = 4321
 
     wait_calls = 0
+    launch_commands: list[list[str]] = []
 
     def fake_wait(path: Path) -> bool:
         nonlocal wait_calls
         wait_calls += 1
         return wait_calls > 1 and path.parent.exists()
 
+    def fake_popen(command, **_kwargs):
+        launch_commands.append(list(command))
+        return FakeProcess()
+
     monkeypatch.setattr(codex_remote_control, "_wait_for_socket", fake_wait)
-    monkeypatch.setattr(codex_remote_control.subprocess, "Popen", lambda command, **kwargs: FakeProcess())
+    monkeypatch.setattr(codex_remote_control.subprocess, "Popen", fake_popen)
 
     started = codex_remote_control._start_direct_app_server(
-        executable="codex",
+        executable_prefix=("/usr/bin/env", "codex"),
         socket_path=socket_path,
         environment={},
     )
@@ -235,6 +262,7 @@ def test_direct_app_server_uses_private_control_directory(
     directory_mode = stat.S_IMODE(socket_path.parent.stat().st_mode)
     pid_mode = stat.S_IMODE((socket_path.parent / "hol-guard-app-server.pid").stat().st_mode)
     assert started is True
+    assert launch_commands == [["/usr/bin/env", "codex", "app-server", "--listen", f"unix://{socket_path}"]]
     assert directory_mode == 0o700
     assert pid_mode == 0o600
 
@@ -269,7 +297,7 @@ def test_direct_app_server_recovers_when_pid_marker_is_stale(
     monkeypatch.setattr(codex_remote_control.subprocess, "Popen", fake_popen)
 
     started = codex_remote_control._start_direct_app_server(
-        executable="codex",
+        executable_prefix=("codex",),
         socket_path=socket_path,
         environment={},
     )
@@ -316,7 +344,7 @@ def test_direct_app_server_stops_matching_dead_listener_before_replacement(
     monkeypatch.setattr(codex_remote_control.subprocess, "Popen", fake_popen)
 
     started = codex_remote_control._start_direct_app_server(
-        executable="codex",
+        executable_prefix=("codex",),
         socket_path=socket_path,
         environment={},
     )

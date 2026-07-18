@@ -171,19 +171,37 @@ def append_permission_artifacts(
 
 
 def _mcp_env_keys(server_config: dict[str, object]) -> list[str]:
-    keys: set[str] = set()
-    for field in ("env", "environment"):
+    return sorted(_mcp_environment(server_config))
+
+
+def _mcp_environment(server_config: dict[str, object]) -> dict[str, str]:
+    environment: dict[str, str] = {}
+    for field in ("environment", "env"):
         value = server_config.get(field)
         if isinstance(value, dict):
-            keys.update(key for key in value if isinstance(key, str))
-    return sorted(keys)
+            environment.update(
+                {
+                    key.strip(): item
+                    for key, item in value.items()
+                    if isinstance(key, str) and key.strip() and isinstance(item, str)
+                }
+            )
+    return environment
+
+
+def _mcp_headers(server_config: dict[str, object]) -> dict[str, str]:
+    headers = server_config.get("headers")
+    if not isinstance(headers, dict):
+        return {}
+    return {
+        key.strip(): item
+        for key, item in headers.items()
+        if isinstance(key, str) and key.strip() and isinstance(item, str)
+    }
 
 
 def _mcp_headers_keys(server_config: dict[str, object]) -> list[str]:
-    headers = server_config.get("headers")
-    if not isinstance(headers, dict):
-        return []
-    return sorted(key for key in headers if isinstance(key, str))
+    return sorted(_mcp_headers(server_config))
 
 
 def append_mcp_artifacts(
@@ -213,6 +231,8 @@ def append_mcp_artifacts(
         raw_args = server_config.get("args")
         args = tuple(str(item) for item in raw_args) if isinstance(raw_args, list) else ()
         transport = "http" if isinstance(url, str) else "stdio"
+        environment = _mcp_environment(server_config)
+        headers = _mcp_headers(server_config)
         metadata = enrich_mcp_server_metadata(
             {
                 "name": server_name,
@@ -223,6 +243,8 @@ def append_mcp_artifacts(
             args=args,
             url=url if isinstance(url, str) else None,
             transport=transport,
+            configured_environment=environment,
+            configured_headers=headers,
         )
         artifacts.append(
             GuardArtifact(

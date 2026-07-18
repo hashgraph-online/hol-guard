@@ -240,8 +240,7 @@ def test_guard_protect_render_uses_supply_chain_user_copy(capsys) -> None:
                     "harness_message": (
                         "HOL Guard blocked `minimist@1.2.5` before install.\n"
                         "Reason: Known exploited package.\n"
-                        "Fix: Install `minimist@1.2.9` instead.\n"
-                        "Review this request in HOL Guard, then retry."
+                        "Fix: Install `minimist@1.2.9` instead."
                     ),
                 },
             },
@@ -253,7 +252,7 @@ def test_guard_protect_render_uses_supply_chain_user_copy(capsys) -> None:
 
     assert "HOL Guard blocked" in output
     assert "Install `minimist@1.2.9` instead." in output
-    assert "Review this request in HOL Guard, then retry." in output
+    assert "Review this request in HOL Guard, then retry." not in output
 
 
 def test_guard_protect_render_uses_supply_chain_review_copy(capsys) -> None:

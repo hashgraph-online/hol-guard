@@ -1104,7 +1104,7 @@ class TestGuardApprovals:
         assert pending == []
         assert decisions[0]["harness"] == "*"
 
-    def test_guard_package_artifact_approval_reuses_transient_exact_replay(self, tmp_path):
+    def test_guard_package_artifact_approval_replay_fails_closed_without_integrity_key(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         artifact_id = "guard-cli:project:package-request:impeccable"
         artifact_hash = "hash-impeccable"
@@ -1143,6 +1143,7 @@ class TestGuardApprovals:
             policy_count = connection.execute("select count(*) from policy_decisions").fetchone()[0]
         assert policy_count == 1
         store._policy_integrity_secret_store = None
+        store._clear_policy_integrity_cache()
         first_retry = store.resolve_policy_decision(
             "guard-cli",
             artifact_id,
@@ -1166,11 +1167,11 @@ class TestGuardApprovals:
         )
 
         assert resolved["status"] == "resolved"
-        assert first_retry is not None
-        assert first_retry["action"] == "allow"
-        assert second_retry is not None
-        assert second_retry["action"] == "allow"
+        assert first_retry is None
+        assert second_retry is None
         assert changed_request is None
+        ignored = store.list_events(event_name="rule.ignored.local_integrity")
+        assert any(event["payload"].get("source") == "approval-gate-once" for event in ignored)
 
     def test_guard_saved_scope_repairs_integrity_before_policy_write(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")

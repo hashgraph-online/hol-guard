@@ -554,7 +554,7 @@ class TestPolicyScopePersistence:
 
 
 class TestEvaluateDetectionScopePersistence:
-    def test_unchanged_artifact_with_stored_allow_policy_is_not_blocked(self, tmp_path: Path) -> None:
+    def test_legacy_stored_allow_cannot_lower_current_reapproval(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
         config = _make_config(tmp_path)
         artifact = _make_artifact()
@@ -581,8 +581,10 @@ class TestEvaluateDetectionScopePersistence:
         result = evaluate_detection(detection, store, config, persist=False)
 
         artifact_result = result["artifacts"][0]
-        assert artifact_result["policy_action"] == "allow"
-        assert result["blocked"] is False
+        assert artifact_result["policy_action"] == "require-reapproval"
+        assert artifact_result["approval_reuse_status"] == "rejected"
+        assert artifact_result["approval_reuse_reason_code"] == "approval_reuse_content_changed"
+        assert result["blocked"] is True
 
     def test_changed_artifact_hash_without_stored_policy_triggers_reapproval(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)

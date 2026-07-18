@@ -119,7 +119,7 @@ def zcode_hook_response_from_guard(
     """
 
     resolved_event = event_name or "PreToolUse"
-    if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+    if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
         cleaned_reason = (reason.strip() if isinstance(reason, str) else "") or "Blocked by HOL Guard."
         if resolved_event == "UserPromptSubmit":
             return {
@@ -164,7 +164,7 @@ def emit_zcode_hook_response(
 
 
 def zcode_hook_should_block(*, policy_action: str) -> bool:
-    return policy_action in {"block", "sandbox-required", "require-reapproval"}
+    return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
 
 
 __all__ = [

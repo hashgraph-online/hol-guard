@@ -7,7 +7,7 @@ import sys
 from hashlib import sha256
 from pathlib import Path
 
-from ..aibom_detection import extend_detection_with_workspace_aibom
+from ..aibom_detection import enrich_mcp_server_metadata, extend_detection_with_workspace_aibom
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
@@ -89,6 +89,43 @@ class CursorHarnessAdapter(HarnessAdapter):
                 env_payload = server_config.get("env")
                 environment_payload = server_config.get("environment")
                 environment = env_payload if isinstance(env_payload, dict) else environment_payload
+                normalized_environment = (
+                    {
+                        key.strip(): value
+                        for key, value in environment.items()
+                        if isinstance(key, str) and key.strip() and isinstance(value, str)
+                    }
+                    if isinstance(environment, dict)
+                    else {}
+                )
+                url = server_config.get("url")
+                raw_headers = server_config.get("headers")
+                configured_headers = (
+                    {
+                        key.strip(): value
+                        for key, value in raw_headers.items()
+                        if isinstance(key, str) and key.strip() and isinstance(value, str)
+                    }
+                    if isinstance(raw_headers, dict)
+                    else {}
+                )
+                metadata = enrich_mcp_server_metadata(
+                    {
+                        "name": name,
+                        "env": normalized_environment,
+                        "env_keys": sorted(normalized_environment),
+                        "headers_keys": sorted(configured_headers),
+                        "guard_managed_proxy": is_guard_proxy_command(
+                            command if isinstance(command, str) else None,
+                            args,
+                        ),
+                    },
+                    command=command if isinstance(command, str) else None,
+                    args=args,
+                    url=url if isinstance(url, str) else None,
+                    transport="http" if isinstance(url, str) else "stdio",
+                    configured_headers=configured_headers,
+                )
                 artifacts.append(
                     enrich_artifact_with_mcp_skill_firewall(
                         GuardArtifact(
@@ -100,21 +137,9 @@ class CursorHarnessAdapter(HarnessAdapter):
                             config_path=str(config_path),
                             command=command if isinstance(command, str) else None,
                             args=args,
-                            url=server_config.get("url") if isinstance(server_config.get("url"), str) else None,
-                            transport="http" if isinstance(server_config.get("url"), str) else "stdio",
-                            metadata={
-                                "env": {
-                                    str(key): str(value)
-                                    for key, value in environment.items()
-                                    if isinstance(key, str) and isinstance(value, str)
-                                }
-                                if isinstance(environment, dict)
-                                else {},
-                                "guard_managed_proxy": is_guard_proxy_command(
-                                    command if isinstance(command, str) else None,
-                                    args,
-                                ),
-                            },
+                            url=url if isinstance(url, str) else None,
+                            transport="http" if isinstance(url, str) else "stdio",
+                            metadata=metadata,
                         )
                     )
                 )

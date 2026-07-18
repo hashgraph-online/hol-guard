@@ -38,7 +38,9 @@ def test_mcp_server_artifact_emits_mcp_skill_firewall_bundle() -> None:
     assert server["packageName"] == "@modelcontextprotocol/server-filesystem"
     assert server["commandHash"]
     assert server["transportHash"]
-    assert artifact.metadata["mcp_server_identity"]["identity_hash"] == server["identityHash"]
+    legacy_server = artifact.metadata["mcp_server_identity"]
+    assert isinstance(legacy_server, dict)
+    assert legacy_server["identity_hash"] == server["identityHash"]
 
 
 def test_tool_call_artifact_emits_mcp_skill_firewall_and_legacy_identities() -> None:
@@ -67,7 +69,62 @@ def test_tool_call_artifact_emits_mcp_skill_firewall_and_legacy_identities() -> 
     assert len(tools) == 1
     assert tools[0]["toolName"] == "read_file"
     assert tools[0]["hashScope"] == "full"
-    assert artifact.metadata["mcp_tool_identity"]["tool_name"] == "read_file"
+    server = firewall["mcpServer"]
+    assert isinstance(server, dict)
+    assert server["envValuesHash"] == server_identity.env_values_hash
+    legacy_server = artifact.metadata["mcp_server_identity"]
+    legacy_tool = artifact.metadata["mcp_tool_identity"]
+    assert isinstance(legacy_server, dict)
+    assert isinstance(legacy_tool, dict)
+    assert legacy_server["env_values_hash"] == server_identity.env_values_hash
+    assert legacy_tool["tool_name"] == "read_file"
+
+
+def test_legacy_tool_call_missing_environment_hash_gets_stable_non_secret_fallback() -> None:
+    legacy_artifact = GuardArtifact(
+        artifact_id="codex:mcp:filesystem:read_file",
+        name="filesystem:read_file",
+        harness="codex",
+        artifact_type="tool_call",
+        source_scope="project",
+        config_path=".mcp.json",
+        command="read_file",
+        transport="stdio",
+        metadata={
+            "mcp_server_identity": {
+                "args_hash": "args-hash",
+                "command": "python",
+                "env_keys": ["TOKEN"],
+                "identity_hash": "server-hash",
+                "transport": "stdio",
+            },
+            "mcp_tool_identity": {
+                "description_hash": "description-hash",
+                "identity_hash": "tool-hash",
+                "schema_hash": "schema-hash",
+                "server_hash": "server-hash",
+                "tool_name": "read_file",
+            },
+        },
+    )
+
+    first = enrich_artifact_with_mcp_skill_firewall(legacy_artifact)
+    second = enrich_artifact_with_mcp_skill_firewall(legacy_artifact)
+    first_firewall = first.metadata["mcpSkillFirewall"]
+    second_firewall = second.metadata["mcpSkillFirewall"]
+    assert isinstance(first_firewall, dict)
+    assert isinstance(second_firewall, dict)
+    first_server = first_firewall["mcpServer"]
+    second_server = second_firewall["mcpServer"]
+    assert isinstance(first_server, dict)
+    assert isinstance(second_server, dict)
+    fallback_hash = first_server["envValuesHash"]
+    assert isinstance(fallback_hash, str)
+    assert len(fallback_hash) == 64
+    assert fallback_hash == second_server["envValuesHash"]
+    legacy_server = first.metadata["mcp_server_identity"]
+    assert isinstance(legacy_server, dict)
+    assert legacy_server["env_values_hash"] == fallback_hash
 
 
 def test_skill_artifact_emits_skill_firewall_metadata(tmp_path) -> None:
@@ -94,7 +151,9 @@ def test_skill_artifact_emits_skill_firewall_metadata(tmp_path) -> None:
     assert skill["skillHash"] == identity.skill_hash
     metadata = skill_identity_metadata(identity)
     assert metadata["identity_hash"] == identity.identity_hash
-    assert portal_skill_identity(identity)["stableId"].startswith("skill:")
+    stable_id = portal_skill_identity(identity)["stableId"]
+    assert isinstance(stable_id, str)
+    assert stable_id.startswith("skill:")
 
 
 def test_append_artifact_enriches_mcp_server_metadata() -> None:

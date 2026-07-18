@@ -13,7 +13,6 @@ from rich.text import Text
 from ..approval_gate import ApprovalGateError, ApprovalGateGrant, public_config, require_approval_decision
 from ..consumer import artifact_hash
 from ..models import GuardArtifact, PolicyDecision
-from ..receipts import build_receipt
 from ..store import GuardStore
 from .approval_gate_prompt import prompt_for_approval_gate
 
@@ -41,6 +40,7 @@ class PromptArtifact:
     metadata: dict[str, object]
     current_snapshot: dict[str, object] | None
     removed: bool = False
+    snapshot_hash: str | None = None
 
 
 def resolve_interactive_decisions(
@@ -52,7 +52,12 @@ def resolve_interactive_decisions(
     console: Console | None = None,
     input_func: Callable[[str], str] | None = None,
 ) -> dict[str, object]:
-    """Prompt for changed artifacts and apply the chosen Guard override."""
+    """Prompt for changed artifacts and return exact, unpersisted launch intents.
+
+    Persistent policy choices are stored against the reviewed context token,
+    but receipts and snapshots are left to ``guard_run`` after it redetects
+    the launch state and recomputes the authoritative action.
+    """
 
     review_items = [
         artifact
@@ -95,7 +100,6 @@ def resolve_interactive_decisions(
                 )
                 evaluation["blocked"] = True
                 return evaluation
-            _record_override_receipt(store, artifact, "allow", "allow-once", now)
             _set_decision_payload(decisions_by_artifact, artifact.artifact_id, "allow", "allow-once")
             continue
         if choice == "allow_artifact":
@@ -110,14 +114,13 @@ def resolve_interactive_decisions(
                     harness=artifact.harness,
                     scope="artifact",
                     artifact_id=artifact.artifact_id,
+                    artifact_hash=artifact.artifact_hash,
                     action="allow",
                     reason="interactive-allow-artifact",
                 ),
                 now,
                 approval_gate_grant=approval_gate_grant,
             )
-            _persist_allowed_artifact(store, artifact, now)
-            _record_override_receipt(store, artifact, "allow", "allow-artifact", now)
             _set_decision_payload(decisions_by_artifact, artifact.artifact_id, "allow", "allow-artifact")
             continue
         if choice == "allow_publisher":
@@ -132,6 +135,8 @@ def resolve_interactive_decisions(
                     PolicyDecision(
                         harness=artifact.harness,
                         scope="harness",
+                        artifact_id=artifact.artifact_id,
+                        artifact_hash=artifact.artifact_hash,
                         action="allow",
                         reason="interactive-allow-harness",
                     ),
@@ -150,6 +155,8 @@ def resolve_interactive_decisions(
                     PolicyDecision(
                         harness=artifact.harness,
                         scope="publisher",
+                        artifact_id=artifact.artifact_id,
+                        artifact_hash=artifact.artifact_hash,
                         publisher=artifact.publisher,
                         action="allow",
                         reason="interactive-allow-publisher",
@@ -158,8 +165,6 @@ def resolve_interactive_decisions(
                     approval_gate_grant=approval_gate_grant,
                 )
                 decision_scope = "allow-publisher"
-            _persist_allowed_artifact(store, artifact, now)
-            _record_override_receipt(store, artifact, "allow", decision_scope, now)
             _set_decision_payload(decisions_by_artifact, artifact.artifact_id, "allow", decision_scope)
             continue
 
@@ -180,7 +185,6 @@ def resolve_interactive_decisions(
             now,
             approval_gate_grant=approval_gate_grant,
         )
-        _record_override_receipt(store, artifact, "block", "block", now)
         _set_decision_payload(decisions_by_artifact, artifact.artifact_id, "block", "block")
         blocked = True
 
@@ -299,44 +303,6 @@ def _safe_prompt_value(value: str) -> str:
     return "".join(character if character.isprintable() else "?" for character in value)
 
 
-def _persist_allowed_artifact(store: GuardStore, artifact: PromptArtifact, now: str) -> None:
-    if artifact.removed:
-        store.delete_snapshot(artifact.harness, artifact.artifact_id)
-        return
-    if artifact.current_snapshot is None:
-        return
-    store.save_snapshot(
-        artifact.harness,
-        artifact.artifact_id,
-        {**artifact.current_snapshot, "artifact_hash": artifact.artifact_hash},
-        artifact.artifact_hash,
-        now,
-    )
-
-
-def _record_override_receipt(
-    store: GuardStore,
-    artifact: PromptArtifact,
-    policy_decision: str,
-    user_override: str,
-    now: str,
-) -> None:
-    receipt = build_receipt(
-        harness=artifact.harness,
-        artifact_id=artifact.artifact_id,
-        artifact_hash=artifact.artifact_hash,
-        policy_decision=policy_decision,
-        capabilities_summary=_capabilities_summary(artifact),
-        changed_capabilities=list(artifact.changed_fields),
-        provenance_summary=artifact.provenance_summary,
-        artifact_name=artifact.artifact_name,
-        source_scope=artifact.source_scope,
-        user_override=user_override,
-        approval_source="inline",
-    )
-    store.add_receipt(receipt)
-
-
 def _set_decision_payload(
     decision_map: dict[str, dict[str, object]],
     artifact_id: str,
@@ -362,6 +328,12 @@ def build_prompt_artifacts(
     for item in evaluation_artifacts:
         artifact_id = str(item.get("artifact_id"))
         artifact = artifacts_by_id.get(artifact_id)
+        approval_context_hash = item.get("approval_context_hash")
+        exact_approval_hash = (
+            approval_context_hash if isinstance(approval_context_hash, str) and approval_context_hash.strip() else None
+        )
+        raw_content_hash = item.get("artifact_hash")
+        content_hash = raw_content_hash if isinstance(raw_content_hash, str) and raw_content_hash else None
         raw_changed_fields = item.get("changed_fields")
         changed_fields = (
             tuple(str(field) for field in raw_changed_fields if isinstance(field, str))
@@ -374,7 +346,7 @@ def build_prompt_artifacts(
                     harness=harness,
                     artifact_id=artifact_id,
                     artifact_name=str(item.get("artifact_name") or artifact_id),
-                    artifact_hash=str(item.get("artifact_hash") or "removed"),
+                    artifact_hash=exact_approval_hash or str(item.get("artifact_hash") or "removed"),
                     policy_action=str(item.get("policy_action") or "review"),
                     changed_fields=changed_fields,
                     provenance_summary=f"artifact removed from {harness}",
@@ -388,6 +360,7 @@ def build_prompt_artifacts(
                     metadata={},
                     current_snapshot=None,
                     removed=bool(item.get("removed")),
+                    snapshot_hash=content_hash,
                 )
             )
             continue
@@ -396,7 +369,7 @@ def build_prompt_artifacts(
                 harness=harness,
                 artifact_id=artifact.artifact_id,
                 artifact_name=artifact.name,
-                artifact_hash=artifact_hash(artifact),
+                artifact_hash=exact_approval_hash or artifact_hash(artifact),
                 policy_action=str(item.get("policy_action") or "review"),
                 changed_fields=changed_fields,
                 provenance_summary=f"{artifact.source_scope} artifact defined at {artifact.config_path}",
@@ -408,11 +381,21 @@ def build_prompt_artifacts(
                 command=artifact.command,
                 transport=artifact.transport,
                 metadata=dict(artifact.metadata),
-                current_snapshot=artifact.to_dict(),
+                current_snapshot=_prompt_artifact_snapshot(artifact),
                 removed=False,
+                snapshot_hash=content_hash or artifact_hash(artifact),
             )
         )
     return prompt_artifacts
+
+
+def _prompt_artifact_snapshot(artifact: GuardArtifact) -> dict[str, object]:
+    """Mirror the consumer snapshot shape without persisting raw env values."""
+
+    snapshot = artifact.to_dict()
+    metadata = snapshot.get("metadata")
+    snapshot["env_keys"] = metadata.get("env_keys", []) if isinstance(metadata, dict) else []
+    return snapshot
 
 
 def _coerce_artifact_results(value: object) -> list[dict[str, object]]:

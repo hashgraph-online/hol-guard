@@ -12,6 +12,7 @@ import pytest
 from codex_plugin_scanner.guard import shims as shims_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES
 from codex_plugin_scanner.guard.shims import install_package_shims, probe_package_shim_intercepts
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.shim_execution_helpers import (
@@ -131,7 +132,9 @@ def test_package_shim_intercept_probe_records_evaluator_evidence(
     assert manager_result["manager"] == "npm"
     assert manager_result["evaluator_invoked"] is True
     assert manager_result["intercept_ran"] is True
-    assert manager_result.get("protect_decision") in {"allow", "review", "block", "monitor"}
+    protect_decision = manager_result.get("protect_decision")
+    assert protect_decision in GUARD_ACTION_VALUES
+    assert manager_result["execution_permitted"] is (protect_decision in {"allow", "warn"})
     assert not (tmp_path / "npm-never-runs.json").exists()
 
 

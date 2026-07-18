@@ -50,8 +50,9 @@ def _run_hook_claude_permission_request(
     if not _is_claude_permission_request(args, payload_map):
         return None
     notice = _peek_claude_permission_notice(store, payload_map)
-    if notice is not None and _claude_permission_notice_prefers_ask_user_question(notice):
+    if notice is not None:
         _mark_claude_pending_permission_prompt_seen(store=store, payload=payload_map, notice=notice)
+    if notice is not None and _claude_permission_notice_prefers_ask_user_question(notice):
         _emit_native_hook_response(
             harness=args.harness,
             policy_action="block",
@@ -75,7 +76,7 @@ def _run_hook_claude_permission_request(
             runtime_artifact=runtime_artifact,
             runtime_workspace=runtime_workspace,
         )
-        if policy_action not in {"block", "sandbox-required", "require-reapproval"}:
+        if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"}:
             _emit_claude_permission_request_passthrough(output_stream=output_stream)
             return 0
         native_reason = _runtime_artifact_native_reason(runtime_artifact, reason_stub)
