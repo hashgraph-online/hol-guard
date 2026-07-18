@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import inspect
 import json
 import os
 import re
@@ -68,6 +67,10 @@ def _decode_object(path: Path) -> dict[str, object]:
     return cast(dict[str, object], decoded)
 
 
+def _oracle_paths() -> tuple[Path, ...]:
+    return tuple(sorted(Path(__file__).parent.glob("guard_command_corpus_oracle*.py")))
+
+
 def _floor_rank(value: object) -> int:
     if value == "monitor":
         return guard_action_severity("warn")
@@ -103,7 +106,7 @@ def _oracle_digest(records: tuple[OracleRecord, ...]) -> str:
 def test_manifest_binds_generator_oracle_fixtures_counts_and_budgets() -> None:
     manifest = load_seed_manifest()
     generator_path = Path(__file__).with_name("guard_command_corpus.py")
-    oracle_path = Path(__file__).with_name("guard_command_corpus_oracle.py")
+    oracle_paths = _oracle_paths()
 
     assert manifest["fixed_seed"] == 22020
     assert manifest["permutation_multiplier"] == 7919
@@ -112,7 +115,7 @@ def test_manifest_binds_generator_oracle_fixtures_counts_and_budgets() -> None:
     assert manifest["benign_target_count"] == 1000
     assert manifest["adversarial_target_count"] == 50000
     assert manifest["generator_source_sha256"] == _sha256(generator_path)
-    assert manifest["oracle_source_sha256"] == _sha256(oracle_path)
+    assert manifest["oracle_source_sha256"] == {path.name: _sha256(path) for path in oracle_paths}
     assert manifest["pairs_sha256"] == _sha256(PAIRS_PATH)
     assert manifest["known_gaps_sha256"] == _sha256(KNOWN_GAPS_PATH)
     assert manifest["evaluation_budget_seconds"] == 30
@@ -137,7 +140,7 @@ def test_inputs_are_exact_unique_opaque_shuffled_and_label_free() -> None:
 
 
 def test_independent_oracle_is_complete_per_seed_and_never_invents_proof() -> None:
-    source = inspect.getsource(sys.modules["tests.guard_command_corpus_oracle"])
+    source = "\n".join(path.read_text(encoding="utf-8") for path in _oracle_paths())
     assert "command_evaluation" not in source
     assert "command_extensions" not in source
     assert "command_rules" not in source
