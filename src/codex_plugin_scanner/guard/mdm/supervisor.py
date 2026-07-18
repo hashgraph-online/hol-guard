@@ -27,7 +27,7 @@ _PROBE_TIMEOUT_SECONDS = 10
 _ABSENT_HRESULTS = {2, 0x80070002, -2147024894}
 
 
-def _machine_executable(paths: MachinePaths, system_name: str) -> Path:
+def machine_executable(paths: MachinePaths, system_name: str) -> Path:
     executable = "hol-guard.exe" if system_name == "Windows" else "hol-guard"
     return paths.runtime_root / "hol-guard" / executable
 
@@ -72,7 +72,7 @@ def _macos_registration_status(paths: MachinePaths, plist_path: Path) -> Supervi
     if not isinstance(payload, dict) or payload.get("Label") != _MACOS_LABEL:
         return SupervisorStatus("stopped", "supervisor_registration_invalid")
     expected_arguments = [
-        str(_machine_executable(paths, "Darwin")),
+        str(machine_executable(paths, "Darwin")),
         "mdm",
         "integrity-snapshot",
         "--scope",
@@ -152,7 +152,7 @@ def _launchctl_arguments(output: str) -> list[str] | None:
 
 
 def _macos_loaded_status(paths: MachinePaths, output: str) -> SupervisorStatus | None:
-    expected_executable = str(_machine_executable(paths, "Darwin"))
+    expected_executable = str(machine_executable(paths, "Darwin"))
     expected_arguments = [expected_executable, "mdm", "integrity-snapshot", "--scope", "machine", "--json"]
     if _launchctl_scalar(output, "path") != str(_MACOS_PLIST):
         return SupervisorStatus("stopped", "supervisor_registration_invalid")
@@ -283,7 +283,7 @@ def _windows_registration_status(paths: MachinePaths, xml_text: str) -> Supervis
     actions = root.findall("./task:Actions/*", {"task": _TASK_NAMESPACE})
     if len(actions) != 1 or actions[0].tag != f"{{{_TASK_NAMESPACE}}}Exec":
         return SupervisorStatus("stopped", "supervisor_registration_invalid")
-    expected_executable = ntpath.normcase(ntpath.normpath(str(_machine_executable(paths, "Windows"))))
+    expected_executable = ntpath.normcase(ntpath.normpath(str(machine_executable(paths, "Windows"))))
     command = _xml_text(actions[0], "./task:Command")
     if command is None or ntpath.normcase(ntpath.normpath(command)) != expected_executable:
         return SupervisorStatus("stopped", "supervisor_executable_mismatch")
@@ -367,7 +367,7 @@ def _windows_task_xml(paths: MachinePaths) -> bytes:
     actions = ElementTree.SubElement(task, f"{{{_TASK_NAMESPACE}}}Actions", {"Context": "System"})
     action = ElementTree.SubElement(actions, f"{{{_TASK_NAMESPACE}}}Exec")
     ElementTree.SubElement(action, f"{{{_TASK_NAMESPACE}}}Command").text = ntpath.normpath(
-        str(_machine_executable(paths, "Windows"))
+        str(machine_executable(paths, "Windows"))
     )
     ElementTree.SubElement(action, f"{{{_TASK_NAMESPACE}}}Arguments").text = _HEALTH_ARGUMENTS
     return ElementTree.tostring(task, encoding="utf-16", xml_declaration=True)
@@ -387,7 +387,7 @@ def install_machine_supervisor() -> dict[str, object]:
     if not _windows_is_administrator():
         raise PermissionError("supervisor_administrator_required")
     paths = default_machine_paths(system_name="Windows")
-    executable = _machine_executable(paths, "Windows")
+    executable = machine_executable(paths, "Windows")
     if executable.is_symlink() or not executable.is_file() or not paths.state_root.is_dir():
         raise OSError("supervisor_runtime_absent")
     descriptor, temporary_name = tempfile.mkstemp(prefix="health-task-", suffix=".xml", dir=paths.state_root)

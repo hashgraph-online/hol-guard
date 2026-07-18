@@ -124,6 +124,24 @@ def test_snapshot_detects_shadowed_command_without_exposing_path(
     assert str(shadow) not in serialized
 
 
+def test_snapshot_detects_shadow_when_runtime_root_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shadow = tmp_path / "user-bin" / "hol-guard"
+    shadow.parent.mkdir()
+    shadow.write_text("shadow")
+    monkeypatch.setattr(integrity, "default_machine_paths", lambda: _paths(tmp_path))
+    monkeypatch.setattr(shutil, "which", lambda _command: str(shadow))
+
+    snapshot = integrity.machine_integrity_snapshot()
+
+    assert snapshot["components"]["commandShadowing"] == {
+        "state": "tampered",
+        "healthy": False,
+        "reasonCode": "command_shadowing_detected",
+    }
+
+
 def test_snapshot_reports_no_shadow_when_entrypoint_is_absent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(integrity, "default_machine_paths", lambda: _paths(tmp_path))
     monkeypatch.setattr(shutil, "which", lambda _command: None)
@@ -153,10 +171,11 @@ def test_snapshot_fails_honest_when_entrypoint_disappears(tmp_path: Path, monkey
 
 def test_snapshot_accepts_runtime_owned_command_entrypoint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths = _paths(tmp_path)
-    paths.runtime_root.mkdir(parents=True)
-    executable = paths.runtime_root / "hol-guard"
+    executable = paths.runtime_root / "hol-guard" / "hol-guard"
+    executable.parent.mkdir(parents=True)
     executable.write_text("runtime")
     monkeypatch.setattr(integrity, "default_machine_paths", lambda: paths)
+    monkeypatch.setattr(integrity.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(shutil, "which", lambda _command: str(executable))
 
     snapshot = integrity.machine_integrity_snapshot()
@@ -165,6 +184,26 @@ def test_snapshot_accepts_runtime_owned_command_entrypoint(tmp_path: Path, monke
         "state": "healthy",
         "healthy": True,
         "reasonCode": "command_shadowing_trusted",
+    }
+
+
+def test_snapshot_rejects_noncanonical_executable_inside_runtime_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _paths(tmp_path)
+    executable = paths.runtime_root / "old" / "hol-guard"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("old runtime")
+    monkeypatch.setattr(integrity, "default_machine_paths", lambda: paths)
+    monkeypatch.setattr(integrity.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(shutil, "which", lambda _command: str(executable))
+
+    snapshot = integrity.machine_integrity_snapshot()
+
+    assert snapshot["components"]["commandShadowing"] == {
+        "state": "tampered",
+        "healthy": False,
+        "reasonCode": "command_shadowing_detected",
     }
 
 

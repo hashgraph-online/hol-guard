@@ -31,7 +31,7 @@ from .device_key import verify_machine_device_key
 from .manifest import ManifestVerification, verify_release_manifest
 from .native import NativeInstallVerification, verify_native_install
 from .policy import load_managed_policy
-from .supervisor import verify_machine_supervisor
+from .supervisor import machine_executable, verify_machine_supervisor
 
 
 def _now() -> str:
@@ -184,8 +184,8 @@ def _command_shadowing_component(paths: MachinePaths) -> IntegrityComponent:
         if resolved is None:
             return _component("healthy", "command_shadowing_absent")
         command_path = Path(resolved).resolve(strict=True)
-        runtime_root = paths.runtime_root.resolve(strict=True)
-        if command_path.is_relative_to(runtime_root):
+        expected_executable = machine_executable(paths, platform.system()).resolve(strict=False)
+        if command_path == expected_executable:
             return _component("healthy", "command_shadowing_trusted")
         return _component("tampered", "command_shadowing_detected")
     except (OSError, RuntimeError):
