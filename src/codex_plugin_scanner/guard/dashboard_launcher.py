@@ -227,6 +227,7 @@ def _build_authenticated_browser_url(
     )
     return urllib.parse.urlunparse(parsed._replace(fragment=urllib.parse.urlencode(fragment_pairs)))
 
+
 def _redact_token_from_url(url: str | None) -> str | None:
     """Remove the ``guard-token`` parameter from a URL fragment.
 

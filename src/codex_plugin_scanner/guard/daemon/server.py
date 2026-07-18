@@ -3753,6 +3753,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         ``TrayLifecycleResult`` (already redacted; no tokens emitted).
         """
         from ..tray.lifecycle import get_status as get_tray_status
+
         try:
             state, capability, locator = get_tray_status(self.server.store.guard_home)  # type: ignore[attr-defined]
         except Exception as error:
@@ -3783,6 +3784,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             stop_tray,
         )
         from ..tray.platforms import detect_platform_adapter
+
         guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
 
         # install/uninstall require a platform adapter (LaunchAgent/Run-key/XDG).

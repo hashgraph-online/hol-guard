@@ -20,9 +20,7 @@ import re
 
 # Matches key=value or key: value patterns for common secret names.
 # Case-insensitive. Captures the key name for the redaction template.
-_SECRET_KV_PATTERN = re.compile(
-    r"(?i)(token|key|secret|password|auth|bearer|credential|api[_-]?key)\s*[=:]\s*\S+"
-)
+_SECRET_KV_PATTERN = re.compile(r"(?i)(token|key|secret|password|auth|bearer|credential|api[_-]?key)\s*[=:]\s*\S+")
 
 # Matches URL fragments containing guard-token parameters.
 _GUARD_TOKEN_FRAGMENT_PATTERN = re.compile(r"#guard-token=[^&\s]+")

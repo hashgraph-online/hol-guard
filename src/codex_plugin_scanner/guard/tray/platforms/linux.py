@@ -58,7 +58,7 @@ class LinuxTrayAdapter:
         exec_line = ""
         for line in content.splitlines():
             if line.startswith("Exec="):
-                exec_line = line[len("Exec="):]
+                exec_line = line[len("Exec=") :]
                 break
 
         return {
@@ -167,8 +167,11 @@ class LinuxTrayAdapter:
 
         executable = sys.executable
         args = [
-            executable, "-m", "codex_plugin_scanner.guard.tray.runtime",
-            "--guard-home", str(guard_home),
+            executable,
+            "-m",
+            "codex_plugin_scanner.guard.tray.runtime",
+            "--guard-home",
+            str(guard_home),
         ]
 
         try:

@@ -103,11 +103,8 @@ def _build_task_xml(guard_home: Path) -> str:
     """
     executable = _pythonw_path()
     # escape() handles & < >. For " inside the quoted argument, use &quot;.
-    escaped_home = escape(str(guard_home)).replace('"', '&quot;')
-    arguments = (
-        f'-m codex_plugin_scanner.guard.tray.runtime '
-        f'--guard-home "{escaped_home}"'
-    )
+    escaped_home = escape(str(guard_home)).replace('"', "&quot;")
+    arguments = f'-m codex_plugin_scanner.guard.tray.runtime --guard-home "{escaped_home}"'
     return TASK_XML_TEMPLATE.format(
         task_name=TASK_NAME,
         executable=escape(executable),
@@ -183,7 +180,10 @@ class WindowsTrayAdapter:
         xml_path: str | None = None
         try:
             with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".xml", delete=False, encoding="utf-16",
+                mode="w",
+                suffix=".xml",
+                delete=False,
+                encoding="utf-16",
             ) as f:
                 xml_path = f.name  # assign before write so cleanup works on failure
                 f.write(task_xml)
@@ -271,8 +271,10 @@ class WindowsTrayAdapter:
         executable = _pythonw_path()
         args = [
             executable,
-            "-m", "codex_plugin_scanner.guard.tray.runtime",
-            "--guard-home", str(guard_home),
+            "-m",
+            "codex_plugin_scanner.guard.tray.runtime",
+            "--guard-home",
+            str(guard_home),
         ]
 
         try:

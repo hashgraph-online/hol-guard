@@ -93,8 +93,11 @@ class MacOSTrayAdapter:
 
         executable = sys.executable
         program_arguments = [
-            executable, "-m", "codex_plugin_scanner.guard.tray.runtime",
-            "--guard-home", str(guard_home),
+            executable,
+            "-m",
+            "codex_plugin_scanner.guard.tray.runtime",
+            "--guard-home",
+            str(guard_home),
         ]
 
         plist_content = {

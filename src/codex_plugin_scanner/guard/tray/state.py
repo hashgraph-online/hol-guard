@@ -179,6 +179,7 @@ def is_process_owned(
         return False
     return not (expected_guard_home and expected_guard_home not in cmdline)
 
+
 def _read_process_command(pid: int) -> str | None:
     """Read the command line for a PID. Returns None on failure.
 
@@ -190,10 +191,7 @@ def _read_process_command(pid: int) -> str | None:
         import subprocess
 
         # Preferred: PowerShell Get-CimInstance (wmic is deprecated on Win11)
-        ps_cmd = (
-            f'Get-CimInstance Win32_Process -Filter "ProcessId={pid}" '
-            "| Select-Object -ExpandProperty CommandLine"
-        )
+        ps_cmd = f'Get-CimInstance Win32_Process -Filter "ProcessId={pid}" | Select-Object -ExpandProperty CommandLine'
         try:
             result = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", ps_cmd],
@@ -265,9 +263,7 @@ def process_start_fingerprint(pid: int) -> str | None:
             import subprocess
 
             # Preferred: PowerShell Get-Process StartTime (wmic deprecated on Win11)
-            ps_cmd = (
-                f"(Get-Process -Id {pid} -ErrorAction SilentlyContinue).StartTime.ToString('o')"
-            )
+            ps_cmd = f"(Get-Process -Id {pid} -ErrorAction SilentlyContinue).StartTime.ToString('o')"
             try:
                 result = subprocess.run(
                     ["powershell", "-NoProfile", "-Command", ps_cmd],
