@@ -1,14 +1,42 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
+import platform
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from jsonschema import Draft202012Validator
 
 from codex_plugin_scanner.guard.mdm import lifecycle
 from codex_plugin_scanner.guard.mdm.contracts import MDM_STATUS_SCHEMA_VERSION, MachinePaths
+
+
+def _write_signed_runtime(runtime: Path, key: Ed25519PrivateKey) -> None:
+    runtime.mkdir()
+    executable = runtime / "hol-guard"
+    executable.write_bytes(b"runtime")
+    payload: dict[str, object] = {
+        "schemaVersion": "hol-guard-release-manifest.v1",
+        "version": "3.1.0a1",
+        "buildId": "build-1",
+        "sourceCommit": "a" * 40,
+        "platform": "macos",
+        "architecture": platform.machine().lower(),
+        "policySchemaVersion": "hol-guard-mdm-policy.v1",
+        "installerIdentity": "org.hol.guard",
+        "files": [{"path": "hol-guard", "sha256": hashlib.sha256(b"runtime").hexdigest()}],
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    payload["signature"] = {
+        "keyId": "release-1",
+        "value": base64.b64encode(key.sign(canonical)).decode(),
+    }
+    (runtime / "release-manifest.json").write_text(json.dumps(payload))
 
 
 def test_user_status_does_not_conflate_machine_installation(tmp_path: Path) -> None:
@@ -17,6 +45,42 @@ def test_user_status_does_not_conflate_machine_installation(tmp_path: Path) -> N
     assert payload["scope"] == "user"
     assert payload["state"] == "absent"
     assert payload["healthy"] is False
+
+
+def test_machine_status_uses_external_managed_release_key(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    key = Ed25519PrivateKey.generate()
+    _write_signed_runtime(runtime, key)
+    public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    policy = tmp_path / "policy.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "hol-guard-mdm-policy.v1",
+                "integrityTrust": {"releasePublicKeys": {"release-1": base64.b64encode(public).decode()}},
+            }
+        )
+    )
+
+    payload = lifecycle.machine_status(machine_root=runtime, policy_path=policy)
+
+    assert payload["healthy"] is True
+    assert payload["state"] == "protected"
+
+
+def test_machine_status_ignores_circular_runtime_keyring(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    key = Ed25519PrivateKey.generate()
+    _write_signed_runtime(runtime, key)
+    public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    (runtime / "release-trusted-keys.json").write_text(
+        json.dumps({"release-1": base64.b64encode(public).decode()})
+    )
+
+    payload = lifecycle.machine_status(machine_root=runtime, policy_path=tmp_path / "missing-policy.json")
+
+    assert payload["healthy"] is False
+    assert payload["manifest"]["reasonCode"] == "release_manifest_trust_anchor_absent"
 
 
 def test_user_home_must_be_absolute_and_exist(tmp_path: Path) -> None:
@@ -164,22 +228,3 @@ def test_authorization_creation_requires_admin_and_safe_name(tmp_path: Path, mon
         lifecycle.authorize_deactivation(tmp_path, "developer", token_name="../escape.json")
     payload = lifecycle.authorize_deactivation(tmp_path, "developer", token_name="developer.json")
     assert Path(str(payload["authorizationPath"])).is_file()
-
-
-def test_trusted_key_loader_skips_only_malformed_entries(tmp_path: Path) -> None:
-    path = tmp_path / "release-trusted-keys.json"
-    path.write_text(json.dumps({"valid": "a2V5", "invalid": "%%%"}))
-
-    assert lifecycle.load_trusted_public_keys(path) == {"valid": b"key"}
-
-
-def test_trusted_key_loader_rejects_symlinks_and_oversized_files(tmp_path: Path) -> None:
-    target = tmp_path / "target.json"
-    target.write_text(json.dumps({"valid": "a2V5"}))
-    symlink = tmp_path / "keys.json"
-    symlink.symlink_to(target)
-    oversized = tmp_path / "oversized.json"
-    oversized.write_bytes(b"x" * (64 * 1024 + 1))
-
-    assert lifecycle.load_trusted_public_keys(symlink) == {}
-    assert lifecycle.load_trusted_public_keys(oversized) == {}

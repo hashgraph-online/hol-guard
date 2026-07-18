@@ -13,10 +13,16 @@ readonly PACKAGE_ID="org.hol.guard"
 rm -rf "${OUT}"
 mkdir -p "${RUNTIME}" "${STAGE}/Library/LaunchAgents" "${OUT}"
 
-uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard \
+typeset -a pyinstaller_args
+pyinstaller_args=(--clean --noconfirm --onedir --name hol-guard \
   --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
   --distpath "${RUNTIME}" --workpath "${OUT}/pyinstaller" --specpath "${OUT}" \
-  "${ROOT}/scripts/mdm/hol-guard-entry.py"
+  "${ROOT}/scripts/mdm/hol-guard-entry.py")
+if [[ -n "${HOL_GUARD_INSTALLER_SIGN_IDENTITY:-}" ]]; then
+  [[ -n "${HOL_GUARD_APPLICATION_SIGN_IDENTITY:-}" ]] || exit 2
+  pyinstaller_args=(--codesign-identity "${HOL_GUARD_APPLICATION_SIGN_IDENTITY}" "${pyinstaller_args[@]}")
+fi
+uv run --no-sync pyinstaller "${pyinstaller_args[@]}"
 
 cp "${ROOT}/scripts/mdm/macos/org.hol.guard.user-activation.plist" \
   "${STAGE}/Library/LaunchAgents/org.hol.guard.user-activation.plist"
@@ -26,8 +32,7 @@ manifest_args=(--runtime-root "${RUNTIME}" --version "${VERSION}" --build-id "${
   --platform macos --architecture "${ARCH}" --installer-identity "${PACKAGE_ID}" \
   --output "${RUNTIME}/release-manifest.json")
 if [[ -n "${HOL_GUARD_MANIFEST_SIGNING_KEY:-}" ]]; then
-  [[ -n "${HOL_GUARD_MANIFEST_KEY_ID:-}" && -n "${HOL_GUARD_MANIFEST_PUBLIC_KEYS:-}" ]] || exit 2
-  cp "${HOL_GUARD_MANIFEST_PUBLIC_KEYS}" "${RUNTIME}/release-trusted-keys.json"
+  [[ -n "${HOL_GUARD_MANIFEST_KEY_ID:-}" ]] || exit 2
   manifest_args+=(--signing-key "${HOL_GUARD_MANIFEST_SIGNING_KEY}" --key-id "${HOL_GUARD_MANIFEST_KEY_ID}")
 fi
 python3 "${ROOT}/scripts/mdm/generate-release-manifest.py" "${manifest_args[@]}"

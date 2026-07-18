@@ -24,7 +24,6 @@ from .contracts import (
     SupervisorStatus,
     default_machine_paths,
 )
-from .lifecycle import load_trusted_public_keys
 from .manifest import ManifestVerification, verify_release_manifest
 from .native import NativeInstallVerification, verify_native_install
 from .policy import load_managed_policy
@@ -83,9 +82,13 @@ def _bounded_file_hash(path: Path) -> str | None:
         return None
 
 
-def _verify_manifest(paths: MachinePaths) -> ManifestVerification:
+def _verify_manifest(
+    paths: MachinePaths,
+    native: NativeInstallVerification,
+    minimum_version: str | None,
+    trusted_public_keys: dict[str, bytes],
+) -> ManifestVerification:
     try:
-        trusted_public_keys = load_trusted_public_keys(paths.runtime_root / "release-trusted-keys.json")
         return verify_release_manifest(
             paths.manifest_path,
             paths.runtime_root,
@@ -93,14 +96,30 @@ def _verify_manifest(paths: MachinePaths) -> ManifestVerification:
             expected_platform={"Darwin": "macos", "Windows": "windows"}.get(platform.system()),
             expected_architecture=platform.machine().lower(),
             expected_owner_uid=0 if platform.system() != "Windows" else None,
+            expected_installer_identity=(
+                native.package_identity
+                if native.healthy
+                else {"Darwin": "org.hol.guard", "Windows": "HOLGuardMachine"}.get(platform.system())
+            ),
+            expected_native_version=native.version if native.healthy else None,
+            minimum_version=minimum_version,
         )
     except Exception:
         return ManifestVerification("unknown", "release_manifest_probe_failed")
 
 
-def _verify_native(runtime_root: Path) -> NativeInstallVerification:
+def _verify_native(
+    runtime_root: Path,
+    *,
+    macos_team_id: str | None,
+    windows_signer_thumbprints: tuple[str, ...],
+) -> NativeInstallVerification:
     try:
-        return verify_native_install(runtime_root)
+        return verify_native_install(
+            runtime_root,
+            macos_team_id=macos_team_id,
+            windows_signer_thumbprints=windows_signer_thumbprints,
+        )
     except Exception:
         return NativeInstallVerification("unknown", "native_install_probe_failed", "unknown", "unknown")
 
@@ -117,9 +136,21 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
 
     paths = default_machine_paths()
     runtime_root = paths.runtime_root
-    manifest = _verify_manifest(paths)
-    native = _verify_native(runtime_root)
     policy = _load_policy()
+    minimum_version = policy.policy.update.minimum_version if policy.policy is not None else None
+    live_policy = policy.policy if policy.reason_code != "managed_policy_profile_removed_cached" else None
+    trust = live_policy.integrity_trust if live_policy is not None else None
+    native = _verify_native(
+        runtime_root,
+        macos_team_id=trust.macos_team_id if trust is not None else None,
+        windows_signer_thumbprints=trust.windows_signer_thumbprints if trust is not None else (),
+    )
+    manifest = _verify_manifest(
+        paths,
+        native,
+        minimum_version,
+        trust.release_public_keys if trust is not None else {},
+    )
     update_owner = policy.policy.install_owner if policy.policy is not None else "user"
     if policy.policy is None and policy.status in {"invalid", "inaccessible", "tampered"}:
         update_owner = "mdm"

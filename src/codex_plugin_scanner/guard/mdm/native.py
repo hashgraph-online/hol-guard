@@ -11,6 +11,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from packaging.version import InvalidVersion, Version
+
 
 @dataclass(frozen=True, slots=True)
 class NativeInstallVerification:
@@ -34,16 +36,33 @@ class NativeInstallVerification:
         }
 
 
-def verify_native_install(runtime_root: Path) -> NativeInstallVerification:
+def _validated_version(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        Version(value)
+    except InvalidVersion:
+        return None
+    return value.strip()
+
+
+def verify_native_install(
+    runtime_root: Path,
+    *,
+    macos_team_id: str | None = None,
+    windows_signer_thumbprints: tuple[str, ...] = (),
+) -> NativeInstallVerification:
     if platform.system() == "Darwin":
-        return _verify_macos(runtime_root)
+        return _verify_macos(runtime_root, expected_team_id=macos_team_id)
     if platform.system() == "Windows":
-        return _verify_windows(runtime_root)
+        return _verify_windows(runtime_root, expected_thumbprints=windows_signer_thumbprints)
     return NativeInstallVerification("unsupported", "native_platform_unsupported", "unknown", "unsupported")
 
 
-def _verify_macos(runtime_root: Path) -> NativeInstallVerification:
+def _verify_macos(runtime_root: Path, *, expected_team_id: str | None) -> NativeInstallVerification:
     identity = "org.hol.guard"
+    if expected_team_id is None:
+        return NativeInstallVerification("unknown", "native_publisher_pin_absent", identity, "unverified")
     executable = runtime_root / "hol-guard" / "hol-guard"
     try:
         receipt = subprocess.run(
@@ -60,25 +79,48 @@ def _verify_macos(runtime_root: Path) -> NativeInstallVerification:
             capture_output=True,
             timeout=10,
         )
+        signature_details = subprocess.run(
+            ["/usr/bin/codesign", "-d", "--verbose=4", str(executable)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
     except (OSError, subprocess.SubprocessError, plistlib.InvalidFileException):
         return NativeInstallVerification("absent", "native_package_receipt_absent", identity, "unknown")
-    if signature.returncode != 0:
+    validated_version = _validated_version(version)
+    if validated_version is None:
+        return NativeInstallVerification("tampered", "native_package_version_invalid", identity, "invalid")
+    team_id = next(
+        (
+            line.partition("=")[2].strip()
+            for line in signature_details.stderr.splitlines()
+            if line.startswith("TeamIdentifier=")
+        ),
+        None,
+    )
+    if signature.returncode != 0 or signature_details.returncode != 0 or team_id != expected_team_id:
         return NativeInstallVerification(
-            "tampered", "native_publisher_signature_invalid", identity, "invalid", str(version) if version else None
+            "tampered", "native_publisher_signature_invalid", identity, "invalid", validated_version
         )
     return NativeInstallVerification(
-        "healthy", "native_install_valid", identity, "valid", str(version) if version else None
+        "healthy", "native_install_valid", identity, "valid", validated_version
     )
 
 
-def _verify_windows(runtime_root: Path) -> NativeInstallVerification:
+def _verify_windows(runtime_root: Path, *, expected_thumbprints: tuple[str, ...]) -> NativeInstallVerification:
     identity = "HOLGuardMachine"
+    if not expected_thumbprints:
+        return NativeInstallVerification("unknown", "native_publisher_pin_absent", identity, "unverified")
     executable = runtime_root / "hol-guard" / "hol-guard.exe"
     escaped = str(executable).replace("'", "''")
-    command = (
-        f"$s=Get-AuthenticodeSignature -LiteralPath '{escaped}';"
-        "@{Status=$s.Status.ToString();Signer=if($s.SignerCertificate){$s.SignerCertificate.Subject}else{$null}}"
-        "|ConvertTo-Json -Compress"
+    command = "".join(
+        (
+            f"$s=Get-AuthenticodeSignature -LiteralPath '{escaped}';",
+            f"$v=(Get-Item -LiteralPath '{escaped}').VersionInfo.ProductVersion;",
+            "@{Status=$s.Status.ToString();Thumbprint=if($s.SignerCertificate)",
+            "{$s.SignerCertificate.Thumbprint}else{$null};Version=$v}|ConvertTo-Json -Compress",
+        )
     )
     try:
         windows_directory = _windows_directory()
@@ -101,9 +143,18 @@ def _verify_windows(runtime_root: Path) -> NativeInstallVerification:
         payload: object = json.loads(result.stdout)
     except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
         return NativeInstallVerification("absent", "native_package_identity_absent", identity, "unknown")
-    if not isinstance(payload, dict) or payload.get("Status") != "Valid" or not payload.get("Signer"):
+    thumbprint = payload.get("Thumbprint") if isinstance(payload, dict) else None
+    version = payload.get("Version") if isinstance(payload, dict) else None
+    normalized_thumbprint = thumbprint.replace(" ", "").upper() if isinstance(thumbprint, str) else None
+    validated_version = _validated_version(version)
+    if (
+        not isinstance(payload, dict)
+        or payload.get("Status") != "Valid"
+        or normalized_thumbprint not in expected_thumbprints
+        or validated_version is None
+    ):
         return NativeInstallVerification("tampered", "native_publisher_signature_invalid", identity, "invalid")
-    return NativeInstallVerification("healthy", "native_install_valid", identity, "valid")
+    return NativeInstallVerification("healthy", "native_install_valid", identity, "valid", validated_version)
 
 
 def _windows_directory() -> str:

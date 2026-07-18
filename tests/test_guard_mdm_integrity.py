@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.mdm import integrity
 from codex_plugin_scanner.guard.mdm.contracts import (
     MDM_POLICY_SCHEMA_VERSION,
     MachinePaths,
+    ManagedIntegrityTrust,
     ManagedPolicy,
     ManagedPolicyState,
     ManagedUpdatePolicy,
@@ -122,6 +123,91 @@ def test_snapshot_preserves_cached_managed_authority(tmp_path: Path, monkeypatch
     assert snapshot["assuranceLevel"] == "mdm-managed-unverified"
     assert snapshot["remediationClass"] == "mdm-repair"
     assert "managed_policy_profile_removed_cached" in snapshot["reasonCodes"]
+
+
+def test_snapshot_never_uses_cached_policy_as_integrity_trust_anchor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    managed_policy = ManagedPolicy(
+        schema_version=MDM_POLICY_SCHEMA_VERSION,
+        settings={},
+        locked_settings=frozenset(),
+        update=ManagedUpdatePolicy(owner="mdm"),
+        integrity_trust=ManagedIntegrityTrust(release_public_keys={"attacker": b"a" * 32}),
+    )
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(integrity, "default_machine_paths", lambda: _paths(tmp_path))
+    monkeypatch.setattr(
+        integrity,
+        "load_managed_policy",
+        lambda **_kwargs: ManagedPolicyState(
+            "active",
+            "native-cache",
+            policy=managed_policy,
+            reason_code="managed_policy_profile_removed_cached",
+        ),
+    )
+    monkeypatch.setattr(
+        integrity,
+        "verify_release_manifest",
+        lambda *_args, **kwargs: captured.update(kwargs)
+        or ManifestVerification("tampered", "release_manifest_trust_anchor_absent"),
+    )
+
+    integrity.machine_integrity_snapshot()
+
+    assert captured["trusted_keys"] == {}
+
+
+def test_snapshot_reports_deleted_manifest_before_missing_trust_anchor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(integrity, "default_machine_paths", lambda: _paths(tmp_path))
+
+    snapshot = integrity.machine_integrity_snapshot()
+
+    assert snapshot["components"]["manifest"]["reasonCode"] == "release_manifest_absent"
+
+
+def test_snapshot_binds_manifest_to_native_package_and_managed_minimum(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    managed_policy = ManagedPolicy(
+        schema_version=MDM_POLICY_SCHEMA_VERSION,
+        settings={},
+        locked_settings=frozenset(),
+        update=ManagedUpdatePolicy(owner="mdm", minimum_version="3.1.0a1"),
+        integrity_trust=ManagedIntegrityTrust(
+            release_public_keys={"release-1": b"r" * 32},
+            macos_team_id="TEAM123",
+        ),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_verify(*_args: object, **kwargs: object) -> ManifestVerification:
+        captured.update(kwargs)
+        return ManifestVerification("healthy", "release_manifest_valid", "3.1.0a1", "build-1")
+
+    monkeypatch.setattr(integrity, "default_machine_paths", lambda: _paths(tmp_path))
+    monkeypatch.setattr(
+        integrity,
+        "load_managed_policy",
+        lambda **_kwargs: ManagedPolicyState("active", "native", policy=managed_policy),
+    )
+    monkeypatch.setattr(
+        integrity,
+        "verify_native_install",
+        lambda _root, **_kwargs: NativeInstallVerification(
+            "healthy", "native_install_valid", "org.hol.guard", "valid", "3.1.0a1"
+        ),
+    )
+    monkeypatch.setattr(integrity, "verify_release_manifest", fake_verify)
+
+    integrity.machine_integrity_snapshot()
+
+    assert captured["expected_installer_identity"] == "org.hol.guard"
+    assert captured["expected_native_version"] == "3.1.0a1"
+    assert captured["minimum_version"] == "3.1.0a1"
 
 
 def test_snapshot_normalizes_probe_failures(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -26,21 +26,32 @@ IntegrityReasonCode = Literal[
     "release_manifest_absent",
     "release_manifest_architecture_mismatch",
     "release_manifest_hash_mismatch",
+    "release_manifest_coverage_gap",
+    "release_manifest_duplicate_path",
+    "release_manifest_file_limit_exceeded",
+    "release_manifest_file_missing",
     "release_manifest_insecure_permissions",
     "release_manifest_invalid",
+    "release_manifest_installer_identity_mismatch",
+    "release_manifest_native_version_mismatch",
     "release_manifest_path_escape",
     "release_manifest_platform_mismatch",
+    "release_manifest_size_limit_exceeded",
     "release_manifest_unsigned",
     "release_manifest_untrusted_key",
+    "release_manifest_trust_anchor_absent",
     "release_manifest_valid",
+    "release_manifest_version_rollback",
     "release_manifest_wrong_owner",
     "release_runtime_insecure_permissions",
     "release_runtime_wrong_owner",
     "native_install_valid",
     "native_package_identity_absent",
     "native_package_receipt_absent",
+    "native_package_version_invalid",
     "native_platform_unsupported",
     "native_publisher_signature_invalid",
+    "native_publisher_pin_absent",
     "managed_policy_active",
     "managed_policy_absent",
     "managed_policy_cache_invalid",
@@ -286,6 +297,20 @@ class ManagedUpdatePolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class ManagedIntegrityTrust:
+    release_public_keys: dict[str, bytes] = field(default_factory=dict)
+    macos_team_id: str | None = None
+    windows_signer_thumbprints: tuple[str, ...] = ()
+
+    def to_public_dict(self) -> dict[str, object]:
+        return {
+            "releaseKeyIds": sorted(self.release_public_keys),
+            "macosTeamIdConfigured": self.macos_team_id is not None,
+            "windowsSignerThumbprintsConfigured": bool(self.windows_signer_thumbprints),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ManagedPolicy:
     schema_version: str
     settings: dict[str, object]
@@ -293,6 +318,7 @@ class ManagedPolicy:
     required_harnesses: tuple[str, ...] = ()
     network: ManagedNetworkPolicy = field(default_factory=ManagedNetworkPolicy)
     update: ManagedUpdatePolicy = field(default_factory=ManagedUpdatePolicy)
+    integrity_trust: ManagedIntegrityTrust = field(default_factory=ManagedIntegrityTrust)
     daemon_startup: Literal["on-demand", "login"] = "on-demand"
     content_hash: str = ""
 
@@ -308,6 +334,7 @@ class ManagedPolicy:
             "requiredHarnesses": list(self.required_harnesses),
             "network": self.network.to_dict(),
             "update": self.update.to_dict(),
+            "integrityTrust": self.integrity_trust.to_public_dict(),
             "daemonStartup": self.daemon_startup,
         }
 
