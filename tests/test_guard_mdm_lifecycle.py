@@ -73,9 +73,7 @@ def test_machine_status_ignores_circular_runtime_keyring(tmp_path: Path) -> None
     key = Ed25519PrivateKey.generate()
     _write_signed_runtime(runtime, key)
     public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-    (runtime / "release-trusted-keys.json").write_text(
-        json.dumps({"release-1": base64.b64encode(public).decode()})
-    )
+    (runtime / "release-trusted-keys.json").write_text(json.dumps({"release-1": base64.b64encode(public).decode()}))
 
     payload = lifecycle.machine_status(machine_root=runtime, policy_path=tmp_path / "missing-policy.json")
 

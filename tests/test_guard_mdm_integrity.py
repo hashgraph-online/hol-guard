@@ -150,8 +150,9 @@ def test_snapshot_never_uses_cached_policy_as_integrity_trust_anchor(
     monkeypatch.setattr(
         integrity,
         "verify_release_manifest",
-        lambda *_args, **kwargs: captured.update(kwargs)
-        or ManifestVerification("tampered", "release_manifest_trust_anchor_absent"),
+        lambda *_args, **kwargs: (
+            captured.update(kwargs) or ManifestVerification("tampered", "release_manifest_trust_anchor_absent")
+        ),
     )
 
     integrity.machine_integrity_snapshot()

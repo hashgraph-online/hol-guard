@@ -103,9 +103,7 @@ def _verify_macos(runtime_root: Path, *, expected_team_id: str | None) -> Native
         return NativeInstallVerification(
             "tampered", "native_publisher_signature_invalid", identity, "invalid", validated_version
         )
-    return NativeInstallVerification(
-        "healthy", "native_install_valid", identity, "valid", validated_version
-    )
+    return NativeInstallVerification("healthy", "native_install_valid", identity, "valid", validated_version)
 
 
 def _verify_windows(runtime_root: Path, *, expected_thumbprints: tuple[str, ...]) -> NativeInstallVerification:

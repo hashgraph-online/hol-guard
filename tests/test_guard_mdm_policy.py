@@ -70,9 +70,7 @@ def test_integrity_trust_parses_pins_without_disclosing_key_material(tmp_path: P
 @pytest.mark.parametrize("encoded", ["not-base64", base64.b64encode(b"short").decode()])
 def test_integrity_trust_rejects_invalid_release_keys(encoded: str) -> None:
     with pytest.raises(ValueError, match="release public key"):
-        policy_module.parse_managed_policy(
-            _policy(integrityTrust={"releasePublicKeys": {"release-1": encoded}})
-        )
+        policy_module.parse_managed_policy(_policy(integrityTrust={"releasePublicKeys": {"release-1": encoded}}))
 
 
 def test_rejects_unknown_keys_and_proxy_credentials(tmp_path: Path) -> None:

@@ -267,9 +267,7 @@ def verify_release_manifest(
             key_bytes = (trusted_keys or {}).get(key_id)
             if key_bytes is None:
                 reason = "release_manifest_untrusted_key" if trusted_keys else "release_manifest_trust_anchor_absent"
-                return ManifestVerification(
-                    "tampered", reason, version, build_id, installer_identity
-                )
+                return ManifestVerification("tampered", reason, version, build_id, installer_identity)
             Ed25519PublicKey.from_public_bytes(key_bytes).verify(
                 base64.b64decode(encoded, validate=True), _canonical_unsigned_payload(payload)
             )
@@ -364,9 +362,7 @@ def verify_release_manifest(
                     "tampered", "release_manifest_path_escape", version, build_id, installer_identity, signature_state
                 )
             try:
-                actual, hashed_bytes, metadata = _hash_regular_file(
-                    candidate, _MAX_RUNTIME_BYTES - total_runtime_bytes
-                )
+                actual, hashed_bytes, metadata = _hash_regular_file(candidate, _MAX_RUNTIME_BYTES - total_runtime_bytes)
             except OverflowError:
                 return ManifestVerification(
                     "tampered",

@@ -137,9 +137,7 @@ def test_macos_native_verification_fails_closed_without_team_id(tmp_path: Path) 
     assert result.reason_code == "native_publisher_pin_absent"
 
 
-def test_macos_native_verification_requires_matching_team_id(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_macos_native_verification_requires_matching_team_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     run = Mock(
         side_effect=[
             subprocess.CompletedProcess(["pkgutil"], 0, plistlib.dumps({"pkg-version": "3.1.0a1"}), b""),
