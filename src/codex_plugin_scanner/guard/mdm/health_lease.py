@@ -137,11 +137,23 @@ def _atomic_outbox_write(paths: MachinePaths, outbox: HealthLeaseOutbox) -> None
 
 
 def _atomic_ack_write(paths: MachinePaths, ack: HealthLeaseAck) -> None:
+    parent = paths.state_root
+    if parent.is_symlink() or not parent.is_dir():
+        raise OSError("health_lease_state_root_invalid")
     target = _ack_path(paths)
-    with suppress(FileNotFoundError):
-        target.unlink()
-        _fsync_directory(paths.state_root)
-    _atomic_create(paths, target, ack.canonical_bytes(), conflict_reason="health_lease_ack_conflict")
+    temporary = parent / f".{target.name}.{secrets.token_hex(16)}.tmp"
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb", closefd=True) as handle:
+            handle.write(ack.canonical_bytes())
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, target)
+        _fsync_directory(parent)
+    finally:
+        with suppress(FileNotFoundError):
+            temporary.unlink()
 
 
 def _load_pending(paths: MachinePaths) -> HealthLeaseOutbox | None:
