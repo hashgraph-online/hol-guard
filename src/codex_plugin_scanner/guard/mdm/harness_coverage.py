@@ -336,11 +336,12 @@ def _artifact_state(home: Path, artifact: dict[str, object]) -> str:
         }
     ):
         raise ValueError("harness_coverage_registry_invalid")
-    target = (home / relative).resolve(strict=False)
+    candidate = home / relative
+    target = candidate.resolve(strict=False)
     if not target.is_relative_to(home):
         return "degraded"
     try:
-        actual_kind, actual_digest = artifact_digest(target)
+        actual_kind, actual_digest = artifact_digest(candidate)
     except OSError:
         return "missing"
     if kind == "missing" or actual_kind == "missing":
