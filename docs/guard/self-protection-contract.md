@@ -91,7 +91,7 @@ Rotation creates a new key identifier without changing the installation generati
 
 ## Privacy, retention, and residency
 
-Cloud stores the minimum evidence needed to reconstruct state: workspace/device/installation/generation identifiers; schema and key identifiers; timestamps and sequence; state/reason codes; version and assurance; evidence digests; observer mapping identifiers; authorization/remediation audit metadata; and delivery outcomes.
+Cloud stores the minimum evidence needed to reconstruct state: workspace/device/installation/generation identifiers; schema and key identifiers; timestamps and sequence; state/reason codes (including concurrent active causes); version and assurance; evidence digests; observer mapping identifiers; authorization/remediation audit metadata; and delivery outcomes.
 
 Raw snapshots and vendor payloads are rejected or reduced to the schema before persistence. Private keys, refresh/access tokens, usernames, home paths, IP addresses, command content, and unrestricted host metadata are forbidden. Display labels are stored separately from evidence and are not signed claims.
 

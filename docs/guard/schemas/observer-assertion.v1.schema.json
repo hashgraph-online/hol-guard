@@ -22,7 +22,7 @@
         "endpointOnline": {"type": ["boolean", "null"]},
         "version": {"type": ["string", "null"], "maxLength": 128},
         "packageIdentity": {"type": ["string", "null"], "maxLength": 256},
-        "reasonCodes": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128}}
+        "reasonCodes": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"$ref": "self-protection-common.v1.schema.json#/$defs/observerReasonCode"}}
       }
     },
     "remediation": {

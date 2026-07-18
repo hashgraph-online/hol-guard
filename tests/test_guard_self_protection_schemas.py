@@ -93,12 +93,16 @@ def test_observer_and_remediation_authorities_are_separate_and_allowlisted() -> 
             "endpointOnline": True,
             "version": None,
             "packageIdentity": None,
-            "reasonCodes": ["package_absent"],
+            "reasonCodes": ["observer_current_absent"],
         },
         "remediation": {"state": "none", "jobId": None},
         "signature": {"algorithm": "ed25519", "keyId": "observer-key-a", "value": "AQID"},
     }
     _validator("observer-assertion.v1").validate(assertion)
+    detection = assertion["detection"]
+    assert isinstance(detection, dict)
+    detection["reasonCodes"] = ["package_absent"]
+    assert list(_validator("observer-assertion.v1").iter_errors(assertion))
 
     job: dict[str, JsonValue] = {
         "schemaVersion": "remediation-job.v1",
@@ -116,5 +120,8 @@ def test_observer_and_remediation_authorities_are_separate_and_allowlisted() -> 
     }
     validator = _validator("remediation-job.v1")
     validator.validate(job)
+    job["action"] = "version-converge"
+    job["targetVersion"] = None
+    assert list(validator.iter_errors(job))
     job["action"] = "run-command"
     assert list(validator.iter_errors(job))

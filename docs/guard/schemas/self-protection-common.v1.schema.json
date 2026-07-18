@@ -28,6 +28,17 @@
         "local_integrity_degraded", "local_integrity_tampered"
       ]
     },
+    "observerReasonCode": {
+      "enum": [
+        "observer_current_present",
+        "observer_current_absent",
+        "observer_current_partial",
+        "observer_offline",
+        "observer_stale",
+        "observer_mapping_ambiguous",
+        "observer_credential_invalid"
+      ]
+    },
     "signature": {
       "type": "object",
       "additionalProperties": false,

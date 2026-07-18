@@ -5,6 +5,12 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "jobId", "workspaceId", "deviceId", "installationGeneration", "action", "targetVersion", "idempotencyKey", "issuedAt", "expiresAt", "attemptLimit", "signature"],
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"enum": ["install", "version-converge"]}}, "required": ["action"]},
+      "then": {"properties": {"targetVersion": {"type": "string", "minLength": 1, "maxLength": 128}}}
+    }
+  ],
   "properties": {
     "schemaVersion": {"const": "remediation-job.v1"},
     "jobId": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"},
