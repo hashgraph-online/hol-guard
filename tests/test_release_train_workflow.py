@@ -65,8 +65,9 @@ def test_push_build_keeps_the_repository_version_without_restamping() -> None:
     assert "sync_repo_version.py --check" in stamp_run
     assert '[[ "$CURRENT_VERSION" == "$VERSION" ]]' in stamp_run
     assert 'sync_repo_version.py --version "$VERSION"' in stamp_run
-    assert stamp_run.index("--check") < stamp_run.index('CURRENT_VERSION" == "$VERSION')
-    assert stamp_run.index('CURRENT_VERSION" == "$VERSION') < stamp_run.index("--version")
+    condition = '[[ "$CURRENT_VERSION" == "$VERSION" ]]'
+    assert stamp_run.index("--check") < stamp_run.index(condition)
+    assert stamp_run.index(condition) < stamp_run.index("--version")
 
 
 def test_stable_noop_and_pr_alpha_version_stamping_contracts() -> None:
