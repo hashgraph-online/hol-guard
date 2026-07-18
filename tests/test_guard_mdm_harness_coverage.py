@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import errno
 import json
+import os
 import threading
 from pathlib import Path
 
@@ -191,6 +193,31 @@ def test_registry_rejects_unsafe_permissions_and_symlink(tmp_path: Path) -> None
     assert symlinked.reason_code == "harness_coverage_probe_failed"
 
 
+def test_directory_fsync_tolerates_platform_unsupported_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    directory = tmp_path / "state"
+    directory.mkdir()
+
+    def unsupported_fsync(descriptor: int) -> None:
+        assert os.path.isdir(f"/dev/fd/{descriptor}")
+        raise OSError(errno.EINVAL, "directory fsync unsupported")
+
+    monkeypatch.setattr(harness_coverage.os, "fsync", unsupported_fsync)
+    harness_coverage._fsync_directory(directory)
+
+
+def test_directory_fsync_tolerates_platform_unsupported_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    directory = tmp_path / "state"
+    directory.mkdir()
+
+    def unsupported_open(path: Path, flags: int) -> int:
+        assert path == directory
+        assert flags & os.O_RDONLY == os.O_RDONLY
+        raise OSError(errno.ENOTSUP, "directory open unsupported")
+
+    monkeypatch.setattr(harness_coverage.os, "open", unsupported_open)
+    harness_coverage._fsync_directory(directory)
+
+
 def test_symlinked_harness_artifact_is_never_protected(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     home = tmp_path / "home"
@@ -203,6 +230,25 @@ def test_symlinked_harness_artifact_is_never_protected(tmp_path: Path) -> None:
     harness_coverage.register_user_harnesses(paths, home, [_install("codex", artifact)])
     verification = harness_coverage.verify_harness_coverage(paths, _policy("codex"))
 
+    assert verification.coverage == {"required": 1, "protected": 0, "degraded": 1, "missing": 0}
+
+
+def test_artifact_replaced_by_out_of_home_symlink_is_degraded(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    home = tmp_path / "home"
+    artifact = home / "config.toml"
+    home.mkdir()
+    artifact.write_text("managed = true\n")
+    harness_coverage.register_user_harnesses(paths, home, [_install("codex", artifact)])
+
+    artifact.unlink()
+    outside = tmp_path / "attacker-config"
+    outside.write_text("managed = false\n")
+    artifact.symlink_to(outside)
+    verification = harness_coverage.verify_harness_coverage(paths, _policy("codex"))
+
+    assert verification.state == "degraded"
+    assert verification.reason_code == "harness_coverage_degraded"
     assert verification.coverage == {"required": 1, "protected": 0, "degraded": 1, "missing": 0}
 
 

@@ -37,8 +37,10 @@ def artifact_digest(path: Path) -> tuple[str, str | None]:
         except OSError:
             return "missing", None
         directory_fields = ("st_dev", "st_ino", "st_mtime_ns", "st_ctime_ns")
-        if digest is None or not stat.S_ISDIR(final_directory.st_mode) or any(
-            getattr(metadata, field) != getattr(final_directory, field) for field in directory_fields
+        if (
+            digest is None
+            or not stat.S_ISDIR(final_directory.st_mode)
+            or any(getattr(metadata, field) != getattr(final_directory, field) for field in directory_fields)
         ):
             return "missing", None
         return "directory", digest

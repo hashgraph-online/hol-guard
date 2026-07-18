@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import platform
@@ -121,9 +122,18 @@ def _validate_registry_users(users: list[object]) -> None:
 def _fsync_directory(path: Path) -> None:
     if os.name == "nt":
         return
-    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
-        os.fsync(descriptor)
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    except OSError as exc:
+        if exc.errno in {errno.EINVAL, errno.ENOTSUP}:
+            return
+        raise
+    try:
+        try:
+            os.fsync(descriptor)
+        except OSError as exc:
+            if exc.errno not in {errno.EINVAL, errno.ENOTSUP}:
+                raise
     finally:
         os.close(descriptor)
 
@@ -314,16 +324,21 @@ def _artifact_state(home: Path, artifact: dict[str, object]) -> str:
         raise ValueError("harness_coverage_registry_invalid")
     relative = artifact.get("path")
     kind = artifact.get("kind")
-    if not isinstance(relative, str) or not relative or kind not in {
-        "file",
-        "directory",
-        "missing",
-        "mutable-file",
-    }:
+    if (
+        not isinstance(relative, str)
+        or not relative
+        or kind
+        not in {
+            "file",
+            "directory",
+            "missing",
+            "mutable-file",
+        }
+    ):
         raise ValueError("harness_coverage_registry_invalid")
     target = (home / relative).resolve(strict=False)
     if not target.is_relative_to(home):
-        raise ValueError("harness_coverage_registry_invalid")
+        return "degraded"
     try:
         actual_kind, actual_digest = artifact_digest(target)
     except OSError:
