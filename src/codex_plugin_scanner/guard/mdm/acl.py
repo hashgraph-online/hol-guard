@@ -154,8 +154,7 @@ def _macos_acl_is_mutable(path: Path) -> bool:
         if not tokens or not tokens[0].rstrip(":").isdigit() or "allow" not in tokens:
             continue
         allow_index = tokens.index("allow")
-        principal = " ".join(tokens[1:allow_index]).casefold()
-        if principal == "user:root":
+        if tokens[1].casefold() == "user:root":
             continue
         rights = {right.strip().casefold() for token in tokens[allow_index + 1 :] for right in token.split(",")}
         if rights & _MUTATING_POSIX_ACL_RIGHTS:
@@ -281,7 +280,11 @@ def _windows_surface_payload(paths: MachinePaths) -> list[dict[str, str | bool]]
             key = (kind, path.casefold())
             if key in seen:
                 if index == len(chain) - 1:
-                    existing = next(item for item in payload if item["kind"] == kind and item["path"] == path)
+                    existing = next(
+                        item
+                        for item in payload
+                        if item["kind"] == kind and str(item["path"]).casefold() == path.casefold()
+                    )
                     existing["leaf"] = True
                 continue
             seen.add(key)

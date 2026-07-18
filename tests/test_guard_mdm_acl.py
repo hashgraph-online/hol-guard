@@ -151,6 +151,17 @@ def test_macos_extended_acl_does_not_exempt_wheel_mutation(monkeypatch: pytest.M
     assert acl._macos_acl_is_mutable(tmp_path)
 
 
+def test_macos_extended_acl_exempts_inherited_root_mutation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    output = "-rw-r--r--+ 1 root wheel 0 Jul 17 00:00 policy\n 0: user:root inherited allow read,writeattr\n"
+    monkeypatch.setattr(
+        acl.subprocess,
+        "run",
+        Mock(return_value=subprocess.CompletedProcess(["ls"], 0, output, "")),
+    )
+
+    assert not acl._macos_acl_is_mutable(tmp_path)
+
+
 def test_macos_acl_verification_detects_pathname_race(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _create_macos_surfaces(tmp_path)
 
@@ -204,6 +215,22 @@ def test_macos_acl_verification_detects_final_same_type_swap(tmp_path: Path, mon
 
 def _windows_paths() -> MachinePaths:
     return default_machine_paths(system_name="Windows")
+
+
+def test_windows_payload_deduplicates_case_insensitive_paths() -> None:
+    paths = _windows_paths()
+    mixed_case_paths = MachinePaths(
+        runtime_root=paths.runtime_root,
+        state_root=paths.state_root,
+        policy_path=paths.policy_path,
+        log_root=paths.log_root,
+        manifest_path=Path(str(paths.runtime_root).upper()) / "release-manifest.json",
+    )
+
+    payload = acl._windows_surface_payload(mixed_case_paths)
+    normalized_paths = [(str(item["kind"]), str(item["path"]).casefold()) for item in payload]
+
+    assert len(normalized_paths) == len(set(normalized_paths))
 
 
 def _windows_rows() -> list[dict[str, object]]:
