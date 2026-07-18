@@ -26,6 +26,12 @@ if [[ -n "${HOL_GUARD_INSTALLER_SIGN_IDENTITY:-}" ]]; then
   pyinstaller_args=(--codesign-identity "${HOL_GUARD_APPLICATION_SIGN_IDENTITY}" "${pyinstaller_args[@]}")
 fi
 uv run --no-sync pyinstaller "${pyinstaller_args[@]}"
+xcrun swiftc -O -framework Security -framework Foundation \
+  "${ROOT}/scripts/mdm/macos/device-key-helper.swift" -o "${RUNTIME}/hol-guard-device-key"
+if [[ -n "${HOL_GUARD_APPLICATION_SIGN_IDENTITY:-}" ]]; then
+  codesign --force --options runtime --timestamp --sign "${HOL_GUARD_APPLICATION_SIGN_IDENTITY}" \
+    "${RUNTIME}/hol-guard-device-key"
+fi
 
 cp "${ROOT}/scripts/mdm/macos/org.hol.guard.user-activation.plist" \
   "${STAGE}/Library/LaunchAgents/org.hol.guard.user-activation.plist"
@@ -44,7 +50,7 @@ python3 "${ROOT}/scripts/mdm/generate-release-manifest.py" "${manifest_args[@]}"
 
 find "${STAGE}" -type d -exec chmod 0755 {} +
 find "${STAGE}" -type f -exec chmod 0644 {} +
-chmod 0755 "${RUNTIME}/hol-guard/hol-guard" "${RUNTIME}/activate-current-user"
+chmod 0755 "${RUNTIME}/hol-guard/hol-guard" "${RUNTIME}/hol-guard-device-key" "${RUNTIME}/activate-current-user"
 
 typeset -a pkg_args
 pkg_args=(--root "${STAGE}" --ownership recommended --identifier "${PACKAGE_ID}" --version "${VERSION}" \

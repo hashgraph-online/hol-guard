@@ -112,6 +112,7 @@ def _macos_surfaces(paths: MachinePaths) -> tuple[_PathSurface, ...]:
         _PathSurface("runtime", paths.runtime_root, True, trust_root),
         _PathSurface("manifest", paths.manifest_path, False, trust_root),
         _PathSurface("machineState", paths.state_root, True, trust_root),
+        _PathSurface("deviceKeyMetadata", paths.state_root / "device-key.json", False, trust_root),
         _PathSurface("logs", paths.log_root, True, trust_root),
         _PathSurface(
             "serviceRegistration",
@@ -274,6 +275,7 @@ def _windows_surface_payload(paths: MachinePaths) -> list[dict[str, str | bool]]
         ("filesystem", str(paths.runtime_root), True),
         ("filesystem", str(paths.manifest_path), False),
         ("filesystem", str(paths.state_root), True),
+        ("filesystem", str(paths.state_root / "device-key.json"), False),
         ("filesystem", str(paths.log_root), True),
         ("registry", _WINDOWS_POLICY, True),
         ("registry", _WINDOWS_ACTIVE_SETUP, True),

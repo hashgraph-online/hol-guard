@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.mdm import integrity
 from codex_plugin_scanner.guard.mdm.acl import OwnershipAclVerification
 from codex_plugin_scanner.guard.mdm.contracts import (
     MDM_POLICY_SCHEMA_VERSION,
+    KeyProtectionStatus,
     MachinePaths,
     ManagedIntegrityTrust,
     ManagedPolicy,
@@ -41,6 +42,11 @@ def _isolate_host_policy(monkeypatch: pytest.MonkeyPatch) -> None:
         integrity,
         "verify_machine_supervisor",
         lambda _paths: SupervisorStatus("unsupported", "supervisor_verification_unavailable"),
+    )
+    monkeypatch.setattr(
+        integrity,
+        "verify_machine_device_key",
+        lambda _paths: KeyProtectionStatus("unsupported", "unavailable", "device_key_verification_unavailable"),
     )
 
 
@@ -129,6 +135,29 @@ def test_snapshot_projects_acl_tamper_without_exposing_surface_paths(
         "reasonCode": "ownership_acl_standard_user_writable",
     }
     assert str(tmp_path) not in serialized
+
+
+def test_snapshot_projects_device_key_protection_without_public_material(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(integrity, "default_machine_paths", lambda: _paths(tmp_path))
+    monkeypatch.setattr(
+        integrity,
+        "verify_machine_device_key",
+        lambda _paths: KeyProtectionStatus("healthy", "hardware-backed", "device_key_active"),
+    )
+
+    snapshot = integrity.machine_integrity_snapshot()
+    serialized = json.dumps(snapshot, sort_keys=True)
+
+    assert snapshot["components"]["deviceKey"] == {
+        "state": "healthy",
+        "healthy": True,
+        "level": "hardware-backed",
+        "reasonCode": "device_key_active",
+    }
+    assert "publicKey" not in serialized
+    assert "generation" not in serialized
 
 
 def test_snapshot_preserves_cached_managed_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
