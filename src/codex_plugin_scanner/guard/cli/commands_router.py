@@ -77,6 +77,7 @@ _COMMON_HANDLERS = {
     "device": "_run_guard_device_command",
     "commands": "_run_guard_commands_command",
     "daemon": "_run_guard_daemon_command",
+    "tray": "_run_guard_tray_command",
     "hook": "_run_guard_hook_command",
 }
 
