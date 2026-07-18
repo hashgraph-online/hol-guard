@@ -16,8 +16,9 @@ from itertools import chain
 from pathlib import Path
 from typing import TypedDict, cast
 
-EVALUATION_WORKER_COUNT = 2 if sys.version_info < (3, 11) else 1
-WORKER_TIMEOUT_SECONDS = 35
+EVALUATION_SHARD_COUNT = 2
+MAX_CONCURRENT_WORKERS = 1 + int(sys.version_info < (3, 11))
+WORKER_TIMEOUT_SECONDS = 35 if MAX_CONCURRENT_WORKERS > 1 else 20
 REPO_ROOT = Path(__file__).parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -118,8 +119,12 @@ def _run_worker(worker_index: int) -> WorkerReport:
 
 
 def _iter_reports() -> Iterator[WorkerReport]:
-    with ThreadPoolExecutor(max_workers=EVALUATION_WORKER_COUNT) as executor:
-        yield from executor.map(_run_worker, range(EVALUATION_WORKER_COUNT))
+    if MAX_CONCURRENT_WORKERS == 1:
+        for worker_index in range(EVALUATION_SHARD_COUNT):
+            yield _run_worker(worker_index)
+        return
+    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_WORKERS) as executor:
+        yield from executor.map(_run_worker, range(EVALUATION_SHARD_COUNT))
 
 
 def _coordinator_report() -> dict[str, object]:
@@ -134,17 +139,19 @@ def _coordinator_report() -> dict[str, object]:
         key: [len(ids), hashlib.sha256(("\n".join(sorted(ids)) + "\n").encode()).hexdigest()]
         for key, ids in groups.items()
     }
+    worker_rss = [report["rss_mib"] for report in reports]
+    active_worker_rss = sum(worker_rss) if MAX_CONCURRENT_WORKERS > 1 else max(worker_rss, default=0.0)
     return {
         "actual": actual,
         "elapsed": elapsed,
-        "rss_mib": _rss_mib() + sum(report["rss_mib"] for report in reports),
+        "rss_mib": _rss_mib() + active_worker_rss,
         "worker_elapsed": [report["elapsed"] for report in reports],
     }
 
 
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "--worker":
-        print(json.dumps(_worker_report(int(sys.argv[2]), EVALUATION_WORKER_COUNT), sort_keys=True))
+        print(json.dumps(_worker_report(int(sys.argv[2]), EVALUATION_SHARD_COUNT), sort_keys=True))
     elif len(sys.argv) == 1:
         print(json.dumps(_coordinator_report(), sort_keys=True))
     else:
