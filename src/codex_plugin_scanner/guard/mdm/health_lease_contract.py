@@ -263,18 +263,31 @@ class HealthLeaseClaims:
         return HEALTH_LEASE_SIGNING_DOMAIN + canonical_json_bytes(self.to_dict())
 
 
+def _canonical_ecdsa_signature(signature: bytes) -> bytes:
+    try:
+        r, s = decode_dss_signature(signature)
+    except ValueError as exc:
+        raise ValueError("health_lease_invalid") from exc
+    if not 1 <= r < P256_ORDER or not 1 <= s < P256_ORDER or encode_dss_signature(r, s) != signature:
+        raise ValueError("health_lease_invalid")
+    if s <= P256_ORDER // 2:
+        return signature
+    return encode_dss_signature(r, P256_ORDER - s)
+
+
 @dataclass(frozen=True, slots=True)
 class SignedHealthLease:
     claims: HealthLeaseClaims
     signature: bytes
 
     def to_dict(self) -> dict[str, object]:
+        signature = _canonical_ecdsa_signature(self.signature)
         return {
             "claims": self.claims.to_dict(),
             "signature": {
                 "algorithm": SIGNATURE_ALGORITHM,
                 "encoding": SIGNATURE_ENCODING,
-                "value": base64.b64encode(self.signature).decode("ascii"),
+                "value": base64.b64encode(signature).decode("ascii"),
             },
         }
 
@@ -303,15 +316,10 @@ class SignedHealthLease:
             raise ValueError("health_lease_invalid")
         try:
             signature = base64.b64decode(value, validate=True)
-            r, s = decode_dss_signature(signature)
+            canonical_signature = _canonical_ecdsa_signature(signature)
         except (ValueError, TypeError) as exc:
             raise ValueError("health_lease_invalid") from exc
-        if (
-            not 1 <= r < P256_ORDER
-            or not 1 <= s < P256_ORDER
-            or encode_dss_signature(r, s) != signature
-            or base64.b64encode(signature).decode("ascii") != value
-        ):
+        if canonical_signature != signature or base64.b64encode(signature).decode("ascii") != value:
             raise ValueError("health_lease_invalid")
         return cls(HealthLeaseClaims.parse(raw.get("claims")), signature)
 

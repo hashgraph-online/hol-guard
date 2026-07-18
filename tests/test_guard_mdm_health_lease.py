@@ -13,12 +13,14 @@ from typing import cast
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
 
 from codex_plugin_scanner.guard.mdm import continuity, health_lease
 from codex_plugin_scanner.guard.mdm.contracts import LocalIntegritySnapshot, MachinePaths
 from codex_plugin_scanner.guard.mdm.device_key import KeyGeneration
 from codex_plugin_scanner.guard.mdm.health_lease_contract import (
     HEALTH_LEASE_SCHEMA,
+    P256_ORDER,
     HealthLeaseBinding,
     HealthLeaseClaims,
     HealthLeaseOutbox,
@@ -192,6 +194,24 @@ def test_outbox_rejects_oversized_snapshot() -> None:
 
     with pytest.raises(ValueError, match="health_lease_outbox_invalid"):
         HealthLeaseOutbox(lease, snapshot).canonical_bytes()
+
+
+def test_signed_lease_emits_low_s_and_rejects_high_s() -> None:
+    private, key = _key()
+    claims = HealthLeaseClaims.parse(_claims(key.key_id))
+    signature = private.sign(claims.signing_payload(), ec.ECDSA(hashes.SHA256()))
+    r, s = decode_dss_signature(signature)
+    high_s_signature = encode_dss_signature(r, max(s, P256_ORDER - s))
+    lease = SignedHealthLease(claims, high_s_signature)
+    serialized = json.loads(lease.canonical_bytes())
+    serialized_signature = base64.b64decode(serialized["signature"]["value"], validate=True)
+    _, serialized_s = decode_dss_signature(serialized_signature)
+
+    assert serialized_s <= P256_ORDER // 2
+
+    serialized["signature"]["value"] = base64.b64encode(high_s_signature).decode("ascii")
+    with pytest.raises(ValueError, match="health_lease_invalid"):
+        SignedHealthLease.parse(canonical_json_bytes(serialized))
 
 
 @pytest.mark.parametrize("container", [None, "identifiers", "product", "components", "harnessCoverage", "continuity"])
