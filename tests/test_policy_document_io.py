@@ -29,7 +29,7 @@ def _policy_document(
     *,
     effect: str = "allow",
     match: dict[str, object] | None = None,
-    extensions: dict[str, object] | None = None,
+    local_extension: dict[str, object] | None = None,
 ) -> GuardPolicyDocument:
     return GuardPolicyDocument.from_mapping(
         {
@@ -44,7 +44,7 @@ def _policy_document(
                         "enabled": True,
                         "effect": effect,
                         "match": match or {"artifacts": ["skill:hol/deploy"]},
-                        **({"extensions": extensions} if extensions is not None else {}),
+                        **({"x-hol-local": local_extension} if local_extension is not None else {}),
                         "lifetime": {"mode": "permanent", "expiresAt": None},
                         "provenance": {
                             "source": "import",
@@ -318,9 +318,8 @@ def test_compile_rejects_invalid_until_expiry() -> None:
 def test_compile_ignores_artifact_scope_override_for_tool_family() -> None:
     document = _policy_document(
         match={"tools": ["mcp"]},
-        extensions={"x-hol-local": {"scope": "artifact"}},
+        local_extension={"scope": "artifact"},
     )
-
     compiled = compile_policy_document(document)
 
     assert compiled[0].decision.artifact_id == "family:mcp"
