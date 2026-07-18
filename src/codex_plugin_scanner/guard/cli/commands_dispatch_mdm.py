@@ -14,6 +14,7 @@ from ..mdm.device_key import (
     revoke_machine_device_key,
     rotate_machine_device_key,
 )
+from ..mdm.health_reporter import run_machine_health_cadence
 from ..mdm.integrity import machine_integrity_snapshot
 from ..mdm.lifecycle import (
     activate_user,
@@ -68,6 +69,8 @@ def _run_guard_mdm_command(
             }
         elif command == "integrity-snapshot":
             payload = dict(machine_integrity_snapshot())
+        elif command == "health-report":
+            payload = run_machine_health_cadence()
         elif command == "supervisor-install":
             payload = install_machine_supervisor()
         elif command == "supervisor-remove":

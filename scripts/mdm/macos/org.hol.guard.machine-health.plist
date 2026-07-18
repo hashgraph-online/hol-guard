@@ -7,7 +7,7 @@
   <array>
     <string>/Library/Application Support/HOL Guard/hol-guard/hol-guard</string>
     <string>mdm</string>
-    <string>integrity-snapshot</string>
+    <string>health-report</string>
     <string>--scope</string>
     <string>machine</string>
     <string>--json</string>

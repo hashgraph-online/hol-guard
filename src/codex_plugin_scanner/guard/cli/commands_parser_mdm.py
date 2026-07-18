@@ -35,6 +35,12 @@ def _configure_guard_mdm_parsers(
         "--json", required=True, action="store_true", help="Emit the versioned JSON automation contract"
     )
 
+    health_report = commands.add_parser("health-report", help=argparse.SUPPRESS)
+    health_report.add_argument("--scope", required=True, choices=("machine",))
+    health_report.add_argument(
+        "--json", required=True, action="store_true", help="Emit the versioned JSON automation contract"
+    )
+
     for name in ("supervisor-install", "supervisor-remove"):
         supervisor = commands.add_parser(name, help=argparse.SUPPRESS)
         _add_json(supervisor)
