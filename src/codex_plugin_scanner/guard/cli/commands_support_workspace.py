@@ -142,6 +142,16 @@ def _build_init_plan(args: argparse.Namespace) -> list[dict[str, object]]:
             "command": "hol-guard doctor --notifications --force-notification-settings",
             "skip_flag": "skip_notifications",
         },
+        {
+            "id": "tray",
+            "title": "Install menu bar / tray icon",
+            "detail": (
+                "Adds a persistent HOL Guard icon to your menu bar (macOS) or system tray (Windows/Linux) "
+                "so you can open the dashboard without the terminal. Starts at login and can be toggled off later."
+            ),
+            "command": "hol-guard tray install && hol-guard tray start",
+            "skip_flag": "skip_tray",
+        },
     ]
 
 def _print_init_plan_preview(plan: list[dict[str, object]]) -> None:
