@@ -7,15 +7,36 @@ import ctypes
 import json
 import ntpath
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from typing import Literal, cast
 
+from cryptography.hazmat.primitives.asymmetric import utils
+
 from .contracts import KeyProtectionLevel, MachinePaths
 
 _MAX_HELPER_OUTPUT_BYTES = 16 * 1024
+_MAX_HELPER_STDERR_BYTES = 4096
+_MAX_HEALTH_LEASE_CLAIMS_BYTES = 4096
 _HELPER_TIMEOUT_SECONDS = 15
 _SYSTEM_SID = "S-1-5-18"
+_P256_ORDER = int("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16)
+_HEALTH_LEASE_KEYS = {
+    "deviceId",
+    "installationGeneration",
+    "issuedAt",
+    "leaseExpiresAt",
+    "machineInstallationId",
+    "previousLeaseDigest",
+    "previousLeaseKeyId",
+    "schemaVersion",
+    "sequence",
+    "signingKeyId",
+    "snapshotDigest",
+    "snapshotSchemaVersion",
+    "workspaceId",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +47,51 @@ class NativeKeyEvidence:
     reason_code: str
 
 
+@dataclass(frozen=True, slots=True)
+class NativeHealthLeaseSignature:
+    signature: bytes
+    algorithm: Literal["ecdsa-p256-sha256"] = "ecdsa-p256-sha256"
+    encoding: Literal["asn1-der"] = "asn1-der"
+
+
+def _validated_canonical_health_lease_claims(claims: bytes) -> str:
+    if not claims or len(claims) > _MAX_HEALTH_LEASE_CLAIMS_BYTES:
+        raise ValueError("health_lease_claims_invalid")
+    try:
+        text = claims.decode("utf-8")
+        decoded = cast(object, json.loads(text))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("health_lease_claims_invalid") from exc
+    if not isinstance(decoded, dict):
+        raise ValueError("health_lease_claims_invalid")
+    payload = cast(dict[str, object], decoded)
+    if set(payload) != _HEALTH_LEASE_KEYS:
+        raise ValueError("health_lease_claims_invalid")
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    if canonical != text:
+        raise ValueError("health_lease_claims_invalid")
+    from .health_lease_contract import HealthLeaseClaims
+
+    try:
+        HealthLeaseClaims.parse(payload)
+    except ValueError as exc:
+        raise ValueError("health_lease_claims_invalid") from exc
+    return text
+
+
+def _validated_der_signature(encoded: object) -> bytes:
+    if not isinstance(encoded, str) or len(encoded) > 128:
+        raise OSError("device_key_probe_failed")
+    try:
+        signature = base64.b64decode(encoded, validate=True)
+        r, s = utils.decode_dss_signature(signature)
+    except (ValueError, TypeError) as exc:
+        raise OSError("device_key_probe_failed") from exc
+    if not 0 < r < _P256_ORDER or not 0 < s < _P256_ORDER or utils.encode_dss_signature(r, s) != signature:
+        raise OSError("device_key_probe_failed")
+    return signature
+
+
 def windows_directory() -> str:
     buffer = ctypes.create_unicode_buffer(32_768)
     length = int(ctypes.windll.kernel32.GetSystemWindowsDirectoryW(buffer, len(buffer)))
@@ -34,9 +100,9 @@ def windows_directory() -> str:
     return ntpath.normpath(str(buffer.value))
 
 
-def run_helper(paths: MachinePaths, verb: str, generation: str, *, system_name: str) -> NativeKeyEvidence:
-    if verb not in {"create", "inspect", "delete"}:
-        raise ValueError("device_key_request_invalid")
+def _helper_invocation(
+    paths: MachinePaths, verb: str, generation: str, system_name: str
+) -> tuple[list[str], dict[str, str], str]:
     if system_name == "Darwin":
         command = [str(paths.runtime_root / "hol-guard-device-key"), verb, generation]
         environment = {
@@ -74,7 +140,16 @@ def run_helper(paths: MachinePaths, verb: str, generation: str, *, system_name: 
         }
         cwd = system_directory
     else:
+        raise OSError("device_key_platform_unsupported")
+    return command, environment, cwd
+
+
+def run_helper(paths: MachinePaths, verb: str, generation: str, *, system_name: str) -> NativeKeyEvidence:
+    if verb not in {"create", "inspect", "delete"}:
+        raise ValueError("device_key_request_invalid")
+    if system_name not in {"Darwin", "Windows"}:
         return NativeKeyEvidence("unknown", "unavailable", None, "device_key_platform_unsupported")
+    command, environment, cwd = _helper_invocation(paths, verb, generation, system_name)
     result = subprocess.run(
         command,
         check=False,
@@ -85,7 +160,10 @@ def run_helper(paths: MachinePaths, verb: str, generation: str, *, system_name: 
         text=True,
         timeout=_HELPER_TIMEOUT_SECONDS,
     )
-    if len(result.stdout.encode("utf-8")) > _MAX_HELPER_OUTPUT_BYTES or len(result.stderr.encode("utf-8")) > 4096:
+    if (
+        len(result.stdout.encode("utf-8")) > _MAX_HELPER_OUTPUT_BYTES
+        or len(result.stderr.encode("utf-8")) > _MAX_HELPER_STDERR_BYTES
+    ):
         raise OSError("device_key_probe_failed")
     try:
         payload = json.loads(result.stdout)
@@ -149,6 +227,44 @@ def run_helper(paths: MachinePaths, verb: str, generation: str, *, system_name: 
     )
 
 
+def sign_health_lease(
+    paths: MachinePaths, generation: str, canonical_claims: bytes, *, system_name: str
+) -> NativeHealthLeaseSignature:
+    if re.fullmatch(r"[0-9a-f]{32}", generation) is None:
+        raise ValueError("device_key_request_invalid")
+    claims_text = _validated_canonical_health_lease_claims(canonical_claims)
+    command, environment, cwd = _helper_invocation(paths, "sign-health-lease", generation, system_name)
+    result = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        cwd=cwd,
+        env=environment,
+        input=claims_text,
+        text=True,
+        timeout=_HELPER_TIMEOUT_SECONDS,
+    )
+    if (
+        len(result.stdout.encode("utf-8")) > _MAX_HELPER_OUTPUT_BYTES
+        or len(result.stderr.encode("utf-8")) > _MAX_HELPER_STDERR_BYTES
+    ):
+        raise OSError("device_key_probe_failed")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise OSError("device_key_probe_failed") from exc
+    if (
+        result.returncode != 0
+        or not isinstance(payload, dict)
+        or set(payload) != {"ok", "signature", "signatureAlgorithm", "signatureEncoding"}
+        or payload.get("ok") is not True
+        or payload.get("signatureAlgorithm") != "ecdsa-p256-sha256"
+        or payload.get("signatureEncoding") != "asn1-der"
+    ):
+        raise OSError("device_key_probe_failed")
+    return NativeHealthLeaseSignature(_validated_der_signature(payload.get("signature")))
+
+
 def windows_current_user_sid() -> str:
     from ctypes import wintypes
 
@@ -187,4 +303,11 @@ def require_machine_context(system_name: str) -> None:
     raise OSError("device_key_platform_unsupported")
 
 
-__all__ = ["NativeKeyEvidence", "require_machine_context", "run_helper", "windows_current_user_sid"]
+__all__ = [
+    "NativeHealthLeaseSignature",
+    "NativeKeyEvidence",
+    "require_machine_context",
+    "run_helper",
+    "sign_health_lease",
+    "windows_current_user_sid",
+]
