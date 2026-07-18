@@ -84,6 +84,7 @@ def test_hgc073_signed_policy_bundle_rejects_payload_hash_mismatch() -> None:
         bundle,
         trusted_verification_keys=trusted_keys,
         anchored_verification_keys=trusted_keys,
+        expected_workspace_id="workspace-1",
     )
 
     assert validated_bundle is None
@@ -91,7 +92,7 @@ def test_hgc073_signed_policy_bundle_rejects_payload_hash_mismatch() -> None:
 
 
 def test_hgc073_signed_policy_bundle_rejects_invalid_payload_hash() -> None:
-    for payload_hash in (None, "", 123):
+    for payload_hash in (None, "", 123, f" sha256:{'0' * 64}"):
         bundle, trusted_keys = _signed_policy_bundle()
         bundle["payloadHash"] = payload_hash
 
@@ -99,7 +100,8 @@ def test_hgc073_signed_policy_bundle_rejects_invalid_payload_hash() -> None:
             bundle,
             trusted_verification_keys=trusted_keys,
             anchored_verification_keys=trusted_keys,
+            expected_workspace_id="workspace-1",
         )
 
         assert validated_bundle is None
-        assert reason == "payload_hash_invalid"
+        assert reason == "invalid_payload_hash"
