@@ -363,7 +363,7 @@ def _configure_guard_cloud_parsers(
     hook_parser.add_argument("--artifact-name")
     hook_parser.add_argument(
         "--policy-action",
-        choices=("allow", "warn", "review", "block", "sandbox-required", "require-reapproval"),
+        choices=GUARD_ACTION_VALUES,
     )
     hook_parser.add_argument("--event-file")
     hook_parser.add_argument("--json", action="store_true")

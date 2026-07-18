@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
-from codex_plugin_scanner.guard.consumer.service import evaluate_detection
+from codex_plugin_scanner.guard.consumer.service import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.models import (
     GuardApprovalRequest,
     GuardArtifact,
@@ -100,8 +100,8 @@ class TestPolicyDeduplication:
         store.save_snapshot(
             "codex",
             artifact.artifact_id,
-            {**artifact.to_dict(), "artifact_hash": "hash-test"},
-            "hash-test",
+            {**artifact.to_dict(), "artifact_hash": artifact_hash(artifact)},
+            artifact_hash(artifact),
             "2026-01-01T00:00:00+00:00",
         )
 
@@ -136,8 +136,8 @@ class TestPolicyDeduplication:
         store.save_snapshot(
             "codex",
             artifact.artifact_id,
-            {**artifact.to_dict(), "artifact_hash": "hash-test"},
-            "hash-test",
+            {**artifact.to_dict(), "artifact_hash": artifact_hash(artifact)},
+            artifact_hash(artifact),
             "2026-01-01T00:00:00+00:00",
         )
 
@@ -198,7 +198,7 @@ class TestDeniedCommandBehavior:
         )
 
         assert evaluation.get("blocked") is True, "Denied artifact must be blocked"
-        assert len(approvals) > 0, "Blocked artifact must still queue for user review in Guard"
+        assert approvals == [], "Terminal block decisions must not be presented as overridable approvals"
 
 
 class TestMeaningfulChangeAsksAgain:

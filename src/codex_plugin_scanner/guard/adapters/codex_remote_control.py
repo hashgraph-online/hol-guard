@@ -7,7 +7,7 @@ import signal
 import socket
 import subprocess
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 _REMOTE_CONTROL_START_TIMEOUT_SECONDS = 10
@@ -55,10 +55,35 @@ def guarded_codex_launch_command(
 ) -> list[str]:
     """Return a remote TUI command when Codex app-server control is available."""
 
-    plain_command = [executable, *passthrough_args]
+    return guarded_codex_launch_command_from_prefix(
+        executable_prefix=(executable,),
+        home_dir=home_dir,
+        passthrough_args=passthrough_args,
+        environ=environ,
+    )
+
+
+def guarded_codex_launch_command_from_prefix(
+    *,
+    executable_prefix: Sequence[str],
+    home_dir: Path,
+    passthrough_args: list[str],
+    environ: Mapping[str, str] | None = None,
+) -> list[str]:
+    """Prepare Codex using an already authorized canonical launch prefix.
+
+    Script-backed Codex launchers may require a verified interpreter and
+    launcher path. Keeping the complete prefix prevents remote-control or
+    app-server setup from resolving an attacker-swapped PATH entry or symlink.
+    """
+
+    prefix = list(executable_prefix)
+    if not prefix or any(not isinstance(part, str) or not part for part in prefix):
+        raise ValueError("Codex launch preparation requires a canonical executable prefix.")
+    plain_command = [*prefix, *passthrough_args]
     if not _supports_remote_tui(passthrough_args):
         return plain_command
-    environment = dict(environ or os.environ)
+    environment = dict(os.environ if environ is None else environ)
     codex_home = codex_home_for_user(home_dir)
     try:
         codex_home.mkdir(parents=True, exist_ok=True)
@@ -68,7 +93,7 @@ def guarded_codex_launch_command(
     environment["CODEX_HOME"] = str(codex_home)
     try:
         result = subprocess.run(
-            [executable, "remote-control", "start", "--json"],
+            [*prefix, "remote-control", "start", "--json"],
             capture_output=True,
             text=True,
             timeout=_REMOTE_CONTROL_START_TIMEOUT_SECONDS,
@@ -80,12 +105,38 @@ def guarded_codex_launch_command(
     socket_path = default_codex_control_socket(home_dir)
     managed_daemon_ready = result is not None and result.returncode == 0 and _wait_for_socket(socket_path)
     if not managed_daemon_ready and not _start_direct_app_server(
-        executable=executable,
+        executable_prefix=prefix,
         socket_path=socket_path,
         environment=environment,
     ):
         return plain_command
-    return [executable, "--remote", f"unix://{socket_path}", *passthrough_args]
+    return [*prefix, "--remote", f"unix://{socket_path}", *passthrough_args]
+
+
+def guarded_codex_launch_command_candidates(
+    *,
+    executable: str,
+    home_dir: Path,
+    passthrough_args: list[str],
+) -> tuple[list[str], ...]:
+    """Preview every argv the remote-control launch preparation may select.
+
+    This function intentionally performs no filesystem, socket, or subprocess
+    setup. Compatible TUI launches may select the remote argv when setup
+    succeeds or the ordinary argv when it does not; incompatible subcommands
+    have only the ordinary form.
+    """
+
+    plain_command = [executable, *passthrough_args]
+    if not _supports_remote_tui(passthrough_args):
+        return (plain_command,)
+    remote_command = [
+        executable,
+        "--remote",
+        f"unix://{default_codex_control_socket(home_dir)}",
+        *passthrough_args,
+    ]
+    return (remote_command, plain_command)
 
 
 def codex_remote_launch_environment(home_dir: Path) -> dict[str, str]:
@@ -141,7 +192,7 @@ def _socket_is_live(socket_path: Path) -> bool:
 
 def _start_direct_app_server(
     *,
-    executable: str,
+    executable_prefix: Sequence[str],
     socket_path: Path,
     environment: Mapping[str, str],
 ) -> bool:
@@ -165,7 +216,7 @@ def _start_direct_app_server(
                 if not _stop_tracked_process(tracked_pid):
                     return False
         process = subprocess.Popen(
-            [executable, "app-server", "--listen", f"unix://{socket_path}"],
+            [*executable_prefix, "app-server", "--listen", f"unix://{socket_path}"],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

@@ -8,6 +8,8 @@ from __future__ import annotations
 import importlib
 from typing import TYPE_CHECKING
 
+from ..runtime.approval_context import approval_context_tokens_validation_reason
+
 if TYPE_CHECKING:
     from ._commands_shared import _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS, _hook_command_text, _now
     from .commands_support_hook_payload import _browser_url_with_guard_params
@@ -33,11 +35,15 @@ def _optional_string(value: object | None) -> str | None:
     return _runtime_artifacts_module()._optional_string(value)
 
 
-def _update_codex_browser_operation_status(
+def _set_codex_browser_operation_status(
     response_payload: dict[str, object],
     daemon_client: object | None,
     status: str,
 ) -> None:
+    operation = response_payload.get("operation")
+    if isinstance(operation, dict):
+        operation["status"] = status
+    response_payload["operation_status"] = status
     _hook_state_module()._update_codex_browser_operation_status(response_payload, daemon_client, status)
 
 
@@ -298,7 +304,7 @@ def _should_emit_claude_native_pretooluse_notice(
         _canonical_harness_name(args.harness) == "claude-code"
         and not getattr(args, "json", False)
         and event_name == "PreToolUse"
-        and policy_action == "require-reapproval"
+        and policy_action in {"review", "require-reapproval"}
     )
 
 def _should_emit_native_hook_json_response(
@@ -325,7 +331,7 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
     # the tool. Blocking must be communicated through the JSON hook response.
     canonical = _canonical_harness_name(args.harness)
     if canonical in {"kimi", "grok", "pi", "zcode"} and event_name in {"PreToolUse", "UserPromptSubmit"}:
-        return policy_action in {"block", "sandbox-required", "require-reapproval"}
+        return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 
 def _codex_browser_approval_decision(
@@ -337,6 +343,8 @@ def _codex_browser_approval_decision(
     store: GuardStore,
     config: GuardConfig,
     daemon_client: object | None = None,
+    expected_artifact_hash: str | None = None,
+    fresh_context_provider: Callable[[], Mapping[str, object] | None] | None = None,
 ) -> str | None:
     if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
         return None
@@ -367,7 +375,7 @@ def _codex_browser_approval_decision(
     )
     response_payload["approval_wait"] = wait_result
     if not bool(wait_result.get("resolved")):
-        _update_codex_browser_operation_status(response_payload, daemon_client, "approval_wait_timeout")
+        _set_codex_browser_operation_status(response_payload, daemon_client, "approval_wait_timeout")
         response_payload["review_hint"] = (
             "Approval is still pending in HOL Guard. Approve it in the browser, then retry the same Codex action."
         )
@@ -375,19 +383,210 @@ def _codex_browser_approval_decision(
     wait_items = wait_result.get("items")
     resolved_items = [item for item in (wait_items if isinstance(wait_items, list) else []) if isinstance(item, dict)]
     if any(str(item.get("resolution_action")) == "block" for item in resolved_items):
-        _update_codex_browser_operation_status(response_payload, daemon_client, "blocked")
+        _set_codex_browser_operation_status(response_payload, daemon_client, "blocked")
+        _record_codex_live_hook_continuation(
+            response_payload=response_payload,
+            store=store,
+            request_ids=request_ids,
+            action="block",
+        )
         response_payload["review_hint"] = "Browser decision saved. HOL Guard kept this Codex action blocked."
         return "block"
-    _update_codex_browser_operation_status(response_payload, daemon_client, "completed")
+    fresh_artifact_id: str | None = None
+    fresh_artifact_hash = expected_artifact_hash
+    fresh_current_action: str | None = None
+    fresh_authoritative_action: str | None = None
+    fresh_terminal_action: str | None = None
+    exact_validation_failure: str | None = None
+    if fresh_context_provider is None:
+        exact_validation_failure = "fresh_context_unavailable"
+    else:
+        try:
+            fresh_context = fresh_context_provider()
+        except Exception:
+            fresh_context = None
+        if not isinstance(fresh_context, Mapping):
+            exact_validation_failure = "fresh_context_unavailable"
+        else:
+            fresh_artifact_id = _optional_string(fresh_context.get("artifact_id"))
+            fresh_artifact_hash = _optional_string(fresh_context.get("artifact_hash"))
+            fresh_current_action = _optional_string(fresh_context.get("current_action"))
+            fresh_authoritative_action = _optional_string(
+                fresh_context.get("authoritative_action")
+            )
+            if fresh_authoritative_action in {"block", "sandbox-required"}:
+                fresh_terminal_action = fresh_authoritative_action
+            elif fresh_current_action in {"block", "sandbox-required"}:
+                fresh_terminal_action = fresh_current_action
+            if fresh_artifact_id is None or fresh_artifact_hash is None:
+                exact_validation_failure = "fresh_context_incomplete"
+            elif fresh_current_action in {"block", "sandbox-required"}:
+                exact_validation_failure = "current_policy_became_terminal"
+            elif fresh_current_action not in {"allow", "warn", "review", "require-reapproval"}:
+                exact_validation_failure = "fresh_current_action_unrecognized"
+    if exact_validation_failure is None:
+        exact_validation_failure = _codex_browser_exact_resolution_failure(
+            response_payload=response_payload,
+            store=store,
+            request_ids=request_ids,
+            resolved_items=resolved_items,
+            expected_artifact_hash=fresh_artifact_hash,
+            expected_artifact_id=fresh_artifact_id,
+        )
+    if (
+        exact_validation_failure is None
+        and fresh_context_provider is not None
+        and fresh_authoritative_action != "allow"
+    ):
+        # The exact browser decision is evidence, not the launch authority.
+        # Re-evaluation must have successfully applied (and, for one-shot
+        # rows, atomically claimed) that evidence.  A renewed review or a
+        # concurrent saved block must never be overwritten by this waiter.
+        exact_validation_failure = "fresh_authoritative_action_not_allowed"
+    if exact_validation_failure is not None:
+        terminal_action = fresh_terminal_action or "block"
+        response_payload["approval_requests"] = resolved_items
+        _set_codex_browser_operation_status(response_payload, daemon_client, "blocked")
+        _record_codex_live_hook_continuation(
+            response_payload=response_payload,
+            store=store,
+            request_ids=request_ids,
+            action=terminal_action,
+        )
+        response_payload["browser_resolution_validation"] = exact_validation_failure
+        if terminal_action == "sandbox-required":
+            response_payload["review_hint"] = (
+                "HOL Guard rejected the browser approval because current policy now requires a sandbox. "
+                "This Codex action was not resumed."
+            )
+        else:
+            response_payload["review_hint"] = (
+                "HOL Guard rejected the browser approval because it did not match the exact current request. "
+                "This Codex action remains blocked."
+            )
+        return terminal_action
+    response_payload["approval_requests"] = resolved_items
+    _set_codex_browser_operation_status(response_payload, daemon_client, "completed")
+    _record_codex_live_hook_continuation(
+        response_payload=response_payload,
+        store=store,
+        request_ids=request_ids,
+        action="allow",
+    )
+    response_payload["browser_resolution_request_id"] = request_ids[0]
     response_payload["review_hint"] = "Approval received in HOL Guard. Codex is resuming this action."
     return "allow"
+
+
+def _codex_browser_exact_resolution_failure(
+    *,
+    response_payload: Mapping[str, object],
+    store: GuardStore,
+    request_ids: list[str],
+    resolved_items: list[dict[str, object]],
+    expected_artifact_hash: str | None,
+    expected_artifact_id: str | None = None,
+) -> str | None:
+    resolved_by_id = {
+        str(item.get("request_id")): item
+        for item in resolved_items
+        if isinstance(item.get("request_id"), str)
+    }
+    current_artifact_hash = expected_artifact_hash
+    if current_artifact_hash is None:
+        current_artifact_hash = _optional_string(response_payload.get("artifact_hash"))
+    current_artifact_id = expected_artifact_id or _optional_string(response_payload.get("artifact_id"))
+    if current_artifact_hash is None:
+        return "missing_current_approval_context"
+    for request_id in request_ids:
+        resolved_item = resolved_by_id.get(request_id)
+        stored_item = store.get_approval_request(request_id)
+        item = dict(stored_item) if isinstance(stored_item, Mapping) else None
+        if resolved_item is not None:
+            item = {**(item or {}), **resolved_item}
+        if item is None:
+            return "missing_resolved_request"
+        if str(item.get("resolution_action")) != "allow":
+            return "non_allow_resolution"
+        if str(item.get("policy_action")) not in {"review", "require-reapproval"}:
+            return "terminal_request_is_not_approvable"
+        if current_artifact_id is not None and str(item.get("artifact_id")) != current_artifact_id:
+            return "approval_artifact_changed"
+        if approval_context_tokens_validation_reason(
+            item.get("artifact_hash"),
+            current_artifact_hash,
+        ) is not None:
+            return "approval_context_changed"
+    return None
+
+
+def _record_codex_live_hook_continuation(
+    *,
+    response_payload: dict[str, object],
+    store: GuardStore,
+    request_ids: list[str],
+    action: str,
+) -> None:
+    status = "resumed" if action == "allow" else "blocked"
+    sandbox_required = action == "sandbox-required"
+    continuation: dict[str, object] = {
+        "status": status,
+        "resolution_action": action,
+        "strategy": "live-hook",
+    }
+    response_payload["continuation"] = continuation
+    response_payload["codex_resume"] = dict(continuation)
+    now = _now()
+    for request_id in request_ids:
+        resume = store.get_request_resume(request_id)
+        if not isinstance(resume, Mapping):
+            continue
+        attempt_count = resume.get("attempt_count")
+        store.update_request_resume(
+            request_id=request_id,
+            resolution_action=action,
+            strategy=(
+                str(resume.get("strategy"))
+                if isinstance(resume.get("strategy"), str)
+                else "live-hook"
+            ),
+            supported=(
+                bool(resume.get("supported"))
+                if resume.get("supported") is not None
+                else action == "allow"
+            ),
+            status=status,
+            reason=(
+                "live_hook_completed"
+                if action == "allow"
+                else "sandbox_required_not_resumed"
+                if sandbox_required
+                else "blocked_not_resumed"
+            ),
+            message=(
+                "The original Codex hook consumed the exact browser approval and resumed the action."
+                if action == "allow"
+                else "Current HOL Guard policy requires a sandbox; the original Codex action was not resumed."
+                if sandbox_required
+                else "HOL Guard kept the original Codex action blocked."
+            ),
+            last_error=None,
+            attempt_count=int(attempt_count) if isinstance(attempt_count, int) else 0,
+            last_attempt_at=now,
+            sent_at=(
+                str(resume.get("sent_at"))
+                if isinstance(resume.get("sent_at"), str)
+                else None
+            ),
+            now=now,
+        )
 
 def _codex_can_use_browser_approval(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
     return (
         _canonical_harness_name(args.harness) == "codex"
         and not getattr(args, "json", False)
         and event_name in {"PreToolUse", "PostToolUse", "UserPromptSubmit"}
-        and policy_action in {"block", "sandbox-required", "require-reapproval"}
+        and policy_action in {"review", "require-reapproval"}
     )
 
 def _codex_hook_waits_for_browser_approval(

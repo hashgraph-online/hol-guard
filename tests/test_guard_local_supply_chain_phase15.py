@@ -22,6 +22,8 @@ from codex_plugin_scanner.guard.cli import commands as commands_module
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -335,6 +337,14 @@ def test_guard_protect_receipt_keeps_matched_policy_rule_metadata(tmp_path: Path
     assert payload["supply_chain_evaluation"]["matched_rule_id"] == "policy-rule-1"
     action_envelope = dict(payload["receipt"]["action_envelope_json"])
     package_context = action_envelope.pop("package_execution_context")
+    assert action_envelope.pop("policy_action") == "warn"
+    assert action_envelope.pop("additional_policy_context") == {
+        "action": "allow",
+        "matched_advisories": [],
+        "reason": "Guard found no blocking advisory or risky install signal for this request.",
+        "risk_signals": [],
+        "version": 1,
+    }
     assert action_envelope == {
         "bundle_version": "1747612800000-deadbeef",
         "matched_rule_id": "policy-rule-1",
@@ -721,20 +731,20 @@ def test_runtime_snapshot_marks_supply_chain_policy_as_cloud_managed(tmp_path: P
         packages=[_package(name="minimist", version="1.2.5", default_action="block")],
         now=now,
     )
+    policy_bundle = build_cloud_exception_policy_bundle(workspace_id=WORKSPACE_ID)
     store.set_sync_payload(
-        "team_policy_pack",
-        {
-            "name": "Security team default",
-            "updatedAt": "2026-05-19T11:55:00Z",
-        },
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id=WORKSPACE_ID),
         now,
     )
+    store.set_sync_payload("policy_bundle", policy_bundle, now)
 
     snapshot = build_runtime_snapshot(store=store, approval_center_url="http://127.0.0.1:4874")
 
     assert snapshot["supply_chain"]["policy"]["managed_by_cloud"] is True
-    assert snapshot["supply_chain"]["policy"]["team_policy_active"] is True
-    assert snapshot["supply_chain"]["policy"]["managed_label"] == "Security team default"
+    assert snapshot["supply_chain"]["policy"]["remote_policy_active"] is True
+    assert snapshot["supply_chain"]["policy"]["team_policy_active"] is False
+    assert snapshot["supply_chain"]["policy"]["managed_label"] == "Guard Cloud sync"
 
 
 @pytest.mark.parametrize(

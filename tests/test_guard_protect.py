@@ -14,6 +14,7 @@ from typing import ClassVar
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import protect
 from codex_plugin_scanner.guard.advisory_model import ProtectTargetIdentity, advisory_matches_target
+from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.redaction import redact_text
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -825,14 +826,73 @@ class TestGuardProtect:
         assert payload["verdict"]["action"] == "block"
         assert payload["receipt"]["policy_decision"] == "block"
         assert any(item.get("id") == "adv-cached-block" for item in payload.get("matched_advisories", []))
-        stored_receipt = store.list_receipts(limit=1)[0]
+        stored_receipts = store.list_receipts(limit=10)
+        assert len(stored_receipts) == 1
+        stored_receipt = stored_receipts[0]
         assert stored_receipt["policy_decision"] == "block"
-        events = store.list_events(limit=10)
-        assert any(
-            event.get("event_name") == "install_time_block"
-            and event.get("payload", {}).get("cached_advisory_override") is True
-            for event in events
+        block_events = store.list_events(limit=10, event_name="install_time_block")
+        assert len(block_events) == 1
+        assert block_events[0]["payload"]["action"] == "block"
+        assert block_events[0]["payload"].get("cached_advisory_override") is not True
+
+    def test_cached_advisory_merge_preserves_action_change_receipt_and_event_contract(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        store = GuardStore(tmp_path / "home")
+        now = _now()
+        receipt = GuardReceipt(
+            receipt_id="cached-action-change-receipt",
+            timestamp=now,
+            harness="guard-cli",
+            artifact_id="guard-cli:project:package-request:npm-change",
+            artifact_hash="sha256:cached-action-change",
+            policy_decision="allow",
+            capabilities_summary="Package allowed before cached advisory refresh.",
+            changed_capabilities=("badpkg@1.0.0",),
+            provenance_summary="Initial package authority allowed execution.",
+            artifact_name="npm install badpkg@1.0.0",
+            source_scope="project",
         )
+        store.add_receipt(receipt)
+        payload: dict[str, object] = {
+            "request": {"executor": "npm", "install_kind": "install"},
+            "verdict": {
+                "action": "allow",
+                "reason": "Initial package authority allowed execution.",
+                "risk_signals": [],
+                "matched_advisories": [],
+                "blocking": False,
+            },
+            "matched_advisories": [],
+            "executed": False,
+            "dry_run": False,
+            "receipt": receipt.to_dict(),
+        }
+        cached_verdict = protect.ProtectVerdict(
+            action="block",
+            reason="Cached advisory blocks execution.",
+            risk_signals=("Cached advisory blocks execution.",),
+            matched_advisories=({"id": "adv-action-change", "action": "block"},),
+        )
+
+        merged_payload, returncode = protect._merge_cached_advisory_into_package_payload(
+            (payload, 0),
+            cached_verdict=cached_verdict,
+            requested_dry_run=False,
+            store=store,
+            now=now,
+        )
+
+        assert returncode == 2
+        assert merged_payload["verdict"]["action"] == "block"
+        assert merged_payload["receipt"]["policy_decision"] == "block"
+        stored_receipts = store.list_receipts(limit=10)
+        assert len(stored_receipts) == 1
+        assert stored_receipts[0]["policy_decision"] == "block"
+        events = store.list_events(event_name="install_time_block")
+        assert len(events) == 1
+        assert events[0]["payload"]["cached_advisory_override"] is True
 
     def test_guard_protect_matches_review_advisory_by_remote_endpoint_indicator(
         self,

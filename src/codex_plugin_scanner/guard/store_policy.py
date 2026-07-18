@@ -4,15 +4,697 @@
 
 from __future__ import annotations
 
+from typing import Literal, cast
+
 # ruff: noqa: F403,F405
+from .action_lattice import guard_action_severity
 from .memory_pattern_fingerprint import (
     build_exact_command_memory_artifact_id,
+    build_exact_shell_command_memory_artifact_id,
     build_memory_pattern_fingerprint,
 )
+from .models import GUARD_ACTION_VALUES
+from .runtime.approval_context import approval_context_tokens_validation_reason
 from .store_base import *
+from .store_event_receipts import _local_once_approval_is_reusable, _verify_local_once_approval
+
+_NON_CONSUMING_POLICY_MATCH_LIMIT = 256
+_APPROVAL_REUSE_DIAGNOSTIC_LIMIT = 32
+_APPROVAL_CONTEXT_SQL_PATTERN = "guard-approval-context:v1:%"
+_POLICY_LOOKUP_COLUMNS = """
+    decision_id, harness, scope, artifact_id, action, artifact_hash, workspace, publisher, source,
+    reason, owner, expires_at, updated_at, integrity_version, integrity_generation,
+    payload_hash, payload_mac, integrity_key_id, signed_at
+"""
+_LOCAL_REUSE_DIAGNOSTIC_COLUMNS = """
+    approval_id, request_id, harness, artifact_id, artifact_hash, workspace, publisher,
+    action, created_at, expires_at, claimed_at, integrity_version, payload_hash, payload_mac,
+    integrity_key_id, signed_at
+"""
+_POLICY_REUSE_DIAGNOSTIC_COLUMNS = _POLICY_LOOKUP_COLUMNS
+
+_SqlProbe = tuple[str, tuple[object, ...], str]
+
+
+def _memory_artifact_is_shell_command(
+    artifact_type: str | None,
+    artifact_name: str | None,
+) -> bool:
+    normalized_type = artifact_type.strip().casefold() if isinstance(artifact_type, str) else ""
+    if normalized_type in {"bash", "shell", "shell_command"}:
+        return True
+    if normalized_type != "tool_action_request" or not isinstance(artifact_name, str):
+        return False
+    normalized_name = artifact_name.strip().casefold()
+    return normalized_name in {"bash", "shell"} or normalized_name.startswith(("bash ", "shell "))
+
+
+def _distinct_non_null(values: Sequence[str | None]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(value for value in values if value is not None))
+
+
+def _execute_unordered_bounded_probes(
+    connection: sqlite3.Connection,
+    *,
+    table: str,
+    columns: str,
+    probes: Sequence[_SqlProbe],
+    limit: int,
+    current_time: str,
+    explain: bool,
+) -> list[sqlite3.Row]:
+    """Execute exact probes while bounding each branch by the remaining cap."""
+
+    rows: list[sqlite3.Row] = []
+    for predicate, parameters, index_name in probes:
+        remaining = limit - len(rows)
+        query = f"""
+            select {columns}
+            from {table} indexed by {index_name}
+            where {predicate}
+              and (expires_at is null or julianday(expires_at) > julianday(?))
+            limit ?
+        """
+        if explain:
+            rows.extend(
+                connection.execute(
+                    f"explain query plan {query}",
+                    (*parameters, current_time, limit),
+                ).fetchall()
+            )
+            continue
+        if remaining <= 0:
+            break
+        rows.extend(connection.execute(query, (*parameters, current_time, remaining)).fetchall())
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _execute_ordered_probe_groups(
+    connection: sqlite3.Connection,
+    *,
+    table: str,
+    columns: str,
+    probe_groups: Sequence[Sequence[_SqlProbe]],
+    order_column: str,
+    id_column: str,
+    limit: int,
+    explain: bool,
+) -> list[sqlite3.Row]:
+    """Merge indexed priority groups without a SQL CASE sort.
+
+    Probes within a group are disjoint (for example, the requested harness and
+    the wildcard harness).  Each can therefore read at most ``limit`` rows in
+    index order before the small in-memory merge.  Groups are concatenated in
+    the same precedence order previously expressed by ``ORDER BY CASE``.
+    """
+
+    rows: list[sqlite3.Row] = []
+    for probes in probe_groups:
+        group_rows: list[sqlite3.Row] = []
+        for predicate, parameters, index_name in probes:
+            query = f"""
+                select {columns}
+                from {table} indexed by {index_name}
+                where {predicate}
+                order by {order_column} desc, {id_column} desc
+                limit ?
+            """
+            if explain:
+                rows.extend(
+                    connection.execute(
+                        f"explain query plan {query}",
+                        (*parameters, limit),
+                    ).fetchall()
+                )
+                continue
+            group_rows.extend(connection.execute(query, (*parameters, limit)).fetchall())
+        if explain:
+            continue
+        group_rows.sort(
+            key=lambda row: (str(row[order_column]), row[id_column]),
+            reverse=True,
+        )
+        remaining = limit - len(rows)
+        if remaining <= 0:
+            break
+        rows.extend(group_rows[:remaining])
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _hash_partition_probes(
+    *,
+    base_predicate: str,
+    base_parameters: tuple[object, ...],
+    exact_hashes: Sequence[str | None],
+    exact_index: str,
+    legacy_index: str | None,
+    exact_first: bool = False,
+) -> list[_SqlProbe]:
+    """Partition nullable, exact, and legacy hashes into disjoint probes.
+
+    ``exact_first`` is used for scopes whose equal-action precedence is exact
+    context, then family-bound context. Artifact and publisher probes retain
+    their established nullable-first ordering.
+    """
+
+    nullable_probe: _SqlProbe = (
+        f"{base_predicate} and artifact_hash is null",
+        base_parameters,
+        exact_index,
+    )
+    distinct_hashes = _distinct_non_null(exact_hashes)
+    exact_probes: list[_SqlProbe] = [
+        (
+            f"{base_predicate} and artifact_hash = ?",
+            (*base_parameters, exact_hash),
+            exact_index,
+        )
+        for exact_hash in distinct_hashes
+    ]
+    probes = [*exact_probes, nullable_probe] if exact_first else [nullable_probe, *exact_probes]
+    if legacy_index is not None:
+        legacy_predicate = (
+            f"{base_predicate} and artifact_hash is not null "
+            f"and artifact_hash not like '{_APPROVAL_CONTEXT_SQL_PATTERN}'"
+        )
+        legacy_parameters = list(base_parameters)
+        for exact_hash in distinct_hashes:
+            legacy_predicate += " and artifact_hash <> ?"
+            legacy_parameters.append(exact_hash)
+        probes.append((legacy_predicate, tuple(legacy_parameters), legacy_index))
+    return probes
+
+
+def _bounded_non_consuming_policy_rows(
+    connection: sqlite3.Connection,
+    *,
+    harness: str,
+    artifact_id: str | None,
+    artifact_hash: str | None,
+    runtime_exact_match_key: str | None,
+    workspace_key: str | None,
+    workspace: str | None,
+    publisher: str | None,
+    action_family_key: str | None,
+    current_time: str,
+    _explain: bool = False,
+) -> list[sqlite3.Row]:
+    """Read at most one-over-limit matches through disjoint exact probes.
+
+    Every branch fixes the scope, harness selector, scope selector, and hash
+    partition.  This prevents a miss for one artifact from walking all rows for
+    the same harness.  Within workspace, harness, and global scopes, exact
+    artifact selectors precede family selectors, exact hashes precede nullable
+    or legacy family matches, and broad selectors run last.  Legacy non-context
+    hashes use dedicated partial indexes, while nullable and exact hashes use
+    the regular scope indexes.
+    """
+
+    probes: list[_SqlProbe] = []
+    harness_selectors = _distinct_non_null((harness, "*"))
+    if artifact_id is not None:
+        for harness_selector in harness_selectors:
+            probes.extend(
+                _hash_partition_probes(
+                    base_predicate="scope = 'artifact' and artifact_id = ? and harness = ?",
+                    base_parameters=(artifact_id, harness_selector),
+                    exact_hashes=(artifact_hash, runtime_exact_match_key),
+                    exact_index="idx_policy_decisions_lookup_artifact",
+                    legacy_index=None,
+                )
+            )
+
+    workspace_selectors = _distinct_non_null((workspace_key, workspace))
+    for workspace_selector in workspace_selectors:
+        for harness_selector in harness_selectors:
+            for artifact_selector in _distinct_non_null((artifact_id, action_family_key)):
+                probes.extend(
+                    _hash_partition_probes(
+                        base_predicate=("scope = 'workspace' and workspace = ? and harness = ? and artifact_id = ?"),
+                        base_parameters=(workspace_selector, harness_selector, artifact_selector),
+                        exact_hashes=(artifact_hash,),
+                        exact_index="idx_policy_decisions_lookup_workspace",
+                        legacy_index=None,
+                        exact_first=True,
+                    )
+                )
+            probes.append(
+                (
+                    "scope = 'workspace' and workspace = ? and harness = ? and artifact_id is null",
+                    (workspace_selector, harness_selector),
+                    "idx_policy_decisions_lookup_workspace",
+                )
+            )
+
+    if publisher is not None:
+        for harness_selector in harness_selectors:
+            probes.extend(
+                _hash_partition_probes(
+                    base_predicate="scope = 'publisher' and publisher = ? and harness = ?",
+                    base_parameters=(publisher, harness_selector),
+                    exact_hashes=(artifact_hash,),
+                    exact_index="idx_policy_decisions_lookup_publisher",
+                    legacy_index="idx_policy_decisions_lookup_publisher_legacy",
+                )
+            )
+
+    for harness_selector in harness_selectors:
+        for artifact_selector in _distinct_non_null((artifact_id, action_family_key)):
+            probes.extend(
+                _hash_partition_probes(
+                    base_predicate="scope = 'harness' and harness = ? and artifact_id = ?",
+                    base_parameters=(harness_selector, artifact_selector),
+                    exact_hashes=(artifact_hash, runtime_exact_match_key),
+                    exact_index="idx_policy_decisions_lookup_harness",
+                    legacy_index="idx_policy_decisions_lookup_harness_legacy",
+                    exact_first=True,
+                )
+            )
+        probes.extend(
+            _hash_partition_probes(
+                base_predicate="scope = 'harness' and harness = ? and artifact_id is null",
+                base_parameters=(harness_selector,),
+                exact_hashes=(artifact_hash, runtime_exact_match_key),
+                exact_index="idx_policy_decisions_lookup_harness",
+                legacy_index="idx_policy_decisions_lookup_harness_legacy",
+                exact_first=True,
+            )
+        )
+
+    for harness_selector in harness_selectors:
+        for artifact_selector in _distinct_non_null((artifact_id, action_family_key)):
+            probes.extend(
+                _hash_partition_probes(
+                    base_predicate="scope = 'global' and harness = ? and artifact_id = ?",
+                    base_parameters=(harness_selector, artifact_selector),
+                    exact_hashes=(artifact_hash, runtime_exact_match_key),
+                    exact_index="idx_policy_decisions_lookup_global",
+                    legacy_index="idx_policy_decisions_lookup_global_legacy",
+                    exact_first=True,
+                )
+            )
+        probes.extend(
+            _hash_partition_probes(
+                base_predicate="scope = 'global' and harness = ? and artifact_id is null",
+                base_parameters=(harness_selector,),
+                exact_hashes=(artifact_hash, runtime_exact_match_key),
+                exact_index="idx_policy_decisions_lookup_global",
+                legacy_index="idx_policy_decisions_lookup_global_legacy",
+                exact_first=True,
+            )
+        )
+
+    return _execute_unordered_bounded_probes(
+        connection,
+        table="policy_decisions",
+        columns=_POLICY_LOOKUP_COLUMNS,
+        probes=probes,
+        limit=_NON_CONSUMING_POLICY_MATCH_LIMIT + 1,
+        current_time=current_time,
+        explain=_explain,
+    )
+
+
+def _append_exclusions(
+    predicate: str,
+    parameters: tuple[object, ...],
+    *,
+    column: str,
+    values: Sequence[str | None],
+) -> tuple[str, tuple[object, ...]]:
+    """Exclude nullable values without introducing an OR predicate."""
+
+    next_parameters = list(parameters)
+    for value in _distinct_non_null(values):
+        predicate += f" and {column} is not ?"
+        next_parameters.append(value)
+    return predicate, tuple(next_parameters)
+
+
+def _bounded_local_approval_reuse_diagnostic_rows(
+    connection: sqlite3.Connection,
+    *,
+    harness: str,
+    artifact_id: str,
+    artifact_family: str | None,
+    artifact_hash: str | None,
+    _explain: bool = False,
+) -> list[sqlite3.Row]:
+    """Return local near matches in legacy diagnostic precedence order."""
+
+    identity_selectors = _distinct_non_null((artifact_id, artifact_family))
+    probe_groups: list[list[_SqlProbe]] = [
+        [
+            (
+                "claimed_at is null and action = 'allow' and harness = ? and artifact_id = ?",
+                (harness, identity_selector),
+                "idx_guard_local_once_diagnostic_artifact",
+            )
+        ]
+        for identity_selector in identity_selectors
+    ]
+    if artifact_hash is not None:
+        hash_predicate, hash_parameters = _append_exclusions(
+            "claimed_at is null and action = 'allow' and harness = ? and artifact_hash = ?",
+            (harness, artifact_hash),
+            column="artifact_id",
+            values=identity_selectors,
+        )
+        probe_groups.append(
+            [
+                (
+                    hash_predicate,
+                    hash_parameters,
+                    "idx_guard_local_once_diagnostic_hash",
+                )
+            ]
+        )
+    return _execute_ordered_probe_groups(
+        connection,
+        table="guard_local_once_approvals",
+        columns=_LOCAL_REUSE_DIAGNOSTIC_COLUMNS,
+        probe_groups=probe_groups,
+        order_column="created_at",
+        id_column="approval_id",
+        limit=_APPROVAL_REUSE_DIAGNOSTIC_LIMIT,
+        explain=_explain,
+    )
+
+
+def _bounded_policy_approval_reuse_diagnostic_rows(
+    connection: sqlite3.Connection,
+    *,
+    harness: str,
+    artifact_id: str,
+    artifact_family: str | None,
+    artifact_hash: str | None,
+    publisher: str | None,
+    _explain: bool = False,
+) -> list[sqlite3.Row]:
+    """Return saved-policy near matches through ordered exact probes."""
+
+    harness_selectors = _distinct_non_null((harness, "*"))
+    identity_selectors = _distinct_non_null((artifact_id, artifact_family))
+    probe_groups: list[list[_SqlProbe]] = []
+    for identity_selector in identity_selectors:
+        probe_groups.append(
+            [
+                (
+                    "action = ? and harness = ? and artifact_id = ?",
+                    (action, harness_selector, identity_selector),
+                    "idx_policy_decisions_reuse_artifact",
+                )
+                for harness_selector in harness_selectors
+                for action in GUARD_ACTION_VALUES
+            ]
+        )
+
+    if artifact_hash is not None:
+        hash_probes: list[_SqlProbe] = []
+        for harness_selector in harness_selectors:
+            for action in GUARD_ACTION_VALUES:
+                hash_predicate, hash_parameters = _append_exclusions(
+                    "action = ? and harness = ? and artifact_hash = ?",
+                    (action, harness_selector, artifact_hash),
+                    column="artifact_id",
+                    values=identity_selectors,
+                )
+                hash_probes.append(
+                    (
+                        hash_predicate,
+                        hash_parameters,
+                        "idx_policy_decisions_reuse_hash",
+                    )
+                )
+        probe_groups.append(hash_probes)
+
+    broad_probes: list[_SqlProbe] = []
+    for harness_selector in harness_selectors:
+        for scope, index_name in (
+            ("harness", "idx_policy_decisions_diagnostic_harness_broad"),
+            ("global", "idx_policy_decisions_diagnostic_global_broad"),
+        ):
+            broad_predicate, broad_parameters = _append_exclusions(
+                f"scope = '{scope}' and action = 'allow' and artifact_id is null and harness = ?",
+                (harness_selector,),
+                column="artifact_hash",
+                values=(artifact_hash,),
+            )
+            broad_probes.append((broad_predicate, broad_parameters, index_name))
+            for action in GUARD_ACTION_VALUES:
+                if action == "allow":
+                    continue
+                non_allow_predicate, non_allow_parameters = _append_exclusions(
+                    f"scope = '{scope}' and action = ? and harness = ? and artifact_id is null",
+                    (action, harness_selector),
+                    column="artifact_hash",
+                    values=(artifact_hash,),
+                )
+                broad_probes.append(
+                    (
+                        non_allow_predicate,
+                        non_allow_parameters,
+                        "idx_policy_decisions_reuse_artifact",
+                    )
+                )
+        if publisher is not None:
+            publisher_predicate, publisher_parameters = _append_exclusions(
+                "scope = 'publisher' and action = 'allow' and harness = ? and publisher = ?",
+                (harness_selector, publisher),
+                column="artifact_id",
+                values=identity_selectors,
+            )
+            publisher_predicate, publisher_parameters = _append_exclusions(
+                publisher_predicate,
+                publisher_parameters,
+                column="artifact_hash",
+                values=(artifact_hash,),
+            )
+            broad_probes.append(
+                (
+                    publisher_predicate,
+                    publisher_parameters,
+                    "idx_policy_decisions_diagnostic_publisher",
+                )
+            )
+            for action in GUARD_ACTION_VALUES:
+                if action == "allow":
+                    continue
+                non_allow_publisher_predicate, non_allow_publisher_parameters = _append_exclusions(
+                    "scope = 'publisher' and action = ? and harness = ? and publisher = ?",
+                    (action, harness_selector, publisher),
+                    column="artifact_id",
+                    values=identity_selectors,
+                )
+                non_allow_publisher_predicate, non_allow_publisher_parameters = _append_exclusions(
+                    non_allow_publisher_predicate,
+                    non_allow_publisher_parameters,
+                    column="artifact_hash",
+                    values=(artifact_hash,),
+                )
+                broad_probes.append(
+                    (
+                        non_allow_publisher_predicate,
+                        non_allow_publisher_parameters,
+                        "idx_policy_decisions_reuse_publisher",
+                    )
+                )
+    probe_groups.append(broad_probes)
+
+    return _execute_ordered_probe_groups(
+        connection,
+        table="policy_decisions",
+        columns=_POLICY_REUSE_DIAGNOSTIC_COLUMNS,
+        probe_groups=probe_groups,
+        order_column="updated_at",
+        id_column="decision_id",
+        limit=_APPROVAL_REUSE_DIAGNOSTIC_LIMIT,
+        explain=_explain,
+    )
+
+
+def _most_restrictive_policy_lookup(
+    lookups: Sequence[PolicyDecisionLookupResult],
+) -> PolicyDecisionLookupResult:
+    """Compose non-consuming direct, exact-command, and memory matches."""
+
+    if not lookups:
+        raise ValueError("at least one policy lookup is required")
+    selected_lookup = lookups[0]
+    selected_decision = selected_lookup["decision"]
+    ignored_integrity = selected_lookup.get("ignored_local_integrity")
+    revisions = {lookup["authority_revision"] for lookup in lookups}
+    authority_revision = next(iter(revisions)) if len(revisions) == 1 else -1
+    for lookup in lookups[1:]:
+        decision = lookup["decision"]
+        if ignored_integrity is None and lookup.get("ignored_local_integrity") is not None:
+            ignored_integrity = lookup["ignored_local_integrity"]
+        if decision is None:
+            continue
+        if selected_decision is None or guard_action_severity(
+            decision.get("action"),
+            unknown_action="block",
+        ) > guard_action_severity(selected_decision.get("action"), unknown_action="block"):
+            selected_lookup = lookup
+            selected_decision = decision
+    if selected_decision is not None:
+        selected_decision = {
+            **selected_decision,
+            "_approval_authority_revision": authority_revision,
+        }
+    return {
+        "decision": selected_decision,
+        "ignored_local_integrity": ignored_integrity,
+        "trust_status": selected_lookup["trust_status"],
+        "authority_revision": authority_revision,
+    }
+
+
+def _approval_authority_revision(connection: sqlite3.Connection) -> int:
+    row = connection.execute("select revision from guard_approval_authority_revision where singleton = 1").fetchone()
+    if row is None:
+        return -1
+    revision = row["revision"]
+    return revision if isinstance(revision, int) and not isinstance(revision, bool) else -1
 
 
 class StorePolicyMixin:
+    def reconcile_managed_policy_bundle_keyring_state(
+        self,
+        *,
+        managed_keyring: Mapping[str, object] | None,
+        quarantined_local_keyring: Mapping[str, object] | None,
+        provenance: Mapping[str, object] | None,
+        now: str,
+        force_clear: bool = False,
+    ) -> bool:
+        """Atomically reconcile the user-side mirror of machine key authority.
+
+        A configured managed domain writes its diagnostic mirror, empty local
+        anchor slot, and provenance marker in one transaction. Cleanup may be
+        forced by an authorized managed repair/deactivation so deleting the
+        user-writable marker cannot preserve a replacement local anchor.
+        """
+
+        state_keys = (
+            "managed_policy_bundle_keyring_provenance",
+            "managed_policy_bundle_keyring_mirror",
+            "policy_bundle_keyring",
+        )
+        normalized_now = _canonical_utc_timestamp(now)
+        configured = managed_keyring is not None and quarantined_local_keyring is not None and provenance is not None
+        if (
+            any(item is not None for item in (managed_keyring, quarantined_local_keyring, provenance))
+            and not configured
+        ):
+            raise ValueError("managed_policy_bundle_keyring_reconcile_incomplete")
+        with self._connect() as connection:
+            connection.execute("begin immediate")
+            if not configured:
+                marker = connection.execute(
+                    "select 1 from sync_state where state_key = ?",
+                    (state_keys[0],),
+                ).fetchone()
+                if marker is None and not force_clear:
+                    connection.rollback()
+                    return False
+                placeholders = ",".join("?" for _ in state_keys)
+                connection.execute(
+                    f"delete from sync_state where state_key in ({placeholders})",
+                    state_keys,
+                )
+                return True
+            assert managed_keyring is not None
+            assert quarantined_local_keyring is not None
+            assert provenance is not None
+            payloads = {
+                state_keys[0]: dict(provenance),
+                state_keys[1]: dict(managed_keyring),
+                state_keys[2]: dict(quarantined_local_keyring),
+            }
+            encoded = {state_key: json.dumps(payload, allow_nan=False) for state_key, payload in payloads.items()}
+            for state_key, payload_json in encoded.items():
+                connection.execute(
+                    """
+                    insert into sync_state (state_key, payload_json, updated_at)
+                    values (?, ?, ?)
+                    on conflict(state_key) do update set
+                      payload_json = excluded.payload_json,
+                      updated_at = excluded.updated_at
+                    """,
+                    (state_key, payload_json, normalized_now),
+                )
+        return True
+
+    @staticmethod
+    def _materialized_policy_bundle_row_identity(row: sqlite3.Row) -> tuple[object, ...]:
+        return (
+            row["harness"],
+            row["scope"],
+            row["artifact_id"],
+            row["artifact_hash"],
+            row["workspace"],
+            row["publisher"],
+            row["action"],
+            row["reason"],
+            row["owner"],
+            row["source"],
+            row["expires_at"],
+        )
+
+    def _cached_policy_bundle_decision_identities(
+        self,
+        *,
+        now: float | None = None,
+    ) -> frozenset[tuple[object, ...]]:
+        """Return only rows derivable from the currently authorized signed bundle."""
+
+        from .policy_bundle_decisions import build_policy_bundle_decisions
+        from .synced_policy import SyncPayloadReader, cached_policy_bundle_validation
+
+        policy_bundle = self.get_sync_payload("policy_bundle")
+        if not isinstance(policy_bundle, dict) or not policy_bundle:
+            return frozenset()
+        validated_bundle, _reason = cached_policy_bundle_validation(
+            cast(SyncPayloadReader, cast(object, self)),
+            policy_bundle,
+            now=now,
+        )
+        if validated_bundle is None:
+            return frozenset()
+        try:
+            device_metadata = self.get_device_metadata()
+            decisions = build_policy_bundle_decisions(
+                validated_bundle,
+                device_id=str(device_metadata["installation_id"]),
+                device_name=str(device_metadata["device_label"]),
+            )
+        except (KeyError, OSError, RuntimeError, TypeError, ValueError):
+            return frozenset()
+        identities: set[tuple[object, ...]] = set()
+        for decision in decisions:
+            artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
+            identities.add(
+                (
+                    decision.harness,
+                    decision.scope,
+                    artifact_id,
+                    artifact_hash,
+                    workspace,
+                    publisher,
+                    decision.action,
+                    decision.reason,
+                    decision.owner,
+                    decision.source,
+                    (_canonical_utc_timestamp(decision.expires_at) if decision.expires_at is not None else None),
+                )
+            )
+        return frozenset(identities)
+
     def upsert_policy(
         self,
         decision: PolicyDecision,
@@ -21,6 +703,8 @@ class StorePolicyMixin:
         approval_gate_grant: ApprovalGateGrant | None = None,
         remote_write_authorized: bool = False,
     ) -> None:
+        now = _canonical_utc_timestamp(now)
+        expires_at = _canonical_utc_timestamp(decision.expires_at) if decision.expires_at is not None else None
         validate_policy_write_authority(
             decision,
             remote_write_authorized=remote_write_authorized,
@@ -75,7 +759,7 @@ class StorePolicyMixin:
                     decision.reason,
                     decision.owner,
                     decision.source,
-                    decision.expires_at,
+                    expires_at,
                     now,
                     None,
                     None,
@@ -113,6 +797,145 @@ class StorePolicyMixin:
         approval_gate_grant: ApprovalGateGrant | None = None,
         remote_write_authorized: bool = False,
     ) -> None:
+        now, rows = self._prepared_remote_policy_rows(
+            decisions,
+            now,
+            approval_gate_grant=approval_gate_grant,
+            remote_write_authorized=remote_write_authorized,
+        )
+        with self._connect() as connection:
+            self._replace_remote_policy_rows_locked(connection, rows)
+
+    def apply_policy_bundle_authority(
+        self,
+        decisions: list[PolicyDecision],
+        now: str,
+        *,
+        policy_bundle: Mapping[str, object],
+        policy_bundle_keyring: Mapping[str, object],
+        cloud_exceptions: Sequence[Mapping[str, object]],
+        policy_bundle_ack: Mapping[str, object],
+        policy_bundle_checkpoint: Mapping[str, object],
+        update_last_good: bool,
+        policy_bundle_last_error: Mapping[str, object] | None = None,
+        approval_gate_grant: ApprovalGateGrant | None = None,
+        remote_write_authorized: bool = False,
+    ) -> bool:
+        """Atomically activate one authenticated policy bundle and its rows.
+
+        The cached bundle is itself enforcement authority because policy
+        defaults are read directly from it.  It must therefore become current
+        in the same SQLite transaction as every materialized decision,
+        bundle-derived exception, acknowledgement, and trust checkpoint.
+        Preparing and JSON-encoding all inputs before the write transaction
+        also guarantees malformed rule expiry or payload data cannot leave a
+        partially activated bundle behind.
+        """
+
+        normalized_now, rows = self._prepared_remote_policy_rows(
+            decisions,
+            now,
+            approval_gate_grant=approval_gate_grant,
+            remote_write_authorized=remote_write_authorized,
+        )
+        from .policy_bundle_parser import policy_bundle_acceptance_checkpoint
+
+        normalized_checkpoint = policy_bundle_acceptance_checkpoint(dict(policy_bundle))
+        if dict(policy_bundle_checkpoint) != normalized_checkpoint:
+            return False
+        state_payloads: dict[str, object] = {
+            "cloud_exceptions": [dict(item) for item in cloud_exceptions],
+            "policy": {},
+            "policy_bundle": dict(policy_bundle),
+            "policy_bundle_ack": dict(policy_bundle_ack),
+            "policy_bundle_acceptance_checkpoint": normalized_checkpoint,
+            "policy_bundle_keyring": dict(policy_bundle_keyring),
+            "policy_bundle_last_error": dict(policy_bundle_last_error or {}),
+            "team_policy_pack": {},
+        }
+        if update_last_good:
+            state_payloads["policy_bundle_last_good"] = dict(policy_bundle)
+        encoded_payloads = {
+            state_key: json.dumps(payload, allow_nan=False) for state_key, payload in state_payloads.items()
+        }
+        with self._connect() as connection:
+            connection.execute("begin immediate")
+            checkpoint_row = connection.execute(
+                "select payload_json from sync_state where state_key = ?",
+                ("policy_bundle_acceptance_checkpoint",),
+            ).fetchone()
+            if checkpoint_row is not None:
+                try:
+                    existing_checkpoint = json.loads(str(checkpoint_row["payload_json"]))
+                except json.JSONDecodeError:
+                    connection.rollback()
+                    return False
+                if not isinstance(existing_checkpoint, dict) or not existing_checkpoint:
+                    connection.rollback()
+                    return False
+                from .policy_bundle_parser import policy_bundle_is_version_downgrade
+
+                if policy_bundle_is_version_downgrade(existing_checkpoint, dict(policy_bundle)):
+                    connection.rollback()
+                    return False
+            self._replace_remote_policy_rows_locked(connection, rows)
+            for state_key, payload_json in encoded_payloads.items():
+                connection.execute(
+                    """
+                    insert into sync_state (state_key, payload_json, updated_at)
+                    values (?, ?, ?)
+                    on conflict(state_key) do update set
+                      payload_json = excluded.payload_json,
+                      updated_at = excluded.updated_at
+                    """,
+                    (state_key, payload_json, normalized_now),
+                )
+        return True
+
+    def clear_policy_bundle_authority(
+        self,
+        now: str,
+        *,
+        policy_bundle_last_error: Mapping[str, object],
+    ) -> None:
+        """Atomically remove all cached and materialized remote authority."""
+
+        normalized_now = _canonical_utc_timestamp(now)
+        state_payloads: dict[str, object] = {
+            "cloud_exceptions": [],
+            "policy": {},
+            "policy_bundle_last_error": dict(policy_bundle_last_error),
+            "team_policy_pack": {},
+        }
+        encoded_payloads = {
+            state_key: json.dumps(payload, allow_nan=False) for state_key, payload in state_payloads.items()
+        }
+        with self._connect() as connection:
+            connection.execute("begin immediate")
+            self._replace_remote_policy_rows_locked(connection, ())
+            connection.execute("delete from sync_state where state_key in ('policy_bundle', 'policy_bundle_ack')")
+            for state_key, payload_json in encoded_payloads.items():
+                connection.execute(
+                    """
+                    insert into sync_state (state_key, payload_json, updated_at)
+                    values (?, ?, ?)
+                    on conflict(state_key) do update set
+                      payload_json = excluded.payload_json,
+                      updated_at = excluded.updated_at
+                    """,
+                    (state_key, payload_json, normalized_now),
+                )
+
+    def _prepared_remote_policy_rows(
+        self,
+        decisions: Sequence[PolicyDecision],
+        now: str,
+        *,
+        approval_gate_grant: ApprovalGateGrant | None,
+        remote_write_authorized: bool,
+    ) -> tuple[str, list[tuple[object, ...]]]:
+        normalized_now = _canonical_utc_timestamp(now)
+        rows: list[tuple[object, ...]] = []
         for decision in decisions:
             validate_policy_write_authority(
                 decision,
@@ -122,46 +945,55 @@ class StorePolicyMixin:
                 self.guard_home,
                 decision=decision,
                 approval_gate_grant=approval_gate_grant,
-                now=now,
+                now=normalized_now,
             )
-        with self._connect() as connection:
-            connection.execute(
-                f"delete from policy_decisions where source in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}",
-                _REMOTE_POLICY_SOURCE_PARAMS,
-            )
-            for decision in decisions:
-                _validate_scoped_policy_artifact_target(decision.scope, decision.artifact_id)
-                artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
-                connection.execute(
-                    """
-                    insert into policy_decisions (
-                      harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,
-                      expires_at, updated_at, integrity_version, integrity_generation, payload_hash, payload_mac,
-                      integrity_key_id, signed_at
-                    )
-                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        decision.harness,
-                        decision.scope,
-                        artifact_id,
-                        artifact_hash,
-                        workspace,
-                        publisher,
-                        decision.action,
-                        decision.reason,
-                        decision.owner,
-                        decision.source,
-                        decision.expires_at,
-                        now,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                    ),
+            expires_at = _canonical_utc_timestamp(decision.expires_at) if decision.expires_at is not None else None
+            _validate_scoped_policy_artifact_target(decision.scope, decision.artifact_id)
+            artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
+            rows.append(
+                (
+                    decision.harness,
+                    decision.scope,
+                    artifact_id,
+                    artifact_hash,
+                    workspace,
+                    publisher,
+                    decision.action,
+                    decision.reason,
+                    decision.owner,
+                    decision.source,
+                    expires_at,
+                    normalized_now,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
                 )
+            )
+        return normalized_now, rows
+
+    @staticmethod
+    def _replace_remote_policy_rows_locked(
+        connection: sqlite3.Connection,
+        rows: Sequence[tuple[object, ...]],
+    ) -> None:
+        connection.execute(
+            f"delete from policy_decisions where source in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}",
+            _REMOTE_POLICY_SOURCE_PARAMS,
+        )
+        connection.executemany(
+            """
+            insert into policy_decisions (
+              harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,
+              expires_at, updated_at, integrity_version, integrity_generation, payload_hash, payload_mac,
+              integrity_key_id, signed_at
+            )
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
 
     def resolve_policy(
         self,
@@ -175,6 +1007,7 @@ class StorePolicyMixin:
         memory_command: str | None = None,
         memory_artifact_type: str | None = None,
         memory_artifact_name: str | None = None,
+        consume_one_shot: bool = True,
     ) -> str | None:
         lookup = self.resolve_policy_decision_lookup_with_memory_pattern(
             harness,
@@ -186,6 +1019,7 @@ class StorePolicyMixin:
             memory_command=memory_command,
             memory_artifact_type=memory_artifact_type,
             memory_artifact_name=memory_artifact_name,
+            consume_one_shot=consume_one_shot,
         )
         decision = lookup["decision"]
         return str(decision["action"]) if decision is not None else None
@@ -203,6 +1037,7 @@ class StorePolicyMixin:
         memory_command: str | None = None,
         memory_artifact_type: str | None = None,
         memory_artifact_name: str | None = None,
+        consume_one_shot: bool = True,
     ) -> PolicyDecisionLookupResult:
         direct_lookup = self.resolve_policy_decision_lookup(
             harness,
@@ -212,25 +1047,37 @@ class StorePolicyMixin:
             publisher=publisher,
             now=now,
             runtime_exact_match_context=runtime_exact_match_context,
+            consume_one_shot=consume_one_shot,
         )
-        if direct_lookup["decision"] is not None or direct_lookup.get("ignored_local_integrity") is not None:
+        candidate_lookups = [direct_lookup]
+        if consume_one_shot and (
+            direct_lookup["decision"] is not None or direct_lookup.get("ignored_local_integrity") is not None
+        ):
             return direct_lookup
-        exact_command_artifact_id = build_exact_command_memory_artifact_id(memory_command)
-        if exact_command_artifact_id is not None and exact_command_artifact_id != artifact_id:
-            exact_command_lookup = self.resolve_policy_decision_lookup(
-                harness,
-                exact_command_artifact_id,
-                artifact_hash=artifact_hash,
-                workspace=workspace,
-                publisher=publisher,
-                now=now,
-                runtime_exact_match_context=runtime_exact_match_context,
+        if _memory_artifact_is_shell_command(memory_artifact_type, memory_artifact_name):
+            exact_command_artifact_ids = (
+                build_exact_shell_command_memory_artifact_id(memory_command),
+                build_exact_command_memory_artifact_id(memory_command),
             )
-            if (
-                exact_command_lookup["decision"] is not None
-                or exact_command_lookup.get("ignored_local_integrity") is not None
-            ):
-                return exact_command_lookup
+            for exact_command_artifact_id in _distinct_non_null(exact_command_artifact_ids):
+                if exact_command_artifact_id == artifact_id:
+                    continue
+                exact_command_lookup = self.resolve_policy_decision_lookup(
+                    harness,
+                    exact_command_artifact_id,
+                    artifact_hash=artifact_hash,
+                    workspace=workspace,
+                    publisher=publisher,
+                    now=now,
+                    runtime_exact_match_context=runtime_exact_match_context,
+                    consume_one_shot=consume_one_shot,
+                )
+                candidate_lookups.append(exact_command_lookup)
+                if consume_one_shot and (
+                    exact_command_lookup["decision"] is not None
+                    or exact_command_lookup.get("ignored_local_integrity") is not None
+                ):
+                    return exact_command_lookup
         memory_pattern = build_memory_pattern_fingerprint(
             command=memory_command,
             artifact_type=memory_artifact_type,
@@ -239,10 +1086,10 @@ class StorePolicyMixin:
             harness=harness,
         )
         if memory_pattern is None:
-            return direct_lookup
+            return _most_restrictive_policy_lookup(candidate_lookups)
         memory_artifact_id = f"memory:{harness}:{memory_pattern.kind}:{memory_pattern.fingerprint}"
         if memory_artifact_id == artifact_id:
-            return direct_lookup
+            return _most_restrictive_policy_lookup(candidate_lookups)
         memory_lookup = self.resolve_policy_decision_lookup(
             harness,
             memory_artifact_id,
@@ -251,12 +1098,16 @@ class StorePolicyMixin:
             publisher=publisher,
             now=now,
             runtime_exact_match_context=runtime_exact_match_context,
+            consume_one_shot=consume_one_shot,
         )
-        return (
-            memory_lookup
-            if (memory_lookup["decision"] is not None or memory_lookup.get("ignored_local_integrity") is not None)
-            else direct_lookup
-        )
+        candidate_lookups.append(memory_lookup)
+        if consume_one_shot:
+            return (
+                memory_lookup
+                if (memory_lookup["decision"] is not None or memory_lookup.get("ignored_local_integrity") is not None)
+                else direct_lookup
+            )
+        return _most_restrictive_policy_lookup(candidate_lookups)
 
     def resolve_policy_decision_lookup(
         self,
@@ -267,8 +1118,9 @@ class StorePolicyMixin:
         publisher: str | None = None,
         now: str | None = None,
         runtime_exact_match_context: str | None = None,
+        consume_one_shot: bool = True,
     ) -> PolicyDecisionLookupResult:
-        current_time = now or _now()
+        current_time = _canonical_utc_timestamp(now or _now())
         workspace_key = _workspace_policy_key(workspace)
         action_family_key = _artifact_family_key(artifact_id)
         runtime_exact_match_key = (
@@ -279,13 +1131,41 @@ class StorePolicyMixin:
         events: list[tuple[str, dict[str, object]]] = []
         selected_payload: dict[str, object] | None = None
         ignored_local_integrity: dict[str, object] | None = None
+        local_once_integrity_key: bytes | None = None
+        local_once_integrity_key_id: str | None = None
         with self._connect() as connection:
+            starting_authority_revision = _approval_authority_revision(connection)
+
+            def lookup_result(
+                decision: dict[str, object] | None,
+                *,
+                ignored_integrity: dict[str, object] | None,
+                trust_status: dict[str, object],
+            ) -> PolicyDecisionLookupResult:
+                ending_authority_revision = _approval_authority_revision(connection)
+                stable_revision = (
+                    starting_authority_revision if ending_authority_revision == starting_authority_revision else -1
+                )
+                if decision is not None and not consume_one_shot:
+                    decision = {
+                        **decision,
+                        "_approval_authority_revision": stable_revision,
+                    }
+                return {
+                    "decision": decision,
+                    "ignored_local_integrity": ignored_integrity,
+                    "trust_status": trust_status,
+                    "authority_revision": stable_revision,
+                }
+
             local_once_decision = None
+            local_once_hash: str | None = None
+            reported_local_once_failures: set[object] = set()
             local_once_hashes = tuple(
                 dict.fromkeys(hash_value for hash_value in (artifact_hash, runtime_exact_match_key) if hash_value)
             )
             for local_once_hash in local_once_hashes:
-                local_once_decision = self._claim_local_once_approval_locked(
+                local_once_decision, local_once_integrity_failure = self._peek_local_once_approval_lookup_locked(
                     connection,
                     harness=harness,
                     artifact_id=artifact_id,
@@ -294,23 +1174,99 @@ class StorePolicyMixin:
                     publisher=publisher,
                     now=current_time,
                 )
+                if (
+                    local_once_decision is None
+                    and local_once_integrity_failure is not None
+                    and local_once_integrity_failure.get("integrity_status") == "unknown_key"
+                ):
+                    local_once_integrity_key, local_once_integrity_key_id = self._policy_integrity_secret_material(
+                        create=False
+                    )
+                    local_once_decision, local_once_integrity_failure = self._peek_local_once_approval_lookup_locked(
+                        connection,
+                        harness=harness,
+                        artifact_id=artifact_id,
+                        artifact_hash=local_once_hash,
+                        workspace=workspace,
+                        publisher=publisher,
+                        now=current_time,
+                        integrity_key=local_once_integrity_key,
+                        integrity_key_id=local_once_integrity_key_id,
+                    )
+                if local_once_integrity_failure is not None:
+                    if ignored_local_integrity is None:
+                        ignored_local_integrity = local_once_integrity_failure
+                    failure_id = local_once_integrity_failure.get("approval_id")
+                    if failure_id not in reported_local_once_failures:
+                        reported_local_once_failures.add(failure_id)
+                        events.append(
+                            (
+                                "rule.ignored.local_integrity",
+                                {
+                                    **local_once_integrity_failure,
+                                    "message": local_once_integrity_failure.get("integrity_message"),
+                                },
+                            )
+                        )
                 if local_once_decision is not None:
                     break
             if local_once_decision is not None:
                 selected_payload = local_once_decision
+
+            def claim_selected_local_once() -> None:
+                """Consume a selected one-shot only after stronger policy wins are known."""
+
+                nonlocal selected_payload
+                if (
+                    not consume_one_shot
+                    or local_once_decision is None
+                    or selected_payload is not local_once_decision
+                    or local_once_hash is None
+                ):
+                    return
+                claimed = self._claim_local_once_approval_locked(
+                    connection,
+                    harness=harness,
+                    artifact_id=artifact_id,
+                    artifact_hash=local_once_hash,
+                    workspace=workspace,
+                    publisher=publisher,
+                    now=current_time,
+                    integrity_key=local_once_integrity_key,
+                    integrity_key_id=local_once_integrity_key_id,
+                )
+                if claimed is None:
+                    selected_payload = None
+                    return
+                selected_payload = claimed
                 events.append(
                     (
                         "approval.local_once_applied",
                         {
-                            "approval_id": local_once_decision.get("approval_id"),
-                            "request_id": local_once_decision.get("request_id"),
+                            "approval_id": claimed.get("approval_id"),
+                            "request_id": claimed.get("request_id"),
                             "harness": harness,
                             "artifact_id": artifact_id,
                         },
                     )
                 )
-            rows = connection.execute(
-                """
+
+            if not consume_one_shot:
+                rows = _bounded_non_consuming_policy_rows(
+                    connection,
+                    harness=harness,
+                    artifact_id=artifact_id,
+                    artifact_hash=artifact_hash,
+                    runtime_exact_match_key=runtime_exact_match_key,
+                    workspace_key=workspace_key,
+                    workspace=workspace,
+                    publisher=publisher,
+                    action_family_key=action_family_key,
+                    current_time=current_time,
+                )
+            else:
+                rows = connection.execute(
+                    """
                 select decision_id, harness, scope, artifact_id, action, artifact_hash, workspace, publisher, source,
                        reason, owner, expires_at, updated_at, integrity_version, integrity_generation,
                        payload_hash, payload_mac,
@@ -332,10 +1288,19 @@ class StorePolicyMixin:
                       )
                     )
                   )
-                  or (scope = 'publisher' and publisher = ?)
+                  or (
+                    scope = 'publisher' and publisher = ? and (
+                      artifact_hash is null or artifact_hash = ?
+                      or artifact_hash not like 'guard-approval-context:v1:%'
+                    )
+                  )
                   or (
                     scope = 'harness' and (
                       artifact_id is null or artifact_id = ?
+                    ) and (
+                      artifact_hash is null or artifact_hash = ?
+                      or (? is not null and artifact_hash = ?)
+                      or artifact_hash not like 'guard-approval-context:v1:%'
                     )
                   )
                     or (
@@ -343,10 +1308,14 @@ class StorePolicyMixin:
                         artifact_id is null
                         or artifact_id = ?
                         or artifact_id = ?
+                      ) and (
+                        artifact_hash is null or artifact_hash = ?
+                        or (? is not null and artifact_hash = ?)
+                        or artifact_hash not like 'guard-approval-context:v1:%'
                       )
                     )
                 )
-                and (expires_at is null or expires_at > ?)
+                and (expires_at is null or julianday(expires_at) > julianday(?))
                 order by case scope when 'artifact' then 0 when 'workspace' then 1 when 'publisher' then 2
                          when 'harness' then 3 else 4 end,
                          case
@@ -354,75 +1323,144 @@ class StorePolicyMixin:
                            else 1
                          end,
                          updated_at desc
+                limit ?
                 """,
-                (
-                    harness,
-                    artifact_id,
-                    artifact_hash,
-                    artifact_hash,
-                    runtime_exact_match_key,
-                    runtime_exact_match_key,
-                    workspace_key,
-                    workspace,
-                    artifact_id,
-                    action_family_key,
-                    artifact_hash,
-                    artifact_hash,
-                    publisher,
-                    action_family_key,
-                    artifact_id,
-                    action_family_key,
-                    current_time,
-                ),
-            ).fetchall()
+                    (
+                        harness,
+                        artifact_id,
+                        artifact_hash,
+                        artifact_hash,
+                        runtime_exact_match_key,
+                        runtime_exact_match_key,
+                        workspace_key,
+                        workspace,
+                        artifact_id,
+                        action_family_key,
+                        artifact_hash,
+                        artifact_hash,
+                        publisher,
+                        artifact_hash,
+                        action_family_key,
+                        artifact_hash,
+                        runtime_exact_match_key,
+                        runtime_exact_match_key,
+                        artifact_id,
+                        action_family_key,
+                        artifact_hash,
+                        runtime_exact_match_key,
+                        runtime_exact_match_key,
+                        current_time,
+                        _NON_CONSUMING_POLICY_MATCH_LIMIT + 1 if not consume_one_shot else -1,
+                    ),
+                ).fetchall()
+            policy_match_overflow = not consume_one_shot and len(rows) > _NON_CONSUMING_POLICY_MATCH_LIMIT
+            if policy_match_overflow:
+                rows = rows[:_NON_CONSUMING_POLICY_MATCH_LIMIT]
+                selected_payload = {
+                    "action": "block",
+                    "artifact_hash": artifact_hash,
+                    "artifact_id": artifact_id,
+                    "decision_id": None,
+                    "expires_at": None,
+                    "harness": harness,
+                    "owner": None,
+                    "publisher": publisher,
+                    "reason": "Guard policy match limit exceeded during approval reuse.",
+                    "scope": "global",
+                    "source": "guard-policy-match-cap",
+                    "updated_at": current_time,
+                    "workspace": workspace,
+                }
+                events.append(
+                    (
+                        "approval.policy_lookup_overflow",
+                        {
+                            "harness": harness,
+                            "artifact_id": artifact_id,
+                            "match_limit": _NON_CONSUMING_POLICY_MATCH_LIMIT,
+                            "authoritative_action": "block",
+                        },
+                    )
+                )
             cached_state = self._load_policy_integrity_state(connection) or {}
             cached_trust_status = TrustStatus.from_policy_integrity_state(cached_state).to_dict()
             if not rows and selected_payload is None:
-                return {
-                    "decision": None,
-                    "ignored_local_integrity": None,
-                    "trust_status": cached_trust_status,
-                }
+                for event_name, payload in events:
+                    connection.execute(
+                        """
+                        insert into guard_events (event_name, payload_json, occurred_at)
+                        values (?, ?, ?)
+                        """,
+                        (event_name, json.dumps(payload), current_time),
+                    )
+                if ignored_local_integrity is not None:
+                    ignored_local_integrity["trust_status"] = cached_trust_status
+                return lookup_result(
+                    None,
+                    ignored_integrity=ignored_local_integrity,
+                    trust_status=cached_trust_status,
+                )
+            policy_bundle_decision_identities = (
+                self._cached_policy_bundle_decision_identities(
+                    now=_parse_utc_timestamp(current_time).timestamp(),
+                )
+                if any(str(candidate["source"]) == "policy-bundle" for candidate in rows)
+                else frozenset()
+            )
             has_local_rows = any(not is_remote_policy_source(str(candidate["source"])) for candidate in rows)
             if not has_local_rows:
-                if selected_payload is None:
-                    for candidate in rows:
-                        if _scoped_runtime_row_requires_exact_match(
-                            scope=str(candidate["scope"]),
-                            stored_artifact_id=(
-                                str(candidate["artifact_id"]) if isinstance(candidate["artifact_id"], str) else None
-                            ),
-                            stored_artifact_hash=(
-                                str(candidate["artifact_hash"]) if isinstance(candidate["artifact_hash"], str) else None
-                            ),
-                            source=str(candidate["source"]),
-                            requested_artifact_id=artifact_id,
-                            requested_runtime_exact_match_key=runtime_exact_match_key,
-                        ):
-                            continue
-                        integrity_result = self._policy_integrity_result_for_row(
-                            candidate,
-                            mode=str((cached_state or {}).get("mode") or "degraded"),
-                            key=None,
-                            key_id=None,
-                            trusted_generation=_mapping_int(cached_state, "generation"),
-                        )
-                        if integrity_result.status != "valid":
-                            events.append(
-                                (
-                                    "policy_integrity_violation",
-                                    {
-                                        "decision_id": int(candidate["decision_id"]),
-                                        "harness": str(candidate["harness"]),
-                                        "artifact_id": candidate["artifact_id"],
-                                        "integrity_status": integrity_result.status,
-                                        "message": integrity_result.message,
-                                    },
-                                )
+                for candidate in rows:
+                    if str(candidate["source"]) in {"cloud-sync", "team-policy"}:
+                        continue
+                    if (
+                        str(candidate["source"]) == "policy-bundle"
+                        and self._materialized_policy_bundle_row_identity(candidate)
+                        not in policy_bundle_decision_identities
+                    ):
+                        continue
+                    if _scoped_runtime_row_requires_exact_match(
+                        scope=str(candidate["scope"]),
+                        stored_artifact_id=(
+                            str(candidate["artifact_id"]) if isinstance(candidate["artifact_id"], str) else None
+                        ),
+                        stored_artifact_hash=(
+                            str(candidate["artifact_hash"]) if isinstance(candidate["artifact_hash"], str) else None
+                        ),
+                        source=str(candidate["source"]),
+                        requested_artifact_id=artifact_id,
+                        requested_artifact_hash=artifact_hash,
+                        requested_runtime_exact_match_key=runtime_exact_match_key,
+                    ):
+                        continue
+                    integrity_result = self._policy_integrity_result_for_row(
+                        candidate,
+                        mode=str((cached_state or {}).get("mode") or "degraded"),
+                        key=None,
+                        key_id=None,
+                        trusted_generation=_mapping_int(cached_state, "generation"),
+                    )
+                    if integrity_result.status != "valid":
+                        events.append(
+                            (
+                                "policy_integrity_violation",
+                                {
+                                    "decision_id": int(candidate["decision_id"]),
+                                    "harness": str(candidate["harness"]),
+                                    "artifact_id": candidate["artifact_id"],
+                                    "integrity_status": integrity_result.status,
+                                    "message": integrity_result.message,
+                                },
                             )
-                            continue
-                        selected_payload = self._policy_row_payload(candidate)
-                        if is_remote_policy_source(str(candidate["source"])):
+                        )
+                        continue
+                    candidate_payload = self._policy_row_payload(candidate)
+                    candidate_outranks_local_once = selected_payload is None or guard_action_severity(
+                        candidate_payload.get("action"),
+                        unknown_action="block",
+                    ) > guard_action_severity(selected_payload.get("action"), unknown_action="block")
+                    if candidate_outranks_local_once:
+                        selected_payload = candidate_payload
+                        if consume_one_shot and is_remote_policy_source(str(candidate["source"])):
                             events.append(
                                 (
                                     "policy.cloud.applied",
@@ -436,12 +1474,18 @@ class StorePolicyMixin:
                                     },
                                 )
                             )
-                        if _is_approval_gate_one_shot_policy(candidate):
+                        if consume_one_shot and _is_approval_gate_one_shot_policy(candidate):
                             connection.execute(
                                 "delete from policy_decisions where decision_id = ?",
                                 (int(candidate["decision_id"]),),
                             )
+                    # The first valid policy row retains the established scope
+                    # precedence for legacy consuming callers. Current-policy-
+                    # first callers inspect every valid match so a saved,
+                    # specific allow cannot hide a broader managed block.
+                    if consume_one_shot:
                         break
+                claim_selected_local_once()
                 for event_name, payload in events:
                     connection.execute(
                         """
@@ -450,15 +1494,25 @@ class StorePolicyMixin:
                         """,
                         (event_name, json.dumps(payload), current_time),
                     )
-                return {
-                    "decision": selected_payload,
-                    "ignored_local_integrity": None,
-                    "trust_status": cached_trust_status,
-                }
+                if ignored_local_integrity is not None:
+                    ignored_local_integrity["trust_status"] = cached_trust_status
+                return lookup_result(
+                    selected_payload,
+                    ignored_integrity=ignored_local_integrity,
+                    trust_status=cached_trust_status,
+                )
             state = self._refresh_policy_integrity_state(connection, now=current_time, create_key=True)
             trust_status = TrustStatus.from_policy_integrity_state(state).to_dict()
             key, key_id = self._policy_integrity_secret_material(create=True)
-            for candidate in rows if selected_payload is None else ():
+            for candidate in rows:
+                if str(candidate["source"]) in {"cloud-sync", "team-policy"}:
+                    continue
+                if (
+                    str(candidate["source"]) == "policy-bundle"
+                    and self._materialized_policy_bundle_row_identity(candidate)
+                    not in policy_bundle_decision_identities
+                ):
+                    continue
                 if _scoped_runtime_row_requires_exact_match(
                     scope=str(candidate["scope"]),
                     stored_artifact_id=(
@@ -469,6 +1523,7 @@ class StorePolicyMixin:
                     ),
                     source=str(candidate["source"]),
                     requested_artifact_id=artifact_id,
+                    requested_artifact_hash=artifact_hash,
                     requested_runtime_exact_match_key=runtime_exact_match_key,
                 ):
                     continue
@@ -484,12 +1539,22 @@ class StorePolicyMixin:
                     state,
                     source=str(candidate["source"]),
                 ):
-                    selected_payload = self._policy_row_payload(
+                    candidate_payload = self._policy_row_payload(
                         candidate,
                         integrity_result=integrity_result,
                         state=state,
                     )
-                    if is_remote_policy_source(str(candidate["source"])):
+                    candidate_outranks_local_once = selected_payload is None or guard_action_severity(
+                        candidate_payload.get("action"),
+                        unknown_action="block",
+                    ) > guard_action_severity(selected_payload.get("action"), unknown_action="block")
+                    if candidate_outranks_local_once:
+                        selected_payload = candidate_payload
+                    if (
+                        candidate_outranks_local_once
+                        and consume_one_shot
+                        and is_remote_policy_source(str(candidate["source"]))
+                    ):
                         events.append(
                             (
                                 "policy.cloud.applied",
@@ -503,12 +1568,18 @@ class StorePolicyMixin:
                                 },
                             )
                         )
-                    if _is_approval_gate_one_shot_policy(candidate):
+                    if (
+                        candidate_outranks_local_once
+                        and consume_one_shot
+                        and _is_approval_gate_one_shot_policy(candidate)
+                    ):
                         connection.execute(
                             "delete from policy_decisions where decision_id = ?",
                             (int(candidate["decision_id"]),),
                         )
-                    break
+                    if consume_one_shot:
+                        break
+                    continue
                 events.append(
                     (
                         "policy_integrity_violation",
@@ -552,6 +1623,7 @@ class StorePolicyMixin:
                     candidate["decision_id"],
                     integrity_result.status,
                 )
+            claim_selected_local_once()
             for event_name, payload in events:
                 connection.execute(
                     """
@@ -560,11 +1632,13 @@ class StorePolicyMixin:
                     """,
                     (event_name, json.dumps(payload), current_time),
                 )
-            return {
-                "decision": selected_payload,
-                "ignored_local_integrity": ignored_local_integrity,
-                "trust_status": trust_status,
-            }
+            if ignored_local_integrity is not None:
+                ignored_local_integrity.setdefault("trust_status", trust_status)
+            return lookup_result(
+                selected_payload,
+                ignored_integrity=ignored_local_integrity,
+                trust_status=trust_status,
+            )
 
     def resolve_policy_decision(
         self,
@@ -575,6 +1649,7 @@ class StorePolicyMixin:
         publisher: str | None = None,
         now: str | None = None,
         runtime_exact_match_context: str | None = None,
+        consume_one_shot: bool = True,
     ) -> dict[str, object] | None:
         lookup = self.resolve_policy_decision_lookup(
             harness,
@@ -584,8 +1659,394 @@ class StorePolicyMixin:
             publisher=publisher,
             now=now,
             runtime_exact_match_context=runtime_exact_match_context,
+            consume_one_shot=consume_one_shot,
         )
         return lookup["decision"]
+
+    def claim_approval_reuse_decision(
+        self,
+        decision: Mapping[str, object],
+        *,
+        now: str | None = None,
+    ) -> bool:
+        """Atomically validate and claim an accepted saved ``allow`` decision.
+
+        Returning ``False`` means the decision expired, changed, was consumed
+        by another evaluator, or was not an approval ``allow``. Callers must
+        then enforce the recomputed current action without saved evidence.
+        """
+
+        return self.claim_approval_reuse_decisions((decision,), now=now)
+
+    @staticmethod
+    def approval_reuse_claim_disposition(
+        decision: Mapping[str, object],
+    ) -> Literal["consumed", "retained"] | None:
+        """Describe what a successful claim does to this selected allow.
+
+        Package local-once approvals are reusable and remain in their table.
+        Expiring ``approval-gate`` policy rows are the only policy decisions
+        atomically deleted by the claim transaction. All other valid policy
+        allows remain authoritative and therefore must still exist when a
+        caller revalidates immediately before launch.
+        """
+
+        if decision.get("action") != "allow":
+            return None
+        approval_id = decision.get("approval_id")
+        if isinstance(approval_id, str) and approval_id:
+            artifact_id = decision.get("artifact_id")
+            if not isinstance(artifact_id, str) or not artifact_id:
+                return None
+            return "retained" if _local_once_approval_is_reusable(artifact_id) else "consumed"
+        decision_id = decision.get("decision_id")
+        if not isinstance(decision_id, int) or isinstance(decision_id, bool):
+            return None
+        if decision.get("source") == _APPROVAL_GATE_POLICY_SOURCE and decision.get("expires_at") is not None:
+            return "consumed"
+        return "retained"
+
+    def claim_approval_reuse_decisions(
+        self,
+        decisions: Sequence[Mapping[str, object]],
+        *,
+        now: str | None = None,
+    ) -> bool:
+        """Validate and claim a group of saved allows in one transaction.
+
+        A compound launch (for example, an MCP tool call that also installs a
+        package) may depend on more than one one-shot approval.  The launch is
+        authorized only when every selected row still matches the authority
+        revision observed during evaluation.  Any failed member rolls the
+        entire group back so a denied launch cannot consume a sibling grant.
+        """
+
+        current_time = _canonical_utc_timestamp(now or _now())
+        unique_decisions: list[Mapping[str, object]] = []
+        seen_keys: set[tuple[str, object]] = set()
+        expected_revision: int | None = None
+        has_local_once = False
+        for decision in decisions:
+            if decision.get("action") != "allow":
+                return False
+            revision = decision.get("_approval_authority_revision")
+            if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
+                return False
+            if expected_revision is None:
+                expected_revision = revision
+            elif revision != expected_revision:
+                return False
+            approval_id = decision.get("approval_id")
+            decision_id = decision.get("decision_id")
+            if isinstance(approval_id, str) and approval_id:
+                decision_key: tuple[str, object] = ("approval", approval_id)
+                has_local_once = True
+            elif isinstance(decision_id, int) and not isinstance(decision_id, bool):
+                decision_key = ("policy", decision_id)
+            else:
+                return False
+            if decision_key in seen_keys:
+                continue
+            seen_keys.add(decision_key)
+            unique_decisions.append(decision)
+        if not unique_decisions:
+            return True
+        assert expected_revision is not None
+        local_integrity_key: bytes | None = None
+        local_integrity_key_id: str | None = None
+        if has_local_once:
+            local_integrity_key, local_integrity_key_id = self._policy_integrity_secret_material(create=False)
+        with self._connect() as connection:
+            connection.execute("begin immediate")
+            if _approval_authority_revision(connection) != expected_revision:
+                connection.rollback()
+                return False
+            policy_bundle_decision_identities: frozenset[tuple[object, ...]] | None = None
+            if any(decision.get("source") == "policy-bundle" for decision in unique_decisions):
+                # Revalidate the signed bundle and its materialized identities
+                # after the write lock is held. This closes bundle/key/workspace
+                # replacement and key-expiry races between lookup and launch.
+                policy_bundle_decision_identities = self._cached_policy_bundle_decision_identities(
+                    now=_parse_utc_timestamp(current_time).timestamp(),
+                )
+            for decision in unique_decisions:
+                if not self._claim_approval_reuse_decision_locked(
+                    connection,
+                    decision=decision,
+                    current_time=current_time,
+                    local_integrity_key=local_integrity_key,
+                    local_integrity_key_id=local_integrity_key_id,
+                    policy_bundle_decision_identities=policy_bundle_decision_identities,
+                ):
+                    connection.rollback()
+                    return False
+        return True
+
+    def _claim_approval_reuse_decision_locked(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        decision: Mapping[str, object],
+        current_time: str,
+        local_integrity_key: bytes | None,
+        local_integrity_key_id: str | None,
+        policy_bundle_decision_identities: frozenset[tuple[object, ...]] | None,
+    ) -> bool:
+        """Claim one prevalidated member of an open batch transaction."""
+
+        approval_id = decision.get("approval_id")
+        decision_id = decision.get("decision_id")
+        if isinstance(approval_id, str) and approval_id:
+            claim_disposition = self.approval_reuse_claim_disposition(decision)
+            if claim_disposition is None:
+                return False
+            claimed = self._claim_local_once_approval_by_id_locked(
+                connection,
+                approval_id=approval_id,
+                now=current_time,
+                expected_decision=decision,
+                integrity_key=local_integrity_key,
+                integrity_key_id=local_integrity_key_id,
+                consume=claim_disposition == "consumed",
+            )
+            if claimed is None:
+                return False
+            connection.execute(
+                """
+                insert into guard_events (event_name, payload_json, occurred_at)
+                values (?, ?, ?)
+                """,
+                (
+                    (
+                        "approval.local_once_reused"
+                        if claim_disposition == "retained"
+                        else "approval.local_once_applied"
+                    ),
+                    json.dumps(
+                        {
+                            "approval_id": claimed.get("approval_id"),
+                            "request_id": claimed.get("request_id"),
+                            "harness": claimed.get("harness"),
+                            "artifact_id": claimed.get("artifact_id"),
+                        }
+                    ),
+                    current_time,
+                ),
+            )
+            return True
+        if not isinstance(decision_id, int) or isinstance(decision_id, bool):
+            return False
+        row = connection.execute(
+            """
+            select decision_id, harness, scope, artifact_id, action, artifact_hash, workspace, publisher,
+                   source, reason, owner, expires_at, updated_at, integrity_version, integrity_generation,
+                   payload_hash, payload_mac, integrity_key_id, signed_at
+            from policy_decisions
+            where decision_id = ? and action = 'allow'
+              and (expires_at is null or julianday(expires_at) > julianday(?))
+            """,
+            (decision_id, current_time),
+        ).fetchone()
+        if row is None:
+            return False
+        source = str(row["source"])
+        if source in {"cloud-sync", "team-policy"}:
+            return False
+        if source == "policy-bundle" and (
+            policy_bundle_decision_identities is None
+            or self._materialized_policy_bundle_row_identity(row) not in policy_bundle_decision_identities
+        ):
+            return False
+        if is_remote_policy_source(source):
+            integrity_result = self._policy_integrity_result_for_row(
+                row,
+                mode="protected",
+                key=None,
+                key_id=None,
+                trusted_generation=None,
+            )
+            integrity_state: dict[str, object] | None = None
+        else:
+            integrity_state = self._refresh_policy_integrity_state(connection, now=current_time, create_key=True) or {}
+            key, key_id = self._policy_integrity_secret_material(create=True)
+            generation = integrity_state.get("generation")
+            trusted_generation = (
+                generation if isinstance(generation, int) and not isinstance(generation, bool) else None
+            )
+            integrity_result = self._policy_integrity_result_for_row(
+                row,
+                mode=str(integrity_state.get("mode") or "degraded"),
+                key=key,
+                key_id=key_id,
+                trusted_generation=trusted_generation,
+            )
+        if integrity_result.status != "valid":
+            return False
+        current_payload = self._policy_row_payload(
+            row,
+            integrity_result=integrity_result,
+            state=integrity_state,
+        )
+        identity_keys = (
+            "action",
+            "artifact_hash",
+            "artifact_id",
+            "decision_id",
+            "expires_at",
+            "harness",
+            "integrity_enforcement",
+            "integrity_generation",
+            "integrity_key_id",
+            "integrity_mode",
+            "integrity_status",
+            "integrity_version",
+            "owner",
+            "publisher",
+            "reason",
+            "signed_at",
+            "scope",
+            "source",
+            "updated_at",
+            "workspace",
+        )
+        if any(current_payload.get(key) != decision.get(key) for key in identity_keys):
+            return False
+        claim_disposition = self.approval_reuse_claim_disposition(current_payload)
+        if claim_disposition is None:
+            return False
+        if claim_disposition == "consumed":
+            cursor = connection.execute(
+                "delete from policy_decisions where decision_id = ? and action = 'allow'",
+                (decision_id,),
+            )
+            if cursor.rowcount != 1:
+                return False
+        connection.execute(
+            """
+            insert into guard_events (event_name, payload_json, occurred_at)
+            values (?, ?, ?)
+            """,
+            (
+                "approval.policy_reuse_applied",
+                json.dumps(
+                    {
+                        "decision_id": decision_id,
+                        "harness": current_payload.get("harness"),
+                        "artifact_id": current_payload.get("artifact_id"),
+                        "scope": current_payload.get("scope"),
+                    }
+                ),
+                current_time,
+            ),
+        )
+        return True
+
+    def approval_reuse_validation_reason(
+        self,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        workspace: str | None,
+        publisher: str | None,
+        now: str | None = None,
+    ) -> str | None:
+        """Explain why otherwise relevant saved allow evidence did not match.
+
+        The normal resolver intentionally returns only usable authority.  This
+        read-only diagnostic pass is used after a miss so receipts can explain
+        stale content/context without treating a near match as permission.
+        """
+
+        if artifact_id is None:
+            return None
+        current_time = _canonical_utc_timestamp(now or _now())
+        workspace_key = _workspace_policy_key(workspace)
+        artifact_family = _artifact_family_key(artifact_id)
+        policy_integrity_state: dict[str, object] = {}
+        policy_integrity_key: bytes | None = None
+        policy_integrity_key_id: str | None = None
+        with self._connect() as connection:
+            local_rows = _bounded_local_approval_reuse_diagnostic_rows(
+                connection,
+                harness=harness,
+                artifact_id=artifact_id,
+                artifact_family=artifact_family,
+                artifact_hash=artifact_hash,
+            )
+            policy_rows = _bounded_policy_approval_reuse_diagnostic_rows(
+                connection,
+                harness=harness,
+                artifact_id=artifact_id,
+                artifact_family=artifact_family,
+                artifact_hash=artifact_hash,
+                publisher=publisher,
+            )
+            if any(not is_remote_policy_source(str(row["source"])) for row in policy_rows):
+                policy_integrity_state = self._refresh_policy_integrity_state(
+                    connection,
+                    now=current_time,
+                    create_key=False,
+                )
+                policy_integrity_key, policy_integrity_key_id = self._policy_integrity_secret_material(create=False)
+        if local_rows:
+            local_integrity_key, local_integrity_key_id = self._policy_integrity_secret_material(create=False)
+            for row in local_rows:
+                integrity_result = _verify_local_once_approval(
+                    dict(row),
+                    key=local_integrity_key,
+                    key_id=local_integrity_key_id,
+                )
+                if integrity_result.status != "valid":
+                    return "approval_reuse_integrity_failure"
+        for row in (*local_rows, *policy_rows):
+            row_keys = set(row.keys())
+            if "claimed_at" in row_keys and row["claimed_at"] is not None:
+                continue
+            stored_artifact_id = str(row["artifact_id"]) if row["artifact_id"] is not None else None
+            stored_artifact_hash = str(row["artifact_hash"]) if row["artifact_hash"] is not None else None
+            same_identity = stored_artifact_id in {artifact_id, artifact_family}
+            same_content = artifact_hash is not None and stored_artifact_hash == artifact_hash
+            broad_scope = "scope" in row_keys and str(row["scope"]) in {"harness", "global"}
+            publisher_scope = (
+                "scope" in row_keys
+                and str(row["scope"]) == "publisher"
+                and row["publisher"] is not None
+                and str(row["publisher"]) == publisher
+            )
+            if not (same_identity or same_content or publisher_scope or (broad_scope and stored_artifact_id is None)):
+                continue
+            if "decision_id" in row_keys and not is_remote_policy_source(str(row["source"])):
+                integrity_result = self._policy_integrity_result_for_row(
+                    row,
+                    mode=str(policy_integrity_state.get("mode") or "degraded"),
+                    key=policy_integrity_key,
+                    key_id=policy_integrity_key_id,
+                    trusted_generation=_mapping_int(policy_integrity_state, "generation"),
+                )
+                if integrity_result.status != "valid" and not _warn_only_policy_integrity_status(
+                    integrity_result.status,
+                    policy_integrity_state,
+                    source=str(row["source"]),
+                ):
+                    return "approval_reuse_integrity_failure"
+            expires_at = str(row["expires_at"]) if row["expires_at"] is not None else None
+            if expires_at is not None and _timestamp_has_expired(expires_at, now=current_time):
+                return "approval_reuse_expired"
+            if _is_approval_context_token(stored_artifact_hash) or _is_approval_context_token(artifact_hash):
+                context_reason = approval_context_tokens_validation_reason(stored_artifact_hash, artifact_hash)
+                if context_reason is not None:
+                    return context_reason
+            if stored_artifact_hash is not None and artifact_hash is not None and stored_artifact_hash != artifact_hash:
+                return "approval_reuse_content_changed"
+            stored_workspace = str(row["workspace"]) if row["workspace"] is not None else None
+            stored_publisher = str(row["publisher"]) if row["publisher"] is not None else None
+            if stored_workspace is not None and stored_workspace not in {workspace, workspace_key}:
+                return "approval_reuse_identity_changed"
+            if stored_publisher is not None and stored_publisher != publisher:
+                return "approval_reuse_identity_changed"
+            if not same_identity:
+                return "approval_reuse_identity_changed"
+        return None
 
     @staticmethod
     def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None, str | None]:
@@ -595,7 +2056,9 @@ class StorePolicyMixin:
             artifact_id = decision.artifact_id if decision.scope in {"artifact", "workspace"} else None
         artifact_hash = (
             decision.artifact_hash
-            if decision.scope in {"artifact", "workspace"} or _is_runtime_scoped_exact_match_key(decision.artifact_hash)
+            if decision.scope in {"artifact", "workspace"}
+            or _is_runtime_scoped_exact_match_key(decision.artifact_hash)
+            or _is_approval_context_token(decision.artifact_hash)
             else None
         )
         workspace = _workspace_policy_key(decision.workspace) if decision.scope == "workspace" else None
@@ -620,7 +2083,7 @@ class StorePolicyMixin:
         import json
         from datetime import datetime, timezone
 
-        current_time = now or datetime.now(timezone.utc).isoformat()
+        current_time = _canonical_utc_timestamp(now or datetime.now(timezone.utc).isoformat())
         workspace_key = _workspace_policy_key(str(workspace) if workspace is not None else None)
         with self._connect() as connection:
             rows = connection.execute(
@@ -630,7 +2093,7 @@ class StorePolicyMixin:
                        payload_hash, payload_mac, integrity_key_id, signed_at
                 from policy_decisions
                 where (harness = ? or harness = '*')
-                  and (expires_at is null or expires_at > ?)
+                  and (expires_at is null or julianday(expires_at) > julianday(?))
                   and (
                     scope in ('global', 'harness', 'publisher', 'artifact')
                     or (scope = 'workspace' and (workspace = ? or workspace is null))

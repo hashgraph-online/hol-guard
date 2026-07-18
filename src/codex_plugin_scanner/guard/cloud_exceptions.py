@@ -100,9 +100,9 @@ def _policy_bundle_cloud_exception_is_valid(item: object) -> bool:
 
 
 def policy_bundle_cloud_exceptions_are_valid(policy_bundle: dict[str, object]) -> bool:
-    cloud_exceptions = policy_bundle.get("cloudExceptions")
-    if cloud_exceptions is None:
+    if "cloudExceptions" not in policy_bundle:
         return True
+    cloud_exceptions = policy_bundle.get("cloudExceptions")
     if not isinstance(cloud_exceptions, list):
         return False
     return all(_policy_bundle_cloud_exception_is_valid(item) for item in cloud_exceptions)
@@ -114,9 +114,19 @@ def _resolve_cloud_exception_ack_status(
     policy_bundle: dict[str, object] | None,
     policy_bundle_ack: dict[str, object] | None,
 ) -> CloudExceptionAckStatus | None:
-    if isinstance(policy_bundle_ack, dict):
+    if isinstance(policy_bundle_ack, dict) and isinstance(policy_bundle, dict) and device_id is not None:
         ack_status = policy_bundle_ack.get("status")
-        if _is_cloud_exception_ack_status(ack_status):
+        bundle_hash = _non_empty_string(policy_bundle.get("bundleHash"))
+        bundle_version = _non_empty_string(policy_bundle.get("bundleVersion"))
+        if (
+            _is_cloud_exception_ack_status(ack_status)
+            and bundle_hash is not None
+            and bundle_version is not None
+            and policy_bundle_ack.get("bundleHash") == bundle_hash
+            and policy_bundle_ack.get("bundleVersion") == bundle_version
+            and policy_bundle_ack.get("deviceId") == device_id
+            and _normalized_timestamp_string(policy_bundle_ack.get("appliedAt")) is not None
+        ):
             return ack_status
     if not isinstance(policy_bundle, dict):
         return None

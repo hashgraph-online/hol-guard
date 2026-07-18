@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from ._commands_shared import _NAMED_SECURITY_LEVELS, _SETTINGS_POLICY_RISK_ACTIONS, _guard_risk_action_key
 
 
+from ..action_lattice import coerce_guard_action
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -47,18 +48,9 @@ def _copilot_hook_permission_decision(policy_action: str) -> str:
 
 def _guard_action_from_cli(value: object) -> GuardAction:
     normalized = str(value).strip()
-    if normalized == "allow":
-        return "allow"
-    if normalized == "warn":
-        return "warn"
-    if normalized == "review":
-        return "review"
-    if normalized == "block":
-        return "block"
-    if normalized == "sandbox-required":
-        return "sandbox-required"
-    if normalized == "require-reapproval":
-        return "require-reapproval"
+    action = coerce_guard_action(normalized)
+    if action is not None:
+        return action
     raise ValueError(f"Unsupported Guard action '{normalized}'.")
 
 def _run_approval_password_settings_command(*, args: argparse.Namespace, guard_home: Path) -> dict[str, object]:
@@ -416,7 +408,7 @@ def _claude_prompt_system_message(
     return None
 
 def _codex_prompt_block_system_message(*, policy_action: str, native_reason: str) -> str | None:
-    if policy_action not in {"block", "sandbox-required", "require-reapproval"}:
+    if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"}:
         return None
     if "open hol guard" not in native_reason.lower():
         return None
@@ -477,11 +469,17 @@ def _emit_copilot_hook_response(
     *,
     policy_action: str,
     reason: str,
+    approval_reuse: dict[str, object] | None = None,
+    scanner_evidence: tuple[dict[str, object], ...] = (),
     output_stream: TextIO | None = None,
 ) -> None:
     payload: dict[str, object] = {"permissionDecision": _copilot_hook_permission_decision(policy_action)}
     if payload["permissionDecision"] != "allow":
         payload["permissionDecisionReason"] = reason
+    if approval_reuse is not None:
+        payload["approval_reuse"] = approval_reuse
+    if scanner_evidence:
+        payload["scanner_evidence"] = list(scanner_evidence)
     _write_json_line(payload, output_stream=output_stream)
 
 def _emit_copilot_permission_request_response(
@@ -489,6 +487,8 @@ def _emit_copilot_permission_request_response(
     behavior: str,
     message: str | None = None,
     interrupt: bool | None = None,
+    approval_reuse: dict[str, object] | None = None,
+    scanner_evidence: tuple[dict[str, object], ...] = (),
     output_stream: TextIO | None = None,
 ) -> None:
     payload: dict[str, object] = {"behavior": behavior}
@@ -496,6 +496,10 @@ def _emit_copilot_permission_request_response(
         payload["message"] = message.strip()
     if isinstance(interrupt, bool):
         payload["interrupt"] = interrupt
+    if approval_reuse is not None:
+        payload["approval_reuse"] = approval_reuse
+    if scanner_evidence:
+        payload["scanner_evidence"] = list(scanner_evidence)
     _write_json_line(payload, output_stream=output_stream)
 
 __all__ = [

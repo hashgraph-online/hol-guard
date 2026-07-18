@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal
 
@@ -11,6 +12,7 @@ from ..path_support import is_safe_relative_path, iter_safe_matching_files, reso
 from .codex_skill_config import load_codex_skill_config_rules, resolve_codex_skill_enabled
 from .inventory_contract import fingerprint_mapping, fingerprint_path_tree, fingerprint_text
 from .models import GuardArtifact, HarnessDetection
+from .runtime.approval_context import build_configured_environment_hash, build_configured_header_values_hash
 
 InstructionRole = Literal[
     "agents_md",
@@ -122,7 +124,9 @@ def mcp_server_content_hash(
     url: str | None,
     transport: str | None,
     env_keys: tuple[str, ...] = (),
+    env_values_hash: str | None = None,
     headers_keys: tuple[str, ...] = (),
+    header_values_hash: str | None = None,
 ) -> str:
     return fingerprint_mapping(
         {
@@ -131,7 +135,9 @@ def mcp_server_content_hash(
             "url": url,
             "transport": transport,
             "env_keys": sorted(env_keys),
+            "env_values_hash": env_values_hash,
             "headers_keys": sorted(headers_keys),
+            "header_values_hash": header_values_hash,
         }
     )
 
@@ -645,24 +651,77 @@ def enrich_mcp_server_metadata(
     args: tuple[str, ...],
     url: str | None,
     transport: str | None,
+    configured_environment: Mapping[str, object] | None = None,
+    configured_headers: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    env_keys = metadata.get("env_keys")
-    normalized_env_keys: tuple[str, ...] = ()
-    if isinstance(env_keys, list):
-        normalized_env_keys = tuple(str(key) for key in env_keys if isinstance(key, str))
-    headers_keys = metadata.get("headers_keys")
-    normalized_headers_keys: tuple[str, ...] = ()
-    if isinstance(headers_keys, list):
-        normalized_headers_keys = tuple(str(key) for key in headers_keys if isinstance(key, str))
+    normalized_env_keys = _canonical_mcp_configured_keys(metadata.get("env_keys"))
+    raw_env = configured_environment if configured_environment is not None else metadata.get("env")
+    normalized_env = _canonical_mcp_configured_values(raw_env)
+    if not normalized_env_keys and normalized_env:
+        normalized_env_keys = tuple(sorted(normalized_env))
+    raw_env_values_hash = metadata.get("env_values_hash")
+    env_values_hash = (
+        raw_env_values_hash.strip()
+        if isinstance(raw_env_values_hash, str) and raw_env_values_hash.strip()
+        else build_configured_environment_hash(
+            normalized_env,
+            configured_keys=normalized_env_keys,
+        )
+    )
+    normalized_headers_keys = _canonical_mcp_configured_keys(metadata.get("headers_keys"))
+    raw_headers = configured_headers if configured_headers is not None else metadata.get("headers")
+    normalized_headers = _canonical_mcp_configured_values(raw_headers)
+    if not normalized_headers_keys and normalized_headers:
+        normalized_headers_keys = tuple(sorted(normalized_headers))
+    raw_header_values_hash = metadata.get("header_values_hash")
+    header_values_hash = (
+        raw_header_values_hash.strip()
+        if isinstance(raw_header_values_hash, str) and raw_header_values_hash.strip()
+        else build_configured_header_values_hash(
+            normalized_headers,
+            configured_keys=normalized_headers_keys,
+        )
+    )
     content_hash = mcp_server_content_hash(
         command=command,
         args=args,
         url=url,
         transport=transport,
         env_keys=normalized_env_keys,
+        env_values_hash=env_values_hash,
         headers_keys=normalized_headers_keys,
+        header_values_hash=header_values_hash,
     )
     enriched = dict(metadata)
+    enriched["env_keys"] = list(normalized_env_keys)
+    enriched["headers_keys"] = list(normalized_headers_keys)
+    enriched["env_values_hash"] = env_values_hash
+    enriched["header_values_hash"] = header_values_hash
     enriched["content_hash"] = content_hash
     enriched.update(version_info_metadata(content_hash=content_hash, version_label=str(metadata.get("name", "mcp"))))
     return enriched
+
+
+def _canonical_mcp_configured_key(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _canonical_mcp_configured_keys(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    normalized = {key for item in value if (key := _canonical_mcp_configured_key(item)) is not None}
+    return tuple(sorted(normalized))
+
+
+def _canonical_mcp_configured_values(value: object) -> dict[str, str]:
+    if not isinstance(value, Mapping):
+        return {}
+    normalized: dict[str, str] = {}
+    for raw_key, raw_value in value.items():
+        key = _canonical_mcp_configured_key(raw_key)
+        if key is not None and isinstance(raw_value, str):
+            normalized[key] = raw_value
+    return normalized

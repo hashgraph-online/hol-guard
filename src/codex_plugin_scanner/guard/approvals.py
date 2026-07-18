@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TypeGuard
 from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
+from .action_lattice import normalize_guard_action_result
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
@@ -37,9 +38,7 @@ from .local_supply_chain import build_local_supply_chain_posture
 from .memory_decision_outbox import enqueue_memory_decision_event
 from .models import (
     DECISION_SCOPE_VALUES,
-    GUARD_ACTION_VALUES,
     DecisionScope,
-    GuardAction,
     GuardApprovalRequest,
     GuardArtifact,
     HarnessDetection,
@@ -48,6 +47,7 @@ from .models import (
 from .package_execution_context import package_execution_context_from_scanner_evidence
 from .redaction import redact_text
 from .risk import artifact_risk_signals, artifact_risk_summary
+from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
 from .store import (
     GuardStore,
@@ -55,6 +55,7 @@ from .store import (
     browser_mcp_exact_match_context,
     runtime_tool_action_exact_match_context,
 )
+from .synced_policy import synced_policy_bundle_validation
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
@@ -114,10 +115,6 @@ def _normalize_harness_slug(harness: str | None) -> str | None:
     if normalized in {"claude", "claude-code"}:
         return "claude-code"
     return normalized or None
-
-
-def _is_guard_action(value: object) -> TypeGuard[GuardAction]:
-    return isinstance(value, str) and value in GUARD_ACTION_VALUES
 
 
 def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
@@ -408,16 +405,35 @@ def queue_blocked_approvals(
     for item in artifacts:
         if not isinstance(item, dict):
             continue
-        policy_action = item.get("policy_action")
-        if not _is_guard_action(policy_action) or policy_action not in {
-            "block",
-            "sandbox-required",
-            "require-reapproval",
-        }:
+        normalization = normalize_guard_action_result(
+            item.get("policy_action"),
+            unknown_action="require-reapproval",
+        )
+        policy_action = normalization.action
+        if policy_action not in {"require-reapproval", "review"}:
             continue
+        scanner_evidence = _item_scanner_evidence(item)
+        if not normalization.recognized:
+            normalization_evidence: dict[str, object] = {
+                "source": "guard_action_normalizer",
+                "reason_code": normalization.reason_code,
+                "original_action": normalization.original_action,
+                "normalized_action": normalization.action,
+            }
+            scanner_evidence = (
+                *scanner_evidence,
+                normalization_evidence,
+            )
         artifact_id = str(item.get("artifact_id") or "")
         if not artifact_id:
             continue
+        approval_context_hash = item.get("approval_context_hash")
+        request_artifact_hash = (
+            approval_context_hash
+            if isinstance(approval_context_hash, str)
+            and parse_approval_context_token(approval_context_hash) is not None
+            else str(item.get("artifact_hash") or "unknown")
+        )
         artifact = artifacts_by_id.get(artifact_id)
         request_id = uuid.uuid4().hex
         risk_summary = _item_risk_summary(item, artifact)
@@ -447,7 +463,7 @@ def queue_blocked_approvals(
             artifact_id=artifact_id,
             artifact_name=_artifact_name(item, artifact_id),
             artifact_type=artifact.artifact_type if artifact is not None else "artifact",
-            artifact_hash=str(item.get("artifact_hash") or "unknown"),
+            artifact_hash=request_artifact_hash,
             policy_action=policy_action,
             recommended_scope="publisher" if artifact is not None and artifact.publisher else "artifact",
             changed_fields=tuple(_string_list(item.get("changed_fields"))),
@@ -469,7 +485,7 @@ def queue_blocked_approvals(
             risk_headline=incident["risk_headline"],
             action_envelope_json=_item_action_envelope_json(item),
             decision_v2_json=_item_decision_v2_json(item),
-            scanner_evidence=_item_scanner_evidence(item),
+            scanner_evidence=scanner_evidence,
             raw_command_text=raw_command_text,
         )
         persisted_request_id = store.add_approval_request(request, timestamp)
@@ -488,6 +504,24 @@ def queue_blocked_approvals(
         request_payload["allowed_scopes"] = list(supported_request_scopes(request_payload))
         queued.append(request_payload)
     return queued
+
+
+def evaluation_has_terminal_policy_action(evaluation: Mapping[str, object]) -> bool:
+    """Return whether an evaluation contains a non-overridable policy action."""
+
+    artifacts = evaluation.get("artifacts")
+    if not isinstance(artifacts, list):
+        return False
+    for item in artifacts:
+        if not isinstance(item, Mapping):
+            continue
+        action = normalize_guard_action_result(
+            item.get("policy_action"),
+            unknown_action="require-reapproval",
+        ).action
+        if action in {"block", "sandbox-required"}:
+            return True
+    return False
 
 
 def apply_approval_resolution(
@@ -518,6 +552,10 @@ def apply_approval_resolution(
     workspace_artifact_id, workspace_artifact_hash = _workspace_policy_artifact_keys(request, scope)
     request_artifact_id = _string_or_none(request.get("artifact_id"))
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
+    approval_context_token = (
+        request_artifact_hash if parse_approval_context_token(request_artifact_hash) is not None else None
+    )
+    exact_context_allow = action == "allow" and approval_context_token is not None
     request_publisher = _string_or_none(request.get("publisher"))
     resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
     portable_package_workspace = package_request_portable_workspace_scope(
@@ -530,15 +568,23 @@ def apply_approval_resolution(
         resolved_workspace = portable_package_workspace
     scoped_artifact_id = request_artifact_id if scope in {"artifact", "harness", "global"} else workspace_artifact_id
     scoped_artifact_hash = request_artifact_hash if scope == "artifact" else workspace_artifact_hash
-    artifact_runtime_exact_match_key = _artifact_scope_runtime_exact_match_key(request, scope)
-    if artifact_runtime_exact_match_key is not None:
-        scoped_artifact_hash = artifact_runtime_exact_match_key
-    broad_runtime_exact_match_key = _broad_runtime_exact_match_key(request, scope)
-    if broad_runtime_exact_match_key is not None:
-        scoped_artifact_hash = broad_runtime_exact_match_key
-    browser_mcp_exact_key = _browser_mcp_exact_match_key(request, scope)
-    if browser_mcp_exact_key is not None:
-        scoped_artifact_hash = browser_mcp_exact_key
+    if exact_context_allow:
+        # The token already binds the exact request across every security
+        # dimension. Broad scopes remain match selectors; they do not discard
+        # this exact approval identity or turn it into a broad permission.
+        scoped_artifact_hash = approval_context_token
+        if scope in {"artifact", "workspace", "harness", "global"}:
+            scoped_artifact_id = request_artifact_id
+    else:
+        artifact_runtime_exact_match_key = _artifact_scope_runtime_exact_match_key(request, scope)
+        if artifact_runtime_exact_match_key is not None:
+            scoped_artifact_hash = artifact_runtime_exact_match_key
+        broad_runtime_exact_match_key = _broad_runtime_exact_match_key(request, scope)
+        if broad_runtime_exact_match_key is not None:
+            scoped_artifact_hash = broad_runtime_exact_match_key
+        browser_mcp_exact_key = _browser_mcp_exact_match_key(request, scope)
+        if browser_mcp_exact_key is not None:
+            scoped_artifact_hash = browser_mcp_exact_key
     decision = PolicyDecision(
         harness="*" if scope == "global" else str(request["harness"]),
         scope=scope,
@@ -617,7 +663,7 @@ def apply_approval_resolution(
                 raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
             if error == "not_found":
                 raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
-        if resolve_scope_matches:
+        if resolve_scope_matches and not exact_context_allow:
             resolved_scope_ids = store.resolve_matching_approval_requests(
                 harness=resolution_harness,
                 scope=scope,
@@ -647,7 +693,7 @@ def apply_approval_resolution(
         )
         return result
     resolved_ids: list[str] = []
-    if resolve_scope_matches:
+    if resolve_scope_matches and not exact_context_allow:
         resolved_ids = store.resolve_matching_approval_requests(
             harness=resolution_harness,
             scope=scope,
@@ -1188,6 +1234,13 @@ def wait_for_approval_requests(
     timeout_seconds: int,
     poll_interval: float = 0.01,
 ) -> dict[str, object]:
+    if not request_ids:
+        return {
+            "resolved": False,
+            "pending_request_ids": [],
+            "items": [],
+            "reason": "no_approval_requests",
+        }
     deadline = time.monotonic() + max(timeout_seconds, 0)
     while True:
         items = [store.get_approval_request(request_id) for request_id in request_ids]
@@ -1248,6 +1301,9 @@ def _artifact_type(item: dict[str, object]) -> str:
 
 
 def _workspace_scope_target(item: dict[str, object], artifact) -> str | None:
+    effective_workspace = item.get("effective_workspace")
+    if isinstance(effective_workspace, str) and effective_workspace.strip():
+        return effective_workspace.strip()
     config_path = _config_path(item, artifact)
     if not config_path:
         return None
@@ -1370,16 +1426,14 @@ def _build_runtime_cloud_context(
     connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
     sync_url = cloud_profile["sync_url"] if cloud_profile is not None else None
     sync_summary = store.get_sync_payload("sync_summary") or {}
-    remote_policy = store.get_sync_payload("policy") or {}
-    team_policy_pack = store.get_sync_payload("team_policy_pack") or {}
     alert_preferences = store.get_sync_payload("alert_preferences") or {}
-    policy_bundle = _sync_payload_dict(store, "policy_bundle")
+    policy_bundle, cached_policy_bundle_error = synced_policy_bundle_validation(store)
+    policy_bundle = policy_bundle or {}
+    policy_defaults = policy_bundle.get("policyDefaults")
+    remote_policy = policy_defaults if isinstance(policy_defaults, dict) else {}
     policy_bundle_last_error = _sync_payload_dict(store, "policy_bundle_last_error")
-    acknowledgement = policy_bundle.get("acknowledgement")
-    cloud_policy_last_ack_at = (
-        _optional_string(acknowledgement.get("acknowledgedAt")) if isinstance(acknowledgement, dict) else None
-    )
-    remote_payload_active = any((sync_summary, remote_policy, team_policy_pack, alert_preferences))
+    cloud_policy_last_ack_at = _cloud_policy_last_ack_at(store, policy_bundle)
+    remote_payload_active = any((sync_summary, remote_policy, alert_preferences))
     cloud_state = resolve_guard_cloud_state(
         sync_configured=cloud_profile is not None,
         sync_completed=bool(sync_summary),
@@ -1447,15 +1501,39 @@ def _build_runtime_cloud_context(
         "cloud_policy_bundle_hash": _optional_string(policy_bundle.get("bundleHash")),
         "cloud_policy_bundle_version": _optional_string(policy_bundle.get("bundleVersion")),
         "cloud_policy_rollout_state": _optional_string(policy_bundle.get("rolloutState")),
-        "cloud_policy_sync_error": _optional_string(policy_bundle_last_error.get("reason")),
+        "cloud_policy_sync_error": cached_policy_bundle_error
+        or _optional_string(policy_bundle_last_error.get("reason")),
         "cloud_policy_last_ack_at": cloud_policy_last_ack_at,
-        "team_policy_active": bool(team_policy_pack),
+        "team_policy_active": False,
     }
 
 
 def _sync_payload_dict(store: GuardStore, key: str) -> dict[str, object]:
     payload = store.get_sync_payload(key) or {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _cloud_policy_last_ack_at(store: GuardStore, policy_bundle: dict[str, object]) -> str | None:
+    acknowledgement = _sync_payload_dict(store, "policy_bundle_ack")
+    bundle_hash = _optional_string(policy_bundle.get("bundleHash"))
+    bundle_version = _optional_string(policy_bundle.get("bundleVersion"))
+    if bundle_hash is None or bundle_version is None:
+        return None
+    try:
+        device_id = str(store.get_device_metadata()["installation_id"])
+    except (KeyError, OSError, RuntimeError, TypeError, ValueError):
+        return None
+    applied_at = _optional_string(acknowledgement.get("appliedAt"))
+    if (
+        acknowledgement.get("bundleHash") != bundle_hash
+        or acknowledgement.get("bundleVersion") != bundle_version
+        or acknowledgement.get("deviceId") != device_id
+        or acknowledgement.get("status") != "synced"
+        or applied_at is None
+        or _parse_timestamp(applied_at) is None
+    ):
+        return None
+    return applied_at
 
 
 def _build_runtime_device_context(store: GuardStore) -> dict[str, object]:

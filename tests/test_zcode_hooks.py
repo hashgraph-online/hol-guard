@@ -111,6 +111,7 @@ class TestZCodeHookResponses:
         assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
 
     def test_should_block_flags_blocking_actions(self) -> None:
+        assert zcode_hook_should_block(policy_action="review")
         assert zcode_hook_should_block(policy_action="block")
         assert zcode_hook_should_block(policy_action="sandbox-required")
         assert zcode_hook_should_block(policy_action="require-reapproval")

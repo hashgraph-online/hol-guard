@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -21,6 +21,41 @@ pythonpath_entries = [entry for entry in existing_pythonpath.split(os.pathsep) i
 pythonpath_prefix = [str(path) for path in (SUPPORT_PATH, SRC_PATH) if str(path) not in pythonpath_entries]
 if pythonpath_prefix:
     os.environ["PYTHONPATH"] = os.pathsep.join([*pythonpath_prefix, *pythonpath_entries])
+
+
+def _test_guard_homes_with_daemon_state(root: Path) -> set[Path]:
+    guard_homes: set[Path] = set()
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            pending.append(Path(entry.path))
+                        elif entry.is_file(follow_symlinks=False) and entry.name == "daemon-state.json":
+                            guard_homes.add(Path(entry.path).parent)
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return guard_homes
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> Iterator[None]:
+    """Retire Guard daemons launched from the completed test's temporary tree."""
+    del nextitem
+    test_tmp_path = item.funcargs.get("tmp_path")
+    yield
+    if not isinstance(test_tmp_path, Path):
+        return
+
+    from codex_plugin_scanner.guard.daemon.manager import retire_all_guard_daemons_for_home
+
+    for guard_home in sorted(_test_guard_homes_with_daemon_state(test_tmp_path)):
+        retire_all_guard_daemons_for_home(guard_home)
 
 
 @pytest.fixture(autouse=True)

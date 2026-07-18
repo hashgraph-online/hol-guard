@@ -142,7 +142,7 @@ class TestHashnetMcpKnownSafeRemote:
 
 
 class TestHashnetMcpChangedCapability:
-    """changed-capability scenario: tool schema drift is detected by Guard."""
+    """Changed server and tool capabilities produce distinct identities."""
 
     def _server_hash(self) -> str:
         return build_mcp_server_identity(
@@ -205,12 +205,9 @@ class TestHashnetMcpChangedCapability:
 class TestHashnetMcpChangedDomain:
     """changed-domain scenario: URL and args drift are detected by server identity.
 
-    Note: ``build_mcp_server_identity`` uses ``_command_name()`` which extracts
-    only the last URL path segment as the effective command name. Host-only
-    swaps (same path, different hostname) therefore produce the same
-    ``identity_hash`` — this is a known limitation of the current design.
-    Path changes (different last segment) are detected, as are stdio args
-    changes.
+    The display-oriented command name remains the final URL path segment, but
+    identity also binds a hash of the complete configured command. Host-only
+    swaps, path changes, and stdio argument changes are therefore detected.
     """
 
     def test_url_path_change_produces_different_identity(self) -> None:
@@ -228,7 +225,7 @@ class TestHashnetMcpChangedDomain:
         )
         assert real_identity.identity_hash != evil_identity.identity_hash
 
-    def test_host_only_swap_produces_same_identity_hash(self) -> None:
+    def test_host_only_swap_produces_different_identity_hash(self) -> None:
         real_identity = build_mcp_server_identity(
             config_path=_HASHNET_CONFIG_PATH,
             command=_HASHNET_REMOTE_URL,
@@ -241,11 +238,7 @@ class TestHashnetMcpChangedDomain:
             args=(),
             transport="http",
         )
-        assert real_identity.identity_hash == host_swapped.identity_hash, (
-            "Known limitation: _command_name() extracts only the last URL path "
-            "segment, so a host-only swap with the same path is not detected by "
-            "McpServerIdentity alone."
-        )
+        assert real_identity.identity_hash != host_swapped.identity_hash
 
     def test_args_drift_produces_different_stdio_identity(self) -> None:
         canonical = build_mcp_server_identity(

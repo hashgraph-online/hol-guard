@@ -51,7 +51,7 @@ from .grok_executable import (
 
 tomllib: Any
 try:
-    import tomllib as tomllib  # type: ignore[attr-defined]
+    import tomllib as tomllib  # pyright: ignore[reportMissingImports]
 except ModuleNotFoundError:
     tomllib = importlib.import_module("tomli")
 
@@ -171,6 +171,19 @@ class GrokHarnessAdapter(HarnessAdapter):
         if executable.source == "explicit":
             executable = register_trusted_grok_executable(context, executable)
         return [str(executable.path), *passthrough_args]
+
+    def preview_launch_commands(
+        self,
+        context: HarnessContext,
+        passthrough_args: list[str],
+    ) -> tuple[list[str], ...]:
+        """Resolve Grok without persisting an explicit-path registration."""
+
+        resolution = resolve_trusted_grok_executable(context)
+        executable = resolution.executable
+        if executable is None:
+            raise FileNotFoundError(resolution.error or "Trusted Grok executable not found.")
+        return ([str(executable.path), *passthrough_args],)
 
     def prepare_launch_environment(
         self,

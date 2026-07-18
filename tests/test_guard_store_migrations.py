@@ -13,6 +13,8 @@ import types
 import pytest
 
 from codex_plugin_scanner.guard import store as guard_store_module
+from codex_plugin_scanner.guard.policy_bundle_decisions import build_policy_bundle_decisions
+from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.store import (
     EncryptedFileSecretStore,
     FallbackSecretStore,
@@ -22,6 +24,9 @@ from codex_plugin_scanner.guard.store import (
     _build_oauth_secret_store,
 )
 from codex_plugin_scanner.guard.store_evidence import EvidenceRecord
+from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+
+_POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
 
 
 def test_store_star_import_includes_guard_store() -> None:
@@ -448,6 +453,170 @@ def _incomplete_evidence_table(connection: sqlite3.Connection) -> None:
         )
         """
     )
+
+
+@pytest.mark.parametrize("include_artifact_hash", (False, True))
+def test_guard_store_migrates_historical_policy_columns_before_creating_indexes(
+    tmp_path,
+    include_artifact_hash: bool,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    database_path = guard_home / "guard.db"
+    artifact_hash_column = ", artifact_hash text" if include_artifact_hash else ""
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            f"""
+            create table policy_decisions (
+              decision_id integer primary key autoincrement,
+              harness text not null,
+              scope text not null,
+              artifact_id text,
+              workspace text,
+              action text not null,
+              reason text,
+              updated_at text not null
+              {artifact_hash_column}
+            )
+            """
+        )
+        connection.execute(
+            """
+            insert into policy_decisions (
+              harness, scope, artifact_id, workspace, action, reason, updated_at
+            ) values (
+              'codex', 'artifact', 'codex:project:legacy', null,
+              'allow', 'historical row', '2025-01-01T00:00:00Z'
+            )
+            """
+        )
+
+    store = GuardStore(guard_home, prime_policy_integrity=False)
+    GuardStore(guard_home, prime_policy_integrity=False)
+
+    migrated_columns = {
+        "publisher",
+        "artifact_hash",
+        "owner",
+        "source",
+        "expires_at",
+        "integrity_version",
+        "integrity_generation",
+        "payload_hash",
+        "payload_mac",
+        "integrity_key_id",
+        "signed_at",
+    }
+    expected_indexes = {
+        "idx_policy_decisions_reuse_artifact",
+        "idx_policy_decisions_reuse_hash",
+        "idx_policy_decisions_reuse_publisher",
+        "idx_policy_decisions_lookup_artifact",
+        "idx_policy_decisions_lookup_workspace",
+        "idx_policy_decisions_lookup_publisher",
+        "idx_policy_decisions_lookup_publisher_legacy",
+        "idx_policy_decisions_lookup_harness",
+        "idx_policy_decisions_lookup_harness_legacy",
+        "idx_policy_decisions_lookup_global",
+        "idx_policy_decisions_lookup_global_legacy",
+        "idx_policy_decisions_diagnostic_harness_broad",
+        "idx_policy_decisions_diagnostic_global_broad",
+        "idx_policy_decisions_diagnostic_publisher",
+    }
+    with sqlite3.connect(database_path) as connection:
+        columns = {str(row[1]) for row in connection.execute("pragma table_info(policy_decisions)")}
+        indexes = {
+            str(row[0])
+            for row in connection.execute(
+                "select name from sqlite_schema where type = 'index' and tbl_name = 'policy_decisions'"
+            )
+        }
+        historical_source = connection.execute(
+            "select source from policy_decisions where artifact_id = 'codex:project:legacy'"
+        ).fetchone()
+
+    assert migrated_columns.issubset(columns)
+    assert expected_indexes.issubset(indexes)
+    assert historical_source == ("local",)
+
+    current_artifact_id = "codex:project:tool-action:migrated-store"
+    activated_at = "2026-07-18T12:00:00Z"
+    bundle_version = "migration-current-v1"
+    bundle = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": bundle_version,
+            "bundleHash": "",
+            "issuedAt": activated_at,
+            "expiresAt": None,
+            "rolloutState": "enforcing",
+            "policyDefaults": {
+                "mode": "observe",
+                "defaultAction": "allow",
+                "unknownPublisherAction": "allow",
+                "changedHashAction": "allow",
+                "newNetworkDomainAction": "allow",
+                "subprocessAction": "allow",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [
+                {
+                    "ruleId": "migrated-store-rule",
+                    "action": "allow",
+                    "reason": "Authenticated policy after historical schema migration.",
+                    "artifactId": current_artifact_id,
+                    "scope": {
+                        "agents": [],
+                        "devices": [],
+                        "ecosystems": [],
+                        "environments": [],
+                        "harnesses": ["codex"],
+                        "locations": [],
+                    },
+                }
+            ],
+            "cloudExceptions": [],
+            "acknowledgements": [],
+        },
+        workspace_id=_POLICY_BUNDLE_WORKSPACE_ID,
+    )
+    store.set_sync_payload(
+        "oauth_local_credentials",
+        {"workspace_id": _POLICY_BUNDLE_WORKSPACE_ID},
+        activated_at,
+    )
+    device = store.get_device_metadata()
+    decisions = build_policy_bundle_decisions(
+        bundle,
+        device_id=str(device["installation_id"]),
+        device_name=str(device["device_label"]),
+    )
+    assert len(decisions) == 1
+    assert decisions[0].artifact_id == current_artifact_id
+    store.apply_policy_bundle_authority(
+        decisions,
+        activated_at,
+        policy_bundle=bundle,
+        policy_bundle_keyring=policy_bundle_test_keyring(workspace_id=_POLICY_BUNDLE_WORKSPACE_ID),
+        cloud_exceptions=[],
+        policy_bundle_ack={"bundleVersion": bundle_version, "status": "applied"},
+        policy_bundle_checkpoint=policy_bundle_acceptance_checkpoint(bundle),
+        update_last_good=True,
+        remote_write_authorized=True,
+    )
+
+    selected = store.resolve_policy_decision(
+        "codex",
+        current_artifact_id,
+        "sha256:current",
+        now="2026-07-18T12:01:00Z",
+        consume_one_shot=False,
+    )
+
+    assert selected is not None
+    assert selected["source"] == "policy-bundle"
+    assert selected["artifact_id"] == current_artifact_id
 
 
 def test_guard_store_repairs_missing_evidence_table_when_schema_v4_is_applied(tmp_path):

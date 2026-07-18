@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import importlib
+import re
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
@@ -14,11 +15,29 @@ if TYPE_CHECKING:
     from .commands_support_prompts import _prompt_request_classes, _prompt_requires_hard_block
 
 
+from ..action_lattice import coerce_guard_action, most_restrictive_guard_action, normalize_guard_action
+from ..models import GuardAction
+from ..proxy._env import _build_scrubbed_env
+from ..runtime.approval_context import (
+    approval_context_tokens_validation_reason,
+    build_approval_context_token,
+    build_configured_environment_hash,
+    build_runtime_launch_identity,
+)
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+# Bump when runtime scanner or action-composition semantics change. Product and
+# approval-surface versions deliberately do not participate in this identity.
+_RUNTIME_HOOK_EVALUATOR_POLICY_VERSION = "runtime-hook-evaluation-v1"
+_LOCAL_REVIEW_INSTRUCTION_RE = re.compile(
+    re.escape("Review this request in HOL Guard, then retry."),
+    re.IGNORECASE,
+)
+_LOCAL_APPROVAL_REQUEST_URL_RE = re.compile(r"https?://[^\s]+/requests(?:/[^\s]*)?", re.IGNORECASE)
 
 
 def _runtime_artifacts_module():
@@ -186,6 +205,30 @@ def _approval_center_routed_message(message: str, review_context: str) -> str:
         return review_context
     return f"{_ensure_terminal_punctuation(normalized)} {review_context}"
 
+def _terminal_action_message(message: str) -> str:
+    normalized = _strip_cloud_inbox_urls(message)
+    normalized = _strip_legacy_approval_center_sentence(normalized)
+    normalized = _LOCAL_REVIEW_INSTRUCTION_RE.sub("", normalized)
+    normalized = _LOCAL_APPROVAL_REQUEST_URL_RE.sub("", normalized)
+    normalized = " ".join(normalized.split())
+    return _strip_review_evidence_tail(normalized)
+
+def _terminalize_runtime_action_copy(response_payload: dict[str, object]) -> None:
+    decision_v2 = response_payload.get("decision_v2_json")
+    if isinstance(decision_v2, dict):
+        harness_message = _optional_string(decision_v2.get("harness_message"))
+        if harness_message is not None:
+            decision_v2["harness_message"] = _terminal_action_message(harness_message)
+        decision_v2.pop("retry_instruction", None)
+    supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
+    if isinstance(supply_chain_evaluation, dict):
+        user_copy = supply_chain_evaluation.get("user_copy")
+        if isinstance(user_copy, dict):
+            harness_message = _optional_string(user_copy.get("harness_message"))
+            if harness_message is not None:
+                user_copy["harness_message"] = _terminal_action_message(harness_message)
+            user_copy["dashboard_url"] = None
+
 def _strip_review_evidence_tail(message: str) -> str:
     stripped = message.strip()
     lower_stripped = stripped.lower()
@@ -222,7 +265,7 @@ def _is_cloud_inbox_url(value: str) -> bool:
     parsed = urllib.parse.urlparse(value)
     return parsed.scheme in {"http", "https"} and parsed.path.rstrip("/") == "/guard/inbox"
 
-def _runtime_stored_policy_action(
+def _runtime_stored_policy_decision(
     *,
     store: GuardStore,
     harness: str,
@@ -231,7 +274,16 @@ def _runtime_stored_policy_action(
     artifact_hash: str,
     workspace: str | None,
     decision_lookup: Mapping[str, object] | None = None,
-) -> str | None:
+    consume_one_shot: bool = True,
+) -> Mapping[str, object] | None:
+    """Return a matching saved decision without conflating it with current policy.
+
+    Runtime launch paths pass ``consume_one_shot=False`` and claim an accepted
+    approval only after recomputing all current policy and scanner inputs.  The
+    consuming default preserves the compatibility contract for older direct
+    callers that use this helper outside the authoritative runtime path.
+    """
+
     runtime_exact_match_context = _runtime_artifact_exact_match_context(artifact)
     ignored_local_integrity: Mapping[str, object] | None = None
     if isinstance(decision_lookup, Mapping):
@@ -242,22 +294,43 @@ def _runtime_stored_policy_action(
             raw_ignored_local_integrity if isinstance(raw_ignored_local_integrity, Mapping) else None
         )
     else:
-        decision = store.resolve_policy_decision(
-            harness,
-            artifact_id,
-            artifact_hash=artifact_hash,
-            workspace=workspace,
-            publisher=artifact.publisher,
-            runtime_exact_match_context=runtime_exact_match_context,
-        )
+        if consume_one_shot:
+            decision = store.resolve_policy_decision(
+                harness,
+                artifact_id,
+                artifact_hash=artifact_hash,
+                workspace=workspace,
+                publisher=artifact.publisher,
+                runtime_exact_match_context=runtime_exact_match_context,
+            )
+        else:
+            decision = store.resolve_policy_decision(
+                harness,
+                artifact_id,
+                artifact_hash=artifact_hash,
+                workspace=workspace,
+                publisher=artifact.publisher,
+                runtime_exact_match_context=runtime_exact_match_context,
+                consume_one_shot=False,
+            )
     if decision is None and runtime_exact_match_context is not None and ignored_local_integrity is None:
-        legacy_decision = store.resolve_policy_decision(
-            harness,
-            artifact_id,
-            artifact_hash=artifact_hash,
-            workspace=workspace,
-            publisher=artifact.publisher,
-        )
+        if consume_one_shot:
+            legacy_decision = store.resolve_policy_decision(
+                harness,
+                artifact_id,
+                artifact_hash=artifact_hash,
+                workspace=workspace,
+                publisher=artifact.publisher,
+            )
+        else:
+            legacy_decision = store.resolve_policy_decision(
+                harness,
+                artifact_id,
+                artifact_hash=artifact_hash,
+                workspace=workspace,
+                publisher=artifact.publisher,
+                consume_one_shot=False,
+            )
         if _optional_string((legacy_decision or {}).get("scope")) in {"harness", "global"}:
             decision = legacy_decision
     if decision is None:
@@ -266,6 +339,13 @@ def _runtime_stored_policy_action(
     if action is None:
         return None
     scope = _optional_string(decision.get("scope"))
+    if action == "allow" and approval_context_tokens_validation_reason(
+        decision.get("artifact_hash"),
+        artifact_hash,
+    ) is None:
+        # A valid v1 token already binds the exact request context. Broad
+        # scopes are selectors only; they must not discard that exact token.
+        return decision
     if (
         action in {"allow", "warn", "review"}
         and scope in {"workspace", "publisher", "harness", "global"}
@@ -277,7 +357,7 @@ def _runtime_stored_policy_action(
             if decision_artifact_id == artifact_id and (
                 decision_artifact_hash is None or decision_artifact_hash == artifact_hash
             ):
-                return action
+                return decision
             return None
         if scope in {"harness", "global"}:
             decision_artifact_hash = _optional_string(decision.get("artifact_hash"))
@@ -290,10 +370,278 @@ def _runtime_stored_policy_action(
                 if key is not None
             }
             if not exact_match_keys:
-                return action if decision_artifact_id is not None else None
-            return action if decision_artifact_hash in exact_match_keys else None
+                return decision if decision_artifact_id is not None else None
+            return decision if decision_artifact_hash in exact_match_keys else None
         return None
-    return action
+    return decision
+
+
+def _runtime_stored_policy_action(
+    *,
+    store: GuardStore,
+    harness: str,
+    artifact: GuardArtifact,
+    artifact_id: str,
+    artifact_hash: str,
+    workspace: str | None,
+    decision_lookup: Mapping[str, object] | None = None,
+    consume_one_shot: bool = True,
+) -> str | None:
+    """Compatibility projection for callers that only need the saved action."""
+
+    decision = _runtime_stored_policy_decision(
+        store=store,
+        harness=harness,
+        artifact=artifact,
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+        workspace=workspace,
+        decision_lookup=decision_lookup,
+        consume_one_shot=consume_one_shot,
+    )
+    return _optional_string(decision.get("action")) if decision is not None else None
+
+
+def _runtime_saved_allow_validation_reason(
+    decision: Mapping[str, object],
+    *,
+    artifact: GuardArtifact,
+    artifact_hash: str,
+) -> str | None:
+    """Require saved runtime allows to carry the complete current v1 context."""
+
+    if _optional_string(decision.get("action")) != "allow":
+        return None
+    stored_hash = _optional_string(decision.get("artifact_hash"))
+    return approval_context_tokens_validation_reason(stored_hash, artifact_hash)
+
+
+def _runtime_hook_approval_context_token(
+    *,
+    artifact: GuardArtifact,
+    content_hash: str,
+    runtime_workspace: Path | None,
+    action_envelope: GuardActionEnvelope | None,
+    config: GuardConfig,
+    current_config_action: GuardAction,
+    trusted_cli_action: GuardAction | None,
+    untrusted_payload_action: GuardAction | None,
+    package_action: GuardAction | None,
+    data_flow_action: GuardAction | None,
+    scanner_action: GuardAction | None,
+    current_action: GuardAction,
+    data_flow_signals: Sequence[object],
+    scanner_evidence: Sequence[object],
+) -> str:
+    """Bind a saved hook approval to the exact reviewed runtime context.
+
+    The returned token intentionally partitions context into independently
+    comparable dimensions.  Values are hashed by ``approval_context`` and are
+    never serialized into the stored token itself.
+    """
+
+    effective_cwd = _normalized_runtime_context_path(runtime_workspace or Path.cwd())
+    configured_workspace = (
+        _normalized_runtime_context_path(config.workspace) if config.workspace is not None else None
+    )
+    envelope_workspace = (
+        _normalized_runtime_context_path(Path(action_envelope.workspace))
+        if action_envelope is not None and action_envelope.workspace is not None
+        else None
+    )
+    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
+    return build_approval_context_token(
+        identity={
+            "artifact_id": artifact.artifact_id,
+            "artifact_name": artifact.name,
+            "artifact_type": artifact.artifact_type,
+            "config_path": artifact.config_path,
+            "configured_workspace": configured_workspace,
+            "cwd": effective_cwd,
+            "envelope_workspace": envelope_workspace,
+            "envelope_workspace_hash": action_envelope.workspace_hash if action_envelope is not None else None,
+            "executable": _runtime_hook_executable_identity(
+                artifact,
+                launch_cwd=runtime_workspace or Path.cwd(),
+            ),
+            "guard_home": _normalized_runtime_context_path(config.guard_home),
+            "harness": artifact.harness,
+            "publisher": artifact.publisher,
+            "source_scope": artifact.source_scope,
+        },
+        content={
+            "artifact_content_hash": content_hash,
+            "command_security_identity": metadata.get("command_security_identity"),
+        },
+        capabilities={
+            "action_envelope": _runtime_hook_action_capabilities(action_envelope),
+            "artifact_type": artifact.artifact_type,
+            "data_flow_signals": [_runtime_hook_evidence_payload(item) for item in data_flow_signals],
+            "risk_classes": _runtime_artifact_risk_classes(artifact),
+            "scanner_evidence": [_runtime_hook_evidence_payload(item) for item in scanner_evidence],
+            "transport": artifact.transport,
+        },
+        policy={
+            "config": _runtime_hook_effective_policy_config(config),
+            "evaluator_policy_version": _RUNTIME_HOOK_EVALUATOR_POLICY_VERSION,
+            "composition": {
+                "current_action": current_action,
+                "current_config_action": current_config_action,
+                "data_flow_action": data_flow_action,
+                "package_action": package_action,
+                "scanner_action": scanner_action,
+                "trusted_cli_action": trusted_cli_action,
+                "untrusted_payload_action": untrusted_payload_action,
+            },
+        },
+        sandbox={
+            "analysis": config.sandbox_analysis,
+            "required": current_action == "sandbox-required",
+        },
+    )
+
+
+def _runtime_hook_effective_policy_config(config: GuardConfig) -> dict[str, object]:
+    """Return effective settings that can change enforcement or risk evidence."""
+
+    return {
+        "artifact_actions": dict(config.artifact_actions or {}),
+        "changed_hash_action": config.changed_hash_action,
+        "default_action": config.default_action,
+        "harness_actions": dict(config.harness_actions or {}),
+        "harness_risk_actions": {
+            harness: dict(actions) for harness, actions in (config.harness_risk_actions or {}).items()
+        },
+        "install_owner": config.install_owner,
+        "managed_locked_settings": list(config.managed_locked_settings),
+        "managed_policy_hash": config.managed_policy_hash,
+        "managed_policy_status": config.managed_policy_status,
+        "mode": config.mode,
+        "new_network_domain_action": config.new_network_domain_action,
+        "publisher_actions": dict(config.publisher_actions or {}),
+        "risk_actions": dict(config.risk_actions or {}),
+        "runtime_detector_disabled_ids": list(config.runtime_detector_disabled_ids),
+        "runtime_detector_registry": config.runtime_detector_registry,
+        "runtime_detector_timeout_ms": config.runtime_detector_timeout_ms,
+        "security_level": config.security_level,
+        "subprocess_action": config.subprocess_action,
+        "unknown_publisher_action": config.unknown_publisher_action,
+    }
+
+
+def _runtime_hook_action_capabilities(action_envelope: GuardActionEnvelope | None) -> dict[str, object] | None:
+    if action_envelope is None:
+        return None
+    return {
+        "action_type": action_envelope.action_type,
+        "mcp_server": action_envelope.mcp_server,
+        "mcp_tool": action_envelope.mcp_tool,
+        "network_hosts": list(action_envelope.network_hosts),
+        "package_intent_kind": action_envelope.package_intent_kind,
+        "package_manager": action_envelope.package_manager,
+        "package_name": action_envelope.package_name,
+        "package_targets": list(action_envelope.package_targets),
+        "script_name": action_envelope.script_name,
+        "target_paths": list(action_envelope.target_paths),
+        "tool_name": action_envelope.tool_name,
+    }
+
+
+def _runtime_hook_evidence_payload(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {str(key): item for key, item in value.items()}
+    to_dict = getattr(value, "to_dict", None)
+    return to_dict() if callable(to_dict) else str(value)
+
+
+def _runtime_hook_executable_identity(
+    artifact: GuardArtifact,
+    *,
+    launch_cwd: Path,
+) -> dict[str, object]:
+    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
+    raw_environment = metadata.get("env")
+    configured_environment = (
+        {
+            str(key): str(value)
+            for key, value in raw_environment.items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
+        if isinstance(raw_environment, Mapping)
+        else {}
+    )
+    raw_env_keys = metadata.get("env_keys")
+    configured_env_keys = tuple(
+        sorted(
+            {
+                *configured_environment,
+                *(
+                    (item for item in raw_env_keys if isinstance(item, str) and item)
+                    if isinstance(raw_env_keys, Sequence) and not isinstance(raw_env_keys, str)
+                    else ()
+                ),
+            }
+        )
+    )
+    provided_env_values_hash = _optional_string(
+        metadata.get("env_values_hash") or metadata.get("envValuesHash")
+    )
+    computed_env_values_hash = (
+        build_configured_environment_hash(
+            configured_environment,
+            configured_keys=configured_env_keys,
+        )
+        if configured_environment or not configured_env_keys
+        else None
+    )
+    launch_env = _build_scrubbed_env(configured_environment)
+    launch_identity = build_runtime_launch_identity(
+        artifact.command,
+        args=artifact.args,
+        structured_command=artifact.artifact_type != "tool_action_request",
+        search_path=launch_env.get("PATH"),
+        cwd=launch_cwd,
+        launch_env=launch_env,
+    )
+    missing_value_keys = tuple(key for key in configured_env_keys if key not in configured_environment)
+    unavailable_values = bool(missing_value_keys) and provided_env_values_hash is None
+    code_loading_keys = {"BASH_ENV", "ENV", "NODE_OPTIONS", "PYTHONINSPECT", "PYTHONPATH", "ZDOTDIR"}
+    unresolved_code_loading_environment = bool(code_loading_keys.intersection(missing_value_keys))
+    configured_environment_identity: dict[str, object] = {
+        "computed_values_hash": computed_env_values_hash,
+        "keys": list(configured_env_keys),
+        "provided_values_hash": provided_env_values_hash,
+        "values_hash": provided_env_values_hash if missing_value_keys else computed_env_values_hash,
+        "provided_values_hash_matches": (
+            provided_env_values_hash == computed_env_values_hash
+            if provided_env_values_hash is not None and computed_env_values_hash is not None
+            else None
+        ),
+        "status": (
+            "unproven"
+            if unavailable_values or unresolved_code_loading_environment
+            else "verified"
+        ),
+    }
+    if unavailable_values or unresolved_code_loading_environment:
+        configured_environment_identity["reuse_nonce"] = secrets.token_hex(16)
+    return {
+        "artifact_command": artifact.command,
+        "artifact_tool": metadata.get("tool_name"),
+        "configured_environment": configured_environment_identity,
+        "launch_argv_sha256": launch_identity["argv_sha256"],
+        "launch_cwd": launch_identity["launch_cwd"],
+        "resolved_artifact_command": launch_identity["executable"],
+        "resolved_entrypoint": launch_identity["entrypoint"],
+        "transport": artifact.transport,
+    }
+
+
+def _normalized_runtime_context_path(path: Path) -> str:
+    try:
+        return str(path.expanduser().resolve(strict=False))
+    except (OSError, RuntimeError):
+        return str(path.expanduser().absolute())
 
 
 def _remembered_rule_rejection_reason(
@@ -338,10 +686,23 @@ def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None
         raw_command_text=raw_command_text if isinstance(raw_command_text, str) else None,
         wrapper_chain=normalized_wrapper_chain,
     )
-def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact, harness: str) -> str:
+def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact, harness: str) -> GuardAction:
     if _prompt_requires_hard_block(artifact):
         return "block"
     canonical_harness = _canonical_harness_name(harness)
+    configured_override = config.resolve_action_override(
+        canonical_harness,
+        artifact.artifact_id,
+        artifact.publisher,
+    )
+
+    def with_config_policy(action: GuardAction) -> GuardAction:
+        # Artifact/publisher/harness settings are more-specific resolutions of
+        # the global default, not additional inputs.  Scanner/risk results are
+        # independent and therefore remain a floor even for an exact allow.
+        current_config_action = configured_override if configured_override is not None else config.default_action
+        return most_restrictive_guard_action(action, current_config_action)
+
     risk_classes = _runtime_artifact_risk_classes(artifact)
     has_configured_risk_action = any(
         _resolve_configured_risk_action(config, risk_class, harness=canonical_harness) for risk_class in risk_classes
@@ -352,22 +713,23 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
             or resolve_risk_action(config, risk_class, harness=canonical_harness)
             for risk_class in risk_classes
         ]
-        resolved_actions = [action for action in risk_actions if action in VALID_GUARD_ACTIONS]
+        resolved_actions = [action for action in risk_actions if coerce_guard_action(action) is not None]
         if resolved_actions:
-            return max(resolved_actions, key=guard_action_severity)
+            return with_config_policy(most_restrictive_guard_action(*resolved_actions))
     guard_default_action = _runtime_artifact_guard_default_action(artifact)
     risk_actions = [resolve_risk_action(config, risk_class, harness=canonical_harness) for risk_class in risk_classes]
-    resolved_actions = [action for action in risk_actions if action in VALID_GUARD_ACTIONS]
+    resolved_actions = [action for action in risk_actions if coerce_guard_action(action) is not None]
     if resolved_actions:
-        resolved = max(resolved_actions, key=guard_action_severity)
-        if guard_default_action is not None and guard_action_severity(guard_default_action) > guard_action_severity(
-            resolved
-        ):
-            return guard_default_action
-        return resolved
+        resolved = most_restrictive_guard_action(*resolved_actions)
+        resolved_with_default = (
+            most_restrictive_guard_action(resolved, guard_default_action)
+            if guard_default_action is not None
+            else resolved
+        )
+        return with_config_policy(resolved_with_default)
     if guard_default_action is not None:
-        return guard_default_action
-    return SAFE_CHANGED_HASH_ACTION
+        return with_config_policy(guard_default_action)
+    return with_config_policy(SAFE_CHANGED_HASH_ACTION)
 
 def _resolve_configured_risk_action(config: GuardConfig, risk_class: str, *, harness: str) -> str | None:
     if config.harness_risk_actions is not None:
@@ -378,11 +740,9 @@ def _resolve_configured_risk_action(config: GuardConfig, risk_class: str, *, har
         return config.risk_actions[risk_class]
     return None
 
-def _runtime_artifact_guard_default_action(artifact: GuardArtifact) -> str | None:
+def _runtime_artifact_guard_default_action(artifact: GuardArtifact) -> GuardAction | None:
     value = artifact.metadata.get("guard_default_action")
-    if value in VALID_GUARD_ACTIONS:
-        return str(value)
-    return None
+    return normalize_guard_action(value, unknown_action="require-reapproval") if value is not None else None
 
 def _runtime_action_data_flow_signals(
     action_envelope: GuardActionEnvelope | None,
@@ -594,5 +954,6 @@ __all__ = [
     "_runtime_artifact_guard_default_action", "_runtime_artifact_policy_action", "_runtime_artifact_risk_classes",
     "_runtime_data_flow_sink_type", "_runtime_data_flow_summary", "_runtime_detector_perf_payload",
     "_runtime_detector_registry_payload", "_runtime_stored_policy_action", "_strip_cloud_inbox_urls",
-    "_strip_legacy_approval_center_sentence", "_strip_review_evidence_tail",
+    "_strip_legacy_approval_center_sentence", "_strip_review_evidence_tail", "_terminal_action_message",
+    "_terminalize_runtime_action_copy",
 ]

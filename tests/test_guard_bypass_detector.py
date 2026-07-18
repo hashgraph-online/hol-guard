@@ -165,10 +165,10 @@ class TestComposeActionFromSignals:
         assert result.action == "block"
         assert result.upgraded
 
-    def test_persistence_signal_upgrades_to_ask(self) -> None:
+    def test_persistence_signal_upgrades_to_review(self) -> None:
         signal = _make_signal(signal_id="persist:cron", category="persistence", severity="high", confidence="strong")
         result = compose_action_from_signals((signal,), "allow")
-        assert result.action in ("ask", "block")
+        assert result.action in ("review", "block")
         assert result.upgraded
 
     def test_critical_risk_signal_upgrades_to_block(self) -> None:
@@ -177,19 +177,19 @@ class TestComposeActionFromSignals:
         assert result.action == "block"
         assert result.upgraded
 
-    def test_strong_fp_with_no_risk_downgrades_block_to_ask(self) -> None:
+    def test_strong_fp_with_no_risk_downgrades_block_to_review(self) -> None:
         fp = _make_signal(
             signal_id="fp:source-search:grep", category="false_positive", severity="info", confidence="strong"
         )
         result = compose_action_from_signals((fp,), "block")
-        assert result.action == "ask"
+        assert result.action == "review"
         assert result.downgraded
 
-    def test_strong_fp_source_search_downgrades_ask_to_warn(self) -> None:
+    def test_strong_fp_source_search_downgrades_review_to_warn(self) -> None:
         fp = _make_signal(
             signal_id="fp:source-search:grep", category="false_positive", severity="info", confidence="strong"
         )
-        result = compose_action_from_signals((fp,), "ask")
+        result = compose_action_from_signals((fp,), "review")
         assert result.action == "warn"
         assert result.downgraded
 

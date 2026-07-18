@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.consumer import artifact_hash as compute_artifac
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.memory_pattern_fingerprint import (
     build_exact_command_memory_artifact_id,
+    build_exact_shell_command_memory_artifact_id,
     build_memory_pattern_fingerprint,
 )
 from codex_plugin_scanner.guard.models import (
@@ -27,8 +28,87 @@ from codex_plugin_scanner.guard.models import (
     PolicyDecision,
 )
 from codex_plugin_scanner.guard.policy.engine import decide_action
+from codex_plugin_scanner.guard.policy_bundle_decisions import build_policy_bundle_decisions
+from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.receipts.manager import build_receipt
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+
+_POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
+
+
+def _install_signed_exact_policies(
+    store: GuardStore,
+    policies: list[tuple[str, str, str]],
+    *,
+    now: str,
+    bundle_version: str,
+) -> None:
+    rules = [
+        {
+            "ruleId": f"test-rule-{index}",
+            "action": action,
+            "reason": reason,
+            "artifactId": artifact_id,
+            "scope": {
+                "agents": [],
+                "devices": [],
+                "ecosystems": [],
+                "environments": [],
+                "harnesses": ["codex"],
+                "locations": [],
+            },
+        }
+        for index, (artifact_id, action, reason) in enumerate(policies)
+    ]
+    bundle = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": bundle_version,
+            "bundleHash": "",
+            "issuedAt": now,
+            "expiresAt": None,
+            "rolloutState": "enforcing",
+            "policyDefaults": {
+                "mode": "observe",
+                "defaultAction": "allow",
+                "unknownPublisherAction": "allow",
+                "changedHashAction": "allow",
+                "newNetworkDomainAction": "allow",
+                "subprocessAction": "allow",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": rules,
+            "cloudExceptions": [],
+            "acknowledgements": [],
+        },
+        workspace_id=_POLICY_BUNDLE_WORKSPACE_ID,
+    )
+    keyring = policy_bundle_test_keyring(workspace_id=_POLICY_BUNDLE_WORKSPACE_ID)
+    store.set_sync_payload(
+        "oauth_local_credentials",
+        {"workspace_id": _POLICY_BUNDLE_WORKSPACE_ID},
+        now,
+    )
+    device = store.get_device_metadata()
+    decisions = build_policy_bundle_decisions(
+        bundle,
+        device_id=device["installation_id"],
+        device_name=device["device_label"],
+    )
+    assert [(item.artifact_id, item.action, item.reason) for item in decisions] == policies
+    store.apply_policy_bundle_authority(
+        decisions,
+        now,
+        policy_bundle=bundle,
+        policy_bundle_keyring=keyring,
+        cloud_exceptions=[],
+        policy_bundle_ack={"bundleVersion": bundle_version, "status": "applied"},
+        policy_bundle_checkpoint=policy_bundle_acceptance_checkpoint(bundle),
+        update_last_good=True,
+        remote_write_authorized=True,
+    )
 
 
 def _make_artifact(
@@ -85,23 +165,11 @@ def test_resolve_policy_with_remote_only_rule_skips_policy_integrity_refresh(
     store = _make_store(tmp_path)
     artifact_id = "codex:project:remote-only"
     artifact_hash = "hash-remote"
-    store.replace_remote_policies(
-        [
-            PolicyDecision(
-                harness="codex",
-                scope="artifact",
-                artifact_id=artifact_id,
-                artifact_hash=artifact_hash,
-                workspace=None,
-                publisher=None,
-                action="allow",
-                reason="remote policy",
-                owner=None,
-                source="cloud-sync",
-            )
-        ],
+    _install_signed_exact_policies(
+        store,
+        [(artifact_id, "allow", "remote policy")],
         now="2026-06-26T00:00:00Z",
-        remote_write_authorized=True,
+        bundle_version="policy-2026-06-26.1",
     )
 
     def fail_refresh(*_args, **_kwargs):
@@ -127,23 +195,17 @@ def test_remote_suggested_memory_policy_matches_runtime_command_pattern(
         harness="codex",
     )
     assert remembered is not None
-    store.replace_remote_policies(
+    _install_signed_exact_policies(
+        store,
         [
-            PolicyDecision(
-                harness="codex",
-                scope="artifact",
-                artifact_id=f"memory:codex:{remembered.kind}:{remembered.fingerprint}",
-                artifact_hash=None,
-                workspace=None,
-                publisher=None,
-                action=policy_action,
-                reason="Suggested Memory",
-                owner=None,
-                source="cloud-sync",
+            (
+                f"memory:codex:{remembered.kind}:{remembered.fingerprint}",
+                policy_action,
+                "Suggested Memory",
             )
         ],
         now="2026-07-11T00:00:00Z",
-        remote_write_authorized=True,
+        bundle_version=f"policy-2026-07-11.suggested-{policy_action}",
     )
 
     assert (
@@ -176,23 +238,11 @@ def test_remote_exact_command_policy_rejects_command_suffix(
     store = _make_store(tmp_path)
     exact_artifact_id = build_exact_command_memory_artifact_id("printf 'suggested-memory'")
     assert exact_artifact_id is not None
-    store.replace_remote_policies(
-        [
-            PolicyDecision(
-                harness="codex",
-                scope="artifact",
-                artifact_id=exact_artifact_id,
-                artifact_hash=None,
-                workspace=None,
-                publisher=None,
-                action=policy_action,
-                reason="Exact command memory",
-                owner=None,
-                source="cloud-sync",
-            )
-        ],
+    _install_signed_exact_policies(
+        store,
+        [(exact_artifact_id, policy_action, "Exact command memory")],
         now="2026-07-11T00:00:00Z",
-        remote_write_authorized=True,
+        bundle_version=f"policy-2026-07-11.exact-{policy_action}",
     )
 
     assert (
@@ -226,6 +276,44 @@ def test_remote_exact_command_policy_rejects_command_suffix(
                 memory_command=whitespace_variant,
                 memory_artifact_type="shell_command",
                 memory_artifact_name="Shell command",
+            )
+            is None
+        )
+
+
+def test_signed_exact_shell_command_policy_does_not_cross_tool_domains(tmp_path: Path) -> None:
+    store = _make_store(tmp_path)
+    command = "read_file"
+    exact_artifact_id = build_exact_shell_command_memory_artifact_id(command)
+    assert exact_artifact_id is not None
+    _install_signed_exact_policies(
+        store,
+        [(exact_artifact_id, "block", "Exact shell command")],
+        now="2026-07-11T00:00:00Z",
+        bundle_version="policy-2026-07-11.exact-shell-domain",
+    )
+
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:runtime:shell:request",
+            memory_command=command,
+            memory_artifact_type="shell_command",
+            memory_artifact_name="Shell command",
+        )
+        == "block"
+    )
+    for artifact_type, artifact_name in (
+        ("tool_call", "filesystem:read_file"),
+        ("tool_action_request", "read_file"),
+    ):
+        assert (
+            store.resolve_policy(
+                "codex",
+                "codex:runtime:mcp:filesystem:read_file",
+                memory_command=command,
+                memory_artifact_type=artifact_type,
+                memory_artifact_name=artifact_name,
             )
             is None
         )
@@ -272,35 +360,18 @@ def test_direct_artifact_policy_precedes_suggested_memory_policy(tmp_path: Path)
         harness="codex",
     )
     assert remembered is not None
-    store.replace_remote_policies(
+    _install_signed_exact_policies(
+        store,
         [
-            PolicyDecision(
-                harness="codex",
-                scope="artifact",
-                artifact_id=artifact_id,
-                artifact_hash=None,
-                workspace=None,
-                publisher=None,
-                action="block",
-                reason="Direct policy",
-                owner=None,
-                source="cloud-sync",
-            ),
-            PolicyDecision(
-                harness="codex",
-                scope="artifact",
-                artifact_id=f"memory:codex:{remembered.kind}:{remembered.fingerprint}",
-                artifact_hash=None,
-                workspace=None,
-                publisher=None,
-                action="allow",
-                reason="Suggested Memory",
-                owner=None,
-                source="cloud-sync",
+            (artifact_id, "block", "Direct policy"),
+            (
+                f"memory:codex:{remembered.kind}:{remembered.fingerprint}",
+                "allow",
+                "Suggested Memory",
             ),
         ],
         now="2026-07-11T00:00:00Z",
-        remote_write_authorized=True,
+        bundle_version="policy-2026-07-11.direct-precedence",
     )
 
     assert (
@@ -554,7 +625,7 @@ class TestPolicyScopePersistence:
 
 
 class TestEvaluateDetectionScopePersistence:
-    def test_unchanged_artifact_with_stored_allow_policy_is_not_blocked(self, tmp_path: Path) -> None:
+    def test_legacy_stored_allow_cannot_lower_current_reapproval(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
         config = _make_config(tmp_path)
         artifact = _make_artifact()
@@ -581,8 +652,10 @@ class TestEvaluateDetectionScopePersistence:
         result = evaluate_detection(detection, store, config, persist=False)
 
         artifact_result = result["artifacts"][0]
-        assert artifact_result["policy_action"] == "allow"
-        assert result["blocked"] is False
+        assert artifact_result["policy_action"] == "require-reapproval"
+        assert artifact_result["approval_reuse_status"] == "rejected"
+        assert artifact_result["approval_reuse_reason_code"] == "approval_reuse_content_changed"
+        assert result["blocked"] is True
 
     def test_changed_artifact_hash_without_stored_policy_triggers_reapproval(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)

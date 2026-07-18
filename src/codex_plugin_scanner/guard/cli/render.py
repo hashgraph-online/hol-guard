@@ -2596,11 +2596,21 @@ def _artifact_risk_text(*artifacts: dict[str, object]) -> str:
 def _run_artifact_should_be_visible(artifact: dict[str, object]) -> bool:
     if bool(artifact.get("changed")):
         return True
-    return str(artifact.get("policy_action") or "allow") in {"block", "sandbox-required", "require-reapproval"}
+    return str(artifact.get("policy_action") or "allow") in {
+        "review",
+        "require-reapproval",
+        "sandbox-required",
+        "block",
+    }
 
 
 def _artifact_needs_review(artifact: dict[str, object]) -> bool:
-    return str(artifact.get("policy_action") or "allow") in {"block", "sandbox-required", "require-reapproval"}
+    return str(artifact.get("policy_action") or "allow") in {
+        "review",
+        "require-reapproval",
+        "sandbox-required",
+        "block",
+    }
 
 
 def _build_approval_table(items: list[dict[str, object]], *, title: str | None) -> Table:

@@ -443,7 +443,7 @@ def test_codex_guard_proxy_observe_mode_allows_risky_tool_calls_and_still_queues
     assert result["responses"][1]["result"]["content"][0]["text"] == "dangerous_delete"
     assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
     assert len(pending) == 1
-    assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
+    assert store.list_receipts(limit=1)[0]["policy_decision"] == "require-reapproval"
 
 
 def test_codex_guard_proxy_queues_approval_when_inline_prompt_gets_no_response(tmp_path):
@@ -1178,8 +1178,17 @@ def test_codex_guard_proxy_buffers_other_inline_approval_responses(tmp_path):
     assert outer_result == {"action": "accept", "content": {"decision": "approve"}}
 
 
-@pytest.mark.parametrize("action", ["warn", "review"])
-def test_codex_guard_proxy_treats_non_blocking_policy_actions_as_pass_through(monkeypatch, tmp_path, action):
+@pytest.mark.parametrize(
+    ("action", "forwards", "receipt_action"),
+    (("warn", True, "warn"), ("review", False, "require-reapproval")),
+)
+def test_codex_guard_proxy_only_passes_through_policy_actions_that_permit_execution(
+    monkeypatch,
+    tmp_path,
+    action,
+    forwards,
+    receipt_action,
+):
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
@@ -1203,6 +1212,8 @@ def test_codex_guard_proxy_treats_non_blocking_policy_actions_as_pass_through(mo
             summary="Policy override matched this tool call.",
         ),
     )
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(proxy, "_maybe_open_approval_center", lambda **_kwargs: None)
 
     result = proxy.run_session(
         [
@@ -1216,10 +1227,74 @@ def test_codex_guard_proxy_treats_non_blocking_policy_actions_as_pass_through(mo
         ]
     )
 
-    assert result["responses"][1]["result"]["content"][0]["text"] == "dangerous_delete"
-    assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
-    assert store.count_approval_requests() == 0
-    assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
+    if forwards:
+        assert result["responses"][1]["result"]["content"][0]["text"] == "dangerous_delete"
+        assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
+        assert store.count_approval_requests() == 0
+    else:
+        assert result["responses"][1]["error"]["data"]["guardPolicyAction"] == "require-reapproval"
+        assert marker_path.exists() is False
+        assert store.count_approval_requests() == 1
+    assert store.list_receipts(limit=1)[0]["policy_decision"] == receipt_action
+
+
+def test_codex_guard_proxy_never_forwards_unknown_stored_policy_action(monkeypatch, tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(
+        store,
+        "resolve_policy_decision_lookup_with_memory_pattern",
+        lambda *_args, **_kwargs: {
+            "decision": {"action": "future-action"},
+            "ignored_local_integrity": None,
+            "trust_status": {},
+        },
+    )
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+            },
+        ]
+    )
+
+    assert result["responses"][1]["error"]["code"] == -32001
+    assert marker_path.exists() is False
+    assert store.count_approval_requests() == 1
+    approval = store.list_approval_requests(limit=1)[0]
+    assert approval["policy_action"] == "require-reapproval"
+    assert approval["scanner_evidence"][-2] == {
+        "source": "guard_action_normalizer",
+        "input_source": "stored_tool_policy",
+        "reason_code": "guard_action_unknown",
+        "original_action": "future-action",
+        "normalized_action": "require-reapproval",
+    }
+    assert approval["scanner_evidence"][-1] == {
+        "source": "approval_reuse",
+        "status": "rejected",
+        "reason_code": "approval_reuse_saved_action_unknown",
+        "current_action": "review",
+        "saved_action": "require-reapproval",
+        "effective_action": "require-reapproval",
+    }
 
 
 def test_codex_guard_proxy_reuses_server_identity_with_env_keys(monkeypatch, tmp_path):
@@ -1272,7 +1347,53 @@ def test_codex_guard_proxy_reuses_server_identity_with_env_keys(monkeypatch, tmp
     assert tool_identity["description_hash"] == expected.description_hash
 
 
-def test_codex_guard_proxy_merges_paginated_tools_catalog_and_clears_stale_entries(tmp_path):
+def _catalog_test_proxy(tmp_path: Path) -> CodexMcpGuardProxy:
+    context = _context(tmp_path)
+    return CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(tmp_path / "catalog-tool-call.json"),
+        context=context,
+        store=GuardStore(context.guard_home),
+        config=GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir),
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+
+def _advertised_tool(
+    name: str,
+    *,
+    description: str | None = None,
+    schema_type: str = "object",
+) -> dict[str, object]:
+    tool: dict[str, object] = {
+        "name": name,
+        "inputSchema": {"type": schema_type, "properties": {}},
+    }
+    if description is not None:
+        tool["description"] = description
+    return tool
+
+
+def _capture_catalog_page(
+    proxy: CodexMcpGuardProxy,
+    tools: list[dict[str, object]],
+    *,
+    request_cursor: str | None = None,
+    next_cursor: str | None = None,
+) -> None:
+    generation = proxy._begin_tools_catalog_request(request_cursor)
+    result: dict[str, object] = {"tools": tools}
+    if next_cursor is not None:
+        result["nextCursor"] = next_cursor
+    proxy._capture_tools_catalog(
+        {"jsonrpc": "2.0", "id": 1, "result": result},
+        request_cursor=request_cursor,
+        request_generation=generation,
+    )
+
+
+def test_codex_guard_proxy_publishes_only_terminal_paginated_tools_catalog(tmp_path):
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
@@ -1297,11 +1418,13 @@ def test_codex_guard_proxy_merges_paginated_tools_catalog_and_clears_stale_entri
                         "inputSchema": {"type": "object", "properties": {}},
                     }
                 ],
-                "nextCursor": "",
+                "nextCursor": "page-2",
             }
         }
     )
-    assert set(proxy._tool_catalog) == {"safe_echo"}
+    assert proxy._tool_catalog_state == "pending"
+    assert proxy._tool_catalog == {}
+    assert set(proxy._tool_catalog_pending or {}) == {"safe_echo"}
     proxy._capture_tools_catalog(
         {
             "result": {
@@ -1317,7 +1440,9 @@ def test_codex_guard_proxy_merges_paginated_tools_catalog_and_clears_stale_entri
         request_cursor="page-2",
     )
 
+    assert proxy._tool_catalog_state == "complete"
     assert set(proxy._tool_catalog) == {"safe_echo", "dangerous_delete"}
+    assert proxy._tool_catalog_pending is None
 
     proxy._capture_tools_catalog(
         {
@@ -1333,11 +1458,189 @@ def test_codex_guard_proxy_merges_paginated_tools_catalog_and_clears_stale_entri
         }
     )
 
+    assert proxy._tool_catalog_state == "complete"
     assert set(proxy._tool_catalog) == {"safe_echo"}
 
     proxy._capture_tools_catalog({"result": {"tools": []}})
 
+    assert proxy._tool_catalog_state == "complete"
     assert proxy._tool_catalog == {}
+
+
+def test_runtime_mcp_catalog_fingerprint_distinguishes_lifecycle_states() -> None:
+    catalog = {
+        "safe_echo": {
+            "description": "Safe echo",
+            "inputSchema": {"type": "object", "properties": {}},
+        }
+    }
+
+    assert runtime_mcp_module._tool_catalog_fingerprint(
+        catalog,
+        state="complete",
+    ) != runtime_mcp_module._tool_catalog_fingerprint(catalog, state="pending")
+    assert runtime_mcp_module._tool_catalog_fingerprint(
+        {},
+        state="unobserved",
+    ) != runtime_mcp_module._tool_catalog_fingerprint({}, state="complete")
+
+
+def test_runtime_mcp_catalog_page_two_addition_and_full_metadata_change_are_bound(tmp_path: Path) -> None:
+    proxy = _catalog_test_proxy(tmp_path)
+    _capture_catalog_page(
+        proxy,
+        [_advertised_tool("safe_echo", description="Safe echo")],
+        next_cursor="page-2",
+    )
+    page_two_v1 = _advertised_tool("dangerous_delete", description="Dangerous delete")
+    page_two_v1["annotations"] = {"destructiveHint": True}
+    _capture_catalog_page(proxy, [page_two_v1], request_cursor="page-2")
+    first_fingerprint = runtime_mcp_module._tool_catalog_fingerprint(
+        proxy._tool_catalog,
+        state=proxy._tool_catalog_state,
+    )
+
+    assert proxy._tool_catalog_state == "complete"
+    assert set(proxy._tool_catalog) == {"safe_echo", "dangerous_delete"}
+
+    _capture_catalog_page(
+        proxy,
+        [_advertised_tool("safe_echo", description="Safe echo")],
+        next_cursor="page-2-refresh",
+    )
+    page_two_v2 = _advertised_tool("dangerous_delete", description="Dangerous delete")
+    page_two_v2["annotations"] = {"destructiveHint": False}
+    _capture_catalog_page(proxy, [page_two_v2], request_cursor="page-2-refresh")
+    second_fingerprint = runtime_mcp_module._tool_catalog_fingerprint(
+        proxy._tool_catalog,
+        state=proxy._tool_catalog_state,
+    )
+
+    assert proxy._tool_catalog_state == "complete"
+    assert first_fingerprint != second_fingerprint
+
+
+def test_runtime_mcp_catalog_rejects_continuation_without_root_and_wrong_cursor(tmp_path: Path) -> None:
+    proxy = _catalog_test_proxy(tmp_path)
+    proxy._capture_tools_catalog(
+        {"result": {"tools": [_advertised_tool("orphan")]}},
+        request_cursor="page-2",
+    )
+
+    assert proxy._tool_catalog_state == "error"
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+    _capture_catalog_page(
+        proxy,
+        [_advertised_tool("safe_echo")],
+        next_cursor="expected-page-2",
+    )
+    wrong_generation = proxy._begin_tools_catalog_request("wrong-page-2")
+    proxy._capture_tools_catalog(
+        {"result": {"tools": [_advertised_tool("must-not-publish")]}},
+        request_cursor="wrong-page-2",
+        request_generation=wrong_generation,
+    )
+
+    assert proxy._tool_catalog_state == "error"
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+
+@pytest.mark.parametrize(
+    "failure_response",
+    [
+        {"jsonrpc": "2.0", "id": 2, "error": {"code": -32000, "message": "list failed"}},
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "error": {
+                "code": -32800,
+                "message": "timed out",
+                "data": {"guard_timeout": True},
+            },
+        },
+        {"jsonrpc": "2.0", "id": 2, "result": {"tools": "not-a-list"}},
+    ],
+    ids=("jsonrpc-error", "timeout", "malformed"),
+)
+def test_runtime_mcp_failed_root_refresh_poisons_old_complete_catalog(
+    tmp_path: Path,
+    failure_response: dict[str, object],
+) -> None:
+    proxy = _catalog_test_proxy(tmp_path)
+    _capture_catalog_page(proxy, [_advertised_tool("stale_tool")])
+    generation = proxy._begin_tools_catalog_request(None)
+    proxy._capture_tools_catalog(
+        failure_response,
+        request_cursor=None,
+        request_generation=generation,
+    )
+
+    assert proxy._tool_catalog_state == "error"
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+
+def test_runtime_mcp_catalog_error_mid_pagination_discards_all_partial_pages(tmp_path: Path) -> None:
+    proxy = _catalog_test_proxy(tmp_path)
+    _capture_catalog_page(
+        proxy,
+        [_advertised_tool("page_one_tool")],
+        next_cursor="page-2",
+    )
+    generation = proxy._begin_tools_catalog_request("page-2")
+    proxy._capture_tools_catalog(
+        {"jsonrpc": "2.0", "id": 2, "error": {"code": -32000, "message": "page failed"}},
+        request_cursor="page-2",
+        request_generation=generation,
+    )
+
+    assert proxy._tool_catalog_state == "error"
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+
+def test_runtime_mcp_identical_complete_catalog_refresh_is_order_independent(tmp_path: Path) -> None:
+    proxy = _catalog_test_proxy(tmp_path)
+    first_tools = [
+        {
+            "name": "safe_echo",
+            "description": "Safe echo",
+            "inputSchema": {"type": "object", "properties": {"value": {"type": "string"}}},
+        },
+        {
+            "name": "dangerous_delete",
+            "annotations": {"destructiveHint": True, "readOnlyHint": False},
+            "inputSchema": {"properties": {"target": {"type": "string"}}, "type": "object"},
+        },
+    ]
+    _capture_catalog_page(proxy, first_tools)
+    first_fingerprint = runtime_mcp_module._tool_catalog_fingerprint(
+        proxy._tool_catalog,
+        state=proxy._tool_catalog_state,
+    )
+    reordered_tools = [
+        {
+            "inputSchema": {"type": "object", "properties": {"target": {"type": "string"}}},
+            "annotations": {"readOnlyHint": False, "destructiveHint": True},
+            "name": "dangerous_delete",
+        },
+        {
+            "inputSchema": {"properties": {"value": {"type": "string"}}, "type": "object"},
+            "description": "Safe echo",
+            "name": "safe_echo",
+        },
+    ]
+    _capture_catalog_page(proxy, reordered_tools)
+    second_fingerprint = runtime_mcp_module._tool_catalog_fingerprint(
+        proxy._tool_catalog,
+        state=proxy._tool_catalog_state,
+    )
+
+    assert proxy._tool_catalog_state == "complete"
+    assert first_fingerprint == second_fingerprint
 
 
 def test_codex_guard_proxy_invalidates_catalog_on_list_changed_notification(tmp_path):
@@ -1380,6 +1683,7 @@ def test_codex_guard_proxy_invalidates_catalog_on_list_changed_notification(tmp_
 
     assert response is None
     assert event["decision"] == "forward-notification"
+    assert proxy._tool_catalog_state == "invalidated"
     assert proxy._tool_catalog == {}
     assert proxy._tool_catalog_pending is None
 
@@ -1431,6 +1735,7 @@ def test_codex_guard_proxy_ignores_stale_tools_list_after_catalog_invalidation(t
     )
 
     assert proxy._tool_catalog_generation == stale_generation + 1
+    assert proxy._tool_catalog_state == "invalidated"
     assert proxy._tool_catalog == {}
     assert proxy._tool_catalog_pending is None
 
@@ -1481,6 +1786,7 @@ def test_codex_guard_proxy_invalidates_catalog_on_server_list_changed_notificati
     )
 
     assert response["id"] == 7
+    assert proxy._tool_catalog_state == "invalidated"
     assert proxy._tool_catalog == {}
     assert proxy._tool_catalog_pending is None
 

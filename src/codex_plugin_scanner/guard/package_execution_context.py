@@ -104,6 +104,7 @@ def build_package_execution_context(
     workspace_dir: Path,
     artifact: GuardArtifact,
     executable: str | None = None,
+    executable_args: Sequence[str] = (),
     environment: Mapping[str, str] | None = None,
 ) -> PackageExecutionContext:
     """Build a fail-closed package execution context for an approval request."""
@@ -133,6 +134,7 @@ def build_package_execution_context(
         repository_root=repository_root,
         manager=manager,
         executable=executable or _string_value(metadata.get("package_executable")),
+        arguments=executable_args,
         environment=env,
         files=files,
     )

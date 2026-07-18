@@ -7,6 +7,12 @@ from codex_plugin_scanner.guard.policy_bundle_parser import (
     computed_policy_bundle_hash,
     validated_policy_bundle_payload,
 )
+from tests.policy_bundle_signing_helpers import (
+    TEST_POLICY_BUNDLE_WORKSPACE_ID,
+    policy_bundle_test_keyring,
+    policy_bundle_test_verification_key,
+    sign_policy_bundle,
+)
 
 
 def _valid_base_rule() -> dict[str, object]:
@@ -126,7 +132,7 @@ class TestBrowserScopeValidation:
             "bundleVersion": "1.0",
             "issuedAt": "2026-01-01T00:00:00Z",
             "expiresAt": "2027-01-01T00:00:00Z",
-            "verifier": {"algorithm": "sha256", "keyId": "key-1", "signature": "sig"},
+            "verifier": {"algorithm": "rsa-pss-sha256", "keyId": "key-1", "signature": "sig"},
             "rolloutState": "enforced",
             "policyDefaults": {
                 "mode": "enforce",
@@ -141,10 +147,15 @@ class TestBrowserScopeValidation:
             "rules": [rule],
             "acknowledgements": [],
         }
-        from codex_plugin_scanner.guard.policy_bundle_parser import computed_policy_bundle_hash
 
-        bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
-        payload, error = validated_policy_bundle_payload(bundle)
+        signing_key = policy_bundle_test_verification_key()
+        bundle = sign_policy_bundle(bundle, key=signing_key)
+        payload, error = validated_policy_bundle_payload(
+            bundle,
+            trusted_verification_keys=(signing_key,),
+            anchored_verification_keys=(signing_key,),
+            expected_workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID,
+        )
         assert payload is not None
         assert error is None
 
@@ -155,7 +166,7 @@ def _valid_bundle_with_rules(rules: list[dict[str, object]]) -> dict[str, object
         "bundleVersion": "1.0",
         "issuedAt": "2026-01-01T00:00:00Z",
         "expiresAt": "2027-01-01T00:00:00Z",
-        "verifier": {"algorithm": "sha256", "keyId": "key-1", "signature": "sig"},
+        "verifier": {"algorithm": "rsa-pss-sha256", "keyId": "key-1", "signature": "sig"},
         "rolloutState": "enforced",
         "policyDefaults": {
             "mode": "enforce",
@@ -198,7 +209,7 @@ class TestBrowserScopeDecisionNarrowing:
     def test_exact_command_rule_does_not_create_family_decision(self) -> None:
         """An exact command rule must not broaden into all tool actions."""
         from codex_plugin_scanner.guard.memory_pattern_fingerprint import (
-            build_exact_command_memory_artifact_id,
+            build_exact_shell_command_memory_artifact_id,
         )
         from codex_plugin_scanner.guard.runtime.runner import (
             _build_policy_bundle_decisions,
@@ -206,6 +217,7 @@ class TestBrowserScopeDecisionNarrowing:
 
         command = " python -m pytest "
         rule = self._local_match_rule()
+        rule["scope"]["ecosystems"] = []
         rule["matcher"] = {"command": command, "tool": "shell"}
         rule["artifactId"] = "memory:codex:command_pattern:broad"
         rule["matcherFamilies"] = ["tool-action"]
@@ -213,7 +225,158 @@ class TestBrowserScopeDecisionNarrowing:
         decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
         assert len(decisions) == 1
         assert decisions[0].scope == "artifact"
-        assert decisions[0].artifact_id == build_exact_command_memory_artifact_id(command)
+        assert decisions[0].artifact_id == build_exact_shell_command_memory_artifact_id(command)
+
+    def test_exact_artifact_rule_does_not_create_family_decision(self) -> None:
+        """An exact artifact grant stays exact even when a family is advertised."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        artifact_id = "codex:project:package-request:npm-safe-lib"
+        rule = self._local_match_rule()
+        rule["scope"]["ecosystems"] = []
+        rule["matcher"] = {"artifactId": artifact_id}
+        rule["matcherFamilies"] = ["package-request"]
+        bundle = _valid_bundle_with_rules([rule])
+
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert len(decisions) == 1
+        assert decisions[0].scope == "artifact"
+        assert decisions[0].artifact_id == artifact_id
+
+    def test_exact_command_with_unrepresentable_scope_is_skipped(self) -> None:
+        """Exact identity does not authorize dropping an additional path constraint."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["scope"]["ecosystems"] = []
+        rule["scope"]["path"] = "/trusted/workspace"
+        rule["matcher"] = {"command": "python -m pytest", "tool": "shell"}
+        rule["matcherFamilies"] = ["tool-action"]
+        bundle = _valid_bundle_with_rules([rule])
+
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert decisions == []
+
+    def test_exact_artifact_with_package_selector_is_skipped(self) -> None:
+        """Exact artifact IDs cannot silently discard independent package selectors."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["scope"]["ecosystems"] = ["npm"]
+        rule["scope"]["packageNames"] = ["safe-lib"]
+        rule["matcher"] = {"artifactId": "codex:project:package-request:npm-safe-lib"}
+        rule["matcherFamilies"] = ["package-request"]
+        bundle = _valid_bundle_with_rules([rule])
+
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert decisions == []
+
+    def test_package_selectors_do_not_create_harness_family_allow(self, tmp_path) -> None:
+        """npm/safe-lib authority must not become an allow for pypi/evil."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+        from codex_plugin_scanner.guard.store import GuardStore
+
+        rule = self._local_match_rule()
+        rule["matcherFamilies"] = ["package-request"]
+        rule["scope"]["devices"] = []
+        rule["scope"]["ecosystems"] = ["npm"]
+        rule["scope"]["packageNames"] = ["safe-lib"]
+        bundle = sign_policy_bundle(_valid_bundle_with_rules([rule]))
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert decisions == []
+
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_payload(
+            "oauth_local_credentials",
+            {"workspace_id": TEST_POLICY_BUNDLE_WORKSPACE_ID},
+            "2026-01-01T00:00:00Z",
+        )
+        store.set_sync_payload(
+            "policy_bundle_keyring",
+            policy_bundle_test_keyring(),
+            "2026-01-01T00:00:00Z",
+        )
+        store.set_sync_payload("policy_bundle", bundle, "2026-01-01T00:00:00Z")
+        store.replace_remote_policies(decisions, "2026-01-01T00:00:00Z", remote_write_authorized=True)
+
+        assert store.resolve_policy("codex", "codex:project:package-request:pypi-evil", "sha256:evil") is None
+
+    def test_explicit_unconstrained_package_artifact_type_can_create_family_rule(self) -> None:
+        """An explicitly package-wide rule remains representable at family scope."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["artifactType"] = "package_request"
+        rule["matcherFamilies"] = ["package-request"]
+        rule["scope"]["ecosystems"] = []
+        bundle = _valid_bundle_with_rules([rule])
+
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert len(decisions) == 1
+        assert decisions[0].scope == "harness"
+        assert decisions[0].artifact_id == "family:package-request"
+
+    def test_unrepresentable_matcher_selector_does_not_create_family_rule(self) -> None:
+        """A tool selector cannot be discarded while persisting a tool family rule."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["matcher"] = {"tool": "shell"}
+        rule["matcherFamilies"] = ["tool-action"]
+        rule["scope"]["ecosystems"] = []
+        bundle = _valid_bundle_with_rules([rule])
+
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert decisions == []
+
+    def test_blank_harness_constraint_does_not_broaden_to_wildcard(self) -> None:
+        """Malformed blank selectors fail closed instead of becoming ``*``."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["artifactType"] = "tool_action_request"
+        rule["matcherFamilies"] = ["tool-action"]
+        rule["scope"]["ecosystems"] = []
+        rule["scope"]["harnesses"] = [""]
+        bundle = _valid_bundle_with_rules([rule])
+
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert decisions == []
+
+    def test_custom_agent_class_does_not_broaden_to_every_harness(self) -> None:
+        """A portal-side custom-agent class cannot become wildcard authority."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["artifactType"] = "tool_action_request"
+        rule["matcherFamilies"] = ["tool-action"]
+        rule["scope"]["ecosystems"] = []
+        rule["scope"]["agents"] = ["custom"]
+        rule["scope"]["harnesses"] = []
+        bundle = _valid_bundle_with_rules([rule])
+
+        assert _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev") == []
+
+    def test_disjoint_agent_and_harness_selectors_do_not_form_a_union(self) -> None:
+        """Conjunctive selector fields cannot be widened by unioning them."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["artifactType"] = "tool_action_request"
+        rule["matcherFamilies"] = ["tool-action"]
+        rule["scope"]["ecosystems"] = []
+        rule["scope"]["agents"] = ["codex"]
+        rule["scope"]["harnesses"] = ["claude-code"]
+        bundle = _valid_bundle_with_rules([rule])
+
+        assert _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev") == []
 
     def test_rule_with_only_sensitive_surface_skipped(self) -> None:
         """A rule with only sensitiveSurface scope is skipped (no broad allow)."""
@@ -256,6 +419,7 @@ class TestBrowserScopeDecisionNarrowing:
 
         plain_rule = self._local_match_rule()
         plain_rule["ruleId"] = "plain-rule"
+        plain_rule["scope"]["ecosystems"] = []
         plain_rule["scope"]["command"] = "python -m pytest"
 
         bundle = _valid_bundle_with_rules([browser_rule, plain_rule])
@@ -282,6 +446,7 @@ class TestBrowserScopeDecisionNarrowing:
         from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
 
         rule = self._local_match_rule()
+        rule["scope"]["ecosystems"] = []
         rule["scope"]["command"] = "python -m pytest"
         rule["scope"]["browserIntent"] = []
         rule["scope"]["origin"] = []
@@ -305,6 +470,7 @@ class TestBrowserScopeDecisionNarrowing:
         from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
 
         rule = self._local_match_rule()
+        rule["scope"]["ecosystems"] = []
         rule["scope"]["command"] = "python -m pytest"
         rule["browserIntent"] = []
         rule["origin"] = []

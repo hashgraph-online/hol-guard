@@ -158,7 +158,7 @@ def _configure_guard_local_parsers(
     run_parser.add_argument("--dry-run", action="store_true")
     run_parser.add_argument(
         "--default-action",
-        choices=("allow", "warn", "review", "block", "sandbox-required", "require-reapproval"),
+        choices=GUARD_ACTION_VALUES,
     )
     run_parser.add_argument(
         "--grok-executable",

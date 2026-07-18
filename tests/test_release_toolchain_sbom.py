@@ -61,7 +61,7 @@ def test_publish_workflow_attests_toolchain_sbom_without_sending_it_to_pypi() ->
     workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8"))
     jobs = workflow["jobs"]
     build_steps = jobs["build"]["steps"]
-    release_steps = jobs["release"]["steps"]
+    release_steps = jobs["release-alpha"]["steps"]
 
     preflight_index = next(
         index
@@ -74,23 +74,25 @@ def test_publish_workflow_attests_toolchain_sbom_without_sending_it_to_pypi() ->
     assert any(step.get("name") == "Download release toolchain SBOM" for step in release_steps)
     assert all(
         step.get("name") != "Download release toolchain SBOM"
-        for job_name in ("publish-testpypi", "publish-pypi")
+        for job_name in (
+            "publish-testpypi",
+            "publish-alpha-testpypi",
+            "publish-alpha-pypi",
+        )
         for step in jobs[job_name]["steps"]
     )
     provenance_step = next(step for step in release_steps if step.get("id") == "provenance")
     assert "dist/*" in provenance_step["with"]["subject-path"]
 
 
-def test_publish_workflow_limits_ambient_credentials_for_build_and_version_sync() -> None:
+def test_publish_workflow_limits_ambient_credentials_and_has_no_version_sync() -> None:
     workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8"))
     jobs = workflow["jobs"]
-    sync_job = jobs["sync-repository-version"]
 
-    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["permissions"] == {"contents": "read", "pull-requests": "read"}
     assert "permissions" not in jobs["build"]
-    assert sync_job["permissions"] == {"contents": "read"}
-    token_steps = [step.get("name") for step in sync_job["steps"] if "ACTION_REPO_TOKEN" in (step.get("env") or {})]
-    assert token_steps == ["Open repository version sync PR"]
+    assert "sync-repository-version" not in jobs
+    assert "ACTION_REPO_TOKEN" not in (ROOT / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8")
 
     publish_uv_versions = {
         step["with"]["version"]
