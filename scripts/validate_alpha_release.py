@@ -18,6 +18,7 @@ class ReleaseTrain:
     major: int
     minor: int
     patch: int = 0
+    stable_enabled: bool = False
 
     @property
     def version_prefix(self) -> str:
@@ -55,6 +56,7 @@ RELEASE_TRAINS: Final[Mapping[str, ReleaseTrain]] = MappingProxyType(
             git_ref="refs/heads/release/3.1",
             major=3,
             minor=1,
+            stable_enabled=True,
         ),
     }
 )
@@ -150,6 +152,8 @@ def validate_release_train(
     train = RELEASE_TRAINS.get(git_ref)
     if train is None:
         raise ValueError(f"Releases must run from one of: {', '.join(ALPHA_BRANCHES)}")
+    if parsed_channel is ReleaseChannel.STABLE and not train.stable_enabled:
+        raise ValueError(f"{git_ref} is alpha-only; stable releases are disabled")
 
     source_sha = _validate_source_sha(github_sha=github_sha, expected_sha=expected_sha)
     version = _parse_version(version_text, label="Requested version")
