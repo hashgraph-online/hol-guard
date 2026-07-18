@@ -277,8 +277,8 @@ class TrayRuntime:
             return 1
 
         try:
-            import pystray  # pyright: ignore[reportMissingImports]
-            from PIL import Image  # pyright: ignore[reportMissingImports]
+            import pystray
+            from PIL import Image
         except ImportError as error:
             logger.error("tray: pystray/Pillow not available: %s", error)
             self._state = TrayState.UNSUPPORTED
@@ -394,8 +394,8 @@ def detect_capability() -> TrayCapability:
             )
 
     try:
-        import pystray  # noqa: F401  # pyright: ignore[reportMissingImports]
-        from PIL import Image  # noqa: F401  # pyright: ignore[reportMissingImports]
+        import pystray  # noqa: F401
+        from PIL import Image  # noqa: F401
     except Exception as error:
         # Broaden beyond ImportError: pystray may raise RuntimeError or
         # platform-specific errors on broken installs. Treat any import-time
