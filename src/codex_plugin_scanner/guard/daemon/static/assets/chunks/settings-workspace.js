@@ -1,10 +1,6 @@
-Warning: truncated output (original token count: 46444)
-Total output lines: 3957
-
-import { N as requireReact, O as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, v as useFocusTrap, Q as HiMiniKey, S as SectionLabel, A as ActionButton, k as HiMiniShieldCheck, R as HiMiniLockClosed, T as HiMiniBellAlert, U as HiMiniAdjustmentsHorizontal, V as HiMiniCog6Tooth, W as HiMiniWindow, X as HiMiniCircleStack, Y as TabBar, z as HiMiniChevronRight, Z as fetchTrayStatus, _ as runTrayAction, $ as resolveProtectionLevelCopy, a0 as fetchSettings, a1 as fetchRuntimeSnapshot, a2 as updateSettings, a3 as clearPolicy, a4 as clearReviewQueue, a5 as revokeApprovalGateCooldown, a6 as disableApprovalGateTotp, a7 as importSettings, a8 as resetSettings, a9 as enrollApprovalGateTotp, aa as verifyApprovalGateTotp, ab as clearEvidence, ac as exportDiagnostics, ad as repairApprovalCenter, ae as exportSettings, af as setupDesktopNotifications, b as EmptyState, e as GuardHero, ag as Tag, ah as HiMiniMagnifyingGlass, d as HiMiniCheckCircle, x as HiMiniExclamationTriangle, ai as approvalGateCooldownLabel, n as HiMiniXMark } from "../guard-dashboard.js";
+import { N as getDefaultExportFromCjs, r as reactExports, R as React, j as jsxRuntimeExports, v as useFocusTrap, O as HiMiniKey, S as SectionLabel, A as ActionButton, k as HiMiniShieldCheck, Q as HiMiniLockClosed, T as HiMiniBellAlert, U as HiMiniAdjustmentsHorizontal, V as HiMiniCog6Tooth, W as HiMiniWindow, X as HiMiniCircleStack, Y as TabBar, z as HiMiniChevronRight, Z as fetchTrayStatus, _ as runTrayAction, $ as resolveProtectionLevelCopy, a0 as fetchSettings, a1 as fetchRuntimeSnapshot, a2 as updateSettings, a3 as clearPolicy, a4 as clearReviewQueue, a5 as revokeApprovalGateCooldown, a6 as disableApprovalGateTotp, a7 as importSettings, a8 as resetSettings, a9 as enrollApprovalGateTotp, aa as verifyApprovalGateTotp, ab as clearEvidence, ac as exportDiagnostics, ad as repairApprovalCenter, ae as exportSettings, af as setupDesktopNotifications, b as EmptyState, e as GuardHero, ag as Tag, ah as HiMiniMagnifyingGlass, d as HiMiniCheckCircle, x as HiMiniExclamationTriangle, ai as approvalGateCooldownLabel, n as HiMiniXMark } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
-var lib = {};
-var propTypes = { exports: {} };
+var propTypes$2 = { exports: {} };
 var ReactPropTypesSecret_1;
 var hasRequiredReactPropTypesSecret;
 function requireReactPropTypesSecret() {
@@ -70,73 +66,931 @@ function requireFactoryWithThrowingShims() {
 }
 var hasRequiredPropTypes;
 function requirePropTypes() {
-  if (hasRequiredPropTypes) return propTypes.exports;
+  if (hasRequiredPropTypes) return propTypes$2.exports;
   hasRequiredPropTypes = 1;
   {
-    propTypes.exports = /* @__PURE__ */ requireFactoryWithThrowingShims()();
+    propTypes$2.exports = /* @__PURE__ */ requireFactoryWithThrowingShims()();
   }
-  return propTypes.exports;
+  return propTypes$2.exports;
 }
-var ErrorCorrectLevel;
-var hasRequiredErrorCorrectLevel;
-function requireErrorCorrectLevel() {
-  if (hasRequiredErrorCorrectLevel) return ErrorCorrectLevel;
-  hasRequiredErrorCorrectLevel = 1;
-  ErrorCorrectLevel = {
-    L: 1,
-    M: 0,
-    Q: 3,
-    H: 2
+var propTypesExports = /* @__PURE__ */ requirePropTypes();
+const PropTypes = /* @__PURE__ */ getDefaultExportFromCjs(propTypesExports);
+const qrcode = function(typeNumber, errorCorrectionLevel) {
+  const PAD0 = 236;
+  const PAD1 = 17;
+  let _typeNumber = typeNumber;
+  const _errorCorrectionLevel = QRErrorCorrectionLevel[errorCorrectionLevel];
+  let _modules = null;
+  let _moduleCount = 0;
+  let _dataCache = null;
+  const _dataList = [];
+  const _this = {};
+  const makeImpl = function(test, maskPattern) {
+    _moduleCount = _typeNumber * 4 + 17;
+    _modules = (function(moduleCount) {
+      const modules = new Array(moduleCount);
+      for (let row = 0; row < moduleCount; row += 1) {
+        modules[row] = new Array(moduleCount);
+        for (let col = 0; col < moduleCount; col += 1) {
+          modules[row][col] = null;
+        }
+      }
+      return modules;
+    })(_moduleCount);
+    setupPositionProbePattern(0, 0);
+    setupPositionProbePattern(_moduleCount - 7, 0);
+    setupPositionProbePattern(0, _moduleCount - 7);
+    setupPositionAdjustPattern();
+    setupTimingPattern();
+    setupTypeInfo(test, maskPattern);
+    if (_typeNumber >= 7) {
+      setupTypeNumber(test);
+    }
+    if (_dataCache == null) {
+      _dataCache = createData(_typeNumber, _errorCorrectionLevel, _dataList);
+    }
+    mapData(_dataCache, maskPattern);
   };
-  return ErrorCorrectLevel;
-}
-var mode;
-var hasRequiredMode;
-function requireMode() {
-  if (hasRequiredMode) return mode;
-  hasRequiredMode = 1;
-  mode = {
-    MODE_NUMBER: 1 << 0,
-    MODE_ALPHA_NUM: 1 << 1,
-    MODE_8BIT_BYTE: 1 << 2,
-    MODE_KANJI: 1 << 3
-  };
-  return mode;
-}
-var _8BitByte;
-var hasRequired_8BitByte;
-function require_8BitByte() {
-  if (hasRequired_8BitByte) return _8BitByte;
-  hasRequired_8BitByte = 1;
-  var mode2 = requireMode();
-  function QR8bitByte(data) {
-    this.mode = mode2.MODE_8BIT_BYTE;
-    this.data = data;
-  }
-  QR8bitByte.prototype = {
-    getLength: function(buffer) {
-      return this.data.length;
-    },
-    write: function(buffer) {
-      for (var i = 0; i < this.data.length; i++) {
-        buffer.put(this.data.charCodeAt(i), 8);
+  const setupPositionProbePattern = function(row, col) {
+    for (let r = -1; r <= 7; r += 1) {
+      if (row + r <= -1 || _moduleCount <= row + r) continue;
+      for (let c = -1; c <= 7; c += 1) {
+        if (col + c <= -1 || _moduleCount <= col + c) continue;
+        if (0 <= r && r <= 6 && (c == 0 || c == 6) || 0 <= c && c <= 6 && (r == 0 || r == 6) || 2 <= r && r <= 4 && 2 <= c && c <= 4) {
+          _modules[row + r][col + c] = true;
+        } else {
+          _modules[row + r][col + c] = false;
+        }
       }
     }
   };
-  _8BitByte = QR8bitByte;
-  return _8BitByte;
-}
-var RSBlock;
-var hasRequiredRSBlock;
-function requireRSBlock() {
-  if (hasRequiredRSBlock) return RSBlock;
-  hasRequiredRSBlock = 1;
-  var ECL = requireErrorCorrectLevel();
-  function QRRSBlock(totalCount, dataCount) {
-    this.totalCount = totalCount;
-    this.dataCount = dataCount;
+  const getBestMaskPattern = function() {
+    let minLostPoint = 0;
+    let pattern = 0;
+    for (let i = 0; i < 8; i += 1) {
+      makeImpl(true, i);
+      const lostPoint = QRUtil.getLostPoint(_this);
+      if (i == 0 || minLostPoint > lostPoint) {
+        minLostPoint = lostPoint;
+        pattern = i;
+      }
+    }
+    return pattern;
+  };
+  const setupTimingPattern = function() {
+    for (let r = 8; r < _moduleCount - 8; r += 1) {
+      if (_modules[r][6] != null) {
+        continue;
+      }
+      _modules[r][6] = r % 2 == 0;
+    }
+    for (let c = 8; c < _moduleCount - 8; c += 1) {
+      if (_modules[6][c] != null) {
+        continue;
+      }
+      _modules[6][c] = c % 2 == 0;
+    }
+  };
+  const setupPositionAdjustPattern = function() {
+    const pos = QRUtil.getPatternPosition(_typeNumber);
+    for (let i = 0; i < pos.length; i += 1) {
+      for (let j = 0; j < pos.length; j += 1) {
+        const row = pos[i];
+        const col = pos[j];
+        if (_modules[row][col] != null) {
+          continue;
+        }
+        for (let r = -2; r <= 2; r += 1) {
+          for (let c = -2; c <= 2; c += 1) {
+            if (r == -2 || r == 2 || c == -2 || c == 2 || r == 0 && c == 0) {
+              _modules[row + r][col + c] = true;
+            } else {
+              _modules[row + r][col + c] = false;
+            }
+          }
+        }
+      }
+    }
+  };
+  const setupTypeNumber = function(test) {
+    const bits = QRUtil.getBCHTypeNumber(_typeNumber);
+    for (let i = 0; i < 18; i += 1) {
+      const mod = !test && (bits >> i & 1) == 1;
+      _modules[Math.floor(i / 3)][i % 3 + _moduleCount - 8 - 3] = mod;
+    }
+    for (let i = 0; i < 18; i += 1) {
+      const mod = !test && (bits >> i & 1) == 1;
+      _modules[i % 3 + _moduleCount - 8 - 3][Math.floor(i / 3)] = mod;
+    }
+  };
+  const setupTypeInfo = function(test, maskPattern) {
+    const data = _errorCorrectionLevel << 3 | maskPattern;
+    const bits = QRUtil.getBCHTypeInfo(data);
+    for (let i = 0; i < 15; i += 1) {
+      const mod = !test && (bits >> i & 1) == 1;
+      if (i < 6) {
+        _modules[i][8] = mod;
+      } else if (i < 8) {
+        _modules[i + 1][8] = mod;
+      } else {
+        _modules[_moduleCount - 15 + i][8] = mod;
+      }
+    }
+    for (let i = 0; i < 15; i += 1) {
+      const mod = !test && (bits >> i & 1) == 1;
+      if (i < 8) {
+        _modules[8][_moduleCount - i - 1] = mod;
+      } else if (i < 9) {
+        _modules[8][15 - i - 1 + 1] = mod;
+      } else {
+        _modules[8][15 - i - 1] = mod;
+      }
+    }
+    _modules[_moduleCount - 8][8] = !test;
+  };
+  const mapData = function(data, maskPattern) {
+    let inc = -1;
+    let row = _moduleCount - 1;
+    let bitIndex = 7;
+    let byteIndex = 0;
+    const maskFunc = QRUtil.getMaskFunction(maskPattern);
+    for (let col = _moduleCount - 1; col > 0; col -= 2) {
+      if (col == 6) col -= 1;
+      while (true) {
+        for (let c = 0; c < 2; c += 1) {
+          if (_modules[row][col - c] == null) {
+            let dark = false;
+            if (byteIndex < data.length) {
+              dark = (data[byteIndex] >>> bitIndex & 1) == 1;
+            }
+            const mask = maskFunc(row, col - c);
+            if (mask) {
+              dark = !dark;
+            }
+            _modules[row][col - c] = dark;
+            bitIndex -= 1;
+            if (bitIndex == -1) {
+              byteIndex += 1;
+              bitIndex = 7;
+            }
+          }
+        }
+        row += inc;
+        if (row < 0 || _moduleCount <= row) {
+          row -= inc;
+          inc = -inc;
+          break;
+        }
+      }
+    }
+  };
+  const createBytes = function(buffer, rsBlocks) {
+    let offset = 0;
+    let maxDcCount = 0;
+    let maxEcCount = 0;
+    const dcdata = new Array(rsBlocks.length);
+    const ecdata = new Array(rsBlocks.length);
+    for (let r = 0; r < rsBlocks.length; r += 1) {
+      const dcCount = rsBlocks[r].dataCount;
+      const ecCount = rsBlocks[r].totalCount - dcCount;
+      maxDcCount = Math.max(maxDcCount, dcCount);
+      maxEcCount = Math.max(maxEcCount, ecCount);
+      dcdata[r] = new Array(dcCount);
+      for (let i = 0; i < dcdata[r].length; i += 1) {
+        dcdata[r][i] = 255 & buffer.getBuffer()[i + offset];
+      }
+      offset += dcCount;
+      const rsPoly = QRUtil.getErrorCorrectPolynomial(ecCount);
+      const rawPoly = qrPolynomial(dcdata[r], rsPoly.getLength() - 1);
+      const modPoly = rawPoly.mod(rsPoly);
+      ecdata[r] = new Array(rsPoly.getLength() - 1);
+      for (let i = 0; i < ecdata[r].length; i += 1) {
+        const modIndex = i + modPoly.getLength() - ecdata[r].length;
+        ecdata[r][i] = modIndex >= 0 ? modPoly.getAt(modIndex) : 0;
+      }
+    }
+    let totalCodeCount = 0;
+    for (let i = 0; i < rsBlocks.length; i += 1) {
+      totalCodeCount += rsBlocks[i].totalCount;
+    }
+    const data = new Array(totalCodeCount);
+    let index = 0;
+    for (let i = 0; i < maxDcCount; i += 1) {
+      for (let r = 0; r < rsBlocks.length; r += 1) {
+        if (i < dcdata[r].length) {
+          data[index] = dcdata[r][i];
+          index += 1;
+        }
+      }
+    }
+    for (let i = 0; i < maxEcCount; i += 1) {
+      for (let r = 0; r < rsBlocks.length; r += 1) {
+        if (i < ecdata[r].length) {
+          data[index] = ecdata[r][i];
+          index += 1;
+        }
+      }
+    }
+    return data;
+  };
+  const createData = function(typeNumber2, errorCorrectionLevel2, dataList) {
+    const rsBlocks = QRRSBlock.getRSBlocks(typeNumber2, errorCorrectionLevel2);
+    const buffer = qrBitBuffer();
+    for (let i = 0; i < dataList.length; i += 1) {
+      const data = dataList[i];
+      buffer.put(data.getMode(), 4);
+      buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber2));
+      data.write(buffer);
+    }
+    let totalDataCount = 0;
+    for (let i = 0; i < rsBlocks.length; i += 1) {
+      totalDataCount += rsBlocks[i].dataCount;
+    }
+    if (buffer.getLengthInBits() > totalDataCount * 8) {
+      throw "code length overflow. (" + buffer.getLengthInBits() + ">" + totalDataCount * 8 + ")";
+    }
+    if (buffer.getLengthInBits() + 4 <= totalDataCount * 8) {
+      buffer.put(0, 4);
+    }
+    while (buffer.getLengthInBits() % 8 != 0) {
+      buffer.putBit(false);
+    }
+    while (true) {
+      if (buffer.getLengthInBits() >= totalDataCount * 8) {
+        break;
+      }
+      buffer.put(PAD0, 8);
+      if (buffer.getLengthInBits() >= totalDataCount * 8) {
+        break;
+      }
+      buffer.put(PAD1, 8);
+    }
+    return createBytes(buffer, rsBlocks);
+  };
+  _this.addData = function(data, mode) {
+    mode = mode || "Byte";
+    let newData = null;
+    switch (mode) {
+      case "Numeric":
+        newData = qrNumber(data);
+        break;
+      case "Alphanumeric":
+        newData = qrAlphaNum(data);
+        break;
+      case "Byte":
+        newData = qr8BitByte(data);
+        break;
+      case "Kanji":
+        newData = qrKanji(data);
+        break;
+      default:
+        throw "mode:" + mode;
+    }
+    _dataList.push(newData);
+    _dataCache = null;
+  };
+  _this.isDark = function(row, col) {
+    if (row < 0 || _moduleCount <= row || col < 0 || _moduleCount <= col) {
+      throw row + "," + col;
+    }
+    return _modules[row][col];
+  };
+  _this.getModuleCount = function() {
+    return _moduleCount;
+  };
+  _this.make = function() {
+    if (_typeNumber < 1) {
+      let typeNumber2 = 1;
+      for (; typeNumber2 < 40; typeNumber2++) {
+        const rsBlocks = QRRSBlock.getRSBlocks(typeNumber2, _errorCorrectionLevel);
+        const buffer = qrBitBuffer();
+        for (let i = 0; i < _dataList.length; i++) {
+          const data = _dataList[i];
+          buffer.put(data.getMode(), 4);
+          buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber2));
+          data.write(buffer);
+        }
+        let totalDataCount = 0;
+        for (let i = 0; i < rsBlocks.length; i++) {
+          totalDataCount += rsBlocks[i].dataCount;
+        }
+        if (buffer.getLengthInBits() <= totalDataCount * 8) {
+          break;
+        }
+      }
+      _typeNumber = typeNumber2;
+    }
+    makeImpl(false, getBestMaskPattern());
+  };
+  _this.createTableTag = function(cellSize, margin) {
+    cellSize = cellSize || 2;
+    margin = typeof margin == "undefined" ? cellSize * 4 : margin;
+    let qrHtml = "";
+    qrHtml += '<table style="';
+    qrHtml += " border-width: 0px; border-style: none;";
+    qrHtml += " border-collapse: collapse;";
+    qrHtml += " padding: 0px; margin: " + margin + "px;";
+    qrHtml += '">';
+    qrHtml += "<tbody>";
+    for (let r = 0; r < _this.getModuleCount(); r += 1) {
+      qrHtml += "<tr>";
+      for (let c = 0; c < _this.getModuleCount(); c += 1) {
+        qrHtml += '<td style="';
+        qrHtml += " border-width: 0px; border-style: none;";
+        qrHtml += " border-collapse: collapse;";
+        qrHtml += " padding: 0px; margin: 0px;";
+        qrHtml += " width: " + cellSize + "px;";
+        qrHtml += " height: " + cellSize + "px;";
+        qrHtml += " background-color: ";
+        qrHtml += _this.isDark(r, c) ? "#000000" : "#ffffff";
+        qrHtml += ";";
+        qrHtml += '"/>';
+      }
+      qrHtml += "</tr>";
+    }
+    qrHtml += "</tbody>";
+    qrHtml += "</table>";
+    return qrHtml;
+  };
+  _this.createSvgTag = function(cellSize, margin, alt, title) {
+    let opts = {};
+    if (typeof arguments[0] == "object") {
+      opts = arguments[0];
+      cellSize = opts.cellSize;
+      margin = opts.margin;
+      alt = opts.alt;
+      title = opts.title;
+    }
+    cellSize = cellSize || 2;
+    margin = typeof margin == "undefined" ? cellSize * 4 : margin;
+    alt = typeof alt === "string" ? { text: alt } : alt || {};
+    alt.text = alt.text || null;
+    alt.id = alt.text ? alt.id || "qrcode-description" : null;
+    title = typeof title === "string" ? { text: title } : title || {};
+    title.text = title.text || null;
+    title.id = title.text ? title.id || "qrcode-title" : null;
+    const size = _this.getModuleCount() * cellSize + margin * 2;
+    let c, mc, r, mr, qrSvg = "", rect;
+    rect = "l" + cellSize + ",0 0," + cellSize + " -" + cellSize + ",0 0,-" + cellSize + "z ";
+    qrSvg += '<svg version="1.1" xmlns="http://www.w3.org/2000/svg"';
+    qrSvg += !opts.scalable ? ' width="' + size + 'px" height="' + size + 'px"' : "";
+    qrSvg += ' viewBox="0 0 ' + size + " " + size + '" ';
+    qrSvg += ' preserveAspectRatio="xMinYMin meet"';
+    qrSvg += title.text || alt.text ? ' role="img" aria-labelledby="' + escapeXml([title.id, alt.id].join(" ").trim()) + '"' : "";
+    qrSvg += ">";
+    qrSvg += title.text ? '<title id="' + escapeXml(title.id) + '">' + escapeXml(title.text) + "</title>" : "";
+    qrSvg += alt.text ? '<description id="' + escapeXml(alt.id) + '">' + escapeXml(alt.text) + "</description>" : "";
+    qrSvg += '<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>';
+    qrSvg += '<path d="';
+    for (r = 0; r < _this.getModuleCount(); r += 1) {
+      mr = r * cellSize + margin;
+      for (c = 0; c < _this.getModuleCount(); c += 1) {
+        if (_this.isDark(r, c)) {
+          mc = c * cellSize + margin;
+          qrSvg += "M" + mc + "," + mr + rect;
+        }
+      }
+    }
+    qrSvg += '" stroke="transparent" fill="black"/>';
+    qrSvg += "</svg>";
+    return qrSvg;
+  };
+  _this.createDataURL = function(cellSize, margin) {
+    cellSize = cellSize || 2;
+    margin = typeof margin == "undefined" ? cellSize * 4 : margin;
+    const size = _this.getModuleCount() * cellSize + margin * 2;
+    const min = margin;
+    const max = size - margin;
+    return createDataURL(size, size, function(x, y) {
+      if (min <= x && x < max && min <= y && y < max) {
+        const c = Math.floor((x - min) / cellSize);
+        const r = Math.floor((y - min) / cellSize);
+        return _this.isDark(r, c) ? 0 : 1;
+      } else {
+        return 1;
+      }
+    });
+  };
+  _this.createImgTag = function(cellSize, margin, alt) {
+    cellSize = cellSize || 2;
+    margin = typeof margin == "undefined" ? cellSize * 4 : margin;
+    const size = _this.getModuleCount() * cellSize + margin * 2;
+    let img = "";
+    img += "<img";
+    img += ' src="';
+    img += _this.createDataURL(cellSize, margin);
+    img += '"';
+    img += ' width="';
+    img += size;
+    img += '"';
+    img += ' height="';
+    img += size;
+    img += '"';
+    if (alt) {
+      img += ' alt="';
+      img += escapeXml(alt);
+      img += '"';
+    }
+    img += "/>";
+    return img;
+  };
+  const escapeXml = function(s) {
+    let escaped = "";
+    for (let i = 0; i < s.length; i += 1) {
+      const c = s.charAt(i);
+      switch (c) {
+        case "<":
+          escaped += "&lt;";
+          break;
+        case ">":
+          escaped += "&gt;";
+          break;
+        case "&":
+          escaped += "&amp;";
+          break;
+        case '"':
+          escaped += "&quot;";
+          break;
+        default:
+          escaped += c;
+          break;
+      }
+    }
+    return escaped;
+  };
+  const _createHalfASCII = function(margin) {
+    const cellSize = 1;
+    margin = typeof margin == "undefined" ? cellSize * 2 : margin;
+    const size = _this.getModuleCount() * cellSize + margin * 2;
+    const min = margin;
+    const max = size - margin;
+    let y, x, r1, r2, p;
+    const blocks = {
+      "██": "█",
+      "█ ": "▀",
+      " █": "▄",
+      "  ": " "
+    };
+    const blocksLastLineNoMargin = {
+      "██": "▀",
+      "█ ": "▀",
+      " █": " ",
+      "  ": " "
+    };
+    let ascii = "";
+    for (y = 0; y < size; y += 2) {
+      r1 = Math.floor((y - min) / cellSize);
+      r2 = Math.floor((y + 1 - min) / cellSize);
+      for (x = 0; x < size; x += 1) {
+        p = "█";
+        if (min <= x && x < max && min <= y && y < max && _this.isDark(r1, Math.floor((x - min) / cellSize))) {
+          p = " ";
+        }
+        if (min <= x && x < max && min <= y + 1 && y + 1 < max && _this.isDark(r2, Math.floor((x - min) / cellSize))) {
+          p += " ";
+        } else {
+          p += "█";
+        }
+        ascii += margin < 1 && y + 1 >= max ? blocksLastLineNoMargin[p] : blocks[p];
+      }
+      ascii += "\n";
+    }
+    if (size % 2 && margin > 0) {
+      return ascii.substring(0, ascii.length - size - 1) + Array(size + 1).join("▀");
+    }
+    return ascii.substring(0, ascii.length - 1);
+  };
+  _this.createASCII = function(cellSize, margin) {
+    cellSize = cellSize || 1;
+    if (cellSize < 2) {
+      return _createHalfASCII(margin);
+    }
+    cellSize -= 1;
+    margin = typeof margin == "undefined" ? cellSize * 2 : margin;
+    const size = _this.getModuleCount() * cellSize + margin * 2;
+    const min = margin;
+    const max = size - margin;
+    let y, x, r, p;
+    const white = Array(cellSize + 1).join("██");
+    const black = Array(cellSize + 1).join("  ");
+    let ascii = "";
+    let line = "";
+    for (y = 0; y < size; y += 1) {
+      r = Math.floor((y - min) / cellSize);
+      line = "";
+      for (x = 0; x < size; x += 1) {
+        p = 1;
+        if (min <= x && x < max && min <= y && y < max && _this.isDark(r, Math.floor((x - min) / cellSize))) {
+          p = 0;
+        }
+        line += p ? white : black;
+      }
+      for (r = 0; r < cellSize; r += 1) {
+        ascii += line + "\n";
+      }
+    }
+    return ascii.substring(0, ascii.length - 1);
+  };
+  _this.renderTo2dContext = function(context, cellSize) {
+    cellSize = cellSize || 2;
+    const length = _this.getModuleCount();
+    for (let row = 0; row < length; row++) {
+      for (let col = 0; col < length; col++) {
+        context.fillStyle = _this.isDark(row, col) ? "black" : "white";
+        context.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+      }
+    }
+  };
+  return _this;
+};
+qrcode.stringToBytes = function(s) {
+  const bytes = [];
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s.charCodeAt(i);
+    bytes.push(c & 255);
   }
-  QRRSBlock.RS_BLOCK_TABLE = [
+  return bytes;
+};
+qrcode.createStringToBytes = function(unicodeData, numChars) {
+  const unicodeMap = (function() {
+    const bin = base64DecodeInputStream(unicodeData);
+    const read = function() {
+      const b = bin.read();
+      if (b == -1) throw "eof";
+      return b;
+    };
+    let count = 0;
+    const unicodeMap2 = {};
+    while (true) {
+      const b0 = bin.read();
+      if (b0 == -1) break;
+      const b1 = read();
+      const b2 = read();
+      const b3 = read();
+      const k = String.fromCharCode(b0 << 8 | b1);
+      const v = b2 << 8 | b3;
+      unicodeMap2[k] = v;
+      count += 1;
+    }
+    if (count != numChars) {
+      throw count + " != " + numChars;
+    }
+    return unicodeMap2;
+  })();
+  const unknownChar = "?".charCodeAt(0);
+  return function(s) {
+    const bytes = [];
+    for (let i = 0; i < s.length; i += 1) {
+      const c = s.charCodeAt(i);
+      if (c < 128) {
+        bytes.push(c);
+      } else {
+        const b = unicodeMap[s.charAt(i)];
+        if (typeof b == "number") {
+          if ((b & 255) == b) {
+            bytes.push(b);
+          } else {
+            bytes.push(b >>> 8);
+            bytes.push(b & 255);
+          }
+        } else {
+          bytes.push(unknownChar);
+        }
+      }
+    }
+    return bytes;
+  };
+};
+const QRMode = {
+  MODE_NUMBER: 1 << 0,
+  MODE_ALPHA_NUM: 1 << 1,
+  MODE_8BIT_BYTE: 1 << 2,
+  MODE_KANJI: 1 << 3
+};
+const QRErrorCorrectionLevel = {
+  L: 1,
+  M: 0,
+  Q: 3,
+  H: 2
+};
+const QRMaskPattern = {
+  PATTERN000: 0,
+  PATTERN001: 1,
+  PATTERN010: 2,
+  PATTERN011: 3,
+  PATTERN100: 4,
+  PATTERN101: 5,
+  PATTERN110: 6,
+  PATTERN111: 7
+};
+const QRUtil = (function() {
+  const PATTERN_POSITION_TABLE = [
+    [],
+    [6, 18],
+    [6, 22],
+    [6, 26],
+    [6, 30],
+    [6, 34],
+    [6, 22, 38],
+    [6, 24, 42],
+    [6, 26, 46],
+    [6, 28, 50],
+    [6, 30, 54],
+    [6, 32, 58],
+    [6, 34, 62],
+    [6, 26, 46, 66],
+    [6, 26, 48, 70],
+    [6, 26, 50, 74],
+    [6, 30, 54, 78],
+    [6, 30, 56, 82],
+    [6, 30, 58, 86],
+    [6, 34, 62, 90],
+    [6, 28, 50, 72, 94],
+    [6, 26, 50, 74, 98],
+    [6, 30, 54, 78, 102],
+    [6, 28, 54, 80, 106],
+    [6, 32, 58, 84, 110],
+    [6, 30, 58, 86, 114],
+    [6, 34, 62, 90, 118],
+    [6, 26, 50, 74, 98, 122],
+    [6, 30, 54, 78, 102, 126],
+    [6, 26, 52, 78, 104, 130],
+    [6, 30, 56, 82, 108, 134],
+    [6, 34, 60, 86, 112, 138],
+    [6, 30, 58, 86, 114, 142],
+    [6, 34, 62, 90, 118, 146],
+    [6, 30, 54, 78, 102, 126, 150],
+    [6, 24, 50, 76, 102, 128, 154],
+    [6, 28, 54, 80, 106, 132, 158],
+    [6, 32, 58, 84, 110, 136, 162],
+    [6, 26, 54, 82, 110, 138, 166],
+    [6, 30, 58, 86, 114, 142, 170]
+  ];
+  const G15 = 1 << 10 | 1 << 8 | 1 << 5 | 1 << 4 | 1 << 2 | 1 << 1 | 1 << 0;
+  const G18 = 1 << 12 | 1 << 11 | 1 << 10 | 1 << 9 | 1 << 8 | 1 << 5 | 1 << 2 | 1 << 0;
+  const G15_MASK = 1 << 14 | 1 << 12 | 1 << 10 | 1 << 4 | 1 << 1;
+  const _this = {};
+  const getBCHDigit = function(data) {
+    let digit = 0;
+    while (data != 0) {
+      digit += 1;
+      data >>>= 1;
+    }
+    return digit;
+  };
+  _this.getBCHTypeInfo = function(data) {
+    let d = data << 10;
+    while (getBCHDigit(d) - getBCHDigit(G15) >= 0) {
+      d ^= G15 << getBCHDigit(d) - getBCHDigit(G15);
+    }
+    return (data << 10 | d) ^ G15_MASK;
+  };
+  _this.getBCHTypeNumber = function(data) {
+    let d = data << 12;
+    while (getBCHDigit(d) - getBCHDigit(G18) >= 0) {
+      d ^= G18 << getBCHDigit(d) - getBCHDigit(G18);
+    }
+    return data << 12 | d;
+  };
+  _this.getPatternPosition = function(typeNumber) {
+    return PATTERN_POSITION_TABLE[typeNumber - 1];
+  };
+  _this.getMaskFunction = function(maskPattern) {
+    switch (maskPattern) {
+      case QRMaskPattern.PATTERN000:
+        return function(i, j) {
+          return (i + j) % 2 == 0;
+        };
+      case QRMaskPattern.PATTERN001:
+        return function(i, j) {
+          return i % 2 == 0;
+        };
+      case QRMaskPattern.PATTERN010:
+        return function(i, j) {
+          return j % 3 == 0;
+        };
+      case QRMaskPattern.PATTERN011:
+        return function(i, j) {
+          return (i + j) % 3 == 0;
+        };
+      case QRMaskPattern.PATTERN100:
+        return function(i, j) {
+          return (Math.floor(i / 2) + Math.floor(j / 3)) % 2 == 0;
+        };
+      case QRMaskPattern.PATTERN101:
+        return function(i, j) {
+          return i * j % 2 + i * j % 3 == 0;
+        };
+      case QRMaskPattern.PATTERN110:
+        return function(i, j) {
+          return (i * j % 2 + i * j % 3) % 2 == 0;
+        };
+      case QRMaskPattern.PATTERN111:
+        return function(i, j) {
+          return (i * j % 3 + (i + j) % 2) % 2 == 0;
+        };
+      default:
+        throw "bad maskPattern:" + maskPattern;
+    }
+  };
+  _this.getErrorCorrectPolynomial = function(errorCorrectLength) {
+    let a = qrPolynomial([1], 0);
+    for (let i = 0; i < errorCorrectLength; i += 1) {
+      a = a.multiply(qrPolynomial([1, QRMath.gexp(i)], 0));
+    }
+    return a;
+  };
+  _this.getLengthInBits = function(mode, type) {
+    if (1 <= type && type < 10) {
+      switch (mode) {
+        case QRMode.MODE_NUMBER:
+          return 10;
+        case QRMode.MODE_ALPHA_NUM:
+          return 9;
+        case QRMode.MODE_8BIT_BYTE:
+          return 8;
+        case QRMode.MODE_KANJI:
+          return 8;
+        default:
+          throw "mode:" + mode;
+      }
+    } else if (type < 27) {
+      switch (mode) {
+        case QRMode.MODE_NUMBER:
+          return 12;
+        case QRMode.MODE_ALPHA_NUM:
+          return 11;
+        case QRMode.MODE_8BIT_BYTE:
+          return 16;
+        case QRMode.MODE_KANJI:
+          return 10;
+        default:
+          throw "mode:" + mode;
+      }
+    } else if (type < 41) {
+      switch (mode) {
+        case QRMode.MODE_NUMBER:
+          return 14;
+        case QRMode.MODE_ALPHA_NUM:
+          return 13;
+        case QRMode.MODE_8BIT_BYTE:
+          return 16;
+        case QRMode.MODE_KANJI:
+          return 12;
+        default:
+          throw "mode:" + mode;
+      }
+    } else {
+      throw "type:" + type;
+    }
+  };
+  _this.getLostPoint = function(qrcode2) {
+    const moduleCount = qrcode2.getModuleCount();
+    let lostPoint = 0;
+    for (let row = 0; row < moduleCount; row += 1) {
+      for (let col = 0; col < moduleCount; col += 1) {
+        let sameCount = 0;
+        const dark = qrcode2.isDark(row, col);
+        for (let r = -1; r <= 1; r += 1) {
+          if (row + r < 0 || moduleCount <= row + r) {
+            continue;
+          }
+          for (let c = -1; c <= 1; c += 1) {
+            if (col + c < 0 || moduleCount <= col + c) {
+              continue;
+            }
+            if (r == 0 && c == 0) {
+              continue;
+            }
+            if (dark == qrcode2.isDark(row + r, col + c)) {
+              sameCount += 1;
+            }
+          }
+        }
+        if (sameCount > 5) {
+          lostPoint += 3 + sameCount - 5;
+        }
+      }
+    }
+    for (let row = 0; row < moduleCount - 1; row += 1) {
+      for (let col = 0; col < moduleCount - 1; col += 1) {
+        let count = 0;
+        if (qrcode2.isDark(row, col)) count += 1;
+        if (qrcode2.isDark(row + 1, col)) count += 1;
+        if (qrcode2.isDark(row, col + 1)) count += 1;
+        if (qrcode2.isDark(row + 1, col + 1)) count += 1;
+        if (count == 0 || count == 4) {
+          lostPoint += 3;
+        }
+      }
+    }
+    for (let row = 0; row < moduleCount; row += 1) {
+      for (let col = 0; col < moduleCount - 6; col += 1) {
+        if (qrcode2.isDark(row, col) && !qrcode2.isDark(row, col + 1) && qrcode2.isDark(row, col + 2) && qrcode2.isDark(row, col + 3) && qrcode2.isDark(row, col + 4) && !qrcode2.isDark(row, col + 5) && qrcode2.isDark(row, col + 6)) {
+          lostPoint += 40;
+        }
+      }
+    }
+    for (let col = 0; col < moduleCount; col += 1) {
+      for (let row = 0; row < moduleCount - 6; row += 1) {
+        if (qrcode2.isDark(row, col) && !qrcode2.isDark(row + 1, col) && qrcode2.isDark(row + 2, col) && qrcode2.isDark(row + 3, col) && qrcode2.isDark(row + 4, col) && !qrcode2.isDark(row + 5, col) && qrcode2.isDark(row + 6, col)) {
+          lostPoint += 40;
+        }
+      }
+    }
+    let darkCount = 0;
+    for (let col = 0; col < moduleCount; col += 1) {
+      for (let row = 0; row < moduleCount; row += 1) {
+        if (qrcode2.isDark(row, col)) {
+          darkCount += 1;
+        }
+      }
+    }
+    const ratio = Math.abs(100 * darkCount / moduleCount / moduleCount - 50) / 5;
+    lostPoint += ratio * 10;
+    return lostPoint;
+  };
+  return _this;
+})();
+const QRMath = (function() {
+  const EXP_TABLE = new Array(256);
+  const LOG_TABLE = new Array(256);
+  for (let i = 0; i < 8; i += 1) {
+    EXP_TABLE[i] = 1 << i;
+  }
+  for (let i = 8; i < 256; i += 1) {
+    EXP_TABLE[i] = EXP_TABLE[i - 4] ^ EXP_TABLE[i - 5] ^ EXP_TABLE[i - 6] ^ EXP_TABLE[i - 8];
+  }
+  for (let i = 0; i < 255; i += 1) {
+    LOG_TABLE[EXP_TABLE[i]] = i;
+  }
+  const _this = {};
+  _this.glog = function(n) {
+    if (n < 1) {
+      throw "glog(" + n + ")";
+    }
+    return LOG_TABLE[n];
+  };
+  _this.gexp = function(n) {
+    while (n < 0) {
+      n += 255;
+    }
+    while (n >= 256) {
+      n -= 255;
+    }
+    return EXP_TABLE[n];
+  };
+  return _this;
+})();
+const qrPolynomial = function(num, shift) {
+  if (typeof num.length == "undefined") {
+    throw num.length + "/" + shift;
+  }
+  const _num = (function() {
+    let offset = 0;
+    while (offset < num.length && num[offset] == 0) {
+      offset += 1;
+    }
+    const _num2 = new Array(num.length - offset + shift);
+    for (let i = 0; i < num.length - offset; i += 1) {
+      _num2[i] = num[i + offset];
+    }
+    return _num2;
+  })();
+  const _this = {};
+  _this.getAt = function(index) {
+    return _num[index];
+  };
+  _this.getLength = function() {
+    return _num.length;
+  };
+  _this.multiply = function(e) {
+    const num2 = new Array(_this.getLength() + e.getLength() - 1);
+    for (let i = 0; i < _this.getLength(); i += 1) {
+      for (let j = 0; j < e.getLength(); j += 1) {
+        num2[i + j] ^= QRMath.gexp(QRMath.glog(_this.getAt(i)) + QRMath.glog(e.getAt(j)));
+      }
+    }
+    return qrPolynomial(num2, 0);
+  };
+  _this.mod = function(e) {
+    if (_this.getLength() - e.getLength() < 0) {
+      return _this;
+    }
+    const ratio = QRMath.glog(_this.getAt(0)) - QRMath.glog(e.getAt(0));
+    const num2 = new Array(_this.getLength());
+    for (let i = 0; i < _this.getLength(); i += 1) {
+      num2[i] = _this.getAt(i);
+    }
+    for (let i = 0; i < e.getLength(); i += 1) {
+      num2[i] ^= QRMath.gexp(QRMath.glog(e.getAt(i)) + ratio);
+    }
+    return qrPolynomial(num2, 0).mod(e);
+  };
+  return _this;
+};
+const QRRSBlock = (function() {
+  const RS_BLOCK_TABLE = [
     // L
     // M
     // Q
@@ -156,7 +1010,7 @@ function requireRSBlock() {
     [1, 70, 44],
     [2, 35, 17],
     [2, 35, 13],
-    // 4		
+    // 4
     [1, 100, 80],
     [2, 50, 32],
     [2, 50, 24],
@@ -171,7 +1025,7 @@ function requireRSBlock() {
     [4, 43, 27],
     [4, 43, 19],
     [4, 43, 15],
-    // 7		
+    // 7
     [2, 98, 78],
     [4, 49, 31],
     [2, 32, 14, 4, 33, 15],
@@ -186,7 +1040,7 @@ function requireRSBlock() {
     [3, 58, 36, 2, 59, 37],
     [4, 36, 16, 4, 37, 17],
     [4, 36, 12, 4, 37, 13],
-    // 10		
+    // 10
     [2, 86, 68, 2, 87, 69],
     [4, 69, 43, 1, 70, 44],
     [6, 43, 19, 2, 44, 20],
@@ -215,7 +1069,7 @@ function requireRSBlock() {
     [5, 109, 87, 1, 110, 88],
     [5, 65, 41, 5, 66, 42],
     [5, 54, 24, 7, 55, 25],
-    [11, 36, 12],
+    [11, 36, 12, 7, 37, 13],
     // 16
     [5, 122, 98, 1, 123, 99],
     [7, 73, 45, 3, 74, 46],
@@ -342,869 +1196,615 @@ function requireRSBlock() {
     [34, 54, 24, 34, 55, 25],
     [20, 45, 15, 61, 46, 16]
   ];
-  QRRSBlock.getRSBlocks = function(typeNumber, errorCorrectLevel) {
-    var rsBlock = QRRSBlock.getRsBlockTable(typeNumber, errorCorrectLevel);
-    if (rsBlock == void 0) {
-      throw new Error("bad rs block @ typeNumber:" + typeNumber + "/errorCorrectLevel:" + errorCorrectLevel);
-    }
-    var length = rsBlock.length / 3;
-    var list = new Array();
-    for (var i = 0; i < length; i++) {
-      var count = rsBlock[i * 3 + 0];
-      var totalCount = rsBlock[i * 3 + 1];
-      var dataCount = rsBlock[i * 3 + 2];
-      for (var j = 0; j < count; j++) {
-        list.push(new QRRSBlock(totalCount, dataCount));
-      }
-    }
-    return list;
+  const qrRSBlock = function(totalCount, dataCount) {
+    const _this2 = {};
+    _this2.totalCount = totalCount;
+    _this2.dataCount = dataCount;
+    return _this2;
   };
-  QRRSBlock.getRsBlockTable = function(typeNumber, errorCorrectLevel) {
-    switch (errorCorrectLevel) {
-      case ECL.L:
-        return QRRSBlock.RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 0];
-      case ECL.M:
-        return QRRSBlock.RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 1];
-      case ECL.Q:
-        return QRRSBlock.RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 2];
-      case ECL.H:
-        return QRRSBlock.RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 3];
+  const _this = {};
+  const getRsBlockTable = function(typeNumber, errorCorrectionLevel) {
+    switch (errorCorrectionLevel) {
+      case QRErrorCorrectionLevel.L:
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 0];
+      case QRErrorCorrectionLevel.M:
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 1];
+      case QRErrorCorrectionLevel.Q:
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 2];
+      case QRErrorCorrectionLevel.H:
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 3];
       default:
         return void 0;
     }
   };
-  RSBlock = QRRSBlock;
-  return RSBlock;
-}
-var BitBuffer;
-var hasRequiredBitBuffer;
-function requireBitBuffer() {
-  if (hasRequiredBitBuffer) return BitBuffer;
-  hasRequiredBitBuffer = 1;
-  function QRBitBuffer() {
-    this.buffer = new Array();
-    this.length = 0;
-  }
-  QRBitBuffer.prototype = {
-    get: function(index) {
-      var bufIndex = Math.floor(index / 8);
-      return (this.buffer[bufIndex] >>> 7 - index % 8 & 1) == 1;
-    },
-    put: function(num, length) {
-      for (var i = 0; i < length; i++) {
-        this.putBit((num >>> length - i - 1 & 1) == 1);
+  _this.getRSBlocks = function(typeNumber, errorCorrectionLevel) {
+    const rsBlock = getRsBlockTable(typeNumber, errorCorrectionLevel);
+    if (typeof rsBlock == "undefined") {
+      throw "bad rs block @ typeNumber:" + typeNumber + "/errorCorrectionLevel:" + errorCorrectionLevel;
+    }
+    const length = rsBlock.length / 3;
+    const list = [];
+    for (let i = 0; i < length; i += 1) {
+      const count = rsBlock[i * 3 + 0];
+      const totalCount = rsBlock[i * 3 + 1];
+      const dataCount = rsBlock[i * 3 + 2];
+      for (let j = 0; j < count; j += 1) {
+        list.push(qrRSBlock(totalCount, dataCount));
       }
-    },
-    getLengthInBits: function() {
-      return this.length;
-    },
-    putBit: function(bit) {
-      var bufIndex = Math.floor(this.length / 8);
-      if (this.buffer.length <= bufIndex) {
-        this.buffer.push(0);
-      }
-      if (bit) {
-        this.buffer[bufIndex] |= 128 >>> this.length % 8;
-      }
-      this.length++;
+    }
+    return list;
+  };
+  return _this;
+})();
+const qrBitBuffer = function() {
+  const _buffer = [];
+  let _length = 0;
+  const _this = {};
+  _this.getBuffer = function() {
+    return _buffer;
+  };
+  _this.getAt = function(index) {
+    const bufIndex = Math.floor(index / 8);
+    return (_buffer[bufIndex] >>> 7 - index % 8 & 1) == 1;
+  };
+  _this.put = function(num, length) {
+    for (let i = 0; i < length; i += 1) {
+      _this.putBit((num >>> length - i - 1 & 1) == 1);
     }
   };
-  BitBuffer = QRBitBuffer;
-  return BitBuffer;
-}
-var math;
-var hasRequiredMath;
-function requireMath() {
-  if (hasRequiredMath) return math;
-  hasRequiredMath = 1;
-  var QRMath = {
-    glog: function(n) {
-      if (n < 1) {
-        throw new Error("glog(" + n + ")");
-      }
-      return QRMath.LOG_TABLE[n];
-    },
-    gexp: function(n) {
-      while (n < 0) {
-        n += 255;
-      }
-      while (n >= 256) {
-        n -= 255;
-      }
-      return QRMath.EXP_TABLE[n];
-    },
-    EXP_TABLE: new Array(256),
-    LOG_TABLE: new Array(256)
+  _this.getLengthInBits = function() {
+    return _length;
   };
-  for (var i = 0; i < 8; i++) {
-    QRMath.EXP_TABLE[i] = 1 << i;
-  }
-  for (var i = 8; i < 256; i++) {
-    QRMath.EXP_TABLE[i] = QRMath.EXP_TABLE[i - 4] ^ QRMath.EXP_TABLE[i - 5] ^ QRMath.EXP_TABLE[i - 6] ^ QRMath.EXP_TABLE[i - 8];
-  }
-  for (var i = 0; i < 255; i++) {
-    QRMath.LOG_TABLE[QRMath.EXP_TABLE[i]] = i;
-  }
-  math = QRMath;
-  return math;
-}
-var Polynomial;
-var hasRequiredPolynomial;
-function requirePolynomial() {
-  if (hasRequiredPolynomial) return Polynomial;
-  hasRequiredPolynomial = 1;
-  var math2 = requireMath();
-  function QRPolynomial(num, shift) {
-    if (num.length == void 0) {
-      throw new Error(num.length + "/" + shift);
+  _this.putBit = function(bit) {
+    const bufIndex = Math.floor(_length / 8);
+    if (_buffer.length <= bufIndex) {
+      _buffer.push(0);
     }
-    var offset = 0;
-    while (offset < num.length && num[offset] == 0) {
-      offset++;
+    if (bit) {
+      _buffer[bufIndex] |= 128 >>> _length % 8;
     }
-    this.num = new Array(num.length - offset + shift);
-    for (var i = 0; i < num.length - offset; i++) {
-      this.num[i] = num[i + offset];
+    _length += 1;
+  };
+  return _this;
+};
+const qrNumber = function(data) {
+  const _mode = QRMode.MODE_NUMBER;
+  const _data = data;
+  const _this = {};
+  _this.getMode = function() {
+    return _mode;
+  };
+  _this.getLength = function(buffer) {
+    return _data.length;
+  };
+  _this.write = function(buffer) {
+    const data2 = _data;
+    let i = 0;
+    while (i + 2 < data2.length) {
+      buffer.put(strToNum(data2.substring(i, i + 3)), 10);
+      i += 3;
     }
-  }
-  QRPolynomial.prototype = {
-    get: function(index) {
-      return this.num[index];
-    },
-    getLength: function() {
-      return this.num.length;
-    },
-    multiply: function(e) {
-      var num = new Array(this.getLength() + e.getLength() - 1);
-      for (var i = 0; i < this.getLength(); i++) {
-        for (var j = 0; j < e.getLength(); j++) {
-          num[i + j] ^= math2.gexp(math2.glog(this.get(i)) + math2.glog(e.get(j)));
-        }
+    if (i < data2.length) {
+      if (data2.length - i == 1) {
+        buffer.put(strToNum(data2.substring(i, i + 1)), 4);
+      } else if (data2.length - i == 2) {
+        buffer.put(strToNum(data2.substring(i, i + 2)), 7);
       }
-      return new QRPolynomial(num, 0);
-    },
-    mod: function(e) {
-      if (this.getLength() - e.getLength() < 0) {
-        return this;
-      }
-      var ratio = math2.glog(this.get(0)) - math2.glog(e.get(0));
-      var num = new Array(this.getLength());
-      for (var i = 0; i < this.getLength(); i++) {
-        num[i] = this.get(i);
-      }
-      for (var i = 0; i < e.getLength(); i++) {
-        num[i] ^= math2.gexp(math2.glog(e.get(i)) + ratio);
-      }
-      return new QRPolynomial(num, 0).mod(e);
     }
   };
-  Polynomial = QRPolynomial;
-  return Polynomial;
-}
-var util;
-var hasRequiredUtil;
-function requireUtil() {
-  if (hasRequiredUtil) return util;
-  hasRequiredUtil = 1;
-  var Mode = requireMode();
-  var Polynomial2 = requirePolynomial();
-  var math2 = requireMath();
-  var QRMaskPattern = {
-    PATTERN000: 0,
-    PATTERN001: 1,
-    PATTERN010: 2,
-    PATTERN011: 3,
-    PATTERN100: 4,
-    PATTERN101: 5,
-    PATTERN110: 6,
-    PATTERN111: 7
+  const strToNum = function(s) {
+    let num = 0;
+    for (let i = 0; i < s.length; i += 1) {
+      num = num * 10 + chatToNum(s.charAt(i));
+    }
+    return num;
   };
-  var QRUtil = {
-    PATTERN_POSITION_TABLE: [
-      [],
-      [6, 18],
-      [6, 22],
-      [6, 26],
-      [6, 30],
-      [6, 34],
-      [6, 22, 38],
-      [6, 24, 42],
-      [6, 26, 46],
-      [6, 28, 50],
-      [6, 30, 54],
-      [6, 32, 58],
-      [6, 34, 62],
-      [6, 26, 46, 66],
-      [6, 26, 48, 70],
-      [6, 26, 50, 74],
-      [6, 30, 54, 78],
-      [6, 30, 56, 82],
-      [6, 30, 58, 86],
-      [6, 34, 62, 90],
-      [6, 28, 50, 72, 94],
-      [6, 26, 50, 74, 98],
-      [6, 30, 54, 78, 102],
-      [6, 28, 54, 80, 106],
-      [6, 32, 58, 84, 110],
-      [6, 30, 58, 86, 114],
-      [6, 34, 62, 90, 118],
-      [6, 26, 50, 74, 98, 122],
-      [6, 30, 54, 78, 102, 126],
-      [6, 26, 52, 78, 104, 130],
-      [6, 30, 56, 82, 108, 134],
-      [6, 34, 60, 86, 112, 138],
-      [6, 30, 58, 86, 114, 142],
-      [6, 34, 62, 90, 118, 146],
-      [6, 30, 54, 78, 102, 126, 150],
-      [6, 24, 50, 76, 102, 128, 154],
-      [6, 28, 54, 80, 106, 132, 158],
-      [6, 32, 58, 84, 110, 136, 162],
-      [6, 26, 54, 82, 110, 138, 166],
-      [6, 30, 58, 86, 114, 142, 170]
-    ],
-    G15: 1 << 10 | 1 << 8 | 1 << 5 | 1 << 4 | 1 << 2 | 1 << 1 | 1 << 0,
-    G18: 1 << 12 | 1 << 11 | 1 << 10 | 1 << 9 | 1 << 8 | 1 << 5 | 1 << 2 | 1 << 0,
-    G15_MASK: 1 << 14 | 1 << 12 | 1 << 10 | 1 << 4 | 1 << 1,
-    getBCHTypeInfo: function(data) {
-      var d = data << 10;
-      while (QRUtil.getBCHDigit(d) - QRUtil.getBCHDigit(QRUtil.G15) >= 0) {
-        d ^= QRUtil.G15 << QRUtil.getBCHDigit(d) - QRUtil.getBCHDigit(QRUtil.G15);
-      }
-      return (data << 10 | d) ^ QRUtil.G15_MASK;
-    },
-    getBCHTypeNumber: function(data) {
-      var d = data << 12;
-      while (QRUtil.getBCHDigit(d) - QRUtil.getBCHDigit(QRUtil.G18) >= 0) {
-        d ^= QRUtil.G18 << QRUtil.getBCHDigit(d) - QRUtil.getBCHDigit(QRUtil.G18);
-      }
-      return data << 12 | d;
-    },
-    getBCHDigit: function(data) {
-      var digit = 0;
-      while (data != 0) {
-        digit++;
-        data >>>= 1;
-      }
-      return digit;
-    },
-    getPatternPosition: function(typeNumber) {
-      return QRUtil.PATTERN_POSITION_TABLE[typeNumber - 1];
-    },
-    getMask: function(maskPattern, i, j) {
-      switch (maskPattern) {
-        case QRMaskPattern.PATTERN000:
-          return (i + j) % 2 == 0;
-        case QRMaskPattern.PATTERN001:
-          return i % 2 == 0;
-        case QRMaskPattern.PATTERN010:
-          return j % 3 == 0;
-        case QRMaskPattern.PATTERN011:
-          return (i + j) % 3 == 0;
-        case QRMaskPattern.PATTERN100:
-          return (Math.floor(i / 2) + Math.floor(j / 3)) % 2 == 0;
-        case QRMaskPattern.PATTERN101:
-          return i * j % 2 + i * j % 3 == 0;
-        case QRMaskPattern.PATTERN110:
-          return (i * j % 2 + i * j % 3) % 2 == 0;
-        case QRMaskPattern.PATTERN111:
-          return (i * j % 3 + (i + j) % 2) % 2 == 0;
+  const chatToNum = function(c) {
+    if ("0" <= c && c <= "9") {
+      return c.charCodeAt(0) - "0".charCodeAt(0);
+    }
+    throw "illegal char :" + c;
+  };
+  return _this;
+};
+const qrAlphaNum = function(data) {
+  const _mode = QRMode.MODE_ALPHA_NUM;
+  const _data = data;
+  const _this = {};
+  _this.getMode = function() {
+    return _mode;
+  };
+  _this.getLength = function(buffer) {
+    return _data.length;
+  };
+  _this.write = function(buffer) {
+    const s = _data;
+    let i = 0;
+    while (i + 1 < s.length) {
+      buffer.put(
+        getCode(s.charAt(i)) * 45 + getCode(s.charAt(i + 1)),
+        11
+      );
+      i += 2;
+    }
+    if (i < s.length) {
+      buffer.put(getCode(s.charAt(i)), 6);
+    }
+  };
+  const getCode = function(c) {
+    if ("0" <= c && c <= "9") {
+      return c.charCodeAt(0) - "0".charCodeAt(0);
+    } else if ("A" <= c && c <= "Z") {
+      return c.charCodeAt(0) - "A".charCodeAt(0) + 10;
+    } else {
+      switch (c) {
+        case " ":
+          return 36;
+        case "$":
+          return 37;
+        case "%":
+          return 38;
+        case "*":
+          return 39;
+        case "+":
+          return 40;
+        case "-":
+          return 41;
+        case ".":
+          return 42;
+        case "/":
+          return 43;
+        case ":":
+          return 44;
         default:
-          throw new Error("bad maskPattern:" + maskPattern);
+          throw "illegal char :" + c;
       }
-    },
-    getErrorCorrectPolynomial: function(errorCorrectLength) {
-      var a = new Polynomial2([1], 0);
-      for (var i = 0; i < errorCorrectLength; i++) {
-        a = a.multiply(new Polynomial2([1, math2.gexp(i)], 0));
-      }
-      return a;
-    },
-    getLengthInBits: function(mode2, type) {
-      if (1 <= type && type < 10) {
-        switch (mode2) {
-          case Mode.MODE_NUMBER:
-            return 10;
-          case Mode.MODE_ALPHA_NUM:
-            return 9;
-          case Mode.MODE_8BIT_BYTE:
-            return 8;
-          case Mode.MODE_KANJI:
-            return 8;
-          default:
-            throw new Error("mode:" + mode2);
-        }
-      } else if (type < 27) {
-        switch (mode2) {
-          case Mode.MODE_NUMBER:
-            return 12;
-          case Mode.MODE_ALPHA_NUM:
-            return 11;
-          case Mode.MODE_8BIT_BYTE:
-            return 16;
-          case Mode.MODE_KANJI:
-            return 10;
-          default:
-            throw new Error("mode:" + mode2);
-        }
-      } else if (type < 41) {
-        switch (mode2) {
-          case Mode.MODE_NUMBER:
-            return 14;
-          case Mode.MODE_ALPHA_NUM:
-            return 13;
-          case Mode.MODE_8BIT_BYTE:
-            return 16;
-          case Mode.MODE_KANJI:
-            return 12;
-          default:
-            throw new Error("mode:" + mode2);
-        }
+    }
+  };
+  return _this;
+};
+const qr8BitByte = function(data) {
+  const _mode = QRMode.MODE_8BIT_BYTE;
+  const _bytes = qrcode.stringToBytes(data);
+  const _this = {};
+  _this.getMode = function() {
+    return _mode;
+  };
+  _this.getLength = function(buffer) {
+    return _bytes.length;
+  };
+  _this.write = function(buffer) {
+    for (let i = 0; i < _bytes.length; i += 1) {
+      buffer.put(_bytes[i], 8);
+    }
+  };
+  return _this;
+};
+const qrKanji = function(data) {
+  const _mode = QRMode.MODE_KANJI;
+  const stringToBytes = qrcode.stringToBytes;
+  !(function(c, code) {
+    const test = stringToBytes(c);
+    if (test.length != 2 || (test[0] << 8 | test[1]) != code) {
+      throw "sjis not supported.";
+    }
+  })("友", 38726);
+  const _bytes = stringToBytes(data);
+  const _this = {};
+  _this.getMode = function() {
+    return _mode;
+  };
+  _this.getLength = function(buffer) {
+    return ~~(_bytes.length / 2);
+  };
+  _this.write = function(buffer) {
+    const data2 = _bytes;
+    let i = 0;
+    while (i + 1 < data2.length) {
+      let c = (255 & data2[i]) << 8 | 255 & data2[i + 1];
+      if (33088 <= c && c <= 40956) {
+        c -= 33088;
+      } else if (57408 <= c && c <= 60351) {
+        c -= 49472;
       } else {
-        throw new Error("type:" + type);
+        throw "illegal char at " + (i + 1) + "/" + c;
       }
-    },
-    getLostPoint: function(qrCode) {
-      var moduleCount = qrCode.getModuleCount();
-      var lostPoint = 0;
-      for (var row = 0; row < moduleCount; row++) {
-        for (var col = 0; col < moduleCount; col++) {
-          var sameCount = 0;
-          var dark = qrCode.isDark(row, col);
-          for (var r = -1; r <= 1; r++) {
-            if (row + r < 0 || moduleCount <= row + r) {
-              continue;
-            }
-            for (var c = -1; c <= 1; c++) {
-              if (col + c < 0 || moduleCount <= col + c) {
-                continue;
-              }
-              if (r == 0 && c == 0) {
-                continue;
-              }
-              if (dark == qrCode.isDark(row + r, col + c)) {
-                sameCount++;
-              }
-            }
-          }
-          if (sameCount > 5) {
-            lostPoint += 3 + sameCount - 5;
-          }
-        }
-      }
-      for (var row = 0; row < moduleCount - 1; row++) {
-        for (var col = 0; col < moduleCount - 1; col++) {
-          var count = 0;
-          if (qrCode.isDark(row, col)) count++;
-          if (qrCode.isDark(row + 1, col)) count++;
-          if (qrCode.isDark(row, col + 1)) count++;
-          if (qrCode.isDark(row + 1, col + 1)) count++;
-          if (count == 0 || count == 4) {
-            lostPoint += 3;
-          }
-        }
-      }
-      for (var row = 0; row < moduleCount; row++) {
-        for (var col = 0; col < moduleCount - 6; col++) {
-          if (qrCode.isDark(row, col) && !qrCode.isDark(row, col + 1) && qrCode.isDark(row, col + 2) && qrCode.isDark(row, col + 3) && qrCode.isDark(row, col + 4) && !qrCode.isDark(row, col + 5) && qrCode.isDark(row, col + 6)) {
-            lostPoint += 40;
-          }
-        }
-      }
-      for (var col = 0; col < moduleCount; col++) {
-        for (var row = 0; row < moduleCount - 6; row++) {
-          if (qrCode.isDark(row, col) && !qrCode.isDark(row + 1, col) && qrCode.isDark(row + 2, col) && qrCode.isDark(row + 3, col) && qrCode.isDark(row + 4, col) && !qrCode.isDark(row + 5, col) && qrCode.isDark(row + 6, col)) {
-            lostPoint += 40;
-          }
-        }
-      }
-      var darkCount = 0;
-      for (var col = 0; col < moduleCount; col++) {
-        for (var row = 0; row < moduleCount; row++) {
-          if (qrCode.isDark(row, col)) {
-            darkCount++;
-          }
-        }
-      }
-      var ratio = Math.abs(100 * darkCount / moduleCount / moduleCount - 50) / 5;
-      lostPoint += ratio * 10;
-      return lostPoint;
+      c = (c >>> 8 & 255) * 192 + (c & 255);
+      buffer.put(c, 13);
+      i += 2;
+    }
+    if (i < data2.length) {
+      throw "illegal char at " + (i + 1);
     }
   };
-  util = QRUtil;
-  return util;
-}
-var QRCode_1;
-var hasRequiredQRCode;
-function requireQRCode() {
-  if (hasRequiredQRCode) return QRCode_1;
-  hasRequiredQRCode = 1;
-  var BitByte = require_8BitByte();
-  var RSBlock2 = requireRSBlock();
-  var BitBuffer2 = requireBitBuffer();
-  var util2 = requireUtil();
-  var Polynomial2 = requirePolynomial();
-  function QRCode2(typeNumber, errorCorrectLevel) {
-    this.typeNumber = typeNumber;
-    this.errorCorrectLevel = errorCorrectLevel;
-    this.modules = null;
-    this.moduleCount = 0;
-    this.dataCache = null;
-    this.dataList = [];
-  }
-  var proto = QRCode2.prototype;
-  proto.addData = function(data) {
-    var newData = new BitByte(data);
-    this.dataList.push(newData);
-    this.dataCache = null;
+  return _this;
+};
+const byteArrayOutputStream = function() {
+  const _bytes = [];
+  const _this = {};
+  _this.writeByte = function(b) {
+    _bytes.push(b & 255);
   };
-  proto.isDark = function(row, col) {
-    if (row < 0 || this.moduleCount <= row || col < 0 || this.moduleCount <= col) {
-      throw new Error(row + "," + col);
+  _this.writeShort = function(i) {
+    _this.writeByte(i);
+    _this.writeByte(i >>> 8);
+  };
+  _this.writeBytes = function(b, off, len) {
+    off = off || 0;
+    len = len || b.length;
+    for (let i = 0; i < len; i += 1) {
+      _this.writeByte(b[i + off]);
     }
-    return this.modules[row][col];
   };
-  proto.getModuleCount = function() {
-    return this.moduleCount;
+  _this.writeString = function(s) {
+    for (let i = 0; i < s.length; i += 1) {
+      _this.writeByte(s.charCodeAt(i));
+    }
   };
-  proto.make = function() {
-    if (this.typeNumber < 1) {
-      var typeNumber = 1;
-      for (typeNumber = 1; typeNumber < 40; typeNumber++) {
-        var rsBlocks = RSBlock2.getRSBlocks(typeNumber, this.errorCorrectLevel);
-        var buffer = new BitBuffer2();
-        var totalDataCount = 0;
-        for (var i = 0; i < rsBlocks.length; i++) {
-          totalDataCount += rsBlocks[i].dataCount;
-        }
-        for (var i = 0; i < this.dataList.length; i++) {
-          var data = this.dataList[i];
-          buffer.put(data.mode, 4);
-          buffer.put(data.getLength(), util2.getLengthInBits(data.mode, typeNumber));
-          data.write(buffer);
-        }
-        if (buffer.getLengthInBits() <= totalDataCount * 8)
-          break;
+  _this.toByteArray = function() {
+    return _bytes;
+  };
+  _this.toString = function() {
+    let s = "";
+    s += "[";
+    for (let i = 0; i < _bytes.length; i += 1) {
+      if (i > 0) {
+        s += ",";
       }
-      this.typeNumber = typeNumber;
+      s += _bytes[i];
     }
-    this.makeImpl(false, this.getBestMaskPattern());
+    s += "]";
+    return s;
   };
-  proto.makeImpl = function(test, maskPattern) {
-    this.moduleCount = this.typeNumber * 4 + 17;
-    this.modules = new Array(this.moduleCount);
-    for (var row = 0; row < this.moduleCount; row++) {
-      this.modules[row] = new Array(this.moduleCount);
-      for (var col = 0; col < this.moduleCount; col++) {
-        this.modules[row][col] = null;
-      }
-    }
-    this.setupPositionProbePattern(0, 0);
-    this.setupPositionProbePattern(this.moduleCount - 7, 0);
-    this.setupPositionProbePattern(0, this.moduleCount - 7);
-    this.setupPositionAdjustPattern();
-    this.setupTimingPattern();
-    this.setupTypeInfo(test, maskPattern);
-    if (this.typeNumber >= 7) {
-      this.setupTypeNumber(test);
-    }
-    if (this.dataCache == null) {
-      this.dataCache = QRCode2.createData(this.typeNumber, this.errorCorrectLevel, this.dataList);
-    }
-    this.mapData(this.dataCache, maskPattern);
+  return _this;
+};
+const base64EncodeOutputStream = function() {
+  let _buffer = 0;
+  let _buflen = 0;
+  let _length = 0;
+  let _base64 = "";
+  const _this = {};
+  const writeEncoded = function(b) {
+    _base64 += String.fromCharCode(encode(b & 63));
   };
-  proto.setupPositionProbePattern = function(row, col) {
-    for (var r = -1; r <= 7; r++) {
-      if (row + r <= -1 || this.moduleCount <= row + r) continue;
-      for (var c = -1; c <= 7; c++) {
-        if (col + c <= -1 || this.moduleCount <= col + c) continue;
-        if (0 <= r && r <= 6 && (c == 0 || c == 6) || 0 <= c && c <= 6 && (r == 0 || r == 6) || 2 <= r && r <= 4 && 2 <= c && c <= 4) {
-          this.modules[row + r][col + c] = true;
-        } else {
-          this.modules[row + r][col + c] = false;
-        }
+  const encode = function(n) {
+    if (n < 0) {
+      throw "n:" + n;
+    } else if (n < 26) {
+      return 65 + n;
+    } else if (n < 52) {
+      return 97 + (n - 26);
+    } else if (n < 62) {
+      return 48 + (n - 52);
+    } else if (n == 62) {
+      return 43;
+    } else if (n == 63) {
+      return 47;
+    } else {
+      throw "n:" + n;
+    }
+  };
+  _this.writeByte = function(n) {
+    _buffer = _buffer << 8 | n & 255;
+    _buflen += 8;
+    _length += 1;
+    while (_buflen >= 6) {
+      writeEncoded(_buffer >>> _buflen - 6);
+      _buflen -= 6;
+    }
+  };
+  _this.flush = function() {
+    if (_buflen > 0) {
+      writeEncoded(_buffer << 6 - _buflen);
+      _buffer = 0;
+      _buflen = 0;
+    }
+    if (_length % 3 != 0) {
+      const padlen = 3 - _length % 3;
+      for (let i = 0; i < padlen; i += 1) {
+        _base64 += "=";
       }
     }
   };
-  proto.getBestMaskPattern = function() {
-    var minLostPoint = 0;
-    var pattern = 0;
-    for (var i = 0; i < 8; i++) {
-      this.makeImpl(true, i);
-      var lostPoint = util2.getLostPoint(this);
-      if (i == 0 || minLostPoint > lostPoint) {
-        minLostPoint = lostPoint;
-        pattern = i;
-      }
-    }
-    return pattern;
+  _this.toString = function() {
+    return _base64;
   };
-  proto.createMovieClip = function(target_mc, instance_name, depth) {
-    var qr_mc = target_mc.createEmptyMovieClip(instance_name, depth);
-    var cs = 1;
-    this.make();
-    for (var row = 0; row < this.modules.length; row++) {
-      var y = row * cs;
-      for (var col = 0; col < this.modules[row].length; col++) {
-        var x = col * cs;
-        var dark = this.modules[row][col];
-        if (dark) {
-          qr_mc.beginFill(0, 100);
-          qr_mc.moveTo(x, y);
-          qr_mc.lineTo(x + cs, y);
-          qr_mc.lineTo(x + cs, y + cs);
-          qr_mc.lineTo(x, y + cs);
-          qr_mc.endFill();
+  return _this;
+};
+const base64DecodeInputStream = function(str) {
+  const _str = str;
+  let _pos = 0;
+  let _buffer = 0;
+  let _buflen = 0;
+  const _this = {};
+  _this.read = function() {
+    while (_buflen < 8) {
+      if (_pos >= _str.length) {
+        if (_buflen == 0) {
+          return -1;
         }
+        throw "unexpected end of file./" + _buflen;
       }
-    }
-    return qr_mc;
-  };
-  proto.setupTimingPattern = function() {
-    for (var r = 8; r < this.moduleCount - 8; r++) {
-      if (this.modules[r][6] != null) {
+      const c = _str.charAt(_pos);
+      _pos += 1;
+      if (c == "=") {
+        _buflen = 0;
+        return -1;
+      } else if (c.match(/^\s$/)) {
         continue;
       }
-      this.modules[r][6] = r % 2 == 0;
+      _buffer = _buffer << 6 | decode(c.charCodeAt(0));
+      _buflen += 6;
     }
-    for (var c = 8; c < this.moduleCount - 8; c++) {
-      if (this.modules[6][c] != null) {
-        continue;
+    const n = _buffer >>> _buflen - 8 & 255;
+    _buflen -= 8;
+    return n;
+  };
+  const decode = function(c) {
+    if (65 <= c && c <= 90) {
+      return c - 65;
+    } else if (97 <= c && c <= 122) {
+      return c - 97 + 26;
+    } else if (48 <= c && c <= 57) {
+      return c - 48 + 52;
+    } else if (c == 43) {
+      return 62;
+    } else if (c == 47) {
+      return 63;
+    } else {
+      throw "c:" + c;
+    }
+  };
+  return _this;
+};
+const gifImage = function(width, height) {
+  const _width = width;
+  const _height = height;
+  const _data = new Array(width * height);
+  const _this = {};
+  _this.setPixel = function(x, y, pixel) {
+    _data[y * _width + x] = pixel;
+  };
+  _this.write = function(out) {
+    out.writeString("GIF87a");
+    out.writeShort(_width);
+    out.writeShort(_height);
+    out.writeByte(128);
+    out.writeByte(0);
+    out.writeByte(0);
+    out.writeByte(0);
+    out.writeByte(0);
+    out.writeByte(0);
+    out.writeByte(255);
+    out.writeByte(255);
+    out.writeByte(255);
+    out.writeString(",");
+    out.writeShort(0);
+    out.writeShort(0);
+    out.writeShort(_width);
+    out.writeShort(_height);
+    out.writeByte(0);
+    const lzwMinCodeSize = 2;
+    const raster = getLZWRaster(lzwMinCodeSize);
+    out.writeByte(lzwMinCodeSize);
+    let offset = 0;
+    while (raster.length - offset > 255) {
+      out.writeByte(255);
+      out.writeBytes(raster, offset, 255);
+      offset += 255;
+    }
+    out.writeByte(raster.length - offset);
+    out.writeBytes(raster, offset, raster.length - offset);
+    out.writeByte(0);
+    out.writeString(";");
+  };
+  const bitOutputStream = function(out) {
+    const _out = out;
+    let _bitLength = 0;
+    let _bitBuffer = 0;
+    const _this2 = {};
+    _this2.write = function(data, length) {
+      if (data >>> length != 0) {
+        throw "length over";
       }
-      this.modules[6][c] = c % 2 == 0;
-    }
-  };
-  proto.setupPositionAdjustPattern = function() {
-    var pos = util2.getPatternPosition(this.typeNumber);
-    for (var i = 0; i < pos.length; i++) {
-      for (var j = 0; j < pos.length; j++) {
-        var row = pos[i];
-        var col = pos[j];
-        if (this.modules[row][col] != null) {
-          continue;
-        }
-        for (var r = -2; r <= 2; r++) {
-          for (var c = -2; c <= 2; c++) {
-            if (r == -2 || r == 2 || c == -2 || c == 2 || r == 0 && c == 0) {
-              this.modules[row + r][col + c] = true;
-            } else {
-              this.modules[row + r][col + c] = false;
-            }
-          }
-        }
+      while (_bitLength + length >= 8) {
+        _out.writeByte(255 & (data << _bitLength | _bitBuffer));
+        length -= 8 - _bitLength;
+        data >>>= 8 - _bitLength;
+        _bitBuffer = 0;
+        _bitLength = 0;
       }
-    }
+      _bitBuffer = data << _bitLength | _bitBuffer;
+      _bitLength = _bitLength + length;
+    };
+    _this2.flush = function() {
+      if (_bitLength > 0) {
+        _out.writeByte(_bitBuffer);
+      }
+    };
+    return _this2;
   };
-  proto.setupTypeNumber = function(test) {
-    var bits = util2.getBCHTypeNumber(this.typeNumber);
-    for (var i = 0; i < 18; i++) {
-      var mod = !test && (bits >> i & 1) == 1;
-      this.modules[Math.floor(i / 3)][i % 3 + this.moduleCount - 8 - 3] = mod;
+  const getLZWRaster = function(lzwMinCodeSize) {
+    const clearCode = 1 << lzwMinCodeSize;
+    const endCode = (1 << lzwMinCodeSize) + 1;
+    let bitLength = lzwMinCodeSize + 1;
+    const table = lzwTable();
+    for (let i = 0; i < clearCode; i += 1) {
+      table.add(String.fromCharCode(i));
     }
-    for (var i = 0; i < 18; i++) {
-      var mod = !test && (bits >> i & 1) == 1;
-      this.modules[i % 3 + this.moduleCount - 8 - 3][Math.floor(i / 3)] = mod;
-    }
-  };
-  proto.setupTypeInfo = function(test, maskPattern) {
-    var data = this.errorCorrectLevel << 3 | maskPattern;
-    var bits = util2.getBCHTypeInfo(data);
-    for (var i = 0; i < 15; i++) {
-      var mod = !test && (bits >> i & 1) == 1;
-      if (i < 6) {
-        this.modules[i][8] = mod;
-      } else if (i < 8) {
-        this.modules[i + 1][8] = mod;
+    table.add(String.fromCharCode(clearCode));
+    table.add(String.fromCharCode(endCode));
+    const byteOut = byteArrayOutputStream();
+    const bitOut = bitOutputStream(byteOut);
+    bitOut.write(clearCode, bitLength);
+    let dataIndex = 0;
+    let s = String.fromCharCode(_data[dataIndex]);
+    dataIndex += 1;
+    while (dataIndex < _data.length) {
+      const c = String.fromCharCode(_data[dataIndex]);
+      dataIndex += 1;
+      if (table.contains(s + c)) {
+        s = s + c;
       } else {
-        this.modules[this.moduleCount - 15 + i][8] = mod;
-      }
-    }
-    for (var i = 0; i < 15; i++) {
-      var mod = !test && (bits >> i & 1) == 1;
-      if (i < 8) {
-        this.modules[8][this.moduleCount - i - 1] = mod;
-      } else if (i < 9) {
-        this.modules[8][15 - i - 1 + 1] = mod;
-      } else {
-        this.modules[8][15 - i - 1] = mod;
-      }
-    }
-    this.modules[this.moduleCount - 8][8] = !test;
-  };
-  proto.mapData = function(data, maskPattern) {
-    var inc = -1;
-    var row = this.moduleCount - 1;
-    var bitIndex = 7;
-    var byteIndex = 0;
-    for (var col = this.moduleCount - 1; col > 0; col -= 2) {
-      if (col == 6) col--;
-      while (true) {
-        for (var c = 0; c < 2; c++) {
-          if (this.modules[row][col - c] == null) {
-            var dark = false;
-            if (byteIndex < data.length) {
-              dark = (data[byteIndex] >>> bitIndex & 1) == 1;
-            }
-            var mask = util2.getMask(maskPattern, row, col - c);
-            if (mask) {
-              dark = !dark;
-            }
-            this.modules[row][col - c] = dark;
-            bitIndex--;
-            if (bitIndex == -1) {
-              byteIndex++;
-              bitIndex = 7;
-            }
+        bitOut.write(table.indexOf(s), bitLength);
+        if (table.size() < 4095) {
+          if (table.size() == 1 << bitLength) {
+            bitLength += 1;
           }
+          table.add(s + c);
         }
-        row += inc;
-        if (row < 0 || this.moduleCount <= row) {
-          row -= inc;
-          inc = -inc;
-          break;
-        }
+        s = c;
       }
     }
+    bitOut.write(table.indexOf(s), bitLength);
+    bitOut.write(endCode, bitLength);
+    bitOut.flush();
+    return byteOut.toByteArray();
   };
-  QRCode2.PAD0 = 236;
-  QRCode2.PAD1 = 17;
-  QRCode2.createData = function(typeNumber, errorCorrectLevel, dataList) {
-    var rsBlocks = RSBlock2.getRSBlocks(typeNumber, errorCorrectLevel);
-    var buffer = new BitBuffer2();
-    for (var i = 0; i < dataList.length; i++) {
-      var data = dataList[i];
-      buffer.put(data.mode, 4);
-      buffer.put(data.getLength(), util2.getLengthInBits(data.mode, typeNumber));
-      data.write(buffer);
-    }
-    var totalDataCount = 0;
-    for (var i = 0; i < rsBlocks.length; i++) {
-      totalDataCount += rsBlocks[i].dataCount;
-    }
-    if (buffer.getLengthInBits() > totalDataCount * 8) {
-      throw new Error("code length overflow. (" + buffer.getLengthInBits() + ">" + totalDataCount * 8 + ")");
-    }
-    if (buffer.getLengthInBits() + 4 <= totalDataCount * 8) {
-      buffer.put(0, 4);
-    }
-    while (buffer.getLengthInBits() % 8 != 0) {
-      buffer.putBit(false);
-    }
-    while (true) {
-      if (buffer.getLengthInBits() >= totalDataCount * 8) {
-        break;
+  const lzwTable = function() {
+    const _map = {};
+    let _size = 0;
+    const _this2 = {};
+    _this2.add = function(key) {
+      if (_this2.contains(key)) {
+        throw "dup key:" + key;
       }
-      buffer.put(QRCode2.PAD0, 8);
-      if (buffer.getLengthInBits() >= totalDataCount * 8) {
-        break;
-      }
-      buffer.put(QRCode2.PAD1, 8);
-    }
-    return QRCode2.createBytes(buffer, rsBlocks);
+      _map[key] = _size;
+      _size += 1;
+    };
+    _this2.size = function() {
+      return _size;
+    };
+    _this2.indexOf = function(key) {
+      return _map[key];
+    };
+    _this2.contains = function(key) {
+      return typeof _map[key] != "undefined";
+    };
+    return _this2;
   };
-  QRCode2.createBytes = function(buffer, rsBlocks) {
-    var offset = 0;
-    var maxDcCount = 0;
-    var maxEcCount = 0;
-    var dcdata = new Array(rsBlocks.length);
-    var ecdata = new Array(rsBlocks.length);
-    for (var r = 0; r < rsBlocks.length; r++) {
-      var dcCount = rsBlocks[r].dataCount;
-      var ecCount = rsBlocks[r].totalCount - dcCount;
-      maxDcCount = Math.max(maxDcCount, dcCount);
-      maxEcCount = Math.max(maxEcCount, ecCount);
-      dcdata[r] = new Array(dcCount);
-      for (var i = 0; i < dcdata[r].length; i++) {
-        dcdata[r][i] = 255 & buffer.buffer[i + offset];
-      }
-      offset += dcCount;
-      var rsPoly = util2.getErrorCorrectPolynomial(ecCount);
-      var rawPoly = new Polynomial2(dcdata[r], rsPoly.getLength() - 1);
-      var modPoly = rawPoly.mod(rsPoly);
-      ecdata[r] = new Array(rsPoly.getLength() - 1);
-      for (var i = 0; i < ecdata[r].length; i++) {
-        var modIndex = i + modPoly.getLength() - ecdata[r].length;
-        ecdata[r][i] = modIndex >= 0 ? modPoly.get(modIndex) : 0;
-      }
+  return _this;
+};
+const createDataURL = function(width, height, getPixel) {
+  const gif = gifImage(width, height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      gif.setPixel(x, y, getPixel(x, y));
     }
-    var totalCodeCount = 0;
-    for (var i = 0; i < rsBlocks.length; i++) {
-      totalCodeCount += rsBlocks[i].totalCount;
+  }
+  const b = byteArrayOutputStream();
+  gif.write(b);
+  const base64 = base64EncodeOutputStream();
+  const bytes = b.toByteArray();
+  for (let i = 0; i < bytes.length; i += 1) {
+    base64.writeByte(bytes[i]);
+  }
+  base64.flush();
+  return "data:image/gif;base64," + base64;
+};
+qrcode.stringToBytes;
+function _extends() {
+  return _extends = Object.assign ? Object.assign.bind() : function(n) {
+    for (var e = 1; e < arguments.length; e++) {
+      var t = arguments[e];
+      for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]);
     }
-    var data = new Array(totalCodeCount);
-    var index = 0;
-    for (var i = 0; i < maxDcCount; i++) {
-      for (var r = 0; r < rsBlocks.length; r++) {
-        if (i < dcdata[r].length) {
-          data[index++] = dcdata[r][i];
-        }
-      }
-    }
-    for (var i = 0; i < maxEcCount; i++) {
-      for (var r = 0; r < rsBlocks.length; r++) {
-        if (i < ecdata[r].length) {
-          data[index++] = ecdata[r][i];
-        }
-      }
-    }
-    return data;
-  };
-  QRCode_1 = QRCode2;
-  return QRCode_1;
+    return n;
+  }, _extends.apply(null, arguments);
 }
-var QRCodeSvg = {};
-var hasRequiredQRCodeSvg;
-function requireQRCodeSvg() {
-  if (hasRequiredQRCodeSvg) return QRCodeSvg;
-  hasRequiredQRCodeSvg = 1;
-  Object.defineProperty(QRCodeSvg, "__esModule", {
-    value: true
-  });
-  var _extends = Object.assign || function(target) {
-    for (var i = 1; i < arguments.length; i++) {
-      var source = arguments[i];
-      for (var key in source) {
-        if (Object.prototype.hasOwnProperty.call(source, key)) {
-          target[key] = source[key];
-        }
-      }
-    }
-    return target;
-  };
-  var _propTypes = /* @__PURE__ */ requirePropTypes();
-  var _propTypes2 = _interopRequireDefault(_propTypes);
-  var _react = requireReact();
-  var _react2 = _interopRequireDefault(_react);
-  function _interopRequireDefault(obj) {
-    return obj && obj.__esModule ? obj : { default: obj };
+function _objectWithoutProperties(e, t) {
+  if (null == e) return {};
+  var o, r, i = _objectWithoutPropertiesLoose(e, t);
+  if (Object.getOwnPropertySymbols) {
+    var n = Object.getOwnPropertySymbols(e);
+    for (r = 0; r < n.length; r++) o = n[r], -1 === t.indexOf(o) && {}.propertyIsEnumerable.call(e, o) && (i[o] = e[o]);
   }
-  function _objectWithoutProperties(obj, keys) {
-    var target = {};
-    for (var i in obj) {
-      if (keys.indexOf(i) >= 0) continue;
-      if (!Object.prototype.hasOwnProperty.call(obj, i)) continue;
-      target[i] = obj[i];
-    }
-    return target;
-  }
-  var propTypes2 = {
-    bgColor: _propTypes2.default.oneOfType([_propTypes2.default.object, _propTypes2.default.string]).isRequired,
-    bgD: _propTypes2.default.string.isRequired,
-    fgColor: _propTypes2.default.oneOfType([_propTypes2.default.object, _propTypes2.default.string]).isRequired,
-    fgD: _propTypes2.default.string.isRequired,
-    size: _propTypes2.default.number.isRequired,
-    title: _propTypes2.default.string,
-    viewBoxSize: _propTypes2.default.number.isRequired,
-    xmlns: _propTypes2.default.string
-  };
-  var QRCodeSvg$1 = (0, _react.forwardRef)(function(_ref, ref) {
-    var bgColor = _ref.bgColor, bgD = _ref.bgD, fgD = _ref.fgD, fgColor = _ref.fgColor, size = _ref.size, title = _ref.title, viewBoxSize = _ref.viewBoxSize, _ref$xmlns = _ref.xmlns, xmlns = _ref$xmlns === void 0 ? "http://www.w3.org/2000/svg" : _ref$xmlns, props = _objectWithoutProperties(_ref, ["bgColor", "bgD", "fgD", "fgColor", "size", "title", "viewBoxSize", "xmlns"]);
-    return _react2.default.createElement(
-      "svg",
-      _extends({}, props, { height: size, ref, viewBox: "0 0 " + viewBoxSize + " " + viewBoxSize, width: size, xmlns }),
-      title ? _react2.default.createElement(
-        "title",
-        null,
-        title
-      ) : null,
-      _react2.default.createElement("path", { d: bgD, fill: bgColor }),
-      _react2.default.createElement("path", { d: fgD, fill: fgColor })
-    );
-  });
-  QRCodeSvg$1.displayName = "QRCodeSvg";
-  QRCodeSvg$1.propTypes = propTypes2;
-  QRCodeSvg.default = QRCodeSvg$1;
-  return QRCodeSvg;
+  return i;
 }
-var hasRequiredLib;
-function requireLib() {
-  if (hasRequiredLib) return lib;
-  hasRequiredLib = 1;
-  Object.defineProperty(lib, "__esModule", {
-    value: true
-  });
-  lib.QRCode = void 0;
-  var _extends = Object.assign || function(target) {
-    for (var i = 1; i < arguments.length; i++) {
-      var source = arguments[i];
-      for (var key in source) {
-        if (Object.prototype.hasOwnProperty.call(source, key)) {
-          target[key] = source[key];
-        }
-      }
-    }
-    return target;
-  };
-  var _propTypes = /* @__PURE__ */ requirePropTypes();
-  var _propTypes2 = _interopRequireDefault(_propTypes);
-  var _ErrorCorrectLevel = requireErrorCorrectLevel();
-  var _ErrorCorrectLevel2 = _interopRequireDefault(_ErrorCorrectLevel);
-  var _QRCode = requireQRCode();
-  var _QRCode2 = _interopRequireDefault(_QRCode);
-  var _react = requireReact();
-  var _react2 = _interopRequireDefault(_react);
-  var _QRCodeSvg = requireQRCodeSvg();
-  var _QRCodeSvg2 = _interopRequireDefault(_QRCodeSvg);
-  function _interopRequireDefault(obj) {
-    return obj && obj.__esModule ? obj : { default: obj };
+function _objectWithoutPropertiesLoose(r, e) {
+  if (null == r) return {};
+  var t = {};
+  for (var n in r) if ({}.hasOwnProperty.call(r, n)) {
+    if (-1 !== e.indexOf(n)) continue;
+    t[n] = r[n];
   }
-  function _objectWithoutProperties(obj, keys) {
-    var target = {};
-    for (var i in obj) {
-      if (keys.indexOf(i) >= 0) continue;
-      if (!Object.prototype.hasOwnProperty.call(obj, i)) continue;
-      target[i] = obj[i];
-    }
-    return target;
-  }
-  function bytesToBinaryString(bytes) {
-    return bytes.map(function(b) {
-      return String.fromCharCode(b & 255);
-    }).join("");
-  }
-  function encodeStringToUtf8Bytes(input) {
-    return Array.from(new TextEncoder().encode(input));
-  }
-  var propTypes2 = {
-    bgColor: _propTypes2.default.oneOfType([_propTypes2.default.object, _propTypes2.default.string]),
-    fgColor: _propTypes2.default.oneOfType([_propTypes2.default.object, _propTypes2.default.string]),
-    level: _propTypes2.default.string,
-    size: _propTypes2.default.number,
-    value: _propTypes2.default.string.isRequired
-  };
-  var QRCode2 = (0, _react.forwardRef)(function(_ref, ref) {
-    var _ref$bgColor = _ref.bgColor, bgColor = _ref$bgColor === void 0 ? "#FFFFFF" : _ref$bgColor, _ref$fgColor = _ref.fgColor, fgColor = _ref$fgColor === void 0 ? "#000000" : _ref$fgColor, _ref$level = _ref.level, level = _ref$level === void 0 ? "L" : _ref$level, _ref$size = _ref.size, size = _ref$size === void 0 ? 256 : _ref$size, value = _ref.value, props = _objectWithoutProperties(_ref, ["bgColor", "fgColor", "level", "size", "value"]);
-    var qrcode = new _QRCode2.default(-1, _ErrorCorrectLevel2.default[level]);
-    var utf8Bytes = encodeStringToUtf8Bytes(value);
-    var binaryString = bytesToBinaryString(utf8Bytes);
-    qrcode.addData(binaryString, "Byte");
-    qrcode.make();
-    var cells = qrcode.modules;
-    return _react2.default.createElement(_QRCodeSvg2.default, _extends({}, props, {
-      bgColor,
-      bgD: cells.map(function(row, rowIndex) {
-        return row.map(function(cell, cellIndex) {
-          return !cell ? "M " + cellIndex + " " + rowIndex + " l 1 0 0 1 -1 0 Z" : "";
-        }).join(" ");
-      }).join(" "),
-      fgColor,
-      fgD: cells.map(function(row, rowIndex) {
-        return row.map(function(cell, cellIndex) {
-          return cell ? "M " + cellIndex + " " + rowIndex + " l 1 0 0 1 -1 0 Z" : "";
-        }).join(" ");
-      }).join(" "),
-      ref,
-      size,
-      viewBoxSize: cells.length
-    }));
-  });
-  lib.QRCode = QRCode2;
-  QRCode2.displayName = "QRCode";
-  QRCode2.propTypes = propTypes2;
-  lib.default = QRCode2;
-  return lib;
+  return t;
 }
-var libExports = requireLib();
-const QRCode = /* @__PURE__ */ getDefaultExportFromCjs(libExports);
+var _excluded$1 = ["bgColor", "bgD", "fgD", "fgColor", "size", "title", "viewBoxSize", "xmlns"];
+var propTypes$1 = {
+  bgColor: PropTypes.oneOfType([PropTypes.object, PropTypes.string]).isRequired,
+  bgD: PropTypes.string.isRequired,
+  fgColor: PropTypes.oneOfType([PropTypes.object, PropTypes.string]).isRequired,
+  fgD: PropTypes.string.isRequired,
+  size: PropTypes.number.isRequired,
+  title: PropTypes.string,
+  viewBoxSize: PropTypes.number.isRequired,
+  xmlns: PropTypes.string
+};
+var QRCodeSvg = /* @__PURE__ */ reactExports.forwardRef(function(_ref, ref) {
+  var bgColor = _ref.bgColor, bgD = _ref.bgD, fgD = _ref.fgD, fgColor = _ref.fgColor, size = _ref.size, title = _ref.title, viewBoxSize = _ref.viewBoxSize, _ref$xmlns = _ref.xmlns, xmlns = _ref$xmlns === void 0 ? "http://www.w3.org/2000/svg" : _ref$xmlns, props = _objectWithoutProperties(_ref, _excluded$1);
+  return /* @__PURE__ */ React.createElement("svg", _extends({}, props, {
+    height: size,
+    ref,
+    viewBox: "0 0 ".concat(viewBoxSize, " ").concat(viewBoxSize),
+    width: size,
+    xmlns
+  }), title ? /* @__PURE__ */ React.createElement("title", null, title) : null, /* @__PURE__ */ React.createElement("path", {
+    d: bgD,
+    fill: bgColor
+  }), /* @__PURE__ */ React.createElement("path", {
+    d: fgD,
+    fill: fgColor
+  }));
+});
+QRCodeSvg.displayName = "QRCodeSvg";
+QRCodeSvg.propTypes = propTypes$1;
+var _excluded = ["bgColor", "fgColor", "level", "size", "value"];
+qrcode.stringToBytes = function(s) {
+  return Array.from(new TextEncoder().encode(s));
+};
+var propTypes = {
+  bgColor: PropTypes.oneOfType([PropTypes.object, PropTypes.string]),
+  fgColor: PropTypes.oneOfType([PropTypes.object, PropTypes.string]),
+  level: PropTypes.string,
+  size: PropTypes.number,
+  value: PropTypes.string.isRequired
+};
+var QRCode = /* @__PURE__ */ reactExports.forwardRef(function(_ref, ref) {
+  var _ref$bgColor = _ref.bgColor, bgColor = _ref$bgColor === void 0 ? "#FFFFFF" : _ref$bgColor, _ref$fgColor = _ref.fgColor, fgColor = _ref$fgColor === void 0 ? "#000000" : _ref$fgColor, _ref$level = _ref.level, level = _ref$level === void 0 ? "L" : _ref$level, _ref$size = _ref.size, size = _ref$size === void 0 ? 256 : _ref$size, value = _ref.value, props = _objectWithoutProperties(_ref, _excluded);
+  var qr = qrcode(0, level);
+  qr.addData(value);
+  qr.make();
+  var moduleCount = qr.getModuleCount();
+  var cells = Array.from({
+    length: moduleCount
+  }, function(_, rowIndex) {
+    return Array.from({
+      length: moduleCount
+    }, function(_2, colIndex) {
+      return qr.isDark(rowIndex, colIndex);
+    });
+  });
+  return /* @__PURE__ */ React.createElement(QRCodeSvg, _extends({}, props, {
+    bgColor,
+    bgD: cells.map(function(row, rowIndex) {
+      return row.map(function(cell, cellIndex) {
+        return !cell ? "M ".concat(cellIndex, " ").concat(rowIndex, " l 1 0 0 1 -1 0 Z") : "";
+      }).join(" ");
+    }).join(" "),
+    fgColor,
+    fgD: cells.map(function(row, rowIndex) {
+      return row.map(function(cell, cellIndex) {
+        return cell ? "M ".concat(cellIndex, " ").concat(rowIndex, " l 1 0 0 1 -1 0 Z") : "";
+      }).join(" ");
+    }).join(" "),
+    ref,
+    size,
+    viewBoxSize: moduleCount
+  }));
+});
+QRCode.displayName = "QRCode";
+QRCode.propTypes = propTypes;
 function buildTotpQrImageOptions() {
   return {
     bgColor: "#ffffff",
@@ -1363,15 +1963,15 @@ function resolveSettingsSaveProofModalCopy(input) {
     confirmLabel: "Save settings"
   };
 }
-function isSettingsSaveProofSubmitDisabled(mode2, credentials, totpRequired) {
+function isSettingsSaveProofSubmitDisabled(mode, credentials, totpRequired) {
   const current = credentials.currentPassword?.trim() ?? "";
   const next = credentials.newPassword?.trim() ?? "";
   const confirm = credentials.confirmPassword?.trim() ?? "";
   const totp = credentials.totpCode?.trim() ?? "";
-  if (mode2 === "setup-gate") {
+  if (mode === "setup-gate") {
     return next.length === 0 || confirm.length === 0 || next !== confirm;
   }
-  if (mode2 === "change-password") {
+  if (mode === "change-password") {
     if (next.length === 0 || confirm.length === 0 || next !== confirm) {
       return true;
     }
@@ -1673,7 +2273,1414 @@ function SettingsSectionNavItem({ active, item, onSelect }) {
     }
   ) });
 }
-function Se…16444 tokens truncated…* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No settings match your search." }),
+function SettingsSectionShell({
+  activeTab,
+  onTabChange,
+  intro,
+  children
+}) {
+  const handleNavSelect = reactExports.useCallback(
+    (item) => {
+      onTabChange(item.key);
+    },
+    [onTabChange]
+  );
+  const mobileTabs = localSettingsNavItems.map((item) => ({
+    value: item.key,
+    label: localSettingsMobileTabLabels[item.key],
+    id: `settings-tab-${item.key}`
+  }));
+  const activeItem = localSettingsNavItems.find((item) => item.key === activeTab);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col gap-6", children: [
+    intro,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col gap-6 lg:flex-row lg:items-stretch", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "nav",
+        {
+          "aria-label": "Settings section navigation",
+          "data-testid": "settings-section-nav",
+          className: "hidden w-full shrink-0 lg:block lg:w-60",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "flex flex-col gap-0.5 p-0", children: localSettingsNavGroups.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-col", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400", children: group.label }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "flex flex-col gap-0.5", children: localSettingsNavItems.filter((item) => item.group === group.key).map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              SettingsSectionNavItem,
+              {
+                active: activeTab === item.key,
+                item,
+                onSelect: handleNavSelect
+              },
+              item.key
+            )) })
+          ] }, group.key)) })
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 min-w-0 flex-1 flex-col gap-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "-mx-1 overflow-x-auto px-1 lg:hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TabBar, { tabs: mobileTabs, active: activeTab, onChange: onTabChange }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            role: "tabpanel",
+            id: `settings-panel-${activeTab}`,
+            "aria-label": activeItem ? `${activeItem.label} settings` : void 0,
+            className: "guard-tab-enter flex min-h-[min(28rem,calc(100dvh-18rem))] flex-1 flex-col rounded-2xl border border-slate-100 bg-white p-4 sm:p-6",
+            children: [
+              activeItem ? /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "mb-5 shrink-0 border-b border-slate-100 pb-4 lg:hidden", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: activeItem.label }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: activeItem.summary })
+              ] }) : null,
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-0 flex-1 flex-col", children })
+            ]
+          }
+        )
+      ] })
+    ] })
+  ] });
+}
+function SettingsFormSection({ title, description, children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "guard-settings-section space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "guard-settings-section-title", children: title }),
+      description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-body mt-1 text-slate-500", children: description }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "divide-y divide-slate-100 rounded-xl border border-slate-100 bg-white px-4", children })
+  ] });
+}
+function SettingsToggleRow({
+  label,
+  description,
+  checked,
+  onChange,
+  disabled = false
+}) {
+  const labelId = reactExports.useId();
+  const descriptionId = reactExports.useId();
+  const handleToggle = reactExports.useCallback(() => {
+    if (!disabled) {
+      onChange(!checked);
+    }
+  }, [checked, disabled, onChange]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-4 py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: labelId, className: "guard-settings-body font-medium text-brand-dark", children: label }),
+      description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: descriptionId, className: "guard-settings-caption mt-0.5 text-slate-500", children: description }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        role: "switch",
+        "aria-checked": checked,
+        "aria-labelledby": labelId,
+        "aria-describedby": description ? descriptionId : void 0,
+        disabled,
+        onClick: handleToggle,
+        className: `relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/60 ${checked ? "bg-brand-blue" : "bg-slate-200"} ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`,
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "span",
+          {
+            className: `absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-0"}`
+          }
+        )
+      }
+    )
+  ] });
+}
+const IDLE_STATE = { status: "idle", message: "" };
+function TraySettingsPanel() {
+  const [trayStatus, setTrayStatus] = reactExports.useState(null);
+  const [statusLoading, setStatusLoading] = reactExports.useState(true);
+  const [statusError, setStatusError] = reactExports.useState(null);
+  const [actionState, setActionState] = reactExports.useState(IDLE_STATE);
+  const [pendingAction, setPendingAction] = reactExports.useState(null);
+  const refreshStatus = reactExports.useCallback(async () => {
+    setStatusLoading(true);
+    setStatusError(null);
+    try {
+      const status = await fetchTrayStatus();
+      setTrayStatus(status);
+    } catch (error) {
+      setStatusError(error instanceof Error ? error.message : "Failed to load tray status");
+      setTrayStatus(null);
+    } finally {
+      setStatusLoading(false);
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    void refreshStatus();
+  }, [refreshStatus]);
+  const handleAction = reactExports.useCallback(
+    async (action) => {
+      setPendingAction(action);
+      setActionState({ status: "loading", message: "" });
+      try {
+        const result = await runTrayAction(action);
+        setActionState({
+          status: result.ok ? "success" : "error",
+          message: result.message
+        });
+        await refreshStatus();
+      } catch (error) {
+        setActionState({
+          status: "error",
+          message: error instanceof Error ? error.message : `Tray ${action} failed`
+        });
+      } finally {
+        setPendingAction(null);
+      }
+    },
+    [refreshStatus]
+  );
+  const isRunning = trayStatus?.state === "running";
+  const isSupported = trayStatus?.capability.supported ?? false;
+  const platformLabel = trayStatus?.capability.platform ?? "Unknown";
+  const backendLabel = trayStatus?.capability.backend ?? "none";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SettingsFormSection,
+      {
+        title: "Menu-bar tray icon",
+        description: "A persistent icon in your menu bar (macOS) or system tray (Windows/Linux) that opens the HOL Guard dashboard without a terminal.",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 py-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-slate-200 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Current status" }),
+              statusLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Loading…" }) : statusError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-red-600", children: statusError }) : trayStatus ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 space-y-1", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-700", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "State:" }),
+                  " ",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "span",
+                    {
+                      className: isRunning ? "rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700" : "rounded bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600",
+                      children: trayStatus.state
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
+                  "Platform: ",
+                  platformLabel,
+                  " · Backend: ",
+                  backendLabel
+                ] }),
+                !isSupported && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-amber-600", children: "Tray icons are not supported on this platform." })
+              ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "No status available." })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: () => void refreshStatus(), variant: "outline", disabled: statusLoading, children: statusLoading ? "Refreshing…" : "Refresh" })
+          ] }) }),
+          actionState.status !== "idle" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "div",
+            {
+              className: actionState.status === "error" ? "rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" : actionState.status === "success" ? "rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700" : "rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600",
+              role: actionState.status === "error" ? "alert" : "status",
+              children: actionState.status === "loading" ? "Working…" : actionState.message
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Start tray" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Launch the menu-bar icon now." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                ActionButton,
+                {
+                  onClick: () => void handleAction("start"),
+                  disabled: !isSupported || pendingAction !== null || isRunning,
+                  variant: "primary",
+                  children: pendingAction === "start" ? "Starting…" : "Start"
+                }
+              ) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Stop tray" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Quit the running menu-bar icon." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                ActionButton,
+                {
+                  onClick: () => void handleAction("stop"),
+                  disabled: pendingAction !== null || !isRunning,
+                  variant: "outline",
+                  children: pendingAction === "stop" ? "Stopping…" : "Stop"
+                }
+              ) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Restart tray" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Stop and start again (use if the icon is stuck)." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                ActionButton,
+                {
+                  onClick: () => void handleAction("restart"),
+                  disabled: !isSupported || pendingAction !== null,
+                  variant: "outline",
+                  children: pendingAction === "restart" ? "Restarting…" : "Restart"
+                }
+              ) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Repair tray" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Reset crash state if the tray won't start." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                ActionButton,
+                {
+                  onClick: () => void handleAction("repair"),
+                  disabled: pendingAction !== null,
+                  variant: "outline",
+                  children: pendingAction === "repair" ? "Repairing…" : "Repair"
+                }
+              ) })
+            ] })
+          ] })
+        ] })
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SettingsFormSection,
+      {
+        title: "Start at login",
+        description: "Automatically launch the tray icon when you log in to your computer.",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Install login item" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Registers the tray to start automatically (LaunchAgent on macOS, Run key on Windows, XDG autostart on Linux)." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ActionButton,
+              {
+                onClick: () => void handleAction("install"),
+                disabled: !isSupported || pendingAction !== null,
+                variant: "primary",
+                children: pendingAction === "install" ? "Installing…" : "Install"
+              }
+            ) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Remove login item" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Unregister the automatic start-at-login entry." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ActionButton,
+              {
+                onClick: () => void handleAction("uninstall"),
+                disabled: pendingAction !== null,
+                variant: "outline",
+                children: pendingAction === "uninstall" ? "Removing…" : "Remove"
+              }
+            ) })
+          ] })
+        ] }) })
+      }
+    )
+  ] });
+}
+const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
+function resolveSecurityLevelCardDescription(level) {
+  if (level === "relaxed") return "Warn on dangerous actions. Most safe actions run without a prompt.";
+  if (level === "balanced") return "Ask before secret access, hidden execution, exfiltration, and destructive actions.";
+  if (level === "strict") return "Ask more often, including new network destinations.";
+  return "Use the exact choices below for this machine and connected apps.";
+}
+function resolveFineTuningSectionDescription(securityLevel) {
+  if (securityLevel === "custom") {
+    return "You are overriding the preset for this machine.";
+  }
+  return `These rules follow the ${securityLevelLabel(securityLevel)} preset. Use Custom fine-tuning to edit each action type here.`;
+}
+function isFineTuningEditable(securityLevel) {
+  return securityLevel === "custom";
+}
+function buildClearPolicyPayload(all) {
+  return { all };
+}
+function buildClearReviewQueuePayload(input) {
+  return {
+    status: "pending",
+    ...input.approvalPassword ? { approval_password: input.approvalPassword } : {},
+    ...input.approvalTotpCode ? { approval_totp_code: input.approvalTotpCode } : {}
+  };
+}
+function buildApprovalGateWriteProof(credentials) {
+  const approvalPassword = credentials?.currentPassword?.trim() ?? "";
+  const approvalTotpCode = credentials?.totpCode?.trim() ?? "";
+  return {
+    ...approvalPassword.length > 0 ? { approval_password: approvalPassword } : {},
+    ...approvalTotpCode.length > 0 ? { approval_totp_code: approvalTotpCode } : {}
+  };
+}
+function resolveTotpSetupStep(enrollment) {
+  return enrollment !== null ? "scan" : "confirm";
+}
+function hasApprovalGateSettingsChanged(gateConfig, enabled, cooldownSeconds, strictAllDecisions) {
+  if (gateConfig === null) {
+    return false;
+  }
+  return enabled !== gateConfig.enabled || cooldownSeconds !== gateConfig.cooldown_seconds || strictAllDecisions !== gateConfig.strict_all_decisions;
+}
+function resolveApprovalPasswordSectionCopy(wasConfigured) {
+  if (wasConfigured) {
+    return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
+  }
+  return "Choose a password when you save settings. Guard will ask for it before allow or trust changes stick.";
+}
+function resolveTotpSetupModalTitle(isConfirmStep) {
+  if (isConfirmStep) {
+    return "Confirm your approval password";
+  }
+  return "Scan and verify";
+}
+function resolveTotpSetupModalDescription(isConfirmStep) {
+  if (isConfirmStep) {
+    return "Guard needs your approval password before it can generate a QR code for your authenticator app.";
+  }
+  return "Open your authenticator app, add an account, scan the code, then enter the live six-digit code.";
+}
+const actionOptions = [
+  { value: "allow", label: "Allow without asking" },
+  { value: "warn", label: "Warn only" },
+  { value: "review", label: "Ask me first" },
+  { value: "require-reapproval", label: "Ask every time" },
+  { value: "sandbox-required", label: "Run in sandbox" },
+  { value: "block", label: "Block" }
+];
+const surfacePolicyOptions = [
+  { value: "attention-aware", label: "Smart (recommended)" },
+  { value: "approval-center", label: "Open prompts immediately" },
+  { value: "native-only", label: "Never open the browser" }
+];
+const attentionSeverityOptions = [
+  { value: "critical", label: "Critical risk" },
+  { value: "high", label: "High or critical risk" },
+  { value: "medium", label: "Medium risk or higher" },
+  { value: "low", label: "Any identified risk" }
+];
+const protectionModeChoices = [
+  { value: "prompt", label: "Ask first" },
+  { value: "enforce", label: "Block until approved" },
+  { value: "observe", label: "Watch only" }
+];
+const securityLevels = [
+  {
+    value: "relaxed",
+    label: "Relaxed",
+    description: "Warn on dangerous actions. Most safe actions run without a prompt.",
+    icon: HiMiniShieldCheck,
+    protects: ["Destructive commands", "Credential sharing"],
+    tone: "green"
+  },
+  {
+    value: "balanced",
+    label: "Balanced",
+    description: "Ask before secret access, hidden execution, exfiltration, and destructive actions.",
+    icon: HiMiniShieldCheck,
+    protects: ["Secret file access", "Credential sharing", "Destructive shell commands", "Hidden scripts"],
+    tone: "blue"
+  },
+  {
+    value: "strict",
+    label: "Strict",
+    description: "Ask more often, including new network destinations.",
+    icon: HiMiniLockClosed,
+    protects: ["Everything in Balanced", "New network destinations"],
+    tone: "purple"
+  },
+  {
+    value: "custom",
+    label: "Custom",
+    description: "Use the exact choices below for this machine and connected apps.",
+    icon: HiMiniCog6Tooth,
+    protects: [],
+    tone: "slate"
+  }
+];
+const riskControls = [
+  { key: "local_secret_read", label: "Local secrets", description: "Files such as .env, .npmrc, .netrc, SSH keys, and cloud credentials.", consequence: RISK_CONTROL_CONSEQUENCES["local_secret_read"] },
+  { key: "credential_exfiltration", label: "Credential sharing", description: "Commands or scripts that appear to send keys, tokens, or credentials away.", consequence: RISK_CONTROL_CONSEQUENCES["credential_exfiltration"] },
+  { key: "data_flow_exfiltration", label: "Secret data flow", description: "Detected source-to-sink route where a local secret is read and its value reaches a network or external sink.", consequence: RISK_CONTROL_CONSEQUENCES["data_flow_exfiltration"] },
+  { key: "destructive_shell", label: "Destructive commands", description: "Shell actions that delete, overwrite, or rewrite local files.", consequence: RISK_CONTROL_CONSEQUENCES["destructive_shell"] },
+  { key: "encoded_execution", label: "Hidden scripts", description: "Encoded, encrypted, or decoded-and-run command payloads.", consequence: RISK_CONTROL_CONSEQUENCES["encoded_execution"] },
+  { key: "network_egress", label: "New network destinations", description: "Outbound connections Guard has not seen in this context.", consequence: RISK_CONTROL_CONSEQUENCES["network_egress"] },
+  { key: "prompt_injection", label: "Prompt injection", description: "Prompts that try to override Guard, leak secrets, or weaken review.", consequence: RISK_CONTROL_CONSEQUENCES["prompt_injection"] },
+  { key: "mcp_dangerous_tool", label: "Connected tools", description: "Tool calls that can read files, run commands, or reach the network.", consequence: RISK_CONTROL_CONSEQUENCES["mcp_dangerous_tool"] },
+  { key: "malicious_skill", label: "Skills", description: "Agent skills from unknown or risky sources.", consequence: RISK_CONTROL_CONSEQUENCES["malicious_skill"] },
+  { key: "package_script", label: "Package scripts", description: "Lifecycle scripts such as postinstall, prepare, and prepublish.", consequence: RISK_CONTROL_CONSEQUENCES["package_script"] },
+  { key: "persistence", label: "Persistence", description: "Startup files, launch agents, scheduled jobs, and recurring hooks.", consequence: RISK_CONTROL_CONSEQUENCES["persistence"] },
+  { key: "guard_bypass", label: "Guard bypass", description: "Attempts to disable Guard hooks, policies, or approval flow.", consequence: RISK_CONTROL_CONSEQUENCES["guard_bypass"] },
+  { key: "cloud_advisory", label: "Cloud advisories", description: "Team and Cloud guidance for known risky patterns.", consequence: RISK_CONTROL_CONSEQUENCES["cloud_advisory"] },
+  { key: "encoded_exfiltration", label: "Encoded exfiltration", description: "Encoded payloads that hide secret extraction and network transfer.", consequence: RISK_CONTROL_CONSEQUENCES["encoded_exfiltration"] }
+];
+const riskProfileActions = {
+  relaxed: {
+    local_secret_read: "warn",
+    credential_exfiltration: "warn",
+    data_flow_exfiltration: "warn",
+    destructive_shell: "warn",
+    encoded_execution: "warn",
+    network_egress: "allow",
+    prompt_injection: "warn",
+    mcp_dangerous_tool: "warn",
+    malicious_skill: "warn",
+    package_script: "warn",
+    persistence: "warn",
+    guard_bypass: "warn",
+    cloud_advisory: "allow",
+    encoded_exfiltration: "warn"
+  },
+  balanced: {
+    local_secret_read: "require-reapproval",
+    credential_exfiltration: "require-reapproval",
+    data_flow_exfiltration: "require-reapproval",
+    destructive_shell: "require-reapproval",
+    encoded_execution: "require-reapproval",
+    network_egress: "warn",
+    prompt_injection: "require-reapproval",
+    mcp_dangerous_tool: "require-reapproval",
+    malicious_skill: "require-reapproval",
+    package_script: "warn",
+    persistence: "require-reapproval",
+    guard_bypass: "block",
+    cloud_advisory: "warn",
+    encoded_exfiltration: "require-reapproval"
+  },
+  strict: {
+    local_secret_read: "require-reapproval",
+    credential_exfiltration: "require-reapproval",
+    data_flow_exfiltration: "block",
+    destructive_shell: "require-reapproval",
+    encoded_execution: "require-reapproval",
+    network_egress: "require-reapproval",
+    prompt_injection: "block",
+    mcp_dangerous_tool: "block",
+    malicious_skill: "block",
+    package_script: "require-reapproval",
+    persistence: "block",
+    guard_bypass: "block",
+    cloud_advisory: "require-reapproval",
+    encoded_exfiltration: "block"
+  },
+  custom: {
+    local_secret_read: "require-reapproval",
+    credential_exfiltration: "require-reapproval",
+    data_flow_exfiltration: "require-reapproval",
+    destructive_shell: "require-reapproval",
+    encoded_execution: "require-reapproval",
+    network_egress: "warn",
+    prompt_injection: "require-reapproval",
+    mcp_dangerous_tool: "require-reapproval",
+    malicious_skill: "require-reapproval",
+    package_script: "warn",
+    persistence: "require-reapproval",
+    guard_bypass: "block",
+    cloud_advisory: "warn",
+    encoded_exfiltration: "require-reapproval"
+  }
+};
+const securityToneClasses = {
+  green: {
+    icon: "text-emerald-600",
+    iconBg: "bg-emerald-50",
+    selected: "border-emerald-300 bg-emerald-50"
+  },
+  blue: {
+    icon: "text-brand-blue",
+    iconBg: "bg-brand-blue/10",
+    selected: "border-brand-blue/30 bg-brand-blue/[0.05]"
+  },
+  purple: {
+    icon: "text-brand-purple",
+    iconBg: "bg-brand-purple/10",
+    selected: "border-brand-purple/30 bg-brand-purple/[0.04]"
+  },
+  slate: {
+    icon: "text-slate-500",
+    iconBg: "bg-slate-100",
+    selected: "border-slate-300 bg-slate-50"
+  }
+};
+function getSecurityToneClasses(tone) {
+  return securityToneClasses[tone] ?? securityToneClasses.slate;
+}
+function normalizeSettingsPayload(payload) {
+  return { ...payload, settings: normalizeGuardSettings(payload.settings) };
+}
+function normalizeGuardSettings(settings) {
+  const securityLevel = settings.security_level === "gentle" ? "relaxed" : settings.security_level;
+  const defaults = riskProfileActions[securityLevel];
+  const explicitOverrides = settings.risk_action_overrides ?? {};
+  const effectiveRiskActions = riskControls.reduce((actions, risk) => {
+    actions[risk.key] = settings.risk_actions?.[risk.key] ?? explicitOverrides[risk.key] ?? defaults[risk.key];
+    return actions;
+  }, {});
+  return {
+    ...settings,
+    security_level: securityLevel,
+    risk_actions: effectiveRiskActions,
+    risk_action_overrides: explicitOverrides,
+    harness_risk_actions: settings.harness_risk_actions ?? {}
+  };
+}
+function buildConsequenceSummary(settings) {
+  const level = settings.security_level;
+  const mode = settings.mode;
+  if (mode === "observe") return "Guard is watching and recording what your AI apps do, but it will not pause any actions. Switch to Prompt or Enforce when you want Guard to actively protect you.";
+  if (level === "relaxed") return "Guard will warn about destructive commands and credential sharing but will not pause for approval. Most safe actions run automatically. Good for trusted environments.";
+  if (level === "balanced") return "Guard will ask before secret access, hidden execution, and destructive commands. New network destinations get a warning. This is the recommended setting for most users.";
+  if (level === "strict") return "Guard will ask before almost every risky action, including new network destinations. Use this when working with sensitive data or untrusted AI tools.";
+  if (level === "custom") return "You have customized individual risk controls. Review the choices below to make sure they match how you want Guard to behave.";
+  return "";
+}
+function hasUnsavedChanges(saved, draft) {
+  if (saved === null || draft === null) return false;
+  return JSON.stringify(saved) !== JSON.stringify(draft);
+}
+function applyApprovalGateDraft(settings, updates) {
+  const gate = settings.approval_gate;
+  return {
+    ...settings,
+    approval_gate: {
+      enabled: updates.enabled,
+      configured: gate?.configured ?? false,
+      cooldown_seconds: updates.cooldown_seconds,
+      cooldown_active: gate?.cooldown_active ?? false,
+      cooldown_expires_at: gate?.cooldown_expires_at ?? null,
+      locked_until: gate?.locked_until ?? null,
+      fail_closed: gate?.fail_closed ?? false,
+      strict_all_decisions: updates.strict_all_decisions ?? gate?.strict_all_decisions ?? false,
+      totp_enabled: gate?.totp_enabled ?? false,
+      totp_pending: gate?.totp_pending ?? false
+    }
+  };
+}
+function protectionModeHelp(mode) {
+  if (mode === "enforce") {
+    return "Guard keeps risky actions stopped until you allow them.";
+  }
+  if (mode === "observe") {
+    return "Guard logs what it sees without pausing anything.";
+  }
+  return "Guard pauses risky actions and asks what to do.";
+}
+function protectionModeLabel(mode) {
+  const match = protectionModeChoices.find((choice) => choice.value === mode);
+  return match?.label ?? mode;
+}
+function saveStatusText(saveSuccess, saveError) {
+  if (saveSuccess) {
+    return "Settings saved successfully.";
+  }
+  return saveError ?? "";
+}
+function SettingsWorkspace({ onApprovalGateChange }) {
+  const [state, setState] = reactExports.useState({ kind: "loading" });
+  const [draft, setDraft] = reactExports.useState(null);
+  const [saving, setSaving] = reactExports.useState(false);
+  const [saveSuccess, setSaveSuccess] = reactExports.useState(false);
+  const [saveError, setSaveError] = reactExports.useState(null);
+  const [clearingApprovals, setClearingApprovals] = reactExports.useState(false);
+  const [clearingEvidence, setClearingEvidence] = reactExports.useState(false);
+  const [clearingReviewQueue, setClearingReviewQueue] = reactExports.useState(false);
+  const [exporting, setExporting] = reactExports.useState(false);
+  const [repairing, setRepairing] = reactExports.useState(false);
+  const [settingUpNotifications, setSettingUpNotifications] = reactExports.useState(false);
+  const [notificationSetup, setNotificationSetup] = reactExports.useState(null);
+  const [actionMessage, setActionMessage] = reactExports.useState(null);
+  const [actionMessageKind, setActionMessageKind] = reactExports.useState("success");
+  const [perfSnapshot, setPerfSnapshot] = reactExports.useState(null);
+  const [pendingMode, setPendingMode] = reactExports.useState(null);
+  const [activeTab, setActiveTab] = reactExports.useState("protection");
+  const [searchQuery, setSearchQuery] = reactExports.useState("");
+  const [importingSettings, setImportingSettings] = reactExports.useState(false);
+  const [resettingSettings, setResettingSettings] = reactExports.useState(false);
+  const [exportingSettings, setExportingSettings] = reactExports.useState(false);
+  const settingsImportInputRef = reactExports.useRef(null);
+  const saveSuccessTimerRef = reactExports.useRef(null);
+  const savedSettingsRef = reactExports.useRef(null);
+  const [approvalGateEnabled, setApprovalGateEnabled] = reactExports.useState(false);
+  const [approvalGateTotpCode, setApprovalGateTotpCode] = reactExports.useState("");
+  const [approvalGateTotpDeviceLabel, setApprovalGateTotpDeviceLabel] = reactExports.useState("local-device");
+  const [approvalGateStrictAllDecisions, setApprovalGateStrictAllDecisions] = reactExports.useState(false);
+  const [approvalGateCooldown, setApprovalGateCooldown] = reactExports.useState(0);
+  const [totpEnrollment, setTotpEnrollment] = reactExports.useState(null);
+  const [totpSetupOpen, setTotpSetupOpen] = reactExports.useState(false);
+  const [totpSetupStep, setTotpSetupStep] = reactExports.useState("confirm");
+  const [totpActionPassword, setTotpActionPassword] = reactExports.useState("");
+  const [totpActionPending, setTotpActionPending] = reactExports.useState(null);
+  const [totpActionError, setTotpActionError] = reactExports.useState(null);
+  const [proofModalOpen, setProofModalOpen] = reactExports.useState(false);
+  const [proofModalMode, setProofModalMode] = reactExports.useState("verify-save");
+  const [proofModalError, setProofModalError] = reactExports.useState(null);
+  const [proofModalPending, setProofModalPending] = reactExports.useState(false);
+  const [pendingProofAction, setPendingProofAction] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    fetchSettings().then((payload) => {
+      if (!cancelled) {
+        const normalizedPayload = normalizeSettingsPayload(payload);
+        setState({ kind: "ready", payload: normalizedPayload });
+        setDraft(normalizedPayload.settings);
+        savedSettingsRef.current = normalizedPayload.settings;
+        const gate = normalizedPayload.settings.approval_gate;
+        if (gate !== void 0) {
+          setApprovalGateEnabled(gate.enabled);
+          setApprovalGateCooldown(gate.cooldown_seconds);
+          setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
+          onApprovalGateChange?.(gate);
+        }
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        setState({ kind: "error", message: error instanceof Error ? error.message : "Unable to load Guard settings." });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [onApprovalGateChange]);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    fetchRuntimeSnapshot().then((snapshot) => {
+      if (!cancelled) setPerfSnapshot(snapshot);
+    }).catch((_err) => {
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  reactExports.useEffect(() => {
+    return () => {
+      if (saveSuccessTimerRef.current !== null) clearTimeout(saveSuccessTimerRef.current);
+    };
+  }, []);
+  reactExports.useEffect(() => {
+    function handleBeforeUnload(event) {
+      if (hasUnsavedChanges(savedSettingsRef.current, draft)) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [draft]);
+  const handleTabChange = reactExports.useCallback((tab) => {
+    setActiveTab(tab);
+    setActionMessage(null);
+  }, []);
+  const handleSearchChange = reactExports.useCallback((event) => {
+    setSearchQuery(event.target.value);
+  }, []);
+  const handleStringChange = reactExports.useCallback(
+    (key) => (event) => {
+      setDraft((value) => value === null ? value : { ...value, [key]: event.target.value });
+      setSaveError(null);
+    },
+    []
+  );
+  const handleSecurityLevelChange = reactExports.useCallback((securityLevel) => {
+    setDraft((value) => {
+      if (value === null) return value;
+      if (securityLevel === "custom") return { ...value, security_level: securityLevel };
+      const normalizedLevel = securityLevel === "gentle" ? "relaxed" : securityLevel;
+      return {
+        ...value,
+        security_level: normalizedLevel,
+        risk_actions: riskProfileActions[normalizedLevel],
+        risk_action_overrides: {},
+        harness_risk_actions: {}
+      };
+    });
+    setSaveError(null);
+  }, []);
+  const handleSwitchToCustomFineTuning = reactExports.useCallback(() => {
+    handleSecurityLevelChange("custom");
+  }, [handleSecurityLevelChange]);
+  const handleRiskActionChange = reactExports.useCallback(
+    (riskKey) => (event) => {
+      setDraft((value) => {
+        if (value === null) return value;
+        return { ...value, security_level: "custom", risk_actions: { ...value.risk_actions, [riskKey]: event.target.value }, risk_action_overrides: { ...value.risk_action_overrides, [riskKey]: event.target.value } };
+      });
+      setSaveError(null);
+    },
+    []
+  );
+  const handleCodexSecretReadChange = reactExports.useCallback((event) => {
+    setDraft((value) => {
+      if (value === null) return value;
+      return { ...value, security_level: "custom", harness_risk_actions: { ...value.harness_risk_actions, codex: { ...value.harness_risk_actions.codex ?? {}, local_secret_read: event.target.value } } };
+    });
+    setSaveError(null);
+  }, []);
+  const handleTimeoutChange = reactExports.useCallback((event) => {
+    const nextValue = Number.parseInt(event.target.value, 10);
+    const nextTimeout = Number.isNaN(nextValue) ? 0 : nextValue;
+    setDraft((value) => value === null ? value : { ...value, approval_wait_timeout_seconds: nextTimeout });
+    setSaveError(null);
+  }, []);
+  const handleNumberChange = reactExports.useCallback(
+    (key) => (event) => {
+      const parsed = Number.parseInt(event.target.value, 10);
+      const value = Number.isNaN(parsed) ? 0 : parsed;
+      setDraft((settings) => settings === null ? settings : { ...settings, [key]: value });
+      setSaveError(null);
+    },
+    []
+  );
+  const handleModeChange = reactExports.useCallback((event) => {
+    const nextMode = event.target.value;
+    if (nextMode === "observe") {
+      setPendingMode(nextMode);
+      return;
+    }
+    setDraft((value) => value === null ? value : { ...value, mode: nextMode });
+    setSaveError(null);
+  }, []);
+  const confirmModeChange = reactExports.useCallback(() => {
+    if (pendingMode === null) return;
+    setDraft((value) => value === null ? value : { ...value, mode: pendingMode });
+    setPendingMode(null);
+    setSaveError(null);
+  }, [pendingMode]);
+  const cancelModeChange = reactExports.useCallback(() => {
+    setPendingMode(null);
+  }, []);
+  reactExports.useCallback(
+    (key) => (event) => {
+      setDraft((value) => value === null ? value : { ...value, [key]: event.target.checked });
+      setSaveError(null);
+    },
+    []
+  );
+  const handleTelemetryToggle = reactExports.useCallback((checked) => {
+    setDraft((value) => value === null ? value : { ...value, telemetry: checked });
+    setSaveError(null);
+  }, []);
+  const handleSyncToggle = reactExports.useCallback((checked) => {
+    setDraft((value) => value === null ? value : { ...value, sync: checked });
+    setSaveError(null);
+  }, []);
+  const handleBillingToggle = reactExports.useCallback((checked) => {
+    setDraft((value) => value === null ? value : { ...value, billing: checked });
+    setSaveError(null);
+  }, []);
+  const handleApprovalGateToggle = reactExports.useCallback((event) => {
+    const checked = event.target.checked;
+    setApprovalGateEnabled(checked);
+    setDraft(
+      (value) => value === null ? value : applyApprovalGateDraft(value, {
+        enabled: checked,
+        cooldown_seconds: approvalGateCooldown,
+        strict_all_decisions: approvalGateStrictAllDecisions
+      })
+    );
+    setSaveError(null);
+  }, [approvalGateCooldown, approvalGateStrictAllDecisions]);
+  const handleApprovalGateTotpCode = reactExports.useCallback((event) => {
+    setApprovalGateTotpCode(event.target.value);
+    setTotpActionError(null);
+  }, []);
+  const handleApprovalGateTotpDeviceLabel = reactExports.useCallback((event) => {
+    setApprovalGateTotpDeviceLabel(event.target.value);
+    setTotpActionError(null);
+  }, []);
+  const handleTotpActionPasswordChange = reactExports.useCallback((event) => {
+    setTotpActionPassword(event.target.value);
+    setTotpActionError(null);
+  }, []);
+  const handleOpenTotpSetup = reactExports.useCallback(() => {
+    setTotpSetupStep(resolveTotpSetupStep(totpEnrollment));
+    setTotpActionError(null);
+    setTotpSetupOpen(true);
+  }, [totpEnrollment]);
+  const handleCloseTotpSetup = reactExports.useCallback(() => {
+    setTotpSetupOpen(false);
+    setTotpSetupStep("confirm");
+    if (totpEnrollment === null) {
+      setTotpActionPassword("");
+    }
+    setTotpActionError(null);
+  }, [totpEnrollment]);
+  const handleApprovalGateCooldownChange = reactExports.useCallback((event) => {
+    const next = Number(event.target.value);
+    setApprovalGateCooldown(next);
+    setDraft(
+      (value) => value === null ? value : applyApprovalGateDraft(value, {
+        enabled: approvalGateEnabled,
+        cooldown_seconds: next,
+        strict_all_decisions: approvalGateStrictAllDecisions
+      })
+    );
+    setSaveError(null);
+  }, [approvalGateEnabled, approvalGateStrictAllDecisions]);
+  const handleApprovalGateStrictAllDecisions = reactExports.useCallback((event) => {
+    const strict = event.target.checked;
+    setApprovalGateStrictAllDecisions(strict);
+    setDraft(
+      (value) => value === null ? value : applyApprovalGateDraft(value, {
+        enabled: approvalGateEnabled,
+        cooldown_seconds: approvalGateCooldown,
+        strict_all_decisions: strict
+      })
+    );
+    setSaveError(null);
+  }, [approvalGateEnabled, approvalGateCooldown]);
+  const applyLoadedSettingsPayload = reactExports.useCallback((normalizedPayload) => {
+    setState({ kind: "ready", payload: normalizedPayload });
+    setDraft(normalizedPayload.settings);
+    savedSettingsRef.current = normalizedPayload.settings;
+    const gate = normalizedPayload.settings.approval_gate;
+    if (gate !== void 0) {
+      setApprovalGateEnabled(gate.enabled);
+      setApprovalGateCooldown(gate.cooldown_seconds);
+      setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
+      onApprovalGateChange?.(gate);
+    }
+  }, [onApprovalGateChange]);
+  const openProofModal = reactExports.useCallback((mode, action) => {
+    setProofModalMode(mode);
+    setPendingProofAction(action);
+    setProofModalError(null);
+    setProofModalOpen(true);
+  }, []);
+  const closeProofModal = reactExports.useCallback(() => {
+    if (proofModalPending) {
+      return;
+    }
+    setProofModalOpen(false);
+    setPendingProofAction(null);
+    setProofModalError(null);
+  }, [proofModalPending]);
+  const executeSave = reactExports.useCallback(async (proof) => {
+    if (draft === null) {
+      return;
+    }
+    const fromModal = proof !== void 0;
+    if (!fromModal) {
+      setSaving(true);
+      setSaveError(null);
+      setSaveSuccess(false);
+    }
+    try {
+      const approvalGateUpdate = {
+        enabled: approvalGateEnabled,
+        configured: draft.approval_gate?.configured ?? false,
+        cooldown_seconds: approvalGateCooldown,
+        cooldown_active: draft.approval_gate?.cooldown_active ?? false,
+        cooldown_expires_at: draft.approval_gate?.cooldown_expires_at ?? null,
+        locked_until: draft.approval_gate?.locked_until ?? null,
+        fail_closed: draft.approval_gate?.fail_closed ?? false,
+        strict_all_decisions: approvalGateStrictAllDecisions,
+        totp_enabled: draft.approval_gate?.totp_enabled ?? false,
+        totp_pending: draft.approval_gate?.totp_pending ?? false,
+        ...proof?.currentPassword ? { current_password: proof.currentPassword } : {},
+        ...proof?.newPassword ? { new_password: proof.newPassword } : {},
+        ...proof?.confirmPassword ? { confirm_password: proof.confirmPassword } : {},
+        ...proof?.totpCode ? { totp_code: proof.totpCode } : {}
+      };
+      const settingsToSave = {
+        ...draft,
+        risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
+        approval_gate: approvalGateUpdate
+      };
+      const payload = await updateSettings(settingsToSave);
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
+      if (normalizedPayload.settings.approval_gate !== void 0) {
+        const gate = normalizedPayload.settings.approval_gate;
+        setApprovalGateEnabled(gate.enabled);
+        setApprovalGateCooldown(gate.cooldown_seconds);
+        setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
+        onApprovalGateChange?.(gate);
+      }
+      if (!fromModal) {
+        setSaveSuccess(true);
+        if (saveSuccessTimerRef.current !== null) clearTimeout(saveSuccessTimerRef.current);
+        saveSuccessTimerRef.current = setTimeout(() => setSaveSuccess(false), 2e3);
+      } else {
+        setSaveSuccess(true);
+        setSaveError(null);
+        if (saveSuccessTimerRef.current !== null) clearTimeout(saveSuccessTimerRef.current);
+        saveSuccessTimerRef.current = setTimeout(() => setSaveSuccess(false), 2e3);
+      }
+    } catch (error) {
+      if (fromModal) {
+        throw error;
+      }
+      setSaveError(error instanceof Error ? error.message : "Unable to save settings.");
+    } finally {
+      if (!fromModal) {
+        setSaving(false);
+      }
+    }
+  }, [
+    draft,
+    approvalGateEnabled,
+    approvalGateCooldown,
+    approvalGateStrictAllDecisions,
+    onApprovalGateChange
+  ]);
+  const executeMaintenanceWithProof = reactExports.useCallback(async (action, proof) => {
+    const password = proof.currentPassword?.trim() ?? "";
+    const totpCode = proof.totpCode?.trim() ?? "";
+    if (action === "clear-approvals") {
+      setClearingApprovals(true);
+      setActionMessage(null);
+      try {
+        await clearPolicy({
+          all: true,
+          approval_password: password || void 0,
+          approval_totp_code: totpCode || void 0
+        });
+        setActionMessage("Saved approvals cleared. Guard will ask again for future matching actions.");
+        setActionMessageKind("success");
+      } finally {
+        setClearingApprovals(false);
+      }
+      return;
+    }
+    if (action === "clear-queue") {
+      setClearingReviewQueue(true);
+      setActionMessage(null);
+      try {
+        const result = await clearReviewQueue(buildClearReviewQueuePayload({
+          approvalPassword: password,
+          approvalTotpCode: totpCode
+        }));
+        setActionMessage(`Review queue cleared. Removed ${result.cleared} pending ${result.cleared === 1 ? "item" : "items"}.`);
+        setActionMessageKind("success");
+      } finally {
+        setClearingReviewQueue(false);
+      }
+      return;
+    }
+    if (action === "revoke-cooldown") {
+      try {
+        const payload = await revokeApprovalGateCooldown(
+          password,
+          totpCode.length > 0 ? totpCode : void 0
+        );
+        const normalizedPayload = normalizeSettingsPayload(payload);
+        const gate = normalizedPayload.settings.approval_gate;
+        setState({ kind: "ready", payload: normalizedPayload });
+        setDraft(normalizedPayload.settings);
+        savedSettingsRef.current = normalizedPayload.settings;
+        if (gate !== void 0) {
+          setApprovalGateEnabled(gate.enabled);
+          setApprovalGateCooldown(gate.cooldown_seconds);
+          setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
+          onApprovalGateChange?.(gate);
+        }
+        setActionMessage("Cooldown revoked successfully.");
+        setActionMessageKind("success");
+      } catch (error) {
+        throw error;
+      }
+      return;
+    }
+    setTotpActionPending("disable");
+    setTotpActionError(null);
+    try {
+      const payload = await disableApprovalGateTotp(password, totpCode);
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      const gate = normalizedPayload.settings.approval_gate;
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
+      if (gate !== void 0) {
+        setApprovalGateEnabled(gate.enabled);
+        setApprovalGateCooldown(gate.cooldown_seconds);
+        setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
+        onApprovalGateChange?.(gate);
+      }
+      setApprovalGateTotpCode("");
+      setTotpActionPassword("");
+      setTotpEnrollment(null);
+      setTotpSetupOpen(false);
+      setTotpSetupStep("confirm");
+      setActionMessage("Authenticator app disconnected.");
+      setActionMessageKind("success");
+    } finally {
+      setTotpActionPending(null);
+    }
+  }, [onApprovalGateChange]);
+  const executeImportSettings = reactExports.useCallback(async (settingsExport, proof) => {
+    setImportingSettings(true);
+    setActionMessage(null);
+    try {
+      const payload = await importSettings(settingsExport, buildApprovalGateWriteProof(proof));
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      applyLoadedSettingsPayload(normalizedPayload);
+      setActionMessage("Settings imported.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to import settings.");
+      setActionMessageKind("error");
+      throw error;
+    } finally {
+      setImportingSettings(false);
+    }
+  }, [applyLoadedSettingsPayload]);
+  const executeResetSettings = reactExports.useCallback(async (proof) => {
+    setResettingSettings(true);
+    setActionMessage(null);
+    try {
+      const payload = await resetSettings(buildApprovalGateWriteProof(proof));
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      applyLoadedSettingsPayload(normalizedPayload);
+      setActionMessage("Settings reset to defaults.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to reset settings.");
+      setActionMessageKind("error");
+      throw error;
+    } finally {
+      setResettingSettings(false);
+    }
+  }, [applyLoadedSettingsPayload]);
+  const handleProofModalConfirm = reactExports.useCallback(async (proof) => {
+    if (pendingProofAction === null) {
+      return;
+    }
+    setProofModalPending(true);
+    setProofModalError(null);
+    try {
+      if (pendingProofAction.kind === "save") {
+        await executeSave(proof);
+      } else if (pendingProofAction.action === "import-settings") {
+        if (pendingProofAction.importExport === void 0) {
+          throw new Error("Missing settings import payload.");
+        }
+        await executeImportSettings(pendingProofAction.importExport, proof);
+      } else if (pendingProofAction.action === "reset-settings") {
+        await executeResetSettings(proof);
+      } else {
+        await executeMaintenanceWithProof(pendingProofAction.action, proof);
+      }
+      setProofModalOpen(false);
+      setPendingProofAction(null);
+    } catch (error) {
+      setProofModalError(error instanceof Error ? error.message : "Unable to continue.");
+    } finally {
+      setProofModalPending(false);
+    }
+  }, [pendingProofAction, executeSave, executeImportSettings, executeResetSettings, executeMaintenanceWithProof]);
+  const handleSave = reactExports.useCallback(() => {
+    if (draft === null) {
+      return;
+    }
+    const savedGateConfig = savedSettingsRef.current?.approval_gate ?? null;
+    const proofKind = resolveSettingsSaveProofKind({
+      savedGateEnabled: savedGateConfig?.enabled === true,
+      wasConfigured: savedGateConfig?.configured === true,
+      draftGateEnabled: approvalGateEnabled
+    });
+    if (requiresSettingsSaveProof(proofKind)) {
+      openProofModal(proofKind, { kind: "save" });
+      return;
+    }
+    void executeSave();
+  }, [approvalGateEnabled, draft, executeSave, openProofModal]);
+  const handleOpenPasswordChangeModal = reactExports.useCallback(() => {
+    openProofModal("change-password", { kind: "save" });
+  }, [openProofModal]);
+  const handleRequestRevokeCooldown = reactExports.useCallback(() => {
+    openProofModal("maintenance", { kind: "maintenance", action: "revoke-cooldown" });
+  }, [openProofModal]);
+  const handleRequestDisableTotp = reactExports.useCallback(() => {
+    openProofModal("maintenance", { kind: "maintenance", action: "disable-totp" });
+  }, [openProofModal]);
+  const handleStartTotpEnrollment = reactExports.useCallback(async () => {
+    if (!totpActionPassword.trim()) {
+      setTotpActionError("Enter your approval password to continue.");
+      return;
+    }
+    setTotpActionPending("enroll");
+    setTotpActionError(null);
+    try {
+      const payload = await enrollApprovalGateTotp(
+        totpActionPassword,
+        approvalGateTotpDeviceLabel.trim() || "local-device"
+      );
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      const gate = normalizedPayload.settings.approval_gate;
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
+      if (gate !== void 0) {
+        setApprovalGateEnabled(gate.enabled);
+        setApprovalGateCooldown(gate.cooldown_seconds);
+        setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
+        onApprovalGateChange?.(gate);
+      }
+      setTotpEnrollment(payload.enrollment ?? null);
+      setTotpSetupStep("scan");
+      setTotpSetupOpen(payload.enrollment !== void 0 && payload.enrollment !== null);
+      setActionMessage("Scan the QR code, then enter a live code from your app.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setTotpActionError(error instanceof Error ? error.message : "Unable to start TOTP enrollment.");
+    } finally {
+      setTotpActionPending(null);
+    }
+  }, [totpActionPassword, approvalGateTotpDeviceLabel, onApprovalGateChange]);
+  const handleVerifyTotpEnrollment = reactExports.useCallback(async () => {
+    if (!totpActionPassword.trim()) {
+      setTotpActionError("Enter your approval password to continue.");
+      return;
+    }
+    if (!approvalGateTotpCode.trim()) {
+      setTotpActionError("Enter the six-digit code from your authenticator app.");
+      return;
+    }
+    setTotpActionPending("verify");
+    setTotpActionError(null);
+    try {
+      const payload = await verifyApprovalGateTotp(totpActionPassword, approvalGateTotpCode);
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      const gate = normalizedPayload.settings.approval_gate;
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
+      if (gate !== void 0) {
+        setApprovalGateEnabled(gate.enabled);
+        setApprovalGateCooldown(gate.cooldown_seconds);
+        setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
+        onApprovalGateChange?.(gate);
+      }
+      setApprovalGateTotpCode("");
+      setTotpActionPassword("");
+      setTotpEnrollment(null);
+      setTotpSetupOpen(false);
+      setTotpSetupStep("confirm");
+      setActionMessage("Authenticator app connected.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setTotpActionError(error instanceof Error ? error.message : "Unable to verify TOTP.");
+    } finally {
+      setTotpActionPending(null);
+    }
+  }, [totpActionPassword, approvalGateTotpCode, onApprovalGateChange]);
+  const handleDisableTotp = reactExports.useCallback(async () => {
+    handleRequestDisableTotp();
+  }, [handleRequestDisableTotp]);
+  const handleClearApprovals = reactExports.useCallback(() => {
+    if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) {
+      return;
+    }
+    const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
+    if (savedGateEnabled) {
+      openProofModal("maintenance", { kind: "maintenance", action: "clear-approvals" });
+      return;
+    }
+    setClearingApprovals(true);
+    setActionMessage(null);
+    void clearPolicy({ all: true }).then(() => {
+      setActionMessage("Saved approvals cleared. Guard will ask again for future matching actions.");
+      setActionMessageKind("success");
+    }).catch((error) => {
+      setActionMessage(error instanceof Error ? error.message : "Unable to clear approvals.");
+      setActionMessageKind("error");
+    }).finally(() => {
+      setClearingApprovals(false);
+    });
+  }, [openProofModal]);
+  const handleClearReviewQueue = reactExports.useCallback(() => {
+    if (!window.confirm("Clear the pending review queue? Guard will remove waiting items without creating allow or block decisions.")) {
+      return;
+    }
+    const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
+    if (savedGateEnabled) {
+      openProofModal("maintenance", { kind: "maintenance", action: "clear-queue" });
+      return;
+    }
+    setClearingReviewQueue(true);
+    setActionMessage(null);
+    void clearReviewQueue(buildClearReviewQueuePayload({})).then((result) => {
+      setActionMessage(`Review queue cleared. Removed ${result.cleared} pending ${result.cleared === 1 ? "item" : "items"}.`);
+      setActionMessageKind("success");
+    }).catch((error) => {
+      setActionMessage(error instanceof Error ? error.message : "Unable to clear review queue.");
+      setActionMessageKind("error");
+    }).finally(() => {
+      setClearingReviewQueue(false);
+    });
+  }, [openProofModal]);
+  const handleClearEvidence = reactExports.useCallback(async () => {
+    if (!window.confirm("Clear the evidence log permanently? This cannot be undone.")) return;
+    setClearingEvidence(true);
+    setActionMessage(null);
+    try {
+      await clearEvidence();
+      setActionMessage("Evidence log cleared.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to clear evidence.");
+      setActionMessageKind("error");
+    } finally {
+      setClearingEvidence(false);
+    }
+  }, []);
+  const handleExportDiagnostics = reactExports.useCallback(async () => {
+    setExporting(true);
+    setActionMessage(null);
+    try {
+      const blob = await exportDiagnostics();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `guard-diagnostics-${Date.now()}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      setActionMessage("Diagnostics exported.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to export diagnostics.");
+      setActionMessageKind("error");
+    } finally {
+      setExporting(false);
+    }
+  }, []);
+  const handleRepairApprovalCenter = reactExports.useCallback(async () => {
+    if (!window.confirm("Reset the approval center locator? The daemon will be reachable again after Guard restarts. Pending approvals are preserved.")) return;
+    setRepairing(true);
+    setActionMessage(null);
+    try {
+      await repairApprovalCenter();
+      setActionMessage("Approval center repaired. Restart Guard to reconnect.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to repair approval center.");
+      setActionMessageKind("error");
+    } finally {
+      setRepairing(false);
+    }
+  }, []);
+  const handleExportSettings = reactExports.useCallback(async () => {
+    setExportingSettings(true);
+    setActionMessage(null);
+    try {
+      const exported = await exportSettings();
+      const blob = new Blob([JSON.stringify(exported, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `guard-settings-${Date.now()}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      setActionMessage("Settings exported.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to export settings.");
+      setActionMessageKind("error");
+    } finally {
+      setExportingSettings(false);
+    }
+  }, []);
+  const handleImportSettingsClick = reactExports.useCallback(() => {
+    settingsImportInputRef.current?.click();
+  }, []);
+  const handleImportSettingsFile = reactExports.useCallback(async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setActionMessage(null);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
+      if (savedGateEnabled) {
+        openProofModal("maintenance", {
+          kind: "maintenance",
+          action: "import-settings",
+          importExport: parsed
+        });
+        return;
+      }
+      await executeImportSettings(parsed);
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to import settings.");
+      setActionMessageKind("error");
+    }
+  }, [executeImportSettings, openProofModal]);
+  const handleResetSettings = reactExports.useCallback(async () => {
+    if (!window.confirm("Reset all local Guard settings to defaults? This cannot be undone.")) return;
+    const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
+    if (savedGateEnabled) {
+      openProofModal("maintenance", { kind: "maintenance", action: "reset-settings" });
+      return;
+    }
+    try {
+      await executeResetSettings();
+    } catch {
+    }
+  }, [executeResetSettings, openProofModal]);
+  const handleSetupNotifications = reactExports.useCallback(async () => {
+    setSettingUpNotifications(true);
+    setActionMessage(null);
+    try {
+      const result = await setupDesktopNotifications();
+      setNotificationSetup(result);
+      if (!result.supported) {
+        setActionMessage("Desktop notification setup is not available on this OS.");
+        setActionMessageKind("error");
+      } else if (result.settings_opened) {
+        setActionMessage("Notification settings opened. Turn on alerts and sounds for Guard.");
+        setActionMessageKind("success");
+      } else {
+        setActionMessage(
+          "We could not open Settings automatically. Open System Settings > Notifications and allow alerts for Guard."
+        );
+        setActionMessageKind("success");
+      }
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to set up notifications.");
+      setActionMessageKind("error");
+    } finally {
+      setSettingUpNotifications(false);
+    }
+  }, []);
+  if (state.kind === "loading") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-10 w-64" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-72 w-full" })
+    ] });
+  }
+  if (state.kind === "error" || draft === null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: "Settings are unavailable", body: state.kind === "error" ? state.message : "Guard did not return editable settings.", tone: "teach" });
+  }
+  const modeHelp = protectionModeHelp(draft.mode);
+  const consequenceSummary = buildConsequenceSummary(draft);
+  const searchMatches = filterSettingsBySearch(searchQuery);
+  const hasSearch = searchQuery.trim().length > 0;
+  const riskSearchMatches = searchMatches.filter((m) => m.section === "risk");
+  const visibleRiskControls = hasSearch ? riskControls.filter((rc) => riskSearchMatches.some((m) => m.key === rc.key)) : riskControls;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-[calc(100dvh-11rem)] flex-col gap-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      GuardHero,
+      {
+        status: "clear",
+        headline: "Set how hard Guard should push back",
+        subheadline: "Pick a security level, then fine-tune individual rules whenever you need more control.",
+        cta: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: protectionModeLabel(draft.mode) })
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          id: "settings-search",
+          name: "settings-search",
+          type: "search",
+          value: searchQuery,
+          onChange: handleSearchChange,
+          placeholder: "Search settings...",
+          "aria-label": "Search settings",
+          className: "w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        }
+      )
+    ] }),
+    hasSearch && searchMatches.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No settings match your search." }),
     hasSearch && riskSearchMatches.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Matching fine-tuning rules" }),
       !isFineTuningEditable(draft.security_level) ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
