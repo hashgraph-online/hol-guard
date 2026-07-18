@@ -1555,6 +1555,107 @@ clearer UX and an implementation plan with technical references.
         assert output["recorded"] is True
         assert "approval_requests" not in output
 
+    @pytest.mark.parametrize(
+        "command",
+        (
+            "rg -n 'SMTP_TOKEN' src/example.ts; sed -n '1,20p' src/example.ts",
+            "nl -ba src/example.ts | sed -n '1,20p'",
+            "wc -l src/example.ts; sed -n '1,20p' src/example.ts",
+            ("yq '.jobs.build.steps[] | select(.name == \"Compute publish version\")' .github/workflows/publish.yml"),
+        ),
+    )
+    def test_codex_post_tool_use_allows_common_read_only_source_inspection(
+        self,
+        command,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(workspace_dir / "src" / "example.ts", "const SMTP_TOKEN = process.env.SMTP_TOKEN;\n")
+        _write_text(
+            workspace_dir / ".github" / "workflows" / "publish.yml",
+            "jobs:\n  build:\n    steps:\n      - name: Compute publish version\n",
+        )
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": "const SMTP_TOKEN = process.env.SMTP_TOKEN;\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recorded"] is True
+        assert "approval_requests" not in output
+
+    @pytest.mark.parametrize(
+        "command",
+        (
+            "sed -n '1,20p' src/example.ts; rm src/example.ts",
+            "nl -ba .env",
+        ),
+    )
+    def test_codex_post_tool_use_keeps_unsafe_source_inspection_guarded(
+        self,
+        command,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(workspace_dir / "src" / "example.ts", "const SMTP_TOKEN = process.env.SMTP_TOKEN;\n")
+        _write_text(workspace_dir / ".github" / "workflows" / "publish.yml", "jobs: {}\n")
+        _write_text(workspace_dir / ".env", "API_TOKEN=fixture-only\n")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": "API_TOKEN=fixture-only\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] in {"block", "require-reapproval"}
+        assert output["approval_requests"]
+
     def test_codex_post_tool_use_allows_absolute_source_view_with_secret_like_output(
         self,
         monkeypatch,
@@ -22903,10 +23004,22 @@ def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_pat
     assert artifact is None
 
 
-def test_codex_read_only_source_inspection_still_blocks_value_like_secret_output(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "command",
+    (
+        "rg -n \"token\" src | sed -n '1,40p'",
+        "nl -ba src/config.ts | sed -n '1,40p'",
+        "wc -l src/config.ts; sed -n '1,40p' src/config.ts",
+        "yq '.jobs' .github/workflows/publish.yml",
+    ),
+)
+def test_codex_read_only_source_inspection_still_blocks_value_like_secret_output(
+    command: str,
+    tmp_path: Path,
+) -> None:
     workspace_dir = tmp_path / "workspace"
     _write_text(workspace_dir / "src" / "config.ts", "export const label = 'token';\n")
-    command = "rg -n \"token\" src | sed -n '1,40p'"
+    _write_text(workspace_dir / ".github" / "workflows" / "publish.yml", "jobs: {}\n")
 
     artifact = guard_commands_module._codex_post_tool_output_artifact(
         payload={
@@ -23545,7 +23658,7 @@ def test_codex_read_only_source_inspection_rejects_malformed_chains(tmp_path: Pa
         "sed -n '1,10p' src/safe.ts &&",
         "sed -n '1,10p' src/safe.ts && && cat src/safe.ts",
         "sed -n '1,10p' src/safe.ts || cat src/safe.ts",
-        "sed -n '1,10p' src/safe.ts; cat src/safe.ts",
+        "sed -n '1,10p' src/safe.ts;; cat src/safe.ts",
     ]
 
     for command in commands:

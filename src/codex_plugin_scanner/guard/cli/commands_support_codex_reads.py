@@ -53,6 +53,15 @@ def _codex_source_inspection_target_tokens(parts: list[str]) -> tuple[str, ...]:
         if executable in {"head", "tail"}:
             targets, valid, skip_next = _parse_codex_head_tail_args(args)
             return tuple(targets) if valid and not skip_next else ()
+        if executable == "nl":
+            targets = _codex_nl_targets(args)
+            return targets if targets is not None else ()
+        if executable == "wc":
+            targets = _codex_wc_targets(args)
+            return targets if targets is not None else ()
+        if executable == "yq":
+            parsed = _codex_yq_expression_and_targets(args)
+            return parsed[1] if parsed is not None else ()
         return tuple(_codex_cat_targets(args))
     if executable in _CODEX_READ_ONLY_SEARCH_COMMANDS:
         if executable == "fd":
@@ -225,8 +234,17 @@ def _split_codex_safe_read_only_chain(command: str) -> list[str] | None:
             index += 2
             start = index
             continue
-        if command.startswith("||", index) or char in {";", "&"}:
+        if command.startswith("||", index) or char == "&":
             return None
+        if char == ";":
+            segment = command[start:index].strip()
+            if not segment or command.startswith(";;", index):
+                return None
+            segments.append(segment)
+            found_chain = True
+            index += 1
+            start = index
+            continue
         index += 1
     if quote is not None or escaped or not found_chain:
         return None
@@ -395,6 +413,10 @@ def _codex_command_is_bounded_read_only_filter(command_text: str) -> bool:
         return False
     if executable == "sed":
         return _codex_sed_args_are_bounded_filter(parts[1:])
+    if executable == "nl":
+        return _codex_nl_targets(parts[1:]) == ()
+    if executable == "wc":
+        return _codex_wc_targets(parts[1:]) == ()
     return _codex_head_tail_args_are_bounded_filter(parts[1:])
 
 
@@ -424,7 +446,164 @@ def _codex_command_is_read_only_source_view(
         return _codex_sed_targets_are_read_only_source_like(parts[1:], cwd=cwd, home_dir=home_dir)
     if executable in {"head", "tail"}:
         return _codex_head_tail_targets_are_source_like(parts[1:], cwd=cwd, home_dir=home_dir)
+    if executable == "nl":
+        targets = _codex_nl_targets(parts[1:])
+        return (
+            targets is not None
+            and bool(targets)
+            and all(_codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets)
+        )
+    if executable == "wc":
+        targets = _codex_wc_targets(parts[1:])
+        return (
+            targets is not None
+            and bool(targets)
+            and all(_codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets)
+        )
+    if executable == "yq":
+        parsed = _codex_yq_expression_and_targets(parts[1:])
+        return parsed is not None and all(
+            _codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in parsed[1]
+        )
     return _codex_cat_targets_are_source_like(parts[1:], cwd=cwd, home_dir=home_dir)
+
+
+_CODEX_NL_VALUE_OPTIONS = frozenset(
+    {
+        "-b",
+        "--body-numbering",
+        "-d",
+        "--section-delimiter",
+        "-f",
+        "--footer-numbering",
+        "-h",
+        "--header-numbering",
+        "-i",
+        "--line-increment",
+        "-l",
+        "--join-blank-lines",
+        "-n",
+        "--number-format",
+        "-s",
+        "--number-separator",
+        "-v",
+        "--starting-line-number",
+        "-w",
+        "--number-width",
+    }
+)
+
+_CODEX_WC_BOOLEAN_OPTIONS = frozenset(
+    {"-c", "--bytes", "-m", "--chars", "-l", "--lines", "-L", "--max-line-length", "-w", "--words"}
+)
+
+_CODEX_YQ_BOOLEAN_OPTIONS = frozenset(
+    {
+        "-C",
+        "--colors",
+        "-e",
+        "--exit-status",
+        "-M",
+        "--no-colors",
+        "-N",
+        "--no-doc",
+        "-n",
+        "--null-input",
+        "-P",
+        "--prettyPrint",
+        "-r",
+        "--unwrapScalar",
+    }
+)
+
+_CODEX_YQ_VALUE_OPTIONS = frozenset({"-I", "--indent", "-o", "--output-format"})
+
+_CODEX_YQ_EXTERNAL_READ_PATTERN = re.compile(
+    r"(?i)(?:\$ENV(?:\.|\b)|(?:^|[^A-Za-z0-9_])(?:env|strenv|envsubst|eval|load(?:_[A-Za-z0-9_]+)?)\s*\()"
+)
+
+
+def _codex_nl_targets(args: list[str]) -> tuple[str, ...] | None:
+    targets: list[str] = []
+    skip_value = False
+    after_options = False
+    for arg in args:
+        if skip_value:
+            skip_value = False
+            continue
+        if after_options:
+            targets.append(arg)
+            continue
+        if arg == "--":
+            after_options = True
+            continue
+        if arg in _CODEX_NL_VALUE_OPTIONS:
+            skip_value = True
+            continue
+        if any(arg.startswith(f"{option}=") for option in _CODEX_NL_VALUE_OPTIONS if option.startswith("--")):
+            continue
+        if re.fullmatch(r"-[bdfhilnsvw].+", arg):
+            continue
+        if arg == "-" or arg.startswith("-"):
+            return None
+        targets.append(arg)
+    if skip_value or len(targets) > 1:
+        return None
+    return tuple(targets)
+
+
+def _codex_wc_targets(args: list[str]) -> tuple[str, ...] | None:
+    targets: list[str] = []
+    after_options = False
+    for arg in args:
+        if after_options:
+            targets.append(arg)
+            continue
+        if arg == "--":
+            after_options = True
+            continue
+        if arg in _CODEX_WC_BOOLEAN_OPTIONS or re.fullmatch(r"-[cmlLw]+", arg):
+            continue
+        if arg == "-" or arg.startswith("-"):
+            return None
+        targets.append(arg)
+    return tuple(targets)
+
+
+def _codex_yq_expression_and_targets(args: list[str]) -> tuple[str, tuple[str, ...]] | None:
+    positional: list[str] = []
+    skip_value = False
+    after_options = False
+    for arg in args:
+        if skip_value:
+            skip_value = False
+            continue
+        if after_options:
+            positional.append(arg)
+            continue
+        if arg == "--":
+            after_options = True
+            continue
+        if arg in _CODEX_YQ_BOOLEAN_OPTIONS:
+            continue
+        if arg in _CODEX_YQ_VALUE_OPTIONS:
+            skip_value = True
+            continue
+        if any(arg.startswith(f"{option}=") for option in _CODEX_YQ_VALUE_OPTIONS if option.startswith("--")):
+            continue
+        if re.fullmatch(r"-(?:I\d+|o(?:json|props|xml|yaml))", arg):
+            continue
+        if arg.startswith("-"):
+            return None
+        positional.append(arg)
+    if skip_value or len(positional) < 2:
+        return None
+    expression, *targets = positional
+    if not expression.startswith(".") or _CODEX_YQ_EXTERNAL_READ_PATTERN.search(expression):
+        return None
+    if any(target == "-" for target in targets):
+        return None
+    return expression, tuple(targets)
 
 
 def _codex_command_is_read_only_source_search(
