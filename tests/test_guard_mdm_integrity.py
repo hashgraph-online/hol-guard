@@ -11,6 +11,11 @@ from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli import commands_dispatch_mdm
 from codex_plugin_scanner.guard.mdm import integrity
 from codex_plugin_scanner.guard.mdm.acl import OwnershipAclVerification
+from codex_plugin_scanner.guard.mdm.continuity import (
+    BootObservation,
+    ContinuityVerification,
+    InstallationContinuityRecord,
+)
 from codex_plugin_scanner.guard.mdm.contracts import (
     MDM_POLICY_SCHEMA_VERSION,
     KeyProtectionStatus,
@@ -158,6 +163,45 @@ def test_snapshot_projects_device_key_protection_without_public_material(
     }
     assert "publicKey" not in serialized
     assert "generation" not in serialized
+
+
+def test_snapshot_projects_read_only_installation_continuity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(integrity, "default_machine_paths", lambda: _paths(tmp_path))
+    record = InstallationContinuityRecord(
+        "1" * 32,
+        "2" * 32,
+        "2026-07-17T00:00:00+00:00",
+        "key-id",
+        9,
+        "a" * 64,
+        "boot-before",
+        1_000_000_000,
+        "2026-07-17T00:00:00+00:00",
+    )
+    monkeypatch.setattr(
+        integrity,
+        "verify_installation_continuity",
+        lambda _paths: ContinuityVerification(
+            "healthy",
+            "installation_identity_active",
+            "lease_continuity_active",
+            record,
+            BootObservation("boot-now", 2_500_000_000),
+        ),
+    )
+
+    snapshot = integrity.machine_integrity_snapshot()
+
+    assert snapshot["identifiers"]["machineInstallationId"] == "1" * 32
+    assert snapshot["identifiers"]["installationGeneration"] == "2" * 32
+    assert snapshot["continuity"] == {
+        "monotonicUptimeSeconds": 2.5,
+        "sequence": 9,
+        "previousLeaseDigest": "a" * 64,
+        "bootSessionId": "boot-now",
+    }
+    assert snapshot["components"]["installationIdentity"]["healthy"] is True
+    assert snapshot["components"]["leaseContinuity"]["healthy"] is True
 
 
 def test_snapshot_preserves_cached_managed_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -279,7 +279,7 @@ def _generation_from_evidence(generation: str, evidence: NativeKeyEvidence) -> K
     )
 
 
-def _require_machine_context(system_name: str) -> None:
+def require_machine_device_context(system_name: str) -> None:
     if system_name == "Darwin":
         if os.geteuid() != 0:
             raise PermissionError("device_key_system_context_required")
@@ -343,11 +343,36 @@ def verify_machine_device_key(
         return KeyProtectionStatus("tampered", "unknown", "device_key_metadata_invalid")
 
 
+def verified_machine_device_key_ids(
+    paths: MachinePaths,
+    *,
+    system_name: str | None = None,
+) -> tuple[str, frozenset[str]]:
+    resolved_system = system_name or platform.system()
+    if resolved_system not in {"Darwin", "Windows"}:
+        raise OSError("device_key_platform_unsupported")
+    metadata = _read_metadata(paths)
+    if metadata is None:
+        raise OSError("device_key_absent")
+    if metadata.state != "active" or metadata.active is None:
+        raise OSError("device_key_rotation_incomplete" if metadata.state != "revoked" else "device_key_revoked")
+    verified: set[str] = set()
+    for generation in (metadata.active, metadata.previous):
+        if generation is None:
+            continue
+        status = _verify_generation(paths, generation, resolved_system)
+        if status.healthy:
+            verified.add(generation.key_id)
+        elif generation is metadata.active:
+            raise OSError(status.reason_code)
+    return metadata.active.key_id, frozenset(verified)
+
+
 def machine_device_key_status() -> KeyProtectionStatus:
     """Return live device-key status from a privileged machine context."""
 
     system_name = platform.system()
-    _require_machine_context(system_name)
+    require_machine_device_context(system_name)
     return verify_machine_device_key(default_machine_paths(system_name=system_name), system_name=system_name)
 
 
@@ -382,7 +407,7 @@ def provision_machine_device_key() -> dict[str, object]:
     """Idempotently create or recover the machine device key."""
 
     system_name = platform.system()
-    _require_machine_context(system_name)
+    require_machine_device_context(system_name)
     paths = default_machine_paths(system_name=system_name)
     with _machine_key_lock(paths):
         metadata = _read_metadata(paths)
@@ -409,12 +434,14 @@ def rotate_machine_device_key() -> dict[str, object]:
     """Journal and activate a new generation while retaining the prior public identity."""
 
     system_name = platform.system()
-    _require_machine_context(system_name)
+    require_machine_device_context(system_name)
     paths = default_machine_paths(system_name=system_name)
     with _machine_key_lock(paths):
         metadata = _read_metadata(paths)
         if metadata is None or metadata.active is None or metadata.state == "revoked":
             raise OSError("device_key_active_key_required")
+        # The retained key may anchor installation continuity. Only a future authenticated
+        # Cloud acknowledgement may migrate that binding before retirement or another rotation.
         if metadata.previous is not None and metadata.state != "rotation_pending":
             raise OSError("device_key_previous_generation_pending")
         if metadata.state != "rotation_pending":
@@ -438,7 +465,7 @@ def revoke_machine_device_key() -> dict[str, object]:
     """Disable signing first, then idempotently remove every retained native generation."""
 
     system_name = platform.system()
-    _require_machine_context(system_name)
+    require_machine_device_context(system_name)
     paths = default_machine_paths(system_name=system_name)
     with _machine_key_lock(paths):
         metadata = _read_metadata(paths)
@@ -469,7 +496,9 @@ __all__ = [
     "KeyGeneration",
     "machine_device_key_status",
     "provision_machine_device_key",
+    "require_machine_device_context",
     "revoke_machine_device_key",
     "rotate_machine_device_key",
+    "verified_machine_device_key_ids",
     "verify_machine_device_key",
 ]

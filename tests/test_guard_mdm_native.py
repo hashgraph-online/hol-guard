@@ -112,6 +112,7 @@ def test_windows_installer_registers_system_machine_health_task() -> None:
 
     install = actions["InstallMachineHealthTask"]
     provision_key = actions["ProvisionMachineDeviceKey"]
+    provision_continuity = actions["ProvisionMachineContinuity"]
     rollback_install = actions["RollbackInstallMachineHealthTask"]
     remove = actions["RemoveMachineHealthTask"]
     rollback_remove = actions["RollbackRemoveMachineHealthTask"]
@@ -120,6 +121,10 @@ def test_windows_installer_registers_system_machine_health_task() -> None:
     assert provision_key.attrib["Execute"] == "deferred"
     assert provision_key.attrib["Impersonate"] == "no"
     assert provision_key.attrib["Return"] == "check"
+    assert provision_continuity.attrib["ExeCommand"].endswith("mdm continuity-provision --json")
+    assert provision_continuity.attrib["Execute"] == "deferred"
+    assert provision_continuity.attrib["Impersonate"] == "no"
+    assert provision_continuity.attrib["Return"] == "check"
     assert remove.attrib["ExeCommand"].endswith("mdm supervisor-remove --json")
     assert install.attrib["Execute"] == remove.attrib["Execute"] == "deferred"
     assert rollback_install.attrib["Execute"] == rollback_remove.attrib["Execute"] == "rollback"
@@ -127,7 +132,8 @@ def test_windows_installer_registers_system_machine_health_task() -> None:
     assert rollback_install.attrib["Return"] == rollback_remove.attrib["Return"] == "ignore"
     assert install.attrib["Impersonate"] == remove.attrib["Impersonate"] == "no"
     assert sequence["ProvisionMachineDeviceKey"].attrib["After"] == "InstallFiles"
-    assert sequence["RollbackInstallMachineHealthTask"].attrib["After"] == "ProvisionMachineDeviceKey"
+    assert sequence["ProvisionMachineContinuity"].attrib["After"] == "ProvisionMachineDeviceKey"
+    assert sequence["RollbackInstallMachineHealthTask"].attrib["After"] == "ProvisionMachineContinuity"
     assert sequence["InstallMachineHealthTask"].attrib["After"] == "RollbackInstallMachineHealthTask"
     assert sequence["RollbackRemoveMachineHealthTask"].attrib["Before"] == "RemoveMachineHealthTask"
     assert sequence["RemoveMachineHealthTask"].attrib["Before"] == "RemoveFiles"
@@ -188,6 +194,8 @@ def test_macos_installer_registers_machine_health_launch_daemon() -> None:
     assert 'install -o root -g wheel -m 0644 "${ROLLBACK_PLIST}" "${LAUNCH_DAEMON}"' in postinstall
     assert "/bin/launchctl enable system/org.hol.guard.machine-health" in postinstall
     assert postinstall.index("mdm device-key-provision") < postinstall.index("rollback_armed=1")
+    assert postinstall.index("mdm device-key-provision") < postinstall.index("mdm continuity-provision")
+    assert postinstall.index("mdm continuity-provision") < postinstall.index("rollback_armed=1")
     assert "device-key-revoke" not in postinstall
 
 
