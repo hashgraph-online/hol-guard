@@ -58,7 +58,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def get_status(guard_home: Path, *, package_version: str = "") -> tuple[TrayState, TrayCapability, TrayLocator | None]:
+def get_status(
+    guard_home: Path,
+    *,
+    package_version: str = "",
+    adapter: TrayPlatformAdapter | None = None,
+) -> tuple[TrayState, TrayCapability, TrayLocator | None]:
     """Return the current tray state, capability, and locator (if any).
 
     Reconciles on-disk locator with live process state:
@@ -81,7 +86,8 @@ def get_status(guard_home: Path, *, package_version: str = "") -> tuple[TrayStat
         # No running process. Check if a startup registration exists
         # (LaunchAgent/Task Scheduler/XDG autostart) so the dashboard
         # can show INSTALLED vs SUPPORTED.
-        adapter = detect_platform_adapter()
+        if adapter is None:
+            adapter = detect_platform_adapter()
         if adapter is not None:
             try:
                 reg = adapter.inspect_registration(guard_home=guard_home)
@@ -135,7 +141,7 @@ def start_tray(
         )
 
     # Check for existing running tray
-    state, _, existing_locator = get_status(guard_home, package_version=package_version)
+    state, _, existing_locator = get_status(guard_home, package_version=package_version, adapter=adapter)
     if state == TrayState.RUNNING and existing_locator is not None:
         if force:
             logger.info("tray: force-stopping existing tray at pid %s", existing_locator.pid)
