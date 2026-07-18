@@ -256,11 +256,15 @@ def build_runtime_executable_identity(
         return with_launch_cwd(_unreusable_executable_identity(command, status="not_regular", path=canonical))
     stat_key = _executable_stat_key(metadata)
     digest, hash_status, shebang, shebang_status = _cached_executable_hash(str(canonical), stat_key)
+    if shebang_status == "verified":
+        file_format = "script"
+    elif shebang_status == "not_script":
+        file_format = "native"
+    else:
+        file_format = "unverified"
     identity: dict[str, object] = {
         "command": command,
-        "file_format": (
-            "script" if shebang_status == "verified" else "native" if shebang_status == "not_script" else "unverified"
-        ),
+        "file_format": file_format,
         "path": str(canonical),
         "shebang_status": shebang_status,
         "size": metadata.st_size,

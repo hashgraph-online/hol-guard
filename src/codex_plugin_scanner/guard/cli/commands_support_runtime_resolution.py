@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from ._commands_shared import _now
-    from .commands_support_connect import _synced_policy_payload
     from .commands_support_hook_payload import _action_envelope_json, _coalesce_string
     from .commands_support_runtime_artifacts import _CODEX_PROMPT_SECRET_KEY_MARKERS
 
@@ -19,6 +18,7 @@ from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..runtime.approval_context import build_runtime_launch_identity
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
+from ..synced_policy import synced_policy_payload as _synced_policy_payload
 
 def _redact_codex_prompt_secret_assignments(value: str) -> str:
     output: list[str] = []
