@@ -6,6 +6,7 @@ import {
   HiMiniCog6Tooth,
   HiMiniLockClosed,
   HiMiniShieldCheck,
+  HiMiniWindow,
 } from "react-icons/hi2";
 
 export type LocalSettingsTabKey =
@@ -14,6 +15,7 @@ export type LocalSettingsTabKey =
   | "notifications"
   | "risk"
   | "defaults"
+  | "tray"
   | "maintenance";
 
 export type LocalSettingsNavGroupKey = "local";
@@ -47,6 +49,7 @@ const ICON_NOTIFICATIONS = <HiMiniBellAlert className="h-4 w-4" aria-hidden="tru
 const ICON_RISK = <HiMiniAdjustmentsHorizontal className="h-4 w-4" aria-hidden="true" />;
 const ICON_DEFAULTS = <HiMiniCog6Tooth className="h-4 w-4" aria-hidden="true" />;
 const ICON_MAINTENANCE = <HiMiniCircleStack className="h-4 w-4" aria-hidden="true" />;
+const ICON_TRAY = <HiMiniWindow className="h-4 w-4" aria-hidden="true" />;
 
 export const localSettingsNavItems: readonly LocalSettingsNavItem[] = [
   {
@@ -90,6 +93,14 @@ export const localSettingsNavItems: readonly LocalSettingsNavItem[] = [
     icon: ICON_DEFAULTS,
   },
   {
+    key: "tray",
+    label: "Tray icon",
+    mobileLabel: "Tray",
+    summary: "Menu-bar icon for opening the dashboard without a terminal.",
+    group: "local",
+    icon: ICON_TRAY,
+  },
+  {
     key: "maintenance",
     label: "Data & repair",
     mobileLabel: "Data",
@@ -110,6 +121,7 @@ export const localSettingsTabLabels: Record<LocalSettingsTabKey, string> = {
   notifications: "Notifications",
   risk: "Fine-tuning",
   defaults: "Fallback rules",
+  tray: "Tray icon",
   maintenance: "Data & repair",
 };
 
@@ -120,6 +132,7 @@ export function isLocalSettingsTabKey(value: string): value is LocalSettingsTabK
     || value === "notifications"
     || value === "risk"
     || value === "defaults"
+    || value === "tray"
     || value === "maintenance"
   );
 }

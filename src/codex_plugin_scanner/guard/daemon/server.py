@@ -1442,7 +1442,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             config = load_guard_config(store.guard_home)
             self._write_json(_settings_response_payload(store.guard_home, editable_guard_settings(config)))
             return
-        if parsed.path == "/v1/update/status":
+        if parsed.path == "/v1/tray/status":
+            self._handle_tray_status()
+            return
+        if parsed.path == "/v1/update-status":
             self._write_json(
                 merge_dashboard_update_progress(
                     store.guard_home,
@@ -1891,6 +1894,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     force_pypi_reinstall=force_pypi_reinstall,
                 )
             )
+            return
+        if parsed.path == "/v1/tray/start":
+            self._handle_tray_action("start", payload)
+            return
+        if parsed.path == "/v1/tray/stop":
+            self._handle_tray_action("stop", payload)
+            return
+        if parsed.path == "/v1/tray/restart":
+            self._handle_tray_action("restart", payload)
+            return
+        if parsed.path == "/v1/tray/repair":
+            self._handle_tray_action("repair", payload)
+            return
+        if parsed.path == "/v1/tray/install":
+            self._handle_tray_action("install", payload)
+            return
+        if parsed.path == "/v1/tray/uninstall":
+            self._handle_tray_action("uninstall", payload)
             return
         if parsed.path == "/v1/notifications/setup":
             self._handle_notification_setup(payload)
@@ -3725,6 +3746,92 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         guidance = macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None
         self._write_json(desktop_notification_setup_payload(result, guidance=guidance))
 
+    def _handle_tray_status(self) -> None:
+        """Return the current tray status as JSON.
+
+        Delegates to ``tray.lifecycle.get_status`` which returns a
+        ``TrayLifecycleResult`` (already redacted; no tokens emitted).
+        """
+        from ..tray.lifecycle import get_status as get_tray_status
+        try:
+            state, capability, locator = get_tray_status(self.server.store.guard_home)  # type: ignore[attr-defined]
+        except Exception as error:
+            self._write_json({"error": "tray_status_failed", "message": str(error)}, status=500)
+            return
+        self._write_json(
+            {
+                "state": state.value,
+                "capability": capability.to_payload(),
+                "locator": locator.to_payload() if locator else None,
+            }
+        )
+
+    def _handle_tray_action(self, action: str, payload: dict[str, object]) -> None:
+        """Dispatch a tray lifecycle action (start/stop/restart/repair/install/uninstall).
+
+        All actions return the ``TrayLifecycleResult`` payload from the tray
+        service. No tokens or secrets are emitted — ``TrayLifecycleResult``
+        only carries state, reason code, message, and the redacted locator.
+        """
+        del payload  # no action currently accepts a payload body
+        from ..tray.contracts import TrayLifecycleResult, TrayReasonCode, TrayState
+        from ..tray.lifecycle import (
+            install_registration,
+            remove_registration,
+            repair_tray,
+            start_tray,
+            stop_tray,
+        )
+        from ..tray.platforms import detect_platform_adapter
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+
+        # install/uninstall require a platform adapter (LaunchAgent/Run-key/XDG).
+        # Detect once; if unsupported, all actions return UNSUPPORTED.
+        adapter = detect_platform_adapter()
+
+        try:
+            if action == "start":
+                result = start_tray(guard_home)
+            elif action == "stop":
+                result = stop_tray(guard_home)
+            elif action == "repair":
+                result = repair_tray(guard_home)
+            elif action == "install":
+                if adapter is None:
+                    result = TrayLifecycleResult(
+                        ok=False,
+                        state=TrayState.UNSUPPORTED,
+                        reason=TrayReasonCode.UNSUPPORTED_PLATFORM,
+                        message="Tray startup registration is not supported on this platform",
+                    )
+                else:
+                    result = install_registration(guard_home, adapter=adapter)
+            elif action == "uninstall":
+                if adapter is None:
+                    result = TrayLifecycleResult(
+                        ok=False,
+                        state=TrayState.UNSUPPORTED,
+                        reason=TrayReasonCode.UNSUPPORTED_PLATFORM,
+                        message="Tray startup registration is not supported on this platform",
+                    )
+                else:
+                    result = remove_registration(guard_home, adapter=adapter)
+            elif action == "restart":
+                stop_tray(guard_home)
+                result = start_tray(guard_home)
+            else:
+                self._write_json({"error": "unknown_action", "action": action}, status=400)
+                return
+        except Exception as error:
+            # Error message is returned to the dashboard; no logger available
+            # in the daemon server module (no logging imported here).
+            self._write_json(
+                {"error": "tray_action_failed", "action": action, "message": str(error)},
+                status=500,
+            )
+            return
+        self._write_json(result.to_payload())
+
     def _handle_requests_list(self, query_string: str) -> None:
         limit = self._query_limit(query_string, default=200, maximum=200)
         if limit is None:
@@ -4916,6 +5023,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/daemon/repair",
             "/v1/notifications/setup",
             "/v1/update/status",
+            "/v1/tray/status",
         }:
             return True
         # Hosted dashboard access is blocked for these routes, but local
@@ -5578,6 +5686,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/cloud/connect",
             "/v1/notifications/setup",
             "/v1/update",
+            "/v1/tray/start",
+            "/v1/tray/stop",
+            "/v1/tray/restart",
+            "/v1/tray/repair",
+            "/v1/tray/install",
+            "/v1/tray/uninstall",
         }:
             return True
         if len(path_parts) >= 3 and path_parts[:2] == ["v1", "hooks"]:
