@@ -18,6 +18,14 @@ def test_hol_guard_routes_policy_as_a_top_level_command() -> None:
     ) == ["guard", "policy", "validate", "policy.yaml"]
 
 
+def test_hol_guard_routes_policy_export_format_as_a_top_level_command() -> None:
+    assert _resolve_legacy_args(
+        ["policy", "export", "--format", "yaml"],
+        program_mode="combined",
+        program_name="hol-guard",
+    ) == ["guard", "policy", "export", "--format", "yaml"]
+
+
 def test_policy_export_validate_format_and_diff(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     home = tmp_path / "home"
     policy_file = tmp_path / "policy.yaml"
@@ -27,6 +35,8 @@ def test_policy_export_validate_format_and_diff(tmp_path: Path, capsys: pytest.C
             "guard",
             "policy",
             "export",
+            "--format",
+            "yaml",
             "--home",
             str(home),
             "--output",
@@ -75,6 +85,26 @@ def test_policy_export_validate_format_and_diff(tmp_path: Path, capsys: pytest.C
         "broad_relaxing_changes": [],
         "requires_high_risk_approval": False,
     }
+
+
+def test_policy_show_and_explain_active_document(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home = tmp_path / "home"
+
+    show_rc = main(["guard", "policy", "show", "--home", str(home)])
+    shown_policy = capsys.readouterr().out
+    explain_rc = main(["guard", "policy", "explain", "--home", str(home), "--json"])
+    explanation = json.loads(capsys.readouterr().out)
+
+    assert show_rc == 0
+    assert "apiVersion: guard.hashgraphonline.com/v1alpha1" in shown_policy
+    assert explain_rc == 0
+    assert explanation["rules"] == 0
+    assert explanation["compiled_rows"] == 0
+    assert explanation["actions"] == {}
+    assert explanation["scopes"] == {}
 
 
 def test_policy_import_is_feature_gated_and_dry_run_by_default(

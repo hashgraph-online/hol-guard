@@ -166,6 +166,35 @@ def test_hgc071_signed_policy_bundle_parses() -> None:
     assert verifier["algorithm"] == "rsa-pss-sha256"
 
 
+def test_hgc073_signed_policy_bundle_rejects_payload_hash_mismatch() -> None:
+    bundle, trusted_keys = _signed_policy_bundle()
+    bundle["payloadHash"] = f"sha256:{'0' * 64}"
+
+    validated_bundle, reason = validated_policy_bundle_payload(
+        bundle,
+        trusted_verification_keys=trusted_keys,
+        anchored_verification_keys=trusted_keys,
+    )
+
+    assert validated_bundle is None
+    assert reason == "payload_hash_mismatch"
+
+
+def test_hgc073_signed_policy_bundle_rejects_invalid_payload_hash() -> None:
+    for payload_hash in (None, "", 123):
+        bundle, trusted_keys = _signed_policy_bundle()
+        bundle["payloadHash"] = payload_hash
+
+        validated_bundle, reason = validated_policy_bundle_payload(
+            bundle,
+            trusted_verification_keys=trusted_keys,
+            anchored_verification_keys=trusted_keys,
+        )
+
+        assert validated_bundle is None
+        assert reason == "payload_hash_invalid"
+
+
 def test_hgc073_signed_policy_bundle_rejects_invalid_signature() -> None:
     bundle, trusted_keys = _signed_policy_bundle()
     verifier = dict(bundle["verifier"]) if isinstance(bundle["verifier"], dict) else {}
