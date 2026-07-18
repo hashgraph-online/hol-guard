@@ -24,18 +24,19 @@ _REVIEW_PUBLIC_KEY_PEM = (
 )
 
 
-def review_verification_keys() -> list[dict[str, object]]:
+def review_verification_keys(*, workspace_id: str = "workspace-1") -> list[dict[str, object]]:
     return [
         policy_bundle_verification_key_from_public_key(
             key_id=REVIEW_SIGNING_KEY_ID,
             public_key_pem=_REVIEW_PUBLIC_KEY_PEM,
+            workspace_id=workspace_id,
         ).to_dict()
     ]
 
 
 def review_trusted_keyring_payload(
     *,
-    workspace_id: str | None = "workspace-1",
+    workspace_id: str = "workspace-1",
 ) -> dict[str, object]:
     return policy_bundle_keyring_payload(
         tuple(
@@ -43,9 +44,10 @@ def review_trusted_keyring_payload(
                 key_id=item["keyId"],
                 public_key_pem=str(item["publicKeyPem"]),
                 state=str(item["state"]),
+                workspace_id=workspace_id,
                 valid_until=str(item["validUntil"]) if item["validUntil"] is not None else None,
             )
-            for item in review_verification_keys()
+            for item in review_verification_keys(workspace_id=workspace_id)
         ),
         workspace_id=workspace_id,
     )

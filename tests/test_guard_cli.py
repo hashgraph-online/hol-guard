@@ -36,8 +36,14 @@ from codex_plugin_scanner.guard.cli import update_commands as guard_update_comma
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, resolve_risk_action
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
+from codex_plugin_scanner.guard.policy_bundle_parser import (
+    computed_policy_bundle_hash,
+    payload_hash_for_policy_bundle,
+)
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
 
 def _seed_guard_cloud(
@@ -59,6 +65,12 @@ def _seed_guard_cloud(
         workspace_id=workspace_id,
         now=now,
     )
+    if workspace_id is not None:
+        store.set_sync_payload(
+            "policy_bundle_keyring",
+            policy_bundle_test_keyring(workspace_id=workspace_id),
+            now,
+        )
     if sync_url is not None:
         captured_sync_url = sync_url
         captured_token = token
@@ -68,6 +80,25 @@ def _seed_guard_cloud(
 
         _mp = pytest.MonkeyPatch()
         _mp.setattr(guard_runner_module, "_resolve_guard_sync_auth_context", _fake_resolve)
+
+
+def _signed_status_policy_bundle(*, workspace_id: str = "workspace-1") -> dict[str, object]:
+    policy_bundle = build_cloud_exception_policy_bundle(workspace_id=workspace_id)
+    policy_bundle["bundleVersion"] = "policy-2026-05-01.3"
+    policy_bundle["rolloutState"] = "enforcing"
+    return sign_policy_bundle(policy_bundle, workspace_id=workspace_id)
+
+
+def _digest_only_status_policy_bundle(*, workspace_id: str = "workspace-1") -> dict[str, object]:
+    policy_bundle = _signed_status_policy_bundle(workspace_id=workspace_id)
+    policy_bundle["verifier"] = {
+        "algorithm": "sha256",
+        "keyId": "attacker-recomputed-digest",
+        "signature": None,
+    }
+    policy_bundle["bundleHash"] = computed_policy_bundle_hash(policy_bundle)
+    policy_bundle["payloadHash"] = payload_hash_for_policy_bundle(policy_bundle)
+    return policy_bundle
 
 
 def _disable_oauth_persistence_assert(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -98,12 +129,18 @@ def _read_codex_config(path: Path) -> dict[str, object]:
         return tomllib.load(handle)
 
 
-def _seed_sync_credentials(home_dir: Path, sync_url: str, token: str = "demo-token") -> None:
+def _seed_sync_credentials(
+    home_dir: Path,
+    sync_url: str,
+    token: str = "demo-token",
+    workspace_id: str = "workspace-1",
+) -> None:
     from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
     from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 
     dpop_key_material = generate_dpop_key_pair()
-    GuardStore(home_dir).set_oauth_local_credentials(
+    store = GuardStore(home_dir)
+    store.set_oauth_local_credentials(
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token=token,
@@ -112,7 +149,13 @@ def _seed_sync_credentials(home_dir: Path, sync_url: str, token: str = "demo-tok
         dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
         grant_id="grant-1",
         machine_id="machine-1",
+        workspace_id=workspace_id,
         now="2026-04-09T00:00:00Z",
+    )
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id=workspace_id),
+        "2026-04-09T00:00:00Z",
     )
     guard_runner_module._test_sync_auth_context_override = {
         "sync_url": sync_url,
@@ -2573,9 +2616,23 @@ args = ["workspace-skill.js", "--changed"]
             store = kwargs["store"]
             current_config_provider = kwargs["current_config_provider"]
             _write_text(store.guard_home / "config.toml", 'default_action = "warn"\n')
+            policy_bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
+            policy_defaults = policy_bundle["policyDefaults"]
+            assert isinstance(policy_defaults, dict)
+            policy_defaults["defaultAction"] = "block"
             store.set_sync_payload(
-                "policy",
-                {"defaultAction": "block"},
+                "oauth_local_credentials",
+                {"workspace_id": "workspace-1"},
+                "2026-07-17T00:00:00+00:00",
+            )
+            store.set_sync_payload(
+                "policy_bundle_keyring",
+                policy_bundle_test_keyring(workspace_id="workspace-1"),
+                "2026-07-17T00:00:00+00:00",
+            )
+            store.set_sync_payload(
+                "policy_bundle",
+                sign_policy_bundle(policy_bundle, workspace_id="workspace-1"),
                 "2026-07-17T00:00:00+00:00",
             )
             captured["config"] = current_config_provider()
@@ -6807,7 +6864,7 @@ url = http://127.0.0.1:8787/guard-canary
                 "issuedAt": "2026-06-05T13:45:00Z",
                 "expiresAt": None,
                 "verifier": {
-                    "algorithm": "sha256",
+                    "algorithm": "rsa-pss-sha256",
                     "keyId": "guard-policy-bundle-v1",
                     "signature": None,
                 },
@@ -6827,7 +6884,7 @@ url = http://127.0.0.1:8787/guard-canary
             },
         }
         policy_bundle = _SyncRequestHandler.response_payload["policyBundle"]
-        policy_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(policy_bundle)
+        _SyncRequestHandler.response_payload["policyBundle"] = sign_policy_bundle(policy_bundle)
 
         server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -6854,13 +6911,10 @@ url = http://127.0.0.1:8787/guard-canary
         store = GuardStore(home_dir)
         now = "2026-05-01T00:00:00Z"
         _seed_guard_cloud(store)
+        policy_bundle = _signed_status_policy_bundle()
         store.set_sync_payload(
             "policy_bundle",
-            {
-                "bundleVersion": "policy-2026-05-01.3",
-                "bundleHash": "sha256:bundle-proof",
-                "rolloutState": "enforcing",
-            },
+            policy_bundle,
             now,
         )
         store.set_sync_payload(
@@ -6874,9 +6928,26 @@ url = http://127.0.0.1:8787/guard-canary
 
         assert rc == 0
         assert payload["cloud_policy_bundle_version"] == "policy-2026-05-01.3"
-        assert payload["cloud_policy_bundle_hash"] == "sha256:bundle-proof"
+        assert payload["cloud_policy_bundle_hash"] == policy_bundle["bundleHash"]
         assert payload["cloud_policy_rollout_state"] == "enforcing"
         assert payload["cloud_policy_sync_error"] == "auth_expired"
+
+    def test_guard_status_rejects_digest_only_cached_bundle_metadata(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        now = "2026-05-01T00:00:00Z"
+        _seed_guard_cloud(store)
+        store.set_sync_payload("policy_bundle", _digest_only_status_policy_bundle(), now)
+        store.set_sync_payload("policy_bundle_last_error", {"reason": "auth_expired"}, now)
+
+        rc = main(["guard", "status", "--home", str(home_dir), "--json"])
+        payload = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert payload["cloud_policy_bundle_version"] is None
+        assert payload["cloud_policy_bundle_hash"] is None
+        assert payload["cloud_policy_rollout_state"] is None
+        assert payload["cloud_policy_sync_error"] == "unsupported_signature_algorithm"
 
     def test_guard_status_explains_local_only_policy_state(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -8772,12 +8843,10 @@ url = http://127.0.0.1:8787/guard-canary
         assert sync_output["advisories_stored"] == 1
         assert advisories_output["items"][0]["publisher"] == "hashgraph-online"
         assert advisories_output["items"][0]["headline"] == "Publisher rotated to a new remote domain."
-        assert any(item["source"] == "cloud-sync" and item["action"] == "allow" for item in policies_output["items"])
-        assert any(
-            item["source"] == "team-policy" and item["publisher"] == "hashgraph-online"
-            for item in policies_output["items"]
+        assert not any(
+            item["source"] in {"cloud-sync", "team-policy", "policy-bundle"} for item in policies_output["items"]
         )
-        assert exceptions_output["items"][0]["artifact_id"] == "codex:project:workspace_skill"
+        assert exceptions_output["items"] == []
 
     def test_guard_exceptions_handles_synced_naive_expiry_timestamps(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -8808,7 +8877,7 @@ url = http://127.0.0.1:8787/guard-canary
             login_rc = 0
 
             sync_rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
-            json.loads(capsys.readouterr().out)
+            sync_output = json.loads(capsys.readouterr().out)
             exceptions_rc = main(["guard", "exceptions", "--home", str(home_dir), "--json"])
             exceptions_output = json.loads(capsys.readouterr().out)
         finally:
@@ -8818,7 +8887,8 @@ url = http://127.0.0.1:8787/guard-canary
         assert login_rc == 0
         assert sync_rc == 0
         assert exceptions_rc == 0
-        assert exceptions_output["items"][0]["expires_at"] == "2099-01-01T00:00:00+00:00"
+        assert sync_output["exceptions_stored"] == 0
+        assert exceptions_output["items"] == []
 
     def test_guard_sync_clears_cached_policy_when_server_omits_it(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -8911,7 +8981,7 @@ url = http://127.0.0.1:8787/guard-canary
                 "issuedAt": "2026-04-09T00:00:00Z",
                 "expiresAt": None,
                 "verifier": {
-                    "algorithm": "sha256",
+                    "algorithm": "rsa-pss-sha256",
                     "keyId": "guard-policy-bundle-v1",
                     "signature": None,
                 },
@@ -8926,7 +8996,22 @@ url = http://127.0.0.1:8787/guard-canary
                     "telemetryEnabled": False,
                     "syncEnabled": True,
                 },
-                "rules": [],
+                "rules": [
+                    {
+                        "ruleId": "block-global-tools",
+                        "action": "block",
+                        "reason": "Block the global tools fixture through signed policy authority.",
+                        "artifactId": "codex:global:global_tools",
+                        "scope": {
+                            "agents": [],
+                            "devices": [],
+                            "ecosystems": [],
+                            "environments": [],
+                            "harnesses": ["codex"],
+                            "locations": [],
+                        },
+                    }
+                ],
                 "acknowledgements": [
                     {
                         "deviceId": "device-1",
@@ -8957,7 +9042,8 @@ url = http://127.0.0.1:8787/guard-canary
             },
         }
         policy_bundle = _SyncRequestHandler.response_payload["policyBundle"]
-        policy_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(policy_bundle)
+        signed_policy_bundle = sign_policy_bundle(policy_bundle)
+        _SyncRequestHandler.response_payload["policyBundle"] = signed_policy_bundle
 
         server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -8989,40 +9075,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert _SyncRequestHandler.captured_body is not None
         assert run_output["blocked"] is True
         store = GuardStore(home_dir)
-        assert store.get_sync_payload("policy_bundle") == {
-            "contractVersion": "guard-policy-bundle.v1",
-            "bundleVersion": "policy-2026-04-09.1",
-            "bundleHash": guard_runner_module._computed_policy_bundle_hash(
-                _SyncRequestHandler.response_payload["policyBundle"]
-            ),
-            "issuedAt": "2026-04-09T00:00:00Z",
-            "expiresAt": None,
-            "verifier": {
-                "algorithm": "sha256",
-                "keyId": "guard-policy-bundle-v1",
-                "signature": None,
-            },
-            "rolloutState": "enforcing",
-            "policyDefaults": {
-                "mode": "enforce",
-                "defaultAction": "warn",
-                "unknownPublisherAction": "review",
-                "changedHashAction": "allow",
-                "newNetworkDomainAction": "warn",
-                "subprocessAction": "block",
-                "telemetryEnabled": False,
-                "syncEnabled": True,
-            },
-            "rules": [],
-            "acknowledgements": [
-                {
-                    "deviceId": "device-1",
-                    "deviceName": "Guard local daemon",
-                    "acknowledgedAt": "2026-04-09T00:01:00Z",
-                    "status": "synced",
-                }
-            ],
-        }
+        assert store.get_sync_payload("policy_bundle") == signed_policy_bundle
         assert any(
             artifact["artifact_id"] == "codex:global:global_tools" and artifact["policy_action"] == "block"
             for artifact in run_output["artifacts"]
@@ -9031,6 +9084,7 @@ url = http://127.0.0.1:8787/guard-canary
     def test_synced_policy_payload_prefers_bundle_defaults(self, tmp_path):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
+        _seed_guard_cloud(store)
         store.set_sync_payload(
             "policy",
             {
@@ -9055,7 +9109,7 @@ url = http://127.0.0.1:8787/guard-canary
                 "issuedAt": "2026-04-09T00:10:00Z",
                 "expiresAt": None,
                 "verifier": {
-                    "algorithm": "sha256",
+                    "algorithm": "rsa-pss-sha256",
                     "keyId": "guard-policy-bundle-v1",
                     "signature": None,
                 },
@@ -9075,6 +9129,10 @@ url = http://127.0.0.1:8787/guard-canary
             },
             "2026-04-09T00:10:00Z",
         )
+        cached_bundle = store.get_sync_payload("policy_bundle")
+        assert isinstance(cached_bundle, dict)
+        cached_bundle = sign_policy_bundle(cached_bundle)
+        store.set_sync_payload("policy_bundle", cached_bundle, "2026-04-09T00:10:00Z")
 
         assert guard_commands_module._synced_policy_payload(store) == {
             "mode": "enforce",
@@ -9086,9 +9144,25 @@ url = http://127.0.0.1:8787/guard-canary
             "telemetryEnabled": False,
             "syncEnabled": True,
             "updatedAt": "2026-04-09T00:10:00Z",
-            "bundleHash": "sha256:cf9abe12666da1cbd99e0aeb7b94d15f34c5051bb69bff1e5208477f305e6362",
+            "bundleHash": cached_bundle["bundleHash"],
             "bundleVersion": "policy-2026-04-09.1",
         }
+
+    def test_synced_policy_payload_fails_closed_for_unauthenticated_cached_bundle(self, tmp_path):
+        store = GuardStore(tmp_path / "home")
+        _seed_guard_cloud(store)
+        fallback_policy = {"mode": "observe", "defaultAction": "warn"}
+        store.set_sync_payload("policy", fallback_policy, "2026-04-09T00:00:00Z")
+        digest_bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
+        digest_bundle["verifier"] = {
+            "algorithm": "sha256",
+            "keyId": "legacy-digest-only",
+            "signature": None,
+        }
+        digest_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(digest_bundle)
+        store.set_sync_payload("policy_bundle", digest_bundle, "2026-04-09T00:10:00Z")
+
+        assert guard_commands_module._synced_policy_payload(store) is None
 
     def test_guard_invalid_harness_returns_parser_error(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -9428,7 +9502,16 @@ url = http://127.0.0.1:8787/guard-canary
             "message": "Guard authorization expired. Run `hol-guard connect` to sign in again.",
         }
 
-    def test_refresh_cloud_policy_bundle_preserves_bundle_rejection_reason(self, tmp_path, monkeypatch):
+    @pytest.mark.parametrize(
+        "rejection_reason",
+        ["bundle_version_downgrade", "inactive_rollout_state"],
+    )
+    def test_refresh_cloud_policy_bundle_preserves_bundle_rejection_reason(
+        self,
+        tmp_path,
+        monkeypatch,
+        rejection_reason,
+    ):
         home_dir = tmp_path / "home"
         _disable_oauth_persistence_assert(monkeypatch)
         store = GuardStore(home_dir)
@@ -9437,7 +9520,7 @@ url = http://127.0.0.1:8787/guard-canary
         def _bundle_rejected(current_store: GuardStore, **_kwargs: object) -> dict[str, object]:
             current_store.set_sync_payload(
                 "policy_bundle_last_error",
-                {"reason": "bundle_version_downgrade"},
+                {"reason": rejection_reason},
                 "2026-04-09T00:00:00Z",
             )
             return {"synced": True}
@@ -9459,7 +9542,7 @@ url = http://127.0.0.1:8787/guard-canary
         guard_commands_module._refresh_cloud_policy_bundle(store, bundle_only=True)
 
         assert store.get_sync_payload("policy_bundle_last_error") == {
-            "reason": "bundle_version_downgrade",
+            "reason": rejection_reason,
         }
 
     def test_refresh_cloud_policy_bundle_preserves_bundle_hash_mismatch_reason(self, tmp_path, monkeypatch):

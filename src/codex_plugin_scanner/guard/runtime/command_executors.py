@@ -808,7 +808,7 @@ def _existing_non_review_remote_policies(store: GuardStore) -> list[PolicyDecisi
     for item in store.list_policy_decisions():
         if item.get("source") in {"cloud-signed-memory"}:
             continue
-        if item.get("source") not in {"cloud-sync", "team-policy", "policy-bundle"}:
+        if item.get("source") != "policy-bundle":
             continue
         scope = _optional_string(item.get("scope"))
         action = _optional_string(item.get("action"))

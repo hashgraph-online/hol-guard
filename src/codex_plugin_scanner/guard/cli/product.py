@@ -15,6 +15,7 @@ from ..daemon import load_guard_daemon_url
 from ..models import GuardArtifact, HarnessDetection
 from ..redaction import redact_local_path
 from ..store import GuardStore
+from ..synced_policy import synced_policy_bundle_validation
 from .connect_flow import (
     CONNECT_COMMAND,
     CONNECT_REPAIR_COMMAND,
@@ -251,10 +252,11 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     dashboard_url, connect_url, inbox_url, fleet_url = _resolve_guard_urls(sync_url)
     advisories = store.list_cached_advisories(limit=3)
     alert_preferences = _coerce_payload_dict(store.get_sync_payload("alert_preferences"))
-    remote_policy = _coerce_payload_dict(store.get_sync_payload("policy"))
-    policy_bundle = _coerce_payload_dict(store.get_sync_payload("policy_bundle"))
+    policy_bundle, cached_policy_bundle_error = synced_policy_bundle_validation(store)
+    policy_bundle = policy_bundle or {}
+    policy_defaults = policy_bundle.get("policyDefaults")
+    remote_policy = _coerce_payload_dict(policy_defaults if isinstance(policy_defaults, dict) else None)
     policy_bundle_last_error = _coerce_payload_dict(store.get_sync_payload("policy_bundle_last_error"))
-    team_policy_pack = _coerce_payload_dict(store.get_sync_payload("team_policy_pack"))
     sync_summary = _coerce_payload_dict(store.get_sync_payload("sync_summary"))
     last_sync_at = _optional_string(sync_summary.get("synced_at"))
     effective_connect_state = store.get_effective_guard_connect_state(now=_now())
@@ -268,7 +270,7 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     )
     connect_retry_required = _connect_retry_required(latest_connect_state)
     connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
-    remote_payload_active = bool(advisories or alert_preferences or remote_policy or team_policy_pack)
+    remote_payload_active = bool(advisories or alert_preferences or remote_policy)
     cloud_state = resolve_guard_cloud_state(
         sync_configured=cloud_profile is not None,
         sync_completed=bool(sync_summary),
@@ -306,13 +308,14 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
         "cloud_policy_bundle_hash": _optional_string(policy_bundle.get("bundleHash")),
         "cloud_policy_bundle_version": _optional_string(policy_bundle.get("bundleVersion")),
         "cloud_policy_rollout_state": _optional_string(policy_bundle.get("rolloutState")),
-        "cloud_policy_sync_error": _optional_string(policy_bundle_last_error.get("reason")),
+        "cloud_policy_sync_error": cached_policy_bundle_error
+        or _optional_string(policy_bundle_last_error.get("reason")),
         "alert_preferences_active": bool(alert_preferences),
         "watchlist_enabled": bool(alert_preferences.get("watchlistEnabled")),
         "team_alerts_enabled": bool(alert_preferences.get("teamAlertsEnabled")),
-        "team_policy_active": bool(team_policy_pack),
-        "team_policy_name": _optional_string(team_policy_pack.get("name")),
-        "team_policy_updated_at": _optional_string(team_policy_pack.get("updatedAt")),
+        "team_policy_active": False,
+        "team_policy_name": None,
+        "team_policy_updated_at": None,
     }
 
 

@@ -765,6 +765,7 @@ def test_local_request_snapshot_preserves_scrubbed_command_when_redaction_is_par
 
 def test_local_request_snapshot_syncs_raw_command_aliases_and_routing_when_redaction_disabled(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class RequestStore(FakeStore):
         def list_approval_requests(
@@ -790,7 +791,11 @@ def test_local_request_snapshot_syncs_raw_command_aliases_and_routing_when_redac
             return []
 
     store = RequestStore(tmp_path / "guard-home")
-    store.payloads["cloud_receipt_redaction_level"] = {"level": "none"}
+    monkeypatch.setattr(
+        local_request_snapshots,
+        "validated_synced_policy_bundle",
+        lambda _store: {"receiptRedactionLevel": "none"},
+    )
 
     snapshot = command_executors._local_request_snapshot_items(store)
 

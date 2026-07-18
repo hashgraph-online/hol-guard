@@ -22,15 +22,94 @@ from pathlib import Path
 from ..adapters.base import HarnessContext
 from ..cli.install_commands import apply_managed_install
 from ..daemon.manager import retire_all_guard_daemons_for_home
+from ..policy_bundle_trusted_keys import policy_bundle_keyring_payload
 from ..store import GuardStore
-from .contracts import MDM_STATUS_SCHEMA_VERSION, default_machine_paths
+from .contracts import MDM_STATUS_SCHEMA_VERSION, ManagedPolicy, default_machine_paths
 from .manifest import verify_release_manifest
 from .native import NativeInstallVerification, verify_native_install
 from .policy import load_managed_policy
 
+_MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_CONTRACT_VERSION = "guard-managed-policy-keyring-provenance.v1"
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _policy_bundle_keyring_hash(payload: dict[str, object]) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _managed_policy_bundle_keyring_provenance(
+    *,
+    policy: ManagedPolicy,
+    keyring: dict[str, object],
+) -> dict[str, object]:
+    workspace_id = keyring.get("workspaceId")
+    if not isinstance(workspace_id, str) or not workspace_id:
+        raise ValueError("managed_policy_bundle_keyring_workspace_invalid")
+    return {
+        "contractVersion": _MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_CONTRACT_VERSION,
+        "keyringSha256": _policy_bundle_keyring_hash(keyring),
+        "managedPolicyContentHash": policy.content_hash,
+        "workspaceId": workspace_id,
+    }
+
+
+def _remove_managed_policy_bundle_keyring(
+    store: GuardStore,
+    *,
+    force_clear: bool = False,
+) -> None:
+    store.reconcile_managed_policy_bundle_keyring_state(
+        managed_keyring=None,
+        quarantined_local_keyring=None,
+        provenance=None,
+        now=_now(),
+        force_clear=force_clear,
+    )
+
+
+def _reconcile_managed_policy_bundle_keyring(
+    store: GuardStore,
+    policy: ManagedPolicy | None,
+) -> None:
+    if policy is None:
+        _remove_managed_policy_bundle_keyring(store)
+        return
+    if policy.policy_bundle_keyring is None:
+        # A live machine policy owns this trust domain even when it explicitly
+        # omits signing anchors. Authorized repair must clear all legacy slots
+        # even if their user-writable provenance marker was removed.
+        _remove_managed_policy_bundle_keyring(store, force_clear=True)
+        return
+    keyring = policy.policy_bundle_keyring
+    managed_workspace_id = keyring.get("workspaceId")
+    connected_workspace_id = store.get_cloud_workspace_id()
+    if (
+        not isinstance(managed_workspace_id, str)
+        or not managed_workspace_id
+        or (connected_workspace_id is not None and connected_workspace_id != managed_workspace_id)
+    ):
+        raise ValueError("managed_policy_bundle_keyring_workspace_mismatch")
+    provenance = _managed_policy_bundle_keyring_provenance(
+        policy=policy,
+        keyring=keyring,
+    )
+    now = _now()
+    quarantined_local_keyring = policy_bundle_keyring_payload((), workspace_id=managed_workspace_id)
+    store.reconcile_managed_policy_bundle_keyring_state(
+        managed_keyring=keyring,
+        quarantined_local_keyring=quarantined_local_keyring,
+        provenance=provenance,
+        now=now,
+    )
 
 
 def _base(operation: str) -> dict[str, object]:
@@ -360,6 +439,9 @@ def activate_user(home: Path, user: str) -> dict[str, object]:
     with _activation_lock(guard_home):
         context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home)
         store = GuardStore(guard_home)
+        managed_policy_state = load_managed_policy()
+        if managed_policy_state.status in {"active", "absent"}:
+            _reconcile_managed_policy_bundle_keyring(store, managed_policy_state.policy)
         before = {str(item.get("harness")) for item in store.list_managed_installs() if bool(item.get("active"))}
         try:
             result = apply_managed_install("install", None, True, context, store, None, _now())
@@ -396,6 +478,7 @@ def deactivate_user(home: Path, *, authorization_fingerprint: str | None = None)
         store = GuardStore(guard_home)
         retired_pids = retire_all_guard_daemons_for_home(guard_home)
         result = apply_managed_install("uninstall", None, True, context, store, None, _now())
+        _remove_managed_policy_bundle_keyring(store, force_clear=True)
         (guard_home / "mdm-activation.json").unlink(missing_ok=True)
         _audit(guard_home / "logs" / "mdm-lifecycle.log", operation="deactivate", status="complete", scope="user")
     payload = _base("deactivate")

@@ -52,10 +52,27 @@ Local Policy must **not** author broad local exceptions directly.
 | `policy_bundle_trusted_keys.py` | Trusted signing keys, key expiry |
 | `store_approvals.py` | Local decision persistence substrate |
 
-Bundle parser capabilities today: canonical payload, `bundleHash` / `payloadHash`
-integrity, RSA-PSS signature verification, schema validation for rules and
-acknowledgements. Downgrade protection and exception expiry enforcement live in
-evaluator/sync paths and will be extended in later phases.
+Bundle authority is fail-closed. `bundleHash` and `payloadHash` are independent
+integrity checks, never signatures. The canonical payload—including rules,
+Cloud exceptions, acknowledgements, workspace binding, and optional fields—must
+have an RSA-PSS/SHA-256 signature from an active, workspace-bound
+`policy_bundle` key in the pinned local or machine-managed keyring. Embedded or
+sync-advertised public keys cannot bootstrap trust. See
+`mdm-deployment.md#policy-bundle-signing-trust` for managed first-install
+provisioning.
+
+Digest-only bundles and malformed or untrusted refreshes are rejected without
+applying rules. A still-current, previously verified bundle remains effective;
+otherwise remote materialized rows and Cloud exceptions are cleared. Legacy
+top-level `policy`, `teamPolicyPack`, and `exceptions` response fields are not
+covered by the bundle signature and are ignored as enforcement authority even
+when co-delivered with a valid bundle.
+
+The monotonic acceptance checkpoint records both `bundleHash` and the broader
+signed `payloadHash`. Cached current/LKG consumers re-check that checkpoint, and
+an alternate payload at the same issue time/version is rejected as unordered.
+Cloud exception or acknowledgement changes therefore require a newer signed
+bundle identity and cannot be replayed under an unchanged core hash.
 
 ### Guard Cloud (read-only audit for this slice)
 
@@ -190,7 +207,7 @@ delivery:
 | **Strict config** | Local fallback controls, simulator, evaluation order, bundle ack copy |
 | **Local daemon** | Validates signed bundles, persists active Cloud exceptions, rejects tampered/wrong-workspace payloads |
 | **Guard Cloud bundle** | Active exceptions compiled into `cloudExceptions` on receipt sync; expired/revoked rows omitted |
-| **Integrity** | Bundle hash/signing excludes `cloudExceptions` so local parser verification stays aligned |
+| **Integrity** | The signed canonical payload and its `payloadHash` include `cloudExceptions`; `bundleHash` remains the portal's narrower core projection. Pinned-key signature verification precedes storage or enforcement. |
 
 Release audit command:
 

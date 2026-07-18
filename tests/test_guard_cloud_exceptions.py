@@ -12,6 +12,53 @@ from codex_plugin_scanner.guard.cloud_exceptions import (
 )
 from codex_plugin_scanner.guard.runtime.runner import _persist_cloud_exceptions
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.cloud_exception_bundle_fixtures import (
+    build_cloud_exception_bundle_entry,
+    build_cloud_exception_policy_bundle,
+)
+from tests.policy_bundle_signing_helpers import (
+    policy_bundle_test_keyring,
+    policy_bundle_test_verification_key,
+    sign_policy_bundle,
+)
+
+_WORKSPACE_ID = "workspace-sync-proof"
+_PERSISTED_AT = "2026-06-13T00:00:00+00:00"
+
+
+def _cache_signed_cloud_exception_bundle(
+    store: GuardStore,
+    *,
+    cloud_exceptions: list[dict[str, object]],
+    now: str = _PERSISTED_AT,
+) -> tuple[dict[str, object], str, dict[str, object]]:
+    """Cache a signed bundle under the same workspace and device used by reads."""
+
+    device_id = str(store.get_device_metadata()["installation_id"])
+    bundle = build_cloud_exception_policy_bundle(
+        cloud_exceptions=cloud_exceptions,
+        workspace_id=_WORKSPACE_ID,
+        device_id=device_id,
+    )
+    acknowledgement = {
+        "appliedAt": now,
+        "bundleHash": bundle["bundleHash"],
+        "bundleVersion": bundle["bundleVersion"],
+        "deviceId": device_id,
+        "deviceName": "Cloud exception test device",
+        "status": "synced",
+    }
+    # The workspace metadata is the binding that cached-bundle validation reads.
+    # No OAuth secret is needed for these storage-only tests.
+    store.set_sync_payload("oauth_local_credentials", {"workspace_id": _WORKSPACE_ID}, now)
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id=_WORKSPACE_ID),
+        now,
+    )
+    store.set_sync_payload("policy_bundle", bundle, now)
+    store.set_sync_payload("policy_bundle_ack", acknowledgement, now)
+    return bundle, device_id, acknowledgement
 
 
 def _sample_sync_exception(*, exception_id: str = "artifact:codex:demo") -> dict[str, object]:
@@ -60,132 +107,198 @@ def test_expired_cloud_exceptions_are_not_active() -> None:
     assert active == []
 
 
-def test_persist_cloud_exceptions_stores_dto_in_sync_state(tmp_path: Path) -> None:
+def test_persist_cloud_exceptions_rejects_unsigned_sync_payload(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
     serialized = _persist_cloud_exceptions(
         store,
         sync_exceptions=[_sample_sync_exception()],
         now="2026-06-13T00:00:00Z",
     )
-    assert len(serialized) == 1
-    listed = store.list_cloud_exceptions()
-    assert len(listed) == 1
-    assert listed[0]["id"] == "artifact:codex:demo"
-    assert listed[0]["last_used_at"] is None
+    assert serialized == []
+    assert store.list_cloud_exceptions() == []
     stored = store.get_sync_payload("cloud_exceptions")
     assert isinstance(stored, list)
-    assert len(stored) == 1
+    assert stored == []
 
 
 def test_policy_bundle_cloud_exceptions_are_loaded(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
-    bundle = {
-        "bundleHash": "sha256:demo",
-        "cloudExceptions": [
-            {
-                "exceptionId": "bundle:1",
-                "effect": "allow",
-                "scope": "harness",
-                "harness": "codex",
-                "owner": "owner@example.com",
-                "expiresAt": "2099-01-01T00:00:00Z",
-            }
-        ],
-        "acknowledgements": [],
-    }
-    items = build_cloud_exceptions_from_policy_bundle(bundle, device_id="device-1")
-    assert len(items) == 1
-    assert items[0].bundle_hash == "sha256:demo"
-    _persist_cloud_exceptions(store, policy_bundle=bundle, now="2026-06-13T00:00:00Z")
-    assert store.list_cloud_exceptions(harness="codex")
-
-
-def test_missing_sync_payload_preserves_existing_sync_exceptions(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "home")
-    _persist_cloud_exceptions(
-        store,
-        sync_exceptions=[_sample_sync_exception(exception_id="sync:1")],
-        now="2026-06-13T00:00:00Z",
+    entry = build_cloud_exception_bundle_entry(
+        exception_id="bundle:1",
+        workspace_id=_WORKSPACE_ID,
     )
+    entry.update({"scope": "harness", "harness": "codex"})
+    bundle, device_id, acknowledgement = _cache_signed_cloud_exception_bundle(
+        store,
+        cloud_exceptions=[entry],
+    )
+    items = build_cloud_exceptions_from_policy_bundle(
+        bundle,
+        device_id=device_id,
+        policy_bundle_ack=acknowledgement,
+    )
+    assert len(items) == 1
+    assert items[0].bundle_hash == bundle["bundleHash"]
+    assert items[0].ack_status == "synced"
+    serialized = _persist_cloud_exceptions(
+        store,
+        device_id=device_id,
+        policy_bundle=bundle,
+        now=_PERSISTED_AT,
+    )
+    assert len(serialized) == 1
+    listed = store.list_cloud_exceptions(harness="codex")
+    assert [item["id"] for item in listed] == ["bundle:1"]
+    assert listed[0]["provenance"] == "policy-bundle"
+    assert listed[0]["ack_status"] == "synced"
+
+
+def test_legacy_receipt_sync_cache_is_not_authority_without_signed_bundle(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "home")
+    parsed = cloud_exception_from_mapping(_sample_sync_exception(exception_id="sync:1"))
+    assert parsed is not None
+    store.set_cloud_exceptions([parsed.to_dict()], _PERSISTED_AT)
+
+    assert store.get_sync_payload("cloud_exceptions") != []
+    assert store.list_cloud_exceptions() == []
+
     _persist_cloud_exceptions(store, sync_exceptions=None, now="2026-06-13T01:00:00Z")
-    listed = store.list_cloud_exceptions()
-    assert {item["id"] for item in listed} == {"sync:1"}
+    assert store.get_sync_payload("cloud_exceptions") == []
+    assert store.list_cloud_exceptions() == []
 
 
 def test_explicit_empty_sync_payload_clears_sync_exceptions(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
-    _persist_cloud_exceptions(
-        store,
-        sync_exceptions=[_sample_sync_exception(exception_id="sync:1")],
-        now="2026-06-13T00:00:00Z",
-    )
+    parsed = cloud_exception_from_mapping(_sample_sync_exception(exception_id="sync:1"))
+    assert parsed is not None
+    store.set_cloud_exceptions([parsed.to_dict()], _PERSISTED_AT)
     _persist_cloud_exceptions(store, sync_exceptions=[], now="2026-06-13T01:00:00Z")
+    assert store.get_sync_payload("cloud_exceptions") == []
     assert store.list_cloud_exceptions() == []
 
 
-def test_bundle_only_persist_preserves_existing_sync_exceptions(tmp_path: Path) -> None:
+def test_signed_bundle_ignores_unsigned_sync_exception_sibling(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
-    _persist_cloud_exceptions(
-        store,
-        sync_exceptions=[_sample_sync_exception(exception_id="sync:1")],
-        now="2026-06-13T00:00:00Z",
+    bundle_entry = build_cloud_exception_bundle_entry(
+        exception_id="bundle:1",
+        workspace_id=_WORKSPACE_ID,
     )
-    bundle = {
-        "bundleHash": "sha256:demo",
-        "cloudExceptions": [
-            {
-                "exceptionId": "bundle:1",
-                "effect": "allow",
-                "scope": "harness",
-                "harness": "codex",
-                "owner": "owner@example.com",
-                "expiresAt": "2099-01-01T00:00:00Z",
-            }
-        ],
-        "acknowledgements": [],
-    }
-    _persist_cloud_exceptions(store, policy_bundle=bundle, now="2026-06-13T01:00:00Z")
+    bundle, device_id, _acknowledgement = _cache_signed_cloud_exception_bundle(
+        store,
+        cloud_exceptions=[bundle_entry],
+    )
+    serialized = _persist_cloud_exceptions(
+        store,
+        device_id=device_id,
+        sync_exceptions=[_sample_sync_exception(exception_id="sync:1")],
+        policy_bundle=bundle,
+        now="2026-06-13T01:00:00Z",
+    )
+    assert {item["id"] for item in serialized} == {"bundle:1"}
+    assert {item["provenance"] for item in serialized} == {"policy-bundle"}
     listed = store.list_cloud_exceptions()
-    assert {item["id"] for item in listed} == {"sync:1", "bundle:1"}
+    assert {item["id"] for item in listed} == {"bundle:1"}
 
 
 def test_bundle_update_replaces_stale_bundle_exceptions(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
-    bundle_v1 = {
-        "bundleHash": "sha256:v1",
-        "cloudExceptions": [
-            {
-                "exceptionId": "bundle:1",
-                "effect": "allow",
-                "scope": "harness",
-                "harness": "codex",
-                "owner": "owner@example.com",
-                "expiresAt": "2099-01-01T00:00:00Z",
-            }
+    bundle_v1, device_id, _acknowledgement = _cache_signed_cloud_exception_bundle(
+        store,
+        cloud_exceptions=[
+            build_cloud_exception_bundle_entry(
+                exception_id="bundle:1",
+                workspace_id=_WORKSPACE_ID,
+            )
         ],
-        "acknowledgements": [],
-    }
-    _persist_cloud_exceptions(store, policy_bundle=bundle_v1, now="2026-06-13T00:00:00Z")
-    bundle_v2 = {
-        "bundleHash": "sha256:v2",
-        "cloudExceptions": [
-            {
-                "exceptionId": "bundle:2",
-                "effect": "allow",
-                "scope": "harness",
-                "harness": "codex",
-                "owner": "owner@example.com",
-                "expiresAt": "2099-01-01T00:00:00Z",
-            }
+    )
+    _persist_cloud_exceptions(
+        store,
+        device_id=device_id,
+        policy_bundle=bundle_v1,
+        now=_PERSISTED_AT,
+    )
+    assert {item["id"] for item in store.list_cloud_exceptions()} == {"bundle:1"}
+
+    bundle_v2, device_id, _acknowledgement = _cache_signed_cloud_exception_bundle(
+        store,
+        cloud_exceptions=[
+            build_cloud_exception_bundle_entry(
+                exception_id="bundle:2",
+                workspace_id=_WORKSPACE_ID,
+            )
         ],
-        "acknowledgements": [],
-    }
-    _persist_cloud_exceptions(store, policy_bundle=bundle_v2, now="2026-06-13T01:00:00Z")
+        now="2026-06-13T01:00:00+00:00",
+    )
+    _persist_cloud_exceptions(
+        store,
+        device_id=device_id,
+        policy_bundle=bundle_v2,
+        now="2026-06-13T01:00:00+00:00",
+    )
+    stored = store.get_sync_payload("cloud_exceptions")
+    assert isinstance(stored, list)
+    assert {item["id"] for item in stored if isinstance(item, dict)} == {"bundle:2"}
     assert {item["id"] for item in store.list_cloud_exceptions()} == {"bundle:2"}
 
 
-def test_sync_payload_builder_deduplicates_by_id() -> None:
+def test_sync_payload_builder_parses_distinct_ids() -> None:
     items = build_cloud_exceptions_from_sync_payload(
         [_sample_sync_exception(), _sample_sync_exception(exception_id="artifact:codex:other")]
     )
     assert len(items) == 2
+
+
+def test_signed_bundle_cache_deduplicates_by_id(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "home")
+    duplicate = build_cloud_exception_bundle_entry(
+        exception_id="bundle:duplicate",
+        workspace_id=_WORKSPACE_ID,
+    )
+    bundle, device_id, _acknowledgement = _cache_signed_cloud_exception_bundle(
+        store,
+        cloud_exceptions=[duplicate, dict(duplicate)],
+    )
+
+    serialized = _persist_cloud_exceptions(
+        store,
+        device_id=device_id,
+        policy_bundle=bundle,
+        now=_PERSISTED_AT,
+    )
+
+    assert [item["id"] for item in serialized] == ["bundle:duplicate"]
+    stored = store.get_sync_payload("cloud_exceptions")
+    assert isinstance(stored, list)
+    assert [item["id"] for item in stored if isinstance(item, dict)] == ["bundle:duplicate"]
+    assert [item["id"] for item in store.list_cloud_exceptions()] == ["bundle:duplicate"]
+
+
+def test_signed_bundle_exception_is_hidden_after_bundle_expiry(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "home")
+    bundle, _device_id, _acknowledgement = _cache_signed_cloud_exception_bundle(
+        store,
+        cloud_exceptions=[build_cloud_exception_bundle_entry(exception_id="bundle:expired")],
+    )
+    bundle["expiresAt"] = "2026-07-01T00:00:00Z"
+    store.set_sync_payload("policy_bundle", sign_policy_bundle(bundle, workspace_id=_WORKSPACE_ID), _PERSISTED_AT)
+
+    assert store.list_cloud_exceptions() == []
+
+
+def test_signed_bundle_exception_is_hidden_after_key_revocation(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "home")
+    _cache_signed_cloud_exception_bundle(
+        store,
+        cloud_exceptions=[build_cloud_exception_bundle_entry(exception_id="bundle:revoked")],
+    )
+    revoked_key = policy_bundle_test_verification_key(
+        state="revoked",
+        workspace_id=_WORKSPACE_ID,
+    )
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id=_WORKSPACE_ID, key=revoked_key),
+        _PERSISTED_AT,
+    )
+
+    assert store.list_cloud_exceptions() == []
