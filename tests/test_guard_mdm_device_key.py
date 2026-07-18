@@ -32,7 +32,7 @@ def _prepare_lifecycle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Machi
     paths.state_root.mkdir(parents=True)
     monkeypatch.setattr(device_key.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(device_key, "default_machine_paths", lambda **_kwargs: paths)
-    monkeypatch.setattr(device_key, "_require_machine_context", lambda _system_name: None)
+    monkeypatch.setattr(device_key, "require_machine_device_context", lambda _system_name: None)
     monkeypatch.setattr(device_key, "_machine_key_lock", lambda _paths: nullcontext())
     monkeypatch.setattr(device_key, "_bounded_private_file", lambda path: path.read_bytes())
     return paths
@@ -125,6 +125,9 @@ def test_device_key_rotation_retains_previous_generation(tmp_path: Path, monkeyp
     assert rotated["keyId"] != original["keyId"]
     assert metadata["previous"]["keyId"] == original["keyId"]
     assert len(native.keys) == 2
+    active_key_id, verified_key_ids = device_key.verified_machine_device_key_ids(paths, system_name="Darwin")
+    assert active_key_id == rotated["keyId"]
+    assert verified_key_ids == frozenset({original["keyId"], rotated["keyId"]})
     assert not any(verb == "delete" for verb, _generation in native.calls)
     with pytest.raises(OSError, match="device_key_previous_generation_pending"):
         device_key.rotate_machine_device_key()
@@ -381,7 +384,7 @@ def test_device_key_cli_status_emits_only_component_state(
 
 def test_device_key_status_requires_machine_context(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(device_key.platform, "system", lambda: "Darwin")
-    monkeypatch.setattr(device_key.os, "geteuid", lambda: 501)
+    monkeypatch.setattr(device_key_native.os, "geteuid", lambda: 501)
 
     with pytest.raises(PermissionError, match="device_key_system_context_required"):
         device_key.machine_device_key_status()

@@ -43,6 +43,9 @@ def _configure_guard_mdm_parsers(
         device_key = commands.add_parser(name, help=argparse.SUPPRESS)
         _add_json(device_key)
 
+    continuity = commands.add_parser("continuity-provision", help=argparse.SUPPRESS)
+    _add_json(continuity)
+
     for name in ("activate", "repair"):
         command = commands.add_parser(name, help=f"Idempotently {name} Guard for one user")
         _add_user(command, require_user=True)

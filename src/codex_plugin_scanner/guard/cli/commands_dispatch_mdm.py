@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from ..mdm.continuity import provision_machine_continuity
 from ..mdm.contracts import LocalIntegritySnapshot
 from ..mdm.device_key import (
     machine_device_key_status,
@@ -82,6 +83,8 @@ def _run_guard_mdm_command(
             payload = rotate_machine_device_key()
         elif command == "device-key-revoke":
             payload = revoke_machine_device_key()
+        elif command == "continuity-provision":
+            payload = provision_machine_continuity()
         elif command == "status" and args.scope == "machine":
             root = Path(args.machine_root).resolve() if getattr(args, "machine_root", None) else None
             payload = machine_status(machine_root=root)

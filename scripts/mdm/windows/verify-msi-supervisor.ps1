@@ -25,6 +25,7 @@ $Database = $Installer.GetType().InvokeMember(
 )
 $ExpectedTargets = @{
     ProvisionMachineDeviceKey = '"[InstallFolder]hol-guard\hol-guard.exe" mdm device-key-provision --json'
+    ProvisionMachineContinuity = '"[InstallFolder]hol-guard\hol-guard.exe" mdm continuity-provision --json'
     InstallMachineHealthTask = '"[InstallFolder]hol-guard\hol-guard.exe" mdm supervisor-install --json'
     RollbackInstallMachineHealthTask = '"[InstallFolder]hol-guard\hol-guard.exe" mdm supervisor-remove --json'
     RemoveMachineHealthTask = '"[InstallFolder]hol-guard\hol-guard.exe" mdm supervisor-remove --json'
@@ -32,7 +33,8 @@ $ExpectedTargets = @{
 }
 $ActionView = Open-MsiView $Database (
     'SELECT `Action`, `Type`, `Source`, `Target` FROM `CustomAction` ' +
-    "WHERE `Action`='ProvisionMachineDeviceKey' OR `Action`='InstallMachineHealthTask' " +
+    "WHERE `Action`='ProvisionMachineDeviceKey' OR `Action`='ProvisionMachineContinuity' " +
+    "OR `Action`='InstallMachineHealthTask' " +
     "OR `Action`='RollbackInstallMachineHealthTask' " +
     "OR `Action`='RemoveMachineHealthTask' OR `Action`='RollbackRemoveMachineHealthTask'"
 )
@@ -66,7 +68,8 @@ if ($Observed.Count -ne $ExpectedTargets.Count) {
 
 $SequenceView = Open-MsiView $Database (
     'SELECT `Action`, `Condition`, `Sequence` FROM `InstallExecuteSequence` ' +
-    "WHERE `Action`='ProvisionMachineDeviceKey' OR `Action`='InstallMachineHealthTask' " +
+    "WHERE `Action`='ProvisionMachineDeviceKey' OR `Action`='ProvisionMachineContinuity' " +
+    "OR `Action`='InstallMachineHealthTask' " +
     "OR `Action`='RollbackInstallMachineHealthTask' " +
     "OR `Action`='RemoveMachineHealthTask' OR `Action`='RollbackRemoveMachineHealthTask' " +
     "OR `Action`='InstallFiles' OR `Action`='RemoveFiles' OR `Action`='InstallFinalize'"
@@ -78,7 +81,8 @@ while ($null -ne ($Record = Fetch-MsiRecord $SequenceView)) {
     $Conditions[$Action] = $Record.GetType().InvokeMember('StringData', 'GetProperty', $null, $Record, @(2))
     $Sequences[$Action] = $Record.GetType().InvokeMember('IntegerData', 'GetProperty', $null, $Record, @(3))
 }
-foreach ($Action in @('ProvisionMachineDeviceKey', 'InstallMachineHealthTask', 'RollbackInstallMachineHealthTask',
+foreach ($Action in @('ProvisionMachineDeviceKey', 'ProvisionMachineContinuity', 'InstallMachineHealthTask',
+        'RollbackInstallMachineHealthTask',
         'RemoveMachineHealthTask', 'RollbackRemoveMachineHealthTask', 'InstallFiles', 'RemoveFiles', 'InstallFinalize')) {
     if (-not $Sequences.ContainsKey($Action)) { throw "Missing MSI sequence row: $Action." }
 }
@@ -87,6 +91,9 @@ if ($Conditions['InstallMachineHealthTask'] -ne 'NOT (REMOVE~="ALL")') {
 }
 if ($Conditions['ProvisionMachineDeviceKey'] -ne 'NOT (REMOVE~="ALL")') {
     throw 'Device-key provision action condition is invalid.'
+}
+if ($Conditions['ProvisionMachineContinuity'] -ne 'NOT (REMOVE~="ALL")') {
+    throw 'Continuity provision action condition is invalid.'
 }
 if ($Conditions['RollbackInstallMachineHealthTask'] -ne 'NOT (REMOVE~="ALL")') {
     throw 'Supervisor install rollback action condition is invalid.'
@@ -102,10 +109,14 @@ if ($Sequences['InstallMachineHealthTask'] -le $Sequences['InstallFiles'] -or
     throw 'Supervisor install action is sequenced outside the protected post-file window.'
 }
 if ($Sequences['ProvisionMachineDeviceKey'] -le $Sequences['InstallFiles'] -or
-    $Sequences['ProvisionMachineDeviceKey'] -ge $Sequences['RollbackInstallMachineHealthTask']) {
-    throw 'Device-key provision action must precede supervisor mutation.'
+    $Sequences['ProvisionMachineDeviceKey'] -ge $Sequences['ProvisionMachineContinuity']) {
+    throw 'Device-key provision action must precede continuity provisioning.'
 }
-if ($Sequences['RollbackInstallMachineHealthTask'] -le $Sequences['ProvisionMachineDeviceKey'] -or
+if ($Sequences['ProvisionMachineContinuity'] -le $Sequences['ProvisionMachineDeviceKey'] -or
+    $Sequences['ProvisionMachineContinuity'] -ge $Sequences['RollbackInstallMachineHealthTask']) {
+    throw 'Continuity provision action must precede supervisor mutation.'
+}
+if ($Sequences['RollbackInstallMachineHealthTask'] -le $Sequences['ProvisionMachineContinuity'] -or
     $Sequences['RollbackInstallMachineHealthTask'] -ge $Sequences['InstallMachineHealthTask']) {
     throw 'Supervisor install rollback action must precede the protected install action.'
 }

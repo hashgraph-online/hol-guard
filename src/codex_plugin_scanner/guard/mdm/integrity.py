@@ -10,6 +10,7 @@ from typing import cast, get_args
 
 from ...version import __version__
 from .acl import OwnershipAclVerification, verify_protected_ownership_and_acl
+from .continuity import ContinuityVerification, verify_installation_continuity
 from .contracts import (
     LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION,
     AssuranceLevel,
@@ -155,6 +156,36 @@ def _verify_device_key(paths: MachinePaths) -> KeyProtectionStatus:
         return KeyProtectionStatus("unknown", "unknown", "device_key_probe_failed")
 
 
+def _verify_continuity(paths: MachinePaths) -> ContinuityVerification:
+    try:
+        return verify_installation_continuity(paths)
+    except Exception:
+        return ContinuityVerification("unknown", "installation_identity_probe_failed", "lease_continuity_probe_failed")
+
+
+def _continuity_components(result: ContinuityVerification) -> tuple[IntegrityComponent, IntegrityComponent]:
+    identity_state = {
+        "installation_identity_active": "healthy",
+        "installation_identity_absent": "absent",
+        "installation_identity_invalid": "tampered",
+        "installation_identity_acl_invalid": "tampered",
+        "installation_identity_key_mismatch": "tampered",
+    }.get(result.identity_reason_code, "unknown")
+    lease_state = {
+        "lease_continuity_active": "healthy",
+        "lease_continuity_uninitialized": "healthy",
+        "lease_continuity_absent": "absent",
+        "lease_continuity_invalid": "tampered",
+        "lease_continuity_monotonic_regression": "tampered",
+        "lease_continuity_sequence_exhausted": "degraded",
+        "lease_continuity_platform_unsupported": "unsupported",
+    }.get(result.lease_reason_code, "unknown")
+    return (
+        _component(identity_state, result.identity_reason_code),
+        _component(lease_state, result.lease_reason_code),
+    )
+
+
 def machine_integrity_snapshot() -> LocalIntegritySnapshot:
     """Return bounded machine evidence without trusting environment path overrides."""
 
@@ -182,6 +213,7 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
     acl = _verify_ownership_acl(paths)
     supervisor = _verify_supervisor(paths)
     device_key = _verify_device_key(paths)
+    continuity = _verify_continuity(paths)
 
     manifest_component = _component(manifest.status, manifest.reason_code)
     native_component = _component(native.status, native.reason_code)
@@ -196,8 +228,7 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
     )
     ownership_acl = _component(acl.status, acl.reason_code)
     harness_coverage = IntegrityComponent("unsupported", "harness_coverage_verification_unavailable")
-    installation_identity = IntegrityComponent("unsupported", "installation_identity_verification_unavailable")
-    lease_continuity = IntegrityComponent("unsupported", "lease_continuity_verification_unavailable")
+    installation_identity, lease_continuity = _continuity_components(continuity)
     daemon = IntegrityComponent("unsupported", "daemon_verification_unavailable")
     command_shadowing = IntegrityComponent("unsupported", "command_shadowing_verification_unavailable")
     update = IntegrityComponent("unsupported", "update_verification_unavailable")
@@ -261,8 +292,12 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
         "identifiers": {
             "workspaceId": None,
             "deviceId": None,
-            "machineInstallationId": None,
-            "installationGeneration": None,
+            "machineInstallationId": (
+                continuity.record.machine_installation_id if continuity.record is not None else None
+            ),
+            "installationGeneration": (
+                continuity.record.installation_generation if continuity.record is not None else None
+            ),
         },
         "product": {
             "version": _trusted_product_version(manifest, native),
@@ -275,10 +310,14 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
         "components": components,
         "harnessCoverage": {"required": None, "protected": None, "degraded": None, "missing": None},
         "continuity": {
-            "monotonicUptimeSeconds": None,
-            "sequence": None,
-            "previousLeaseDigest": None,
-            "bootSessionId": None,
+            "monotonicUptimeSeconds": (
+                continuity.observation.monotonic_uptime_ns / 1_000_000_000
+                if continuity.observation is not None
+                else None
+            ),
+            "sequence": continuity.record.last_issued_sequence if continuity.record is not None else None,
+            "previousLeaseDigest": continuity.record.last_lease_digest if continuity.record is not None else None,
+            "bootSessionId": (continuity.observation.boot_session_id if continuity.observation is not None else None),
         },
         "reasonCodes": reason_codes,
         "remediationClass": _remediation_class(assurance_level, healthy, states),
