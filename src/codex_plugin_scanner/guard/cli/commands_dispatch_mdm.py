@@ -22,7 +22,6 @@ from ..mdm.lifecycle import (
     machine_status,
     repair_user,
     user_status,
-    validate_removal_authorization,
     validate_user_home,
 )
 from ..mdm.network import diagnose_endpoint
@@ -46,7 +45,11 @@ def _run_guard_mdm_command(
     try:
         if command == "authorize-deactivation":
             payload = authorize_deactivation(
-                Path(str(args.home)).resolve(), str(args.user), token_name=getattr(args, "token_name", None)
+                Path(str(args.home)).resolve(),
+                str(args.user),
+                actor=str(args.actor),
+                reason=str(args.reason),
+                token_name=getattr(args, "token_name", None),
             )
         elif command == "network-diagnose":
             policy_state = load_managed_policy()
@@ -101,10 +104,11 @@ def _run_guard_mdm_command(
             elif command == "deactivate":
                 if not args.authorization_file:
                     raise PermissionError("mdm_removal_authorization_required")
-                authorization_fingerprint = validate_removal_authorization(
-                    Path(str(args.authorization_file)), home=home, user=str(args.user)
+                payload = deactivate_user(
+                    home,
+                    user=str(args.user),
+                    authorization_file=Path(str(args.authorization_file)),
                 )
-                payload = deactivate_user(home, authorization_fingerprint=authorization_fingerprint)
             else:
                 raise ValueError("mdm_command_invalid")
     except (OSError, RuntimeError, ValueError, PermissionError) as exc:

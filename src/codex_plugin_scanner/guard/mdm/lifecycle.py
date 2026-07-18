@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 import getpass
-import hashlib
 import json
 import logging
 import os
 import platform
-import re
-import secrets
 import shutil
 import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -26,6 +23,11 @@ from .contracts import MDM_STATUS_SCHEMA_VERSION, default_machine_paths
 from .manifest import verify_release_manifest
 from .native import NativeInstallVerification, verify_native_install
 from .policy import load_managed_policy
+from .removal import (
+    authorize_deactivation,
+    record_removal_tombstone,
+    validate_removal_authorization,
+)
 
 
 def _now() -> str:
@@ -74,140 +76,24 @@ def validate_user_home(home: str, user: str | None = None) -> Path:
     return resolved
 
 
-def _is_administrator() -> bool:
-    if platform.system() != "Windows":
-        return os.geteuid() == 0
-    import ctypes
-
-    return bool(ctypes.windll.shell32.IsUserAnAdmin())
-
-
-def authorize_deactivation(home: Path, user: str, *, token_name: str | None = None) -> dict[str, object]:
-    """Create machine-owned authority without putting authorization material in arguments."""
-
-    if not _is_administrator():
-        raise PermissionError("mdm_administrator_context_required")
-    if not home.is_absolute() or not home.is_dir():
-        raise ValueError("mdm_home_not_found")
-    if platform.system() != "Windows":
-        import pwd
-
-        try:
-            account = pwd.getpwnam(user)
-        except KeyError as exc:
-            raise ValueError("mdm_user_not_found") from exc
-        if home.resolve().stat().st_uid != account.pw_uid:
-            raise ValueError("mdm_home_owner_mismatch")
-    root = default_machine_paths().state_root / "removal-authorizations"
-    root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    root.chmod(0o700)
-    now = datetime.now(timezone.utc)
-    resolved_name = token_name or f"{user}-{secrets.token_hex(8)}.json"
-    if re.fullmatch(r"[A-Za-z0-9_.-]{1,128}\.json", resolved_name) is None:
-        raise ValueError("mdm_removal_authorization_name_invalid")
-    target = root / resolved_name
-    target.write_text(
-        json.dumps(
-            {
-                "operation": "deactivate",
-                "user": user,
-                "home": str(home.resolve()),
-                "nonce": secrets.token_urlsafe(24),
-                "issuedAt": now.isoformat(),
-                "expiresAt": (now + timedelta(minutes=2)).isoformat(),
-            },
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    target.chmod(0o644)
-    _audit(
-        default_machine_paths().log_root / "mdm-lifecycle.log",
-        operation="authorize-deactivation",
-        status="authorized",
-        scope="machine",
-    )
-    payload = _base("authorize-deactivation")
-    payload.update(
-        {
-            "scope": "user",
-            "home": str(home.resolve()),
-            "user": user,
-            "authorizationPath": str(target),
-        }
-    )
-    return payload
-
-
-def validate_removal_authorization(
-    path: Path,
-    *,
-    home: Path,
-    user: str,
-    authorization_root: Path | None = None,
-) -> str:
-    """Validate a root/MDM-owned, short-lived, user-bound removal authorization."""
-
-    resolved_root = authorization_root or default_machine_paths().state_root / "removal-authorizations"
-    try:
-        resolved = path.resolve(strict=True)
-    except FileNotFoundError as exc:
-        raise ValueError("mdm_removal_authorization_consumed_or_missing") from exc
-    if not resolved.is_relative_to(resolved_root.resolve()) or not resolved.is_file():
-        raise ValueError("mdm_removal_authorization_wrong_scope")
-    metadata = resolved.stat()
-    if metadata.st_size > 16 * 1024:
-        raise ValueError("mdm_removal_authorization_invalid")
-    if platform.system() != "Windows" and (metadata.st_uid != 0 or metadata.st_mode & 0o022):
-        raise ValueError("mdm_removal_authorization_untrusted_owner")
-    payload = json.loads(resolved.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError("mdm_removal_authorization_invalid")
-    if payload.get("operation") != "deactivate" or payload.get("user") != user:
-        raise ValueError("mdm_removal_authorization_wrong_scope")
-    if payload.get("home") != str(home):
-        raise ValueError("mdm_removal_authorization_wrong_scope")
-    nonce = payload.get("nonce")
-    issued_raw = payload.get("issuedAt")
-    expires_raw = payload.get("expiresAt")
-    if not all(isinstance(value, str) and value for value in (nonce, issued_raw, expires_raw)):
-        raise ValueError("mdm_removal_authorization_invalid")
-    try:
-        issued = datetime.fromisoformat(str(issued_raw))
-        expires = datetime.fromisoformat(str(expires_raw))
-    except ValueError as exc:
-        raise ValueError("mdm_removal_authorization_invalid") from exc
-    now = datetime.now(timezone.utc)
-    if issued.tzinfo is None or expires.tzinfo is None or issued > now or expires <= now:
-        raise ValueError("mdm_removal_authorization_expired")
-    if (expires - issued).total_seconds() > 300 or (now - issued).total_seconds() > 300:
-        raise ValueError("mdm_removal_authorization_expired")
-    fingerprint = hashlib.sha256(resolved.read_bytes()).hexdigest()
-    try:
-        resolved.unlink()
-    except OSError as exc:
-        raise PermissionError("mdm_removal_authorization_not_consumable") from exc
-    return fingerprint
-
-
 @contextmanager
 def _activation_lock(guard_home: Path) -> Iterator[None]:
     guard_home.mkdir(mode=0o700, parents=True, exist_ok=True)
     lock_path = guard_home / "mdm-activation.lock"
     descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
     try:
-        if platform.system() == "Windows":
-            import msvcrt
+        try:
+            if platform.system() == "Windows":
+                import msvcrt
 
-            msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
+                msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
 
-            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (BlockingIOError, OSError) as exc:
+            raise RuntimeError("mdm_activation_in_progress") from exc
         yield
-    except (BlockingIOError, OSError) as exc:
-        raise RuntimeError("mdm_activation_in_progress") from exc
     finally:
         os.close(descriptor)
 
@@ -379,17 +265,34 @@ def repair_user(home: Path, user: str | None = None) -> dict[str, object]:
     return activate_user(home, user or getpass.getuser()) | {"operation": "repair"}
 
 
-def deactivate_user(home: Path, *, authorization_fingerprint: str | None = None) -> dict[str, object]:
-    if authorization_fingerprint is None:
+def deactivate_user(
+    home: Path,
+    *,
+    user: str,
+    authorization_file: Path | None = None,
+) -> dict[str, object]:
+    if authorization_file is None:
         raise PermissionError("mdm_removal_authorization_required")
+    paths = default_machine_paths()
+    evidence = validate_removal_authorization(
+        authorization_file,
+        home=home,
+        user=user,
+    )
+    _ = record_removal_tombstone(evidence, status="started", machine_paths=paths)
     guard_home = home / ".hol-guard"
-    with _activation_lock(guard_home):
-        context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home)
-        store = GuardStore(guard_home)
-        retired_pids = retire_all_guard_daemons_for_home(guard_home)
-        result = apply_managed_install("uninstall", None, True, context, store, None, _now())
-        (guard_home / "mdm-activation.json").unlink(missing_ok=True)
-        _audit(guard_home / "logs" / "mdm-lifecycle.log", operation="deactivate", status="complete", scope="user")
+    try:
+        with _activation_lock(guard_home):
+            context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home)
+            store = GuardStore(guard_home)
+            retired_pids = retire_all_guard_daemons_for_home(guard_home)
+            result = apply_managed_install("uninstall", None, True, context, store, None, _now())
+            (guard_home / "mdm-activation.json").unlink(missing_ok=True)
+            _audit(guard_home / "logs" / "mdm-lifecycle.log", operation="deactivate", status="complete", scope="user")
+    except (OSError, RuntimeError, ValueError):
+        _ = record_removal_tombstone(evidence, status="failed", machine_paths=paths)
+        raise
+    _ = record_removal_tombstone(evidence, status="completed", machine_paths=paths)
     payload = _base("deactivate")
     payload.update(
         {
@@ -397,6 +300,9 @@ def deactivate_user(home: Path, *, authorization_fingerprint: str | None = None)
             "home": str(home),
             "changed": True,
             "retiredDaemonCount": len(retired_pids),
+            "authorizationFingerprint": evidence.fingerprint,
+            "machineInstallationId": evidence.machine_installation_id,
+            "installationGeneration": evidence.installation_generation,
             "result": result,
         }
     )
