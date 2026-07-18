@@ -33,6 +33,7 @@ from .contracts import (
     TrayReasonCode,
     TrayState,
 )
+from .platforms import detect_platform_adapter
 from .runtime import detect_capability
 from .state import (
     build_locator_for_current_process,
@@ -77,6 +78,18 @@ def get_status(guard_home: Path, *, package_version: str = "") -> tuple[TrayStat
         return TrayState.REPAIR_REQUIRED, capability, None
 
     if locator is None:
+        # No running process. Check if a startup registration exists
+        # (LaunchAgent/Task Scheduler/XDG autostart) so the dashboard
+        # can show INSTALLED vs SUPPORTED.
+        adapter = detect_platform_adapter()
+        if adapter is not None:
+            try:
+                reg = adapter.inspect_registration(guard_home=guard_home)
+                if reg.get("installed") and reg.get("owned"):
+                    return TrayState.INSTALLED, capability, None
+            except Exception:
+                # Registration inspection is non-fatal; fall through to SUPPORTED.
+                pass
         return TrayState.SUPPORTED, capability, None
 
     if crash_loop_detected(guard_home):
@@ -128,7 +141,19 @@ def start_tray(
             logger.info("tray: force-stopping existing tray at pid %s", existing_locator.pid)
             stop_result = stop_tray(guard_home, adapter=adapter)
             if not stop_result.ok:
-                logger.warning("tray: force-stop failed, proceeding with start anyway")
+                # Abort: if the old tray ignores SIGTERM and we proceed,
+                # we'd have two tray processes competing for the same
+                # locator. The user must manually repair.
+                return TrayLifecycleResult(
+                    ok=False,
+                    state=TrayState.REPAIR_REQUIRED,
+                    reason=TrayReasonCode.PROCESS_STOP_TIMEOUT,
+                    message=(
+                        f"Force-stop of existing tray (pid {existing_locator.pid}) failed: "
+                        f"{stop_result.message}. Run 'hol-guard guard tray repair' to reset."
+                    ),
+                    recovery_command="hol-guard guard tray repair",
+                )
         else:
             return TrayLifecycleResult(
                 ok=True,
@@ -143,7 +168,7 @@ def start_tray(
             ok=False,
             state=TrayState.REPAIR_REQUIRED,
             reason=TrayReasonCode.CRASH_LOOP_DETECTED,
-            message=f"Crash loop detected ({MAX_CRASH_RETRIES} crashes). Run 'hol-guard tray repair' to reset.",
+            message=f"Crash loop detected ({MAX_CRASH_RETRIES} crashes). Run 'hol-guard guard tray repair' to reset.",
         )
 
     # Clean up stale locator if present
@@ -327,7 +352,7 @@ def stop_tray(
             state=TrayState.REPAIR_REQUIRED,
             reason=TrayReasonCode.LOCATOR_MALFORMED,
             message=f"Locator file is malformed: {error}",
-            recovery_command="hol-guard tray repair",
+            recovery_command="hol-guard guard tray repair",
         )
 
     if locator is None:
@@ -406,7 +431,7 @@ def stop_tray(
         state=TrayState.RUNNING,
         reason=TrayReasonCode.PROCESS_STOP_TIMEOUT,
         message=f"Tray process did not exit within {PROCESS_STOP_TIMEOUT_SECONDS}s (pid {locator.pid})",
-        recovery_command="hol-guard tray stop --force",
+        recovery_command="hol-guard guard tray repair",
     )
 
 

@@ -3824,7 +3824,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 # already_running (which would report success without restarting).
                 stop_result = stop_tray(guard_home)
                 result = start_tray(guard_home, force=True)
-                if not result.ok and stop_result.reason.value:
+                if not result.ok:
                     result = TrayLifecycleResult(
                         ok=result.ok,
                         state=result.state,

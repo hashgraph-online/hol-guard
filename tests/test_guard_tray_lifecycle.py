@@ -132,15 +132,19 @@ class TestGetStatus:
 
     def test_running_tray(self, tmp_path: Path) -> None:
         _write_locator(tmp_path, pid=os.getpid())
-        with patch(
-            "codex_plugin_scanner.guard.tray.lifecycle.detect_capability",
-            return_value=_capability(),
-        ), patch(
-            "codex_plugin_scanner.guard.tray.state.is_process_alive",
-            return_value=True,
-        ), patch(
-            "codex_plugin_scanner.guard.tray.state.process_start_fingerprint",
-            return_value="2024-01-01T00:00:00",
+        with (
+            patch(
+                "codex_plugin_scanner.guard.tray.lifecycle.detect_capability",
+                return_value=_capability(),
+            ),
+            patch(
+                "codex_plugin_scanner.guard.tray.state.is_process_alive",
+                return_value=True,
+            ),
+            patch(
+                "codex_plugin_scanner.guard.tray.state.process_start_fingerprint",
+                return_value="2024-01-01T00:00:00",
+            ),
         ):
             state, _cap, locator = get_status(tmp_path)
         assert state == TrayState.RUNNING
@@ -171,15 +175,19 @@ class TestGetStatus:
 
     def test_crash_loop(self, tmp_path: Path) -> None:
         _write_locator(tmp_path, pid=os.getpid(), crash_count=MAX_CRASH_RETRIES)
-        with patch(
-            "codex_plugin_scanner.guard.tray.lifecycle.detect_capability",
-            return_value=_capability(),
-        ), patch(
-            "codex_plugin_scanner.guard.tray.state.is_process_alive",
-            return_value=True,
-        ), patch(
-            "codex_plugin_scanner.guard.tray.state.process_start_fingerprint",
-            return_value="2024-01-01T00:00:00",
+        with (
+            patch(
+                "codex_plugin_scanner.guard.tray.lifecycle.detect_capability",
+                return_value=_capability(),
+            ),
+            patch(
+                "codex_plugin_scanner.guard.tray.state.is_process_alive",
+                return_value=True,
+            ),
+            patch(
+                "codex_plugin_scanner.guard.tray.state.process_start_fingerprint",
+                return_value="2024-01-01T00:00:00",
+            ),
         ):
             state, _cap, _locator = get_status(tmp_path)
         assert state == TrayState.REPAIR_REQUIRED
@@ -197,15 +205,19 @@ class TestStartTray:
 
     def test_already_running(self, tmp_path: Path) -> None:
         _write_locator(tmp_path, pid=os.getpid())
-        with patch(
-            "codex_plugin_scanner.guard.tray.lifecycle.detect_capability",
-            return_value=_capability(),
-        ), patch(
-            "codex_plugin_scanner.guard.tray.state.is_process_alive",
-            return_value=True,
-        ), patch(
-            "codex_plugin_scanner.guard.tray.state.process_start_fingerprint",
-            return_value="2024-01-01T00:00:00",
+        with (
+            patch(
+                "codex_plugin_scanner.guard.tray.lifecycle.detect_capability",
+                return_value=_capability(),
+            ),
+            patch(
+                "codex_plugin_scanner.guard.tray.state.is_process_alive",
+                return_value=True,
+            ),
+            patch(
+                "codex_plugin_scanner.guard.tray.state.process_start_fingerprint",
+                return_value="2024-01-01T00:00:00",
+            ),
         ):
             result = start_tray(tmp_path)
         assert result.ok is True
@@ -224,15 +236,19 @@ class TestStartTray:
 
     def test_start_via_adapter(self, tmp_path: Path) -> None:
         adapter = FakeAdapter()
-        with patch(
-            "codex_plugin_scanner.guard.tray.lifecycle.detect_capability",
-            return_value=_capability(),
-        ), patch(
-            "codex_plugin_scanner.guard.tray.state.is_process_alive",
-            return_value=True,
-        ), patch(
-            "codex_plugin_scanner.guard.tray.state.process_start_fingerprint",
-            return_value="2024-01-01T00:00:00",
+        with (
+            patch(
+                "codex_plugin_scanner.guard.tray.lifecycle.detect_capability",
+                return_value=_capability(),
+            ),
+            patch(
+                "codex_plugin_scanner.guard.tray.state.is_process_alive",
+                return_value=True,
+            ),
+            patch(
+                "codex_plugin_scanner.guard.tray.state.process_start_fingerprint",
+                return_value="2024-01-01T00:00:00",
+            ),
         ):
             result = start_tray(tmp_path, adapter=adapter)
         assert result.ok is True
@@ -253,15 +269,25 @@ class TestStartTray:
     def test_force_stops_existing(self, tmp_path: Path) -> None:
         _write_locator(tmp_path, pid=os.getpid())
         adapter = FakeAdapter()
-        with patch(
-            "codex_plugin_scanner.guard.tray.lifecycle.detect_capability",
-            return_value=_capability(),
-        ), patch(
-            "codex_plugin_scanner.guard.tray.state.is_process_alive",
-            return_value=True,
-        ), patch(
-            "codex_plugin_scanner.guard.tray.state.process_start_fingerprint",
-            return_value="2024-01-01T00:00:00",
+        # is_process_alive: True (initial check in get_status), then False
+        # (after stop_tray kills it, the wait loop sees it's dead).
+        with (
+            patch(
+                "codex_plugin_scanner.guard.tray.lifecycle.is_process_alive",
+                side_effect=[True, False],
+            ),
+            patch(
+                "codex_plugin_scanner.guard.tray.state.is_process_alive",
+                side_effect=[True, False],
+            ),
+            patch(
+                "codex_plugin_scanner.guard.tray.state.process_start_fingerprint",
+                return_value="2024-01-01T00:00:00",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.tray.lifecycle.locator_is_stale",
+                return_value=False,
+            ),
         ):
             result = start_tray(tmp_path, force=True, adapter=adapter)
         assert result.ok is True
@@ -276,12 +302,15 @@ class TestStopTray:
         # locator_is_stale must be mocked False — the fake PID 12345 is not
         # a real process, so its fingerprint would not match and the new
         # PID-reuse safety guard would short-circuit to NOT_RUNNING.
-        with patch(
-            "codex_plugin_scanner.guard.tray.lifecycle.is_process_alive",
-            side_effect=[True, False],
-        ), patch(
-            "codex_plugin_scanner.guard.tray.lifecycle.locator_is_stale",
-            return_value=False,
+        with (
+            patch(
+                "codex_plugin_scanner.guard.tray.lifecycle.is_process_alive",
+                side_effect=[True, False],
+            ),
+            patch(
+                "codex_plugin_scanner.guard.tray.lifecycle.locator_is_stale",
+                return_value=False,
+            ),
         ):
             result = stop_tray(tmp_path, adapter=adapter)
         assert result.ok is True
@@ -300,7 +329,6 @@ class TestStopTray:
         assert result.ok is True
         assert result.reason == TrayReasonCode.NOT_RUNNING
 
-
     def test_malformed_locator(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.tray.state import ensure_locator_dir
 
@@ -317,12 +345,15 @@ class TestStopTray:
         _write_locator(tmp_path, pid=os.getpid())
         # is_process_alive=True (pid exists) but locator_is_stale=True (fingerprint
         # mismatch — PID was reused). The safety guard must short-circuit.
-        with patch(
-            "codex_plugin_scanner.guard.tray.lifecycle.is_process_alive",
-            return_value=True,
-        ), patch(
-            "codex_plugin_scanner.guard.tray.lifecycle.locator_is_stale",
-            return_value=True,
+        with (
+            patch(
+                "codex_plugin_scanner.guard.tray.lifecycle.is_process_alive",
+                return_value=True,
+            ),
+            patch(
+                "codex_plugin_scanner.guard.tray.lifecycle.locator_is_stale",
+                return_value=True,
+            ),
         ):
             result = stop_tray(tmp_path)
         assert result.ok is True
