@@ -8228,6 +8228,29 @@ url = http://127.0.0.1:8787/guard-canary
             ),
         )
 
+        # Tray step runs even after a step fails (loop continues). Mock it
+        # so init doesn't write a real autostart file on Linux CI.
+        from unittest.mock import MagicMock as _MagicMock
+
+        from codex_plugin_scanner.guard.tray.contracts import TrayState
+
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.platforms.detect_platform_adapter",
+            lambda: _MagicMock(),
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.install_registration",
+            lambda *a, **kw: None,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.start_tray",
+            _MagicMock(return_value=_MagicMock(ok=True)),
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.get_status",
+            _MagicMock(return_value=(TrayState.RUNNING, None, None)),
+        )
+
         rc = main(["guard", "init", "--yes", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
         output = json.loads(capsys.readouterr().out)
 
@@ -8267,6 +8290,28 @@ url = http://127.0.0.1:8787/guard-canary
             guard_commands_module,
             "ensure_desktop_notification_setup",
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("notification permission failed")),
+        )
+
+        # Tray step runs even after notification failure. Mock it.
+        from unittest.mock import MagicMock as _MagicMock
+
+        from codex_plugin_scanner.guard.tray.contracts import TrayState
+
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.platforms.detect_platform_adapter",
+            lambda: _MagicMock(),
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.install_registration",
+            lambda *a, **kw: None,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.start_tray",
+            _MagicMock(return_value=_MagicMock(ok=True)),
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.get_status",
+            _MagicMock(return_value=(TrayState.RUNNING, None, None)),
         )
 
         rc = main(["guard", "init", "--yes", "--home", str(home_dir), "--guard-home", str(guard_home)])

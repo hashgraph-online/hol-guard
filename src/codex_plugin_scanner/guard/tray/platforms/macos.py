@@ -142,16 +142,24 @@ class MacOSTrayAdapter:
                 "message": f"Refusing to remove foreign LaunchAgent at {plist_path}",
             }
 
-        try:
-            # Unload before removing
-            import subprocess
+        import subprocess
 
+        try:
+            # Unload before removing — best-effort. launchctl may not exist
+            # (e.g. running tests on Linux CI) or the agent may already be
+            # unloaded. Either way, the file deletion below is authoritative.
             subprocess.run(
                 ["launchctl", "unload", str(plist_path)],
                 capture_output=True,
                 timeout=10,
                 check=False,
             )
+        except (OSError, subprocess.SubprocessError):
+            # launchctl missing or timed out — proceed to delete the plist.
+            # The LaunchAgent is effectively unloaded if the plist is gone.
+            pass
+
+        try:
             plist_path.unlink()
         except OSError as error:
             return {

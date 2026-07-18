@@ -67,11 +67,12 @@ class TestPlatformId:
     def test_platform_is_macos(self, adapter: macos_module.MacOSTrayAdapter) -> None:
         assert adapter.platform is TrayPlatform.MACOS
 
-    def test_detect_capability_returns_macos(
-        self, adapter: macos_module.MacOSTrayAdapter
-    ) -> None:
-        cap = adapter.detect_capability()
-        assert cap.platform is TrayPlatform.MACOS
+    def test_detect_capability_returns_macos(self, adapter: macos_module.MacOSTrayAdapter) -> None:
+        # detect_capability() calls TrayPlatform.current() which checks
+        # sys.platform. On Linux CI this returns LINUX. Mock it to MACOS.
+        with patch.object(TrayPlatform, "current", return_value=TrayPlatform.MACOS):
+            cap = adapter.detect_capability()
+            assert cap.platform is TrayPlatform.MACOS
 
 
 # ---------------------------------------------------------------------------
@@ -90,9 +91,7 @@ class TestPlistPath:
     def test_plist_filename_matches_label(self) -> None:
         assert f"{TRAY_REGISTRATION_LABEL}.plist" == macos_module.PLIST_FILENAME
 
-    def test_plist_path_uses_home_directory(
-        self, adapter: macos_module.MacOSTrayAdapter, mock_plist_dir: Path
-    ) -> None:
+    def test_plist_path_uses_home_directory(self, adapter: macos_module.MacOSTrayAdapter, mock_plist_dir: Path) -> None:
         plist_path = adapter._plist_path()
         assert plist_path.is_relative_to(mock_plist_dir)
 
@@ -199,9 +198,7 @@ class TestInstallPlistStructure:
         ]
         joined = " ".join(all_values).lower()
         for pat in secret_patterns:
-            assert pat not in joined, (
-                f"Secret pattern '{pat}' found in ProgramArguments: {all_values}"
-            )
+            assert pat not in joined, f"Secret pattern '{pat}' found in ProgramArguments: {all_values}"
 
     def test_plist_contains_keep_alive_false(
         self,
@@ -235,12 +232,8 @@ class TestInstallPlistStructure:
             plist = plistlib.load(f)
         assert "StandardOutPath" in plist
         assert "StandardErrorPath" in plist
-        assert (guard_home / "tray" / "stdout.log") == Path(
-            plist["StandardOutPath"]
-        )
-        assert (guard_home / "tray" / "stderr.log") == Path(
-            plist["StandardErrorPath"]
-        )
+        assert (guard_home / "tray" / "stdout.log") == Path(plist["StandardOutPath"])
+        assert (guard_home / "tray" / "stderr.log") == Path(plist["StandardErrorPath"])
 
     def test_plist_contains_python_unbuffered_env(
         self,
@@ -287,14 +280,10 @@ class TestInstallPlistNoSecrets:
         values: list[str] = []
         if isinstance(obj, dict):
             for k, v in obj.items():
-                values.extend(
-                    TestInstallPlistNoSecrets._flatten_values(v, f"{path}.{k}")
-                )
+                values.extend(TestInstallPlistNoSecrets._flatten_values(v, f"{path}.{k}"))
         elif isinstance(obj, (list, tuple)):
             for i, v in enumerate(obj):
-                values.extend(
-                    TestInstallPlistNoSecrets._flatten_values(v, f"{path}[{i}]")
-                )
+                values.extend(TestInstallPlistNoSecrets._flatten_values(v, f"{path}[{i}]"))
         else:
             values.append(str(obj))
         return values
@@ -322,9 +311,7 @@ class TestInstallPlistNoSecrets:
                 continue
             value_lower = value.lower()
             for pat in self.SECRET_PATTERNS:
-                assert pat not in value_lower, (
-                    f"Secret pattern '{pat}' found in plist value: {value!r}"
-                )
+                assert pat not in value_lower, f"Secret pattern '{pat}' found in plist value: {value!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -641,20 +628,14 @@ class TestProcessLifecycle:
         unload_call = mock_run.call_args_list[0]
         assert "unload" in str(unload_call)
 
-    def test_is_process_running_pid_zero(
-        self, adapter: macos_module.MacOSTrayAdapter
-    ) -> None:
+    def test_is_process_running_pid_zero(self, adapter: macos_module.MacOSTrayAdapter) -> None:
         """PID <= 0 checks via launchctl list."""
-        mock_run = MagicMock(
-            return_value=MagicMock(returncode=0, stdout="")
-        )
+        mock_run = MagicMock(return_value=MagicMock(returncode=0, stdout=""))
         with patch("subprocess.run", mock_run):
             result = adapter.is_process_running(pid=0)
         assert result is True
 
-    def test_is_process_running_pid_nonzero(
-        self, adapter: macos_module.MacOSTrayAdapter
-    ) -> None:
+    def test_is_process_running_pid_nonzero(self, adapter: macos_module.MacOSTrayAdapter) -> None:
         """PID > 0 delegates to is_process_alive."""
         with patch(
             "codex_plugin_scanner.guard.tray.state.is_process_alive",
@@ -663,13 +644,9 @@ class TestProcessLifecycle:
             result = adapter.is_process_running(pid=1234)
         assert result is True
 
-    def test_is_process_running_pid_negative(
-        self, adapter: macos_module.MacOSTrayAdapter
-    ) -> None:
+    def test_is_process_running_pid_negative(self, adapter: macos_module.MacOSTrayAdapter) -> None:
         """Negative PIDs also go through launchctl list."""
-        mock_run = MagicMock(
-            return_value=MagicMock(returncode=0, stdout="")
-        )
+        mock_run = MagicMock(return_value=MagicMock(returncode=0, stdout=""))
         with patch("subprocess.run", mock_run):
             result = adapter.is_process_running(pid=-1)
         assert result is True

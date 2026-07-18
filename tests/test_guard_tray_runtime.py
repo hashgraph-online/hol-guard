@@ -244,7 +244,9 @@ class TestDetectCapability:
         assert cap.platform is None
 
     def test_returns_dependency_missing_when_pystray_absent(self) -> None:
-        with patch.dict("sys.modules", {"pystray": None}):
+        # On headless Linux CI, detect_capability() hits the NO_DISPLAY
+        # check before reaching the pystray import. Set DISPLAY to bypass it.
+        with patch.dict("os.environ", {"DISPLAY": ":0"}, clear=False), patch.dict("sys.modules", {"pystray": None}):
             cap = detect_capability()
         assert cap.supported is False
         assert cap.reason == TrayReasonCode.DEPENDENCY_MISSING
