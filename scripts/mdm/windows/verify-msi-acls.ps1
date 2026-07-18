@@ -27,9 +27,9 @@ while ($null -ne ($Record = $View.GetType().InvokeMember('Fetch', 'InvokeMethod'
 }
 
 $Expected = @{
-    INSTALLFOLDER = 'D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)'
-    STATEFOLDER = 'D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)'
-    LOGSFOLDER = 'D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)'
+    InstallFolder = 'D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)'
+    StateFolder = 'D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)'
+    LogsFolder = 'D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)'
 }
 if ($Rows.Count -ne $Expected.Count) {
     throw "Expected exactly $($Expected.Count) MSI ACL records; found $($Rows.Count)."

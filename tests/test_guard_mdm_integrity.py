@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.mdm.contracts import (
     ManagedPolicy,
     ManagedPolicyState,
     ManagedUpdatePolicy,
+    SupervisorStatus,
 )
 from codex_plugin_scanner.guard.mdm.manifest import ManifestVerification
 from codex_plugin_scanner.guard.mdm.native import NativeInstallVerification
@@ -35,6 +36,11 @@ def _isolate_host_policy(monkeypatch: pytest.MonkeyPatch) -> None:
         integrity,
         "verify_protected_ownership_and_acl",
         lambda _paths: OwnershipAclVerification("unsupported", "ownership_acl_verification_unavailable", ()),
+    )
+    monkeypatch.setattr(
+        integrity,
+        "verify_machine_supervisor",
+        lambda _paths: SupervisorStatus("unsupported", "supervisor_verification_unavailable"),
     )
 
 
@@ -272,6 +278,24 @@ def test_snapshot_loads_policy_without_writing_cache(tmp_path: Path, monkeypatch
 
 def test_running_supervisor_counts_as_healthy_for_remediation() -> None:
     assert integrity._remediation_class("mdm-managed", True, ["healthy", "running"]) == "none"
+
+
+def test_snapshot_projects_native_supervisor_health(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(integrity, "default_machine_paths", lambda: _paths(tmp_path))
+    monkeypatch.setattr(
+        integrity,
+        "verify_machine_supervisor",
+        lambda _paths: SupervisorStatus("disabled", "supervisor_disabled"),
+    )
+
+    snapshot = integrity.machine_integrity_snapshot()
+
+    assert snapshot["components"]["supervisor"] == {
+        "state": "disabled",
+        "healthy": False,
+        "reasonCode": "supervisor_disabled",
+    }
+    assert "supervisor_disabled" in snapshot["reasonCodes"]
 
 
 def test_snapshot_does_not_promote_unverified_manifest_identity(

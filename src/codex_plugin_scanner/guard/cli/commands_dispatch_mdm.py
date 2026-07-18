@@ -20,6 +20,7 @@ from ..mdm.lifecycle import (
 )
 from ..mdm.network import diagnose_endpoint
 from ..mdm.policy import load_managed_policy
+from ..mdm.supervisor import install_machine_supervisor, remove_machine_supervisor
 
 
 def _emit_mdm(payload: dict[str, object] | LocalIntegritySnapshot, as_json: bool) -> None:
@@ -55,6 +56,10 @@ def _run_guard_mdm_command(
             }
         elif command == "integrity-snapshot":
             payload = dict(machine_integrity_snapshot())
+        elif command == "supervisor-install":
+            payload = install_machine_supervisor()
+        elif command == "supervisor-remove":
+            payload = remove_machine_supervisor()
         elif command == "status" and args.scope == "machine":
             root = Path(args.machine_root).resolve() if getattr(args, "machine_root", None) else None
             payload = machine_status(machine_root=root)

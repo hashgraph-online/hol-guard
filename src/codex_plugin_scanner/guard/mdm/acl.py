@@ -119,6 +119,12 @@ def _macos_surfaces(paths: MachinePaths) -> tuple[_PathSurface, ...]:
             False,
             trust_root,
         ),
+        _PathSurface(
+            "machineHealthRegistration",
+            Path("/Library/LaunchDaemons/org.hol.guard.machine-health.plist"),
+            False,
+            trust_root,
+        ),
     ]
     if paths.policy_path is not None:
         surfaces.append(_PathSurface("managedPolicy", paths.policy_path, False, trust_root))

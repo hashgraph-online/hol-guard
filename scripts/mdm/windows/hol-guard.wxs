@@ -4,7 +4,7 @@
     <MajorUpgrade DowngradeErrorMessage="A newer HOL Guard version is already installed." />
     <MediaTemplate EmbedCab="yes" />
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="HOL Guard">
+      <Directory Id="InstallFolder" Name="HOL Guard">
         <Component Id="RuntimeAcl" Guid="0ED54EB2-5CD3-4AD1-8E14-D729153895EB">
           <CreateFolder>
             <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" />
@@ -13,13 +13,13 @@
       </Directory>
     </StandardDirectory>
     <StandardDirectory Id="CommonAppDataFolder">
-      <Directory Id="STATEFOLDER" Name="HOL Guard">
+      <Directory Id="StateFolder" Name="HOL Guard">
         <Component Id="MachineState" Guid="5CF2D38E-C3EC-4F31-BE6C-A15BDD52B279">
           <CreateFolder>
             <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
           </CreateFolder>
         </Component>
-        <Directory Id="LOGSFOLDER" Name="Logs">
+        <Directory Id="LogsFolder" Name="Logs">
           <Component Id="MachineLogs" Guid="E4256A60-A7EF-4FC4-9DCA-FF30D58C24C3">
             <CreateFolder>
               <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
@@ -28,14 +28,32 @@
         </Directory>
       </Directory>
     </StandardDirectory>
-    <Component Id="UserActivation" Directory="INSTALLFOLDER" Guid="EF2BC727-7CA8-44EC-B7A6-C82F4CE4C7BD">
+    <Component Id="UserActivation" Directory="InstallFolder" Guid="EF2BC727-7CA8-44EC-B7A6-C82F4CE4C7BD">
       <RegistryKey Root="HKLM" Key="Software\Microsoft\Active Setup\Installed Components\{AFA2F379-D7A2-4210-91E3-E71E43F1D994}">
         <RegistryValue Name="Version" Value="$(env.HOL_GUARD_VERSION)" Type="string" KeyPath="yes" />
         <RegistryValue Name="StubPath" Type="expandable"
-          Value="&quot;[INSTALLFOLDER]hol-guard\hol-guard.exe&quot; mdm repair --home &quot;%USERPROFILE%&quot; --user &quot;%USERNAME%&quot; --json" />
+          Value="&quot;[InstallFolder]hol-guard\hol-guard.exe&quot; mdm repair --home &quot;%USERPROFILE%&quot; --user &quot;%USERNAME%&quot; --json" />
       </RegistryKey>
     </Component>
-    <Files Include="$(RuntimeRoot)\**" Directory="INSTALLFOLDER" />
+    <Files Include="$(RuntimeRoot)\**" Directory="InstallFolder" />
+    <CustomAction Id="InstallMachineHealthTask" Directory="InstallFolder"
+      ExeCommand="&quot;[InstallFolder]hol-guard\hol-guard.exe&quot; mdm supervisor-install --json"
+      Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="RollbackInstallMachineHealthTask" Directory="InstallFolder"
+      ExeCommand="&quot;[InstallFolder]hol-guard\hol-guard.exe&quot; mdm supervisor-remove --json"
+      Execute="rollback" Impersonate="no" Return="ignore" />
+    <CustomAction Id="RemoveMachineHealthTask" Directory="InstallFolder"
+      ExeCommand="&quot;[InstallFolder]hol-guard\hol-guard.exe&quot; mdm supervisor-remove --json"
+      Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="RollbackRemoveMachineHealthTask" Directory="InstallFolder"
+      ExeCommand="&quot;[InstallFolder]hol-guard\hol-guard.exe&quot; mdm supervisor-install --json"
+      Execute="rollback" Impersonate="no" Return="ignore" />
+    <InstallExecuteSequence>
+      <Custom Action="RollbackInstallMachineHealthTask" After="InstallFiles" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
+      <Custom Action="InstallMachineHealthTask" After="RollbackInstallMachineHealthTask" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
+      <Custom Action="RollbackRemoveMachineHealthTask" Before="RemoveMachineHealthTask" Condition="REMOVE~=&quot;ALL&quot;" />
+      <Custom Action="RemoveMachineHealthTask" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
     <Feature Id="Main">
       <ComponentRef Id="RuntimeAcl" />
       <ComponentRef Id="MachineState" />
