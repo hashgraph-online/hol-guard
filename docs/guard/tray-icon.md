@@ -215,7 +215,14 @@ Cross-platform CI passes on `windows-latest`.
 
 ### Wayland sessions
 
-AppIndicator is compatible with Wayland via XWayland. GNOME Wayland
-requires the AppIndicator extension. KDE Plasma Wayland supports
-AppIndicator natively. Direct GUI testing on Wayland sessions is a
-future verification target.
+The tray runs under Wayland via the AppIndicator backend with XWayland.
+Verified using Weston (reference Wayland compositor) in a Docker container:
+
+- `detect_capability()` returns `LINUX` / `APPINDICATOR` / `supported=True`
+  with `WAYLAND_DISPLAY=wayland-0` set
+- Full lifecycle verified: `tray install` (XDG autostart), `tray start`
+  (process running), `tray status` (running/appindicator), `tray stop`,
+  `tray uninstall`
+
+GNOME Wayland requires the AppIndicator extension. KDE Plasma Wayland
+supports AppIndicator natively.
