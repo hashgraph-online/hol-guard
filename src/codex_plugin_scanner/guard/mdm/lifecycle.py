@@ -139,8 +139,11 @@ def _read_coverage_request(home: Path) -> list[dict[str, object]]:
     guard_home = home / ".hol-guard"
     target = _coverage_request_path(home)
     home_metadata = home.stat()
-    guard_metadata = guard_home.lstat()
-    target_metadata = target.lstat()
+    try:
+        guard_metadata = guard_home.lstat()
+        target_metadata = target.lstat()
+    except FileNotFoundError as exc:
+        raise ValueError("harness_coverage_request_absent") from exc
     if (
         not stat.S_ISDIR(guard_metadata.st_mode)
         or stat.S_ISLNK(guard_metadata.st_mode)

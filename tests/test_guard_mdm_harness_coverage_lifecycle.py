@@ -99,6 +99,18 @@ def test_device_registration_rejects_symlinked_user_request(tmp_path: Path, monk
         lifecycle.register_user_coverage(tmp_path, "developer")
 
 
+def test_device_registration_reports_absent_user_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(lifecycle, "load_managed_policy", _managed_policy)
+    monkeypatch.setattr(
+        lifecycle,
+        "register_user_harnesses",
+        lambda *_args: pytest.fail("absent request was registered"),
+    )
+
+    with pytest.raises(ValueError, match="harness_coverage_request_absent"):
+        lifecycle.register_user_coverage(tmp_path, "developer")
+
+
 def test_partial_activation_rolls_back_new_harnesses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeStore:
         active = False
