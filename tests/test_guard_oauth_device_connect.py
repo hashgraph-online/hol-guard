@@ -1396,6 +1396,64 @@ def test_connect_headless_open_browser_opens_device_approval_before_polling(
     assert "browser_opened" in captured.out
 
 
+def test_connect_headless_open_browser_renders_device_code_for_install_users(
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    args = _HeadlessConnectArgs()
+    args.guard_home = str(guard_home)
+    args.open_browser = True
+    args.json = False
+
+    def fake_headless_flow(
+        *,
+        store: GuardStore,
+        connect_url: str,
+        wait_timeout_seconds: int = 180,
+        announce_copy=None,
+        open_browser=None,
+        ci_safe: bool = False,
+        machine_label: str | None = None,
+    ) -> dict[str, object]:
+        del store, connect_url, wait_timeout_seconds, ci_safe, machine_label
+        assert open_browser is not None
+        if announce_copy is not None:
+            announce_copy(
+                {
+                    "user_code": "ABCD-EFGH",
+                    "verification_uri": "https://guard.example.test/guard/oauth/device",
+                    "verification_uri_complete": "https://guard.example.test/guard/oauth/device?user_code=ABCD-EFGH",
+                }
+            )
+        return {
+            "status": "connected",
+            "connect_mode": "device_code",
+            "browser_opened": bool(open_browser("https://guard.example.test/guard/oauth/device")),
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://guard.example.test/guard/oauth/device",
+            "verification_uri_complete": "https://guard.example.test/guard/oauth/device?user_code=ABCD-EFGH",
+            "next_action": {
+                "command": "open",
+                "target": "https://guard.example.test/guard/oauth/device",
+            },
+        }
+
+    monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", fake_headless_flow)
+    monkeypatch.setattr(guard_commands.webbrowser, "open", lambda _target: True)
+
+    exit_code = run_guard_command(args)
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Approval code" in captured.out
+    assert "ABCD-EFGH" in captured.out
+    assert "Approval URL" in captured.out
+    assert "Enter code ABCD-EFGH" in captured.out
+    assert "device-secret-value" not in captured.out
+
+
 def test_connect_default_uses_browser_oauth_flow(tmp_path: Path, capsys, monkeypatch) -> None:
     guard_home = tmp_path / "guard-home"
     args = _ConnectArgs()
