@@ -85,6 +85,21 @@ def test_standard_user_cannot_mutate_machine_registry(tmp_path: Path, monkeypatc
     assert not paths.state_root.exists()
 
 
+def test_machine_lock_rejects_untrusted_state_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    paths = _paths(tmp_path)
+    paths.state_root.mkdir(mode=0o700)
+    paths.state_root.chmod(0o700)
+    monkeypatch.setattr(machine_state_lock, "_lock_owner_is_trusted", lambda _metadata: False)
+
+    with (
+        pytest.raises(PermissionError, match="machine_state_root_invalid"),
+        machine_state_lock.protected_machine_state_lock(paths, "harness-coverage"),
+    ):
+        pytest.fail("untrusted machine-state root was locked")
+
+    assert not (paths.state_root / ".harness-coverage.lock").exists()
+
+
 def test_registration_rejects_unbounded_manifest_nesting(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     home = tmp_path / "home"
