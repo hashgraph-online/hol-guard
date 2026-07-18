@@ -166,3 +166,56 @@ it with `--skip-tray`:
 ```bash
 hol-guard guard init --skip-tray
 ```
+
+## Native platform evidence
+
+The tray icon has been verified on the following platforms:
+
+### macOS (AppKit backend)
+
+The tray runs via pystray's AppKit backend. Process inspection with
+`sample <pid>` confirms:
+
+- `-[NSApplication run]` is active (AppKit event loop)
+- `_NSEventThread` is running (event processing)
+- `CFRunLoopRunSpecific` / `__CFRunLoopRun` servicing Mach ports
+- `com.apple.AppKit` framework loaded
+
+Lifecycle verified: `tray install` creates a per-user LaunchAgent at
+`~/Library/LaunchAgents/org.hol.guard.tray.plist` (RunAtLoad, absolute
+arguments). `tray start` launches the process on the main thread.
+`tray stop` terminates it. `tray uninstall` removes the LaunchAgent.
+
+### Linux (AppIndicator backend, Xorg)
+
+The tray runs via pystray's AppIndicator backend under Xorg. Tested
+in a Docker container with Xvfb providing a virtual display:
+
+```bash
+export DISPLAY=:99
+Xvfb :99 -screen 0 1024x768x24 &
+```
+
+`detect_capability()` returns `LINUX` / `APPINDICATOR` / `supported=True`.
+Full lifecycle verified:
+
+- `tray install` creates XDG autostart file at
+  `~/.config/autostart/org.hol.guard.tray.desktop` (`Terminal=false`,
+  `X-GNOME-Autostart-enabled=true`)
+- `tray start` launches the process (confirmed via `ps` and `tray status`)
+- `tray status` reports `running` with correct PID and backend
+- `tray stop` terminates the process
+- `tray uninstall` removes the XDG autostart file
+
+### Windows (Win32 backend)
+
+The tray runs via pystray's Win32 backend. The Windows adapter uses a
+per-user Task Scheduler task with `pythonw.exe` (no console flash).
+Cross-platform CI passes on `windows-latest`.
+
+### Wayland sessions
+
+AppIndicator is compatible with Wayland via XWayland. GNOME Wayland
+requires the AppIndicator extension. KDE Plasma Wayland supports
+AppIndicator natively. Direct GUI testing on Wayland sessions is a
+future verification target.
