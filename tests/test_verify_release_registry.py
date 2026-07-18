@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import scripts.verify_release_registry as registry_module
 from scripts.verify_release_registry import (
     Registry,
     RegistryVerificationError,
@@ -20,6 +21,22 @@ from scripts.verify_release_registry import (
     verify_registry_release,
     verify_testpypi_release,
 )
+
+
+class ChunkedResponse:
+    def __init__(self, chunks: list[bytes]) -> None:
+        self._chunks = iter(chunks)
+        self.headers = Message()
+
+    def __enter__(self) -> ChunkedResponse:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self, _size: int) -> bytes:
+        return next(self._chunks, b"")
+
 
 VERSION = "2.2.0a1"
 WHEEL = f"hol_guard-{VERSION}-py3-none-any.whl"
@@ -122,6 +139,15 @@ def test_listing_registry_versions_fails_closed_on_network_error() -> None:
 
     with pytest.raises(RegistryVerificationError, match="Registry request failed"):
         list_registry_versions(Registry.PYPI, fetcher=fetcher)
+
+
+def test_stdlib_fetch_rejects_oversized_chunked_responses(monkeypatch: pytest.MonkeyPatch) -> None:
+    response = ChunkedResponse([b"1234", b"5678", b"9"])
+    monkeypatch.setattr(registry_module, "MAX_RESPONSE_BYTES", 8)
+    monkeypatch.setattr(registry_module.urllib.request, "urlopen", lambda *_args, **_kwargs: response)
+
+    with pytest.raises(RegistryVerificationError, match="maximum allowed size"):
+        registry_module.stdlib_fetch("https://pypi.org/pypi/hol-guard/json")
 
 
 def test_inspect_release_reports_absent_only_for_404() -> None:

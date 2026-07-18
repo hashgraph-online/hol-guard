@@ -88,10 +88,17 @@ def stdlib_fetch(url: str) -> bytes:
                 raise RegistryVerificationError("Registry response has an invalid content length") from exc
             if parsed_length < 0 or parsed_length > MAX_RESPONSE_BYTES:
                 raise RegistryVerificationError("Registry response exceeds the maximum allowed size")
-        payload = response.read(MAX_RESPONSE_BYTES + 1)
-    if len(payload) > MAX_RESPONSE_BYTES:
-        raise RegistryVerificationError("Registry response exceeds the maximum allowed size")
-    return payload
+        chunks: list[bytes] = []
+        total_bytes = 0
+        while True:
+            chunk = response.read(min(1024 * 1024, MAX_RESPONSE_BYTES - total_bytes + 1))
+            if not chunk:
+                break
+            total_bytes += len(chunk)
+            if total_bytes > MAX_RESPONSE_BYTES:
+                raise RegistryVerificationError("Registry response exceeds the maximum allowed size")
+            chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _project_url(registry: Registry) -> str:
