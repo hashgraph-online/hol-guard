@@ -19,7 +19,7 @@ _MACOS_LABEL = "org.hol.guard.machine-health"
 _MACOS_PLIST = Path(f"/Library/LaunchDaemons/{_MACOS_LABEL}.plist")
 _WINDOWS_TASK_NAME = r"\HOL Guard\Machine Health"
 _TASK_NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit/task"
-_HEALTH_ARGUMENTS = "mdm integrity-snapshot --scope machine --json"
+_HEALTH_ARGUMENTS = "mdm health-report --scope machine --json"
 _WINDOWS_TASK_START_BOUNDARY = "2000-01-01T00:00:00"
 _WINDOWS_TASK_SECURITY_DESCRIPTOR = "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
 _MAX_REGISTRATION_BYTES = 256 * 1024
@@ -74,7 +74,7 @@ def _macos_registration_status(paths: MachinePaths, plist_path: Path) -> Supervi
     expected_arguments = [
         str(machine_executable(paths, "Darwin")),
         "mdm",
-        "integrity-snapshot",
+        "health-report",
         "--scope",
         "machine",
         "--json",
@@ -153,7 +153,7 @@ def _launchctl_arguments(output: str) -> list[str] | None:
 
 def _macos_loaded_status(paths: MachinePaths, output: str) -> SupervisorStatus | None:
     expected_executable = str(machine_executable(paths, "Darwin"))
-    expected_arguments = [expected_executable, "mdm", "integrity-snapshot", "--scope", "machine", "--json"]
+    expected_arguments = [expected_executable, "mdm", "health-report", "--scope", "machine", "--json"]
     if _launchctl_scalar(output, "path") != str(_MACOS_PLIST):
         return SupervisorStatus("stopped", "supervisor_registration_invalid")
     if _launchctl_scalar(output, "program") != expected_executable:

@@ -47,7 +47,7 @@ def _launchctl_print(paths: MachinePaths) -> str:
     arguments = {{
         {executable}
         mdm
-        integrity-snapshot
+        health-report
         --scope
         machine
         --json

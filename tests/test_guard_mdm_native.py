@@ -175,7 +175,7 @@ def test_macos_installer_registers_machine_health_launch_daemon() -> None:
     assert '"${STAGE}/Library/LaunchDaemons"' in build
     assert "org.hol.guard.machine-health.plist" in build
     assert payload["StartInterval"] == 300
-    assert payload["ProgramArguments"][-5:] == ["mdm", "integrity-snapshot", "--scope", "machine", "--json"]
+    assert payload["ProgramArguments"][-5:] == ["mdm", "health-report", "--scope", "machine", "--json"]
     assert "/bin/launchctl bootstrap system" in postinstall
     assert "/bin/launchctl bootout" not in preinstall
     assert 'install -o root -g wheel -m 0600 "${LAUNCH_DAEMON}" "${ROLLBACK_PLIST}"' in preinstall
