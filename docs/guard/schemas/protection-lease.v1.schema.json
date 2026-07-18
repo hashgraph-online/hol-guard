@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/schemas/guard/protection-lease.v1.schema.json",
+  "title": "HOL Guard protection lease v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "claims", "signature"],
+  "properties": {
+    "schemaVersion": {"const": "protection-lease.v1"},
+    "claims": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "workspaceId", "deviceId", "machineInstallationId", "installationGeneration", "sequence", "issuedAt", "expiresAt",
+        "snapshotSchemaVersion", "snapshotDigest", "previousLeaseDigest", "signingKeyId", "challenge"
+      ],
+      "properties": {
+        "workspaceId": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"},
+        "deviceId": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"},
+        "machineInstallationId": {"$ref": "self-protection-common.v1.schema.json#/$defs/hex32"},
+        "installationGeneration": {"$ref": "self-protection-common.v1.schema.json#/$defs/hex32"},
+        "sequence": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615},
+        "issuedAt": {"$ref": "self-protection-common.v1.schema.json#/$defs/timestamp"},
+        "expiresAt": {"$ref": "self-protection-common.v1.schema.json#/$defs/timestamp"},
+        "snapshotSchemaVersion": {"const": "local-integrity-snapshot.v1"},
+        "snapshotDigest": {"$ref": "self-protection-common.v1.schema.json#/$defs/hex64"},
+        "previousLeaseDigest": {"oneOf": [{"$ref": "self-protection-common.v1.schema.json#/$defs/hex64"}, {"type": "null"}]},
+        "signingKeyId": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"},
+        "challenge": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object", "additionalProperties": false, "required": ["challengeId", "nonce", "issuedAt", "expiresAt"],
+              "properties": {
+                "challengeId": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"},
+                "nonce": {"type": "string", "pattern": "^[A-Za-z0-9_-]{32,128}$"},
+                "issuedAt": {"$ref": "self-protection-common.v1.schema.json#/$defs/timestamp"},
+                "expiresAt": {"$ref": "self-protection-common.v1.schema.json#/$defs/timestamp"}
+              }
+            }
+          ]
+        }
+      }
+    },
+    "signature": {"$ref": "self-protection-common.v1.schema.json#/$defs/signature"}
+  }
+}
