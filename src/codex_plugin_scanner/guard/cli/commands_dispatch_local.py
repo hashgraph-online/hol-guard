@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
-    from .commands_support_connect import _refresh_cloud_policy_bundle
+    from .commands_support_connect import _refresh_cloud_policy_bundle, _synced_policy_payload
     from .commands_support_interaction import _emit, _run_apps_command, _run_consumer_scan_with_mode
     from .commands_support_runtime_policy import _approval_delivery_payload, _localize_pending_approval_copy
     from .commands_support_workspace import _run_init_command
@@ -202,13 +202,20 @@ def _run_guard_protect_command(
         payload = build_supply_chain_status_payload(store=store, config=config, now=_now())
         _emit("protect", payload, getattr(args, "json", False))
         return 0
+    protect_workspace = workspace or Path.cwd()
+
+    def current_protect_config() -> GuardConfig:
+        local_config = load_guard_config(guard_home, workspace=protect_workspace)
+        return overlay_synced_guard_policy(local_config, _synced_policy_payload(store))
+
     payload, exit_code = build_protect_payload(
         command=protect_command,
         store=store,
-        workspace_dir=workspace or Path.cwd(),
+        workspace_dir=protect_workspace,
         dry_run=bool(getattr(args, "dry_run", False)),
         now=_now(),
         config=config,
+        current_config_provider=current_protect_config,
         unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
     )
     _queue_local_protect_approvals(

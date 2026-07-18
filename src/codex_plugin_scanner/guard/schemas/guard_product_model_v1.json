@@ -19,9 +19,9 @@
         "allow",
         "warn",
         "review",
-        "block",
+        "require-reapproval",
         "sandbox-required",
-        "require-reapproval"
+        "block"
     ],
     "decision_scopes": [
         "global",

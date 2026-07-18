@@ -61,6 +61,7 @@ from ..approvals import (
     attach_primary_approval_link,
     build_approval_browser_url,
     canonical_local_approval_url,
+    evaluation_has_terminal_policy_action,
     first_approval_url,
     queue_blocked_approvals,
     wait_for_approval_requests,
@@ -128,7 +129,7 @@ from ..mcp_tool_calls import (
     build_tool_call_hash,
     evaluate_tool_call,
 )
-from ..models import SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
+from ..models import GUARD_ACTION_VALUES, SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
     package_firewall_available_actions,

@@ -9,7 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.models import HarnessDetection
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope, normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.detectors import (
@@ -578,7 +578,9 @@ def test_guard_run_keeps_detector_results_after_blocked_resolver_reevaluation(tm
         blocked_resolver=blocked_resolver_stub,
     )
 
-    assert calls == ["secret.local"]
+    # The approval/resolver boundary must rerun detectors against the freshly
+    # loaded authority before preserving their evidence in the final result.
+    assert calls == ["secret.local", "secret.local"]
     assert result["runtime_detector_signals_v2"] == [_signal("secret:local", "secret").to_dict()]
     assert result["approval_delivery"] == "queued"
 
@@ -629,6 +631,359 @@ def test_detector_composition_can_block_unblocked_evaluation(tmp_path):
     assert result["blocked"] is True
     assert result["blocked_by_detector"] == "bypass signal 'guard.bypass' forces block"
     assert result["runtime_detector_composition"]["action"] == "block"
+
+
+def test_authoritative_detector_block_controls_artifact_persistence(tmp_path):
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    artifact = GuardArtifact(
+        artifact_id="codex:project:detector-persistence",
+        name="detector-persistence",
+        harness="codex",
+        artifact_type="instruction",
+        source_scope="project",
+        config_path=str(workspace_dir / "AGENTS.md"),
+    )
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(artifact.config_path,),
+        artifacts=(artifact,),
+    )
+    config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, default_action="allow")
+    store = GuardStore(home_dir)
+    detector_reason = "bypass signal 'guard.bypass' forces block"
+
+    result = guard_runner_module.evaluate_detection(
+        detection,
+        store,
+        config,
+        default_action="allow",
+        persist=True,
+        runtime_detector_block_reason=detector_reason,
+    )
+
+    assert result["blocked"] is True
+    assert result["receipts_recorded"] == 1
+    artifact_result = result["artifacts"][0]
+    assert artifact_result["policy_action"] == "block"
+    assert artifact_result["decision_v2_json"]["action"] == "block"
+    assert artifact_result["decision_v2_json"]["reason"] == "runtime_detector_block"
+    assert artifact_result["policy_composition"]["final_action"] == "block"
+    assert artifact_result["policy_composition"]["runtime_detector_action"] == "block"
+    assert artifact_result["policy_composition"]["runtime_detector_reason"] == detector_reason
+    assert artifact_result["scanner_evidence"][-1] == {
+        "source": "runtime_detector_registry",
+        "status": "blocked",
+        "reason_code": "runtime_detector_block",
+        "reason": detector_reason,
+    }
+    inventory = store.find_inventory_item(artifact.artifact_id)
+    assert inventory is not None
+    assert inventory["last_policy_action"] == "block"
+    assert inventory["last_approved_at"] is None
+    assert store.get_snapshot("codex", artifact.artifact_id) is None
+    receipts = store.list_receipts(harness="codex")
+    assert len(receipts) == 1
+    assert receipts[0]["policy_decision"] == "block"
+    assert receipts[0]["approval_source"] == "runtime-detector"
+    assert receipts[0]["scanner_evidence"][-1]["reason_code"] == "runtime_detector_block"
+
+
+def test_guard_run_detector_block_leaves_saved_review_allow_unclaimed(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    artifact = GuardArtifact(
+        artifact_id="codex:project:detector-claim-gate",
+        name="detector-claim-gate",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(workspace_dir / ".codex" / "config.toml"),
+        metadata={"guard_default_action": "review", "action_class": "detector claim gate"},
+    )
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(artifact.config_path,),
+        artifacts=(artifact,),
+    )
+    config = GuardConfig(
+        guard_home=home_dir,
+        workspace=workspace_dir,
+        runtime_detector_registry=True,
+    )
+    store = GuardStore(home_dir)
+    initial = guard_runner_module.evaluate_detection(detection, store, config, persist=False)
+    context_hash = str(initial["artifacts"][0]["approval_context_hash"])
+    approval_id = store.record_local_once_approval(
+        request_id="detector-claim-gate",
+        harness="codex",
+        artifact_id=artifact.artifact_id,
+        artifact_hash=context_hash,
+        workspace=str(workspace_dir),
+        publisher=None,
+        action="allow",
+        created_at="2026-07-17T00:00:00+00:00",
+        expires_at="2099-07-17T00:00:00+00:00",
+    )
+    assert approval_id is not None
+    bypass_signal = RiskSignalV2(
+        signal_id="bypass:claim-gate",
+        category="bypass",
+        severity="high",
+        confidence="strong",
+        detector="guard.bypass",
+        title="Guard bypass attempt",
+        plain_reason="Detector blocked the aggregate launch.",
+        technical_detail=None,
+        evidence_ref=None,
+        redaction_level="summary",
+        false_positive_hint=None,
+        advisory_id=None,
+    )
+    detector_calls: list[str] = []
+    detector = RecordingDetector("guard.bypass", ("bypass",), detector_calls, bypass_signal)
+    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+    monkeypatch.setattr(
+        guard_runner_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("detector-blocked launch must not execute"),
+    )
+
+    result = guard_runner_module.guard_run(
+        "codex",
+        HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+        store,
+        config,
+        dry_run=False,
+        passthrough_args=[],
+    )
+
+    assert result["blocked"] is True
+    assert result["blocked_by_detector"] == "bypass signal 'guard.bypass' forces block"
+    assert result["launched"] is False
+    assert detector_calls == ["guard.bypass"]
+    artifact_result = result["artifacts"][0]
+    assert artifact_result["policy_action"] == "block"
+    assert artifact_result["decision_v2_json"]["action"] == "block"
+    assert artifact_result["decision_v2_json"]["reason"] == "runtime_detector_block"
+    assert artifact_result["policy_composition"]["final_action"] == "block"
+    assert artifact_result["policy_composition"]["runtime_detector_action"] == "block"
+    inventory = store.find_inventory_item(artifact.artifact_id)
+    assert inventory is not None
+    assert inventory["last_policy_action"] == "block"
+    assert inventory["last_approved_at"] is None
+    assert store.get_snapshot("codex", artifact.artifact_id) is None
+    receipts = store.list_receipts(harness="codex")
+    assert len(receipts) == 1
+    assert receipts[0]["policy_decision"] == "block"
+    assert receipts[0]["approval_source"] == "runtime-detector"
+    assert (
+        store.peek_local_once_approval(
+            harness="codex",
+            artifact_id=artifact.artifact_id,
+            artifact_hash=context_hash,
+            workspace=str(workspace_dir),
+            publisher=None,
+            now="2026-07-17T00:01:00+00:00",
+        )
+        is not None
+    )
+
+
+def test_guard_run_detector_review_precedes_saved_allow_reuse_and_persists_authority(
+    tmp_path,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    artifact = GuardArtifact(
+        artifact_id="codex:project:detector-review-claim-gate",
+        name="detector-review-claim-gate",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(workspace_dir / ".codex" / "config.toml"),
+        metadata={"guard_default_action": "review", "action_class": "detector review claim gate"},
+    )
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(artifact.config_path,),
+        artifacts=(artifact,),
+    )
+    config = GuardConfig(
+        guard_home=home_dir,
+        workspace=workspace_dir,
+        runtime_detector_registry=True,
+    )
+    store = GuardStore(home_dir)
+    initial = guard_runner_module.evaluate_detection(detection, store, config, persist=False)
+    original_context_hash = str(initial["artifacts"][0]["approval_context_hash"])
+    approval_id = store.record_local_once_approval(
+        request_id="detector-review-claim-gate",
+        harness="codex",
+        artifact_id=artifact.artifact_id,
+        artifact_hash=original_context_hash,
+        workspace=str(workspace_dir),
+        publisher=None,
+        action="allow",
+        created_at="2026-07-17T00:00:00+00:00",
+        expires_at="2099-07-17T00:00:00+00:00",
+    )
+    assert approval_id is not None
+    persistence_signal = RiskSignalV2(
+        signal_id="persistence:detector-review-claim-gate",
+        category="persistence",
+        severity="high",
+        confidence="likely",
+        detector="persistence.runtime",
+        title="Persistence requires review",
+        plain_reason="Detector found high-severity persistence behavior.",
+        technical_detail=None,
+        evidence_ref=None,
+        redaction_level="summary",
+        false_positive_hint=None,
+        advisory_id=None,
+    )
+    detector_calls: list[str] = []
+    detector = RecordingDetector(
+        "persistence.runtime",
+        ("persistence",),
+        detector_calls,
+        persistence_signal,
+    )
+    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+    monkeypatch.setattr(
+        store,
+        "claim_approval_reuse_decisions",
+        lambda *_args, **_kwargs: pytest.fail("detector review must be current before any saved-allow claim"),
+    )
+    monkeypatch.setattr(
+        guard_runner_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("unresolved detector review must not launch"),
+    )
+
+    result = guard_runner_module.guard_run(
+        "codex",
+        HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+        store,
+        config,
+        dry_run=False,
+        passthrough_args=[],
+    )
+
+    assert result["blocked"] is True
+    assert result["launched"] is False
+    assert detector_calls == ["persistence.runtime"]
+    artifact_result = result["artifacts"][0]
+    assert artifact_result["approval_context_hash"] != original_context_hash
+    assert artifact_result["policy_action"] == "review"
+    assert artifact_result["decision_v2_json"]["action"] == "ask"
+    assert artifact_result["decision_v2_json"]["reason"] == "runtime_detector_review"
+    assert artifact_result["policy_composition"]["current_action"] == "review"
+    assert artifact_result["policy_composition"]["runtime_detector_action"] == "review"
+    assert artifact_result["policy_composition"]["final_action"] == "review"
+    assert artifact_result["scanner_evidence"][-1] == {
+        "source": "runtime_detector_registry",
+        "status": "review-required",
+        "reason_code": "runtime_detector_review",
+        "reason": "persistence signal 'persistence.runtime' requires review",
+    }
+    inventory = store.find_inventory_item(artifact.artifact_id)
+    assert inventory is not None
+    assert inventory["last_policy_action"] == "review"
+    assert inventory["last_approved_at"] is None
+    assert store.get_snapshot("codex", artifact.artifact_id) is None
+    receipts = store.list_receipts(harness="codex")
+    assert len(receipts) == 1
+    assert receipts[0]["policy_decision"] == "review"
+    assert receipts[0]["approval_source"] == "runtime-detector"
+    assert receipts[0]["scanner_evidence"][-1] == artifact_result["scanner_evidence"][-1]
+    assert (
+        store.peek_local_once_approval(
+            harness="codex",
+            artifact_id=artifact.artifact_id,
+            artifact_hash=original_context_hash,
+            workspace=str(workspace_dir),
+            publisher=None,
+            now="2026-07-17T00:01:00+00:00",
+        )
+        is not None
+    )
+
+
+def test_guard_run_detector_block_is_terminal_before_any_review_resolver(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    artifact = GuardArtifact(
+        artifact_id="codex:project:detector-before-review",
+        name="detector-before-review",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(workspace_dir / ".codex" / "config.toml"),
+        metadata={"guard_default_action": "review", "action_class": "detector before review"},
+    )
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(artifact.config_path,),
+        artifacts=(artifact,),
+    )
+    detector_calls: list[str] = []
+    detector = RecordingDetector(
+        "guard.bypass",
+        ("bypass",),
+        detector_calls,
+        RiskSignalV2(
+            signal_id="bypass:before-review",
+            category="bypass",
+            severity="high",
+            confidence="strong",
+            detector="guard.bypass",
+            title="Guard bypass attempt",
+            plain_reason="Detector block must precede approval resolution.",
+            technical_detail=None,
+            evidence_ref=None,
+            redaction_level="summary",
+            false_positive_hint=None,
+            advisory_id=None,
+        ),
+    )
+    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+
+    def unexpected_resolver(*_args, **_kwargs):
+        pytest.fail("a terminal detector block must not enter an approval resolver")
+
+    result = guard_runner_module.guard_run(
+        "codex",
+        HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+        GuardStore(home_dir),
+        GuardConfig(guard_home=home_dir, workspace=workspace_dir, runtime_detector_registry=True),
+        dry_run=False,
+        passthrough_args=[],
+        interactive_resolver=unexpected_resolver,
+        blocked_resolver=unexpected_resolver,
+    )
+
+    assert result["blocked"] is True
+    assert result["blocked_by_detector"] == "bypass signal 'guard.bypass' forces block"
+    assert result["artifacts"][0]["policy_action"] == "block"
+    assert detector_calls == ["guard.bypass"]
 
 
 def test_guard_run_writes_detector_debug_trace_only_when_enabled(tmp_path, monkeypatch):

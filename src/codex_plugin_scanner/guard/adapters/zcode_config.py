@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..aibom_detection import enrich_mcp_server_metadata
 from ..models import GuardArtifact
 from .base import _json_payload
 
@@ -96,11 +97,58 @@ def _string_args(server_config: dict[str, object]) -> tuple[str, ...]:
 
 
 def _mcp_env_keys(server_config: dict[str, object]) -> list[str]:
+    return sorted(_mcp_environment(server_config))
+
+
+def _mcp_environment(server_config: dict[str, object]) -> dict[str, str]:
     for field in ("env", "environment"):
         value = server_config.get(field)
         if isinstance(value, dict):
-            return sorted(key for key in value if isinstance(key, str))
-    return []
+            return {
+                key.strip(): item
+                for key, item in value.items()
+                if isinstance(key, str) and key.strip() and isinstance(item, str)
+            }
+    return {}
+
+
+def _mcp_headers(server_config: dict[str, object]) -> dict[str, str]:
+    value = server_config.get("headers")
+    if not isinstance(value, dict):
+        return {}
+    return {
+        key.strip(): item
+        for key, item in value.items()
+        if isinstance(key, str) and key.strip() and isinstance(item, str)
+    }
+
+
+def _mcp_metadata(
+    *,
+    server_name: str,
+    server_config: dict[str, object],
+    command: str | None,
+    args: tuple[str, ...],
+    url: str | None,
+    transport: str,
+    additional: dict[str, object] | None = None,
+) -> dict[str, object]:
+    environment = _mcp_environment(server_config)
+    headers = _mcp_headers(server_config)
+    return enrich_mcp_server_metadata(
+        {
+            "name": server_name,
+            "env_keys": sorted(environment),
+            "headers_keys": sorted(headers),
+            **(additional or {}),
+        },
+        command=command,
+        args=args,
+        url=url,
+        transport=transport,
+        configured_environment=environment,
+        configured_headers=headers,
+    )
 
 
 def _mcp_transport(server_config: dict[str, object]) -> str:
@@ -144,6 +192,8 @@ def append_cli_config_artifacts(
                 command, url = _mcp_endpoint(server_config)
                 if command is None and url is None:
                     continue
+                args = _string_args(server_config)
+                transport = _mcp_transport(server_config)
                 artifacts.append(
                     GuardArtifact(
                         artifact_id=f"{harness}:{scope}:mcp:{server_name}",
@@ -153,10 +203,17 @@ def append_cli_config_artifacts(
                         source_scope=scope,
                         config_path=str(config_path),
                         command=command,
-                        args=_string_args(server_config),
+                        args=args,
                         url=url,
-                        transport=_mcp_transport(server_config),
-                        metadata={"env_keys": _mcp_env_keys(server_config)},
+                        transport=transport,
+                        metadata=_mcp_metadata(
+                            server_name=server_name,
+                            server_config=server_config,
+                            command=command,
+                            args=args,
+                            url=url,
+                            transport=transport,
+                        ),
                     )
                 )
 
@@ -342,6 +399,8 @@ def append_plugin_manifest_artifacts(
                 command, url = _mcp_endpoint(server_config)
                 if command is None and url is None:
                     continue
+                args = _string_args(server_config)
+                transport = _mcp_transport(server_config)
                 artifacts.append(
                     GuardArtifact(
                         artifact_id=f"{harness}:{scope}:plugin:{plugin_name}:mcp:{server_name}",
@@ -351,13 +410,18 @@ def append_plugin_manifest_artifacts(
                         source_scope=scope,
                         config_path=str(plugin_mcp_path),
                         command=command,
-                        args=_string_args(server_config),
+                        args=args,
                         url=url,
-                        transport=_mcp_transport(server_config),
-                        metadata={
-                            "env_keys": _mcp_env_keys(server_config),
-                            "plugin": plugin_name,
-                        },
+                        transport=transport,
+                        metadata=_mcp_metadata(
+                            server_name=server_name,
+                            server_config=server_config,
+                            command=command,
+                            args=args,
+                            url=url,
+                            transport=transport,
+                            additional={"plugin": plugin_name},
+                        ),
                     )
                 )
 

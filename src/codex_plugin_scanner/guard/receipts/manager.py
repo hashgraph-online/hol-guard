@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
-from typing import TypeGuard
 from uuid import uuid4
 
-from ..models import GUARD_ACTION_VALUES, GuardAction, GuardReceipt
+from ..action_lattice import normalize_guard_action
+from ..models import GuardAction, GuardReceipt
 from ..runtime.actions import GuardActionEnvelope
 
 
@@ -68,12 +68,8 @@ def _auto_diff_summary(changed_capabilities: list[str]) -> str:
     return f"{count} change(s): {sample}{suffix}"
 
 
-def _is_guard_action(value: str) -> TypeGuard[GuardAction]:
-    return value in GUARD_ACTION_VALUES
-
-
 def _resolve_policy_decision(value: str) -> GuardAction:
-    return value if _is_guard_action(value) else "require-reapproval"
+    return normalize_guard_action(value, unknown_action="require-reapproval")
 
 
 def build_receipt(

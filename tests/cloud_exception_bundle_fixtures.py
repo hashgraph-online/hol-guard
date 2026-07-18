@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from codex_plugin_scanner.guard.policy_bundle_parser import computed_policy_bundle_hash
+from tests.policy_bundle_signing_helpers import sign_policy_bundle
 
 
 def _sample_policy_bundle(*, bundle_hash: str | None = None) -> dict[str, object]:
@@ -15,7 +16,7 @@ def _sample_policy_bundle(*, bundle_hash: str | None = None) -> dict[str, object
         "issuedAt": "2026-04-19T00:00:10+00:00",
         "expiresAt": None,
         "verifier": {
-            "algorithm": "sha256",
+            "algorithm": "rsa-pss-sha256",
             "keyId": "guard-policy-bundle-v1",
             "signature": None,
         },
@@ -35,11 +36,12 @@ def _sample_policy_bundle(*, bundle_hash: str | None = None) -> dict[str, object
                 "ruleId": "pkg-block",
                 "action": "block",
                 "reason": "Block risky package installs before execution.",
+                "artifactType": "package_request",
                 "matcherFamilies": ["package-request"],
                 "scope": {
                     "agents": [],
                     "devices": [],
-                    "ecosystems": ["npm"],
+                    "ecosystems": [],
                     "environments": ["development"],
                     "harnesses": ["codex"],
                     "locations": [],
@@ -93,6 +95,7 @@ def build_cloud_exception_policy_bundle(
             "status": "synced",
         }
     ]
-    if bundle_hash is None:
-        bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
-    return bundle
+    signed_bundle = sign_policy_bundle(bundle, workspace_id=workspace_id)
+    if bundle_hash is not None:
+        signed_bundle["bundleHash"] = bundle_hash
+    return signed_bundle

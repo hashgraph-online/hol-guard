@@ -54,6 +54,13 @@ def test_snapshot_schema_reason_codes_match_runtime_contract() -> None:
     assert set(schema["$defs"]["reasonCode"]["enum"]) == set(get_args(IntegrityReasonCode))
 
 
+def test_managed_policy_source_tamper_reason_is_preserved() -> None:
+    component = integrity._component("tampered", "managed_policy_source_tampered")
+
+    assert component.state == "tampered"
+    assert component.reason_code == "managed_policy_source_tampered"
+
+
 @pytest.mark.parametrize(
     ("supervisor", "expected"),
     [

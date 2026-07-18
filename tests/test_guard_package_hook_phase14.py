@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
+import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
@@ -58,6 +59,25 @@ pytest_plugins = ["tests.bundle_first_cloud"]
 pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
 
 WORKSPACE_ID = "workspace-alpha"
+EVALUATION_NOW = datetime(2026, 5, 19, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def _freeze_package_evaluator_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            fixed = cls(
+                EVALUATION_NOW.year,
+                EVALUATION_NOW.month,
+                EVALUATION_NOW.day,
+                tzinfo=timezone.utc,
+            )
+            if tz is None:
+                return fixed.replace(tzinfo=None)
+            return fixed.astimezone(tz)
+
+    monkeypatch.setattr(evaluator_module, "datetime", _FixedDateTime)
 
 
 def _generate_key_pair() -> tuple[bytes, bytes]:
@@ -83,7 +103,7 @@ def _iso(value: datetime) -> str:
 
 
 def _bundle_response(*, action: str, policy_rules: list[dict[str, object]] | None = None) -> dict[str, object]:
-    generated_at = datetime(2026, 5, 19, tzinfo=timezone.utc)
+    generated_at = EVALUATION_NOW
     expires_at = generated_at + timedelta(hours=12)
     bundle = {
         "advisories": [
@@ -290,6 +310,12 @@ def test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses(
 
     assert rc == 1
     assert output["artifact_type"] == "package_request"
+    assert output["policy_action"] == "require-reapproval"
+    assert output["supply_chain_evaluation"]["decision"] == "ask"
+    assert output["supply_chain_evaluation"]["matched_rule_id"] == "policy-review-1"
+    assert output["approval_requests"]
+    assert output.get("terminal") is not True
+    assert output.get("terminal_action") is None
     assert pending
     assert pending[0]["artifact_type"] == "package_request"
     assert pending[0]["action_envelope_json"]["package_manager"] == "npm"
@@ -401,7 +427,7 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
-    _seed_block_bundle(home_dir)
+    store = _seed_block_bundle(home_dir)
     (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
     monkeypatch.setattr(
@@ -426,9 +452,15 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
     assert decision["harness_message"].startswith("HOL Guard blocked")
     assert "Reason:" in decision["harness_message"]
     assert "Fix: install `npm install minimist@1.2.9` or choose a team exception." in decision["harness_message"]
-    assert (
-        "Open HOL Guard to approve or keep this blocked: http://127.0.0.1:5474/requests/" in decision["harness_message"]
-    )
+    assert output["policy_action"] == "block"
+    assert output["terminal_action"] == "block"
+    assert output["terminal"] is True
+    assert output["operation_status"] == "blocked"
+    assert output["approval_requests"] == []
+    assert store.count_approval_requests(status="pending") == 0
+    assert decision.get("retry_instruction") is None
+    assert "/requests/" not in decision["harness_message"]
+    assert "Review this request in HOL Guard, then retry." not in decision["harness_message"]
     assert "guard/inbox" not in decision["harness_message"]
 
 

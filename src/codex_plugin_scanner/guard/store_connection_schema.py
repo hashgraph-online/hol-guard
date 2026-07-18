@@ -45,6 +45,80 @@ def _sleep_compat(seconds: float) -> None:
     sleep(seconds)
 
 
+_POLICY_INDEX_STATEMENTS = (
+    """
+    create index if not exists idx_policy_decisions_reuse_artifact
+    on policy_decisions (action, harness, artifact_id, updated_at desc, decision_id desc)
+    """,
+    """
+    create index if not exists idx_policy_decisions_reuse_hash
+    on policy_decisions (action, harness, artifact_hash, updated_at desc, decision_id desc)
+    """,
+    """
+    create index if not exists idx_policy_decisions_reuse_publisher
+    on policy_decisions (action, harness, publisher, updated_at desc, decision_id desc)
+    """,
+    """
+    create index if not exists idx_policy_decisions_lookup_artifact
+    on policy_decisions (artifact_id, harness, artifact_hash, updated_at desc, decision_id desc)
+    where scope = 'artifact'
+    """,
+    """
+    create index if not exists idx_policy_decisions_lookup_workspace
+    on policy_decisions (workspace, harness, artifact_id, artifact_hash, updated_at desc, decision_id desc)
+    where scope = 'workspace'
+    """,
+    """
+    create index if not exists idx_policy_decisions_lookup_publisher
+    on policy_decisions (publisher, harness, artifact_hash, updated_at desc, decision_id desc)
+    where scope = 'publisher'
+    """,
+    """
+    create index if not exists idx_policy_decisions_lookup_publisher_legacy
+    on policy_decisions (publisher, harness, artifact_hash, updated_at desc, decision_id desc)
+    where scope = 'publisher' and artifact_hash is not null
+      and artifact_hash not like 'guard-approval-context:v1:%'
+    """,
+    """
+    create index if not exists idx_policy_decisions_lookup_harness
+    on policy_decisions (harness, artifact_id, artifact_hash, updated_at desc, decision_id desc)
+    where scope = 'harness'
+    """,
+    """
+    create index if not exists idx_policy_decisions_lookup_harness_legacy
+    on policy_decisions (harness, artifact_id, artifact_hash, updated_at desc, decision_id desc)
+    where scope = 'harness' and artifact_hash is not null
+      and artifact_hash not like 'guard-approval-context:v1:%'
+    """,
+    """
+    create index if not exists idx_policy_decisions_lookup_global
+    on policy_decisions (harness, artifact_id, artifact_hash, updated_at desc, decision_id desc)
+    where scope = 'global'
+    """,
+    """
+    create index if not exists idx_policy_decisions_lookup_global_legacy
+    on policy_decisions (harness, artifact_id, artifact_hash, updated_at desc, decision_id desc)
+    where scope = 'global' and artifact_hash is not null
+      and artifact_hash not like 'guard-approval-context:v1:%'
+    """,
+    """
+    create index if not exists idx_policy_decisions_diagnostic_harness_broad
+    on policy_decisions (harness, updated_at desc, decision_id desc)
+    where scope = 'harness' and action = 'allow' and artifact_id is null
+    """,
+    """
+    create index if not exists idx_policy_decisions_diagnostic_global_broad
+    on policy_decisions (harness, updated_at desc, decision_id desc)
+    where scope = 'global' and action = 'allow' and artifact_id is null
+    """,
+    """
+    create index if not exists idx_policy_decisions_diagnostic_publisher
+    on policy_decisions (harness, publisher, updated_at desc, decision_id desc)
+    where scope = 'publisher' and action = 'allow'
+    """,
+)
+
+
 class StoreConnectionSchemaMixin:
     _startup_prefetched_policy_integrity_secret_material: object | tuple[bytes | None, str | None] = (
         _POLICY_INTEGRITY_LOOKUP_UNSET
@@ -339,12 +413,81 @@ class StoreConnectionSchemaMixin:
               action text not null,
               created_at text not null,
               expires_at text not null,
-              claimed_at text
+              claimed_at text,
+              integrity_version integer,
+              payload_hash text,
+              payload_mac text,
+              integrity_key_id text,
+              signed_at text
             )
             """,
             """
             create index if not exists idx_guard_local_once_approvals_lookup
             on guard_local_once_approvals (claimed_at, harness, artifact_id, artifact_hash, expires_at)
+            """,
+            """
+            create index if not exists idx_guard_local_once_reuse_artifact
+            on guard_local_once_approvals (action, harness, artifact_id, created_at desc, approval_id desc)
+            """,
+            """
+            create index if not exists idx_guard_local_once_reuse_hash
+            on guard_local_once_approvals (action, harness, artifact_hash, created_at desc, approval_id desc)
+            """,
+            """
+            create index if not exists idx_guard_local_once_diagnostic_artifact
+            on guard_local_once_approvals (harness, artifact_id, created_at desc, approval_id desc)
+            where claimed_at is null and action = 'allow'
+            """,
+            """
+            create index if not exists idx_guard_local_once_diagnostic_hash
+            on guard_local_once_approvals (harness, artifact_hash, created_at desc, approval_id desc)
+            where claimed_at is null and action = 'allow'
+            """,
+            """
+            create table if not exists guard_approval_authority_revision (
+              singleton integer primary key check (singleton = 1),
+              revision integer not null
+            )
+            """,
+            """
+            insert or ignore into guard_approval_authority_revision (singleton, revision)
+            values (1, 0)
+            """,
+            """
+            create trigger if not exists trg_policy_decisions_authority_insert
+            after insert on policy_decisions begin
+              update guard_approval_authority_revision set revision = revision + 1 where singleton = 1;
+            end
+            """,
+            """
+            create trigger if not exists trg_policy_decisions_authority_update
+            after update on policy_decisions begin
+              update guard_approval_authority_revision set revision = revision + 1 where singleton = 1;
+            end
+            """,
+            """
+            create trigger if not exists trg_policy_decisions_authority_delete
+            after delete on policy_decisions begin
+              update guard_approval_authority_revision set revision = revision + 1 where singleton = 1;
+            end
+            """,
+            """
+            create trigger if not exists trg_local_once_authority_insert
+            after insert on guard_local_once_approvals begin
+              update guard_approval_authority_revision set revision = revision + 1 where singleton = 1;
+            end
+            """,
+            """
+            create trigger if not exists trg_local_once_authority_update
+            after update on guard_local_once_approvals begin
+              update guard_approval_authority_revision set revision = revision + 1 where singleton = 1;
+            end
+            """,
+            """
+            create trigger if not exists trg_local_once_authority_delete
+            after delete on guard_local_once_approvals begin
+              update guard_approval_authority_revision set revision = revision + 1 where singleton = 1;
+            end
             """,
             """
             create table if not exists guard_cloud_events (
@@ -500,6 +643,13 @@ class StoreConnectionSchemaMixin:
             self._ensure_policy_column(connection, "policy_document_digest", "text")
             self._ensure_policy_column(connection, "policy_rule_id", "text")
             self._ensure_policy_column(connection, "policy_provenance_json", "text")
+            for index_statement in _POLICY_INDEX_STATEMENTS:
+                connection.execute(index_statement)
+            self._ensure_column(connection, "guard_local_once_approvals", "integrity_version", "integer")
+            self._ensure_column(connection, "guard_local_once_approvals", "payload_hash", "text")
+            self._ensure_column(connection, "guard_local_once_approvals", "payload_mac", "text")
+            self._ensure_column(connection, "guard_local_once_approvals", "integrity_key_id", "text")
+            self._ensure_column(connection, "guard_local_once_approvals", "signed_at", "text")
             self._ensure_runtime_receipts_column(connection, "capabilities_summary", "text not null default ''")
             self._ensure_runtime_receipts_column(connection, "scanner_evidence_json", "text not null default '[]'")
             self._ensure_runtime_receipts_column(connection, "diff_summary", "text")

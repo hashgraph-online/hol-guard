@@ -27,6 +27,7 @@ from typing import Any, TypedDict, TypeGuard, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
+from ..action_lattice import is_guard_action as _is_guard_action
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..aibom_cli import _AIBOM_AUTO_SYNC_INTERVAL_SECONDS, sync_aibom_snapshots_if_due
@@ -89,6 +90,7 @@ from ..codex_resume import (
     retry_request_resume,
 )
 from ..config import (
+    VALID_RECEIPT_REDACTION_LEVELS,
     GuardConfig,
     editable_guard_settings,
     load_guard_config,
@@ -110,7 +112,7 @@ from ..local_supply_chain import (
     resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
-from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, DecisionScope, GuardAction, PolicyDecision
+from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -121,7 +123,9 @@ from ..package_firewall_entitlement import (
 )
 from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..package_shim_status import record_package_shim_audit_result
+from ..policy_bundle_parser import policy_bundle_is_enforceable, policy_bundle_rejection_message
 from ..policy_bundle_trusted_keys import (
+    MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
     policy_bundle_keyring_payload,
     validate_synced_policy_bundle,
 )
@@ -144,11 +148,15 @@ from ..runtime.runner import (
     _canonical_policy_enforcement_enabled,
     _daemon_version_supported,
     _guard_device_metadata,
-    _persist_cloud_exceptions,
+    _persist_cloud_receipt_redaction_level,
+    _policy_bundle_acceptance_checkpoint,
     _policy_bundle_acknowledgement_payload,
+    _policy_bundle_cloud_exception_items,
     _policy_bundle_is_version_downgrade,
     _policy_shadow_mismatch_reason_codes,
+    _reset_cloud_receipt_redaction_authority,
     _resolve_guard_sync_auth_context,
+    _validate_cached_policy_bundle,
     prepare_guard_cloud_connect_authorization,
     repair_guard_cloud_connect_storage,
     sync_local_guard_cloud_proof,
@@ -242,10 +250,6 @@ def _build_snapshot_payload(context: HarnessContext) -> dict[str, object]:
 
 def _is_decision_scope(value: str) -> TypeGuard[DecisionScope]:
     return value in DECISION_SCOPE_VALUES
-
-
-def _is_guard_action(value: str) -> TypeGuard[GuardAction]:
-    return value in GUARD_ACTION_VALUES
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -2322,7 +2326,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "unknown_harness"}, status=404)
             return
         try:
-            require_high_risk(
+            approval_gate_grant = require_high_risk(
                 self.server.store.guard_home,  # type: ignore[attr-defined]
                 purpose="policy_write",
                 approval_gate_input=approval_gate_input_from_mapping(payload),
@@ -2347,10 +2351,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 stored_keyring=self.server.store.get_sync_payload("policy_bundle_keyring"),  # type: ignore[attr-defined]
                 sync_payload=payload if isinstance(payload, dict) else None,
                 supply_chain_keyring=self.server.store.get_sync_payload("supply_chain_bundle_keyring"),  # type: ignore[attr-defined]
+                managed_keyring_provenance=self.server.store.get_sync_payload(  # type: ignore[attr-defined]
+                    MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY
+                ),
+                expected_workspace_id=self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
             )
-            existing_policy_bundle_payload = self.server.store.get_sync_payload("policy_bundle")  # type: ignore[attr-defined]
-            existing_policy_bundle = (
-                existing_policy_bundle_payload if isinstance(existing_policy_bundle_payload, dict) else None
+            existing_policy_bundle, _existing_bundle_error = _validate_cached_policy_bundle(
+                self.server.store,  # type: ignore[attr-defined]
+                self.server.store.get_sync_payload("policy_bundle"),  # type: ignore[attr-defined]
             )
             canonical_last_good = self.server.store.get_sync_payload(  # type: ignore[attr-defined]
                 "policy_bundle_canonical_last_good"
@@ -2366,10 +2374,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             ):
                 transition_baseline = canonical_last_good
             if validated_policy_bundle is None:
-                self._write_json({"error": rejection_reason or "invalid_policy_bundle"}, status=400)
+                resolved_reason = rejection_reason or "invalid_policy_bundle"
+                error_payload: dict[str, object] = {"error": resolved_reason}
+                remediation = policy_bundle_rejection_message(resolved_reason)
+                if remediation is not None:
+                    error_payload["message"] = remediation
+                self._write_json(error_payload, status=400)
                 return
             if not _daemon_version_supported(validated_policy_bundle):
                 self._write_json({"error": "unsupported_daemon_version"}, status=400)
+                return
+            if not policy_bundle_is_enforceable(validated_policy_bundle):
+                self._write_json(
+                    {
+                        "error": "inactive_rollout_state",
+                        "message": policy_bundle_rejection_message("inactive_rollout_state"),
+                    },
+                    status=400,
+                )
                 return
             if _policy_bundle_is_version_downgrade(
                 transition_baseline,
@@ -2382,7 +2404,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return
             applied_at = _now()
             device_id, device_name = _guard_device_metadata(self.server.store)  # type: ignore[attr-defined]
-            workspace_id = self.server.store.get_cloud_workspace_id() or ""  # type: ignore[attr-defined]
+            workspace_id = (  # type: ignore[attr-defined]
+                self.server.store.get_cloud_workspace_id()
+                or self._optional_string(validated_policy_bundle.get("workspaceId"))
+                or ""
+            )
             canonical_enforcement = _canonical_policy_enforcement_enabled(
                 workspace_id=workspace_id,
                 device_id=device_id,
@@ -2450,6 +2476,43 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             except PolicyCompilationError as error:
                 self._write_json({"error": f"canonical_compile_{error.code}"}, status=400)
                 return
+            previous_policy_bundle_ack = self.server.store.get_sync_payload(  # type: ignore[attr-defined]
+                "policy_bundle_ack"
+            )
+            policy_bundle_ack = _policy_bundle_acknowledgement_payload(
+                device_id=device_id,
+                device_name=device_name,
+                policy_bundle=validated_policy_bundle,
+                synced_at=applied_at,
+                status=("applied" if canonical_enforcement or not bundle_is_v2 else "validated"),
+                previous=(previous_policy_bundle_ack if isinstance(previous_policy_bundle_ack, dict) else None),
+            )
+            cloud_exception_items = _policy_bundle_cloud_exception_items(
+                self.server.store,  # type: ignore[attr-defined]
+                sync_exceptions=[],
+                policy_bundle=validated_policy_bundle,
+                policy_bundle_ack=policy_bundle_ack,
+                device_id=device_id,
+            )
+            activated = self.server.store.apply_policy_bundle_authority(  # type: ignore[attr-defined]
+                candidate_policy_decisions,
+                applied_at,
+                policy_bundle=validated_policy_bundle,
+                policy_bundle_keyring=policy_bundle_keyring_payload(
+                    trusted_policy_bundle_keys,
+                    workspace_id=workspace_id,
+                ),
+                cloud_exceptions=cloud_exception_items,
+                policy_bundle_ack=policy_bundle_ack,
+                policy_bundle_checkpoint=_policy_bundle_acceptance_checkpoint(validated_policy_bundle),
+                update_last_good=True,
+                policy_bundle_last_error={},
+                approval_gate_grant=approval_gate_grant,
+                remote_write_authorized=True,
+            )
+            if not activated:
+                self._write_json({"error": "bundle_version_downgrade"}, status=400)
+                return
             if bundle_is_v2:
                 if isinstance(canonical_last_good, dict) and canonical_last_good.get(
                     "bundleHash"
@@ -2464,87 +2527,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     validated_policy_bundle,
                     applied_at,
                 )
-                if canonical_enforcement:
-                    self.server.store.set_sync_payload(  # type: ignore[attr-defined]
-                        "policy_bundle",
-                        validated_policy_bundle,
-                        applied_at,
-                    )
-                    self.server.store.set_sync_payload(  # type: ignore[attr-defined]
-                        "policy_bundle_last_good",
-                        validated_policy_bundle,
-                        applied_at,
-                    )
             else:
-                self.server.store.set_sync_payload(  # type: ignore[attr-defined]
-                    "policy_bundle",
-                    validated_policy_bundle,
-                    applied_at,
-                )
-                self.server.store.set_sync_payload(  # type: ignore[attr-defined]
-                    "policy_bundle_last_good",
-                    validated_policy_bundle,
-                    applied_at,
-                )
                 self.server.store.set_sync_payload(  # type: ignore[attr-defined]
                     "policy_bundle_legacy_last_good",
                     validated_policy_bundle,
                     applied_at,
                 )
-            self.server.store.set_sync_payload(  # type: ignore[attr-defined]
-                "policy_bundle_keyring",
-                policy_bundle_keyring_payload(
-                    trusted_policy_bundle_keys,
-                    workspace_id=workspace_id,
-                ),
-                applied_at,
-            )
-            previous_policy_bundle_ack = self.server.store.get_sync_payload(  # type: ignore[attr-defined]
-                "policy_bundle_ack"
-            )
-            self.server.store.set_sync_payload(  # type: ignore[attr-defined]
-                "policy_bundle_ack",
-                _policy_bundle_acknowledgement_payload(
-                    device_id=device_id,
-                    device_name=device_name,
-                    policy_bundle=validated_policy_bundle,
+            receipt_redaction_level = validated_policy_bundle.get("receiptRedactionLevel")
+            if isinstance(receipt_redaction_level, str) and receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
+                _persist_cloud_receipt_redaction_level(
+                    self.server.store,  # type: ignore[attr-defined]
+                    level=receipt_redaction_level,
                     synced_at=applied_at,
-                    status=("applied" if canonical_enforcement else "validated"),
-                    previous=(previous_policy_bundle_ack if isinstance(previous_policy_bundle_ack, dict) else None),
-                ),
-                applied_at,
-            )
-            existing_remote_decisions = [
-                PolicyDecision(
-                    harness=str(item["harness"]),
-                    scope=scope,
-                    action=action,
-                    artifact_id=self._optional_string(item.get("artifact_id")),
-                    artifact_hash=self._optional_string(item.get("artifact_hash")),
-                    workspace=self._optional_string(item.get("workspace")),
-                    publisher=self._optional_string(item.get("publisher")),
-                    reason=self._optional_string(item.get("reason")),
-                    owner=self._optional_string(item.get("owner")),
-                    source=str(item.get("source") or "cloud-sync"),
-                    expires_at=self._optional_string(item.get("expires_at")),
                 )
-                for item in self.server.store.list_policy_decisions()  # type: ignore[attr-defined]
-                if item.get("source") in {"cloud-sync", "team-policy"}
-                if _is_decision_scope(scope := self._optional_string(item.get("scope")) or "")
-                if _is_guard_action(action := self._optional_string(item.get("action")) or "")
-            ]
-            existing_remote_decisions.extend(candidate_policy_decisions)
-            self.server.store.replace_remote_policies(  # type: ignore[attr-defined]
-                existing_remote_decisions,
-                applied_at,
-                remote_write_authorized=True,
-            )
-            _persist_cloud_exceptions(
-                self.server.store,  # type: ignore[attr-defined]
-                policy_bundle=validated_policy_bundle,
-                now=applied_at,
-                device_id=device_id,
-            )
+            else:
+                _reset_cloud_receipt_redaction_authority(  # type: ignore[arg-type]
+                    self.server.store,  # type: ignore[attr-defined]
+                    synced_at=applied_at,
+                )
             applied_bundle_hash = str(validated_policy_bundle["bundleHash"])
             applied_bundle_version = str(validated_policy_bundle["bundleVersion"])
         self._write_json(

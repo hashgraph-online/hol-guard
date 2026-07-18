@@ -42,7 +42,11 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
-from .commands_hook_runtime_state import RuntimeArtifactHookState
+from .commands_hook_runtime_state import (
+    RuntimeArtifactHookState,
+    record_runtime_artifact_hook_receipt,
+    set_runtime_artifact_hook_final_action,
+)
 
 def _finalize_runtime_artifact_hook(
     state: RuntimeArtifactHookState,
@@ -52,6 +56,7 @@ def _finalize_runtime_artifact_hook(
     output_stream: TextIO | None = None,
     payload: Mapping[str, object],
     store: GuardStore,
+    post_wait_revalidator: Callable[[], RuntimeArtifactHookState | None] | None = None,
 ) -> int:
     action_envelope = state.action_envelope
     event_name = state.event_name
@@ -59,6 +64,7 @@ def _finalize_runtime_artifact_hook(
     response_payload = state.response_payload
     runtime_artifact = state.runtime_artifact
     if _should_emit_copilot_hook_response(args):
+        record_runtime_artifact_hook_receipt(state, store)
         _record_harness_usage_for_hook(
             store=store,
             action_envelope=action_envelope,
@@ -75,6 +81,28 @@ def _finalize_runtime_artifact_hook(
             output_stream=output_stream,
         )
         return 0
+    fresh_state: RuntimeArtifactHookState | None = None
+
+    def fresh_browser_context() -> Mapping[str, object] | None:
+        nonlocal fresh_state
+        if post_wait_revalidator is None:
+            return None
+        fresh_state = post_wait_revalidator()
+        if fresh_state is None:
+            return None
+        composition = fresh_state.response_payload.get("policy_composition")
+        current_action = (
+            composition.get("current_composed_action")
+            if isinstance(composition, Mapping)
+            else None
+        )
+        return {
+            "artifact_id": fresh_state.artifact_id,
+            "artifact_hash": fresh_state.runtime_artifact_hash,
+            "current_action": current_action,
+            "authoritative_action": fresh_state.policy_action,
+        }
+
     codex_browser_decision = _codex_browser_approval_decision(
         args=args,
         event_name=event_name,
@@ -83,8 +111,58 @@ def _finalize_runtime_artifact_hook(
         store=store,
         config=config,
         daemon_client=state.browser_approval_daemon_client,
+        expected_artifact_hash=state.runtime_artifact_hash,
+        fresh_context_provider=fresh_browser_context,
     )
+
+    def adopt_fresh_browser_state() -> None:
+        nonlocal action_envelope, event_name, policy_action, response_payload, runtime_artifact, state
+        if fresh_state is None or fresh_state is state:
+            return
+        previous_response = response_payload
+        previous_initial_action = state.initial_policy_action
+        previous_daemon_client = state.browser_approval_daemon_client
+        state = fresh_state
+        state.initial_policy_action = previous_initial_action
+        state.browser_approval_daemon_client = previous_daemon_client
+        for key in (
+            "approval_request_ids",
+            "approval_requests",
+            "approval_url",
+            "approval_url_terminal",
+            "approval_wait",
+            "browser_resolution_request_id",
+            "browser_resolution_validation",
+            "codex_resume",
+            "continuation",
+            "operation",
+            "operation_id",
+            "operation_status",
+            "review_hint",
+            "session_id",
+        ):
+            if key in previous_response:
+                state.response_payload[key] = previous_response[key]
+        action_envelope = state.action_envelope
+        event_name = state.event_name
+        policy_action = state.policy_action
+        response_payload = state.response_payload
+        runtime_artifact = state.runtime_artifact
+
     if codex_browser_decision == "allow":
+        adopt_fresh_browser_state()
+        approval_request_id = response_payload.get("browser_resolution_request_id")
+        set_runtime_artifact_hook_final_action(
+            state,
+            "allow",
+            approval_request_id=(
+                approval_request_id if isinstance(approval_request_id, str) else None
+            ),
+            approval_source="browser",
+        )
+        action_envelope = state.action_envelope
+        policy_action = state.policy_action
+        response_payload = state.response_payload
         if event_name != "PreToolUse":
             _emit_native_hook_response(
                 harness=args.harness,
@@ -93,6 +171,7 @@ def _finalize_runtime_artifact_hook(
                 reason="",
                 output_stream=output_stream,
             )
+        record_runtime_artifact_hook_receipt(state, store)
         _record_harness_usage_for_hook(
             store=store,
             action_envelope=action_envelope,
@@ -100,8 +179,27 @@ def _finalize_runtime_artifact_hook(
             policy_action="allow",
         )
         return 0
-    if codex_browser_decision == "block":
-        policy_action = "block"
+    if codex_browser_decision in {"block", "sandbox-required"}:
+        adopt_fresh_browser_state()
+        approval_request_id = response_payload.get("browser_resolution_request_id")
+        if not isinstance(approval_request_id, str):
+            approval_requests = response_payload.get("approval_requests")
+            if isinstance(approval_requests, list) and approval_requests:
+                first_request = approval_requests[0]
+                if isinstance(first_request, dict) and isinstance(first_request.get("request_id"), str):
+                    approval_request_id = first_request["request_id"]
+        set_runtime_artifact_hook_final_action(
+            state,
+            codex_browser_decision,
+            approval_request_id=(
+                approval_request_id if isinstance(approval_request_id, str) else None
+            ),
+            approval_source="browser",
+        )
+        action_envelope = state.action_envelope
+        policy_action = state.policy_action
+        response_payload = state.response_payload
+    record_runtime_artifact_hook_receipt(state, store)
     approval_context = _native_approval_center_context(response_payload, harness=args.harness)
     raw_runtime_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
     if _should_emit_native_hook_exit_block(args, event_name=event_name, policy_action=policy_action):
@@ -158,11 +256,13 @@ def _finalize_runtime_artifact_hook(
         )
         return 2
     if _canonical_harness_name(args.harness) == "codex" and (
-        event_name == "UserPromptSubmit" or approval_context is not None
+        event_name == "UserPromptSubmit"
+        or approval_context is not None
+        or policy_action in {"block", "sandbox-required"}
     ):
         runtime_reason = _native_hook_reason(
             raw_runtime_reason,
-            approval_context,
+            approval_context or response_payload.get("review_hint"),
         )
     else:
         runtime_reason = _native_hook_reason_for_harness(
@@ -211,7 +311,7 @@ def _finalize_runtime_artifact_hook(
                 payload=payload,
                 policy_action=policy_action,
             )
-            return 0 if policy_action not in {"block", "sandbox-required", "require-reapproval"} else 2
+            return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
         if canonical_harness == "pi":
             from ..adapters.pi_hooks import emit_pi_hook_response
 
@@ -227,7 +327,7 @@ def _finalize_runtime_artifact_hook(
                 payload=payload,
                 policy_action=policy_action,
             )
-            return 0 if policy_action not in {"block", "sandbox-required", "require-reapproval"} else 2
+            return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
         if canonical_harness == "zcode":
             from ..adapters.zcode_hooks import emit_zcode_hook_response
 
@@ -244,7 +344,7 @@ def _finalize_runtime_artifact_hook(
                 payload=payload,
                 policy_action=policy_action,
             )
-            return 0 if policy_action not in {"block", "sandbox-required", "require-reapproval"} else 2
+            return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
         _emit_native_hook_response(
             harness=args.harness,
             policy_action=policy_action,
@@ -267,7 +367,7 @@ def _finalize_runtime_artifact_hook(
         payload=payload,
         policy_action=policy_action,
     )
-    return 1 if policy_action in {"block", "require-reapproval"} else 0
+    return 1 if policy_action in {"review", "require-reapproval", "sandbox-required", "block"} else 0
 
 __all__ = [
     "_finalize_runtime_artifact_hook",

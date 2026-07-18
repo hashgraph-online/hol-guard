@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
@@ -226,7 +227,7 @@ def _data_flow_signal_v2() -> RiskSignalV2:
     )
 
 
-def test_guard_hook_blocks_package_request_before_execution_and_queues_cloud_sync(
+def test_guard_hook_terminal_package_block_is_not_queued_for_browser_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -241,12 +242,13 @@ def test_guard_hook_blocks_package_request_before_execution_and_queues_cloud_syn
     store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="block"), "2026-05-19T00:00:00Z")
     (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
     monkeypatch.setenv("CODEX_MANAGED_BY_BUN", "1")
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
 
-    def fail_daemon(_home: Path) -> object:
-        raise RuntimeError("no daemon client")
+    def unexpected_browser_approval(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("terminal package block must not queue or wait for browser approval")
 
-    monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", unexpected_browser_approval)
+    monkeypatch.setattr(guard_commands_module, "queue_blocked_approvals", unexpected_browser_approval)
+    monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", unexpected_browser_approval)
 
     def fail_subprocess(*args: object, **kwargs: object) -> object:
         raise AssertionError("blocked package request must not launch a subprocess")
@@ -273,14 +275,18 @@ def test_guard_hook_blocks_package_request_before_execution_and_queues_cloud_syn
     assert rc == 0
     assert captured.err == ""
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "blocked" in payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    reason = str(payload["hookSpecificOutput"]["permissionDecisionReason"])
+    assert "blocked" in reason.lower()
+    assert "terminal policy decision" in reason
+    assert "Browser approval cannot override it" in reason
+    assert "/requests/" not in reason
     evidence = store.list_evidence()
     assert evidence
     assert evidence[0]["category"] == "supply-chain"
     queued_events = store.list_guard_events_v1(uploaded=False)
     assert queued_events
     assert any(event["event_type"] == "receipt.created" for event in queued_events)
-    assert store.list_approval_requests(limit=5)
+    assert store.list_approval_requests(limit=5) == []
 
 
 def test_guard_hook_ask_queues_package_approval_with_advisory_context(
@@ -390,15 +396,41 @@ def test_guard_hook_ask_package_live_wait_surfaces_approval_url(
 
     monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
     opened_urls: list[str] = []
+    resolved_request_ids: list[str] = []
     monkeypatch.setattr(guard_commands_module.webbrowser, "open", opened_urls.append)
+
+    def resolve_actual_exact_request(**kwargs: object) -> dict[str, object]:
+        request_ids = kwargs.get("request_ids")
+        assert isinstance(request_ids, list)
+        assert request_ids
+        resolved_items: list[dict[str, object]] = []
+        for request_id_value in request_ids:
+            assert isinstance(request_id_value, str)
+            queued_request = store.get_approval_request(request_id_value)
+            assert queued_request is not None
+            assert str(queued_request["artifact_hash"]).startswith("guard-approval-context:v1:")
+            apply_approval_resolution(
+                store=store,
+                request_id=request_id_value,
+                action="allow",
+                scope="artifact",
+                workspace=None,
+                reason="approved exact package request",
+            )
+            resolved_request = store.get_approval_request(request_id_value)
+            assert resolved_request is not None
+            resolved_items.append(resolved_request)
+            resolved_request_ids.append(request_id_value)
+        return {
+            "resolved": True,
+            "pending_request_ids": [],
+            "items": resolved_items,
+        }
+
     monkeypatch.setattr(
         guard_commands_module,
         "wait_for_approval_requests",
-        lambda **_kwargs: {
-            "resolved": True,
-            "pending_request_ids": [],
-            "items": [{"request_id": "req-1", "resolution_action": "allow"}],
-        },
+        resolve_actual_exact_request,
     )
 
     rc = main(
@@ -419,6 +451,7 @@ def test_guard_hook_ask_package_live_wait_surfaces_approval_url(
 
     assert rc == 0
     assert captured.out == ""
+    assert len(resolved_request_ids) == 1
     assert opened_urls
     assert "/requests/" in opened_urls[0]
     assert opened_urls[0] in captured.err

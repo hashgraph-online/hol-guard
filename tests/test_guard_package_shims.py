@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard import shims as guard_shims_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -34,6 +35,8 @@ from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supp
 from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.shim_execution_helpers import write_fake_manager_script
 from tests.test_guard_protect import _seed_bundle_cache_only, _SyncAndEvaluateHandler
 from tests.test_guard_supply_chain_evaluator import _cloud_response, _EvaluateHandler
@@ -68,9 +71,40 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
         "access_token": token,
         "dpop_key_material": None,
     }
+    if workspace_id is not None:
+        store.set_sync_payload(
+            "policy_bundle_keyring",
+            policy_bundle_test_keyring(workspace_id=workspace_id),
+            now,
+        )
 
 
 WORKSPACE_ID = "workspace-alpha"
+
+
+def _signed_cached_policy_bundle(rules: list[dict[str, object]]) -> dict[str, object]:
+    bundle = build_cloud_exception_policy_bundle(workspace_id=WORKSPACE_ID)
+    bundle["rules"] = rules
+    return sign_policy_bundle(bundle, workspace_id=WORKSPACE_ID)
+
+
+def _cached_policy_rule(
+    rule_id: str,
+    *,
+    matcher_families: list[str],
+    ecosystems: list[str] | None = None,
+    artifact_type: str | None = None,
+) -> dict[str, object]:
+    rule: dict[str, object] = {
+        "ruleId": rule_id,
+        "action": "block",
+        "reason": "Test-only cached package policy.",
+        "matcherFamilies": matcher_families,
+        "scope": {"ecosystems": ecosystems or []},
+    }
+    if artifact_type is not None:
+        rule["artifactType"] = artifact_type
+    return rule
 
 
 def _seed_paid_bundle_entitlement(home_dir: Path) -> None:
@@ -583,7 +617,7 @@ def test_package_manager_shim_uses_trusted_guard_import_path(tmp_path: Path, cap
         ["npm", "install", "file:./vendor/guard"],
     ],
 )
-def test_guard_protect_requires_review_for_untrusted_package_sources_without_cloud(
+def test_guard_protect_requires_reapproval_for_untrusted_package_sources_without_cloud(
     tmp_path: Path,
     command: list[str],
 ) -> None:
@@ -603,7 +637,7 @@ def test_guard_protect_requires_review_for_untrusted_package_sources_without_clo
     assert exit_code == 2
     assert payload["executed"] is False
     assert payload["verdict"]["blocking"] is True
-    assert payload["verdict"]["action"] == "review"
+    assert payload["verdict"]["action"] == "require-reapproval"
 
 
 def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path(tmp_path: Path, capsys) -> None:
@@ -1388,7 +1422,7 @@ def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: 
     assert result.stdout.strip() == "fake-manager-stdout"
 
 
-def test_guard_protect_json_queues_local_approval_link_on_cloud_auth_error(
+def test_guard_protect_json_terminal_block_on_cloud_auth_error_does_not_queue_local_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -1401,7 +1435,11 @@ def test_guard_protect_json_queues_local_approval_link_on_cloud_auth_error(
         package_name="minimist",
         evaluate_status=401,
     )
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(
+        guard_commands_module,
+        "ensure_guard_daemon",
+        lambda _home: (_ for _ in ()).throw(AssertionError("terminal block must not start approval daemon")),
+    )
     try:
         _seed_bundle(
             home_dir=home_dir,
@@ -1431,20 +1469,16 @@ def test_guard_protect_json_queues_local_approval_link_on_cloud_auth_error(
         _stop_cloud_eval_server(server, thread)
 
     payload = json.loads(capsys.readouterr().out)
-    stored_receipt = GuardStore(home_dir).list_receipts(limit=1)[0]
+    store = GuardStore(home_dir)
+    stored_receipt = store.list_receipts(limit=1)[0]
 
     assert rc == 2
-    assert payload["approval_center_url"] == "http://127.0.0.1:5474"
-    assert payload["primary_approval_request_id"]
-    assert payload["primary_approval_url"].startswith("http://127.0.0.1:5474/requests/")
-    assert payload["approval_request_ids"] == [payload["primary_approval_request_id"]]
-    assert payload["receipt"]["approval_request_id"] == payload["primary_approval_request_id"]
-    assert stored_receipt["approval_request_id"] == payload["primary_approval_request_id"]
-    assert payload["supply_chain_evaluation"]["user_copy"]["dashboard_url"] == payload["primary_approval_url"]
-    assert (
-        "Open HOL Guard to approve or keep this blocked:"
-        in payload["supply_chain_evaluation"]["user_copy"]["harness_message"]
-    )
+    assert payload["verdict"]["action"] == "block"
+    assert "approval_center_url" not in payload
+    assert "primary_approval_request_id" not in payload
+    assert payload["receipt"]["approval_request_id"] is None
+    assert stored_receipt["approval_request_id"] is None
+    assert store.list_approval_requests(limit=None) == []
 
 
 def test_guard_protect_probe_skips_local_approval_queue_on_block(
@@ -1596,15 +1630,14 @@ def test_guard_protect_ignores_stale_policy_bundle_package_family_block(
         )
         store.set_sync_payload(
             "policy_bundle",
-            {
-                "rules": [
-                    {
-                        "ruleId": "policy-graph-default-high-block",
-                        "matcherFamilies": ["package-request"],
-                        "scope": {"ecosystems": []},
-                    }
+            _signed_cached_policy_bundle(
+                [
+                    _cached_policy_rule(
+                        "policy-graph-default-high-block",
+                        matcher_families=["package-request"],
+                    )
                 ]
-            },
+            ),
             "2026-05-19T00:00:00Z",
         )
         _seed_workspace_sync_credentials(home_dir, sync_url)
@@ -1641,7 +1674,7 @@ def test_guard_protect_ignores_stale_policy_bundle_package_family_block(
     assert "saved package policy" not in payload["supply_chain_evaluation"]["user_copy"]["harness_message"]
 
 
-def test_guard_protect_keeps_active_policy_bundle_package_family_block(
+def test_guard_protect_ignores_ecosystem_scoped_policy_bundle_family_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -1665,7 +1698,7 @@ def test_guard_protect_keeps_active_policy_bundle_package_family_block(
                     artifact_id="family:package-request",
                     source="policy-bundle",
                     owner="npm-block",
-                    reason="Block npm installs.",
+                    reason="Test-only cached package policy.",
                 )
             ],
             "2026-05-19T00:00:00Z",
@@ -1673,15 +1706,9 @@ def test_guard_protect_keeps_active_policy_bundle_package_family_block(
         )
         store.set_sync_payload(
             "policy_bundle",
-            {
-                "rules": [
-                    {
-                        "ruleId": "npm-block",
-                        "matcherFamilies": ["package-request"],
-                        "scope": {"ecosystems": ["npm"]},
-                    }
-                ]
-            },
+            _signed_cached_policy_bundle(
+                [_cached_policy_rule("npm-block", matcher_families=["package-request"], ecosystems=["npm"])]
+            ),
             "2026-05-19T00:00:00Z",
         )
         _seed_workspace_sync_credentials(home_dir, sync_url)
@@ -1706,16 +1733,15 @@ def test_guard_protect_keeps_active_policy_bundle_package_family_block(
 
     payload = json.loads(capsys.readouterr().out)
 
-    assert rc == 2
+    assert rc == 0
+    assert payload["supply_chain_evaluation"]["decision"] == "warn"
     reason_codes = {
         reason["code"]
         for reason in payload["supply_chain_evaluation"]["reasons"]
         if isinstance(reason, dict) and isinstance(reason.get("code"), str)
     }
-    assert "saved_package_block" in reason_codes
-    assert payload["supply_chain_evaluation"]["user_copy"]["next_step"].startswith(
-        "hol-guard policies clear --decision-id"
-    )
+    assert "saved_package_block" not in reason_codes
+    assert "current_package_policy" in reason_codes
 
 
 def test_guard_protect_keeps_matcher_only_policy_bundle_package_family_block(
@@ -1742,7 +1768,7 @@ def test_guard_protect_keeps_matcher_only_policy_bundle_package_family_block(
                     artifact_id="family:package-request",
                     source="policy-bundle",
                     owner="matcher-only-package-block",
-                    reason="Block package installs.",
+                    reason="Test-only cached package policy.",
                 )
             ],
             "2026-05-19T00:00:00Z",
@@ -1750,7 +1776,15 @@ def test_guard_protect_keeps_matcher_only_policy_bundle_package_family_block(
         )
         store.set_sync_payload(
             "policy_bundle",
-            {"rules": [{"ruleId": "matcher-only-package-block", "matcherFamilies": ["package-request"]}]},
+            _signed_cached_policy_bundle(
+                [
+                    _cached_policy_rule(
+                        "matcher-only-package-block",
+                        matcher_families=["package-request"],
+                        artifact_type="package_request",
+                    )
+                ]
+            ),
             "2026-05-19T00:00:00Z",
         )
         _seed_workspace_sync_credentials(home_dir, sync_url)
@@ -1784,7 +1818,7 @@ def test_guard_protect_keeps_matcher_only_policy_bundle_package_family_block(
     assert "saved_package_block" in reason_codes
 
 
-def test_guard_protect_keeps_package_scope_even_when_matcher_list_omits_package_family(
+def test_guard_protect_ignores_package_family_row_when_signed_matcher_omits_package_family(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -1808,7 +1842,7 @@ def test_guard_protect_keeps_package_scope_even_when_matcher_list_omits_package_
                     artifact_id="family:package-request",
                     source="policy-bundle",
                     owner="ecosystem-package-block",
-                    reason="Block npm installs.",
+                    reason="Test-only cached package policy.",
                 )
             ],
             "2026-05-19T00:00:00Z",
@@ -1816,15 +1850,9 @@ def test_guard_protect_keeps_package_scope_even_when_matcher_list_omits_package_
         )
         store.set_sync_payload(
             "policy_bundle",
-            {
-                "rules": [
-                    {
-                        "ruleId": "ecosystem-package-block",
-                        "matcherFamilies": ["tool-action"],
-                        "scope": {"ecosystems": ["npm"]},
-                    }
-                ]
-            },
+            _signed_cached_policy_bundle(
+                [_cached_policy_rule("ecosystem-package-block", matcher_families=["tool-action"], ecosystems=["npm"])]
+            ),
             "2026-05-19T00:00:00Z",
         )
         _seed_workspace_sync_credentials(home_dir, sync_url)
@@ -1849,13 +1877,15 @@ def test_guard_protect_keeps_package_scope_even_when_matcher_list_omits_package_
 
     payload = json.loads(capsys.readouterr().out)
 
-    assert rc == 2
+    assert rc == 0
+    assert payload["supply_chain_evaluation"]["decision"] == "warn"
     reason_codes = {
         reason["code"]
         for reason in payload["supply_chain_evaluation"]["reasons"]
         if isinstance(reason, dict) and isinstance(reason.get("code"), str)
     }
-    assert "saved_package_block" in reason_codes
+    assert "saved_package_block" not in reason_codes
+    assert "current_package_policy" in reason_codes
 
 
 def test_guard_protect_ignores_stale_policy_bundle_package_family_on_cloud_allow(
@@ -1891,15 +1921,14 @@ def test_guard_protect_ignores_stale_policy_bundle_package_family_on_cloud_allow
         )
         store.set_sync_payload(
             "policy_bundle",
-            {
-                "rules": [
-                    {
-                        "ruleId": "policy-graph-default-high-block",
-                        "matcherFamilies": ["package-request"],
-                        "scope": {"ecosystems": []},
-                    }
+            _signed_cached_policy_bundle(
+                [
+                    _cached_policy_rule(
+                        "policy-graph-default-high-block",
+                        matcher_families=["package-request"],
+                    )
                 ]
-            },
+            ),
             "2026-05-19T00:00:00Z",
         )
         _seed_workspace_sync_credentials(home_dir, sync_url)
@@ -1925,7 +1954,9 @@ def test_guard_protect_ignores_stale_policy_bundle_package_family_on_cloud_allow
     payload = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert payload["supply_chain_evaluation"]["decision"] == "allow"
+    # The cloud feed allows this package and the stale family block is ignored,
+    # while the current balanced package-script policy still contributes warn.
+    assert payload["supply_chain_evaluation"]["decision"] == "warn"
     reason_codes = {
         reason["code"]
         for reason in payload["supply_chain_evaluation"]["reasons"]
@@ -1935,7 +1966,7 @@ def test_guard_protect_ignores_stale_policy_bundle_package_family_on_cloud_allow
     assert "saved_package_block" not in reason_codes
 
 
-def test_guard_protect_retry_runs_after_local_package_approval(
+def test_guard_protect_terminal_current_package_gate_has_no_local_override(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     install_fake_system_keyring,
@@ -1990,14 +2021,8 @@ def test_guard_protect_retry_runs_after_local_package_approval(
         assert rc == 2
 
         store = GuardStore(home_dir)
-        apply_approval_resolution(
-            store=store,
-            request_id=str(payload["primary_approval_request_id"]),
-            action="allow",
-            scope="artifact",
-            workspace=None,
-            reason="reviewed",
-        )
+        assert "primary_approval_request_id" not in payload
+        assert store.list_approval_requests(limit=None) == []
 
         retry_payload, retry_exit_code = build_protect_payload(
             command=["npm", "install", "minimist@1.2.8"],
@@ -2009,13 +2034,13 @@ def test_guard_protect_retry_runs_after_local_package_approval(
     finally:
         _stop_cloud_eval_server(server, thread)
 
-    assert retry_exit_code == 0
-    assert retry_payload["executed"] is True
-    assert retry_payload["verdict"]["action"] == "allow"
-    assert marker_path.exists()
+    assert retry_exit_code == 2
+    assert retry_payload["executed"] is False
+    assert retry_payload["verdict"]["action"] == "block"
+    assert marker_path.exists() is False
 
 
-def test_guard_protect_retry_after_local_package_approval_reuses_recent_cloud_validation_error_cache(
+def test_guard_protect_cached_validation_error_still_requires_current_package_gate(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     install_fake_system_keyring,
@@ -2094,10 +2119,20 @@ def test_guard_protect_retry_after_local_package_approval_reuses_recent_cloud_va
         if server is not None and thread is not None:
             _stop_cloud_eval_server(server, thread)
 
-    assert retry_exit_code == 0
-    assert retry_payload["executed"] is True
-    assert retry_payload["verdict"]["action"] == "allow"
-    assert marker_path.exists()
+    assert retry_exit_code == 2
+    assert retry_payload["executed"] is False
+    assert retry_payload["verdict"]["action"] in {"block", "review"}
+    assert any(
+        isinstance(reason, dict)
+        and reason.get("code")
+        in {
+            "approval_reuse_current_block",
+            "approval_reuse_policy_changed",
+            "approval_reuse_reapproval_required",
+        }
+        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
+    )
+    assert marker_path.exists() is False
     assert store.list_approval_requests(status="pending", limit=None) == []
 
 
@@ -2144,13 +2179,19 @@ def test_guard_protect_denied_retry_surfaces_saved_block_clear_command_without_r
         payload = json.loads(capsys.readouterr().out)
         store = GuardStore(home_dir)
         assert rc == 2
-        apply_approval_resolution(
-            store=store,
-            request_id=str(payload["primary_approval_request_id"]),
-            action="block",
-            scope="artifact",
-            workspace=None,
-            reason="keep blocked",
+        receipt = payload["receipt"]
+        assert isinstance(receipt, dict)
+        assert "primary_approval_request_id" not in payload
+        store.upsert_policy(
+            PolicyDecision(
+                harness="guard-cli",
+                scope="artifact",
+                action="block",
+                artifact_id=str(receipt["artifact_id"]),
+                artifact_hash=str(receipt["artifact_hash"]),
+                reason="keep blocked",
+            ),
+            "2026-05-19T00:00:00Z",
         )
         retry_rc = main(
             [
@@ -2187,10 +2228,10 @@ def test_guard_protect_denied_retry_surfaces_saved_block_clear_command_without_r
     assert "--artifact-id" in user_copy["next_step"]
     assert "--artifact-hash" in user_copy["next_step"]
     assert pending == []
-    assert len(resolved) == 1
+    assert resolved == []
 
 
-def test_guard_protect_json_queues_local_approval_when_cached_advisory_overrides_bundle_allow(
+def test_guard_protect_json_cached_advisory_terminal_block_does_not_queue_local_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -2219,7 +2260,11 @@ def test_guard_protect_json_queues_local_approval_when_cached_advisory_overrides
         ],
         "2026-05-19T00:00:00Z",
     )
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(
+        guard_commands_module,
+        "ensure_guard_daemon",
+        lambda _home: (_ for _ in ()).throw(AssertionError("terminal block must not start approval daemon")),
+    )
 
     rc = main(
         [
@@ -2242,10 +2287,8 @@ def test_guard_protect_json_queues_local_approval_when_cached_advisory_overrides
 
     assert rc == 2
     assert payload["verdict"]["action"] == "block"
-    assert payload["primary_approval_request_id"]
-    assert payload["primary_approval_url"].startswith("http://127.0.0.1:5474/requests/")
-    assert pending[0]["risk_summary"] == payload["verdict"]["reason"]
-    assert pending[0]["risk_summary"] != payload["supply_chain_evaluation"]["risk_summary"]
+    assert "primary_approval_request_id" not in payload
+    assert pending == []
 
 
 def test_guard_protect_denied_retry_with_cloud_block_surfaces_saved_block_clear_command_without_requeue(
@@ -2291,13 +2334,19 @@ def test_guard_protect_denied_retry_with_cloud_block_surfaces_saved_block_clear_
         payload = json.loads(capsys.readouterr().out)
 
         assert rc == 2
-        apply_approval_resolution(
-            store=store,
-            request_id=str(payload["primary_approval_request_id"]),
-            action="block",
-            scope="artifact",
-            workspace=None,
-            reason="keep blocked",
+        receipt = payload["receipt"]
+        assert isinstance(receipt, dict)
+        assert "primary_approval_request_id" not in payload
+        store.upsert_policy(
+            PolicyDecision(
+                harness="guard-cli",
+                scope="artifact",
+                action="block",
+                artifact_id=str(receipt["artifact_id"]),
+                artifact_hash=str(receipt["artifact_hash"]),
+                reason="keep blocked",
+            ),
+            "2026-05-19T00:00:00Z",
         )
 
         retry_rc = main(
@@ -2334,7 +2383,7 @@ def test_guard_protect_denied_retry_with_cloud_block_surfaces_saved_block_clear_
     assert "--artifact-id" in user_copy["next_step"]
     assert "--artifact-hash" in user_copy["next_step"]
     assert pending == []
-    assert len(resolved) == 1
+    assert resolved == []
 
 
 def test_guard_protect_saved_approval_does_not_bypass_new_bundle_block_for_unpinned_package(
@@ -2389,7 +2438,7 @@ def test_guard_protect_saved_approval_does_not_bypass_new_bundle_block_for_unpin
         )
 
         assert first_exit_code == 2
-        assert first_payload["verdict"]["action"] in {"block", "review"}
+        assert first_payload["verdict"]["action"] in {"block", "require-reapproval"}
         receipt = first_payload["receipt"]
         assert isinstance(receipt, dict)
         store.upsert_policy(
@@ -2452,7 +2501,7 @@ def test_guard_protect_saved_approval_does_not_bypass_new_bundle_block_for_unpin
     )
 
 
-def test_guard_protect_retry_runs_after_cached_advisory_package_approval(
+def test_guard_protect_saved_allow_never_lowers_current_cached_advisory_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -2507,13 +2556,19 @@ def test_guard_protect_retry_runs_after_cached_advisory_package_approval(
     payload = json.loads(capsys.readouterr().out)
 
     assert rc == 2
-    apply_approval_resolution(
-        store=store,
-        request_id=str(payload["primary_approval_request_id"]),
-        action="allow",
-        scope="artifact",
-        workspace=None,
-        reason="reviewed",
+    receipt = payload["receipt"]
+    assert isinstance(receipt, dict)
+    assert "primary_approval_request_id" not in payload
+    store.upsert_policy(
+        PolicyDecision(
+            harness="guard-cli",
+            scope="artifact",
+            action="allow",
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_hash=str(receipt["artifact_hash"]),
+            reason="historical exact approval",
+        ),
+        "2026-05-19T00:00:00Z",
     )
 
     retry_payload, retry_exit_code = build_protect_payload(
@@ -2524,14 +2579,252 @@ def test_guard_protect_retry_runs_after_cached_advisory_package_approval(
         now="2026-05-19T00:00:00Z",
     )
 
-    assert retry_exit_code == 0
-    assert retry_payload["executed"] is True
-    assert retry_payload["verdict"]["action"] == "allow"
+    assert retry_exit_code == 2
+    assert retry_payload["executed"] is False
+    assert retry_payload["verdict"]["action"] == "block"
     assert any(
+        isinstance(reason, dict)
+        and reason.get("code")
+        in {
+            "approval_reuse_current_block",
+            "approval_reuse_policy_changed",
+            "approval_reuse_reapproval_required",
+            "approval_reuse_claim_failed",
+        }
+        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
+    )
+    assert not any(
         isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
         for reason in retry_payload["supply_chain_evaluation"]["reasons"]
     )
-    assert marker_path.exists()
+    assert marker_path.exists() is False
+
+
+def test_guard_protect_same_cached_advisory_id_review_to_block_changes_authority_before_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
+) -> None:
+    install_fake_system_keyring()
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    marker_path = tmp_path / "npm-cached-advisory-transition.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    original_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
+    store = GuardStore(home_dir)
+    review_evaluation = supply_chain_package_eval_module.PackageRequestEvaluation(
+        decision="ask",
+        policy_action="review",
+        enforcement="local",
+        entitlement_state="active",
+        cache_status="fresh",
+        package_intent_hash="same-advisory-id-intent",
+        policy_version="same-advisory-id-policy",
+        bundle_version="same-advisory-id-bundle",
+        workspace_fingerprint="same-advisory-id-workspace",
+        reasons=({"code": "package_review", "message": "Review package."},),
+        packages=({"name": "badpkg", "requestedVersion": "1.0.0", "decision": "ask"},),
+        risk_summary="Review package.",
+        user_copy=supply_chain_package_eval_module.SupplyChainUserCopy(
+            title="Review package",
+            summary="Review package.",
+            next_step="Review the package request.",
+            dashboard_url=None,
+            harness_message="Review package.",
+        ),
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "evaluate_package_request_artifact",
+        lambda **_kwargs: review_evaluation,
+    )
+    advisory = {
+        "id": "adv-stable-id",
+        "ecosystem": "npm",
+        "package": "badpkg",
+        "severity": "medium",
+        "action": "review",
+        "headline": "Review this package before installation.",
+    }
+    store.cache_advisories([advisory], "2026-07-17T00:00:00Z")
+
+    preview_payload, preview_rc = build_protect_payload(
+        command=["npm", "install", "badpkg@1.0.0"],
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-07-17T00:00:00Z",
+    )
+    assert preview_rc == 2
+    assert preview_payload["verdict"]["action"] == "review"
+    receipt = preview_payload["receipt"]
+    assert isinstance(receipt, dict)
+    store.ensure_policy_integrity_ready_for_write(now="2026-07-17T00:00:30Z")
+    store.upsert_policy(
+        PolicyDecision(
+            harness="guard-cli",
+            scope="artifact",
+            action="allow",
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_hash=str(receipt["artifact_hash"]),
+            source="approval-gate",
+            expires_at="2026-07-18T00:00:00Z",
+        ),
+        "2026-07-17T00:00:30Z",
+    )
+
+    store.cache_advisories(
+        [
+            {
+                **advisory,
+                "severity": "critical",
+                "action": "block",
+                "headline": "Confirmed malicious package.",
+            }
+        ],
+        "2026-07-17T00:01:00Z",
+    )
+    retry_payload, retry_rc = build_protect_payload(
+        command=["npm", "install", "badpkg@1.0.0"],
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=False,
+        now="2026-07-17T00:01:00Z",
+    )
+
+    assert retry_rc == 2
+    assert retry_payload["verdict"]["action"] == "block"
+    assert retry_payload["executed"] is False
+    assert retry_payload["receipt"]["artifact_hash"] != receipt["artifact_hash"]
+    assert marker_path.exists() is False
+    old_approval_lookup = store.resolve_policy_decision_lookup(
+        "guard-cli",
+        str(receipt["artifact_id"]),
+        str(receipt["artifact_hash"]),
+        None,
+        None,
+        "2026-07-17T00:01:00Z",
+        consume_one_shot=False,
+    )
+    assert old_approval_lookup["decision"] is not None
+
+
+def test_guard_protect_reloads_cached_advisory_authority_after_atomic_claim(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
+) -> None:
+    install_fake_system_keyring()
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    marker_path = tmp_path / "npm-claim-time-advisory.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    original_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
+    store = GuardStore(home_dir)
+    review_evaluation = supply_chain_package_eval_module.PackageRequestEvaluation(
+        decision="ask",
+        policy_action="review",
+        enforcement="local",
+        entitlement_state="active",
+        cache_status="fresh",
+        package_intent_hash="claim-time-advisory-intent",
+        policy_version="claim-time-advisory-policy",
+        bundle_version="claim-time-advisory-bundle",
+        workspace_fingerprint="claim-time-advisory-workspace",
+        reasons=({"code": "package_review", "message": "Review package."},),
+        packages=({"name": "badpkg", "requestedVersion": "1.0.0", "decision": "ask"},),
+        risk_summary="Review package.",
+        user_copy=supply_chain_package_eval_module.SupplyChainUserCopy(
+            title="Review package",
+            summary="Review package.",
+            next_step="Review the package request.",
+            dashboard_url=None,
+            harness_message="Review package.",
+        ),
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "evaluate_package_request_artifact",
+        lambda **_kwargs: review_evaluation,
+    )
+    advisory = {
+        "id": "adv-claim-time-stable-id",
+        "ecosystem": "npm",
+        "package": "badpkg",
+        "severity": "medium",
+        "action": "review",
+        "headline": "Review this package before installation.",
+    }
+    store.cache_advisories([advisory], "2026-07-17T00:00:00Z")
+    preview_payload, preview_rc = build_protect_payload(
+        command=["npm", "install", "badpkg@1.0.0"],
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-07-17T00:00:00Z",
+    )
+    assert preview_rc == 2
+    receipt = preview_payload["receipt"]
+    assert isinstance(receipt, dict)
+    store.ensure_policy_integrity_ready_for_write(now="2026-07-17T00:00:30Z")
+    store.upsert_policy(
+        PolicyDecision(
+            harness="guard-cli",
+            scope="artifact",
+            action="allow",
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_hash=str(receipt["artifact_hash"]),
+            source="approval-gate",
+            expires_at="2026-07-18T00:00:00Z",
+        ),
+        "2026-07-17T00:00:30Z",
+    )
+    original_claim = store.claim_approval_reuse_decision
+
+    def claim_then_block(decision: dict[str, object], *, now: str) -> bool:
+        claimed = original_claim(decision, now=now)
+        assert claimed is True
+        store.cache_advisories(
+            [
+                {
+                    **advisory,
+                    "severity": "critical",
+                    "action": "block",
+                    "headline": "Confirmed malicious during approval claim.",
+                }
+            ],
+            now,
+        )
+        return True
+
+    monkeypatch.setattr(store, "claim_approval_reuse_decision", claim_then_block)
+
+    retry_payload, retry_rc = build_protect_payload(
+        command=["npm", "install", "badpkg@1.0.0"],
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=False,
+        now="2026-07-17T00:01:00Z",
+    )
+
+    assert retry_rc == 2
+    assert retry_payload["executed"] is False
+    assert retry_payload["verdict"]["action"] == "block"
+    assert retry_payload["receipt"]["artifact_hash"] != receipt["artifact_hash"]
+    assert marker_path.exists() is False
+    assert any(
+        isinstance(reason, dict)
+        and reason.get("code") in {"approval_reuse_current_block", "approval_reuse_policy_changed"}
+        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
+    )
 
 
 def test_guard_protect_blocks_npm_ci_before_install_from_lockfile(tmp_path: Path) -> None:
@@ -2568,7 +2861,7 @@ def test_guard_protect_blocks_npm_ci_before_install_from_lockfile(tmp_path: Path
     assert any(package["name"] == "minimist" for package in payload["supply_chain_evaluation"]["packages"])
 
 
-def test_guard_protect_npm_ci_requires_fresh_approval_after_lockfile_change(
+def test_guard_protect_npm_ci_terminal_block_stays_non_queueable_after_lockfile_change(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -2610,14 +2903,8 @@ def test_guard_protect_npm_ci_requires_fresh_approval_after_lockfile_change(
         first_payload = json.loads(capsys.readouterr().out)
 
         assert first_rc == 2
-        apply_approval_resolution(
-            store=store,
-            request_id=str(first_payload["primary_approval_request_id"]),
-            action="allow",
-            scope="artifact",
-            workspace=None,
-            reason="reviewed",
-        )
+        assert "primary_approval_request_id" not in first_payload
+        assert store.list_approval_requests(limit=None) == []
 
         _write_npm_ci_workspace(workspace_dir, package_name="badpkg", package_version="2.0.0")
 
@@ -2644,10 +2931,10 @@ def test_guard_protect_npm_ci_requires_fresh_approval_after_lockfile_change(
 
     assert second_rc == 2
     assert second_payload["verdict"]["action"] == "block"
-    assert second_payload["primary_approval_request_id"] != first_payload["primary_approval_request_id"]
+    assert "primary_approval_request_id" not in second_payload
     assert second_payload["receipt"]["artifact_hash"] != first_payload["receipt"]["artifact_hash"]
-    assert len(pending) == 1
-    assert len(resolved) == 1
+    assert pending == []
+    assert resolved == []
 
 
 def test_guard_package_shims_block_npm_ci_before_manager_execution_from_lockfile(tmp_path: Path, capsys) -> None:

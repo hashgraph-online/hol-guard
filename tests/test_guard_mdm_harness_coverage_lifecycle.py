@@ -49,6 +49,9 @@ def test_user_activation_never_mutates_machine_harness_registry(
         def list_managed_installs(self) -> list[dict[str, object]]:
             return installs
 
+        def reconcile_managed_policy_bundle_keyring_state(self, **_kwargs: object) -> bool:
+            return False
+
     monkeypatch.setattr(lifecycle, "GuardStore", FakeStore)
     monkeypatch.setattr(lifecycle, "apply_managed_install", lambda *_args, **_kwargs: {"managed_installs": installs})
     monkeypatch.setattr(
@@ -129,6 +132,9 @@ def test_partial_activation_rolls_back_new_harnesses(tmp_path: Path, monkeypatch
         def list_managed_installs(self) -> list[dict[str, object]]:
             return [{"harness": "codex", "active": True}] if self.active else []
 
+        def reconcile_managed_policy_bundle_keyring_state(self, **_kwargs: object) -> bool:
+            return False
+
     commands: list[str] = []
 
     def fake_install(command: str, *_args: object, **_kwargs: object) -> dict[str, object]:
@@ -160,6 +166,9 @@ def test_activation_marker_failure_removes_evidence_and_rolls_back(
 
         def list_managed_installs(self) -> list[dict[str, object]]:
             return [{"harness": "codex", "active": True}] if self.active else []
+
+        def reconcile_managed_policy_bundle_keyring_state(self, **_kwargs: object) -> bool:
+            return False
 
     commands: list[str] = []
 

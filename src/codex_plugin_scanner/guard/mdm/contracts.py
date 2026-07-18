@@ -59,6 +59,7 @@ IntegrityReasonCode = Literal[
     "managed_policy_cache_tampered",
     "managed_policy_inaccessible",
     "managed_policy_invalid",
+    "managed_policy_source_tampered",
     "managed_policy_profile_removed_cached",
     "ownership_acl_verification_unavailable",
     "ownership_acl_valid",
@@ -383,13 +384,14 @@ class ManagedPolicy:
     integrity_trust: ManagedIntegrityTrust = field(default_factory=ManagedIntegrityTrust)
     daemon_startup: Literal["on-demand", "login"] = "on-demand"
     content_hash: str = ""
+    policy_bundle_keyring: dict[str, object] | None = None
 
     @property
     def install_owner(self) -> InstallOwner:
         return self.update.owner
 
     def to_public_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "schemaVersion": self.schema_version,
             "contentHash": self.content_hash,
             "lockedSettings": sorted(self.locked_settings),
@@ -399,6 +401,14 @@ class ManagedPolicy:
             "integrityTrust": self.integrity_trust.to_public_dict(),
             "daemonStartup": self.daemon_startup,
         }
+        if self.policy_bundle_keyring is not None:
+            raw_keys = self.policy_bundle_keyring.get("keys")
+            payload["policyBundleKeyring"] = {
+                "configured": True,
+                "keyCount": len(raw_keys) if isinstance(raw_keys, list) else 0,
+                "workspaceId": self.policy_bundle_keyring.get("workspaceId"),
+            }
+        return payload
 
 
 @dataclass(frozen=True, slots=True)

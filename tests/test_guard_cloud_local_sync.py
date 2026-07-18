@@ -16,9 +16,15 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.edge_events import build_runtime_session_event
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.policy_bundle_parser import (
+    computed_policy_bundle_hash,
+    payload_hash_for_policy_bundle,
+)
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -50,6 +56,32 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
         "access_token": token,
         "dpop_key_material": None,
     }
+
+
+def _signed_runtime_status_policy_bundle(*, workspace_id: str) -> dict[str, object]:
+    policy_bundle = build_cloud_exception_policy_bundle(workspace_id=workspace_id)
+    policy_bundle["bundleVersion"] = "policy-2026-05-01.3"
+    policy_bundle["rolloutState"] = "enforcing"
+    policy_bundle["acknowledgements"] = [
+        {
+            "deviceId": "device-alpha",
+            "acknowledgedAt": "2026-06-01T12:00:00+00:00",
+            "status": "synced",
+        }
+    ]
+    return sign_policy_bundle(policy_bundle, workspace_id=workspace_id)
+
+
+def _digest_only_runtime_status_policy_bundle(*, workspace_id: str) -> dict[str, object]:
+    policy_bundle = _signed_runtime_status_policy_bundle(workspace_id=workspace_id)
+    policy_bundle["verifier"] = {
+        "algorithm": "sha256",
+        "keyId": "attacker-recomputed-digest",
+        "signature": None,
+    }
+    policy_bundle["bundleHash"] = computed_policy_bundle_hash(policy_bundle)
+    policy_bundle["payloadHash"] = payload_hash_for_policy_bundle(policy_bundle)
+    return policy_bundle
 
 
 def _artifact(tmp_path: Path) -> GuardArtifact:
@@ -489,16 +521,26 @@ def test_runtime_snapshot_exposes_cloud_policy_bundle_fields(tmp_path: Path) -> 
     now = "2026-06-01T00:00:00+00:00"
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
     store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-alpha"),
+        now,
+    )
+    policy_bundle = _signed_runtime_status_policy_bundle(workspace_id="workspace-alpha")
+    store.set_sync_payload(
         "policy_bundle",
+        policy_bundle,
+        now,
+    )
+    device = store.get_device_metadata()
+    store.set_sync_payload(
+        "policy_bundle_ack",
         {
-            "bundleVersion": "policy-2026-05-01.3",
-            "bundleHash": "sha256:bundle-proof",
-            "rolloutState": "enforcing",
-            "acknowledgement": {
-                "deviceId": "device-alpha",
-                "acknowledgedAt": "2026-06-01T12:00:00+00:00",
-                "status": "synced",
-            },
+            "appliedAt": "2026-06-01T12:00:00+00:00",
+            "bundleHash": policy_bundle["bundleHash"],
+            "bundleVersion": policy_bundle["bundleVersion"],
+            "deviceId": device["installation_id"],
+            "deviceName": device["device_label"],
+            "status": "synced",
         },
         now,
     )
@@ -511,10 +553,63 @@ def test_runtime_snapshot_exposes_cloud_policy_bundle_fields(tmp_path: Path) -> 
     snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
 
     assert snapshot["cloud_policy_bundle_version"] == "policy-2026-05-01.3"
-    assert snapshot["cloud_policy_bundle_hash"] == "sha256:bundle-proof"
+    assert snapshot["cloud_policy_bundle_hash"] == policy_bundle["bundleHash"]
     assert snapshot["cloud_policy_rollout_state"] == "enforcing"
     assert snapshot["cloud_policy_sync_error"] == "sync_failed"
     assert snapshot["cloud_policy_last_ack_at"] == "2026-06-01T12:00:00+00:00"
+
+
+def test_runtime_snapshot_ignores_policy_bundle_ack_for_another_device(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    now = "2026-06-01T00:00:00+00:00"
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-alpha"),
+        now,
+    )
+    policy_bundle = _signed_runtime_status_policy_bundle(workspace_id="workspace-alpha")
+    store.set_sync_payload("policy_bundle", policy_bundle, now)
+    store.set_sync_payload(
+        "policy_bundle_ack",
+        {
+            "appliedAt": "2026-06-01T12:00:00+00:00",
+            "bundleHash": policy_bundle["bundleHash"],
+            "bundleVersion": policy_bundle["bundleVersion"],
+            "deviceId": "another-device",
+            "status": "synced",
+        },
+        now,
+    )
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert snapshot["cloud_policy_last_ack_at"] is None
+
+
+def test_runtime_snapshot_rejects_digest_only_cached_bundle_metadata(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    now = "2026-06-01T00:00:00+00:00"
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-alpha"),
+        now,
+    )
+    store.set_sync_payload(
+        "policy_bundle",
+        _digest_only_runtime_status_policy_bundle(workspace_id="workspace-alpha"),
+        now,
+    )
+    store.set_sync_payload("policy_bundle_last_error", {"reason": "sync_failed"}, now)
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert snapshot["cloud_policy_bundle_version"] is None
+    assert snapshot["cloud_policy_bundle_hash"] is None
+    assert snapshot["cloud_policy_rollout_state"] is None
+    assert snapshot["cloud_policy_sync_error"] == "unsupported_signature_algorithm"
+    assert snapshot["cloud_policy_last_ack_at"] is None
 
 
 def test_runtime_snapshot_exposes_latest_connect_proof_without_pairing_secrets(tmp_path: Path) -> None:

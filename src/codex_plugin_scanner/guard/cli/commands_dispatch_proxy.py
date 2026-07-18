@@ -20,6 +20,11 @@ from ._commands_shared import *
 from .commands_parser_helpers import *
 
 
+def _current_proxy_config(context: HarnessContext, store: GuardStore) -> GuardConfig:
+    local_config = load_guard_config(context.guard_home, workspace=context.workspace_dir)
+    return overlay_synced_guard_policy(local_config, _synced_policy_payload(store))
+
+
 def _run_guard_codex_mcp_proxy_command(
     args: argparse.Namespace,
     *,
@@ -45,6 +50,7 @@ def _run_guard_codex_mcp_proxy_command(
         transport=args.transport,
         server_id=args.server_id,
         server_env_keys=tuple(args.server_env_keys),
+        current_config_provider=lambda: _current_proxy_config(context, store),
     )
     return proxy.serve()
 
@@ -74,6 +80,7 @@ def _run_guard_cursor_mcp_proxy_command(
         transport=args.transport,
         server_id=args.server_id,
         server_env_keys=tuple(args.server_env_keys),
+        current_config_provider=lambda: _current_proxy_config(context, store),
     )
     return proxy.serve()
 
@@ -103,6 +110,7 @@ def _run_guard_opencode_mcp_proxy_command(
         transport=args.transport,
         server_id=args.server_id,
         server_env_keys=tuple(args.server_env_keys),
+        current_config_provider=lambda: _current_proxy_config(context, store),
     )
     return proxy.serve()
 
@@ -132,6 +140,7 @@ def _run_guard_copilot_mcp_proxy_command(
         transport=args.transport,
         server_id=args.server_id,
         server_env_keys=tuple(args.server_env_keys),
+        current_config_provider=lambda: _current_proxy_config(context, store),
     )
     return proxy.serve()
 
@@ -331,6 +340,10 @@ def _run_guard_run_command(
     elif not bool(args.dry_run) and config.mode == "prompt":
         blocked_resolver_fn = _headless_approval_resolver(args=args, context=context, store=store, config=config)
 
+    def current_run_config() -> GuardConfig:
+        local_config = load_guard_config(context.guard_home, workspace=context.workspace_dir)
+        return overlay_synced_guard_policy(local_config, _synced_policy_payload(store))
+
     payload = guard_run(
         args.harness,
         context=context,
@@ -341,6 +354,7 @@ def _run_guard_run_command(
         default_action=args.default_action,
         interactive_resolver=interactive_resolver_fn,
         blocked_resolver=blocked_resolver_fn,
+        current_config_provider=current_run_config,
     )
     payload["dry_run"] = bool(args.dry_run)
     payload["rerun_command"] = _guard_rerun_command(args)

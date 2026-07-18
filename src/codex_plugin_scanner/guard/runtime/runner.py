@@ -18,9 +18,10 @@ import urllib.request
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -28,7 +29,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from ...version import __version__
-from ..adapters.base import HarnessContext
+from ..action_lattice import is_guard_action, most_restrictive_guard_action
+from ..adapters.base import HarnessAdapter, HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..cli.oauth_client import (
     GuardDpopKeyMaterial,
@@ -37,31 +39,34 @@ from ..cli.oauth_client import (
 )
 from ..cloud_exceptions import (
     build_cloud_exceptions_from_policy_bundle,
-    build_cloud_exceptions_from_stored_items,
-    build_cloud_exceptions_from_sync_payload,
     cloud_exception_to_dict,
     dedupe_cloud_exceptions,
-    stored_receipt_sync_cloud_exceptions,
 )
 from ..config import VALID_RECEIPT_REDACTION_LEVELS, GuardConfig, load_guard_config
 from ..edge_events import build_runtime_session_event
 from ..mdm.network import managed_urlopen
-from ..memory_pattern_fingerprint import build_exact_command_memory_artifact_id
-from ..models import GuardArtifact, HarnessDetection, PolicyDecision
+from ..models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_defaults import extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
     reconcile_connect_state_with_oauth_entitlement,
 )
+from ..policy_bundle_decisions import build_policy_bundle_decisions as _materialize_policy_bundle_decisions
 from ..policy_bundle_parser import (
-    POLICY_BUNDLE_BROWSER_SCOPE_KEYS,
-    POLICY_BUNDLE_DEFAULT_ENVIRONMENTS,
-    POLICY_BUNDLE_RULE_ACTIONS,
     POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
     computed_policy_bundle_hash,
     non_empty_string,
+    policy_bundle_acceptance_checkpoint,
+    policy_bundle_is_enforceable,
+    policy_bundle_is_version_downgrade,
+    policy_bundle_rejection_message,
+)
+from ..policy_bundle_parser import (
+    policy_bundle_daemon_version_supported as _daemon_version_supported,
 )
 from ..policy_bundle_trusted_keys import (
+    MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
+    PolicyBundleVerificationKey,
     policy_bundle_keyring_payload,
     validate_synced_policy_bundle,
 )
@@ -75,8 +80,19 @@ from ..policy_document_io import PolicyCompilationError, compile_policy_document
 from ..redaction import redact_sensitive_text
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
+from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
 from ..types import PromptRequest, RemediationAction
 from .actions import GuardActionEnvelope, redacted_workspace_label
+from .approval_context import (
+    build_runtime_launch_identity,
+    parse_approval_context_token,
+    resolved_runtime_launch_argv,
+    runtime_launch_identity_is_reusable,
+)
+from .approval_reuse import (
+    APPROVAL_REUSE_CLAIM_FAILED,
+    APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED,
+)
 from .composition_rules import compose_action_from_signals
 from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
 from .prompt_injection import detect_prompt_injection_requests
@@ -135,13 +151,33 @@ def evaluate_detection(
     *,
     default_action: str | None = None,
     persist: bool = True,
+    trusted_request_overrides: Mapping[str, str] | None = None,
+    trusted_request_override_labels: Mapping[str, str] | None = None,
+    pending_approval_claims: list[tuple[Mapping[str, object], str, str]] | None = None,
+    claimed_saved_approval_overrides: Mapping[str, str] | None = None,
+    retained_saved_approval_overrides: Mapping[str, str] | None = None,
+    runtime_detector_context: Mapping[str, object] | None = None,
+    runtime_detector_block_reason: str | None = None,
 ):
-    from ..consumer import evaluate_detection as _evaluate_detection
+    from ..consumer.service import evaluate_detection as _evaluate_detection
 
-    return _evaluate_detection(detection, store, config, default_action=default_action, persist=persist)
+    return _evaluate_detection(
+        detection,
+        store,
+        config,
+        default_action=default_action,
+        persist=persist,
+        trusted_request_overrides=trusted_request_overrides,
+        trusted_request_override_labels=trusted_request_override_labels,
+        pending_approval_claims=pending_approval_claims,
+        claimed_saved_approval_overrides=claimed_saved_approval_overrides,
+        retained_saved_approval_overrides=retained_saved_approval_overrides,
+        runtime_detector_context=runtime_detector_context,
+        runtime_detector_block_reason=runtime_detector_block_reason,
+    )
 
 
-def get_adapter(harness: str):
+def get_adapter(harness: str) -> HarnessAdapter:
     from ..adapters import get_adapter as _get_adapter
 
     return _get_adapter(harness)
@@ -158,6 +194,485 @@ _APPROVAL_METADATA_KEYS = (
     "approval_wait",
     "review_hint",
 )
+
+_RUNTIME_DETECTOR_REVIEW_REASON = "runtime_detector_review"
+_RUNTIME_DETECTOR_WARN_REASON = "runtime_detector_warn"
+_APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM = "approval_reuse_context_changed_after_claim"
+# Every prepared launch-environment entry is authority-hashed except this
+# explicit execution-boundary credential. Inherited values are removed before
+# hashing; only Guard's freshly resolved Hermes credential may be added later.
+_HERMES_GUARD_TOKEN_ENV_KEY = "HERMES_GUARD_TOKEN"
+_GUARD_RUN_LATE_CREDENTIAL_ENV_KEYS = frozenset({_HERMES_GUARD_TOKEN_ENV_KEY})
+
+
+def _resolved_exact_request_overrides(evaluation: Mapping[str, object]) -> dict[str, str]:
+    """Extract trusted allow results bound to the exact queued context token."""
+
+    wait_result = evaluation.get("approval_wait")
+    if not isinstance(wait_result, Mapping) or wait_result.get("resolved") is not True:
+        return {}
+    raw_items = wait_result.get("items")
+    if not isinstance(raw_items, list) or not raw_items:
+        return {}
+    items = [item for item in raw_items if isinstance(item, Mapping)]
+    if len(items) != len(raw_items) or any(
+        item.get("status") != "resolved" or item.get("resolution_action") != "allow" for item in items
+    ):
+        return {}
+    overrides: dict[str, str] = {}
+    for item in items:
+        artifact_id = item.get("artifact_id")
+        artifact_hash = item.get("artifact_hash")
+        if (
+            not isinstance(artifact_id, str)
+            or not artifact_id
+            or not isinstance(artifact_hash, str)
+            or parse_approval_context_token(artifact_hash) is None
+        ):
+            return {}
+        overrides[artifact_id] = artifact_hash
+    return overrides
+
+
+_INTERACTIVE_ALLOW_OVERRIDE_LABELS = frozenset({"allow-once", "allow-artifact", "allow-publisher", "allow-harness"})
+
+
+def _resolved_interactive_request_overrides(
+    evaluation: Mapping[str, object],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Extract exact allow intents returned by the trusted terminal resolver."""
+
+    raw_items = evaluation.get("artifacts")
+    if not isinstance(raw_items, list):
+        return {}, {}
+    overrides: dict[str, str] = {}
+    labels: dict[str, str] = {}
+    for item in raw_items:
+        if not isinstance(item, Mapping) or item.get("policy_action") != "allow":
+            continue
+        user_override = item.get("user_override")
+        artifact_id = item.get("artifact_id")
+        artifact_hash = item.get("approval_context_hash")
+        if (
+            not isinstance(user_override, str)
+            or user_override not in _INTERACTIVE_ALLOW_OVERRIDE_LABELS
+            or not isinstance(artifact_id, str)
+            or not artifact_id
+            or not isinstance(artifact_hash, str)
+            or parse_approval_context_token(artifact_hash) is None
+        ):
+            continue
+        overrides[artifact_id] = artifact_hash
+        labels[artifact_id] = user_override
+    return overrides, labels
+
+
+def _runtime_detector_authority(evaluation: Mapping[str, object]) -> tuple[GuardAction | None, str | None]:
+    composition = evaluation.get("runtime_detector_composition")
+    if not isinstance(composition, Mapping):
+        return None, None
+    action = composition.get("action")
+    reason = composition.get("reason")
+    if not is_guard_action(action) or action not in {"warn", "review", "block"}:
+        return None, None
+    return action, reason if isinstance(reason, str) and reason else None
+
+
+def _runtime_detector_context(evaluation: Mapping[str, object]) -> dict[str, object] | None:
+    """Return timing-free detector authority suitable for exact context hashing."""
+
+    raw_composition = evaluation.get("runtime_detector_composition")
+    composition = (
+        {
+            "action": raw_composition.get("action"),
+            "reason": raw_composition.get("reason"),
+            "downgraded": raw_composition.get("downgraded") is True,
+            "upgraded": raw_composition.get("upgraded") is True,
+        }
+        if isinstance(raw_composition, Mapping)
+        else {}
+    )
+    raw_signals = evaluation.get("runtime_detector_signals_v2")
+    signals = (
+        [dict(signal) for signal in raw_signals if isinstance(signal, Mapping)] if isinstance(raw_signals, list) else []
+    )
+    telemetry = _normalized_runtime_detector_telemetry(evaluation)
+    if not composition and not signals and not telemetry:
+        return None
+    return {"composition": composition, "signals_v2": signals, "telemetry": telemetry}
+
+
+def _normalized_runtime_detector_telemetry(evaluation: Mapping[str, object]) -> list[dict[str, object]]:
+    """Bind semantic detector outcomes while excluding nondeterministic duration."""
+
+    raw_telemetry = evaluation.get("runtime_detector_telemetry")
+    if not isinstance(raw_telemetry, list):
+        return []
+    telemetry: list[dict[str, object]] = []
+    for raw_item in raw_telemetry:
+        if not isinstance(raw_item, Mapping):
+            continue
+        item = {str(key): value for key, value in raw_item.items() if isinstance(key, str) and key != "elapsed_ms"}
+        categories = item.get("categories")
+        if isinstance(categories, (list, tuple)):
+            item["categories"] = sorted({category for category in categories if isinstance(category, str)})
+        telemetry.append(item)
+    return sorted(
+        telemetry,
+        key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=True),
+    )
+
+
+def _runtime_detector_nonterminal_evidence(
+    action: GuardAction | None,
+    reason: str | None,
+) -> dict[str, object] | None:
+    if action == "warn":
+        return {
+            "source": "runtime_detector_registry",
+            "status": "warning",
+            "reason_code": _RUNTIME_DETECTOR_WARN_REASON,
+            "reason": reason or "runtime detector signals require a warning",
+        }
+    if action == "review":
+        return {
+            "source": "runtime_detector_registry",
+            "status": "review-required",
+            "reason_code": _RUNTIME_DETECTOR_REVIEW_REASON,
+            "reason": reason or "runtime detector signals require review",
+        }
+    return None
+
+
+def _config_with_current_authority(
+    config: GuardConfig,
+    evaluation: Mapping[str, object],
+    authority_action: GuardAction,
+    *,
+    artifact_ids: set[str] | None = None,
+) -> GuardConfig:
+    """Bind runner-only authority into each artifact's current policy context.
+
+    Runtime detector composition happens outside the consumer service.  A
+    synthetic per-artifact override makes that current authority participate
+    in approval-context hashing and saved-decision composition before any
+    one-shot claim. Existing stronger current actions remain authoritative.
+    """
+
+    raw_artifacts = evaluation.get("artifacts")
+    if not isinstance(raw_artifacts, list) or not raw_artifacts:
+        return config
+    artifact_actions = dict(config.artifact_actions or {})
+    changed = False
+    for item in raw_artifacts:
+        if not isinstance(item, Mapping):
+            continue
+        artifact_id = item.get("artifact_id")
+        if not isinstance(artifact_id, str) or not artifact_id:
+            continue
+        if artifact_ids is not None and artifact_id not in artifact_ids:
+            continue
+        composition = item.get("policy_composition")
+        current_action = composition.get("current_action") if isinstance(composition, Mapping) else None
+        if not is_guard_action(current_action):
+            current_action = item.get("policy_action")
+        composed = most_restrictive_guard_action(current_action, authority_action, unknown_action="block")
+        if artifact_actions.get(artifact_id) != composed:
+            artifact_actions[artifact_id] = composed
+            changed = True
+    return replace(config, artifact_actions=artifact_actions) if changed else config
+
+
+@dataclass(frozen=True, slots=True)
+class _GuardRunLaunchPlan:
+    """The exact adapter launch vector resolved at an authority boundary."""
+
+    adapter_command: tuple[str, ...]
+    execution_command: tuple[str, ...]
+    environment: Mapping[str, str]
+    environment_sha256: str
+    identity: Mapping[str, object]
+    launch_cwd: Path
+    reusable: bool
+
+
+def _guard_run_launch_environment(
+    adapter: HarnessAdapter,
+    context: HarnessContext,
+) -> tuple[dict[str, str], Path]:
+    environment = os.environ.copy()
+    environment["HOME"] = str(context.home_dir)
+    if os.name == "nt":
+        environment["USERPROFILE"] = str(context.home_dir)
+    environment = adapter.prepare_launch_environment(context, environment)
+    for credential_key in _GUARD_RUN_LATE_CREDENTIAL_ENV_KEYS:
+        environment.pop(credential_key, None)
+    if any(not isinstance(key, str) or not isinstance(value, str) for key, value in environment.items()):
+        raise ValueError("Harness launch environment must contain only string keys and values.")
+    launch_cwd = (context.workspace_dir or Path.cwd()).expanduser().resolve(strict=True)
+    if not launch_cwd.is_dir():
+        raise NotADirectoryError(f"Harness launch cwd is not a directory: {launch_cwd}")
+    return dict(environment), launch_cwd
+
+
+def _guard_run_launch_environment_hash(environment: Mapping[str, str]) -> str:
+    """Return a canonical, non-reversible digest of the full prepared environment."""
+
+    material = json.dumps(
+        sorted(environment.items()),
+        ensure_ascii=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(b"hol.guard.guard-run-launch-environment:v1\x00" + material).hexdigest()
+
+
+def _guard_run_plan_for_command(
+    adapter_command: Sequence[str],
+    *,
+    environment: Mapping[str, str],
+    launch_cwd: Path,
+) -> _GuardRunLaunchPlan | None:
+    normalized_command = tuple(adapter_command)
+    if not normalized_command or any(not isinstance(part, str) or not part for part in normalized_command):
+        return None
+    identity = build_runtime_launch_identity(
+        normalized_command[0],
+        args=normalized_command[1:],
+        structured_command=True,
+        direct_executable=True,
+        search_path=environment.get("PATH"),
+        cwd=launch_cwd,
+        launch_env=environment,
+    )
+    pinned_command = resolved_runtime_launch_argv(identity, args=normalized_command[1:])
+    reusable = pinned_command is not None and runtime_launch_identity_is_reusable(identity)
+    return _GuardRunLaunchPlan(
+        adapter_command=normalized_command,
+        execution_command=pinned_command if reusable and pinned_command is not None else normalized_command,
+        environment=dict(environment),
+        environment_sha256=_guard_run_launch_environment_hash(environment),
+        identity=identity,
+        launch_cwd=launch_cwd,
+        reusable=reusable,
+    )
+
+
+def _guard_run_launch_previews(
+    harness: str,
+    context: HarnessContext,
+    passthrough_args: list[str],
+) -> tuple[_GuardRunLaunchPlan, ...]:
+    """Content-bind every launch argv without performing adapter setup."""
+
+    adapter = get_adapter(harness)
+    raw_commands: Sequence[Sequence[str]] = adapter.preview_launch_commands(context, passthrough_args)
+    environment, launch_cwd = _guard_run_launch_environment(adapter, context)
+    plans: list[_GuardRunLaunchPlan] = []
+    seen_commands: set[tuple[str, ...]] = set()
+    for raw_command in raw_commands:
+        plan = _guard_run_plan_for_command(
+            raw_command,
+            environment=environment,
+            launch_cwd=launch_cwd,
+        )
+        if plan is None or plan.adapter_command in seen_commands:
+            continue
+        seen_commands.add(plan.adapter_command)
+        plans.append(plan)
+    return tuple(plans)
+
+
+def _guard_run_executable_prefix(launch_plan: _GuardRunLaunchPlan) -> tuple[str, ...] | None:
+    """Recover the canonical prefix prepended while pinning a preview argv."""
+
+    adapter_arguments = launch_plan.adapter_command[1:]
+    prefix_length = len(launch_plan.execution_command) - len(adapter_arguments)
+    if prefix_length < 1:
+        return None
+    if adapter_arguments and launch_plan.execution_command[prefix_length:] != adapter_arguments:
+        return None
+    return launch_plan.execution_command[:prefix_length]
+
+
+def _guard_run_finalize_authorized_launch_plan(
+    harness: str,
+    context: HarnessContext,
+    passthrough_args: list[str],
+    authorized_plans: Sequence[_GuardRunLaunchPlan],
+) -> _GuardRunLaunchPlan | None:
+    """Run authorized setup without re-resolving previewed launch identity."""
+
+    if not authorized_plans or not all(plan.reusable for plan in authorized_plans):
+        return None
+    environment = authorized_plans[0].environment
+    environment_sha256 = authorized_plans[0].environment_sha256
+    if any(
+        plan.environment_sha256 != environment_sha256 or dict(plan.environment) != dict(environment)
+        for plan in authorized_plans[1:]
+    ):
+        return None
+    resolved_prefixes = [_guard_run_executable_prefix(plan) for plan in authorized_plans]
+    if any(prefix is None for prefix in resolved_prefixes):
+        return None
+    prefixes = tuple(dict.fromkeys(cast(tuple[str, ...], prefix) for prefix in resolved_prefixes))
+    adapter = get_adapter(harness)
+    actual_command = adapter.launch_command_from_authorized_plan(
+        context,
+        passthrough_args,
+        authorized_executable_prefixes=prefixes,
+        launch_environment=dict(environment),
+    )
+    normalized_actual = tuple(actual_command)
+    for plan in authorized_plans:
+        if normalized_actual in {plan.adapter_command, plan.execution_command}:
+            return plan
+    return None
+
+
+def _guard_run_launch_plan_signature(launch_plan: _GuardRunLaunchPlan) -> str | None:
+    if not launch_plan.reusable:
+        return None
+    return json.dumps(
+        {
+            "adapter_command": list(launch_plan.adapter_command),
+            "environment_sha256": launch_plan.environment_sha256,
+            "identity": launch_plan.identity,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+
+
+def _guard_run_authority_signature(
+    detection: HarnessDetection,
+    evaluation: Mapping[str, object],
+    launch_previews: Sequence[_GuardRunLaunchPlan] = (),
+) -> tuple[object, ...] | None:
+    """Return the exact launch authority checked on both sides of a claim."""
+
+    raw_artifacts = evaluation.get("artifacts")
+    if not isinstance(raw_artifacts, list):
+        return None
+    contexts: dict[str, tuple[str, str]] = {}
+    for item in raw_artifacts:
+        if not isinstance(item, Mapping):
+            return None
+        artifact_id = item.get("artifact_id")
+        approval_context_hash = item.get("approval_context_hash")
+        policy_action = item.get("policy_action")
+        if (
+            not isinstance(artifact_id, str)
+            or not artifact_id
+            or artifact_id in contexts
+            or not isinstance(approval_context_hash, str)
+            or parse_approval_context_token(approval_context_hash) is None
+            or not is_guard_action(policy_action)
+        ):
+            return None
+        contexts[artifact_id] = (approval_context_hash, policy_action)
+    detector_payload = _runtime_detector_context(evaluation)
+    return (
+        detection.harness,
+        detection.installed,
+        detection.command_available,
+        tuple(detection.config_paths),
+        tuple(sorted(contexts.items())),
+        json.dumps(detector_payload, sort_keys=True, separators=(",", ":"), default=str),
+        tuple(_guard_run_launch_plan_signature(plan) for plan in launch_previews),
+    )
+
+
+def _receipt_rowid_cursor(store: GuardStore) -> int:
+    with store._connect() as connection:
+        row = connection.execute("select coalesce(max(rowid), 0) as cursor from runtime_receipts").fetchone()
+    return int(row["cursor"]) if row is not None else 0
+
+
+def _saved_decision_is_retained(decision: Mapping[str, object]) -> bool:
+    """Return whether a successful claim leaves the authority row in place."""
+
+    approval_id = decision.get("approval_id")
+    if isinstance(approval_id, str) and approval_id:
+        artifact_id = decision.get("artifact_id")
+        return isinstance(artifact_id, str) and ":package-request:" in artifact_id
+    decision_id = decision.get("decision_id")
+    if isinstance(decision_id, int) and not isinstance(decision_id, bool):
+        return not (decision.get("source") == "approval-gate" and decision.get("expires_at") is not None)
+    # The store rejects unknown claim identities. Classifying them as retained
+    # is the conservative fallback if an alternate store implementation ever
+    # accepts one: absence may not be treated as proof of consumption.
+    return True
+
+
+def _append_authority_evidence_to_receipts(
+    store: GuardStore,
+    *,
+    after_rowid: int,
+    evaluation: Mapping[str, object],
+    evidence: Mapping[str, object],
+    approval_source: str,
+    source_actions: frozenset[str],
+    replace_existing_source: bool = False,
+) -> None:
+    """Attach runner-composed authority to receipts emitted by one evaluation."""
+
+    raw_artifacts = evaluation.get("artifacts")
+    if not isinstance(raw_artifacts, list):
+        return
+    artifact_ids = {
+        artifact_id
+        for item in raw_artifacts
+        if isinstance(item, Mapping)
+        for artifact_id in (item.get("artifact_id"),)
+        if isinstance(artifact_id, str) and artifact_id
+    }
+    if not artifact_ids:
+        return
+    reason_code = evidence.get("reason_code")
+    # Runtime detector authority is composed in this aggregate, so its receipt
+    # evidence is amended in the same local transaction boundary.
+    with store._connect() as connection:
+        rows = connection.execute(
+            """
+            select rowid, artifact_id, policy_decision, scanner_evidence_json, approval_source
+            from runtime_receipts
+            where rowid > ?
+            order by rowid asc
+            """,
+            (after_rowid,),
+        ).fetchall()
+        for row in rows:
+            if str(row["artifact_id"]) not in artifact_ids:
+                continue
+            try:
+                raw_evidence = json.loads(str(row["scanner_evidence_json"]))
+            except (TypeError, ValueError):
+                raw_evidence = []
+            scanner_evidence = list(raw_evidence) if isinstance(raw_evidence, list) else []
+            if replace_existing_source:
+                scanner_evidence = [
+                    item
+                    for item in scanner_evidence
+                    if not isinstance(item, Mapping) or item.get("source") != evidence.get("source")
+                ]
+            if not any(
+                isinstance(item, Mapping)
+                and item.get("source") == evidence.get("source")
+                and item.get("reason_code") == reason_code
+                for item in scanner_evidence
+            ):
+                scanner_evidence.append(dict(evidence))
+            current_source = row["approval_source"]
+            next_source = approval_source if str(row["policy_decision"]) in source_actions else current_source
+            connection.execute(
+                """
+                update runtime_receipts
+                set scanner_evidence_json = ?, approval_source = ?
+                where rowid = ?
+                """,
+                (json.dumps(scanner_evidence, sort_keys=True), next_source, int(row["rowid"])),
+            )
 
 
 _DEFAULT_DETECTOR_REGISTRY: tuple[Callable[[], tuple[Any, ...]], DetectorRegistry] | None = None
@@ -534,39 +1049,457 @@ def guard_run(
     default_action: str | None = None,
     interactive_resolver: Callable[[HarnessDetection, dict[str, Any]], dict[str, Any]] | None = None,
     blocked_resolver: Callable[[HarnessDetection, dict[str, Any]], dict[str, Any]] | None = None,
+    current_config_provider: Callable[[], GuardConfig] | None = None,
 ) -> dict[str, Any]:
     """Evaluate local harness state and optionally launch the harness."""
 
     detection = _detection_with_prompt_artifacts(detect_harness(harness, context), context, passthrough_args)
-    if blocked_resolver is None:
-        evaluation = evaluate_detection(detection, store, config, default_action=default_action, persist=True)
-    else:
-        evaluation = evaluate_detection(detection, store, config, default_action=default_action, persist=False)
-        if not evaluation["blocked"]:
-            evaluation = evaluate_detection(detection, store, config, default_action=default_action, persist=True)
+    launch_plan: _GuardRunLaunchPlan | None = None
+    pending_approval_claims: list[tuple[Mapping[str, object], str, str]] = []
+    base_evaluation = evaluate_detection(
+        detection,
+        store,
+        config,
+        default_action=default_action,
+        persist=False,
+        pending_approval_claims=pending_approval_claims,
+    )
 
     action_envelope = _guard_run_action_envelope(harness, context, passthrough_args)
-    if evaluation["blocked"]:
-        evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
-
-    if not dry_run and interactive_resolver is not None and evaluation["blocked"]:
-        evaluation = interactive_resolver(detection, evaluation)
-    elif not dry_run and blocked_resolver is not None and evaluation["blocked"]:
-        pending_evaluation = blocked_resolver(detection, evaluation)
-        detection = _detection_with_prompt_artifacts(detect_harness(harness, context), context, passthrough_args)
-        reevaluated = evaluate_detection(detection, store, config, default_action=default_action, persist=True)
-        if reevaluated["blocked"]:
-            reevaluated = _evaluation_with_action_envelope(reevaluated, action_envelope)
-        for key in _APPROVAL_METADATA_KEYS:
-            if key in pending_evaluation:
-                reevaluated[key] = pending_evaluation[key]
-        evaluation = reevaluated
-    evaluation = _evaluation_with_detector_registry(
-        evaluation,
+    detector_evaluation = _evaluation_with_detector_registry(
+        base_evaluation,
         action_envelope,
         context,
         config,
     )
+    detector_action, _detector_reason = _runtime_detector_authority(detector_evaluation)
+    detector_context = _runtime_detector_context(detector_evaluation)
+    authority_config = config
+    if detector_action in {"warn", "review"}:
+        # The first evaluation is deliberately non-consuming and exists only
+        # to recover each artifact's current policy action. Re-evaluate with
+        # nonterminal detector authority bound into the current authority
+        # before trusting or scheduling any saved approval claim.
+        authority_config = _config_with_current_authority(config, base_evaluation, detector_action)
+    if detector_context is not None:
+        pending_approval_claims = []
+        evaluation = evaluate_detection(
+            detection,
+            store,
+            authority_config,
+            default_action=default_action,
+            persist=False,
+            pending_approval_claims=pending_approval_claims,
+            runtime_detector_context=detector_context,
+        )
+        evaluation = _evaluation_with_recorded_detector_result(evaluation, detector_evaluation)
+    else:
+        evaluation = detector_evaluation
+    detector_block_reason = detector_evaluation.get("blocked_by_detector")
+    authoritative_detector_block = (
+        detector_block_reason if isinstance(detector_block_reason, str) and detector_block_reason else None
+    )
+    if evaluation["blocked"]:
+        evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
+
+    resolved_evaluation: dict[str, Any] | None = None
+    trusted_request_overrides: dict[str, str] = {}
+    trusted_request_override_labels: dict[str, str] = {}
+    if (
+        not dry_run
+        and authoritative_detector_block is None
+        and interactive_resolver is not None
+        and evaluation["blocked"]
+    ):
+        resolved_evaluation = interactive_resolver(detection, evaluation)
+        trusted_request_overrides, trusted_request_override_labels = _resolved_interactive_request_overrides(
+            resolved_evaluation
+        )
+    elif (
+        not dry_run and authoritative_detector_block is None and blocked_resolver is not None and evaluation["blocked"]
+    ):
+        resolved_evaluation = blocked_resolver(detection, evaluation)
+        trusted_request_overrides = _resolved_exact_request_overrides(resolved_evaluation)
+        trusted_request_override_labels = {artifact_id: "approval-center" for artifact_id in trusted_request_overrides}
+    if resolved_evaluation is not None:
+        # A terminal prompt or browser wait is an authority boundary even when
+        # the user chose the unpersisted ``allow-once`` path. Reload policy
+        # before applying that exact request override; post-claim refresh below
+        # cannot protect an approval that intentionally created no stored row.
+        resolution_config_refresh_failed = False
+        if current_config_provider is not None:
+            try:
+                provided_config = current_config_provider()
+            except Exception:
+                resolution_config_refresh_failed = True
+            else:
+                if isinstance(provided_config, GuardConfig):
+                    config = provided_config
+                else:
+                    resolution_config_refresh_failed = True
+        if resolution_config_refresh_failed:
+            trusted_request_overrides = {}
+            trusted_request_override_labels = {}
+        detection = _detection_with_prompt_artifacts(detect_harness(harness, context), context, passthrough_args)
+        base_evaluation = evaluate_detection(
+            detection,
+            store,
+            config,
+            default_action=default_action,
+            persist=False,
+        )
+        detector_evaluation = _evaluation_with_detector_registry(
+            base_evaluation,
+            action_envelope,
+            context,
+            config,
+        )
+        detector_action, _detector_reason = _runtime_detector_authority(detector_evaluation)
+        detector_context = _runtime_detector_context(detector_evaluation)
+        authority_config = config
+        if detector_action in {"warn", "review"}:
+            authority_config = _config_with_current_authority(config, base_evaluation, detector_action)
+        pending_approval_claims = []
+        evaluation = evaluate_detection(
+            detection,
+            store,
+            authority_config,
+            default_action=default_action,
+            persist=False,
+            trusted_request_overrides=trusted_request_overrides,
+            trusted_request_override_labels=trusted_request_override_labels,
+            pending_approval_claims=pending_approval_claims,
+            runtime_detector_context=detector_context,
+        )
+        evaluation = _evaluation_with_recorded_detector_result(evaluation, detector_evaluation)
+        detector_block_reason = detector_evaluation.get("blocked_by_detector")
+        authoritative_detector_block = (
+            detector_block_reason if isinstance(detector_block_reason, str) and detector_block_reason else None
+        )
+        if evaluation["blocked"]:
+            evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
+        for key in _APPROVAL_METADATA_KEYS:
+            if key in resolved_evaluation:
+                evaluation[key] = resolved_evaluation[key]
+    if evaluation["blocked"] or dry_run:
+        receipt_cursor = _receipt_rowid_cursor(store)
+        persisted = evaluate_detection(
+            detection,
+            store,
+            authority_config,
+            default_action=default_action,
+            persist=True,
+            trusted_request_overrides=trusted_request_overrides,
+            trusted_request_override_labels=trusted_request_override_labels,
+            runtime_detector_context=detector_context,
+            runtime_detector_block_reason=authoritative_detector_block,
+        )
+        if persisted["blocked"]:
+            persisted = _evaluation_with_action_envelope(persisted, action_envelope)
+        persisted = _evaluation_with_recorded_detector_result(persisted, detector_evaluation)
+        detector_evidence = _runtime_detector_nonterminal_evidence(detector_action, _detector_reason)
+        if detector_evidence is not None and detector_action is not None:
+            _append_authority_evidence_to_receipts(
+                store,
+                after_rowid=receipt_cursor,
+                evaluation=persisted,
+                evidence=detector_evidence,
+                approval_source="runtime-detector",
+                source_actions=frozenset({detector_action}),
+            )
+        if resolved_evaluation is not None:
+            for key in _APPROVAL_METADATA_KEYS:
+                if key in resolved_evaluation:
+                    persisted[key] = resolved_evaluation[key]
+        evaluation = persisted
+    else:
+        decisions_to_claim = [decision for decision, _artifact_id, _artifact_hash in pending_approval_claims]
+        preclaim_launch_previews: tuple[_GuardRunLaunchPlan, ...] = ()
+        preclaim_signature: tuple[object, ...] | None = None
+        preclaim_failure_reason: str | None = None
+        if decisions_to_claim:
+            try:
+                preclaim_launch_previews = _guard_run_launch_previews(harness, context, passthrough_args)
+            except Exception:
+                preclaim_launch_previews = ()
+            if preclaim_launch_previews and all(plan.reusable for plan in preclaim_launch_previews):
+                preclaim_signature = _guard_run_authority_signature(
+                    detection,
+                    evaluation,
+                    preclaim_launch_previews,
+                )
+            if preclaim_signature is None:
+                preclaim_failure_reason = APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED
+            else:
+                try:
+                    claim_succeeded = store.claim_approval_reuse_decisions(decisions_to_claim, now=_now())
+                except Exception:
+                    claim_succeeded = False
+                if not claim_succeeded:
+                    preclaim_failure_reason = APPROVAL_REUSE_CLAIM_FAILED
+        if decisions_to_claim and preclaim_failure_reason is not None:
+            failed_ids = {artifact_id for _decision, artifact_id, _artifact_hash in pending_approval_claims}
+            failure_config = _config_with_current_authority(
+                authority_config,
+                evaluation,
+                "require-reapproval",
+                artifact_ids=failed_ids,
+            )
+            if preclaim_failure_reason == APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED:
+                failure_reason = (
+                    "saved approval could not be reused because the harness launch identity was not stable "
+                    "and path-pinned"
+                )
+                claim_status = "rejected"
+                revalidation_status = "unverified"
+            else:
+                failure_reason = "saved approval could not be atomically claimed"
+                claim_status = "failed"
+                revalidation_status = "claim-failed"
+            receipt_cursor = _receipt_rowid_cursor(store)
+            evaluation = evaluate_detection(
+                detection,
+                store,
+                failure_config,
+                default_action=default_action,
+                persist=True,
+                trusted_request_overrides=trusted_request_overrides,
+                trusted_request_override_labels=trusted_request_override_labels,
+                runtime_detector_context=detector_context,
+                runtime_detector_block_reason=authoritative_detector_block,
+            )
+            evaluation = _evaluation_with_recorded_detector_result(evaluation, detector_evaluation)
+            evaluation = _evaluation_with_preclaim_failure(
+                evaluation,
+                affected_artifact_ids=failed_ids,
+                reason_code=preclaim_failure_reason,
+                reason=failure_reason,
+                claim_status=claim_status,
+                revalidation_status=revalidation_status,
+            )
+            detector_evidence = _runtime_detector_nonterminal_evidence(detector_action, _detector_reason)
+            if detector_evidence is not None and detector_action is not None:
+                _append_authority_evidence_to_receipts(
+                    store,
+                    after_rowid=receipt_cursor,
+                    evaluation=evaluation,
+                    evidence=detector_evidence,
+                    approval_source="runtime-detector",
+                    source_actions=frozenset({detector_action}),
+                )
+            _append_authority_evidence_to_receipts(
+                store,
+                after_rowid=receipt_cursor,
+                evaluation=evaluation,
+                evidence={
+                    "source": "approval_reuse",
+                    "status": "rejected",
+                    "reason_code": preclaim_failure_reason,
+                    "reason": failure_reason,
+                },
+                approval_source="approval-reuse",
+                source_actions=frozenset({"review", "require-reapproval", "sandbox-required", "block"}),
+                replace_existing_source=True,
+            )
+            if resolved_evaluation is not None:
+                for key in _APPROVAL_METADATA_KEYS:
+                    if key in resolved_evaluation:
+                        evaluation[key] = resolved_evaluation[key]
+            evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
+        else:
+            consumed_claim_overrides = {
+                artifact_id: artifact_hash
+                for decision, artifact_id, artifact_hash in pending_approval_claims
+                if not _saved_decision_is_retained(decision)
+            }
+            retained_claim_overrides = {
+                artifact_id: artifact_hash
+                for decision, artifact_id, artifact_hash in pending_approval_claims
+                if _saved_decision_is_retained(decision)
+            }
+            if decisions_to_claim:
+                config_refresh_failed = False
+                fresh_config = config
+                if current_config_provider is not None:
+                    try:
+                        provided_config = current_config_provider()
+                    except Exception:
+                        config_refresh_failed = True
+                    else:
+                        if isinstance(provided_config, GuardConfig):
+                            fresh_config = provided_config
+                        else:
+                            config_refresh_failed = True
+                detection = _detection_with_prompt_artifacts(
+                    detect_harness(harness, context),
+                    context,
+                    passthrough_args,
+                )
+                fresh_base_evaluation = evaluate_detection(
+                    detection,
+                    store,
+                    fresh_config,
+                    default_action=default_action,
+                    persist=False,
+                )
+                fresh_detector_evaluation = _evaluation_with_detector_registry(
+                    fresh_base_evaluation,
+                    action_envelope,
+                    context,
+                    fresh_config,
+                )
+                fresh_detector_action, fresh_detector_reason = _runtime_detector_authority(fresh_detector_evaluation)
+                fresh_detector_context = _runtime_detector_context(fresh_detector_evaluation)
+                fresh_authority_config = fresh_config
+                if fresh_detector_action in {"warn", "review"}:
+                    fresh_authority_config = _config_with_current_authority(
+                        fresh_config,
+                        fresh_base_evaluation,
+                        fresh_detector_action,
+                    )
+                fresh_evaluation = evaluate_detection(
+                    detection,
+                    store,
+                    fresh_authority_config,
+                    default_action=default_action,
+                    persist=False,
+                    trusted_request_overrides=trusted_request_overrides,
+                    trusted_request_override_labels=trusted_request_override_labels,
+                    claimed_saved_approval_overrides=consumed_claim_overrides,
+                    retained_saved_approval_overrides=retained_claim_overrides,
+                    runtime_detector_context=fresh_detector_context,
+                )
+                fresh_evaluation = _evaluation_with_recorded_detector_result(
+                    fresh_evaluation,
+                    fresh_detector_evaluation,
+                )
+                try:
+                    fresh_launch_previews = _guard_run_launch_previews(harness, context, passthrough_args)
+                except Exception:
+                    fresh_launch_previews = ()
+                postclaim_signature = (
+                    _guard_run_authority_signature(detection, fresh_evaluation, fresh_launch_previews)
+                    if fresh_launch_previews and all(plan.reusable for plan in fresh_launch_previews)
+                    else None
+                )
+                finalized_launch_plan: _GuardRunLaunchPlan | None = None
+                if (
+                    not config_refresh_failed
+                    and preclaim_signature is not None
+                    and postclaim_signature == preclaim_signature
+                ):
+                    try:
+                        finalized_launch_plan = _guard_run_finalize_authorized_launch_plan(
+                            harness,
+                            context,
+                            passthrough_args,
+                            fresh_launch_previews,
+                        )
+                    except Exception:
+                        finalized_launch_plan = None
+                if (
+                    config_refresh_failed
+                    or preclaim_signature is None
+                    or postclaim_signature != preclaim_signature
+                    or finalized_launch_plan is None
+                ):
+                    stale_config = _config_with_current_authority(
+                        fresh_authority_config,
+                        fresh_evaluation,
+                        "require-reapproval",
+                    )
+                    fresh_block_reason = fresh_detector_evaluation.get("blocked_by_detector")
+                    authoritative_fresh_block = (
+                        fresh_block_reason if isinstance(fresh_block_reason, str) and fresh_block_reason else None
+                    )
+                    receipt_cursor = _receipt_rowid_cursor(store)
+                    evaluation = evaluate_detection(
+                        detection,
+                        store,
+                        stale_config,
+                        default_action=default_action,
+                        persist=True,
+                        runtime_detector_context=fresh_detector_context,
+                        runtime_detector_block_reason=authoritative_fresh_block,
+                    )
+                    evaluation = _evaluation_with_recorded_detector_result(
+                        evaluation,
+                        fresh_detector_evaluation,
+                    )
+                    evaluation = _evaluation_with_claim_context_failure(
+                        evaluation,
+                        claimed_artifact_ids={
+                            artifact_id for _decision, artifact_id, _artifact_hash in pending_approval_claims
+                        },
+                    )
+                    fresh_detector_evidence = _runtime_detector_nonterminal_evidence(
+                        fresh_detector_action,
+                        fresh_detector_reason,
+                    )
+                    if fresh_detector_evidence is not None:
+                        _append_authority_evidence_to_receipts(
+                            store,
+                            after_rowid=receipt_cursor,
+                            evaluation=evaluation,
+                            evidence=fresh_detector_evidence,
+                            approval_source="runtime-detector",
+                            source_actions=frozenset(),
+                        )
+                    _append_authority_evidence_to_receipts(
+                        store,
+                        after_rowid=receipt_cursor,
+                        evaluation=evaluation,
+                        evidence={
+                            "source": "approval_reuse",
+                            "status": "rejected",
+                            "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
+                            "reason": "launch authority changed after the saved approval was claimed",
+                        },
+                        approval_source="approval-reuse",
+                        source_actions=frozenset({"review", "require-reapproval", "sandbox-required", "block"}),
+                        replace_existing_source=True,
+                    )
+                    evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
+                else:
+                    detector_evaluation = fresh_detector_evaluation
+                    detector_action = fresh_detector_action
+                    _detector_reason = fresh_detector_reason
+                    detector_context = fresh_detector_context
+                    authority_config = fresh_authority_config
+                    evaluation = fresh_evaluation
+                    launch_plan = finalized_launch_plan
+
+            if not evaluation["blocked"]:
+                receipt_cursor = _receipt_rowid_cursor(store)
+                evaluation = evaluate_detection(
+                    detection,
+                    store,
+                    authority_config,
+                    default_action=default_action,
+                    persist=True,
+                    trusted_request_overrides=trusted_request_overrides,
+                    trusted_request_override_labels=trusted_request_override_labels,
+                    claimed_saved_approval_overrides=consumed_claim_overrides,
+                    retained_saved_approval_overrides=retained_claim_overrides,
+                    runtime_detector_context=detector_context,
+                )
+                if evaluation["blocked"]:
+                    evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
+                evaluation = _evaluation_with_recorded_detector_result(evaluation, detector_evaluation)
+                detector_evidence = _runtime_detector_nonterminal_evidence(detector_action, _detector_reason)
+                if detector_evidence is not None and detector_action is not None:
+                    _append_authority_evidence_to_receipts(
+                        store,
+                        after_rowid=receipt_cursor,
+                        evaluation=evaluation,
+                        evidence=detector_evidence,
+                        approval_source="runtime-detector",
+                        source_actions=frozenset({detector_action}),
+                    )
+                if resolved_evaluation is not None:
+                    for key in _APPROVAL_METADATA_KEYS:
+                        if key in resolved_evaluation:
+                            evaluation[key] = resolved_evaluation[key]
     if "config_paths" not in evaluation:
         evaluation["config_paths"] = list(detection.config_paths) or _guard_run_config_paths(
             detection=detection,
@@ -578,24 +1511,46 @@ def guard_run(
         evaluation["launch_command"] = []
         return evaluation
 
-    adapter = get_adapter(harness)
-    command = adapter.launch_command(context, passthrough_args)
+    if launch_plan is None:
+        try:
+            launch_previews = _guard_run_launch_previews(harness, context, passthrough_args)
+            launch_plan = (
+                _guard_run_finalize_authorized_launch_plan(
+                    harness,
+                    context,
+                    passthrough_args,
+                    launch_previews,
+                )
+                if launch_previews and all(plan.reusable for plan in launch_previews)
+                else None
+            )
+        except Exception as error:
+            evaluation["launched"] = False
+            evaluation["launch_command"] = []
+            evaluation["return_code"] = 127
+            evaluation["launch_error"] = str(error)
+            return evaluation
+    if launch_plan is None or not launch_plan.reusable:
+        evaluation["launched"] = False
+        evaluation["launch_command"] = []
+        evaluation["return_code"] = 127
+        evaluation["launch_error"] = "Guard could not resolve a stable, path-pinned harness launch command."
+        return evaluation
+    command = list(launch_plan.execution_command)
     evaluation["launch_command"] = command
-    environment = os.environ.copy()
-    environment["HOME"] = str(context.home_dir)
-    if os.name == "nt":
-        environment["USERPROFILE"] = str(context.home_dir)
-    environment = adapter.prepare_launch_environment(context, environment)
+    environment = dict(launch_plan.environment)
     if harness == "hermes":
         _hermes_token = _resolve_hermes_guard_access_token(store)
         if _hermes_token is not None:
-            # The token is needed by Hermes's guard_runtime_policy.py to call
-            # the Guard policy API.  It must NOT leak to user-configured MCP
-            # server subprocesses; the proxy layer scrubs it before launching
-            # those processes (see proxy._build_scrubbed_env).
-            environment["HERMES_GUARD_TOKEN"] = _hermes_token
+            # This is the sole intentional environment addition after the
+            # prepared environment was authority-hashed. It is a short-lived
+            # Guard credential resolved only at the execution boundary, not
+            # user-controlled launch configuration. It must NOT leak to
+            # user-configured MCP subprocesses; the proxy layer scrubs it
+            # before launch (see proxy._build_scrubbed_env).
+            environment[_HERMES_GUARD_TOKEN_ENV_KEY] = _hermes_token
     try:
-        result = subprocess.run(command, cwd=context.workspace_dir or Path.cwd(), check=False, env=environment)
+        result = subprocess.run(command, cwd=launch_plan.launch_cwd, check=False, env=environment)
     except FileNotFoundError as error:
         evaluation["launched"] = False
         evaluation["return_code"] = 127
@@ -695,19 +1650,228 @@ def _evaluation_with_detector_registry(
         "runtime_detector_signals_v2": [signal.to_dict() for signal in result.signals],
         "runtime_detector_telemetry": [item.to_dict() for item in result.telemetry],
     }
-    base_action: str = "block" if evaluation.get("blocked") else "allow"
-    composition = compose_action_from_signals(result.signals, base_action)  # type: ignore[arg-type]
+    # Compose detector authority independently from the base artifact result.
+    # Otherwise an already-reviewable artifact makes every detector result
+    # appear to be a block and prevents us from identifying a genuine terminal
+    # detector block before entering the approval flow.
+    composition = compose_action_from_signals(result.signals, "allow")
     next_evaluation["runtime_detector_composition"] = {
         "action": composition.action,
         "reason": composition.reason,
         "downgraded": composition.downgraded,
         "upgraded": composition.upgraded,
     }
-    if composition.action == "block" and not bool(evaluation.get("blocked")):
+    if composition.action == "block":
         next_evaluation["blocked"] = True
         next_evaluation["blocked_by_detector"] = composition.reason
     if trace_error is not None:
         next_evaluation["runtime_detector_trace_error"] = trace_error
+    return next_evaluation
+
+
+_RUNTIME_DETECTOR_RESULT_KEYS = (
+    "runtime_detector_signals_v2",
+    "runtime_detector_telemetry",
+    "runtime_detector_composition",
+    "runtime_detector_trace_error",
+)
+
+
+def _evaluation_with_recorded_detector_result(
+    evaluation: dict[str, Any],
+    detector_evaluation: Mapping[str, object],
+) -> dict[str, Any]:
+    """Carry one pre-launch detector result across persistence without rerunning it."""
+
+    next_evaluation = dict(evaluation)
+    for key in _RUNTIME_DETECTOR_RESULT_KEYS:
+        if key in detector_evaluation:
+            next_evaluation[key] = detector_evaluation[key]
+    blocked_by_detector = detector_evaluation.get("blocked_by_detector")
+    if isinstance(blocked_by_detector, str) and blocked_by_detector:
+        next_evaluation["blocked"] = True
+        next_evaluation["blocked_by_detector"] = blocked_by_detector
+    detector_action, detector_reason = _runtime_detector_authority(detector_evaluation)
+    evidence = _runtime_detector_nonterminal_evidence(detector_action, detector_reason)
+    if evidence is None:
+        return next_evaluation
+
+    raw_artifacts = next_evaluation.get("artifacts")
+    if not isinstance(raw_artifacts, list) or not raw_artifacts:
+        if detector_action == "review":
+            next_evaluation["blocked"] = True
+            next_evaluation["blocked_by_detector"] = evidence["reason"]
+        return next_evaluation
+    artifacts: list[object] = []
+    for raw_item in raw_artifacts:
+        if not isinstance(raw_item, Mapping):
+            artifacts.append(raw_item)
+            continue
+        item = dict(raw_item)
+        raw_scanner_evidence = item.get("scanner_evidence")
+        scanner_evidence: list[object] = (
+            [
+                dict(raw_evidence) if isinstance(raw_evidence, Mapping) else raw_evidence
+                for raw_evidence in raw_scanner_evidence
+            ]
+            if isinstance(raw_scanner_evidence, list)
+            else []
+        )
+        if not any(
+            isinstance(raw_evidence, Mapping)
+            and raw_evidence.get("source") == evidence["source"]
+            and raw_evidence.get("reason_code") == evidence["reason_code"]
+            for raw_evidence in scanner_evidence
+        ):
+            scanner_evidence.append(evidence)
+        item["scanner_evidence"] = scanner_evidence
+        composition = item.get("policy_composition")
+        item["policy_composition"] = {
+            **(dict(composition) if isinstance(composition, Mapping) else {}),
+            "runtime_detector_action": detector_action,
+            "runtime_detector_reason": evidence["reason"],
+        }
+        if item.get("policy_action") == detector_action:
+            decision = item.get("decision_v2_json")
+            if isinstance(decision, Mapping):
+                item["decision_v2_json"] = {**dict(decision), "reason": evidence["reason_code"]}
+        artifacts.append(item)
+    next_evaluation["artifacts"] = artifacts
+    return next_evaluation
+
+
+def _evaluation_with_preclaim_failure(
+    evaluation: dict[str, Any],
+    *,
+    affected_artifact_ids: set[str],
+    reason_code: str,
+    reason: str,
+    claim_status: str,
+    revalidation_status: str,
+) -> dict[str, Any]:
+    """Record a terminal, auditable failure before approval authority is claimed."""
+
+    evidence = {
+        "source": "approval_reuse",
+        "status": "rejected",
+        "reason_code": reason_code,
+        "reason": reason,
+    }
+    artifacts: list[object] = []
+    for raw_item in evaluation.get("artifacts", []):
+        if not isinstance(raw_item, Mapping) or raw_item.get("artifact_id") not in affected_artifact_ids:
+            artifacts.append(raw_item)
+            continue
+        item = dict(raw_item)
+        raw_scanner_evidence = item.get("scanner_evidence")
+        scanner_evidence: list[object] = (
+            [
+                dict(raw_evidence)
+                for raw_evidence in raw_scanner_evidence
+                if isinstance(raw_evidence, Mapping) and raw_evidence.get("source") != "approval_reuse"
+            ]
+            if isinstance(raw_scanner_evidence, list)
+            else []
+        )
+        scanner_evidence.append(evidence)
+        item["scanner_evidence"] = scanner_evidence
+        item["approval_reuse_status"] = "rejected"
+        item["approval_reuse_reason_code"] = reason_code
+        approval_reuse = item.get("approval_reuse")
+        item["approval_reuse"] = {
+            **(dict(approval_reuse) if isinstance(approval_reuse, Mapping) else {}),
+            "action": item.get("policy_action"),
+            "status": "rejected",
+            "reason_code": reason_code,
+            "should_claim": False,
+        }
+        composition = item.get("policy_composition")
+        item["policy_composition"] = {
+            **(dict(composition) if isinstance(composition, Mapping) else {}),
+            "claim_revalidation": revalidation_status,
+            "claim_revalidation_reason": reason_code,
+            "final_action": item.get("policy_action"),
+        }
+        decision = item.get("decision_v2_json")
+        if isinstance(decision, Mapping):
+            item["decision_v2_json"] = {**dict(decision), "reason": reason_code}
+        artifacts.append(item)
+    return {
+        **evaluation,
+        "artifacts": artifacts,
+        "blocked": True,
+        "approval_claim": {
+            "status": claim_status,
+            "reason_code": reason_code,
+            "artifact_ids": sorted(affected_artifact_ids),
+        },
+    }
+
+
+def _evaluation_with_claim_context_failure(
+    evaluation: dict[str, Any],
+    *,
+    claimed_artifact_ids: set[str],
+) -> dict[str, Any]:
+    """Make a changed post-claim authority terminal and auditable."""
+
+    evidence = {
+        "source": "approval_reuse",
+        "status": "rejected",
+        "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
+        "reason": "launch authority changed after the saved approval was claimed",
+    }
+    artifacts: list[object] = []
+    for raw_item in evaluation.get("artifacts", []):
+        if not isinstance(raw_item, Mapping):
+            artifacts.append(raw_item)
+            continue
+        item = dict(raw_item)
+        raw_scanner_evidence = item.get("scanner_evidence")
+        scanner_evidence: list[object] = (
+            [
+                dict(raw_evidence)
+                for raw_evidence in raw_scanner_evidence
+                if isinstance(raw_evidence, Mapping) and raw_evidence.get("source") != "approval_reuse"
+            ]
+            if isinstance(raw_scanner_evidence, list)
+            else []
+        )
+        scanner_evidence.append(evidence)
+        item["scanner_evidence"] = scanner_evidence
+        item["approval_reuse_status"] = "rejected"
+        item["approval_reuse_reason_code"] = _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
+        approval_reuse = item.get("approval_reuse")
+        item["approval_reuse"] = {
+            **(dict(approval_reuse) if isinstance(approval_reuse, Mapping) else {}),
+            "action": item.get("policy_action"),
+            "status": "rejected",
+            "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
+            "should_claim": False,
+        }
+        composition = item.get("policy_composition")
+        item["policy_composition"] = {
+            **(dict(composition) if isinstance(composition, Mapping) else {}),
+            "claim_revalidation": "changed",
+            "claim_revalidation_reason": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
+        }
+        decision = item.get("decision_v2_json")
+        if isinstance(decision, Mapping):
+            item["decision_v2_json"] = {
+                **dict(decision),
+                "reason": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
+            }
+        artifacts.append(item)
+    next_evaluation = {
+        **evaluation,
+        "artifacts": artifacts,
+        "blocked": True,
+        "approval_claim": {
+            "status": "rejected",
+            "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
+            "artifact_ids": sorted(claimed_artifact_ids),
+        },
+    }
     return next_evaluation
 
 
@@ -1104,24 +2268,6 @@ def _policy_bundle_acknowledgement_payload(
     return validated
 
 
-def _version_tuple(value: str) -> tuple[int, ...] | None:
-    tokens = [token for token in re.split(r"[^0-9]+", value) if token]
-    if not tokens:
-        return None
-    return tuple(int(token) for token in tokens)
-
-
-def _daemon_version_supported(policy_bundle: dict[str, object]) -> bool:
-    min_daemon_version = non_empty_string(policy_bundle.get("minDaemonVersion"))
-    if min_daemon_version is None:
-        return True
-    current = _version_tuple(__version__)
-    minimum = _version_tuple(min_daemon_version)
-    if current is None or minimum is None:
-        return True
-    return current >= minimum
-
-
 def _policy_bundle_is_version_downgrade(
     existing_bundle: dict[str, object] | None,
     next_bundle: dict[str, object],
@@ -1155,226 +2301,79 @@ def _policy_bundle_is_version_downgrade(
             )
             is not None
         )
-    if not isinstance(existing_bundle, dict) or not existing_bundle:
-        return False
-    existing_issued_at = non_empty_string(existing_bundle.get("issuedAt"))
-    next_issued_at = non_empty_string(next_bundle.get("issuedAt"))
-    if existing_issued_at is None or next_issued_at is None:
-        return False
-    try:
-        return datetime.fromisoformat(next_issued_at) < datetime.fromisoformat(existing_issued_at)
-    except (TypeError, ValueError):
-        return False
+    return policy_bundle_is_version_downgrade(existing_bundle, next_bundle)
 
 
-def _policy_bundle_rule_matcher_families(rule: dict[str, object]) -> list[str]:
-    explicit = rule.get("matcherFamilies")
-    if isinstance(explicit, list):
-        values = [
-            family for family in explicit if isinstance(family, str) and family in POLICY_BUNDLE_RULE_MATCHER_FAMILIES
-        ]
-        return list(dict.fromkeys(values))
-
-    derived: list[str] = []
-    scope = rule.get("scope")
-    if isinstance(scope, dict):
-        if isinstance(scope.get("ecosystems"), list) and scope["ecosystems"]:
-            derived.append("package-request")
-        if non_empty_string(scope.get("mcp")) is not None or non_empty_string(scope.get("tool")) is not None:
-            derived.append("mcp")
-        if non_empty_string(scope.get("command")) is not None:
-            derived.append("tool-action")
-        if non_empty_string(scope.get("path")) is not None or non_empty_string(scope.get("secretType")) is not None:
-            derived.append("file-read")
-    artifact_type = non_empty_string(rule.get("artifactType"))
-    if artifact_type == "package_request":
-        derived.append("package-request")
-    if artifact_type == "tool_action_request":
-        derived.append("tool-action")
-    if artifact_type == "file_read_request":
-        derived.append("file-read")
-    if artifact_type == "prompt_request":
-        derived.append("prompt")
-    return list(dict.fromkeys(family for family in derived if family in POLICY_BUNDLE_RULE_MATCHER_FAMILIES))
+def _policy_bundle_utc_datetime(value: str) -> datetime:
+    normalized = value[:-1] + "+00:00" if value.endswith(("Z", "z")) else value
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
-def _policy_bundle_rule_saved_decision_families(rule: dict[str, object]) -> list[str]:
-    """Return rule families that can be represented without broadening scope.
-
-    Package-request bundle rules with no package-related scope cannot be
-    represented as local family decisions without becoming "all package
-    installs." Scoped package bundle rules retain the existing runtime
-    family-row behavior.
-    """
-    families = _policy_bundle_rule_matcher_families(rule)
-    if _policy_bundle_rule_exact_command(rule) is not None:
-        families = [family for family in families if family != "tool-action"]
-    if "package-request" not in families:
-        return families
-    if _policy_bundle_rule_has_package_scope(rule):
-        return families
-    return [family for family in families if family != "package-request"]
+def _policy_bundle_numeric_version(value: str) -> tuple[int, ...] | None:
+    tokens = tuple(int(token) for token in re.findall(r"\d+", value))
+    return tokens or None
 
 
-def _policy_bundle_rule_has_package_scope(rule: dict[str, object]) -> bool:
-    artifact_type = non_empty_string(rule.get("artifactType"))
-    if artifact_type == "package_request":
-        return True
-    scope = rule.get("scope")
-    if not isinstance(scope, dict):
-        return False
-    package_scope_keys = (
-        "ecosystems",
-        "packages",
-        "packageNames",
-        "packageManagers",
-        "registries",
-        "sourceUrls",
-    )
-    for key in package_scope_keys:
-        value = scope.get(key)
-        if isinstance(value, list) and value:
-            return True
-        if non_empty_string(value) is not None:
-            return True
-    return False
+def _policy_bundle_acceptance_checkpoint(policy_bundle: Mapping[str, object]) -> dict[str, object]:
+    return policy_bundle_acceptance_checkpoint(dict(policy_bundle))
 
 
-def _policy_bundle_rule_matches_local_scope(
-    rule: dict[str, object],
-    *,
-    device_id: str,
-    device_name: str,
-) -> bool:
-    scope = rule.get("scope")
-    if not isinstance(scope, dict):
-        return False
-    devices = scope.get("devices")
-    if isinstance(devices, list) and devices and device_id not in devices and device_name not in devices:
-        return False
-    environments = scope.get("environments")
-    if not isinstance(environments, list) or not environments:
-        return True
-    return any(isinstance(item, str) and item in POLICY_BUNDLE_DEFAULT_ENVIRONMENTS for item in environments)
-
-
-def _policy_bundle_rule_locations(rule: dict[str, object]) -> list[str]:
-    scope = rule.get("scope")
-    if not isinstance(scope, dict):
-        return []
-    locations = scope.get("locations")
-    if not isinstance(locations, list):
-        return []
-    return [item.strip() for item in locations if isinstance(item, str) and item.strip()]
-
-
-def _policy_bundle_non_empty_exact_command(value: object) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value
-    return None
-
-
-def _policy_bundle_rule_exact_command(rule: dict[str, object]) -> str | None:
-    matcher = rule.get("matcher")
-    if isinstance(matcher, dict):
-        command = _policy_bundle_non_empty_exact_command(matcher.get("command"))
-        if command is not None:
-            return command
-    scope = rule.get("scope")
-    if isinstance(scope, dict):
-        return _policy_bundle_non_empty_exact_command(scope.get("command"))
-    return None
-
-
-def _policy_bundle_rule_exact_artifact_ids(rule: dict[str, object]) -> list[str]:
-    exact_command_artifact_id = build_exact_command_memory_artifact_id(_policy_bundle_rule_exact_command(rule))
-    if exact_command_artifact_id is not None:
-        return [exact_command_artifact_id]
-
-    artifact_ids: list[str] = []
-    matcher = rule.get("matcher")
-    if isinstance(matcher, dict):
-        for key in ("artifactId", "artifact_id"):
-            value = non_empty_string(matcher.get(key))
-            if value is not None:
-                artifact_ids.append(value)
-    for key in ("artifactId", "artifact_id"):
-        value = non_empty_string(rule.get(key))
-        if value is not None:
-            artifact_ids.append(value)
-    return list(dict.fromkeys(artifact_ids))
-
-
-def _policy_bundle_rule_expires_at(
-    rule: dict[str, object],
-    policy_bundle: dict[str, object],
-) -> str | None:
-    return non_empty_string(rule.get("expiresAt")) or non_empty_string(policy_bundle.get("expiresAt"))
-
-
-def _policy_bundle_rule_source_metadata(rule: dict[str, object]) -> dict[str, object]:
-    metadata: dict[str, object] = {}
-    for key in ("sourceDecisionId", "sourceSuggestionId", "ruleId"):
-        value = non_empty_string(rule.get(key))
-        if value is not None:
-            metadata[key] = value
-    for key in ("sourceReceiptIds", "auditEventIds"):
-        value = rule.get(key)
-        if isinstance(value, list):
-            items = [item for item in (non_empty_string(entry) for entry in value) if item is not None]
-            if items:
-                metadata[key] = items
-    return metadata
-
-
-def _policy_bundle_rule_reason(rule: dict[str, object], rule_id: str) -> str:
-    reason = non_empty_string(rule.get("reason")) or f"Matched Guard Cloud rule {rule_id}."
-    source_metadata = _policy_bundle_rule_source_metadata(rule)
-    diagnostic_ids = [
-        f"{key}={value}" for key, value in source_metadata.items() if isinstance(value, str) and key != "ruleId"
+def _policy_bundle_downgrade_reference(
+    store: GuardStore,
+    existing_bundle: dict[str, object] | None,
+) -> dict[str, object] | None:
+    checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
+    workspace_id = store.get_cloud_workspace_id()
+    candidates = [
+        item
+        for item in (
+            checkpoint,
+            existing_bundle,
+            store.get_sync_payload("policy_bundle_last_good"),
+        )
+        if isinstance(item, dict) and non_empty_string(item.get("issuedAt")) is not None
+        if (workspace_id is None or non_empty_string(item.get("workspaceId")) in {None, workspace_id})
     ]
-    if diagnostic_ids:
-        return f"{reason} ({'; '.join(diagnostic_ids)})"
-    return reason
+    if not candidates:
+        return None
+
+    def _sort_key(item: dict[str, object]) -> tuple[datetime, tuple[int, ...], str, bool]:
+        issued_at = non_empty_string(item.get("issuedAt"))
+        assert issued_at is not None
+        try:
+            timestamp = _policy_bundle_utc_datetime(issued_at)
+        except ValueError:
+            timestamp = datetime.max.replace(tzinfo=timezone.utc)
+        version = non_empty_string(item.get("bundleVersion")) or ""
+        return (
+            timestamp,
+            _policy_bundle_numeric_version(version) or (),
+            version,
+            non_empty_string(item.get("payloadHash")) is not None,
+        )
+
+    return max(candidates, key=_sort_key)
 
 
-def _policy_bundle_rule_harnesses(rule: dict[str, object]) -> list[str]:
-    scope = rule.get("scope")
-    if not isinstance(scope, dict):
-        return ["*"]
-    values: list[str] = []
-    for key in ("harnesses", "agents"):
-        current = scope.get(key)
-        if isinstance(current, list):
-            values.extend(item for item in current if isinstance(item, str) and item.strip())
-    normalized = [value.strip().lower() for value in values]
-    if not normalized:
-        return ["*"]
-    return ["*" if value == "custom" else value for value in dict.fromkeys(normalized)]
+def _validate_cached_policy_bundle(
+    store: GuardStore,
+    policy_bundle: object,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Revalidate cached policy authority before any rule is made effective."""
+
+    return cached_policy_bundle_validation(store, policy_bundle)
 
 
-def _policy_bundle_rule_has_browser_scope(rule: dict[str, object]) -> bool:
-    """Check if a rule has any non-empty browser-specific scope constraints.
-
-    Browser scope keys (browserIntent, origin, pathPrefix, browserProfile,
-    sensitiveSurface) cannot be safely represented as harness-scoped family
-    decisions because the runtime resolution would match all browser tool calls
-    in that family, ignoring the narrow constraints the rule author specified.
-
-    The Guard Cloud bundle compiler may emit these fields at the top level of
-    the rule or nested under ``scope``. Empty lists are treated as no
-    constraint (matching how other scope keys behave).
-    """
-    for source in (rule, rule.get("scope")):
-        if not isinstance(source, dict):
-            continue
-        for key in POLICY_BUNDLE_BROWSER_SCOPE_KEYS:
-            value = source.get(key)
-            if isinstance(value, list) and value:
-                return True
-            if isinstance(value, str) and value.strip():
-                return True
-    return False
+def _policy_bundle_rejection_payload(reason: str | None) -> dict[str, object]:
+    resolved_reason = reason or "invalid_policy_bundle"
+    payload: dict[str, object] = {"reason": resolved_reason}
+    remediation = policy_bundle_rejection_message(resolved_reason)
+    if remediation is not None:
+        payload["message"] = remediation
+    return payload
 
 
 def _build_canonical_policy_bundle_decisions(
@@ -1446,88 +2445,11 @@ def _build_policy_bundle_decisions(
             device_id=device_id,
             device_name=device_name,
         )
-    decisions: list[PolicyDecision] = []
-    rules = policy_bundle.get("rules")
-    if not isinstance(rules, list):
-        return decisions
-    for item in rules:
-        if not isinstance(item, dict):
-            continue
-        if not _policy_bundle_rule_matches_local_scope(item, device_id=device_id, device_name=device_name):
-            continue
-        action = item.get("action")
-        if action == "ignore" or action not in POLICY_BUNDLE_RULE_ACTIONS:
-            continue
-        if _policy_bundle_rule_has_browser_scope(item):
-            continue
-        rule_id = non_empty_string(item.get("ruleId")) or "bundle-rule"
-        reason = _policy_bundle_rule_reason(item, rule_id)
-        locations = _policy_bundle_rule_locations(item)
-        expires_at = _policy_bundle_rule_expires_at(item, policy_bundle)
-        for harness in _policy_bundle_rule_harnesses(item):
-            for artifact_id in _policy_bundle_rule_exact_artifact_ids(item):
-                if locations:
-                    for location in locations:
-                        decisions.append(
-                            PolicyDecision(
-                                harness=harness,
-                                scope="workspace",
-                                action=action,
-                                artifact_id=artifact_id,
-                                workspace=location,
-                                reason=reason,
-                                owner=rule_id,
-                                source="policy-bundle",
-                                expires_at=expires_at,
-                            )
-                        )
-                else:
-                    decisions.append(
-                        PolicyDecision(
-                            harness=harness,
-                            scope="artifact",
-                            action=action,
-                            artifact_id=artifact_id,
-                            reason=reason,
-                            owner=rule_id,
-                            source="policy-bundle",
-                            expires_at=expires_at,
-                        )
-                    )
-        matcher_families = _policy_bundle_rule_saved_decision_families(item)
-        if not matcher_families:
-            continue
-        for harness in _policy_bundle_rule_harnesses(item):
-            for family in matcher_families:
-                if locations:
-                    for location in locations:
-                        decisions.append(
-                            PolicyDecision(
-                                harness=harness,
-                                scope="workspace",
-                                action=action,
-                                artifact_id=f"family:{family}",
-                                workspace=location,
-                                reason=reason,
-                                owner=rule_id,
-                                source="policy-bundle",
-                                expires_at=expires_at,
-                            )
-                        )
-                else:
-                    decisions.append(
-                        PolicyDecision(
-                            harness=harness,
-                            scope="harness",
-                            action=action,
-                            artifact_id=f"family:{family}",
-                            reason=reason,
-                            owner=rule_id,
-                            source="policy-bundle",
-                            expires_at=expires_at,
-                        )
-                    )
-    return decisions
+    return _materialize_policy_bundle_decisions(
+        policy_bundle,
+        device_id=device_id,
+        device_name=device_name,
+    )
 
 
 def _policy_shadow_mismatch_reason_codes(
@@ -1692,13 +2614,11 @@ def sync_receipts(
     payload: dict[str, object] = {}
     receipts_stored_total = 0
     advisories_payload: list[dict[str, object]] = []
-    exceptions_payload: list[dict[str, object]] = []
-    exceptions_sync_payload_provided = False
-    policy_payload: dict[str, object] | None = None
     policy_bundle_payload: dict[str, object] | None = None
     policy_bundle_sync_payload: dict[str, object] | None = None
+    policy_bundle_field_provided = False
+    policy_bundle_field_malformed = False
     alert_preferences_payload: dict[str, object] | None = None
-    team_policy_pack_payload: dict[str, object] | None = None
     remote_decisions: set[PolicyDecision] = set()
     device_id, device_name = _guard_device_metadata(store)
     sync_context = _receipt_sync_context(
@@ -1812,24 +2732,18 @@ def sync_receipts(
         advisories = payload.get("advisories")
         if isinstance(advisories, list):
             advisories_payload.extend(item for item in advisories if isinstance(item, dict))
-        policy = payload.get("policy")
-        if isinstance(policy, dict) and (policy or policy_payload is None):
-            policy_payload = policy
-        policy_bundle = payload.get("policyBundle")
-        if isinstance(policy_bundle, dict) and (policy_bundle or policy_bundle_payload is None):
-            policy_bundle_payload = policy_bundle
-            policy_bundle_sync_payload = payload
+        if "policyBundle" in payload:
+            policy_bundle_field_provided = True
+            policy_bundle = payload.get("policyBundle")
+            if isinstance(policy_bundle, dict):
+                if policy_bundle or policy_bundle_payload is None:
+                    policy_bundle_payload = policy_bundle
+                    policy_bundle_sync_payload = payload
+            else:
+                policy_bundle_field_malformed = True
         alert_preferences = payload.get("alertPreferences")
         if isinstance(alert_preferences, dict) and (alert_preferences or alert_preferences_payload is None):
             alert_preferences_payload = alert_preferences
-        team_policy_pack = payload.get("teamPolicyPack")
-        if isinstance(team_policy_pack, dict) and (team_policy_pack or team_policy_pack_payload is None):
-            team_policy_pack_payload = team_policy_pack
-        exceptions = payload.get("exceptions")
-        if isinstance(exceptions, list):
-            exceptions_sync_payload_provided = True
-            exceptions_payload.extend(item for item in exceptions if isinstance(item, dict))
-        remote_decisions.update(_build_remote_policy_decisions(payload))
     now = _sync_timestamp(payload)
     aibom_context: dict[str, object] = {}
     if home_dir is not None:
@@ -1854,15 +2768,15 @@ def sync_receipts(
         synced_at=now,
     )
     deduped_advisories = _dedupe_sync_payload_items(advisories_payload)
-    deduped_exceptions = _dedupe_sync_payload_items(exceptions_payload)
-    sync_exceptions_for_persist = deduped_exceptions if exceptions_sync_payload_provided else None
+    # Top-level ``policy``, ``teamPolicyPack``, and ``exceptions`` fields are
+    # legacy unsigned siblings. They may be present on an authenticated HTTPS
+    # response, but they are not covered by the pinned policy-bundle signature
+    # and therefore cannot be persisted or materialized as local authority.
+    # Only decisions and exceptions inside a validated signed bundle are used.
+    deduped_exceptions: list[dict[str, object]] = []
     advisories_stored = 0
     if deduped_advisories:
         advisories_stored = store.cache_advisories(deduped_advisories, now)
-    if policy_payload is not None:
-        store.set_sync_payload("policy", policy_payload, now)
-    else:
-        store.set_sync_payload("policy", {}, now)
     cloud_workspace_id = store.get_cloud_workspace_id()
     canonical_enforcement = _canonical_policy_enforcement_enabled(
         device_id=device_id,
@@ -1870,51 +2784,44 @@ def sync_receipts(
     )
     candidate_policy_decisions: list[PolicyDecision] = []
     validated_policy_bundle: dict[str, object] | None = None
-    if policy_bundle_payload is not None:
-        validated_policy_bundle, policy_bundle_rejection_reason, trusted_policy_bundle_keys = (
-            validate_synced_policy_bundle(
-                policy_bundle_payload,
-                stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
-                sync_payload=policy_bundle_sync_payload,
-                supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
+    effective_policy_bundle: dict[str, object] | None = None
+    activation_last_error: dict[str, object] = {}
+    trusted_policy_bundle_keys: tuple[PolicyBundleVerificationKey, ...] = ()
+    update_last_good = False
+    existing_policy_bundle_payload = store.get_sync_payload("policy_bundle")
+    existing_policy_bundle, existing_policy_bundle_error = _validate_cached_policy_bundle(
+        store,
+        existing_policy_bundle_payload,
+    )
+    if policy_bundle_field_provided:
+        policy_bundle_rejection_reason: str | None
+        if policy_bundle_field_malformed or policy_bundle_payload is None:
+            policy_bundle_rejection_reason = "invalid_policy_bundle"
+        else:
+            validated_policy_bundle, policy_bundle_rejection_reason, trusted_policy_bundle_keys = (
+                validate_synced_policy_bundle(
+                    policy_bundle_payload,
+                    stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
+                    sync_payload=policy_bundle_sync_payload,
+                    supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
+                    managed_keyring_provenance=store.get_sync_payload(
+                        MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY
+                    ),
+                    expected_workspace_id=store.get_cloud_workspace_id(),
+                )
             )
-        )
-        existing_policy_bundle_payload = store.get_sync_payload("policy_bundle")
-        existing_policy_bundle = (
-            existing_policy_bundle_payload if isinstance(existing_policy_bundle_payload, dict) else None
-        )
-        canonical_last_good_payload = store.get_sync_payload("policy_bundle_canonical_last_good")
-        canonical_previous_good_payload = store.get_sync_payload("policy_bundle_canonical_previous_good")
-        policy_bundle_for_version_check = (
-            canonical_last_good_payload if isinstance(canonical_last_good_payload, dict) else existing_policy_bundle
-        )
         if validated_policy_bundle is not None and not _daemon_version_supported(validated_policy_bundle):
             validated_policy_bundle = None
             policy_bundle_rejection_reason = "unsupported_daemon_version"
+        if validated_policy_bundle is not None and not policy_bundle_is_enforceable(validated_policy_bundle):
+            validated_policy_bundle = None
+            policy_bundle_rejection_reason = "inactive_rollout_state"
         if validated_policy_bundle is not None and _policy_bundle_is_version_downgrade(
-            policy_bundle_for_version_check,
+            _policy_bundle_downgrade_reference(store, existing_policy_bundle),
             validated_policy_bundle,
-            expected_last_good_bundle=(
-                canonical_previous_good_payload if isinstance(canonical_previous_good_payload, dict) else None
-            ),
         ):
             validated_policy_bundle = None
             policy_bundle_rejection_reason = "bundle_version_downgrade"
-        bundle_workspace_id = non_empty_string(
-            validated_policy_bundle.get("workspaceId") if isinstance(validated_policy_bundle, dict) else None
-        )
-        cloud_workspace_id = store.get_cloud_workspace_id()
-        if (
-            validated_policy_bundle is not None
-            and bundle_workspace_id is not None
-            and cloud_workspace_id is not None
-            and bundle_workspace_id != cloud_workspace_id
-        ):
-            validated_policy_bundle = None
-            policy_bundle_rejection_reason = "wrong_workspace"
-        shadow_mismatch_reasons: tuple[str, ...] = ()
-        shadow_legacy_rows = 0
-        shadow_canonical_rows = 0
         validated_bundle_is_v2 = (
             validated_policy_bundle is not None
             and validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
@@ -1927,34 +2834,49 @@ def sync_receipts(
                         device_id=device_id,
                         device_name=device_name,
                     )
+                    legacy_payload = store.get_sync_payload("policy_bundle_legacy_last_good")
+                    if not isinstance(legacy_payload, dict):
+                        legacy_payload = (
+                            existing_policy_bundle
+                            if isinstance(existing_policy_bundle, dict)
+                            and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
+                            else None
+                        )
                     legacy_decisions = (
                         _build_policy_bundle_decisions(
-                            existing_policy_bundle,
+                            legacy_payload,
                             device_id=device_id,
                             device_name=device_name,
                         )
-                        if isinstance(existing_policy_bundle, dict)
-                        and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
+                        if isinstance(legacy_payload, dict)
                         else []
                     )
-                    shadow_legacy_rows = len(legacy_decisions)
-                    shadow_canonical_rows = len(canonical_decisions)
-                    shadow_mismatch_reasons = _policy_shadow_mismatch_reason_codes(
+                    mismatch_reasons = _policy_shadow_mismatch_reason_codes(
                         legacy_decisions,
                         canonical_decisions,
                     )
-                    blocking_shadow_mismatch_reasons = tuple(
-                        reason for reason in shadow_mismatch_reasons if reason != "legacy_unavailable"
+                    blocking_mismatch_reasons = tuple(
+                        reason for reason in mismatch_reasons if reason != "legacy_unavailable"
                     )
                     candidate_policy_decisions = (
                         canonical_decisions
-                        if canonical_enforcement and not blocking_shadow_mismatch_reasons
+                        if canonical_enforcement and not blocking_mismatch_reasons
                         else legacy_decisions
                     )
-                    if canonical_enforcement and blocking_shadow_mismatch_reasons:
+                    if mismatch_reasons:
+                        store.add_event(
+                            "policy_bundle/shadow_mismatch",
+                            {
+                                "canonicalRows": len(canonical_decisions),
+                                "legacyRows": len(legacy_decisions),
+                                "reasonCodes": list(mismatch_reasons),
+                                "status": "mismatch",
+                            },
+                            now,
+                        )
+                    if canonical_enforcement and blocking_mismatch_reasons:
                         validated_policy_bundle = None
                         policy_bundle_rejection_reason = "canonical_shadow_mismatch"
-                        canonical_enforcement = False
                 else:
                     candidate_policy_decisions = _build_policy_bundle_decisions(
                         validated_policy_bundle,
@@ -1964,203 +2886,205 @@ def sync_receipts(
             except PolicyCompilationError as error:
                 validated_policy_bundle = None
                 policy_bundle_rejection_reason = f"canonical_compile_{error.code}"
-        if shadow_mismatch_reasons:
-            store.add_event(
-                "policy_bundle/shadow_mismatch",
-                {
-                    "canonicalRows": shadow_canonical_rows,
-                    "legacyRows": shadow_legacy_rows,
-                    "reasonCodes": list(shadow_mismatch_reasons),
-                    "status": "mismatch",
-                },
-                now,
-            )
         if validated_policy_bundle is not None:
-            if validated_bundle_is_v2:
-                if isinstance(canonical_last_good_payload, dict) and canonical_last_good_payload.get(
-                    "bundleHash"
-                ) != validated_policy_bundle.get("bundleHash"):
-                    store.set_sync_payload(
-                        "policy_bundle_canonical_previous_good",
-                        canonical_last_good_payload,
-                        now,
-                    )
-                store.set_sync_payload(
-                    "policy_bundle_canonical_last_good",
-                    validated_policy_bundle,
-                    now,
-                )
-                if canonical_enforcement:
-                    store.set_sync_payload("policy_bundle", validated_policy_bundle, now)
-                    store.set_sync_payload(
-                        "policy_bundle_last_good",
-                        validated_policy_bundle,
-                        now,
-                    )
-            else:
-                store.set_sync_payload("policy_bundle", validated_policy_bundle, now)
-                store.set_sync_payload(
-                    "policy_bundle_last_good",
-                    validated_policy_bundle,
-                    now,
-                )
-                store.set_sync_payload(
-                    "policy_bundle_legacy_last_good",
-                    validated_policy_bundle,
-                    now,
-                )
-            store.set_sync_payload(
-                "policy_bundle_keyring",
-                policy_bundle_keyring_payload(
-                    trusted_policy_bundle_keys,
-                    workspace_id=store.get_cloud_workspace_id(),
-                ),
-                now,
-            )
-            store.set_sync_payload("policy_bundle_last_error", {}, now)
-            # Extract cloud-configured receipt redaction level from policy bundle
-            cloud_redaction_level = non_empty_string(
-                validated_policy_bundle.get("receiptRedactionLevel")
-                if isinstance(validated_policy_bundle, dict)
-                else None
-            )
-            if cloud_redaction_level and cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
-                _persist_cloud_receipt_redaction_level(
-                    store,
-                    level=cloud_redaction_level,
-                    synced_at=now,
-                )
-            remote_decisions.update(candidate_policy_decisions)
+            effective_policy_bundle = validated_policy_bundle
+            update_last_good = True
         else:
-            canonical_fallback = (
-                canonical_last_good_payload
-                if canonical_enforcement
-                and isinstance(canonical_last_good_payload, dict)
-                and canonical_last_good_payload
-                else None
-            )
-            legacy_last_good_payload = store.get_sync_payload("policy_bundle_legacy_last_good")
-            legacy_fallback = (
-                legacy_last_good_payload
-                if not canonical_enforcement and isinstance(legacy_last_good_payload, dict) and legacy_last_good_payload
-                else None
-            )
+            # A response that claims signed-bundle authority cannot route the
+            # same policy through unsigned sibling fields after verification
+            # fails. Keep only a still-valid signed current/LKG bundle.
+            remote_decisions.clear()
             last_good_bundle_payload = store.get_sync_payload("policy_bundle_last_good")
-            preserved_bundle_payload = (
-                canonical_fallback
-                or legacy_fallback
-                or (
-                    last_good_bundle_payload
-                    if isinstance(last_good_bundle_payload, dict) and last_good_bundle_payload
-                    else existing_policy_bundle
-                )
+            last_good_bundle, _last_good_error = _validate_cached_policy_bundle(
+                store,
+                last_good_bundle_payload,
             )
-            if isinstance(preserved_bundle_payload, dict) and preserved_bundle_payload:
-                remote_decisions.update(
-                    _build_policy_bundle_decisions(
-                        preserved_bundle_payload,
-                        device_id=device_id,
-                        device_name=device_name,
-                        canonical_enforcement=canonical_enforcement,
-                    )
-                )
-                store.add_event(
-                    "policy_bundle/rollback",
-                    {
-                        "reason": policy_bundle_rejection_reason or "invalid_policy_bundle",
-                        "restored": (
-                            "policy_bundle_canonical_last_good"
-                            if canonical_fallback is not None
-                            else (
-                                "policy_bundle_legacy_last_good"
-                                if legacy_fallback is not None
-                                else "policy_bundle_last_good"
-                            )
-                        ),
-                    },
-                    now,
-                )
-            store.set_sync_payload(
-                "policy_bundle_last_error",
-                {"reason": policy_bundle_rejection_reason or "invalid_policy_bundle"},
-                now,
-            )
+            # A valid current bundle may be newer than last-good when a prior
+            # sync stopped after persisting current but before advancing the
+            # checkpoint. Prefer current so a rejected refresh cannot roll
+            # policy authority back to an older signed bundle.
+            effective_policy_bundle = existing_policy_bundle or last_good_bundle
+            activation_last_error = _policy_bundle_rejection_payload(policy_bundle_rejection_reason)
             store.add_event(
                 "policy_bundle/rejected",
-                {"reason": policy_bundle_rejection_reason or "invalid_policy_bundle"},
+                activation_last_error,
                 now,
             )
     else:
-        existing_bundle_payload = store.get_sync_payload("policy_bundle")
-        canonical_cached_payload = store.get_sync_payload("policy_bundle_canonical_last_good")
-        legacy_cached_payload = store.get_sync_payload("policy_bundle_legacy_last_good")
-        if canonical_enforcement and isinstance(canonical_cached_payload, dict) and canonical_cached_payload:
-            existing_bundle_payload = canonical_cached_payload
-        elif (
-            not canonical_enforcement
-            and isinstance(existing_bundle_payload, dict)
-            and existing_bundle_payload.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
-            and isinstance(legacy_cached_payload, dict)
-            and legacy_cached_payload
-        ):
-            existing_bundle_payload = legacy_cached_payload
-        if isinstance(existing_bundle_payload, dict) and existing_bundle_payload:
-            remote_decisions.update(
-                _build_policy_bundle_decisions(
-                    existing_bundle_payload,
-                    device_id=device_id,
-                    device_name=device_name,
-                    canonical_enforcement=canonical_enforcement,
-                )
+        effective_policy_bundle = existing_policy_bundle
+        if effective_policy_bundle is None:
+            last_good_bundle_payload = store.get_sync_payload("policy_bundle_last_good")
+            effective_policy_bundle, last_good_error = _validate_cached_policy_bundle(
+                store,
+                last_good_bundle_payload,
             )
-    if not isinstance(store.get_sync_payload("policy_bundle_last_error"), dict):
-        store.set_sync_payload("policy_bundle_last_error", {}, now)
+            if (
+                effective_policy_bundle is None
+                and isinstance(existing_policy_bundle_payload, dict)
+                and existing_policy_bundle_payload
+            ):
+                rejection_reason = existing_policy_bundle_error or last_good_error or "invalid_policy_bundle"
+                activation_last_error = _policy_bundle_rejection_payload(rejection_reason)
+                store.add_event("policy_bundle/rejected", activation_last_error, now)
+        if not activation_last_error:
+            stored_last_error = store.get_sync_payload("policy_bundle_last_error")
+            if isinstance(stored_last_error, dict):
+                activation_last_error = stored_last_error
     if alert_preferences_payload is not None:
         store.set_sync_payload("alert_preferences", alert_preferences_payload, now)
     else:
         store.set_sync_payload("alert_preferences", {}, now)
-    if team_policy_pack_payload is not None:
-        store.set_sync_payload("team_policy_pack", team_policy_pack_payload, now)
-    else:
-        store.set_sync_payload("team_policy_pack", {}, now)
-    active_policy_bundle_payload = store.get_sync_payload("policy_bundle")
-    active_policy_bundle = active_policy_bundle_payload if isinstance(active_policy_bundle_payload, dict) else None
-    cloud_exception_items = _persist_cloud_exceptions(
-        store,
-        device_id=device_id,
-        sync_exceptions=sync_exceptions_for_persist,
-        policy_bundle=active_policy_bundle,
-        now=now,
-    )
-    remote_policies_stored = len(remote_decisions)
+    cloud_exception_items: list[dict[str, object]] = []
+    remote_policies_stored = 0
     remote_policy_sync_blocked = False
-    try:
-        store.replace_remote_policies(list(remote_decisions), now, remote_write_authorized=True)
+    if effective_policy_bundle is not None:
+        activation_bundle, activation_reason, activation_keys = validate_synced_policy_bundle(
+            effective_policy_bundle,
+            stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
+            supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
+            managed_keyring_provenance=store.get_sync_payload(MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY),
+            expected_workspace_id=store.get_cloud_workspace_id(),
+        )
+        if activation_bundle is not None and not policy_bundle_is_enforceable(activation_bundle):
+            activation_bundle = None
+            activation_reason = "inactive_rollout_state"
+        acceptance_checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
+        if (
+            activation_bundle is not None
+            and isinstance(acceptance_checkpoint, dict)
+            and _policy_bundle_is_version_downgrade(
+                acceptance_checkpoint,
+                activation_bundle,
+            )
+        ):
+            activation_bundle = None
+            activation_reason = "bundle_version_downgrade"
+        if activation_bundle is None:
+            activation_last_error = _policy_bundle_rejection_payload(activation_reason)
+            store.add_event("policy_bundle/rejected", activation_last_error, now)
+            effective_policy_bundle = None
+        else:
+            # Use exactly the payload and anchor set from the final live trust
+            # check for materialization and atomic activation. A key rotation
+            # or revocation between initial selection and this check therefore
+            # cannot leave the previously selected current/LKG bundle active.
+            effective_policy_bundle = activation_bundle
+            trusted_policy_bundle_keys = activation_keys
+    if effective_policy_bundle is None:
+        store.clear_policy_bundle_authority(
+            now,
+            policy_bundle_last_error=activation_last_error,
+        )
+        _reset_cloud_receipt_redaction_authority(store, synced_at=now)
+    else:
+        selected_policy_decisions = (
+            candidate_policy_decisions
+            if validated_policy_bundle is not None
+            and effective_policy_bundle.get("bundleHash") == validated_policy_bundle.get("bundleHash")
+            else _build_policy_bundle_decisions(
+                effective_policy_bundle,
+                device_id=device_id,
+                device_name=device_name,
+                canonical_enforcement=canonical_enforcement,
+            )
+        )
+        remote_decisions.update(selected_policy_decisions)
+        policy_bundle_ack = _policy_bundle_acknowledgement_payload(
+            device_id=device_id,
+            device_name=device_name,
+            policy_bundle=effective_policy_bundle,
+            synced_at=now,
+        )
+        cloud_exception_items = _policy_bundle_cloud_exception_items(
+            store,
+            device_id=device_id,
+            sync_exceptions=[],
+            policy_bundle=effective_policy_bundle,
+            policy_bundle_ack=policy_bundle_ack,
+        )
+        checkpoint = _policy_bundle_downgrade_reference(store, effective_policy_bundle)
         if validated_policy_bundle is not None:
-            previous_ack_payload = store.get_sync_payload("policy_bundle_ack")
-            store.set_sync_payload(
-                "policy_bundle_ack",
-                _policy_bundle_acknowledgement_payload(
-                    device_id=device_id,
-                    device_name=device_name,
-                    policy_bundle=validated_policy_bundle,
-                    synced_at=now,
-                    status=("applied" if canonical_enforcement else "validated"),
-                    previous=(previous_ack_payload if isinstance(previous_ack_payload, dict) else None),
+            checkpoint = _policy_bundle_acceptance_checkpoint(validated_policy_bundle)
+        try:
+            activated = store.apply_policy_bundle_authority(
+                list(remote_decisions),
+                now,
+                policy_bundle=effective_policy_bundle,
+                policy_bundle_keyring=policy_bundle_keyring_payload(
+                    trusted_policy_bundle_keys,
+                    workspace_id=store.get_cloud_workspace_id(),
                 ),
+                cloud_exceptions=cloud_exception_items,
+                policy_bundle_ack=policy_bundle_ack,
+                policy_bundle_checkpoint=(
+                    _policy_bundle_acceptance_checkpoint(checkpoint)
+                    if isinstance(checkpoint, dict)
+                    else _policy_bundle_acceptance_checkpoint(effective_policy_bundle)
+                ),
+                update_last_good=update_last_good,
+                policy_bundle_last_error=activation_last_error,
+                remote_write_authorized=True,
+            )
+            if not activated:
+                cloud_exception_items = []
+                activation_last_error = _policy_bundle_rejection_payload("bundle_version_downgrade")
+                store.add_event(
+                    "policy_bundle/rejected",
+                    activation_last_error,
+                    now,
+                )
+            else:
+                remote_policies_stored = len(remote_decisions)
+                if effective_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
+                    canonical_last_good = store.get_sync_payload("policy_bundle_canonical_last_good")
+                    if isinstance(canonical_last_good, dict) and canonical_last_good.get(
+                        "bundleHash"
+                    ) != effective_policy_bundle.get("bundleHash"):
+                        store.set_sync_payload(
+                            "policy_bundle_canonical_previous_good",
+                            canonical_last_good,
+                            now,
+                        )
+                    store.set_sync_payload(
+                        "policy_bundle_canonical_last_good",
+                        effective_policy_bundle,
+                        now,
+                    )
+                else:
+                    store.set_sync_payload(
+                        "policy_bundle_legacy_last_good",
+                        effective_policy_bundle,
+                        now,
+                    )
+                if validated_policy_bundle is None and policy_bundle_field_provided:
+                    store.add_event(
+                        "policy_bundle/rollback",
+                        {
+                            "reason": activation_last_error.get("reason", "invalid_policy_bundle"),
+                            "restored": "policy_bundle_last_good",
+                        },
+                        now,
+                    )
+                cloud_redaction_level = non_empty_string(effective_policy_bundle.get("receiptRedactionLevel"))
+                if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
+                    _persist_cloud_receipt_redaction_level(
+                        store,
+                        level=cloud_redaction_level,
+                        synced_at=now,
+                    )
+                else:
+                    _reset_cloud_receipt_redaction_authority(store, synced_at=now)
+        except ApprovalGateError as error:
+            cloud_exception_items = []
+            remote_policy_sync_blocked = True
+            store.add_event(
+                "approval_gate/remote_policy_sync_blocked",
+                {
+                    "error": error.code,
+                    "remote_policies_count": len(remote_decisions),
+                },
                 now,
             )
-    except ApprovalGateError as error:
-        remote_policies_stored = 0
-        remote_policy_sync_blocked = True
-        store.add_event(
-            "approval_gate/remote_policy_sync_blocked",
-            {
-                "error": error.code,
-                "remote_policies_count": len(remote_decisions),
-            },
-            now,
-        )
     _record_synced_alert_events(
         store=store,
         advisories=deduped_advisories,
@@ -2985,30 +3909,38 @@ def _persist_cloud_exceptions(
     policy_bundle: dict[str, object] | None = None,
     now: str,
 ) -> list[dict[str, object]]:
+    serialized = _policy_bundle_cloud_exception_items(
+        store,
+        device_id=device_id,
+        sync_exceptions=sync_exceptions,
+        policy_bundle=policy_bundle,
+    )
+    store.set_cloud_exceptions(serialized, now)
+    return serialized
+
+
+def _policy_bundle_cloud_exception_items(
+    store: GuardStore,
+    *,
+    device_id: str | None = None,
+    sync_exceptions: list[dict[str, object]] | None = None,
+    policy_bundle: dict[str, object] | None = None,
+    policy_bundle_ack: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
+    """Build bundle-derived exceptions without mutating activation state."""
+
     resolved_device_id = device_id
     if resolved_device_id is None:
         resolved_device_id, _device_name = _guard_device_metadata(store)
-    bundle_ack_payload = store.get_sync_payload("policy_bundle_ack")
-    bundle_ack = bundle_ack_payload if isinstance(bundle_ack_payload, dict) else None
-    bundle_hash = non_empty_string(policy_bundle.get("bundleHash")) if isinstance(policy_bundle, dict) else None
-    ack_status = non_empty_string(bundle_ack.get("status")) if bundle_ack else None
+    bundle_ack = policy_bundle_ack
+    if bundle_ack is None:
+        bundle_ack_payload = store.get_sync_payload("policy_bundle_ack")
+        bundle_ack = bundle_ack_payload if isinstance(bundle_ack_payload, dict) else None
     items = []
-    if sync_exceptions is not None:
-        items.extend(
-            build_cloud_exceptions_from_sync_payload(
-                sync_exceptions,
-                bundle_hash=bundle_hash,
-                ack_status=ack_status,
-            )
-        )
-    else:
-        existing_payload = store.get_sync_payload("cloud_exceptions")
-        if isinstance(existing_payload, list):
-            stored_items = [item for item in existing_payload if isinstance(item, dict)]
-            if isinstance(policy_bundle, dict):
-                items.extend(stored_receipt_sync_cloud_exceptions(stored_items))
-            else:
-                items.extend(build_cloud_exceptions_from_stored_items(stored_items))
+    # ``sync_exceptions`` is retained as an explicit compatibility boundary so
+    # callers can demonstrate that legacy unsigned siblings were considered
+    # and rejected. It must never contribute enforcement authority.
+    del sync_exceptions
     if isinstance(policy_bundle, dict):
         items.extend(
             build_cloud_exceptions_from_policy_bundle(
@@ -3018,74 +3950,7 @@ def _persist_cloud_exceptions(
             )
         )
     serialized = [cloud_exception_to_dict(item) for item in dedupe_cloud_exceptions(items)]
-    store.set_cloud_exceptions(serialized, now)
     return serialized
-
-
-def _build_remote_policy_decisions(payload: dict[str, object]) -> list[PolicyDecision]:
-    decisions: list[PolicyDecision] = []
-    exceptions = payload.get("exceptions")
-    if isinstance(exceptions, list):
-        for item in exceptions:
-            if not isinstance(item, dict):
-                continue
-            scope = item.get("scope")
-            if scope not in {"artifact", "publisher", "harness", "global", "workspace"}:
-                continue
-            workspace = _remote_workspace(item)
-            if scope == "workspace" and workspace is None:
-                continue
-            harness = _remote_harness(item.get("harness"), allow_wildcard=scope != "harness")
-            if harness is None:
-                continue
-            decisions.append(
-                PolicyDecision(
-                    harness=harness,
-                    scope=scope,
-                    action="allow",
-                    artifact_id=_optional_string(item.get("artifactId")),
-                    workspace=workspace,
-                    publisher=_optional_string(item.get("publisher")),
-                    reason=_optional_string(item.get("reason")),
-                    owner=_optional_string(item.get("owner")),
-                    source="cloud-sync",
-                    expires_at=_normalized_timestamp_string(item.get("expiresAt")),
-                )
-            )
-    team_policy_pack = payload.get("teamPolicyPack")
-    if isinstance(team_policy_pack, dict):
-        policy_name = _optional_string(team_policy_pack.get("name")) or "team policy"
-        blocked_artifacts = team_policy_pack.get("blockedArtifacts")
-        if isinstance(blocked_artifacts, list):
-            for artifact_id in blocked_artifacts:
-                if not isinstance(artifact_id, str) or not artifact_id.strip():
-                    continue
-                decisions.append(
-                    PolicyDecision(
-                        harness="*",
-                        scope="artifact",
-                        action="block",
-                        artifact_id=artifact_id,
-                        reason=f"Blocked by {policy_name}.",
-                        source="team-policy",
-                    )
-                )
-        allowed_publishers = team_policy_pack.get("allowedPublishers")
-        if isinstance(allowed_publishers, list):
-            for publisher in allowed_publishers:
-                if not isinstance(publisher, str) or not publisher.strip():
-                    continue
-                decisions.append(
-                    PolicyDecision(
-                        harness="*",
-                        scope="publisher",
-                        action="allow",
-                        publisher=publisher,
-                        reason=f"Allowed by {policy_name}.",
-                        source="team-policy",
-                    )
-                )
-    return decisions
 
 
 def _base64url_encode(data: bytes) -> str:
@@ -4348,7 +5213,7 @@ def _should_emit_pain_signal(
         return warn_occurrences.get(warn_key, 0) >= 2
     if event_name == "changed_artifact_caught":
         policy_action = _optional_string(payload.get("policy_action"))
-        return policy_action in {"block", "sandbox-required", "require-reapproval"}
+        return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     if event_name == "supply_chain_bundle_refresh_requested":
         reason = _optional_string(payload.get("reason"))
         return reason == "feed_stale"
@@ -4656,6 +5521,42 @@ def _receipt_sync_cursor_rowids_from_batch(
     return [item.get("receipt_rowid") for item in receipt_batch if item.get("receipt_id") in cursor_receipt_ids]
 
 
+def _validated_policy_bundle_acknowledgement(
+    store: GuardStore,
+    *,
+    device_id: str,
+    device_name: str,
+) -> dict[str, object] | None:
+    acknowledgement = store.get_sync_payload("policy_bundle_ack")
+    if not isinstance(acknowledgement, dict):
+        return None
+    if acknowledgement.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
+        validated, _error = validated_policy_bundle_v2_acknowledgement(acknowledgement)
+        return validated
+
+    policy_bundle = validated_synced_policy_bundle(store)
+    if policy_bundle is None:
+        return None
+
+    bundle_hash = non_empty_string(policy_bundle.get("bundleHash"))
+    bundle_version = non_empty_string(policy_bundle.get("bundleVersion"))
+    if bundle_hash is None or bundle_version is None:
+        return None
+    if acknowledgement.get("bundleHash") != bundle_hash:
+        return None
+    if acknowledgement.get("bundleVersion") != bundle_version:
+        return None
+    if acknowledgement.get("deviceId") != device_id:
+        return None
+    if acknowledgement.get("deviceName") != device_name:
+        return None
+    if acknowledgement.get("status") != "synced":
+        return None
+    if _normalized_timestamp_string(acknowledgement.get("appliedAt")) is None:
+        return None
+    return acknowledgement
+
+
 def _receipt_sync_context(
     store: GuardStore,
     *,
@@ -4677,7 +5578,11 @@ def _receipt_sync_context(
         _optional_string(runtime_summary.get("runtime_harness")) if isinstance(runtime_summary, dict) else None
     )
     sync_health = "healthy" if runtime_synced_at is not None else "degraded"
-    policy_bundle_ack = store.get_sync_payload("policy_bundle_ack")
+    policy_bundle_ack = _validated_policy_bundle_acknowledgement(
+        store,
+        device_id=resolved_device_id,
+        device_name=resolved_device_name,
+    )
     context: dict[str, object] = {
         "deviceId": resolved_device_id,
         "deviceName": resolved_device_name,
@@ -4772,6 +5677,18 @@ def _persist_cloud_receipt_redaction_level(store: GuardStore, *, level: str, syn
         )
 
 
+def _reset_cloud_receipt_redaction_authority(store: GuardStore, *, synced_at: str) -> None:
+    """Reset relaxation bookkeeping when no signed override is effective."""
+
+    store.set_sync_payload(
+        "cloud_receipt_redaction_level",
+        {"level": _local_receipt_redaction_level(store), "updated_at": synced_at},
+        synced_at,
+    )
+    store.delete_sync_payload(_RELAXED_RECEIPT_REDACTION_RESYNC_MARKER)
+    store.delete_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER)
+
+
 def _ensure_relaxed_receipt_redaction_resync(
     store: GuardStore,
     *,
@@ -4803,12 +5720,15 @@ def _ensure_relaxed_receipt_redaction_resync(
 def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
     """Resolve the receipt redaction level for cloud sync.
 
-    Priority: cloud-configured level (from policy bundle downlink) >
-    local GuardConfig.receipt_redaction_level > 'full' (safest).
+    A cloud relaxation is authoritative only while its signed policy bundle
+    remains valid. The separately persisted level is cursor bookkeeping, not
+    an authority source, because it can outlive or be detached from a bundle.
     """
-    level = _stored_cloud_receipt_redaction_level(store)
-    if level is not None:
-        return level
+    policy_bundle = validated_synced_policy_bundle(store)
+    if policy_bundle is not None:
+        level = policy_bundle.get("receiptRedactionLevel")
+        if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS:
+            return level
     return _local_receipt_redaction_level(store)
 
 

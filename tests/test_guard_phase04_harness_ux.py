@@ -77,9 +77,11 @@ def _context(tmp_path: Path) -> HarnessContext:
 def _load_claude_pending_question_contract(tmp_path: Path, session_id: str) -> tuple[str, list[dict[str, str]]]:
     store = GuardStore(tmp_path / "guard-home")
     index_payload = store.get_sync_payload(f"claude_pending_permissions:{session_id}")
-    assert isinstance(index_payload, list)
-    assert index_payload
-    pending_payload = store.get_sync_payload(str(index_payload[0]))
+    assert isinstance(index_payload, dict)
+    pending_keys = index_payload.get("pending_keys")
+    assert isinstance(pending_keys, list)
+    assert pending_keys
+    pending_payload = store.get_sync_payload(str(pending_keys[0]))
     assert isinstance(pending_payload, dict)
     question = str(pending_payload["approval_question"])
     options = pending_payload.get("approval_options")
@@ -508,7 +510,7 @@ def test_gr084_claude_keep_blocked_persists_for_repeated_sensitive_read(tmp_path
     assert "HOL Guard blocked Claude" in str(repeat_payload["hookSpecificOutput"])
 
 
-def test_gr085_claude_allow_once_allows_same_action_and_reasks_changed_action(tmp_path: Path) -> None:
+def test_gr085_claude_allow_once_cannot_lower_current_reapproval(tmp_path: Path) -> None:
     event = _claude_sensitive_read_event("session-gr085", "~/.npmrc")
 
     first_exit_code, _first_output = _run_hook(tmp_path, harness="claude-code", payload=event)
@@ -541,12 +543,12 @@ def test_gr085_claude_allow_once_allows_same_action_and_reasks_changed_action(tm
     assert answer_exit_code == 0
     assert answer_output == ""
     assert retry_exit_code == 0
-    assert retry_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert retry_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert changed_exit_code == 0
     assert changed_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
-def test_gr086_claude_session_allow_answer_unblocks_retried_action(tmp_path: Path) -> None:
+def test_gr086_claude_session_allow_cannot_lower_current_reapproval(tmp_path: Path) -> None:
     event = _claude_sensitive_read_event("session-gr086", "~/.npmrc")
 
     first_exit_code, _first_output = _run_hook(tmp_path, harness="claude-code", payload=event)
@@ -573,7 +575,7 @@ def test_gr086_claude_session_allow_answer_unblocks_retried_action(tmp_path: Pat
     assert answer_exit_code == 0
     assert answer_output == ""
     assert retry_exit_code == 0
-    assert retry_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert retry_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
 def test_gr087_opencode_managed_mcp_uses_native_ask_runtime_overlay(tmp_path: Path) -> None:

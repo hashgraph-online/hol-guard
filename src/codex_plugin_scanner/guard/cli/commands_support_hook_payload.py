@@ -37,7 +37,7 @@ def _emit_native_hook_response(
     if isinstance(system_message, str) and system_message.strip():
         payload["systemMessage"] = system_message.strip()
     if event_name == "UserPromptSubmit":
-        if policy_action in {"block", "sandbox-required", "require-reapproval"} and not additional_context:
+        if policy_action in {"review", "require-reapproval", "sandbox-required", "block"} and not additional_context:
             payload["decision"] = "block"
             payload["reason"] = reason
             if _canonical_harness_name(harness) == "codex":
@@ -72,7 +72,7 @@ def _emit_native_hook_response(
             _write_json_line(payload, output_stream=output_stream)
             return
         if event_name == "PermissionRequest" and _canonical_harness_name(harness) == "codex":
-            if policy_action == "require-reapproval":
+            if policy_action in {"review", "require-reapproval"}:
                 payload["systemMessage"] = (
                     "HOL Guard is reviewing this Codex approval request. Codex will show its normal approval prompt; "
                     "choose allow only if you trust the exact tool action."
@@ -102,7 +102,12 @@ def _emit_native_hook_response(
         if payload:
             _write_json_line(payload, output_stream=output_stream)
         return
-    if event_name == "PostToolUse" and policy_action in {"block", "sandbox-required", "require-reapproval"}:
+    if event_name == "PostToolUse" and policy_action in {
+        "review",
+        "require-reapproval",
+        "sandbox-required",
+        "block",
+    }:
         payload["decision"] = "block"
         payload["reason"] = reason
         payload["continue"] = False
@@ -130,7 +135,7 @@ def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str
     canonical = _canonical_harness_name(harness)
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
-    if policy_action == "require-reapproval":
+    if policy_action in {"review", "require-reapproval"}:
         if canonical in {"codex", "kimi", "grok", "zcode"}:
             return "deny"
         return "ask"
@@ -139,7 +144,7 @@ def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str
     return "allow"
 
 def _copilot_hook_permission_decision(policy_action: str) -> str:
-    if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+    if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
         return "deny"
     return "allow"
 
@@ -165,6 +170,8 @@ def _headless_approval_resolver(
     should_wait_for_approvals = not bool(getattr(args, "json", False))
 
     def resolve(detection, payload):
+        if evaluation_has_terminal_policy_action(payload):
+            return payload
         managed_install = _managed_install_for(store, args.harness)
         approval_flow = approval_prompt_flow(args.harness, managed_install=managed_install)
         approval_center_url = ensure_guard_daemon(context.guard_home)

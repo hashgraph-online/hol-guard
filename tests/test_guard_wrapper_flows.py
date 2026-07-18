@@ -1,7 +1,8 @@
 """Guard wrapper flow tests — P4.
 
 Covers:
-- wait_for_approval_requests resolves immediately when all items resolved
+- wait_for_approval_requests resolves immediately when all requested items resolve
+- wait_for_approval_requests fails closed when no approval request was queued
 - wait_for_approval_requests returns pending when timeout fires
 - _headless_approval_resolver with --json flag (noninteractive) skips waiting
 - _headless_approval_resolver timeout produces hint with pending request IDs
@@ -154,7 +155,7 @@ class TestWaitForApprovalRequests:
         assert pending_id in result["pending_request_ids"]
         assert resolved_id not in result["pending_request_ids"]
 
-    def test_empty_request_list_resolves_immediately(self, tmp_path: Path) -> None:
+    def test_empty_request_list_does_not_report_approval(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / "guard")
         result = wait_for_approval_requests(
             store=store,
@@ -162,8 +163,9 @@ class TestWaitForApprovalRequests:
             timeout_seconds=5,
             poll_interval=0.01,
         )
-        assert result["resolved"] is True
+        assert result["resolved"] is False
         assert result["pending_request_ids"] == []
+        assert result["reason"] == "no_approval_requests"
 
 
 class TestHeadlessApprovalResolverNoninteractive:
@@ -205,12 +207,14 @@ class TestHeadlessApprovalResolverNoninteractive:
             config=config,
         ), store
 
+    @pytest.mark.parametrize("policy_action", ["review", "require-reapproval"])
     def test_json_flag_skips_wait_and_returns_unresolved_approval_wait(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
+        policy_action: str,
     ) -> None:
-        resolver, _store = self._make_resolver(tmp_path, monkeypatch, json_flag=True)
+        resolver, store = self._make_resolver(tmp_path, monkeypatch, json_flag=True)
         artifact = _make_artifact()
         payload: dict[str, Any] = {
             "blocked": True,
@@ -219,7 +223,7 @@ class TestHeadlessApprovalResolverNoninteractive:
                     "artifact_id": artifact.artifact_id,
                     "artifact_name": artifact.name,
                     "artifact_hash": "sha256-abc",
-                    "policy_action": "require-reapproval",
+                    "policy_action": policy_action,
                     "changed_fields": ["args"],
                     "artifact_type": artifact.artifact_type,
                     "source_scope": artifact.source_scope,
@@ -233,6 +237,69 @@ class TestHeadlessApprovalResolverNoninteractive:
 
         assert "approval_wait" in result
         assert result["approval_wait"]["resolved"] is False
+        assert len(store.list_approval_requests(limit=None)) == 1
+
+    @pytest.mark.parametrize("policy_action", ["block", "sandbox-required"])
+    @pytest.mark.parametrize("json_flag", [False, True])
+    def test_terminal_action_never_starts_or_waits_for_approval_flow(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        policy_action: str,
+        json_flag: bool,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        store = GuardStore(home_dir)
+        config = GuardConfig(
+            guard_home=home_dir,
+            workspace=workspace_dir,
+            approval_wait_timeout_seconds=1,
+        )
+
+        def unexpected_approval_flow(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("terminal actions must not create or wait on approval requests")
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", unexpected_approval_flow)
+        monkeypatch.setattr(guard_commands_module, "queue_blocked_approvals", unexpected_approval_flow)
+        monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", unexpected_approval_flow)
+        args = argparse.Namespace(harness="codex", json=json_flag)
+        context = HarnessContext(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            guard_home=home_dir,
+        )
+        resolver = guard_commands_module._headless_approval_resolver(
+            args=args,
+            context=context,
+            store=store,
+            config=config,
+        )
+        artifact = _make_artifact()
+        payload: dict[str, Any] = {
+            "blocked": True,
+            "artifacts": [
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_name": artifact.name,
+                    "artifact_hash": "sha256-terminal",
+                    "policy_action": policy_action,
+                    "changed_fields": ["args"],
+                    "artifact_type": artifact.artifact_type,
+                    "source_scope": artifact.source_scope,
+                    "config_path": artifact.config_path,
+                }
+            ],
+        }
+
+        result = resolver(_make_detection(artifact), payload)
+
+        assert result is payload
+        assert result["blocked"] is True
+        assert "approval_requests" not in result
+        assert "approval_wait" not in result
+        assert store.list_approval_requests(limit=None) == []
 
     def test_noninteractive_resolver_includes_approval_center_url(
         self,

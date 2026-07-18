@@ -102,7 +102,7 @@ def test_evaluate_detection_tracks_capability_delta_on_changed_artifact(tmp_path
     assert item["policy_action"] in {"block", "sandbox-required", "require-reapproval", "warn"}
 
 
-def test_build_history_context_does_not_count_require_reapproval_as_prior_approval(tmp_path):
+def test_build_history_context_counts_review_and_reapproval_as_blocks_not_prior_approvals(tmp_path):
     store = GuardStore(tmp_path / "guard-home")
     store.add_receipt(
         GuardReceipt(
@@ -114,6 +114,19 @@ def test_build_history_context_does_not_count_require_reapproval_as_prior_approv
             policy_decision="allow",
             capabilities_summary="local tool",
             changed_capabilities=(),
+            provenance_summary="local",
+        )
+    )
+    store.add_receipt(
+        GuardReceipt(
+            receipt_id="receipt-review",
+            timestamp="2026-04-19T00:02:00+00:00",
+            harness="codex",
+            artifact_id="codex:project:test-artifact",
+            artifact_hash="hash-review",
+            policy_decision="review",
+            capabilities_summary="local tool awaiting approval",
+            changed_capabilities=("review",),
             provenance_summary="local",
         )
     )
@@ -134,4 +147,4 @@ def test_build_history_context_does_not_count_require_reapproval_as_prior_approv
     history = build_history_context(store, "codex", "codex:project:test-artifact", publisher=None)
 
     assert history.prior_approvals == 1
-    assert history.prior_blocks == 1
+    assert history.prior_blocks == 2
