@@ -143,22 +143,18 @@ class MacOSTrayAdapter:
             }
 
         import subprocess
+        from contextlib import suppress
 
-        try:
-            # Unload before removing — best-effort. launchctl may not exist
-            # (e.g. running tests on Linux CI) or the agent may already be
-            # unloaded. Either way, the file deletion below is authoritative.
+        # Unload before removing — best-effort. launchctl may not exist
+        # (e.g. running tests on Linux CI) or the agent may already be
+        # unloaded. Either way, the file deletion below is authoritative.
+        with suppress(OSError, subprocess.SubprocessError):
             subprocess.run(
                 ["launchctl", "unload", str(plist_path)],
                 capture_output=True,
                 timeout=10,
                 check=False,
             )
-        except (OSError, subprocess.SubprocessError):
-            # launchctl missing or timed out — proceed to delete the plist.
-            # The LaunchAgent is effectively unloaded if the plist is gone.
-            pass
-
         try:
             plist_path.unlink()
         except OSError as error:
