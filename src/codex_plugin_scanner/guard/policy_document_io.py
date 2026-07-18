@@ -750,11 +750,11 @@ def _local_scope(
     publisher: str | None,
     harness: str | None,
 ) -> DecisionScope:
+    if artifact_id is not None and artifact_id.startswith("family:"):
+        return "workspace" if workspace is not None else "harness"
     preferred = extension.get("scope")
     if isinstance(preferred, str) and preferred in _LOCAL_SCOPES:
         return cast(DecisionScope, preferred)
-    if artifact_id is not None and artifact_id.startswith("family:"):
-        return "workspace" if workspace is not None else "harness"
     if artifact_id is not None:
         return "artifact"
     if workspace is not None:
