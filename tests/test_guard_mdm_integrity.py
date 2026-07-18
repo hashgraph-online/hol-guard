@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator
 from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli import commands_dispatch_mdm
 from codex_plugin_scanner.guard.mdm import integrity
+from codex_plugin_scanner.guard.mdm.acl import OwnershipAclVerification
 from codex_plugin_scanner.guard.mdm.contracts import (
     MDM_POLICY_SCHEMA_VERSION,
     MachinePaths,
@@ -29,6 +30,11 @@ def _isolate_host_policy(monkeypatch: pytest.MonkeyPatch) -> None:
         integrity,
         "load_managed_policy",
         lambda **_kwargs: ManagedPolicyState("absent", "native", reason_code="managed_policy_absent"),
+    )
+    monkeypatch.setattr(
+        integrity,
+        "verify_protected_ownership_and_acl",
+        lambda _paths: OwnershipAclVerification("unsupported", "ownership_acl_verification_unavailable", ()),
     )
 
 
@@ -96,6 +102,27 @@ def test_snapshot_never_upgrades_incomplete_managed_evidence(tmp_path: Path, mon
     assert snapshot["healthy"] is False
     assert snapshot["remediationClass"] == "user-reinstall"
     assert snapshot["product"]["version"] == "3.1.0a1"
+
+
+def test_snapshot_projects_acl_tamper_without_exposing_surface_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(integrity, "default_machine_paths", lambda: _paths(tmp_path))
+    monkeypatch.setattr(
+        integrity,
+        "verify_protected_ownership_and_acl",
+        lambda _paths: OwnershipAclVerification("tampered", "ownership_acl_standard_user_writable", ()),
+    )
+
+    snapshot = integrity.machine_integrity_snapshot()
+    serialized = json.dumps(snapshot)
+
+    assert snapshot["components"]["ownershipAndAcl"] == {
+        "state": "tampered",
+        "healthy": False,
+        "reasonCode": "ownership_acl_standard_user_writable",
+    }
+    assert str(tmp_path) not in serialized
 
 
 def test_snapshot_preserves_cached_managed_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

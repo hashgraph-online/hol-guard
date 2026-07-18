@@ -8,10 +8,12 @@ readonly ARCH="$(uname -m)"
 readonly OUT="${ROOT}/dist/mdm/macos"
 readonly STAGE="${OUT}/stage"
 readonly RUNTIME="${STAGE}/Library/Application Support/HOL Guard"
+readonly STATE="${STAGE}/Library/Application Support/HOL Guard State"
+readonly LOGS="${STAGE}/Library/Logs/HOL Guard"
 readonly PACKAGE_ID="org.hol.guard"
 
 rm -rf "${OUT}"
-mkdir -p "${RUNTIME}" "${STAGE}/Library/LaunchAgents" "${OUT}"
+mkdir -p "${RUNTIME}" "${STATE}" "${LOGS}" "${STAGE}/Library/LaunchAgents" "${OUT}"
 
 typeset -a pyinstaller_args
 pyinstaller_args=(--clean --noconfirm --onedir --name hol-guard \
@@ -42,7 +44,7 @@ find "${STAGE}" -type f -exec chmod 0644 {} +
 chmod 0755 "${RUNTIME}/hol-guard/hol-guard" "${RUNTIME}/activate-current-user"
 
 typeset -a pkg_args
-pkg_args=(--root "${STAGE}" --identifier "${PACKAGE_ID}" --version "${VERSION}" \
+pkg_args=(--root "${STAGE}" --ownership recommended --identifier "${PACKAGE_ID}" --version "${VERSION}" \
   --scripts "${ROOT}/scripts/mdm/macos/pkg-scripts")
 if [[ -n "${HOL_GUARD_INSTALLER_SIGN_IDENTITY:-}" ]]; then
   [[ -n "${HOL_GUARD_MANIFEST_SIGNING_KEY:-}" ]] || exit 2

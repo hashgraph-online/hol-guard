@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import cast, get_args
 
 from ...version import __version__
+from .acl import OwnershipAclVerification, verify_protected_ownership_and_acl
 from .contracts import (
     LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION,
     AssuranceLevel,
@@ -131,6 +132,13 @@ def _load_policy() -> ManagedPolicyState:
         return ManagedPolicyState("inaccessible", "native", reason_code="managed_policy_probe_failed")
 
 
+def _verify_ownership_acl(paths: MachinePaths) -> OwnershipAclVerification:
+    try:
+        return verify_protected_ownership_and_acl(paths)
+    except Exception:
+        return OwnershipAclVerification("unknown", "ownership_acl_probe_failed", ())
+
+
 def machine_integrity_snapshot() -> LocalIntegritySnapshot:
     """Return bounded machine evidence without trusting environment path overrides."""
 
@@ -155,6 +163,7 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
     if policy.policy is None and policy.status in {"invalid", "inaccessible", "tampered"}:
         update_owner = "mdm"
     assurance_level = _assurance_level(update_owner=update_owner)
+    acl = _verify_ownership_acl(paths)
 
     manifest_component = _component(manifest.status, manifest.reason_code)
     native_component = _component(native.status, native.reason_code)
@@ -167,7 +176,7 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
         policy_state,
         policy.reason_code or ("managed_policy_active" if policy.status == "active" else "managed_policy_absent"),
     )
-    ownership_acl = IntegrityComponent("unsupported", "ownership_acl_verification_unavailable")
+    ownership_acl = _component(acl.status, acl.reason_code)
     supervisor = SupervisorStatus("unsupported", "supervisor_verification_unavailable")
     device_key = KeyProtectionStatus("unsupported", "unavailable", "device_key_verification_unavailable")
     harness_coverage = IntegrityComponent("unsupported", "harness_coverage_verification_unavailable")

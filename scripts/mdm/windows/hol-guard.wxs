@@ -4,13 +4,28 @@
     <MajorUpgrade DowngradeErrorMessage="A newer HOL Guard version is already installed." />
     <MediaTemplate EmbedCab="yes" />
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="HOL Guard" />
+      <Directory Id="INSTALLFOLDER" Name="HOL Guard">
+        <Component Id="RuntimeAcl" Guid="0ED54EB2-5CD3-4AD1-8E14-D729153895EB">
+          <CreateFolder>
+            <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" />
+          </CreateFolder>
+        </Component>
+      </Directory>
     </StandardDirectory>
     <StandardDirectory Id="CommonAppDataFolder">
       <Directory Id="STATEFOLDER" Name="HOL Guard">
         <Component Id="MachineState" Guid="5CF2D38E-C3EC-4F31-BE6C-A15BDD52B279">
-          <CreateFolder />
+          <CreateFolder>
+            <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+          </CreateFolder>
         </Component>
+        <Directory Id="LOGSFOLDER" Name="Logs">
+          <Component Id="MachineLogs" Guid="E4256A60-A7EF-4FC4-9DCA-FF30D58C24C3">
+            <CreateFolder>
+              <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+            </CreateFolder>
+          </Component>
+        </Directory>
       </Directory>
     </StandardDirectory>
     <Component Id="UserActivation" Directory="INSTALLFOLDER" Guid="EF2BC727-7CA8-44EC-B7A6-C82F4CE4C7BD">
@@ -21,6 +36,11 @@
       </RegistryKey>
     </Component>
     <Files Include="$(RuntimeRoot)\**" Directory="INSTALLFOLDER" />
-    <Feature Id="Main"><ComponentRef Id="MachineState" /><ComponentRef Id="UserActivation" /></Feature>
+    <Feature Id="Main">
+      <ComponentRef Id="RuntimeAcl" />
+      <ComponentRef Id="MachineState" />
+      <ComponentRef Id="MachineLogs" />
+      <ComponentRef Id="UserActivation" />
+    </Feature>
   </Package>
 </Wix>
