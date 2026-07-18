@@ -664,7 +664,7 @@ def validated_policy_bundle_payload(
     canonical_payload = canonical_policy_bundle_payload(policy_bundle)
     payload_hash = _non_empty_string(policy_bundle.get("payloadHash"))
     computed_payload_hash = hashlib.sha256(canonical_payload).hexdigest()
-    if payload_hash is None:
+    if payload_hash is None or payload_hash != payload_hash.strip():
         return None, "invalid_payload_hash"
     if payload_hash.lower() not in {computed_payload_hash, f"sha256:{computed_payload_hash}"}:
         return None, "payload_hash_mismatch"

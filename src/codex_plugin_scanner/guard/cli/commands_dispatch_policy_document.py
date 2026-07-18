@@ -159,7 +159,7 @@ def _run_guard_policy_document_command(
                 _write_document(summary + (difference.text or "No policy changes."), output_stream)
             return 1 if difference.changed else 0
 
-        if command == "export":
+        if command in {"export", "show"}:
             include_provenance = bool(args.include_provenance)
             if include_provenance:
                 gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
@@ -171,7 +171,7 @@ def _run_guard_policy_document_command(
             rows = store.list_policy_decisions()
             document = build_policy_document_from_rows(rows, include_provenance=include_provenance)
             formatted = format_policy_document_yaml(document)
-            output_value = getattr(args, "output", None)
+            output_value = getattr(args, "output", None) if command == "export" else None
             payload: dict[str, object] = {
                 "rules": len(document.rules),
                 "digest": policy_document_digest(document),
@@ -200,6 +200,37 @@ def _run_guard_policy_document_command(
                     as_json=as_json,
                     output_stream=output_stream,
                 )
+            return 0
+        if command == "explain":
+            document = build_policy_document_from_rows(
+                store.list_policy_decisions(),
+                include_provenance=True,
+            )
+            compiled = compile_policy_document(document)
+            actions: dict[str, int] = {}
+            scopes: dict[str, int] = {}
+            for row in compiled:
+                action = row.decision.action
+                scope = row.decision.scope
+                actions[action] = actions.get(action, 0) + 1
+                scopes[scope] = scopes.get(scope, 0) + 1
+            _write_payload(
+                "policy explain",
+                {
+                    "document_id": document.metadata.id,
+                    "digest": policy_document_digest(document),
+                    "rules": len(document.rules),
+                    "compiled_rows": len(compiled),
+                    "actions": dict(sorted(actions.items())),
+                    "scopes": dict(sorted(scopes.items())),
+                    "message": (
+                        f"Active policy has {len(document.rules)} canonical rules "
+                        f"compiled into {len(compiled)} local rows."
+                    ),
+                },
+                as_json=as_json,
+                output_stream=output_stream,
+            )
             return 0
 
         if command == "import":
