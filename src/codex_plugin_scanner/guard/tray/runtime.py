@@ -53,10 +53,7 @@ def _load_icon_bytes(platform: TrayPlatform) -> bytes:
     PNG if no asset is available (keeps the tray alive on minimal
     installs).
     """
-    try:
-        from importlib.resources import files
-    except ImportError:  # pragma: no cover - Python < 3.9
-        from importlib_resources import files  # type: ignore[no-redef]
+    from importlib.resources import files
 
     size_hint = {TrayPlatform.MACOS: "22", TrayPlatform.WINDOWS: "16", TrayPlatform.LINUX: "22"}.get(
         platform, "22"
