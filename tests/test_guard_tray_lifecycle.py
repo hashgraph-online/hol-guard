@@ -269,16 +269,23 @@ class TestStartTray:
     def test_force_stops_existing(self, tmp_path: Path) -> None:
         _write_locator(tmp_path, pid=os.getpid())
         adapter = FakeAdapter()
-        # is_process_alive: True (initial check in get_status), then False
-        # (after stop_tray kills it, the wait loop sees it's dead).
+        # is_process_alive: True on first call (process exists), then False
+        # (after stop_tray kills it, the wait loop sees it's dead). Use a
+        # function instead of a list so extra calls don't raise StopIteration.
+        _calls = [0]
+
+        def _alive(_pid: int) -> bool:
+            _calls[0] += 1
+            return _calls[0] == 1
+
         with (
             patch(
                 "codex_plugin_scanner.guard.tray.lifecycle.is_process_alive",
-                side_effect=[True, False],
+                side_effect=_alive,
             ),
             patch(
                 "codex_plugin_scanner.guard.tray.state.is_process_alive",
-                side_effect=[True, False],
+                side_effect=_alive,
             ),
             patch(
                 "codex_plugin_scanner.guard.tray.state.process_start_fingerprint",
