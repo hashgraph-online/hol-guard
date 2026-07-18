@@ -243,6 +243,7 @@ def test_compile_rejects_match_not_supported_by_local_store() -> None:
     with pytest.raises(PolicyCompilationError, match="unsupported_policy_match"):
         compile_policy_document(document)
 
+
 @pytest.mark.parametrize(
     ("tool", "family"),
     (("mcp", "mcp"), ("shell", "tool-action"), ("tool-action", "tool-action")),
@@ -256,9 +257,7 @@ def test_compile_maps_portable_tool_selectors_to_local_families(tool: str, famil
 
 
 def test_compile_preserves_harness_for_tool_family_selector() -> None:
-    compiled = compile_policy_document(
-        _policy_document(match={"tools": ["mcp"], "harnesses": ["codex"]})
-    )
+    compiled = compile_policy_document(_policy_document(match={"tools": ["mcp"], "harnesses": ["codex"]}))
 
     assert len(compiled) == 1
     assert compiled[0].decision.harness == "codex"
@@ -274,9 +273,14 @@ def test_compile_rejects_unknown_tool_family() -> None:
 
 
 def test_compile_rejects_artifact_and_tool_selector_combination() -> None:
-    document = _policy_document(
-        match={"artifacts": ["skill:hol/deploy"], "tools": ["mcp"]}
-    )
+    document = _policy_document(match={"artifacts": ["skill:hol/deploy"], "tools": ["mcp"]})
+
+    with pytest.raises(PolicyCompilationError, match="unsupported_policy_match"):
+        compile_policy_document(document)
+
+
+def test_compile_rejects_tool_and_publisher_selector_combination() -> None:
+    document = _policy_document(match={"tools": ["mcp"], "publishers": ["hashgraph-online"]})
 
     with pytest.raises(PolicyCompilationError, match="unsupported_policy_match"):
         compile_policy_document(document)

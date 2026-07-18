@@ -729,6 +729,8 @@ def _artifact_selector_values(
     tools = _selector_values(match, "tools", rule_id=rule_id)
     if artifacts != (None,) and tools != (None,):
         raise PolicyCompilationError("unsupported_policy_match", rule_id)
+    if tools != (None,) and "publishers" in match:
+        raise PolicyCompilationError("unsupported_policy_match", rule_id)
     if tools == (None,):
         return artifacts
     families: list[str] = []
