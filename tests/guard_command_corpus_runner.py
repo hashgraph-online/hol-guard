@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import resource
+import os
 import subprocess
 import sys
 import time
@@ -20,6 +20,8 @@ EVALUATION_SHARD_COUNT = 2
 MAX_CONCURRENT_WORKERS = 1 + int(sys.version_info < (3, 11))
 WORKER_TIMEOUT_SECONDS = 35 if MAX_CONCURRENT_WORKERS > 1 else 20
 REPO_ROOT = Path(__file__).parents[1]
+SYNTHETIC_CWD = REPO_ROOT / "workspace"
+SYNTHETIC_HOME = REPO_ROOT / "home"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -30,7 +32,26 @@ class WorkerReport(TypedDict):
     rss_mib: float
 
 
-def _rss_mib() -> float:
+def peak_rss_mib() -> float:
+    if sys.platform == "win32":
+        completed = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                f"(Get-Process -Id {os.getpid()}).PeakWorkingSet64",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return int(completed.stdout.strip()) / (1024 * 1024)
+
+    import resource
+
     rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return rss / (1024 * 1024 if sys.platform == "darwin" else 1024)
 
@@ -72,7 +93,7 @@ def _worker_report(worker_index: int, worker_count: int) -> WorkerReport:
     for position, (case, oracle) in enumerate(streams):
         if position % worker_count != worker_index:
             continue
-        observed = evaluate_command(case.command, cwd=Path("workspace"), home_dir=Path("home")).minimum_action
+        observed = evaluate_command(case.command, cwd=SYNTHETIC_CWD, home_dir=SYNTHETIC_HOME).minimum_action
         if ranks[observed] == ranks[oracle.minimum_floor]:
             continue
         kind = "underclassified" if ranks[observed] < ranks[oracle.minimum_floor] else "overclassified"
@@ -81,7 +102,7 @@ def _worker_report(worker_index: int, worker_count: int) -> WorkerReport:
     return {
         "groups": dict(groups),
         "elapsed": time.perf_counter() - started,
-        "rss_mib": _rss_mib(),
+        "rss_mib": peak_rss_mib(),
     }
 
 
@@ -144,7 +165,7 @@ def _coordinator_report() -> dict[str, object]:
     return {
         "actual": actual,
         "elapsed": elapsed,
-        "rss_mib": _rss_mib() + active_worker_rss,
+        "rss_mib": peak_rss_mib() + active_worker_rss,
         "worker_elapsed": [report["elapsed"] for report in reports],
     }
 

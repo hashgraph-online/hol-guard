@@ -12,6 +12,8 @@ from itertools import chain
 from pathlib import Path
 from typing import cast
 
+import pytest
+
 from codex_plugin_scanner.guard.action_lattice import guard_action_severity, is_guard_action
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.effect_contract import (
@@ -40,6 +42,7 @@ from tests.guard_command_corpus_oracle import (
     iter_adversarial_oracle,
     iter_benign_oracle,
 )
+from tests.guard_command_corpus_runner import peak_rss_mib
 
 _OPAQUE_ID = re.compile(r"c-[0-9a-f]{24}")
 _OWNERS = {f"CDX-06{index}" for index in range(7)}
@@ -317,6 +320,28 @@ def test_full_guard_evaluation_matches_exact_non_widening_known_gap_baseline() -
     assert actual == expected
     assert isinstance(report["elapsed"], int | float) and report["elapsed"] < 30
     assert isinstance(report["rss_mib"], int | float) and report["rss_mib"] < 512
+
+
+def test_windows_peak_rss_uses_process_working_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    peak_bytes = 128 * 1024 * 1024
+
+    def fake_run(
+        command: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: int,
+    ) -> subprocess.CompletedProcess[str]:
+        assert command[-1] == "(Get-Process -Id 4242).PeakWorkingSet64"
+        assert check and capture_output and text and timeout == 10
+        return subprocess.CompletedProcess(command, 0, stdout=f"{peak_bytes}\n", stderr="")
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(os, "getpid", lambda: 4242)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert peak_rss_mib() == 128.0
 
 
 def test_canonical_digests_are_stable_across_process_roots_hash_seed_timezone_and_locale(tmp_path: Path) -> None:
