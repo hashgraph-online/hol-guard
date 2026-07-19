@@ -55,7 +55,10 @@ Object.defineProperty(globalThis, "window", {
 const requests: { url: string; init: RequestInit | undefined }[] = [];
 let responder: (url: string, init: RequestInit | undefined) => Response;
 const transport: CommandActivityTransport = async (input, init) => {
-  const path = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+  let path: string;
+  if (typeof input === "string") path = input;
+  else if (input instanceof URL) path = input.toString();
+  else path = input.url;
   const url = new URL(path, "http://127.0.0.1:64123").toString();
   const headers = new Headers(init?.headers);
   headers.set("X-Guard-Dashboard-Session", "dashboard-session");

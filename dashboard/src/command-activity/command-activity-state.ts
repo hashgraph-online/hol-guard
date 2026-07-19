@@ -79,6 +79,12 @@ function dateParam(value: string | null): string | null {
   return Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== value ? null : value;
 }
 
+function booleanParam(value: string | null): boolean | null {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
+}
+
 export function parseCommandActivityFilters(params: URLSearchParams): CommandActivityFilters {
   const prompted = params.get("command_prompted");
   return {
@@ -86,7 +92,7 @@ export function parseCommandActivityFilters(params: URLSearchParams): CommandAct
     harness: stableParam(params.get("command_harness")),
     execution_status: enumParam(params.get("command_status"), EXECUTION_STATUSES),
     proof_level: enumParam(params.get("command_proof"), PROOF_LEVELS),
-    prompted: prompted === "true" ? true : prompted === "false" ? false : null,
+    prompted: booleanParam(prompted),
     approval_reuse_status: enumParam(params.get("command_reuse"), REUSE_STATUSES),
     extension_id: stableParam(params.get("command_extension")),
     rule_id: stableParam(params.get("command_rule")),
