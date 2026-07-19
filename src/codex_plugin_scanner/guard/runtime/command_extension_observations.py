@@ -108,15 +108,22 @@ def observe_command_extensions(
             if not matcher_evidence:
                 continue
             safe_variants: list[SafeVariantObservation] = []
-            uncertainty_reasons: tuple[UncertaintyKind, ...] = ()
+            safe_matcher_failed = False
             for variant in rule.safe_variants:
                 try:
                     evidence = _validated_match(variant.matcher, command)
                 except Exception:
-                    uncertainty_reasons = (UncertaintyKind.MATCHER_FAILURE,)
+                    safe_matcher_failed = True
                     continue
                 if evidence:
                     safe_variants.append(SafeVariantObservation(variant.variant_id, evidence))
+            base_segments = {item.segment_index for item in matcher_evidence}
+            safe_segments = {
+                item.segment_index for observation in safe_variants for item in observation.matcher_evidence
+            }
+            uncertainty_reasons = (
+                (UncertaintyKind.MATCHER_FAILURE,) if safe_matcher_failed and not base_segments <= safe_segments else ()
+            )
             observations.append(
                 CommandExtensionObservation(
                     extension,

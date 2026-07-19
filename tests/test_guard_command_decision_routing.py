@@ -24,6 +24,7 @@ from codex_plugin_scanner.guard.runtime.command_rules import (
     CommandSafeVariant,
     ExecutableMatcher,
 )
+from codex_plugin_scanner.guard.runtime.effect_contract import UncertaintyKind
 
 
 class _FailingMatcher:
@@ -54,6 +55,15 @@ class _OutOfBoundsMatcher:
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         del command
         return (MatcherEvidence(99, "test-tool", "invalid index"),)
+
+
+class _SegmentMatcher:
+    def __init__(self, *segment_indexes: int) -> None:
+        self._segment_indexes: tuple[int, ...] = segment_indexes
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        del command
+        return tuple(MatcherEvidence(index, None, "test evidence") for index in self._segment_indexes)
 
 
 def _registry(
@@ -244,6 +254,32 @@ def test_owned_safe_variant_failure_remains_blocking_uncertainty() -> None:
     )
     assert evaluation.minimum_action == "block"
     assert evaluation.decision_plane.action == "block"
+
+
+def test_failed_optional_safe_matcher_does_not_override_complete_safe_evidence() -> None:
+    safe_variants = (
+        CommandSafeVariant("broken-safe", "Broken safe matcher", _FailingMatcher()),
+        CommandSafeVariant("proven-safe", "Proven safe matcher", _SegmentMatcher(0)),
+    )
+    evaluation = evaluate_command(
+        "test-tool target",
+        registry=_registry("review", safe_variants=safe_variants),
+    )
+    assert evaluation.extension_observations[0].uncertainty_reasons == ()
+    assert evaluation.extension_observations[0].effective_evidence == ()
+
+
+def test_failed_safe_matcher_remains_uncertain_when_safe_evidence_is_partial() -> None:
+    safe_variants = (
+        CommandSafeVariant("broken-safe", "Broken safe matcher", _FailingMatcher()),
+        CommandSafeVariant("partially-safe", "Partial safe matcher", _SegmentMatcher(0)),
+    )
+    evaluation = evaluate_command(
+        "test-tool target && other-tool target",
+        registry=_registry("review", matcher=_SegmentMatcher(0, 1), safe_variants=safe_variants),
+    )
+    assert evaluation.extension_observations[0].uncertainty_reasons == (UncertaintyKind.MATCHER_FAILURE,)
+    assert evaluation.minimum_action == "block"
 
 
 def test_rule_versions_are_stable_and_serialized() -> None:
