@@ -66,12 +66,16 @@ class CommandExtensionObservation(Generic[_ExtensionT]):
         return tuple(item for item in self.matcher_evidence if item.segment_index not in safe_indexes)
 
     def to_dict(self) -> dict[str, object]:
+        match_classes = ["unsafe"] if self.matcher_evidence else []
+        if self.uncertainty_reasons:
+            match_classes.append("uncertainty")
         return {
             "extension_id": self.extension.extension_id,
             "extension_version": self.extension.version,
             "rule_id": self.rule.rule_id,
             "rule_version": self.rule.rule_version,
-            "match_class": "uncertainty" if self.uncertainty_reasons else "unsafe",
+            "match_class": "unsafe" if self.matcher_evidence else "uncertainty",
+            "match_classes": match_classes,
             "matcher_evidence": [item.to_dict() for item in self.matcher_evidence],
             "safe_variants": [item.to_dict() for item in self.safe_variants],
             "uncertainty_reasons": [item.value for item in self.uncertainty_reasons],

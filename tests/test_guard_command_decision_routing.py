@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
 )
 from codex_plugin_scanner.guard.runtime.command_matcher_contracts import MatcherEvidence
 from codex_plugin_scanner.guard.runtime.command_model import CanonicalCommand, parse_shell_command
+from codex_plugin_scanner.guard.runtime.command_risk_effects import COMMAND_RISK_EFFECTS
 from codex_plugin_scanner.guard.runtime.command_rules import (
     CommandRuleMode,
     CommandRuleSeverity,
@@ -243,6 +244,7 @@ def test_matcher_failure_becomes_typed_blocking_uncertainty(matcher: object) -> 
     assert evaluation.decision_plane.action == "block"
     payload = evaluation.extension_observations[0].to_dict()
     assert payload["match_class"] == "uncertainty"
+    assert payload["match_classes"] == ["uncertainty"]
     assert payload["uncertainty_reasons"] == ["matcher-failure"]
     assert "private matcher detail" not in repr(evaluation.to_dict())
 
@@ -256,6 +258,19 @@ def test_risk_effect_mapping_does_not_use_substring_classification() -> None:
     effect_claims = frozenset(effect for item in batch.evidence for effect in item.effect_claims)
     assert EffectKind.DESTRUCTIVE_OR_IRREVERSIBLE_OPERATION not in effect_claims
     assert EffectKind.PROCESS_EXECUTION in effect_claims
+
+
+@pytest.mark.parametrize(("risk_class", "expected"), tuple(COMMAND_RISK_EFFECTS.items()))
+def test_extension_evidence_uses_canonical_risk_effect_mapping(
+    risk_class: str,
+    expected: frozenset[EffectKind],
+) -> None:
+    evaluation = evaluate_command(
+        "test-tool target",
+        registry=_registry("review", risk_classes=(risk_class,)),
+    )
+    batch = extension_evidence_batch(evaluation.command, evaluation.extension_observations)
+    assert frozenset(effect for item in batch.evidence for effect in item.effect_claims) == expected
 
 
 def test_typed_matcher_evidence_is_bounded_and_privacy_normalized() -> None:
@@ -371,6 +386,9 @@ def test_failed_safe_matcher_remains_uncertain_when_safe_evidence_is_partial() -
     )
     assert evaluation.extension_observations[0].uncertainty_reasons == (UncertaintyKind.MATCHER_FAILURE,)
     assert evaluation.minimum_action == "block"
+    payload = evaluation.extension_observations[0].to_dict()
+    assert payload["match_class"] == "unsafe"
+    assert payload["match_classes"] == ["unsafe", "uncertainty"]
 
 
 def test_rule_versions_are_stable_and_serialized() -> None:

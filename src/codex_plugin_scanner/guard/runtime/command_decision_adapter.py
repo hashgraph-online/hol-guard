@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.models import GuardAction
 from .command_extension_observations import CommandExtensionObservation
 from .command_extensions import CommandSafetyExtension
 from .command_model import CanonicalCommand
+from .command_risk_effects import command_risk_effects
 from .command_rules import CommandRuleMode, CommandSafetyRule
 from .effect_contract import (
     UNCERTAINTY_FLOOR,
@@ -58,17 +59,6 @@ _SEVERITY: dict[str, EvidenceSeverity] = {
     "medium": EvidenceSeverity.MEDIUM,
     "high": EvidenceSeverity.HIGH,
     "critical": EvidenceSeverity.CRITICAL,
-}
-_RISK_EFFECTS: dict[str, frozenset[EffectKind]] = {
-    "credential_exfiltration": frozenset({EffectKind.CREDENTIAL_OR_SECRET_OPERATION, EffectKind.NETWORK_WRITE}),
-    "data_flow_exfiltration": frozenset({EffectKind.NETWORK_WRITE}),
-    "destructive_shell": frozenset({EffectKind.DESTRUCTIVE_OR_IRREVERSIBLE_OPERATION}),
-    "encoded_execution": frozenset({EffectKind.PROCESS_EXECUTION}),
-    "execution": frozenset({EffectKind.PROCESS_EXECUTION}),
-    "local_secret_read": frozenset({EffectKind.CREDENTIAL_OR_SECRET_OPERATION}),
-    "network_egress": frozenset({EffectKind.NETWORK_WRITE}),
-    "policy_bypass": frozenset({EffectKind.GUARD_CONTROL_OPERATION}),
-    "supply_chain": frozenset({EffectKind.PROCESS_EXECUTION}),
 }
 
 
@@ -272,7 +262,7 @@ def _extension_proof_requirements() -> frozenset[ProofRequirement]:
 
 
 def _effect_claims(risk_classes: tuple[str, ...]) -> frozenset[EffectKind]:
-    effects: set[EffectKind] = set()
-    for risk in risk_classes:
-        effects.update(_RISK_EFFECTS.get(risk, ()))
-    return frozenset(effects or {EffectKind.PROCESS_EXECUTION})
+    return command_risk_effects(
+        risk_classes,
+        unknown_fallback=frozenset({EffectKind.PROCESS_EXECUTION}),
+    ) or frozenset({EffectKind.PROCESS_EXECUTION})
