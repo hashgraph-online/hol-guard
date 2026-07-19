@@ -135,6 +135,10 @@ async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+export async function requestGuardJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+  return readJson<T>(input, init);
+}
+
 async function requestErrorMessage(response: Response, fallback: string): Promise<string> {
   try {
     const payload = await response.clone().json();

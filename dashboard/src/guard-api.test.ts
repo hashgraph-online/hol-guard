@@ -1,3 +1,11 @@
+import "./commands/command-activity-client.test";
+import {
+  fetchCommandActivityAnalytics,
+  fetchCommandActivityPage,
+  fetchCommandExtensions,
+  submitCommandActivityFeedback,
+} from "./commands/command-activity-api";
+
 import {
   buildDemoRuntimeSnapshot,
   clearReviewQueue,
@@ -1433,6 +1441,85 @@ assert(
 assert(
   headerValue(retryResumeCalls[2].init, "X-Guard-Dashboard-Session") === "fresh-retry-resume-session",
   "L080: retryResume retry uses refreshed dashboard session"
+);
+
+installGuardWindow("?guard-token=token-command-activity&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const commandActivityCalls: RecordedFetch[] = [];
+globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  commandActivityCalls.push({ url, init });
+  const path = new URL(url, "http://127.0.0.1:4174").pathname;
+  if (path === "/v1/command-activity") {
+    return new Response(JSON.stringify({
+      schema_version: "guard.command-activity-api.v1",
+      items: [],
+      next_cursor: null,
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+  if (path === "/v1/command-activity/analytics") {
+    return new Response(JSON.stringify({
+      schema_version: "guard.command-activity-api.v1",
+      window: { from: "2026-07-19", through: "2026-07-19", days: 1 },
+      scope: { dimension: null, dimension_value: null },
+      commands_checked: 0,
+      trend: [],
+      dimensions: {
+        harness: [], extension: [], rule: [], disposition: [], execution_status: [],
+        prompt_status: [], proof_level: [], latency: [],
+      },
+      dimension_breakdowns_scope: "global",
+      feedback: [],
+      health: { status: "healthy", dropped_events: 0, persistence_errors: 0 },
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+  if (path === "/v1/command-extensions") {
+    return new Response(JSON.stringify({
+      schema_version: 2,
+      source: "built-in",
+      items: [],
+      next_cursor: null,
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+  if (path === "/v1/command-activity/feedback") {
+    return new Response(JSON.stringify({
+      schema_version: "guard.command-activity-api.v1",
+      activity_id: "activity-api-test",
+      label: "should_not_have_interrupted",
+      created_at: "2026-07-19T10:00:00Z",
+      updated_at: "2026-07-19T10:00:00Z",
+      changed: true,
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+};
+
+const commandActivityPage = await fetchCommandActivityPage();
+const commandActivityAnalytics = await fetchCommandActivityAnalytics({
+  days: 1,
+  topLimit: 1,
+  dimension: null,
+  dimensionValue: null,
+});
+const commandExtensions = await fetchCommandExtensions();
+const commandFeedback = await submitCommandActivityFeedback(
+  "activity-api-test",
+  "should_not_have_interrupted",
+);
+assert(commandActivityPage.items.length === 0, "CDX-036: authenticated command list normalizes empty pages");
+assert(commandActivityAnalytics.commands_checked === 0, "CDX-036: authenticated analytics normalizes totals");
+assert(commandExtensions.items.length === 0, "CDX-036: authenticated extension catalog normalizes empty pages");
+assert(commandFeedback.changed, "CDX-036: authenticated command feedback normalizes its result");
+assert(
+  headerValue(commandActivityCalls[0].init, "X-Guard-Dashboard-Session") === "token-command-activity",
+  "CDX-036: command list uses dashboard session authentication",
+);
+assert(commandActivityCalls.slice(0, 3).every((call) =>
+  headerValue(call.init, "X-Guard-Dashboard-Session") === "token-command-activity"
+), "CDX-036: every command read uses dashboard session authentication");
+assert(commandActivityCalls[3].init?.method === "POST", "CDX-036: feedback uses POST");
+assert(
+  headerValue(commandActivityCalls[3].init, "X-Guard-Dashboard-Session") === "token-command-activity",
+  "CDX-036: feedback uses dashboard session authentication",
 );
 
 console.log("guard-api.test.ts: all tests passed");
