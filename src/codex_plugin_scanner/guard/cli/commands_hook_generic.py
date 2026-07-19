@@ -482,12 +482,16 @@ def _run_hook_generic_payload(
         artifact_id,
         publisher,
     )
+    configured_narrow_override = config.resolve_artifact_or_publisher_action_override(
+        artifact_id,
+        publisher,
+    )
     configured_policy_normalization = normalize_guard_action_result(
         configured_override if configured_override is not None else config.default_action,
         unknown_action="require-reapproval",
     )
     verified_benign_default = (
-        configured_override is None
+        configured_narrow_override is None
         and configured_policy_normalization.action in {"review", "require-reapproval"}
         and _hook_event_name(payload_map) == "PreToolUse"
         and is_explicitly_benign_tool_action_request(
