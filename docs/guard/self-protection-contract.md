@@ -85,6 +85,8 @@ Workspace policy may tighten, but not exceed, these bounds:
 
 The lease lifetime must be at least twice the cadence and no more than six times the cadence. Grace does not extend cryptographic lease validity. Suppressions and maintenance windows require an authorized actor, bounded reason, start, expiry, and immutable audit record.
 
+Signed lease, challenge, removal-authorization, and remediation-job contracts encode expiry as `issuedAt` plus a schema-bounded `validForSeconds`. Consumers derive the exclusive expiry instant from those fields and reject evidence at or after that instant. These contracts intentionally do not carry a second absolute expiry timestamp: JSON Schema 2020-12 cannot enforce arithmetic consistency between two timestamps, which would let schema-only consumers accept an overlong lifetime. Observer assertions retain `expiresAt` because their freshness is projected and bounded by Guard Cloud rather than authorizing a local action.
+
 ## Key assurance
 
 macOS prefers a non-exportable Secure Enclave or system Keychain key whose ACL is machine-owned and prompt-free in scheduled context. Windows prefers a non-exportable TPM-backed CNG key scoped to the machine. `hardware-backed` is required for the highest managed assurance. `os-protected` is permitted in report-only mode when hardware storage is unavailable. `file-backed` is lower assurance, must be policy-visible, and cannot qualify for enforcement GA. `unavailable` and `unknown` cannot emit healthy managed evidence.

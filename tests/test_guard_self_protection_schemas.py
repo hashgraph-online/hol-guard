@@ -74,7 +74,7 @@ def test_protection_lease_requires_bounded_attestation_not_commands() -> None:
             "installationGeneration": "2" * 32,
             "sequence": 7,
             "issuedAt": "2026-07-18T22:00:00Z",
-            "expiresAt": "2026-07-18T22:15:00Z",
+            "validForSeconds": 900,
             "snapshotSchemaVersion": "local-integrity-snapshot.v1",
             "snapshotDigest": "3" * 64,
             "previousLeaseDigest": "4" * 64,
@@ -83,7 +83,7 @@ def test_protection_lease_requires_bounded_attestation_not_commands() -> None:
                 "challengeId": "challenge-a",
                 "nonce": "A" * 32,
                 "issuedAt": "2026-07-18T22:00:00Z",
-                "expiresAt": "2026-07-18T22:02:00Z",
+                "validForSeconds": 120,
             },
         },
         "signature": {
@@ -97,12 +97,63 @@ def test_protection_lease_requires_bounded_attestation_not_commands() -> None:
 
     claims = payload["claims"]
     assert isinstance(claims, dict)
+    challenge = claims["challenge"]
+    assert isinstance(challenge, dict)
+    challenge["validForSeconds"] = 301
+    assert list(validator.iter_errors(payload))
+    challenge["validForSeconds"] = 120
     claims["issuedAt"] = "not-a-dateZ"
     assert list(validator.iter_errors(payload))
     claims["issuedAt"] = "2026-07-18T22:00:00Z"
 
     payload["command"] = "arbitrary remote command"
     assert list(validator.iter_errors(payload))
+
+
+def test_authority_contracts_reject_overlong_lifetimes() -> None:
+    removal: dict[str, JsonValue] = {
+        "schemaVersion": "removal-authorization.v1",
+        "authorizationId": "authorization-a",
+        "workspaceId": "workspace-a",
+        "deviceId": "device-a",
+        "installationGeneration": "2" * 32,
+        "operation": "uninstall",
+        "actorId": "actor-a",
+        "reason": "Approved device retirement",
+        "issuedAt": "2026-07-18T22:00:00Z",
+        "validForSeconds": 301,
+        "nonce": "A" * 32,
+        "signature": {
+            "algorithm": "ed25519",
+            "keyId": "workspace-key-a",
+            "value": "A" * 86 + "==",
+        },
+    }
+    assert list(_validator("removal-authorization.v1").iter_errors(removal))
+
+    lease: dict[str, JsonValue] = {
+        "schemaVersion": "protection-lease.v1",
+        "claims": {
+            "workspaceId": "workspace-a",
+            "deviceId": "device-a",
+            "machineInstallationId": "1" * 32,
+            "installationGeneration": "2" * 32,
+            "sequence": 1,
+            "issuedAt": "2026-07-18T22:00:00Z",
+            "validForSeconds": 1801,
+            "snapshotSchemaVersion": "local-integrity-snapshot.v1",
+            "snapshotDigest": "3" * 64,
+            "previousLeaseDigest": None,
+            "signingKeyId": "device-key-a",
+            "challenge": None,
+        },
+        "signature": {
+            "algorithm": "ecdsa-p256-sha256",
+            "keyId": "device-key-a",
+            "value": "A" * 86 + "==",
+        },
+    }
+    assert list(_validator("protection-lease.v1").iter_errors(lease))
 
 
 @pytest.mark.parametrize("value", ["not base64!", "AQI", "AQ=ID", "====", "A" * 88])
@@ -116,7 +167,7 @@ def test_signed_evidence_rejects_malformed_base64_signatures(value: str) -> None
             "installationGeneration": "2" * 32,
             "sequence": 7,
             "issuedAt": "2026-07-18T22:00:00Z",
-            "expiresAt": "2026-07-18T22:15:00Z",
+            "validForSeconds": 900,
             "snapshotSchemaVersion": "local-integrity-snapshot.v1",
             "snapshotDigest": "3" * 64,
             "previousLeaseDigest": "4" * 64,
@@ -178,7 +229,7 @@ def test_observer_and_remediation_authorities_are_separate_and_allowlisted() -> 
         "targetVersion": "3.1.0a6",
         "idempotencyKey": "repair-device-a-generation-2",
         "issuedAt": "2026-07-18T22:00:00Z",
-        "expiresAt": "2026-07-18T22:15:00Z",
+        "validForSeconds": 900,
         "attemptLimit": 3,
         "signature": {
             "algorithm": "ed25519",
@@ -188,6 +239,9 @@ def test_observer_and_remediation_authorities_are_separate_and_allowlisted() -> 
     }
     validator = _validator("remediation-job.v1")
     validator.validate(job)
+    job["validForSeconds"] = 3601
+    assert list(validator.iter_errors(job))
+    job["validForSeconds"] = 900
     job["action"] = "version-converge"
     job["targetVersion"] = None
     assert list(validator.iter_errors(job))

@@ -4,7 +4,7 @@
   "title": "HOL Guard remediation job v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "jobId", "workspaceId", "deviceId", "installationGeneration", "action", "targetVersion", "idempotencyKey", "issuedAt", "expiresAt", "attemptLimit", "signature"],
+  "required": ["schemaVersion", "jobId", "workspaceId", "deviceId", "installationGeneration", "action", "targetVersion", "idempotencyKey", "issuedAt", "validForSeconds", "attemptLimit", "signature"],
   "allOf": [
     {
       "if": {"properties": {"action": {"enum": ["install", "version-converge"]}}, "required": ["action"]},
@@ -21,7 +21,7 @@
     "targetVersion": {"type": ["string", "null"], "maxLength": 128},
     "idempotencyKey": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"},
     "issuedAt": {"$ref": "self-protection-common.v1.schema.json#/$defs/timestamp"},
-    "expiresAt": {"$ref": "self-protection-common.v1.schema.json#/$defs/timestamp"},
+    "validForSeconds": {"type": "integer", "minimum": 60, "maximum": 3600},
     "attemptLimit": {"type": "integer", "minimum": 1, "maximum": 5},
     "signature": {"$ref": "self-protection-common.v1.schema.json#/$defs/signature"}
   }

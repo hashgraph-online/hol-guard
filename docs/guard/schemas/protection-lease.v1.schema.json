@@ -10,7 +10,7 @@
     "claims": {
       "type": "object", "additionalProperties": false,
       "required": [
-        "workspaceId", "deviceId", "machineInstallationId", "installationGeneration", "sequence", "issuedAt", "expiresAt",
+        "workspaceId", "deviceId", "machineInstallationId", "installationGeneration", "sequence", "issuedAt", "validForSeconds",
         "snapshotSchemaVersion", "snapshotDigest", "previousLeaseDigest", "signingKeyId", "challenge"
       ],
       "properties": {
@@ -20,7 +20,7 @@
         "installationGeneration": {"$ref": "self-protection-common.v1.schema.json#/$defs/hex32"},
         "sequence": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615},
         "issuedAt": {"$ref": "self-protection-common.v1.schema.json#/$defs/timestamp"},
-        "expiresAt": {"$ref": "self-protection-common.v1.schema.json#/$defs/timestamp"},
+        "validForSeconds": {"type": "integer", "minimum": 180, "maximum": 1800},
         "snapshotSchemaVersion": {"const": "local-integrity-snapshot.v1"},
         "snapshotDigest": {"$ref": "self-protection-common.v1.schema.json#/$defs/hex64"},
         "previousLeaseDigest": {"oneOf": [{"$ref": "self-protection-common.v1.schema.json#/$defs/hex64"}, {"type": "null"}]},
@@ -29,12 +29,12 @@
           "oneOf": [
             {"type": "null"},
             {
-              "type": "object", "additionalProperties": false, "required": ["challengeId", "nonce", "issuedAt", "expiresAt"],
+              "type": "object", "additionalProperties": false, "required": ["challengeId", "nonce", "issuedAt", "validForSeconds"],
               "properties": {
                 "challengeId": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"},
                 "nonce": {"type": "string", "pattern": "^[A-Za-z0-9_-]{32,128}$"},
                 "issuedAt": {"$ref": "self-protection-common.v1.schema.json#/$defs/timestamp"},
-                "expiresAt": {"$ref": "self-protection-common.v1.schema.json#/$defs/timestamp"}
+                "validForSeconds": {"type": "integer", "minimum": 30, "maximum": 300}
               }
             }
           ]

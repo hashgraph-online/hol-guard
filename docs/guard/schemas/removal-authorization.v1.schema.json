@@ -4,7 +4,7 @@
   "title": "HOL Guard removal authorization v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "authorizationId", "workspaceId", "deviceId", "installationGeneration", "operation", "actorId", "reason", "issuedAt", "expiresAt", "nonce", "signature"],
+  "required": ["schemaVersion", "authorizationId", "workspaceId", "deviceId", "installationGeneration", "operation", "actorId", "reason", "issuedAt", "validForSeconds", "nonce", "signature"],
   "properties": {
     "schemaVersion": {"const": "removal-authorization.v1"},
     "authorizationId": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"},
@@ -15,7 +15,7 @@
     "actorId": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"},
     "reason": {"$ref": "self-protection-common.v1.schema.json#/$defs/boundedReason"},
     "issuedAt": {"$ref": "self-protection-common.v1.schema.json#/$defs/timestamp"},
-    "expiresAt": {"$ref": "self-protection-common.v1.schema.json#/$defs/timestamp"},
+    "validForSeconds": {"type": "integer", "minimum": 30, "maximum": 300},
     "nonce": {"type": "string", "pattern": "^[A-Za-z0-9_-]{32,128}$"},
     "signature": {"$ref": "self-protection-common.v1.schema.json#/$defs/signature"}
   }
