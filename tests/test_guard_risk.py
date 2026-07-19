@@ -3152,6 +3152,7 @@ def test_explicitly_benign_tool_action_request_allows_verified_observers(command
         "rg --pre /tmp/payload GuardStore src",
         "rg --pre=/tmp/payload GuardStore src",
         "rg --hostname-bin=/tmp/payload GuardStore src",
+        "rg --config-path=/tmp/rg.conf GuardStore src",
     ),
 )
 def test_explicitly_benign_tool_action_request_rejects_unverified_observers(command: str):

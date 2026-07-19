@@ -313,7 +313,7 @@ _READ_ONLY_LOOKUP_COMMANDS = frozenset(
 )
 _READ_ONLY_LOOKUP_FILTERS = frozenset({"grep", "egrep", "fgrep", "head", "sed", "tail"})
 _READ_ONLY_SEARCH_EXECUTION_FLAGS = {
-    "rg": frozenset({"--hostname-bin", "--pre", "--pre-glob"}),
+    "rg": frozenset({"--config-path", "--hostname-bin", "--pre", "--pre-glob"}),
 }
 _READ_ONLY_GIT_STATUS_FLAGS = frozenset(
     {
@@ -1121,7 +1121,10 @@ def _looks_like_safe_git_status_command(
     if not segments:
         return False
     saw_status = False
-    effective_cwd = (cwd or Path.cwd()).resolve()
+    try:
+        effective_cwd = (cwd or Path.cwd()).resolve()
+    except OSError:
+        return False
     for segment in segments:
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_name is None or command_index != 0:
@@ -1151,12 +1154,12 @@ def _safe_git_status_cd_target(command_name: str, args: list[str], *, cwd: Path)
     path_text = path_args[0]
     if _shell_token_has_command_substitution(path_text):
         return None
-    candidate = Path(path_text).expanduser()
-    if not candidate.is_absolute():
-        candidate = cwd / candidate
     try:
+        candidate = Path(path_text).expanduser()
+        if not candidate.is_absolute():
+            candidate = cwd / candidate
         resolved = candidate.resolve()
-    except OSError:
+    except (OSError, RuntimeError):
         return None
     return resolved if resolved.is_dir() else None
 
@@ -1165,8 +1168,11 @@ def _git_status_has_execution_free_config(cwd: Path | None) -> bool:
     git_path = shutil.which("git")
     if git_path is None:
         return False
-    resolved_git = Path(git_path).resolve()
-    execution_cwd = (cwd or Path.cwd()).resolve()
+    try:
+        resolved_git = Path(git_path).resolve()
+        execution_cwd = (cwd or Path.cwd()).resolve()
+    except OSError:
+        return False
     if not _git_binary_path_is_trusted(resolved_git, cwd=execution_cwd):
         return False
     try:
@@ -1189,7 +1195,16 @@ def _git_status_has_execution_free_config(cwd: Path | None) -> bool:
 
 
 def _git_binary_path_is_trusted(git_path: Path, *, cwd: Path) -> bool:
-    for untrusted_root in (cwd, Path.home().resolve(), Path("/tmp"), Path("/private/tmp")):
+    try:
+        untrusted_roots = (
+            cwd.resolve(),
+            Path.home().resolve(),
+            Path("/tmp").resolve(),
+            Path("/private/tmp").resolve(),
+        )
+    except (OSError, RuntimeError):
+        return False
+    for untrusted_root in untrusted_roots:
         try:
             _ = git_path.relative_to(untrusted_root)
         except ValueError:
