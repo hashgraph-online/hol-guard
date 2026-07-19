@@ -180,6 +180,7 @@ from ..store_evidence import (
 )
 from .command_activity_api import (
     handle_command_activity_analytics,
+    handle_command_activity_diagnostics,
     handle_command_activity_feedback,
     handle_command_activity_list,
     handle_command_extensions,
@@ -1512,6 +1513,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/command-activity/analytics":
             handle_command_activity_analytics(self, parsed.query)
             return
+        if parsed.path == "/v1/command-activity/diagnostics":
+            handle_command_activity_diagnostics(self)
+            return
         if parsed.path == "/v1/command-extensions":
             handle_command_extensions(self, parsed.query)
             return
@@ -1704,7 +1708,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not self._origin_is_allowed_for_request(parsed.path, path_parts):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
-        if not self._header_token_is_valid():
+        body = self._read_delete_body() if parsed.path == "/v1/command-activity" else None
+        if not self._header_token_is_valid(payload=body):
             self._write_json(
                 {"error": "unauthorized"},
                 status=401,
@@ -1712,6 +1717,27 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             return
         store = self.server.store  # type: ignore[attr-defined]
+        if parsed.path == "/v1/command-activity":
+            if body is None:
+                self._write_json({"error": "invalid_request"}, status=400)
+                return
+            if body.get("confirm") != "clear-command-activity":
+                self._write_json(
+                    {"error": "confirmation_required", "confirm": "clear-command-activity"},
+                    status=400,
+                )
+                return
+            try:
+                require_high_risk(
+                    store.guard_home,
+                    purpose="evidence_clear",
+                    approval_gate_input=approval_gate_input_from_mapping(body),
+                )
+            except ApprovalGateError as error:
+                self._write_approval_gate_error(error)
+                return
+            self._write_json(store.clear_command_activity_evidence())
+            return
         if parsed.path == "/v1/evidence":
             with store._connect() as conn:
                 deleted = clear_evidence(conn)
@@ -4818,6 +4844,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/events/stream",
             "/v1/command-activity",
             "/v1/command-activity/analytics",
+            "/v1/command-activity/diagnostics",
             "/v1/command-activity/events",
             "/v1/command-activity/feedback",
             "/v1/command-extensions",
@@ -5118,6 +5145,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/evidence/export",
             "/v1/command-activity",
             "/v1/command-activity/analytics",
+            "/v1/command-activity/diagnostics",
             "/v1/command-activity/events",
             "/v1/command-activity/feedback",
             "/v1/command-extensions",

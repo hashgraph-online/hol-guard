@@ -258,6 +258,11 @@ def handle_command_activity_analytics(handler: object, query_string: str) -> Non
     target._write_json(payload)
 
 
+def handle_command_activity_diagnostics(handler: object) -> None:
+    target = cast(_Handler, handler)
+    target._write_json(target.server.store.command_activity_diagnostics())
+
+
 def handle_command_extensions(handler: object, query_string: str) -> None:
     target = cast(_Handler, handler)
     try:
@@ -457,6 +462,7 @@ __all__ = (
     "decode_activity_cursor",
     "encode_activity_cursor",
     "handle_command_activity_analytics",
+    "handle_command_activity_diagnostics",
     "handle_command_activity_feedback",
     "handle_command_activity_list",
     "handle_command_extensions",
