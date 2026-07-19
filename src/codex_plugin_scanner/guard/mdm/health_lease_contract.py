@@ -6,24 +6,14 @@ import base64
 import hashlib
 import importlib
 import json
-import math
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Final, Protocol, cast, get_args
+from typing import Final, Protocol, cast
 
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
 
-from .contracts import (
-    LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION,
-    AssuranceLevel,
-    InstallOwner,
-    IntegrityReasonCode,
-    IntegrityState,
-    KeyProtectionLevel,
-    RemediationClass,
-    SupervisorState,
-)
+from .contracts import LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION
 
 
 class LeaseClaims(Protocol):
@@ -86,7 +76,6 @@ _HEX_32 = re.compile(r"[0-9a-f]{32}\Z")
 _HEX_64 = re.compile(r"[0-9a-f]{64}\Z")
 _KEY_ID = re.compile(r"[A-Za-z0-9_-]{43}\Z")
 _TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
-_SNAPSHOT_TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\Z")
 _CLAIM_KEYS = {
     "schemaVersion",
     "workspaceId",
@@ -102,46 +91,6 @@ _CLAIM_KEYS = {
     "previousLeaseKeyId",
     "signingKeyId",
 }
-_SNAPSHOT_KEYS = {
-    "schemaVersion",
-    "generatedAt",
-    "scope",
-    "healthy",
-    "assuranceLevel",
-    "installOwner",
-    "platform",
-    "architecture",
-    "identifiers",
-    "product",
-    "components",
-    "harnessCoverage",
-    "continuity",
-    "reasonCodes",
-    "remediationClass",
-}
-_IDENTIFIER_KEYS = {"workspaceId", "deviceId", "machineInstallationId", "installationGeneration"}
-_PRODUCT_KEYS = {"version", "buildId", "sourceCommit", "packageIdentity", "manifestHash", "policyHash"}
-_COMPONENT_KEYS = {
-    "manifest",
-    "nativePackage",
-    "managedPolicy",
-    "ownershipAndAcl",
-    "supervisor",
-    "deviceKey",
-    "harnessCoverage",
-    "installationIdentity",
-    "leaseContinuity",
-    "daemon",
-    "commandShadowing",
-    "update",
-}
-_HARNESS_KEYS = {"required", "protected", "degraded", "missing"}
-_CONTINUITY_KEYS = {"monotonicUptimeSeconds", "sequence", "previousLeaseDigest", "bootSessionId"}
-_BASIC_COMPONENT_KEYS = {"state", "healthy", "reasonCode"}
-_INTEGRITY_STATES = frozenset(get_args(IntegrityState))
-_SUPERVISOR_STATES = frozenset(get_args(SupervisorState))
-_KEY_LEVELS = frozenset(get_args(KeyProtectionLevel))
-_REASON_CODES = frozenset(get_args(IntegrityReasonCode))
 
 
 def canonical_json_bytes(payload: dict[str, object]) -> bytes:
@@ -423,108 +372,9 @@ class HealthLeaseOutbox:
 
 
 def _validate_snapshot_binding(snapshot: bytes, claims: LeaseClaims) -> None:
-    raw = _strict_json(snapshot, maximum=MAX_SNAPSHOT_BYTES, reason="health_lease_outbox_invalid")
-    _exact_keys(raw, _SNAPSHOT_KEYS, "health_lease_outbox_invalid")
-    if raw.get("schemaVersion") != claims.snapshot_schema_version:
-        raise ValueError("health_lease_outbox_invalid")
-    identifiers = raw.get("identifiers")
-    product = raw.get("product")
-    components = raw.get("components")
-    harness = raw.get("harnessCoverage")
-    continuity = raw.get("continuity")
-    if not all(isinstance(value, dict) for value in (identifiers, product, components, harness, continuity)):
-        raise ValueError("health_lease_outbox_invalid")
-    assert isinstance(identifiers, dict)
-    assert isinstance(product, dict)
-    assert isinstance(components, dict)
-    assert isinstance(harness, dict)
-    assert isinstance(continuity, dict)
-    for value, keys in (
-        (identifiers, _IDENTIFIER_KEYS),
-        (product, _PRODUCT_KEYS),
-        (components, _COMPONENT_KEYS),
-        (harness, _HARNESS_KEYS),
-        (continuity, _CONTINUITY_KEYS),
-    ):
-        _exact_keys(value, keys, "health_lease_outbox_invalid")
-    for name, component in components.items():
-        if not isinstance(component, dict):
-            raise ValueError("health_lease_outbox_invalid")
-        expected = _BASIC_COMPONENT_KEYS | ({"level"} if name == "deviceKey" else set())
-        _exact_keys(component, expected, "health_lease_outbox_invalid")
-        allowed_states = _SUPERVISOR_STATES if name == "supervisor" else _INTEGRITY_STATES
-        state = component.get("state")
-        reason_code = component.get("reasonCode")
-        level = component.get("level")
-        if (
-            not isinstance(state, str)
-            or state not in allowed_states
-            or not isinstance(component.get("healthy"), bool)
-            or not isinstance(reason_code, str)
-            or reason_code not in _REASON_CODES
-            or (name == "deviceKey" and (not isinstance(level, str) or level not in _KEY_LEVELS))
-        ):
-            raise ValueError("health_lease_outbox_invalid")
-    generated_at = raw.get("generatedAt")
-    if not isinstance(generated_at, str):
-        raise ValueError("health_lease_outbox_invalid")
-    if _SNAPSHOT_TIMESTAMP.fullmatch(generated_at) is None:
-        raise ValueError("health_lease_outbox_invalid")
-    try:
-        # Python 3.10 does not accept the RFC 3339 ``Z`` suffix directly.
-        generated = datetime.fromisoformat(f"{generated_at[:-1]}+00:00")
-    except ValueError as exc:
-        raise ValueError("health_lease_outbox_invalid") from exc
-    reason_codes = raw.get("reasonCodes")
-    if (
-        generated.tzinfo is None
-        or len(generated_at.encode("utf-8")) > 64
-        or raw.get("scope") != "machine"
-        or not isinstance(raw.get("healthy"), bool)
-        or raw.get("assuranceLevel") not in get_args(AssuranceLevel)
-        or raw.get("installOwner") not in get_args(InstallOwner)
-        or raw.get("remediationClass") not in get_args(RemediationClass)
-        or not isinstance(reason_codes, list)
-        or len(reason_codes) > 64
-        or any(not isinstance(reason, str) or reason not in _REASON_CODES for reason in reason_codes)
-        or reason_codes != sorted(set(reason_codes))
-    ):
-        raise ValueError("health_lease_outbox_invalid")
-    _bounded_string(raw.get("platform"), maximum=64)
-    _bounded_string(raw.get("architecture"), maximum=64)
-    _bounded_string(product.get("version"), maximum=128)
-    _bounded_string(product.get("buildId"), maximum=256, nullable=True)
-    _bounded_string(product.get("sourceCommit"), maximum=256, nullable=True)
-    _bounded_string(product.get("packageIdentity"), maximum=256)
-    for name in ("manifestHash", "policyHash"):
-        value = product.get(name)
-        if value is not None:
-            _match(value, _HEX_64)
-    for value in harness.values():
-        _optional_uint64(value)
-    uptime = continuity.get("monotonicUptimeSeconds")
-    if uptime is not None and (
-        not isinstance(uptime, (int, float)) or isinstance(uptime, bool) or not math.isfinite(uptime) or uptime < 0
-    ):
-        raise ValueError("health_lease_outbox_invalid")
-    _optional_uint64(continuity.get("sequence"))
-    previous = continuity.get("previousLeaseDigest")
-    if previous is not None:
-        _match(previous, _HEX_64)
-    _bounded_string(continuity.get("bootSessionId"), maximum=256, nullable=True)
-    expected_identifiers = {
-        "workspaceId": claims.workspace_id,
-        "deviceId": claims.device_id,
-        "machineInstallationId": claims.machine_installation_id,
-        "installationGeneration": claims.installation_generation,
-    }
-    if any(identifiers.get(key) != value for key, value in expected_identifiers.items()):
-        raise ValueError("health_lease_outbox_invalid")
-    if (
-        continuity.get("sequence") != claims.sequence - 1
-        or continuity.get("previousLeaseDigest") != claims.previous_lease_digest
-    ):
-        raise ValueError("health_lease_outbox_invalid")
+    from .health_snapshot_validation import validate_health_snapshot_binding
+
+    validate_health_snapshot_binding(snapshot, claims)
 
 
 __all__ = [

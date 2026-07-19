@@ -25,6 +25,8 @@ from .health_lease_contract import (
 )
 
 PROTECTION_LEASE_SCHEMA = "protection-lease.v1"
+MIN_PROTECTION_LEASE_SECONDS = 180
+MAX_PROTECTION_LEASE_SECONDS = 1800
 _HEX_32 = __import__("re").compile(r"[0-9a-f]{32}\Z")
 _HEX_64 = __import__("re").compile(r"[0-9a-f]{64}\Z")
 _KEY_ID = __import__("re").compile(r"[A-Za-z0-9_-]{43}\Z")
@@ -142,7 +144,7 @@ class ProtectionLeaseClaims:
             or not 1 <= sequence <= MAX_UINT64
             or not isinstance(duration, int)
             or isinstance(duration, bool)
-            or not 180 <= duration <= 1800
+            or not MIN_PROTECTION_LEASE_SECONDS <= duration <= MAX_PROTECTION_LEASE_SECONDS
         ):
             raise ValueError("health_lease_invalid")
         previous = raw.get("previousLeaseDigest")
@@ -253,4 +255,11 @@ class SignedProtectionLease:
         return cls(claims, parsed)
 
 
-__all__ = ["PROTECTION_LEASE_SCHEMA", "ProtectionLeaseChallenge", "ProtectionLeaseClaims", "SignedProtectionLease"]
+__all__ = [
+    "MAX_PROTECTION_LEASE_SECONDS",
+    "MIN_PROTECTION_LEASE_SECONDS",
+    "PROTECTION_LEASE_SCHEMA",
+    "ProtectionLeaseChallenge",
+    "ProtectionLeaseClaims",
+    "SignedProtectionLease",
+]
