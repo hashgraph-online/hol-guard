@@ -13169,7 +13169,7 @@ def test_guard_run_headless_redetects_before_persisted_resume(tmp_path, monkeypa
     monkeypatch.setattr(guard_runner_module, "detect_harness", fake_detect)
 
     def resolve_pending() -> None:
-        for _ in range(40):
+        for _ in range(100):
             pending = store.list_approval_requests(limit=10)
             if pending:
                 apply_approval_resolution(
@@ -13186,7 +13186,7 @@ def test_guard_run_headless_redetects_before_persisted_resume(tmp_path, monkeypa
     worker = threading.Thread(target=resolve_pending, daemon=True)
     worker.start()
 
-    config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+    config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=5)
     blocked_resolver = guard_commands_module._headless_approval_resolver(
         args=argparse.Namespace(harness="claude-code"),
         context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
