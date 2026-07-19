@@ -1282,7 +1282,7 @@ class StorePolicyMixin:
                   or (
                     scope = 'workspace' and (workspace = ? or workspace = ?) and (
                       artifact_id is null or (
-                        (artifact_id = ? or artifact_id = ?) and (
+                        artifact_id = ? and (
                           artifact_hash is null or (? is not null and artifact_hash = ?)
                         )
                       )
@@ -1335,7 +1335,6 @@ class StorePolicyMixin:
                         workspace_key,
                         workspace,
                         artifact_id,
-                        action_family_key,
                         artifact_hash,
                         artifact_hash,
                         publisher,

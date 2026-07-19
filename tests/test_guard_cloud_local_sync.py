@@ -933,8 +933,6 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("HOL_GUARD_POLICY_YAML_IMPORT", raising=False)
-    monkeypatch.delenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", raising=False)
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
     workspace_dir = tmp_path / "workspace"
@@ -972,7 +970,9 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
     guard_runner_module.sync_runtime_session(
         store,
         session={
-            **guard_runner_module._local_guard_runtime_session(),
+            "harness": "codex",
+            "surface": "cli",
+            "status": "active",
             "updatedAt": "2026-04-24T00:01:00+00:00",
             "workspace": str(workspace_dir),
         },
@@ -1000,62 +1000,6 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
             "nextRefreshAt": "2026-04-24T00:15:00+00:00",
         },
     }
-    assert session_payload["policyDocumentVersions"] == ["guard.hashgraphonline.com/v1alpha1"]
-    assert session_payload["policyBundleVersions"] == [
-        "guard-policy-bundle.v1",
-        "guard-policy-bundle.v2",
-    ]
-    assert session_payload["policyContracts"] == [
-        "guard-policy-bundle/v1",
-        "guard-policy-bundle/v2",
-    ]
-    assert session_payload["yamlImport"] is False
-    assert "canonicalPolicyEnforcement" not in session_payload
-
-
-def test_local_runtime_session_advertises_enabled_policy_capabilities(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("HOL_GUARD_POLICY_YAML_IMPORT", "1")
-    monkeypatch.setenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", "1")
-
-    session = guard_runner_module._local_guard_runtime_session()
-
-    assert session["policy_document_versions"] == ["guard.hashgraphonline.com/v1alpha1"]
-    assert session["policy_bundle_versions"] == [
-        "guard-policy-bundle.v1",
-        "guard-policy-bundle.v2",
-    ]
-    assert session["policy_contracts"] == [
-        "guard-policy-bundle/v1",
-        "guard-policy-bundle/v2",
-    ]
-    assert session["yaml_import"] is True
-    assert session["canonical_policy_enforcement"] is True
-
-
-def test_local_runtime_session_applies_stable_policy_rollout_cohorts(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", "25")
-
-    cohort = [
-        guard_runner_module._canonical_policy_enforcement_enabled(
-            device_id=f"device-{index}",
-            workspace_id="workspace-alpha",
-        )
-        for index in range(100)
-    ]
-
-    assert any(cohort)
-    assert not all(cohort)
-    assert cohort == [
-        guard_runner_module._canonical_policy_enforcement_enabled(
-            device_id=f"device-{index}",
-            workspace_id="workspace-alpha",
-        )
-        for index in range(100)
-    ]
 
 
 def test_sync_runtime_session_prefers_latest_sync_summary_for_package_manager_coverage_freshness(

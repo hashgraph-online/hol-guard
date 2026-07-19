@@ -13,8 +13,13 @@ export function WhyThisPaused(props: WhyThisPausedProps) {
   const plainReasons = signals
     .filter((s) => s.plain_reason.trim().length > 0)
     .map((s) => s.plain_reason);
-  const fallbackReasons = props.item.why_now ? [props.item.why_now] : [];
-  const reasons = plainReasons.length > 0 ? plainReasons : fallbackReasons;
+
+  const reasons: string[] =
+    plainReasons.length > 0
+      ? plainReasons
+      : props.item.why_now
+        ? [props.item.why_now]
+        : [];
 
   if (reasons.length === 0) return null;
 

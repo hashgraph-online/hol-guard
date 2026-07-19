@@ -19,61 +19,6 @@ from .commands_parser_helpers import *
 def _configure_guard_policy_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
-    policy_parser = guard_subparsers.add_parser(
-        "policy",
-        help="Inspect, validate, format, diff, export, or import canonical Guard policy YAML",
-    )
-    policy_subparsers = policy_parser.add_subparsers(dest="policy_command", required=True)
-
-    policy_validate_parser = policy_subparsers.add_parser("validate", help="Validate a policy document")
-    policy_validate_parser.add_argument("file")
-    _add_guard_common_args(policy_validate_parser)
-    policy_validate_parser.add_argument("--json", action="store_true")
-
-    policy_fmt_parser = policy_subparsers.add_parser("fmt", help="Format a policy document canonically")
-    policy_fmt_parser.add_argument("file")
-    policy_fmt_parser.add_argument("--check", action="store_true")
-    _add_guard_common_args(policy_fmt_parser)
-    policy_fmt_parser.add_argument("--json", action="store_true")
-
-    policy_diff_parser = policy_subparsers.add_parser(
-        "diff", help="Diff a candidate document against active local policy"
-    )
-    policy_diff_parser.add_argument("file")
-    _add_guard_common_args(policy_diff_parser)
-    policy_diff_parser.add_argument("--json", action="store_true")
-
-    policy_show_parser = policy_subparsers.add_parser(
-        "show", help="Show the active local policy as canonical YAML"
-    )
-    policy_show_parser.add_argument("--include-provenance", action="store_true")
-    _add_guard_common_args(policy_show_parser)
-    policy_show_parser.add_argument("--json", action="store_true")
-
-    policy_explain_parser = policy_subparsers.add_parser(
-        "explain", help="Explain the active local policy compilation"
-    )
-    _add_guard_common_args(policy_explain_parser)
-    policy_explain_parser.add_argument("--json", action="store_true")
-
-    policy_export_parser = policy_subparsers.add_parser("export", help="Export local policies")
-    policy_export_parser.add_argument("--format", choices=("yaml",), default="yaml")
-    policy_export_parser.add_argument("--output")
-    policy_export_parser.add_argument("--include-provenance", action="store_true")
-    _add_guard_common_args(policy_export_parser)
-    policy_export_parser.add_argument("--json", action="store_true")
-
-    policy_import_parser = policy_subparsers.add_parser("import", help="Import a policy document")
-    policy_import_parser.add_argument("file")
-    import_mode = policy_import_parser.add_mutually_exclusive_group(required=True)
-    import_mode.add_argument("--merge", dest="mode", action="store_const", const="merge")
-    import_mode.add_argument("--replace", dest="mode", action="store_const", const="replace")
-    import_execution = policy_import_parser.add_mutually_exclusive_group()
-    import_execution.add_argument("--dry-run", dest="dry_run", action="store_true", default=True)
-    import_execution.add_argument("--apply", dest="dry_run", action="store_false")
-    _add_guard_common_args(policy_import_parser)
-    policy_import_parser.add_argument("--json", action="store_true")
-
     policies_parser = guard_subparsers.add_parser(
         "policies",
         help="List or clear remembered rules and synced Cloud policy rows",

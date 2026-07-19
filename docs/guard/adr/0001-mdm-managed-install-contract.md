@@ -17,4 +17,4 @@ Status: accepted for implementation; customer platform inputs remain release gat
 
 The package never guesses a user from root/SYSTEM. A device install can succeed with no logged-in user, and each eligible user converges at login without reinstalling. Customer MDM assignment details, minimum OS/CPU scope, publisher identities, signing credentials, and Cloud enrollment remain certification inputs and cannot be inferred in code.
 
-This decision implements the managed-install boundaries in [the self-protection contract](../self-protection-contract.md), with schemas under [`schemas/`](../schemas/), deployment operations in [mdm-deployment.md](../mdm-deployment.md), and network controls in [mdm-networking.md](../mdm-networking.md).
+This decision implements the threat boundaries and acceptance criteria in [the MDM PRD](../mdm-compatibility-prd.md), with schemas under [`schemas/`](../schemas/), deployment operations in [mdm-deployment.md](../mdm-deployment.md), and network controls in [mdm-networking.md](../mdm-networking.md).

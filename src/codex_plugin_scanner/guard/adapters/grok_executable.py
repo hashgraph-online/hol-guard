@@ -81,11 +81,11 @@ def resolve_trusted_grok_executable(context: HarnessContext) -> GrokExecutableRe
     registered = _registered_executable(context)
     if registered.executable is not None:
         return registered
-    if registered.error is not None:
-        return registered
 
     candidate = _which_grok()
     if candidate is None:
+        if registered.error is not None:
+            return registered
         return GrokExecutableResolution(None, "Grok executable was not found in a trusted installation location.")
     return _resolve_candidate(
         candidate,

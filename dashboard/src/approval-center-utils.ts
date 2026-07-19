@@ -177,6 +177,9 @@ export function buildPauseLine(item: GuardApprovalRequest): string {
   if (resolutionBlockReason !== null) {
     return resolutionBlockReason;
   }
+  if (item.policy_action === "block") {
+    return `${harnessDisplayName(item.harness)} kept this blocked because you already saved a block decision for it.`;
+  }
   if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
     return `${harnessDisplayName(item.harness)} has not run this exact action here before, so HOL Guard paused it for you to review.`;
   }

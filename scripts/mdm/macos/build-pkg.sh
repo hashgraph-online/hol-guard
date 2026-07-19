@@ -8,52 +8,36 @@ readonly ARCH="$(uname -m)"
 readonly OUT="${ROOT}/dist/mdm/macos"
 readonly STAGE="${OUT}/stage"
 readonly RUNTIME="${STAGE}/Library/Application Support/HOL Guard"
-readonly STATE="${STAGE}/Library/Application Support/HOL Guard State"
-readonly LOGS="${STAGE}/Library/Logs/HOL Guard"
 readonly PACKAGE_ID="org.hol.guard"
 
 rm -rf "${OUT}"
-mkdir -p "${RUNTIME}" "${STATE}" "${LOGS}" "${STAGE}/Library/LaunchAgents" \
-  "${STAGE}/Library/LaunchDaemons" "${OUT}"
+mkdir -p "${RUNTIME}" "${STAGE}/Library/LaunchAgents" "${OUT}"
 
-typeset -a pyinstaller_args
-pyinstaller_args=(--clean --noconfirm --onedir --name hol-guard \
+uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard \
   --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
   --distpath "${RUNTIME}" --workpath "${OUT}/pyinstaller" --specpath "${OUT}" \
-  "${ROOT}/scripts/mdm/hol-guard-entry.py")
-if [[ -n "${HOL_GUARD_INSTALLER_SIGN_IDENTITY:-}" ]]; then
-  [[ -n "${HOL_GUARD_APPLICATION_SIGN_IDENTITY:-}" ]] || exit 2
-  pyinstaller_args=(--codesign-identity "${HOL_GUARD_APPLICATION_SIGN_IDENTITY}" "${pyinstaller_args[@]}")
-fi
-uv run --no-sync pyinstaller "${pyinstaller_args[@]}"
-xcrun swiftc -O -framework Security -framework Foundation \
-  "${ROOT}/scripts/mdm/macos/device-key-helper.swift" -o "${RUNTIME}/hol-guard-device-key"
-if [[ -n "${HOL_GUARD_APPLICATION_SIGN_IDENTITY:-}" ]]; then
-  codesign --force --options runtime --timestamp --sign "${HOL_GUARD_APPLICATION_SIGN_IDENTITY}" \
-    "${RUNTIME}/hol-guard-device-key"
-fi
+  "${ROOT}/scripts/mdm/hol-guard-entry.py"
 
 cp "${ROOT}/scripts/mdm/macos/org.hol.guard.user-activation.plist" \
   "${STAGE}/Library/LaunchAgents/org.hol.guard.user-activation.plist"
-cp "${ROOT}/scripts/mdm/macos/org.hol.guard.machine-health.plist" \
-  "${STAGE}/Library/LaunchDaemons/org.hol.guard.machine-health.plist"
 cp "${ROOT}/scripts/mdm/macos/activate-current-user.sh" "${RUNTIME}/activate-current-user"
 typeset -a manifest_args
 manifest_args=(--runtime-root "${RUNTIME}" --version "${VERSION}" --build-id "${BUILD_ID}" \
   --platform macos --architecture "${ARCH}" --installer-identity "${PACKAGE_ID}" \
   --output "${RUNTIME}/release-manifest.json")
 if [[ -n "${HOL_GUARD_MANIFEST_SIGNING_KEY:-}" ]]; then
-  [[ -n "${HOL_GUARD_MANIFEST_KEY_ID:-}" ]] || exit 2
+  [[ -n "${HOL_GUARD_MANIFEST_KEY_ID:-}" && -n "${HOL_GUARD_MANIFEST_PUBLIC_KEYS:-}" ]] || exit 2
+  cp "${HOL_GUARD_MANIFEST_PUBLIC_KEYS}" "${RUNTIME}/release-trusted-keys.json"
   manifest_args+=(--signing-key "${HOL_GUARD_MANIFEST_SIGNING_KEY}" --key-id "${HOL_GUARD_MANIFEST_KEY_ID}")
 fi
 python3 "${ROOT}/scripts/mdm/generate-release-manifest.py" "${manifest_args[@]}"
 
 find "${STAGE}" -type d -exec chmod 0755 {} +
 find "${STAGE}" -type f -exec chmod 0644 {} +
-chmod 0755 "${RUNTIME}/hol-guard/hol-guard" "${RUNTIME}/hol-guard-device-key" "${RUNTIME}/activate-current-user"
+chmod 0755 "${RUNTIME}/hol-guard/hol-guard" "${RUNTIME}/activate-current-user"
 
 typeset -a pkg_args
-pkg_args=(--root "${STAGE}" --ownership recommended --identifier "${PACKAGE_ID}" --version "${VERSION}" \
+pkg_args=(--root "${STAGE}" --identifier "${PACKAGE_ID}" --version "${VERSION}" \
   --scripts "${ROOT}/scripts/mdm/macos/pkg-scripts")
 if [[ -n "${HOL_GUARD_INSTALLER_SIGN_IDENTITY:-}" ]]; then
   [[ -n "${HOL_GUARD_MANIFEST_SIGNING_KEY:-}" ]] || exit 2

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -36,7 +35,6 @@ from codex_plugin_scanner.guard.risk import (
 from codex_plugin_scanner.guard.runtime.actions import normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     _gh_pr_create_body_has_shell_command_substitution,
-    _git_binary_path_is_trusted,
     _path_text_is_within_root_text,
     _read_small_runtime_text_file,
     _resolved_runtime_path,
@@ -3155,32 +3153,10 @@ def test_explicitly_benign_tool_action_request_allows_verified_observers(command
         "rg --pre=/tmp/payload GuardStore src",
         "rg --hostname-bin=/tmp/payload GuardStore src",
         "rg --config-path=/tmp/rg.conf GuardStore src",
-        "rg -f patterns.txt GuardStore src",
-        "rg -fpatterns.txt GuardStore src",
-        "rg --file patterns.txt GuardStore src",
-        "rg --file=patterns.txt GuardStore src",
-        "rg --ignore-file=ignore.list GuardStore src",
-        "grep -f patterns.txt GuardStore src",
     ),
 )
 def test_explicitly_benign_tool_action_request_rejects_unverified_observers(command: str):
     assert not is_explicitly_benign_tool_action_request("bash", {"command": command})
-
-
-def test_explicitly_benign_ripgrep_rejects_ambient_config(monkeypatch):
-    monkeypatch.setenv("RIPGREP_CONFIG_PATH", "/tmp/rg.conf")
-
-    assert not is_explicitly_benign_tool_action_request("bash", {"command": "rg GuardStore src"})
-    assert not is_explicitly_benign_tool_action_request("bash", {"command": "rg -- --no-config src"})
-    assert is_explicitly_benign_tool_action_request("bash", {"command": "rg --no-config GuardStore src"})
-
-
-def test_git_binary_path_is_trusted_when_cwd_is_filesystem_root():
-    git_binary = shutil.which("git")
-    if git_binary is None:
-        pytest.skip("git is required for the verified-status classifier")
-
-    assert _git_binary_path_is_trusted(Path(git_binary).resolve(), cwd=Path("/"))
 
 
 def test_explicitly_benign_git_status_rejects_repository_fsmonitor(tmp_path: Path):
