@@ -19,7 +19,7 @@ function makeCapsSummary(i: number): string {
 }
 
 function makeReceipt(i: number): GuardReceipt {
-  const decisions = ["allow", "block", "ask"] as const;
+  const decisions = ["allow", "block", "review"] as const;
   const harnesses = ["codex", "claude", "cursor", "gemini"] as const;
   return {
     receipt_id: `perf-${i}`,

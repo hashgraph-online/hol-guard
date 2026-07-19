@@ -39,7 +39,7 @@ def test_release_branches_run_ci_and_pr_canaries() -> None:
     assert "tags" not in publish[True]["push"]
 
 
-def test_ordinary_pushes_and_tag_pushes_cannot_publish() -> None:
+def test_main_pushes_publish_stable_while_tag_pushes_cannot_publish() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     jobs = workflow["jobs"]
 
@@ -50,17 +50,21 @@ def test_ordinary_pushes_and_tag_pushes_cannot_publish() -> None:
         "publish-container",
     ):
         assert "github.event_name == 'workflow_dispatch'" in jobs[job_name]["if"]
-    assert "publish-stable-testpypi" not in jobs
-    assert "publish-stable-pypi" not in jobs
-    assert "release" not in jobs
+    for job_name in ("publish-main-testpypi", "publish-main-pypi", "release-main"):
+        condition = jobs[job_name]["if"]
+        assert "github.event_name == 'push'" in condition
+        assert "github.run_attempt == 1" in condition
+        assert "github.ref == 'refs/heads/main'" in condition
+        assert "needs.build.outputs.channel == 'stable'" in condition
+    assert jobs["publish-main-pypi"]["needs"] == ["build", "publish-main-testpypi"]
+    assert jobs["release-main"]["needs"] == ["build", "publish-main-pypi"]
 
-    assert "sync-repository-version" not in jobs
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
-    assert "[skip release publish]" not in workflow_text
     assert "startsWith(github.ref, 'refs/tags/')" not in workflow_text
+    assert "github.ref == 'refs/heads/main'" in workflow_text
 
 
-def test_push_build_keeps_the_repository_version_without_restamping() -> None:
+def test_main_push_build_computes_a_registry_derived_stable_version() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     build_steps = workflow["jobs"]["build"]["steps"]
     compute_run = next(step["run"] for step in build_steps if step.get("name") == "Compute publish version")
@@ -70,7 +74,13 @@ def test_push_build_keeps_the_repository_version_without_restamping() -> None:
     assert 'VERSION="$BASE_VERSION"' in compute_run
     assert 'CHANNEL="integration"' in compute_run
     assert 'elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]' in compute_run
-    assert '[[ "$GITHUB_EVENT_NAME" == "push" ]]' not in compute_run
+    assert 'elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]' in compute_run
+    assert 'CHANNEL="stable"' in compute_run
+    assert "verify_release_registry.py" in compute_run
+    assert "list-versions --registry pypi" in compute_run
+    assert "list-versions --registry testpypi" in compute_run
+    assert "'$pypi + $testpypi | unique'" in compute_run
+    assert "compute_main_release_version.py" in compute_run
     assert "if" not in stamp_step
     assert "sync_repo_version.py --check" in stamp_run
     assert '[[ "$CURRENT_VERSION" == "$VERSION" ]]' in stamp_run
@@ -125,7 +135,9 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     assert '"$GITHUB_REF" != "refs/heads/release/3.1"' in dispatch_gate["run"]
     assert '"$EXPECTED_SHA" != "$GITHUB_SHA"' in dispatch_gate["run"]
     assert jobs["build"]["needs"] == "authorize-release"
-    assert jobs["build"]["if"] == "github.event_name != 'workflow_dispatch' || github.run_attempt == 1"
+    build_condition = jobs["build"]["if"]
+    assert "github.event_name != 'workflow_dispatch' || github.run_attempt == 1" in build_condition
+    assert "github.event_name != 'push' || github.run_attempt == 1" in build_condition
     assert jobs["alpha-cross-platform"]["needs"] == "build"
     for job_name in (
         "alpha-cross-platform",
@@ -166,6 +178,8 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     for job_name in (
         "publish-alpha-testpypi",
         "publish-alpha-pypi",
+        "publish-main-testpypi",
+        "publish-main-pypi",
     ):
         steps = jobs[job_name]["steps"]
         assert any(step.get("run") == "sha256sum --check distribution-sha256.txt" for step in steps)
@@ -185,10 +199,19 @@ def test_publish_jobs_use_registered_protected_environments() -> None:
     assert jobs["publish-testpypi"]["environment"] == "testpypi"
     assert jobs["publish-alpha-testpypi"]["environment"] == "testpypi"
     assert jobs["publish-alpha-pypi"]["environment"] == "pypi-alpha"
+    assert jobs["publish-main-testpypi"]["environment"] == "testpypi"
+    assert jobs["publish-main-pypi"]["environment"] == "pypi"
     assert jobs["publish-testpypi"]["permissions"] == {"id-token": "write"}
     assert jobs["publish-alpha-testpypi"]["permissions"] == {"contents": "read", "id-token": "write"}
     assert jobs["publish-alpha-pypi"]["permissions"] == {"contents": "read", "id-token": "write"}
-    for job_name in ("publish-alpha-testpypi", "publish-alpha-pypi"):
+    assert jobs["publish-main-testpypi"]["permissions"] == {"contents": "read", "id-token": "write"}
+    assert jobs["publish-main-pypi"]["permissions"] == {"contents": "read", "id-token": "write"}
+    for job_name in (
+        "publish-alpha-testpypi",
+        "publish-alpha-pypi",
+        "publish-main-testpypi",
+        "publish-main-pypi",
+    ):
         assert "vars.RELEASE_PUBLISHING_ENABLED == 'true'" in jobs[job_name]["if"]
 
 
@@ -196,18 +219,49 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     jobs = workflow["jobs"]
 
-    for job_name in ("publish-alpha-testpypi",):
+    for job_name in ("publish-alpha-testpypi", "publish-main-testpypi"):
         steps = jobs[job_name]["steps"]
         inspect_step = next(step for step in steps if step.get("name") == "Inspect TestPyPI release state")
         publish_step = next(step for step in steps if str(step.get("uses", "")).startswith("pypa/"))
+        cleanup_step = next(step for step in steps if step.get("name") == "Remove generated upload attestations")
         verify_step = next(step for step in steps if step.get("name") == "Download and verify exact TestPyPI artifacts")
         assert "verify-release --registry testpypi" in inspect_step["run"]
         assert publish_step["if"] == "steps.testpypi.outputs.upload == 'true'"
+        assert cleanup_step["run"] == "rm -f dist/*.publish.attestation"
+        assert steps.index(publish_step) < steps.index(cleanup_step) < steps.index(verify_step)
         assert "--download-dir verified-testpypi" in verify_step["run"]
         assert 'uv tool run --from "$wheel"' in verify_step["run"]
         assert 'status" == "exact"' in verify_step["run"]
         assert 'status" != "absent"' in verify_step["run"]
+        assert "for attempt in {1..60}" in verify_step["run"]
+        assert 'attempt" == "60"' in verify_step["run"]
         assert '== "hol-guard $VERSION"' in verify_step["run"]
+
+    main_revalidation = next(
+        step["run"] for step in jobs["publish-main-pypi"]["steps"] if step.get("name") == "Revalidate main publication"
+    )
+    main_testpypi_revalidation = next(
+        step["run"]
+        for step in jobs["publish-main-testpypi"]["steps"]
+        if step.get("name") == "Revalidate main source before TestPyPI"
+    )
+    for main_source_revalidation in (main_testpypi_revalidation, main_revalidation):
+        assert 'git ls-remote --exit-code origin refs/heads/main' in main_source_revalidation
+        assert '[[ "$remote_main_sha" != "$SOURCE_SHA" ]]' in main_source_revalidation
+        assert "Main publication source is no longer the branch head" in main_source_revalidation
+        assert "git merge-base --is-ancestor \"$SOURCE_SHA\" refs/remotes/origin/main" not in main_source_revalidation
+    assert "compute_main_release_version.py" in main_revalidation
+    assert main_revalidation.count("uv run --with packaging==25.0") == 5
+    assert "uv run --no-sync" not in main_revalidation
+    assert "list-versions --registry pypi" in main_revalidation
+    assert "list-versions --registry testpypi" in main_revalidation
+    assert "'$pypi + $testpypi + [$version] | unique'" in main_revalidation
+    assert '<<< "$RELEASE_VERSIONS"' in main_revalidation
+    assert '[[ "$LATEST_RELEASE_VERSION" != "$VERSION" ]]' in main_revalidation
+    assert "--latest-existing" in main_revalidation
+    assert '<<< "$PRIOR_PYPI_VERSIONS"' in main_revalidation
+    assert "refs/tags/v${LATEST_VERSION}" in main_revalidation
+    assert 'git merge-base --is-ancestor "v${LATEST_VERSION}^{commit}" "$SOURCE_SHA"' in main_revalidation
 
     alpha_run = next(
         step["run"]
@@ -223,16 +277,21 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
     assert 'for registry in ("pypi.org", "test.pypi.org")' not in workflow_text
 
-    for job_name in ("publish-alpha-pypi",):
+    for job_name in ("publish-alpha-pypi", "publish-main-pypi"):
         steps = jobs[job_name]["steps"]
         inspect_step = next(step for step in steps if step.get("name") == "Inspect PyPI release state")
         publish_step = next(step for step in steps if str(step.get("uses", "")).startswith("pypa/"))
+        cleanup_step = next(step for step in steps if step.get("name") == "Remove generated upload attestations")
         verify_step = next(step for step in steps if step.get("name") == "Download and verify exact PyPI artifacts")
         assert "verify-release --registry pypi" in inspect_step["run"]
         assert publish_step["if"] == "steps.pypi.outputs.upload == 'true'"
+        assert cleanup_step["run"] == "rm -f dist/*.publish.attestation"
+        assert steps.index(publish_step) < steps.index(cleanup_step) < steps.index(verify_step)
         assert "--download-dir verified-pypi" in verify_step["run"]
         assert 'status" == "exact"' in verify_step["run"]
         assert 'status" != "absent"' in verify_step["run"]
+        assert "for attempt in {1..60}" in verify_step["run"]
+        assert 'attempt" == "60"' in verify_step["run"]
         assert '== "hol-guard $VERSION"' in verify_step["run"]
 
 
@@ -272,22 +331,40 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
     assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in release_run
     assert "--verify-tag" in release_run
 
+    main_release_run = next(
+        step["run"] for step in jobs["release-main"]["steps"] if step.get("name") == "Create discoverable main release"
+    )
+    assert 'tag="v${VERSION}"' in main_release_run
+    assert 'gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs"' in main_release_run
+    assert '-f sha="$SOURCE_SHA"' in main_release_run
+    assert 'remote_tag_sha" != "$SOURCE_SHA"' in main_release_run
+    assert 'gh release view "$tag" --json isDraft,isPrerelease' in main_release_run
+    assert "Existing stable release is a draft or prerelease" in main_release_run
+    assert 'remote_guard_files=("$existing_dir"/hol_guard-*)' in main_release_run
+    assert '[[ "${#remote_guard_files[@]}" -gt 0 ]]' in main_release_run
+    assert 'gh attestation verify "$remote_file"' in main_release_run
+    assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in main_release_run
+    assert "--verify-tag" in main_release_run
 
-def test_release_31_has_no_stable_publication_surface() -> None:
+def test_release_31_dispatch_remains_alpha_only_while_main_is_stable() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     jobs = workflow["jobs"]
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
 
     assert "channel == 'alpha'" in jobs["release-alpha"]["if"]
-    assert "channel == 'stable'" not in jobs["publish-container"]["if"]
+    assert "github.event_name == 'workflow_dispatch'" in jobs["release-alpha"]["if"]
+    assert "channel == 'stable'" in jobs["publish-container"]["if"]
     assert jobs["publish-container"]["needs"] == [
         "build",
         "publish-alpha-pypi",
+        "publish-main-pypi",
         "release-alpha",
+        "release-main",
     ]
-    assert not {"publish-stable-testpypi", "publish-stable-pypi", "release"} & jobs.keys()
-    assert "testpypi-stable" not in workflow_text
-    assert "pypi-stable" not in workflow_text
-    assert "refs/tags/v${VERSION}" not in workflow_text
+    assert {"publish-main-testpypi", "publish-main-pypi", "release-main"} <= jobs.keys()
+    assert jobs["publish-main-testpypi"]["environment"] == "testpypi"
+    assert jobs["publish-main-pypi"]["environment"] == "pypi"
+    assert "refs/tags/${tag}" in workflow_text
     assert "--channel stable" not in workflow_text
-    assert "name: Create GitHub Release" not in workflow_text
+    inputs = workflow[True]["workflow_dispatch"]["inputs"]
+    assert inputs["release_channel"]["options"] == ["alpha"]

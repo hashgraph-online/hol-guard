@@ -53,6 +53,7 @@ from ..approval_gate import (
 from ..approval_gate import (
     validate_settings_update as validate_approval_gate_settings,
 )
+from ..approval_resolution import approval_resolution_block_reason
 from ..approvals import (
     ApprovalRequestAlreadyResolvedError,
     ApprovalRequestNotFoundError,
@@ -135,6 +136,7 @@ from ..receipts.manager import build_receipt
 from ..review_contracts import (
     GuardReviewContractError,
     guard_review_oauth_metadata,
+    normalize_remote_approval_decision,
     validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
 )
@@ -2599,8 +2601,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         request_policy_action = self._optional_string(request_row.get("policy_action"))
         request_recommended_scope = self._optional_string(request_row.get("recommended_scope"))
+        resolution_block_reason = approval_resolution_block_reason(request_row)
         if (
-            request_policy_action not in {"block", "pause", "review", "require-reapproval"}
+            resolution_block_reason is not None
+            or request_policy_action not in {"review", "require-reapproval"}
             or request_recommended_scope not in DECISION_SCOPE_VALUES
         ):
             self._write_json({"error": "remote_once_not_permitted"}, status=409)
@@ -2641,7 +2645,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         ):
             self._write_json({"error": "remote_once_replayed"}, status=409)
             return
-        resolution_action = "block" if self._optional_string(envelope.get("decision")) == "block" else "allow"
+        resolution_action = normalize_remote_approval_decision(envelope.get("decision"))
+        if resolution_action is None:  # Validated before binding and receipt claim; defensive for typed narrowing.
+            self.server.store.release_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
+            self._write_json({"error": "invalid_remote_approval_decision"}, status=400)
+            return
         try:
             result = self.server.store.resolve_request_with_signed_remote_result(  # type: ignore[attr-defined]
                 request_id,

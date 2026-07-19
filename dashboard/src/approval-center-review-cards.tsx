@@ -13,13 +13,8 @@ export function WhyThisPaused(props: WhyThisPausedProps) {
   const plainReasons = signals
     .filter((s) => s.plain_reason.trim().length > 0)
     .map((s) => s.plain_reason);
-
-  const reasons: string[] =
-    plainReasons.length > 0
-      ? plainReasons
-      : props.item.why_now
-        ? [props.item.why_now]
-        : [];
+  const fallbackReasons = props.item.why_now ? [props.item.why_now] : [];
+  const reasons = plainReasons.length > 0 ? plainReasons : fallbackReasons;
 
   if (reasons.length === 0) return null;
 
@@ -48,7 +43,7 @@ type ApproveConsequenceProps = {
 export function ApproveConsequence(props: ApproveConsequenceProps) {
   const text =
     props.isCodex === true
-      ? "If you approve: Codex will continue the blocked action automatically."
+      ? "If you approve: Codex will continue the paused action automatically."
       : props.retryInstruction !== null
         ? `If you approve: ${props.retryInstruction}`
         : "If you approve: HOL Guard will let this action run and remember your choice within the selected scope.";

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.runtime.decisions import (
     GuardDecisionV2,
+    build_authoritative_decision,
     decision_from_legacy_policy_action,
 )
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
@@ -81,6 +83,7 @@ def _clipboard_data_flow_signal() -> RiskSignalV2:
 
 def test_guard_decision_v2_round_trips_to_dict_payload() -> None:
     decision = GuardDecisionV2(
+        guard_action="require-reapproval",
         action="ask",
         reason="require-reapproval",
         user_title="Review this changed action",
@@ -96,6 +99,7 @@ def test_guard_decision_v2_round_trips_to_dict_payload() -> None:
     payload = decision.to_dict()
 
     assert payload == {
+        "guard_action": "require-reapproval",
         "action": "ask",
         "reason": "require-reapproval",
         "user_title": "Review this changed action",
@@ -112,6 +116,7 @@ def test_guard_decision_v2_round_trips_to_dict_payload() -> None:
 
 def test_guard_decision_v2_rejects_non_object_signal_entries() -> None:
     payload = GuardDecisionV2(
+        guard_action="require-reapproval",
         action="ask",
         reason="require-reapproval",
         user_title="Review this changed action",
@@ -126,6 +131,34 @@ def test_guard_decision_v2_rejects_non_object_signal_entries() -> None:
     payload["signals"] = [_signal().to_dict(), "not-a-signal"]
 
     with pytest.raises(ValueError, match="signal item must be an object"):
+        GuardDecisionV2.from_dict(payload)
+
+
+@pytest.mark.parametrize(
+    ("guard_action", "product_action"),
+    [
+        ("allow", "allow"),
+        ("warn", "warn"),
+        ("review", "ask"),
+        ("require-reapproval", "ask"),
+        ("sandbox-required", "ask"),
+        ("block", "block"),
+    ],
+)
+def test_guard_decision_v2_requires_the_exact_product_projection(
+    guard_action: str,
+    product_action: str,
+) -> None:
+    payload = decision_from_legacy_policy_action(
+        guard_action,  # type: ignore[arg-type]
+        reason="projection-test",
+    ).to_dict()
+    payload["action"] = product_action
+
+    assert GuardDecisionV2.from_dict(payload).guard_action == guard_action
+
+    payload["action"] = "block" if product_action != "block" else "allow"
+    with pytest.raises(ValueError, match="must match guard_action"):
         GuardDecisionV2.from_dict(payload)
 
 
@@ -146,10 +179,27 @@ def test_decision_from_legacy_policy_action_maps_all_actions() -> None:
             signals=(_signal(),),
         )
 
+        assert decision.guard_action == legacy_action
         assert (decision.action, decision.harness_message) == expected
         assert decision.reason == "test-reason"
         assert decision.confidence == "strong"
         assert decision.signals == (_signal(),)
+
+
+def test_sandbox_required_copy_never_advertises_an_approval_bypass() -> None:
+    decision = build_authoritative_decision(
+        "sandbox-required",
+        reason="sandbox-policy",
+        composition_trace={"final_action": "sandbox-required"},
+        authority_finalized=True,
+    )
+
+    assert decision.enforcement.sandbox_required is True
+    assert decision.enforcement.prompt_required is False
+    assert decision.enforcement.launch_permitted is False
+    assert decision.decision_v2.approval_scopes == ()
+    assert decision.decision_v2.retry_instruction == "Run this action in an approved sandbox, then retry."
+    assert "approval" not in decision.decision_v2.retry_instruction.lower()
 
 
 def test_decision_from_legacy_policy_action_uses_highest_confidence_signal() -> None:
@@ -172,6 +222,32 @@ def test_decision_from_legacy_policy_action_explains_data_flow_exfiltration() ->
 
     assert "sends local secret to network host" in decision.harness_message
     assert "Source-to-sink" in decision.dashboard_primary_detail
+
+
+@pytest.mark.parametrize(
+    ("policy_action", "required_copy", "forbidden_copy"),
+    [
+        ("allow", "allowed this action", "paused"),
+        ("warn", "allowed this action with a warning", "paused"),
+        ("review", "paused this action", "allowed this action"),
+        ("require-reapproval", "paused this action", "allowed this action"),
+        ("sandbox-required", "requires a sandbox", "paused"),
+        ("block", "blocked this action", "paused"),
+    ],
+)
+def test_data_flow_harness_copy_uses_the_authoritative_action(
+    policy_action: GuardAction,
+    required_copy: str,
+    forbidden_copy: str,
+) -> None:
+    decision = decision_from_legacy_policy_action(
+        policy_action,
+        reason="data-flow-exfiltration",
+        signals=(_data_flow_signal(),),
+    )
+
+    assert required_copy in decision.harness_message
+    assert forbidden_copy not in decision.harness_message
 
 
 def test_decision_from_legacy_policy_action_names_non_network_data_flow_sink() -> None:

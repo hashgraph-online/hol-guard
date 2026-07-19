@@ -5,6 +5,7 @@ import {
   HiOutlineMinus,
 } from "react-icons/hi2";
 import type { GuardReceipt } from "./guard-types";
+import { guardActionDisposition } from "./guard-action";
 
 type Period = "7d" | "30d" | "90d";
 
@@ -41,8 +42,8 @@ interface CompareMetrics {
 }
 
 function computeMetrics(receipts: GuardReceipt[]): CompareMetrics {
-  const allowed = receipts.filter((r) => r.policy_decision === "allow").length;
-  const blocked = receipts.filter((r) => r.policy_decision === "block").length;
+  const allowed = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+  const blocked = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
   const appsActive = new Set(receipts.map((r) => r.harness)).size;
   return {
     total: receipts.length,

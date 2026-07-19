@@ -398,7 +398,13 @@ export type BulkApprovalTier = "blocked" | "high" | "elevated" | "low";
  * dashboard's risk disclosure escalating its copy and friction accordingly.
  */
 export function bulkApprovalRiskTier(group: QueueGroup): BulkApprovalTier {
-  if (group.primary.policy_action === "block") return "blocked";
+  if (
+    group.primary.decision_contract_error !== undefined ||
+    group.primary.policy_action === "block" ||
+    group.primary.policy_action === "sandbox-required"
+  ) {
+    return "blocked";
+  }
   const categoryId = resolveQueueCategory(group.primary).id;
   if (BULK_BLOCKED_CATEGORY_IDS.has(categoryId)) return "blocked";
   if (BULK_HIGH_CATEGORY_IDS.has(categoryId)) return "high";
@@ -1188,7 +1194,7 @@ export function buildHomePrimaryState(
     return {
       status: "needs_decision",
       copy: `${pendingCount} action${pendingCount !== 1 ? "s" : ""} paused and waiting for your decision.`,
-      ctaLabel: "Review blocked action",
+      ctaLabel: "Review waiting action",
     };
   }
   if (watchedAppsCount === 0) {
@@ -1200,7 +1206,7 @@ export function buildHomePrimaryState(
   }
   return {
     status: "protected",
-    copy: "Guard is protecting your apps. No blocked actions right now.",
+    copy: "Guard is protecting your apps. No actions are waiting for a decision.",
     ctaLabel: "Open review queue",
   };
 }

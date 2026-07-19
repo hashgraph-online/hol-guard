@@ -9,8 +9,9 @@ import type {
 import { guardAwareHref } from "./guard-api";
 import { resolveQueueCategory } from "./queue-state";
 import { whyPaused } from "./evidence/plain-english";
+import { guardActionPresentation } from "./guard-action";
 
-export const EMPTY_QUEUE_TITLE = "No blocked actions";
+export const EMPTY_QUEUE_TITLE = "Review queue is clear";
 export const STALE_REQUEST_COPY = "This request was already decided.";
 export const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
 export const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
@@ -172,8 +173,9 @@ export function humanizeChangedFields(values: string[]): string {
 }
 
 export function buildPauseLine(item: GuardApprovalRequest): string {
-  if (item.policy_action === "block") {
-    return `${harnessDisplayName(item.harness)} kept this blocked because you already saved a block decision for it.`;
+  const resolutionBlockReason = requestResolutionBlockReason(item);
+  if (resolutionBlockReason !== null) {
+    return resolutionBlockReason;
   }
   if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
     return `${harnessDisplayName(item.harness)} has not run this exact action here before, so HOL Guard paused it for you to review.`;
@@ -182,6 +184,10 @@ export function buildPauseLine(item: GuardApprovalRequest): string {
 }
 
 export function buildRecommendation(item: GuardApprovalRequest): string {
+  const resolutionBlockReason = requestResolutionBlockReason(item);
+  if (resolutionBlockReason !== null) {
+    return resolutionBlockReason;
+  }
   if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
     return "If this is what you expected, approve this retry. Project approval remembers this same action here without trusting new sensitive actions.";
   }
@@ -192,6 +198,10 @@ export function buildRecommendation(item: GuardApprovalRequest): string {
 }
 
 export function buildQueueSummary(item: GuardApprovalRequest): string {
+  const resolutionBlockReason = requestResolutionBlockReason(item);
+  if (resolutionBlockReason !== null) {
+    return resolutionBlockReason;
+  }
   if (item.policy_action === "block") {
     return "You already chose to block this action.";
   }
@@ -245,16 +255,7 @@ export function scopeLabel(scope: string, variant: "review" | "policy" = "review
 }
 
 export function policyActionLabel(action: string): string {
-  switch (action) {
-    case "require-reapproval":
-      return "Needs review";
-    case "block":
-      return "Blocked";
-    case "allow":
-      return "Allowed";
-    default:
-      return action;
-  }
+  return guardActionPresentation(action).label;
 }
 
 export function artifactTypeLabel(artifactType: string): string {
@@ -301,7 +302,24 @@ export function buildStoppedReason(item: GuardApprovalRequest, receipt: GuardRec
 }
 
 export function buildResumeInstruction(item: GuardApprovalRequest): string {
+  const resolutionBlockReason = requestResolutionBlockReason(item);
+  if (resolutionBlockReason !== null) {
+    return resolutionBlockReason;
+  }
   return `Choose the smallest approval that matches what you meant to do, save it, then retry in ${harnessDisplayName(item.harness)}.`;
+}
+
+export function requestResolutionBlockReason(item: GuardApprovalRequest): string | null {
+  if (item.decision_contract_error !== undefined) {
+    return "HOL Guard found inconsistent stored decision data. This request cannot be approved; rerun the action to create a fresh, consistent review request.";
+  }
+  if (item.policy_action === "sandbox-required") {
+    return "Policy requires this action to run in an approved sandbox. An approval cannot bypass the sandbox requirement.";
+  }
+  if (item.policy_action === "block") {
+    return "Policy terminally blocked this action. This queue record is diagnostic and cannot be overridden by an approval.";
+  }
+  return null;
 }
 
 export function shortConfigPath(path: string): string {
@@ -722,7 +740,7 @@ export function resolveTerminalLabel(item: GuardApprovalRequest): string {
   if (item.artifact_type === "prompt_request") return "Prompt excerpt";
   if (item.artifact_type === "tool_action_request") return "Tool action";
 
-  return "Stopped command";
+  return "Command";
 }
 
 export type CodexResumeUx = {

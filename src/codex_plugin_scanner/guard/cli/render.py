@@ -191,6 +191,7 @@ _KNOWN_MANAGED_INSTALL_MODES = {
 }
 _SENSITIVE_KEY_TOKENS = ("key", "token", "auth", "secret", "password", "credential")
 _NON_SECRET_STRUCTURED_KEYS = frozenset({"oauth_storage_health"})
+_NON_SECRET_DIAGNOSTIC_KEYS = frozenset({"authority_error", "authority_error_message"})
 _SAFE_POLICY_LITERALS = frozenset(
     {"allow", "warn", "review", "block", "require-reapproval", "sandbox-required", "strict", "balanced", "custom"}
 )
@@ -254,6 +255,7 @@ def _redact_payload(value: object, *, key: str | None = None, command: str | Non
     if (
         key is not None
         and key not in _NON_SECRET_STRUCTURED_KEYS
+        and key not in _NON_SECRET_DIAGNOSTIC_KEYS
         and any(token in key.lower() for token in _SENSITIVE_KEY_TOKENS)
     ):
         if isinstance(value, str) and value.lower() in _SAFE_POLICY_LITERALS:
@@ -949,18 +951,32 @@ def _render_run(console: Console, payload: dict[str, object]) -> None:
     blocked = bool(payload.get("blocked"))
     launched = bool(payload.get("launched"))
     dry_run = bool(payload.get("dry_run"))
+    authority_error = payload.get("authority_error")
+    has_authority_error = isinstance(authority_error, str) and bool(authority_error.strip())
     artifacts = _coerce_dict_list(payload.get("artifacts"))
-    visible_artifacts = [artifact for artifact in artifacts if _run_artifact_should_be_visible(artifact)]
+    visible_artifacts = (
+        [] if has_authority_error else [artifact for artifact in artifacts if _run_artifact_should_be_visible(artifact)]
+    )
     summarized_artifacts = _summarize_run_artifacts(visible_artifacts)
-    title = _run_title(blocked=blocked, dry_run=dry_run)
+    title = (
+        "Launch refused: inconsistent decision" if has_authority_error else _run_title(blocked=blocked, dry_run=dry_run)
+    )
     border_style = "red" if blocked else "green"
     body = Table.grid(padding=(0, 1))
     approval_delivery = payload.get("approval_delivery")
     body.add_row("Harness", f"[bold]{payload.get('harness', 'unknown')}[/bold]")
     body.add_row("Mode", "dry run" if dry_run else "launch")
-    body.add_row("Outcome", _run_outcome_text(blocked=blocked, dry_run=dry_run, launched=launched))
+    authority_message = payload.get("authority_error_message")
+    outcome = (
+        str(authority_message)
+        if has_authority_error and isinstance(authority_message, str) and authority_message.strip()
+        else _run_outcome_text(blocked=blocked, dry_run=dry_run, launched=launched)
+    )
+    body.add_row("Outcome", outcome)
+    if has_authority_error:
+        body.add_row("Authority error", str(authority_error))
     body.add_row("Artifacts", str(len(summarized_artifacts)))
-    if blocked:
+    if blocked and not has_authority_error:
         needs_review = sum(1 for artifact in visible_artifacts if _artifact_needs_review(artifact))
         body.add_row("Needs review", str(needs_review))
     body.add_row("Receipts", str(payload.get("receipts_recorded", 0)))
@@ -2358,6 +2374,18 @@ def _run_outcome_text(*, blocked: bool, dry_run: bool, launched: bool) -> str:
 
 def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool) -> list[dict[str, str]]:
     harness = str(payload.get("harness") or "codex")
+    authority_error = payload.get("authority_error")
+    if isinstance(authority_error, str) and authority_error:
+        return [
+            {
+                "title": "Repair and rescan Guard authority",
+                "command": f"hol-guard doctor {harness}",
+                "detail": (
+                    "Guard refused to use contradictory decision fields. Diagnose or repair the local Guard "
+                    "installation, then retry the original guarded command."
+                ),
+            }
+        ]
     approval_center_url = payload.get("approval_center_url")
     review_hint = payload.get("review_hint")
     rerun_command = payload.get("rerun_command")

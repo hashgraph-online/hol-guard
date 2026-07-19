@@ -115,6 +115,46 @@ def test_guard_action_envelope_from_dict_rejects_future_schema_version() -> None
         GuardActionEnvelope.from_dict(payload)
 
 
+def test_guard_action_envelope_cross_checks_documented_camel_aliases() -> None:
+    payload = GuardActionEnvelope(
+        schema_version=1,
+        action_id="action-alias",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="shell_command",
+        workspace=None,
+        workspace_hash=None,
+        tool_name="Bash",
+        command="printf ok",
+        prompt_excerpt=None,
+        prompt_text=None,
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        pre_execution_result="warn",
+        script_name=None,
+        raw_payload_redacted={},
+    ).to_dict()
+    payload.update(
+        {
+            "actionId": "action-alias",
+            "actionType": "shell_command",
+            "preExecutionResult": "warn",
+        }
+    )
+
+    restored = GuardActionEnvelope.from_dict(payload)
+    assert restored.action_id == "action-alias"
+    assert restored.pre_execution_result == "warn"
+
+    payload["preExecutionResult"] = "block"
+    with pytest.raises(ValueError, match="must match pre_execution_result"):
+        GuardActionEnvelope.from_dict(payload)
+
+
 def test_stable_action_hash_trims_outer_command_whitespace_only() -> None:
     base = GuardActionEnvelope(
         schema_version=1,

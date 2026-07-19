@@ -3125,7 +3125,7 @@ def test_headless_remote_once_applies_pending_request_and_records_receipt(tmp_pa
     _seed_guard_cloud(store, workspace_id="workspace-1", now="2026-06-13T00:00:00+00:00")
     request = _remote_once_request(
         "req-remote-once",
-        policy_action="block",
+        policy_action="require-reapproval",
         recommended_scope="workspace",
     )
     store.add_approval_request(request, "2026-05-14T11:59:00+00:00")
@@ -3245,6 +3245,148 @@ def test_headless_remote_once_sanitizes_codex_resume_metadata(
     assert "resume-token-secret" not in event_text
 
 
+@pytest.mark.parametrize("signed_decision", [None, "future-decision"])
+def test_headless_remote_once_rejects_missing_or_unknown_signed_decision_before_claim(
+    tmp_path: Path,
+    signed_decision: str | None,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1", now="2026-06-13T00:00:00+00:00")
+    request_id = "req-remote-invalid-decision"
+    receipt_id = "cloud-receipt-invalid-decision"
+    store.add_approval_request(_remote_once_request(request_id), "2026-05-14T11:59:00+00:00")
+    remote_approval = _signed_remote_approval_for_request(
+        store,
+        request_id,
+        receipt_id=receipt_id,
+    )
+    if signed_decision is None:
+        remote_approval.pop("decision")
+    else:
+        remote_approval["decision"] = signed_decision
+    remote_approval["payloadHash"] = payload_hash_for_remote_approval_envelope(remote_approval)
+    remote_approval["signature"] = sign_review_payload(remote_approval)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/requests/remote-once",
+                token=_dashboard_token_for(store),
+                payload={
+                    "harness": "codex",
+                    "operation": "remote_once",
+                    "remoteApproval": json.dumps(remote_approval),
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "invalid_remote_approval_decision"
+    assert store.has_remote_once_receipt(receipt_id) is False
+    request = store.get_approval_request(request_id)
+    assert request is not None
+    assert request["status"] == "pending"
+
+
+@pytest.mark.parametrize("policy_action", ["block", "sandbox-required"])
+def test_headless_remote_once_cannot_resolve_terminal_policy_actions(
+    tmp_path: Path,
+    policy_action: str,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1", now="2026-06-13T00:00:00+00:00")
+    request_id = f"req-remote-terminal-{policy_action}"
+    receipt_id = f"cloud-receipt-terminal-{policy_action}"
+    store.add_approval_request(
+        _remote_once_request(request_id, policy_action=policy_action),
+        "2026-05-14T11:59:00+00:00",
+    )
+    remote_approval = _signed_remote_approval_for_request(store, request_id, receipt_id=receipt_id)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/requests/remote-once",
+                token=_dashboard_token_for(store),
+                payload={
+                    "harness": "codex",
+                    "operation": "remote_once",
+                    "remoteApproval": json.dumps(remote_approval),
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 409
+    assert payload["error"] == "remote_once_not_permitted"
+    assert store.has_remote_once_receipt(receipt_id) is False
+    request = store.get_approval_request(request_id)
+    assert request is not None
+    assert request["status"] == "pending"
+
+
+def test_headless_remote_once_cannot_resolve_a_contract_invalid_request(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1", now="2026-06-13T00:00:00+00:00")
+    request_id = "req-remote-contract-invalid"
+    receipt_id = "cloud-receipt-contract-invalid"
+    store.add_approval_request(_remote_once_request(request_id), "2026-05-14T11:59:00+00:00")
+    with store._connect() as connection:
+        connection.execute(
+            """
+            update approval_requests
+            set action_envelope_json = ?
+            where request_id = ?
+            """,
+            (
+                json.dumps(
+                    {
+                        "action_type": "shell_command",
+                        "pre_execution_result": "require-reapproval",
+                        "preExecutionResult": "block",
+                    }
+                ),
+                request_id,
+            ),
+        )
+    remote_approval = _signed_remote_approval_for_request(store, request_id, receipt_id=receipt_id)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/requests/remote-once",
+                token=_dashboard_token_for(store),
+                payload={
+                    "harness": "codex",
+                    "operation": "remote_once",
+                    "remoteApproval": json.dumps(remote_approval),
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 409
+    assert payload["error"] == "remote_once_not_permitted"
+    assert store.has_remote_once_receipt(receipt_id) is False
+    request = store.get_approval_request(request_id)
+    assert request is not None
+    assert request["status"] == "pending"
+    assert request["decision_contract_error"] == "authoritative_decision_inconsistent"
+
+
 def test_headless_remote_once_rejects_stale_requests_and_replays(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1", now="2026-06-13T00:00:00+00:00")
@@ -3318,7 +3460,7 @@ def test_headless_remote_once_rejects_payload_scope_spoofing(tmp_path: Path) -> 
     _seed_guard_cloud(store, workspace_id="workspace-1", now="2026-06-13T00:00:00+00:00")
     request = _remote_once_request(
         "req-remote-spoof",
-        policy_action="block",
+        policy_action="require-reapproval",
         recommended_scope="workspace",
     )
     store.add_approval_request(request, "2026-05-14T11:59:00+00:00")

@@ -12,7 +12,14 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install, list_harness_setup_items
+from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.update_context_test_support import build_legacy_update_context
+
+
+@pytest.fixture(autouse=True)
+def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands, "build_trusted_update_context", build_legacy_update_context)
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -70,7 +77,7 @@ def test_update_detects_uv_tool_install_and_pins_latest_version(monkeypatch: pyt
     assert exit_code == 0
     assert payload["installer"] == "uv"
     assert payload["command"] == ["uv", "tool", "install", "--force", "hol-guard==2.0.10"]
-    assert payload["retry_command"] == "uv tool install --force hol-guard==2.0.10"
+    assert payload["retry_command"] == "hol-guard update"
     assert payload["binary_diagnostics"]["path_status"] == "uv_tool_shim_detected"
 
 
@@ -156,6 +163,7 @@ def test_update_version_check_reports_invalid_current_version_as_unavailable(
 
 def test_latest_version_lookup_uses_practical_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     timeouts: list[float] = []
+    read_limits: list[int] = []
 
     class FakeResponse:
         def __enter__(self) -> FakeResponse:
@@ -169,7 +177,8 @@ def test_latest_version_lookup_uses_practical_timeout(monkeypatch: pytest.Monkey
         ) -> None:
             return None
 
-        def read(self) -> bytes:
+        def read(self, limit: int) -> bytes:
+            read_limits.append(limit)
             return b'{"info":{"version":"2.0.1"}}'
 
     def fake_urlopen(request: object, timeout: float) -> FakeResponse:
@@ -180,6 +189,80 @@ def test_latest_version_lookup_uses_practical_timeout(monkeypatch: pytest.Monkey
 
     assert update_commands._latest_version_from_pypi() == "2.0.1"
     assert timeouts == [3.0]
+    assert read_limits == [update_commands._PYPI_RESPONSE_LIMIT_BYTES + 1]
+
+
+def test_latest_version_lookup_rejects_oversized_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands, "_PYPI_RESPONSE_LIMIT_BYTES", 32)
+
+    class FakeResponse:
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_value: BaseException | None,
+            traceback: object,
+        ) -> None:
+            return None
+
+        def read(self, limit: int) -> bytes:
+            assert limit == 33
+            return b"x" * limit
+
+    monkeypatch.setattr(update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
+
+    assert update_commands._latest_version_from_pypi() is None
+
+
+def test_version_lookup_uses_captured_update_network_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_policies: list[ManagedNetworkPolicy | None] = []
+    policy = ManagedNetworkPolicy(proxy_mode="none")
+
+    class FakeResponse:
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_value: BaseException | None,
+            traceback: object,
+        ) -> None:
+            return None
+
+        def read(self, _limit: int) -> bytes:
+            return b'{"info":{"version":"2.0.1"}}'
+
+    def fake_urlopen(
+        request: object,
+        *,
+        timeout: float,
+        policy: ManagedNetworkPolicy | None,
+    ) -> FakeResponse:
+        del request, timeout
+        captured_policies.append(policy)
+        return FakeResponse()
+
+    monkeypatch.setattr(update_commands, "managed_urlopen", fake_urlopen)
+
+    payload = update_commands._version_check_payload("2.0.0", network_policy=policy)
+
+    assert payload["latest_version"] == "2.0.1"
+    assert captured_policies == [policy]
+
+
+def test_bounded_version_read_enforces_total_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed_times = iter((0.0, 0.5, 1.1))
+    monkeypatch.setattr(update_commands.time, "monotonic", lambda: next(observed_times))
+
+    class SlowDripResponse:
+        def read1(self, _limit: int) -> bytes:
+            return b"x"
+
+    with pytest.raises(TimeoutError, match="deadline"):
+        update_commands._read_bounded_pypi_response(SlowDripResponse(), deadline=1.0)
 
 
 def test_latest_version_lookup_handles_truncated_response(monkeypatch: pytest.MonkeyPatch) -> None:

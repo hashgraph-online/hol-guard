@@ -9,10 +9,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from codex_plugin_scanner.guard.local_supply_chain import audit_receipt_metadata
+from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.package_firewall_receipts import package_firewall_receipt_metadata
 from codex_plugin_scanner.guard.shim_probe import protect_evaluator_evidence
 from codex_plugin_scanner.guard.shims import install_package_shims, probe_package_shim_intercepts
 from codex_plugin_scanner.guard.stable_digest import stable_digest_hex
+from codex_plugin_scanner.guard.store import GuardStore
 from tests.shim_execution_helpers import write_fake_manager_script
 
 
@@ -110,6 +112,45 @@ def test_audit_receipt_metadata_includes_manifest_and_lockfile_hashes(tmp_path: 
     assert isinstance(evidence, dict)
     assert evidence["manifest_hashes"] == [manifest_hash]
     assert evidence["lockfile_hashes"] == [lockfile_hash]
+
+
+def test_ask_audit_persists_one_exact_review_action_in_api_and_event(tmp_path: Path) -> None:
+    metadata = audit_receipt_metadata(
+        {
+            "manifest_paths": ["package.json"],
+            "lockfile_paths": ["package-lock.json"],
+            "inventory": {"total_packages": 1},
+            "evaluation": {"decision": "ask", "packages": []},
+        },
+        workspace_dir=tmp_path,
+    )
+    assert metadata["policy_decision"] == "review"
+    assert metadata["scanner_evidence"]["audit_decision"] == "ask"  # type: ignore[index]
+
+    store = GuardStore(tmp_path / "guard-home")
+    receipt = GuardReceipt(
+        receipt_id="receipt-audit-review",
+        harness="package-firewall",
+        artifact_id="package-firewall:audit",
+        artifact_hash="sha256:audit-review",
+        policy_decision=metadata["policy_decision"],  # type: ignore[arg-type]
+        capabilities_summary=str(metadata["capabilities_summary"]),
+        changed_capabilities=("audit",),
+        provenance_summary="workspace audit",
+        user_override=None,
+        artifact_name=str(metadata["artifact_name"]),
+        source_scope="project",
+        scanner_evidence=(metadata["scanner_evidence"],),  # type: ignore[arg-type]
+        timestamp="2026-07-18T00:00:00+00:00",
+    )
+    store.add_receipt(receipt)
+
+    stored = store.get_receipt(receipt.receipt_id)
+    assert stored is not None
+    assert stored["policy_decision"] == "review"
+    events = store.list_guard_events_v1(uploaded=False, limit=10)
+    receipt_event = next(item for item in events if item["event_type"] == "receipt.created")
+    assert receipt_event["payload"]["payload"]["policyDecision"] == "review"  # type: ignore[index]
 
 
 def test_probe_package_shim_intercepts_records_command_hash_and_evaluator_source(

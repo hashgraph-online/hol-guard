@@ -136,6 +136,10 @@ class StoreApprovalsMixin:
             now=resolved_at,
         )
         with self._connect() as connection:
+            connection.execute("begin immediate")
+            request = load_approval_request(connection, request_id)
+            if request is not None:
+                require_resolvable_approval_request(request)
             persist_approval_resolution(
                 connection,
                 request_id,
@@ -163,6 +167,10 @@ class StoreApprovalsMixin:
             now=resolved_at,
         )
         with self._connect() as connection:
+            connection.execute("begin immediate")
+            request = load_approval_request(connection, request_id)
+            if request is not None:
+                require_resolvable_approval_request(request)
             return persist_one_resolution(
                 connection,
                 request_id,
@@ -239,6 +247,9 @@ class StoreApprovalsMixin:
         resolved_at: str,
     ) -> dict[str, object]:
         with self._connect() as connection:
+            request = load_approval_request(connection, request_id)
+            if request is not None:
+                require_resolvable_approval_request(request)
             return persist_queue_resolution(
                 connection,
                 request_id,
@@ -294,27 +305,31 @@ class StoreApprovalsMixin:
         with self._connect() as connection:
             rows = connection.execute(
                 f"""
-                select request_id
+                select request_id, policy_action, decision_v2_json, action_envelope_json
                 from approval_requests
                 where {where_clause}
                 order by last_seen_at desc, request_id desc
-                limit ?
                 """,
-                (*params, _MAX_RESOLVED_SCOPE_IDS),
+                params,
             ).fetchall()
-            connection.execute(
-                f"""
-                update approval_requests
-                set status = 'resolved',
-                    resolution_action = ?,
-                    resolution_scope = ?,
-                    reason = ?,
-                    resolved_at = ?
-                where {where_clause}
-                """,
-                (resolution_action, resolution_scope, reason, resolved_at, *params),
+            matching_ids = [
+                str(row["request_id"])
+                for row in rows
+                if approval_request_surfaces_are_resolvable(
+                    row["policy_action"],
+                    row["decision_v2_json"],
+                    row["action_envelope_json"],
+                )
+            ]
+            self._resolve_approval_request_ids(
+                connection,
+                matching_ids,
+                resolution_action=resolution_action,
+                resolution_scope=resolution_scope,
+                reason=reason,
+                resolved_at=resolved_at,
             )
-        return [str(row["request_id"]) for row in rows]
+        return matching_ids[:_MAX_RESOLVED_SCOPE_IDS]
 
     @staticmethod
     def _approval_scope_conditions(
@@ -365,7 +380,8 @@ class StoreApprovalsMixin:
             connection.execute("begin immediate")
             rows = connection.execute(
                 """
-                select request_id, artifact_id, config_path
+                select request_id, artifact_id, config_path, policy_action,
+                       decision_v2_json, action_envelope_json
                 from approval_requests
                 where status = 'pending'
                   and harness = ?
@@ -378,22 +394,47 @@ class StoreApprovalsMixin:
                 for row in rows
                 if _path_within_workspace(str(row["config_path"]), workspace)
                 and (artifact_id is None or row["artifact_id"] == artifact_id)
-            ]
-            for chunk in _chunks(matching_ids, _SQLITE_ID_BATCH_SIZE):
-                placeholders = ", ".join("?" for _ in chunk)
-                connection.execute(
-                    f"""
-                    update approval_requests
-                    set status = 'resolved',
-                        resolution_action = ?,
-                        resolution_scope = ?,
-                        reason = ?,
-                        resolved_at = ?
-                    where request_id in ({placeholders})
-                    """,
-                    (resolution_action, resolution_scope, reason, resolved_at, *chunk),
+                and approval_request_surfaces_are_resolvable(
+                    row["policy_action"],
+                    row["decision_v2_json"],
+                    row["action_envelope_json"],
                 )
+            ]
+            self._resolve_approval_request_ids(
+                connection,
+                matching_ids,
+                resolution_action=resolution_action,
+                resolution_scope=resolution_scope,
+                reason=reason,
+                resolved_at=resolved_at,
+            )
         return matching_ids[:_MAX_RESOLVED_SCOPE_IDS]
+
+    @staticmethod
+    def _resolve_approval_request_ids(
+        connection: sqlite3.Connection,
+        request_ids: list[str],
+        *,
+        resolution_action: str,
+        resolution_scope: str,
+        reason: str | None,
+        resolved_at: str,
+    ) -> None:
+        for chunk in _chunks(request_ids, _SQLITE_ID_BATCH_SIZE):
+            placeholders = ", ".join("?" for _ in chunk)
+            connection.execute(
+                f"""
+                update approval_requests
+                set status = 'resolved',
+                    resolution_action = ?,
+                    resolution_scope = ?,
+                    reason = ?,
+                    resolved_at = ?
+                where request_id in ({placeholders})
+                  and status = 'pending'
+                """,
+                (resolution_action, resolution_scope, reason, resolved_at, *chunk),
+            )
 
     @staticmethod
     def _matches_scope(

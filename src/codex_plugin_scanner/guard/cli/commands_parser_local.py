@@ -112,6 +112,7 @@ def _configure_guard_local_parsers(
         "--wheel",
         help="Install a local HOL Guard wheel file, or the newest matching hol_guard-*.whl from a directory",
     )
+    update_parser.add_argument("--force-pypi-reinstall", action="store_true", help=argparse.SUPPRESS)
     update_parser.add_argument("--json", action="store_true")
 
     uninstall_parser = guard_subparsers.add_parser(

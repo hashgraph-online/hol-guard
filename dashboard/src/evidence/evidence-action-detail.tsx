@@ -13,7 +13,7 @@ import {
   HiMiniDocumentText,
 } from "react-icons/hi2";
 import { useState } from "react";
-import type { GuardReceipt } from "../guard-types";
+import type { GuardReceipt, RiskSignalV2 } from "../guard-types";
 import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionDetail } from "./plain-english";
@@ -21,6 +21,7 @@ import { detectCategory, getCategoryInfo } from "./categories";
 import { SectionLabel } from "../approval-center-primitives";
 import { DecisionBadge } from "./decision-badge";
 import { LoggedActionPanel } from "../logged-action-panel";
+import { guardActionPresentation } from "../guard-action";
 
 interface EvidenceActionDetailProps {
   receipt: GuardReceipt | null;
@@ -202,18 +203,36 @@ function DetailRow({ label, value, mono }: DetailRowProps) {
   );
 }
 
-function NextSafeCommandHint({ receipt }: { receipt: GuardReceipt }) {
-  const category = detectCategory(receipt);
-  let hint: string | null = null;
-  if (category === "supply-chain") {
-    hint = `Review the package source and version, then approve it from the review queue if it is safe.`;
-  } else if (category === "tool-call" || category === "mcp") {
-    hint = "Review the tool call in Evidence, then approve it in the review queue if it is safe.";
-  } else if (category === "file-write" || category === "destructive") {
-    hint = "Check if the file operation is expected, then allow it from the review queue.";
-  } else if (category === "secret" || category === "network") {
-    hint = "Inspect the access pattern, then update your policy rules if this should be allowed.";
+export function nextSafeStep(receipt: GuardReceipt): string | null {
+  const action = guardActionPresentation(receipt.policy_decision).action;
+  if (action === "block") {
+    return "This action is blocked. Review the governing policy or choose a safer alternative; it cannot be approved from the review queue.";
   }
+  if (action === "sandbox-required") {
+    return "Run this action through an approved sandbox, then retry only after the sandbox requirement is satisfied.";
+  }
+  if (action === "allow" || action === "warn") {
+    return null;
+  }
+  const category = detectCategory(receipt);
+  const approvalCopy = action === "require-reapproval" ? "grant fresh approval" : "approve it";
+  if (category === "supply-chain") {
+    return `Review the package source and version, then ${approvalCopy} from the review queue if it is safe.`;
+  }
+  if (category === "tool-call" || category === "mcp") {
+    return `Review the tool call in Evidence, then ${approvalCopy} in the review queue if it is safe.`;
+  }
+  if (category === "file-write" || category === "destructive") {
+    return `Check whether the file operation is expected, then ${approvalCopy} from the review queue.`;
+  }
+  if (category === "secret" || category === "network") {
+    return "Inspect the access pattern, then make the required review decision before retrying.";
+  }
+  return null;
+}
+
+function NextSafeCommandHint({ receipt }: { receipt: GuardReceipt }) {
+  const hint = nextSafeStep(receipt);
   if (!hint) return null;
   return (
     <div className="rounded-lg border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2.5">
@@ -224,6 +243,7 @@ function NextSafeCommandHint({ receipt }: { receipt: GuardReceipt }) {
 }
 
 function EvidenceTimeline({ receipt }: { receipt: GuardReceipt }) {
+  const action = guardActionPresentation(receipt.policy_decision);
   const events = [
     {
       label: "Action received",
@@ -231,9 +251,9 @@ function EvidenceTimeline({ receipt }: { receipt: GuardReceipt }) {
       icon: "start",
     },
     {
-      label: receipt.policy_decision === "allow" ? "Approved" : "Stopped",
+      label: action.label,
       time: receipt.timestamp,
-      icon: receipt.policy_decision === "allow" ? "allow" : "block",
+      icon: action.disposition,
     },
   ];
   return (
@@ -244,9 +264,9 @@ function EvidenceTimeline({ receipt }: { receipt: GuardReceipt }) {
           <li key={i} className="mb-2 ml-4 last:mb-0">
             <span
               className={`absolute -left-1.5 flex h-3 w-3 items-center justify-center rounded-full border ${
-                event.icon === "allow"
+                event.icon === "allowed"
                   ? "border-brand-green bg-brand-green/20"
-                  : event.icon === "block"
+                  : event.icon === "blocked"
                   ? "border-brand-attention bg-brand-attention/20"
                   : "border-slate-300 bg-slate-100"
               }`}
@@ -403,7 +423,7 @@ export function EvidenceActionDetail({
           </div>
         )}
 
-        {receipt.policy_decision === "block" && (
+        {guardActionPresentation(receipt.policy_decision).disposition !== "allowed" && (
           <NextSafeCommandHint receipt={receipt} />
         )}
 

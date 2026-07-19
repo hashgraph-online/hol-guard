@@ -62,6 +62,27 @@ def _optional_string(value: object, name: str) -> str | None:
     return value
 
 
+def _optional_https_url(value: object, name: str) -> str | None:
+    url = _optional_string(value, name)
+    if url is None:
+        return None
+    if url != url.strip() or any(character.isspace() for character in url):
+        raise ManagedPolicyError(f"{name} must be an absolute HTTPS URL")
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        # Accessing port performs urllib's numeric/range validation.
+        _ = parsed.port
+    except ValueError as exc:
+        raise ManagedPolicyError(f"{name} must be an absolute HTTPS URL") from exc
+    if parsed.scheme.lower() != "https" or not parsed.netloc or parsed.hostname is None:
+        raise ManagedPolicyError(f"{name} must be an absolute HTTPS URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ManagedPolicyError(f"{name} credentials are forbidden in managed policy")
+    if "?" in url or "#" in url:
+        raise ManagedPolicyError(f"{name} must not contain a query or fragment")
+    return url
+
+
 def _validate_settings(value: object) -> dict[str, object]:
     settings = dict(_expect_mapping(value, "settings"))
     try:
@@ -184,6 +205,7 @@ def parse_managed_policy(payload: object) -> ManagedPolicy:
         minimum_version=_optional_string(update_raw.get("minimumVersion"), "update.minimumVersion"),
         maximum_version=_optional_string(update_raw.get("maximumVersion"), "update.maximumVersion"),
         allow_downgrade=allow_downgrade,
+        index_url=_optional_https_url(update_raw.get("indexUrl"), "update.indexUrl"),
     )
     daemon_startup = root.get("daemonStartup", "on-demand")
     if daemon_startup not in {"on-demand", "login"}:

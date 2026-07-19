@@ -348,6 +348,7 @@ class ManagedUpdatePolicy:
     minimum_version: str | None = None
     maximum_version: str | None = None
     allow_downgrade: bool = False
+    index_url: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -356,6 +357,7 @@ class ManagedUpdatePolicy:
             "minimumVersion": self.minimum_version,
             "maximumVersion": self.maximum_version,
             "allowDowngrade": self.allow_downgrade,
+            "indexConfigured": self.index_url is not None,
         }
 
 

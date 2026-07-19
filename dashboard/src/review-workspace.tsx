@@ -41,6 +41,7 @@ import {
   displayArtifactName,
   formatRelativeTime,
   buildCodexResumeUx,
+  requestResolutionBlockReason,
 } from "./approval-center-utils";
 import {
   SkillRiskCard,
@@ -56,6 +57,7 @@ import {
   standardScopeChoicesForRequest,
 } from "./approval-scopes";
 import { ConsolidatedEvidenceAlert, type EvidenceItem } from "./consolidated-evidence-alert";
+import { guardActionPresentation, normalizeGuardAction } from "./guard-action";
 import { useRequestReadState, type RequestReadState, REQUEST_READ_STATE_LIMIT } from "./request-read-state";
 import {
   deriveDataFlowEvidence,
@@ -1065,6 +1067,7 @@ function ReviewDecisionCard(props: {
 }) {
   const detail = props.detail;
   const item = detail?.item ?? null;
+  const resolutionBlockReason = item ? requestResolutionBlockReason(item) : null;
   const [scope, setScope] = useState<DecisionScope>(item?.recommended_scope ?? "artifact");
   const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
   const [resolved, setResolved] = useState<"allow" | "block" | null>(null);
@@ -1126,7 +1129,7 @@ function ReviewDecisionCard(props: {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (submitting !== null || pendingAction !== null) return;
+      if (submitting !== null || pendingAction !== null || resolutionBlockReason !== null) return;
       const target = event.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
@@ -1146,11 +1149,11 @@ function ReviewDecisionCard(props: {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [submitting, pendingAction, scope, item?.request_id, availableScopeChoices]);
+  }, [submitting, pendingAction, scope, item?.request_id, availableScopeChoices, resolutionBlockReason]);
 
   const handleResolve = useCallback(
     async (action: "allow" | "block") => {
-      if (!item) return;
+      if (!item || resolutionBlockReason !== null) return;
       setSubmitting(action);
       setErrorMessage(null);
       try {
@@ -1183,7 +1186,7 @@ function ReviewDecisionCard(props: {
         setSubmitting(null);
       }
     },
-    [item, scope, props.onResolve, props.approvalGate, approvalPassword, approvalTotpCode, useCooldown]
+    [item, scope, props.onResolve, props.approvalGate, approvalPassword, approvalTotpCode, useCooldown, resolutionBlockReason]
   );
 
   const handleRequestResolve = useCallback(
@@ -1258,6 +1261,7 @@ function ReviewDecisionCard(props: {
   const whatWouldHappen = buildWhatWouldHappen(item);
   const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
   const pauseReason = whyPaused(item);
+  const actionPresentation = guardActionPresentation(item.policy_action);
 
   const topAlertItems: EvidenceItem[] = [];
   if (secondaryRiskSummary) {
@@ -1365,12 +1369,27 @@ function ReviewDecisionCard(props: {
               From {harnessName}
             </p>
           </div>
-          <Badge tone={item.policy_action === "block" ? "attention" : "info"}>
-            {item.policy_action === "block" ? "Blocked" : "Needs review"}
+          <Badge tone={actionPresentation.tone}>
+            {actionPresentation.label}
           </Badge>
         </div>
 
         <PrimaryActionCard item={item} />
+
+        {resolutionBlockReason !== null && (
+          <div className="mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4" role="alert">
+            <div className="flex items-start gap-3">
+              <HiMiniExclamationTriangle
+                className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-sm font-semibold text-brand-attention">This decision cannot be overridden</p>
+                <p className="mt-1 text-sm text-brand-dark">{resolutionBlockReason}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {topAlertItems.length > 0 && (
           <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
@@ -1402,7 +1421,7 @@ function ReviewDecisionCard(props: {
           </div>
         )}
 
-        <div className="mt-6 space-y-2">
+        {resolutionBlockReason === null && <div className="mt-6 space-y-2">
           <SectionLabel>How long should this choice last?</SectionLabel>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Scope selection">
             {commonScopeOptions.map((choice) => (
@@ -1454,7 +1473,7 @@ function ReviewDecisionCard(props: {
               </div>
             </details>
           )}
-        </div>
+        </div>}
 
         {errorMessage && (
           <div className="guard-fade-in mt-4 rounded-xl border border-brand-purple/25 bg-brand-purple/[0.05] p-4">
@@ -1474,7 +1493,7 @@ function ReviewDecisionCard(props: {
           </div>
         )}
 
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {resolutionBlockReason === null && <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <ActionButton
             ref={allowButtonRef}
             variant="success"
@@ -1510,7 +1529,7 @@ function ReviewDecisionCard(props: {
               </span>
             )}
           </ActionButton>
-        </div>
+        </div>}
 
       </div>
 
@@ -1784,11 +1803,18 @@ function buildWhatWouldHappen(item: GuardApprovalRequest): string | null {
 }
 
 function pastDecisionVerb(decision: string): string {
-  if (decision === "allow") {
-    return "allowed";
+  switch (normalizeGuardAction(decision)) {
+    case "allow":
+      return "allowed";
+    case "warn":
+      return "allowed with a warning";
+    case "review":
+      return "sent for review";
+    case "require-reapproval":
+      return "required fresh approval for";
+    case "sandbox-required":
+      return "required sandboxing for";
+    case "block":
+      return "blocked";
   }
-  if (decision === "block") {
-    return "blocked";
-  }
-  return "reviewed";
 }
