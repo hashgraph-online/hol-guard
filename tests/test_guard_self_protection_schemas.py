@@ -8,6 +8,8 @@ import pytest
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
+from tests.guard_mdm_health_lease_support import snapshot
+
 SCHEMA_ROOT = Path(__file__).parents[1] / "docs" / "guard" / "schemas"
 SCHEMA_FILES = {
     "self-protection-common.v1": "self-protection-common.v1.schema.json",
@@ -56,6 +58,10 @@ def test_local_integrity_snapshot_rejects_unknown_fields_and_invalid_time() -> N
 
     payload["generatedAt"] = "2026-07-18T22:00:00+05:30"
     assert list(_validator("local-integrity-snapshot.v1").iter_errors(payload))
+
+
+def test_local_integrity_snapshot_accepts_valid_healthy_components() -> None:
+    _validator("local-integrity-snapshot.v1").validate(snapshot())
 
 
 def test_protection_lease_requires_bounded_attestation_not_commands() -> None:

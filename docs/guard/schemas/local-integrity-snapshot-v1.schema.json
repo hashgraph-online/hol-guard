@@ -156,7 +156,6 @@
     },
     "healthyComponent": {
       "type": "object",
-      "additionalProperties": false,
       "required": ["healthy"],
       "properties": {"healthy": {"const": true}}
     },
