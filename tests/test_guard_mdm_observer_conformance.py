@@ -136,3 +136,18 @@ def test_duplicate_comparison_snapshots_shared_mutable_outputs() -> None:
     result = next(result for result in report.results if result.case_id == "duplicate-idempotency")
     assert not result.passed
     assert result.detail == "duplicate_output_changed"
+
+
+def test_invalid_recursive_duplicate_assertions_are_bounded_failures() -> None:
+    def recursive_adapter(fixture: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        if fixture["caseId"] not in {"duplicate-a", "duplicate-b"}:
+            return conforming_adapter(fixture)
+        recursive_assertion: dict[str, JsonValue] = {}
+        recursive_assertion["self"] = recursive_assertion
+        return {"status": "observed", "assertion": recursive_assertion}
+
+    report = run_observer_adapter_conformance("recursive-adapter", recursive_adapter)
+
+    result = next(result for result in report.results if result.case_id == "duplicate-idempotency")
+    assert not report.passed
+    assert result.detail == "duplicate_output_changed"

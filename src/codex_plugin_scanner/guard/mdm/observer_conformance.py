@@ -246,9 +246,11 @@ def run_observer_adapter_conformance(adapter_id: str, adapter: ObserverAdapter) 
         result, output = _run_case(adapter, case)
         results.append(result)
         outputs[case.case_id] = copy.deepcopy(output)
-    duplicate_a = outputs["duplicate-a"].get("assertion")
-    duplicate_b = outputs["duplicate-b"].get("assertion")
-    duplicate_valid = duplicate_a == duplicate_b and isinstance(duplicate_a, dict)
+    case_passed = {result.case_id: result.passed for result in results}
+    duplicate_cases_valid = case_passed["duplicate-a"] and case_passed["duplicate-b"]
+    duplicate_a = outputs["duplicate-a"].get("assertion") if duplicate_cases_valid else None
+    duplicate_b = outputs["duplicate-b"].get("assertion") if duplicate_cases_valid else None
+    duplicate_valid = duplicate_cases_valid and isinstance(duplicate_a, dict) and duplicate_a == duplicate_b
     results.append(
         ObserverConformanceResult(
             "duplicate-idempotency",
