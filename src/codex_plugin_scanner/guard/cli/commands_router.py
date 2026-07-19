@@ -118,6 +118,7 @@ def run_guard_command(
         workspace_dir=workspace,
         guard_home=guard_home,
         executable_overrides=executable_overrides,
+        home_override_explicit=bool(home_override),
     )
 
     handler = _resolve_guard_handler(_PRESTORE_HANDLERS, args.guard_command)

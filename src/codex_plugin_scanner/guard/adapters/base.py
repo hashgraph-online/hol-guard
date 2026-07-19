@@ -25,6 +25,7 @@ class HarnessContext:
     workspace_dir: Path | None
     guard_home: Path
     executable_overrides: Mapping[str, str] = field(default_factory=dict[str, str])
+    home_override_explicit: bool = False
 
 
 def _json_payload(path: Path) -> dict[str, object]:

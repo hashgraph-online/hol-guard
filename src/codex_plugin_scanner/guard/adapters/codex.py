@@ -316,7 +316,7 @@ def _hook_command_parts_for_home_mode(
 def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
     return _hook_command_parts_for_home_mode(
         context,
-        home_is_current=context.home_dir.resolve() == Path.home().resolve(),
+        home_is_current=(not context.home_override_explicit and context.home_dir.resolve() == Path.home().resolve()),
         python_executable=_guard_python_executable(),
     )
 
@@ -649,16 +649,13 @@ def _hook_command_matches_current_boundary(command: object, context: HarnessCont
             return False
     except OSError:
         return False
-    current_home_mode = context.home_dir.resolve() == Path.home().resolve()
-    for home_is_current in (current_home_mode, not current_home_mode):
-        expected_tokens = _hook_command_parts_for_home_mode(
-            context,
-            home_is_current=home_is_current,
-            python_executable=tokens[0],
-        )
-        if tuple(tokens) == expected_tokens:
-            return True
-    return False
+    home_is_current = not context.home_override_explicit and context.home_dir.resolve() == Path.home().resolve()
+    expected_tokens = _hook_command_parts_for_home_mode(
+        context,
+        home_is_current=home_is_current,
+        python_executable=tokens[0],
+    )
+    return tuple(tokens) == expected_tokens
 
 
 def _is_current_managed_hook_group(

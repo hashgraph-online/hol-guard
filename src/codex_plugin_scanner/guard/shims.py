@@ -222,7 +222,9 @@ def _build_windows_script(posix_path: Path) -> str:
 def _home_override_args(context: HarnessContextLike) -> list[str]:
     if not context.home_dir:
         return []
-    if context.home_dir.resolve() == Path.home().resolve():
+    if not bool(getattr(context, "home_override_explicit", False)) and (
+        context.home_dir.resolve() == Path.home().resolve()
+    ):
         return []
     return ["--home", str(context.home_dir)]
 

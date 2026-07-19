@@ -128,7 +128,12 @@ def test_codex_launch_fails_closed_when_native_hooks_are_disabled_after_install(
     config_text = config_path.read_text(encoding="utf-8")
     assert "hooks = true" in config_text
     config_path.write_text(config_text.replace("hooks = true", "hooks = false", 1), encoding="utf-8")
-    context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        guard_home=home_dir,
+        home_override_explicit=True,
+    )
 
     with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
         CodexHarnessAdapter().launch_command(context, ["Fix it."])
@@ -161,6 +166,46 @@ def test_codex_launch_fails_closed_when_authoritative_hook_is_tampered(
         entry["command"] = f"{entry['command']} --tampered"
     config_path.write_text(dump_toml(payload), encoding="utf-8")
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
+
+    with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
+        CodexHarnessAdapter().preview_launch_commands(context, ["Fix it."])
+
+
+def test_codex_launch_rejects_hook_bound_to_opposite_home_mode(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _install_codex(home_dir, workspace_dir, capsys)
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        guard_home=home_dir,
+        home_override_explicit=True,
+    )
+    config_path = home_dir / ".codex" / "config.toml"
+    payload = codex_adapter._read_toml(config_path)
+    hooks = payload["hooks"]
+    assert isinstance(hooks, dict)
+    pre_tool_groups = hooks["PreToolUse"]
+    assert isinstance(pre_tool_groups, list)
+    pre_tool_group = pre_tool_groups[-1]
+    assert isinstance(pre_tool_group, dict)
+    entries = pre_tool_group["hooks"]
+    assert isinstance(entries, list)
+    entry = entries[0]
+    assert isinstance(entry, dict)
+    monkeypatch.setattr(codex_adapter.Path, "home", lambda: home_dir)
+    opposite_home_command = codex_adapter._hook_command_parts_for_home_mode(
+        context,
+        home_is_current=True,
+        python_executable=sys.executable,
+    )
+    entry["command"] = shlex.join(opposite_home_command)
+    assert codex_adapter._hook_command_matches_current_boundary(entry["command"], context) is False
+    config_path.write_text(dump_toml(payload), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
         CodexHarnessAdapter().preview_launch_commands(context, ["Fix it."])
