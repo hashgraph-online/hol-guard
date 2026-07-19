@@ -83,7 +83,7 @@ def test_protection_lease_requires_bounded_attestation_not_commands() -> None:
         "signature": {
             "algorithm": "ecdsa-p256-sha256",
             "keyId": "device-key-a",
-            "value": "AQID",
+            "value": "A" * 86 + "==",
         },
     }
     validator = _validator("protection-lease.v1")
@@ -99,7 +99,7 @@ def test_protection_lease_requires_bounded_attestation_not_commands() -> None:
     assert list(validator.iter_errors(payload))
 
 
-@pytest.mark.parametrize("value", ["not base64!", "AQI", "AQ=ID", "===="])
+@pytest.mark.parametrize("value", ["not base64!", "AQI", "AQ=ID", "====", "A" * 88])
 def test_signed_evidence_rejects_malformed_base64_signatures(value: str) -> None:
     payload: dict[str, JsonValue] = {
         "schemaVersion": "protection-lease.v1",
@@ -145,7 +145,11 @@ def test_observer_and_remediation_authorities_are_separate_and_allowlisted() -> 
             "reasonCodes": ["observer_current_absent"],
         },
         "remediation": {"state": "none", "jobId": None},
-        "signature": {"algorithm": "ed25519", "keyId": "observer-key-a", "value": "AQID"},
+        "signature": {
+            "algorithm": "ed25519",
+            "keyId": "observer-key-a",
+            "value": "A" * 86 + "==",
+        },
     }
     _validator("observer-assertion.v1").validate(assertion)
     detection = assertion["detection"]
@@ -165,7 +169,11 @@ def test_observer_and_remediation_authorities_are_separate_and_allowlisted() -> 
         "issuedAt": "2026-07-18T22:00:00Z",
         "expiresAt": "2026-07-18T22:15:00Z",
         "attemptLimit": 3,
-        "signature": {"algorithm": "ed25519", "keyId": "cloud-remediation-a", "value": "AQID"},
+        "signature": {
+            "algorithm": "ed25519",
+            "keyId": "cloud-remediation-a",
+            "value": "A" * 86 + "==",
+        },
     }
     validator = _validator("remediation-job.v1")
     validator.validate(job)
