@@ -35,6 +35,8 @@ Every `signature` covers the UTF-8 RFC 8785 canonical JSON bytes of the complete
 
 Protection states are `healthy`, `degraded`, `late`, `offline`, `unknown`, `suspected_absent`, `tampered`, `unexpectedly_absent`, `removal_pending`, `removed_authorized`, `repairing`, `recovered`, `retired`, and `legacy_unattested`.
 
+`legacy_unattested` is a fail-closed classification, not a compatibility fallback: a client that cannot produce the frozen attestation contract never receives healthy, managed, or synthesized lease evidence.
+
 Evidence detection states are `present`, `absent`, `partial`, `unknown`, and `unsupported`. `absent` means complete absence on the observer's declared scope. `partial` means some required surface is missing, modified, disabled, downgraded, shadowed, or unhealthy. Neither state is inferred from lease silence.
 
 Stable reason codes are grouped by authority:
