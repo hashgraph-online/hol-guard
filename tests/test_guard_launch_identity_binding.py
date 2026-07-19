@@ -121,6 +121,14 @@ def test_heredoc_observation_is_deterministic(tmp_path: Path) -> None:
     assert first == second
 
 
+@pytest.mark.skipif(shutil.which("env") is None, reason="env wrapper is unavailable")
+def test_embedded_wrapper_observation_is_deterministic(tmp_path: Path) -> None:
+    command = f"{_ECHO} $(env {_ECHO} nested)"
+    first = _observe(tmp_path, command)
+    second = _observe(tmp_path, command)
+    assert first == second
+
+
 def test_direct_construction_cannot_omit_mandatory_uncertainty_or_requirements(tmp_path: Path) -> None:
     observation = _observe(tmp_path, f"{_ECHO} baseline")
     with pytest.raises(ValueError, match="launch and effect uncertainty"):

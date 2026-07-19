@@ -232,7 +232,12 @@ def observe_launch_identity_binding(
         for index, identity in enumerate(runtime_identities)
     ]
     segment_wrapper_order = tuple(
-        dict.fromkeys(wrapper for segment in command.segments for wrapper in segment.wrapper_chain)
+        dict.fromkeys(
+            wrapper
+            for segment in command.segments
+            if segment.execution_context.startswith("top:")
+            for wrapper in segment.wrapper_chain
+        )
     )
     normalization_wrapper_count = len(command.wrapper_chain) - len(segment_wrapper_order)
     normalization_wrappers = command.wrapper_chain[:normalization_wrapper_count]
