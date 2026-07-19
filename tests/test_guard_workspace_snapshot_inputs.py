@@ -91,6 +91,17 @@ def test_symlink_requires_review(tmp_path: Path) -> None:
         _ = complete_workspace_snapshot(workspace)
 
 
+def test_symlinked_package_bin_directory_requires_review(tmp_path: Path) -> None:
+    workspace = (tmp_path / "workspace").resolve()
+    _write(workspace / "src" / "example.ts")
+    package_bin = workspace / "node_modules" / ".bin"
+    package_bin.parent.mkdir(parents=True)
+    package_bin.symlink_to(workspace / "src", target_is_directory=True)
+
+    with pytest.raises(ValueError, match="cannot contain symlinks"):
+        _ = complete_workspace_snapshot(workspace)
+
+
 def test_excluded_state_presence_changes_snapshot_identity(tmp_path: Path) -> None:
     workspace = (tmp_path / "workspace").resolve()
     _write(workspace / "src" / "example.ts")

@@ -106,7 +106,11 @@ def build_local_node_runner_evidence(
     installed_name = _string_value(package_payload, "name")
     installed_version = _string_value(package_payload, "version")
     _require(declared_version is not None, "manifest_dependency_missing", reasons)
-    _require(not str(declared_version or "").lower().startswith(_SOURCE_PREFIXES), "manifest_source_drift", reasons)
+    _require(
+        declared_version is not None and not declared_version.lower().startswith(_SOURCE_PREFIXES),
+        "manifest_source_drift",
+        reasons,
+    )
     _require(locked_version is not None, "lock_dependency_missing", reasons)
     _require(lock_source_ok, "lock_source_drift", reasons)
     _require(installed_name == runner, "installed_package_name_mismatch", reasons)

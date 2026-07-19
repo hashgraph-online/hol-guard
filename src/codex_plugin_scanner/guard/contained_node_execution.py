@@ -32,6 +32,7 @@ from .runtime.effect_decision import (
     DecisionFactorSource,
     EffectDecision,
     EffectDecisionRequest,
+    FinalDisposition,
     PositiveProof,
     evaluate_effect_decision,
 )
@@ -138,7 +139,7 @@ def try_execute_contained_node_command(
     except ValueError:
         return None
     decision = _contained_decision(proof, operation_id=evidence.operation_id)
-    if decision.disposition.value != "silent-contained":
+    if decision.disposition is not FinalDisposition.SILENT_CONTAINED:
         return None
     return ContainedNodeResult(
         result.exit_code,
