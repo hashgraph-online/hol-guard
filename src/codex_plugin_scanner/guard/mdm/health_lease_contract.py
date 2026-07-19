@@ -41,6 +41,7 @@ _HEX_32 = re.compile(r"[0-9a-f]{32}\Z")
 _HEX_64 = re.compile(r"[0-9a-f]{64}\Z")
 _KEY_ID = re.compile(r"[A-Za-z0-9_-]{43}\Z")
 _TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
+_SNAPSHOT_TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\Z")
 _CLAIM_KEYS = {
     "schemaVersion",
     "workspaceId",
@@ -417,14 +418,16 @@ def _validate_snapshot_binding(snapshot: bytes, claims: HealthLeaseClaims) -> No
     generated_at = raw.get("generatedAt")
     if not isinstance(generated_at, str):
         raise ValueError("health_lease_outbox_invalid")
+    if _SNAPSHOT_TIMESTAMP.fullmatch(generated_at) is None:
+        raise ValueError("health_lease_outbox_invalid")
     try:
-        generated = datetime.fromisoformat(generated_at)
+        # Python 3.10 does not accept the RFC 3339 ``Z`` suffix directly.
+        generated = datetime.fromisoformat(f"{generated_at[:-1]}+00:00")
     except ValueError as exc:
         raise ValueError("health_lease_outbox_invalid") from exc
     reason_codes = raw.get("reasonCodes")
     if (
         generated.tzinfo is None
-        or not generated_at.endswith("Z")
         or len(generated_at.encode("utf-8")) > 64
         or raw.get("scope") != "machine"
         or not isinstance(raw.get("healthy"), bool)
