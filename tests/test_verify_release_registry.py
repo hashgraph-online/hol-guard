@@ -271,6 +271,31 @@ def test_computes_local_guard_wheel_and_sdist_hashes(tmp_path: Path) -> None:
     }
 
 
+def test_computes_local_hashes_while_ignoring_publish_attestations(
+    tmp_path: Path,
+) -> None:
+    dist = _local_dist(tmp_path)
+    (dist / f"{WHEEL}.publish.attestation").write_bytes(b"wheel-attestation")
+    (dist / f"{SDIST}.publish.attestation.publish.attestation").write_bytes(
+        b"nested-sdist-attestation"
+    )
+
+    assert compute_local_distribution_hashes(dist, VERSION) == {
+        SDIST: _sha(SDIST_BYTES),
+        WHEEL: _sha(WHEEL_BYTES),
+    }
+
+
+def test_local_hashes_reject_attestation_for_invalid_distribution(
+    tmp_path: Path,
+) -> None:
+    dist = _local_dist(tmp_path)
+    (dist / "not-a-distribution.publish.attestation").write_bytes(b"invalid")
+
+    with pytest.raises(RegistryVerificationError, match="Invalid distribution filename"):
+        compute_local_distribution_hashes(dist, VERSION)
+
+
 def test_verify_testpypi_accepts_absent_release(tmp_path: Path) -> None:
     dist = _local_dist(tmp_path)
     url = _release_url(Registry.TESTPYPI)

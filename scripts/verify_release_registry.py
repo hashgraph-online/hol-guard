@@ -272,6 +272,8 @@ def compute_local_distribution_hashes(
             continue
         if not path.is_file():
             continue
+        if _is_publish_attestation(path.name, version):
+            continue
         try:
             name, file_version = _distribution_identity(path.name)
         except RegistryVerificationError:
