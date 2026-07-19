@@ -5127,6 +5127,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         uptime = round(time.monotonic() - self.server.start_monotonic, 1)  # type: ignore[attr-defined]
         store = self.server.store  # type: ignore[attr-defined]
         pending_approvals = store.count_approval_requests()
+        activity_health = store.get_command_activity_persistence_health()
         return {
             "ok": True,
             "receipts": len(store.list_receipts(limit=500)),
@@ -5138,6 +5139,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
             "package_version": __version__,
             "guard_home": str(store.guard_home.resolve()),
+            "command_activity_evidence": {
+                "state": "degraded" if activity_health.persistence_error_count else "healthy",
+                "dropped_event_count": activity_health.dropped_event_count,
+                "persistence_error_count": activity_health.persistence_error_count,
+                "last_error_code": activity_health.last_error_code,
+                "last_error_at": (
+                    activity_health.last_error_at.isoformat() if activity_health.last_error_at is not None else None
+                ),
+                "schema_version": activity_health.schema_version,
+            },
         }
 
     @staticmethod

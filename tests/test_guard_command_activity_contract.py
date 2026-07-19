@@ -54,6 +54,8 @@ def _activity(
     uncertainty_class: UncertaintyKind | None = None,
     receipt_link_status: ReceiptLinkStatus = ReceiptLinkStatus.NOT_APPLICABLE,
     receipt_id: str | None = None,
+    prompted: bool = False,
+    approval_reuse_status: ActivityApprovalReuseStatus = ActivityApprovalReuseStatus.NOT_APPLICABLE,
     schema_version: str = COMMAND_ACTIVITY_SCHEMA_VERSION,
 ) -> CommandActivity:
     return CommandActivity(
@@ -69,8 +71,8 @@ def _activity(
         parse_confidence=parse_confidence,
         uncertainty_class=uncertainty_class,
         match_count=match_count,
-        prompted=False,
-        approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
+        prompted=prompted,
+        approval_reuse_status=approval_reuse_status,
         request_correlation=request_correlation,
         session_correlation=session_correlation,
         receipt_link_status=receipt_link_status,
@@ -250,6 +252,14 @@ def test_review_or_stronger_activity_requires_exact_receipt_link() -> None:
     assert reviewed.receipt_id == "receipt:01"
     with pytest.raises(ValueError, match="requires receipt_id"):
         replace(reviewed, receipt_id=None)
+
+
+def test_accepted_approval_reuse_cannot_claim_a_prompt() -> None:
+    with pytest.raises(ValueError, match="accepted approval reuse cannot claim a prompt"):
+        _activity(
+            prompted=True,
+            approval_reuse_status=ActivityApprovalReuseStatus.ACCEPTED,
+        )
 
 
 def test_non_exact_parse_requires_bounded_uncertainty() -> None:
