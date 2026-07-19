@@ -88,8 +88,15 @@ def test_rejects_replay_with_changed_payload_and_bad_signature() -> None:
     harness.evaluate(assertion(), mapping_candidates=1, now=NOW, public_key=PUBLIC_KEY)
     with pytest.raises(AdapterConformanceError) as replay:
         harness.evaluate(
-            assertion(detection={"state": "absent", "endpointOnline": True, "version": None,
-                                 "packageIdentity": None, "reasonCodes": ["observer_current_absent"]}),
+            assertion(
+                detection={
+                    "state": "absent",
+                    "endpointOnline": True,
+                    "version": None,
+                    "packageIdentity": None,
+                    "reasonCodes": ["observer_current_absent"],
+                }
+            ),
             mapping_candidates=1,
             now=NOW,
             public_key=PUBLIC_KEY,
@@ -125,8 +132,15 @@ def test_enforces_clock_skew_expiry_and_partial_evidence() -> None:
 
     with pytest.raises(AdapterConformanceError) as partial:
         ObserverAdapterConformanceHarness().evaluate(
-            assertion(detection={"state": "partial", "endpointOnline": True, "version": None,
-                                 "packageIdentity": None, "reasonCodes": []}),
+            assertion(
+                detection={
+                    "state": "partial",
+                    "endpointOnline": True,
+                    "version": None,
+                    "packageIdentity": None,
+                    "reasonCodes": [],
+                }
+            ),
             mapping_candidates=1,
             now=NOW,
             public_key=PUBLIC_KEY,
@@ -160,9 +174,7 @@ def test_remediation_is_signed_allowlisted_bounded_and_replay_safe() -> None:
     assert harness.evaluate(payload, now=NOW, public_key=PUBLIC_KEY).outcome == "duplicate"
 
     with pytest.raises(AdapterConformanceError) as action:
-        RemediationAdapterConformanceHarness().evaluate(
-            remediation(action="shell"), now=NOW, public_key=PUBLIC_KEY
-        )
+        RemediationAdapterConformanceHarness().evaluate(remediation(action="shell"), now=NOW, public_key=PUBLIC_KEY)
     assert reason(action) == "adapter_remediation_action_denied"
 
     with pytest.raises(AdapterConformanceError) as replay:

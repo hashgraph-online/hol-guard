@@ -18,9 +18,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 MAX_ASSERTION_BYTES = 16_384
 MAX_CLOCK_SKEW_SECONDS = 60
 MAX_ASSERTION_LIFETIME_SECONDS = 900
-ALLOWED_REMEDIATION_ACTIONS = frozenset(
-    {"install", "repair", "policy-refresh", "service-register", "version-converge"}
-)
+ALLOWED_REMEDIATION_ACTIONS = frozenset({"install", "repair", "policy-refresh", "service-register", "version-converge"})
 ALLOWED_OBSERVER_REASONS = frozenset(
     {
         "observer_current_present",
@@ -102,9 +100,7 @@ def _strict_json(payload: bytes, *, maximum: int, reason: str) -> dict[str, obje
     return _object(value, reason)
 
 
-def _verify_signature(
-    envelope: Mapping[str, object], public_key: Ed25519PublicKey, *, reason: str
-) -> None:
+def _verify_signature(envelope: Mapping[str, object], public_key: Ed25519PublicKey, *, reason: str) -> None:
     signature = _object(envelope.get("signature"), reason)
     _exact_keys(signature, {"algorithm", "keyId", "value"}, reason)
     _safe_id(signature.get("keyId"), reason)
@@ -243,9 +239,7 @@ class RemediationAdapterConformanceHarness:
 
     accepted: dict[tuple[str, str], str] = field(default_factory=dict)
 
-    def evaluate(
-        self, payload: bytes, *, now: datetime, public_key: Ed25519PublicKey
-    ) -> RemediationConformanceResult:
+    def evaluate(self, payload: bytes, *, now: datetime, public_key: Ed25519PublicKey) -> RemediationConformanceResult:
         if now.tzinfo is None:
             raise _error("adapter_clock_invalid")
         envelope = _strict_json(payload, maximum=MAX_ASSERTION_BYTES, reason="adapter_remediation_invalid")
@@ -292,9 +286,7 @@ class RemediationAdapterConformanceHarness:
         if issued_at + timedelta(seconds=duration) <= current:
             raise _error("adapter_remediation_expired")
         target = envelope.get("targetVersion")
-        if action in {"install", "version-converge"} and (
-            not isinstance(target, str) or not 1 <= len(target) <= 128
-        ):
+        if action in {"install", "version-converge"} and (not isinstance(target, str) or not 1 <= len(target) <= 128):
             raise _error("adapter_remediation_invalid")
         if target is not None and (not isinstance(target, str) or len(target) > 128):
             raise _error("adapter_remediation_invalid")
