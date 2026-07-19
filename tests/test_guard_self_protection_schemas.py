@@ -74,6 +74,12 @@ def test_protection_lease_requires_bounded_attestation_not_commands() -> None:
     validator = _validator("protection-lease.v1")
     validator.validate(payload)
 
+    claims = payload["claims"]
+    assert isinstance(claims, dict)
+    claims["issuedAt"] = "not-a-dateZ"
+    assert list(validator.iter_errors(payload))
+    claims["issuedAt"] = "2026-07-18T22:00:00Z"
+
     payload["command"] = "arbitrary remote command"
     assert list(validator.iter_errors(payload))
 

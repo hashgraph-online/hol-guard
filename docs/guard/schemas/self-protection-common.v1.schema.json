@@ -6,7 +6,7 @@
     "safeId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
     "hex32": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
     "hex64": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "timestamp": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?Z$"},
     "boundedReason": {"type": "string", "minLength": 1, "maxLength": 512},
     "assuranceLevel": {"enum": ["user-managed", "mdm-managed-unverified", "mdm-managed"]},
     "keyProtectionLevel": {"enum": ["hardware-backed", "os-protected", "file-backed", "unavailable", "unknown"]},
