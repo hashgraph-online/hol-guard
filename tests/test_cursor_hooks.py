@@ -258,6 +258,64 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
     assert json.loads(proc.stdout) == {"permission": "allow"}
 
 
+@pytest.mark.parametrize(
+    ("guard_payload", "guard_exit_code"),
+    [
+        ({"error": "evaluation failed"}, 1),
+        ({"policy_action": "future-action"}, 0),
+        ({"recorded": False}, 0),
+    ],
+)
+def test_generated_cursor_hook_fails_closed_for_missing_or_unknown_guard_action(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    guard_payload: dict[str, object],
+    guard_exit_code: int,
+) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace_dir = tmp_path / "workspace"
+    guard_home.mkdir()
+    workspace_dir.mkdir()
+    fake_guard = tmp_path / "fake-guard.py"
+    fake_guard.write_text(
+        "import json\n"
+        f"print(json.dumps({guard_payload!r}))\n"
+        f"raise SystemExit({guard_exit_code})\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+        lambda: [sys.executable, str(fake_guard)],
+    )
+    context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
+    script_path = tmp_path / "cursor-hook.py"
+    script_path.write_text(cursor_hook_script_source(context), encoding="utf-8")
+
+    proc = subprocess.run(
+        [sys.executable, str(script_path)],
+        input=json.dumps(
+            {
+                "hook_event_name": "beforeShellExecution",
+                "tool_name": "Bash",
+                "command": "echo hi",
+                "cwd": str(workspace_dir),
+            }
+        ),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "CURSOR_PROJECT_DIR": str(workspace_dir)},
+        timeout=10,
+    )
+
+    assert proc.returncode == 2
+    response = json.loads(proc.stdout)
+    assert response["permission"] == "deny"
+    assert "failed closed" in response["user_message"]
+
+
 def test_cursor_resolve_guard_cli_command_prefers_plugin_guard(monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import _resolve_guard_cli_command
 
@@ -388,14 +446,32 @@ def test_cursor_hook_response_from_guard_allows_shell() -> None:
     assert response["permission"] == "allow"
 
 
-def test_cursor_hook_would_prompt_user_for_warn_with_risk() -> None:
+@pytest.mark.parametrize("policy_action", ["", "future-action", "ALLOW"])
+def test_cursor_hook_response_from_guard_fails_closed_for_unknown_action(policy_action: str) -> None:
+    response = cursor_hook_response_from_guard(
+        policy_action=policy_action,
+        guard_payload={"risk_summary": "Malformed Guard response."},
+        hook_event_name="beforeShellExecution",
+    )
+    assert response["permission"] == "deny"
+
+
+def test_cursor_hook_warn_with_risk_remains_allowed_without_a_prompt() -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_would_prompt_user
 
-    assert cursor_hook_would_prompt_user(
+    payload = {"risk_signals": ["destructive shell command"]}
+    assert not cursor_hook_would_prompt_user(
         policy_action="warn",
-        guard_payload={"risk_signals": ["destructive shell command"]},
+        guard_payload=payload,
     )
+    response = cursor_hook_response_from_guard(
+        policy_action="warn",
+        guard_payload=payload,
+        hook_event_name="beforeShellExecution",
+    )
+    assert response == {"permission": "allow"}
     assert not cursor_hook_would_prompt_user(policy_action="allow", guard_payload={})
+    assert cursor_hook_would_prompt_user(policy_action="review", guard_payload={})
     assert cursor_hook_would_prompt_user(policy_action="require-reapproval", guard_payload={})
 
 

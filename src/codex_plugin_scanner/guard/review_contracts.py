@@ -8,6 +8,7 @@ import json
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
@@ -33,6 +34,8 @@ _DECISION_MEMORY_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _CLAIM_HASH_KEYS = ("claimHash",)
 _SIGNED_PAYLOAD_STRIP_KEYS = ("payloadHash", "signature", "signatureAlgorithm", "verificationKeys", "bundleHash")
 _GUARD_REVIEW_VERIFICATION_KEYRING_SYNC_KEY = "guard_review_verification_keyring"
+
+RemoteApprovalDecision = Literal["allow", "block"]
 
 
 class GuardReviewContractError(ValueError):
@@ -363,6 +366,20 @@ def payload_hash_for_remote_approval_envelope(envelope: dict[str, object]) -> st
     return _sha256_hex(_canonical_signed_payload(envelope))
 
 
+def normalize_remote_approval_decision(value: object) -> RemoteApprovalDecision | None:
+    """Normalize only the documented signed remote decision wire values."""
+
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip()
+    folded = normalized.replace("_", "-")
+    if folded in {"allow", "allow-once"} or normalized == "allowOnce":
+        return "allow"
+    if folded in {"block", "deny", "denied", "blocked"}:
+        return "block"
+    return None
+
+
 def validated_remote_approval_envelope(
     envelope: dict[str, object],
     *,
@@ -373,6 +390,8 @@ def validated_remote_approval_envelope(
         raise GuardReviewContractError("unsupported_remote_approval_contract")
     if envelope.get("scope") not in _REMOTE_APPROVAL_ALLOWED_SCOPES:
         raise GuardReviewContractError("invalid_remote_approval_scope")
+    if normalize_remote_approval_decision(envelope.get("decision")) is None:
+        raise GuardReviewContractError("invalid_remote_approval_decision")
     issued_at = _parse_iso_timestamp(envelope.get("issuedAt"), field_name="issued_at")
     expires_at = _parse_iso_timestamp(envelope.get("expiresAt"), field_name="expires_at")
     if expires_at <= issued_at:

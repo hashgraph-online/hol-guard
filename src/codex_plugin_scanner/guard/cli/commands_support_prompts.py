@@ -473,6 +473,9 @@ def _emit_copilot_hook_response(
     scanner_evidence: tuple[dict[str, object], ...] = (),
     output_stream: TextIO | None = None,
 ) -> None:
+    # Copilot's command-hook contract only accepts its native transport
+    # fields. The exact Guard action is persisted in Guard receipts/events;
+    # this payload intentionally carries only Copilot's binary disposition.
     payload: dict[str, object] = {"permissionDecision": _copilot_hook_permission_decision(policy_action)}
     if payload["permissionDecision"] != "allow":
         payload["permissionDecisionReason"] = reason

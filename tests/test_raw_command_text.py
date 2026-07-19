@@ -5,6 +5,8 @@ from __future__ import annotations
 import json as _json
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.approvals import (
     queue_blocked_approvals,
 )
@@ -336,6 +338,7 @@ class TestRawCommandTextPropagation:
         """PreToolUse shell command blocks store command in action_envelope_json,
         not in artifact metadata. The extraction should parse it as final fallback."""
         import json as _json
+
         store = GuardStore(tmp_path / "guard-home")
         artifact = GuardArtifact(
             artifact_id="pi:project:pretool:test",
@@ -368,33 +371,35 @@ class TestRawCommandTextPropagation:
         """When artifact is None (not in inventory), command should still be
         extracted from action_envelope_json. This is the common case for
         tool_action_request artifacts."""
-        store = GuardStore(tmp_path / 'guard-home')
+        store = GuardStore(tmp_path / "guard-home")
         detection = HarnessDetection(
-            harness='pi',
+            harness="pi",
             installed=True,
             command_available=True,
-            config_paths=(str(tmp_path / 'config.toml'),),
+            config_paths=(str(tmp_path / "config.toml"),),
             artifacts=(),  # No artifacts registered
         )
-        envelope = _json.dumps({
-            'action_type': 'shell_command',
-            'command': 'rm -rf /important-dir',
-            'tool_name': 'bash',
-        })
+        envelope = _json.dumps(
+            {
+                "action_type": "shell_command",
+                "command": "rm -rf /important-dir",
+                "tool_name": "bash",
+            }
+        )
         evaluation = {
-            'artifacts': [
+            "artifacts": [
                 {
-                    'artifact_id': 'pi:project:tool-action:abc',
-                    'artifact_name': 'bash rm-rf command',
-                    'artifact_hash': 'hash-1',
-                    'artifact_type': 'tool_action_request',
-                    'policy_action': 'require-reapproval',
-                    'changed_fields': ['command'],
-                    'source_scope': 'project',
-                    'config_path': str(tmp_path / 'config.toml'),
-                    'risk_summary': 'Blocked command',
-                    'risk_signals': ['blocked'],
-                    'action_envelope_json': envelope,
+                    "artifact_id": "pi:project:tool-action:abc",
+                    "artifact_name": "bash rm-rf command",
+                    "artifact_hash": "hash-1",
+                    "artifact_type": "tool_action_request",
+                    "policy_action": "require-reapproval",
+                    "changed_fields": ["command"],
+                    "source_scope": "project",
+                    "config_path": str(tmp_path / "config.toml"),
+                    "risk_summary": "Blocked command",
+                    "risk_signals": ["blocked"],
+                    "action_envelope_json": envelope,
                 }
             ]
         }
@@ -402,41 +407,75 @@ class TestRawCommandTextPropagation:
             detection=detection,
             evaluation=evaluation,
             store=store,
-            approval_center_url='http://127.0.0.1/pending',
-            redaction_level='none',
+            approval_center_url="http://127.0.0.1/pending",
+            redaction_level="none",
         )
         assert len(queued) == 1
-        raw = queued[0]['raw_command_text']
+        raw = queued[0]["raw_command_text"]
         assert raw is not None
-        assert 'rm -rf /important-dir' in raw
+        assert "rm -rf /important-dir" in raw
 
     def test_raw_command_text_falls_back_to_action_envelope_dict(self, tmp_path):
         """The runner stores action_envelope_json as a dict (from to_dict()),
         not a JSON string. The extraction must handle both str and dict types."""
-        store = GuardStore(tmp_path / 'guard-home')
+        store = GuardStore(tmp_path / "guard-home")
         artifact = GuardArtifact(
-            artifact_id='pi:project:pretool:test',
-            name='bash docker-sensitive command',
-            harness='pi',
-            artifact_type='tool_action_request',
-            source_scope='project',
-            config_path=str(tmp_path / 'config.toml'),
+            artifact_id="pi:project:pretool:test",
+            name="bash docker-sensitive command",
+            harness="pi",
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
             command=None,
             metadata={},
         )
         detection = _make_detection(artifact, tmp_path)
-        envelope = {'action_type': 'shell_command', 'command': 'docker run --rm alpine cat /etc/passwd'}
-        evaluation = _make_evaluation('pi:project:pretool:test', tmp_path)
-        evaluation['artifacts'][0]['action_envelope_json'] = envelope
+        envelope = {"action_type": "shell_command", "command": "docker run --rm alpine cat /etc/passwd"}
+        evaluation = _make_evaluation("pi:project:pretool:test", tmp_path)
+        evaluation["artifacts"][0]["action_envelope_json"] = envelope
         queued = queue_blocked_approvals(
             detection=detection,
             evaluation=evaluation,
             store=store,
-            approval_center_url='http://127.0.0.1/pending',
-            redaction_level='none',
+            approval_center_url="http://127.0.0.1/pending",
+            redaction_level="none",
         )
         assert len(queued) == 1
-        raw = queued[0]['raw_command_text']
+        raw = queued[0]["raw_command_text"]
         assert raw is not None
-        assert 'docker run' in raw
-        assert 'alpine' in raw
+        assert "docker run" in raw
+        assert "alpine" in raw
+
+    @pytest.mark.parametrize(
+        "action_envelope_json",
+        ("{not-json", _json.dumps(["not-an-object"])),
+    )
+    def test_raw_command_text_rejects_malformed_or_non_object_action_envelope(
+        self,
+        tmp_path,
+        action_envelope_json,
+    ):
+        store = GuardStore(tmp_path / "guard-home")
+        artifact = GuardArtifact(
+            artifact_id="pi:project:pretool:malformed",
+            name="bash malformed action envelope",
+            harness="pi",
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            command=None,
+            metadata={},
+        )
+        evaluation = _make_evaluation(artifact.artifact_id, tmp_path)
+        evaluation["artifacts"][0]["action_envelope_json"] = action_envelope_json
+
+        with pytest.raises(ValueError, match="authoritative_decision_inconsistent"):
+            queue_blocked_approvals(
+                detection=_make_detection(artifact, tmp_path),
+                evaluation=evaluation,
+                store=store,
+                approval_center_url="http://127.0.0.1/pending",
+                redaction_level="none",
+            )
+
+        assert store.list_approval_requests(limit=10) == []

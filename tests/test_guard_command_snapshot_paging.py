@@ -191,7 +191,7 @@ def test_local_request_snapshot_includes_newest_pending_after_truncation(tmp_pat
         "harness": "codex",
         "artifact_id": "artifact-new",
         "artifact_hash": "a" * 64,
-        "policy_action": "require-approval",
+        "policy_action": "require-reapproval",
         "recommended_scope": "artifact",
         "created_at": now_iso,
         "last_seen_at": now_iso,

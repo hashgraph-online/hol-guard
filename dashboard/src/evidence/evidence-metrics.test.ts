@@ -37,7 +37,7 @@ const receipts = [
   makeReceipt("r2", { harness: "codex", policy_decision: "block", timestamp: "2024-06-15T09:00:00.000Z" }),
   makeReceipt("r3", { harness: "claude", policy_decision: "allow", timestamp: "2024-06-14T10:00:00.000Z" }),
   makeReceipt("r4", { harness: "claude", policy_decision: "block", timestamp: "2024-06-13T00:00:00.000Z" }),
-  makeReceipt("r5", { harness: "cursor", policy_decision: "ask", timestamp: "2024-06-12T00:00:00.000Z" }),
+  makeReceipt("r5", { harness: "cursor", policy_decision: "review", timestamp: "2024-06-12T00:00:00.000Z" }),
   makeReceipt("r6", { harness: "codex", policy_decision: "allow", artifact_name: "Tool r1", timestamp: "2024-06-11T00:00:00.000Z" }),
 ];
 
@@ -46,7 +46,7 @@ const metrics = computeMetrics(receipts, NOW);
 assert(metrics.total === 6, "total: 6 receipts");
 assert(metrics.allowed === 3, "allowed: 3");
 assert(metrics.blocked === 2, "blocked: 2");
-assert(metrics.reviewed === 1, "reviewed: 1 (ask)");
+assert(metrics.reviewed === 1, "reviewed: 1 (review)");
 
 // byHarness
 assert(metrics.byHarness.has("codex"), "byHarness: codex present");
