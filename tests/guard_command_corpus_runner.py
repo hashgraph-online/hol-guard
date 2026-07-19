@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TypedDict, cast
 
 EVALUATION_SHARD_COUNT = 4
-MAX_CONCURRENT_WORKERS = 1
+MAX_CONCURRENT_WORKERS = 2
 WORKER_TIMEOUT_SECONDS = 15
 REPO_ROOT = Path(__file__).parents[1]
 SYNTHETIC_CWD = REPO_ROOT / "workspace"
@@ -50,10 +50,27 @@ def peak_rss_mib() -> float:
         )
         return int(completed.stdout.strip()) / (1024 * 1024)
 
+    if sys.platform.startswith("linux"):
+        try:
+            return linux_peak_rss_mib_from_status(Path("/proc/self/status").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+
     import resource
 
     rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return rss / (1024 * 1024 if sys.platform == "darwin" else 1024)
+
+
+def linux_peak_rss_mib_from_status(status: str) -> float:
+    for line in status.splitlines():
+        if not line.startswith("VmHWM:"):
+            continue
+        fields = line.split()
+        if len(fields) == 3 and fields[0] == "VmHWM:" and fields[2] == "kB":
+            return int(fields[1]) / 1024
+        break
+    raise ValueError("missing Linux VmHWM")
 
 
 def _install_evaluator_packages() -> None:

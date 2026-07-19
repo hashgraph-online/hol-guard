@@ -42,7 +42,7 @@ from tests.guard_command_corpus_oracle import (
     iter_adversarial_oracle,
     iter_benign_oracle,
 )
-from tests.guard_command_corpus_runner import peak_rss_mib
+from tests.guard_command_corpus_runner import linux_peak_rss_mib_from_status, peak_rss_mib
 
 _OPAQUE_ID = re.compile(r"c-[0-9a-f]{24}")
 _OWNERS = {f"CDX-06{index}" for index in range(7)}
@@ -342,6 +342,11 @@ def test_windows_peak_rss_uses_process_working_set(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     assert peak_rss_mib() == 128.0
+
+
+def test_linux_peak_rss_uses_fresh_process_high_water_mark() -> None:
+    status = "Name:\tpython\nVmPeak:\t1048576 kB\nVmHWM:\t131072 kB\n"
+    assert linux_peak_rss_mib_from_status(status) == 128.0
 
 
 def test_canonical_digests_are_stable_across_process_roots_hash_seed_timezone_and_locale(tmp_path: Path) -> None:
