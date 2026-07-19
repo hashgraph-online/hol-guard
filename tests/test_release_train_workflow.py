@@ -233,6 +233,8 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         assert 'uv tool run --from "$wheel"' in verify_step["run"]
         assert 'status" == "exact"' in verify_step["run"]
         assert 'status" != "absent"' in verify_step["run"]
+        assert "for attempt in {1..60}" in verify_step["run"]
+        assert 'attempt" == "60"' in verify_step["run"]
         assert '== "hol-guard $VERSION"' in verify_step["run"]
 
     main_revalidation = next(
@@ -243,8 +245,9 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
     assert "uv run --no-sync" not in main_revalidation
     assert "list-versions --registry pypi" in main_revalidation
     assert "list-versions --registry testpypi" in main_revalidation
-    assert "'$pypi + $testpypi | unique'" in main_revalidation
-    assert '<<< "$PRIOR_RELEASE_VERSIONS"' in main_revalidation
+    assert "'$pypi + $testpypi + [$version] | unique'" in main_revalidation
+    assert '<<< "$RELEASE_VERSIONS"' in main_revalidation
+    assert '[[ "$LATEST_RELEASE_VERSION" != "$VERSION" ]]' in main_revalidation
     assert "--latest-existing" in main_revalidation
     assert '<<< "$PRIOR_PYPI_VERSIONS"' in main_revalidation
     assert "refs/tags/v${LATEST_VERSION}" in main_revalidation
@@ -277,6 +280,8 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         assert "--download-dir verified-pypi" in verify_step["run"]
         assert 'status" == "exact"' in verify_step["run"]
         assert 'status" != "absent"' in verify_step["run"]
+        assert "for attempt in {1..60}" in verify_step["run"]
+        assert 'attempt" == "60"' in verify_step["run"]
         assert '== "hol-guard $VERSION"' in verify_step["run"]
 
 

@@ -435,7 +435,7 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          for attempt in {1..12}; do
+          for attempt in {1..60}; do
             if ! result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
               verify-release --registry testpypi --version "$VERSION" --dist-dir dist \
               --download-dir verified-testpypi); then
@@ -445,7 +445,7 @@ jobs:
             if [[ "$status" == "exact" ]]; then
               break
             fi
-            if [[ "$status" != "absent" || "$attempt" == "12" ]]; then
+            if [[ "$status" != "absent" || "$attempt" == "60" ]]; then
               echo "TestPyPI did not expose the exact release artifacts" >&2
               exit 1
             fi
@@ -552,7 +552,7 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          for attempt in {1..12}; do
+          for attempt in {1..60}; do
             if ! result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
               verify-release --registry pypi --version "$VERSION" --dist-dir dist \
               --download-dir verified-pypi); then
@@ -562,7 +562,7 @@ jobs:
             if [[ "$status" == "exact" ]]; then
               break
             fi
-            if [[ "$status" != "absent" || "$attempt" == "12" ]]; then
+            if [[ "$status" != "absent" || "$attempt" == "60" ]]; then
               echo "PyPI did not expose the exact release artifacts" >&2
               exit 1
             fi
@@ -639,7 +639,7 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          for attempt in {1..12}; do
+          for attempt in {1..60}; do
             if ! result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
               verify-release --registry testpypi --version "$VERSION" --dist-dir dist \
               --download-dir verified-testpypi); then
@@ -649,7 +649,7 @@ jobs:
             if [[ "$status" == "exact" ]]; then
               break
             fi
-            if [[ "$status" != "absent" || "$attempt" == "12" ]]; then
+            if [[ "$status" != "absent" || "$attempt" == "60" ]]; then
               echo "TestPyPI did not expose the exact release artifacts" >&2
               exit 1
             fi
@@ -708,15 +708,14 @@ jobs:
           TESTPYPI_VERSIONS=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
             list-versions --registry testpypi)
           RELEASE_VERSIONS=$(jq -n \
+            --arg version "$VERSION" \
             --argjson pypi "$PYPI_VERSIONS" \
             --argjson testpypi "$TESTPYPI_VERSIONS" \
-            '$pypi + $testpypi | unique')
-          PRIOR_RELEASE_VERSIONS=$(jq --arg version "$VERSION" \
-            '[.[] | select(. != $version)]' <<< "$RELEASE_VERSIONS")
-          EXPECTED_VERSION=$(uv run --with packaging==25.0 python scripts/compute_main_release_version.py \
-            --base-version "$BASE_VERSION" <<< "$PRIOR_RELEASE_VERSIONS")
-          if [[ "$EXPECTED_VERSION" != "$VERSION" ]]; then
-            echo "Main release version changed before publication" >&2
+            '$pypi + $testpypi + [$version] | unique')
+          LATEST_RELEASE_VERSION=$(uv run --with packaging==25.0 python scripts/compute_main_release_version.py \
+            --base-version "$BASE_VERSION" --latest-existing <<< "$RELEASE_VERSIONS")
+          if [[ "$LATEST_RELEASE_VERSION" != "$VERSION" ]]; then
+            echo "A newer main release candidate exists before publication" >&2
             exit 1
           fi
           PRIOR_PYPI_VERSIONS=$(jq --arg version "$VERSION" \
@@ -754,7 +753,7 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          for attempt in {1..12}; do
+          for attempt in {1..60}; do
             if ! result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
               verify-release --registry pypi --version "$VERSION" --dist-dir dist \
               --download-dir verified-pypi); then
@@ -764,7 +763,7 @@ jobs:
             if [[ "$status" == "exact" ]]; then
               break
             fi
-            if [[ "$status" != "absent" || "$attempt" == "12" ]]; then
+            if [[ "$status" != "absent" || "$attempt" == "60" ]]; then
               echo "PyPI did not expose the exact release artifacts" >&2
               exit 1
             fi
