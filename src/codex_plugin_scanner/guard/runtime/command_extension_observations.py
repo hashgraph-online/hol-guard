@@ -74,7 +74,7 @@ class CommandExtensionObservation(Generic[_ExtensionT]):
             "extension_version": self.extension.version,
             "rule_id": self.rule.rule_id,
             "rule_version": self.rule.rule_version,
-            "match_class": "unsafe" if self.matcher_evidence else "uncertainty",
+            "match_class": "uncertainty" if self.uncertainty_reasons else "unsafe",
             "match_classes": match_classes,
             "matcher_evidence": [item.to_dict() for item in self.matcher_evidence],
             "safe_variants": [item.to_dict() for item in self.safe_variants],

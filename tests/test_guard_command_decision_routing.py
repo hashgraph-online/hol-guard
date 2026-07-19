@@ -387,7 +387,7 @@ def test_failed_safe_matcher_remains_uncertain_when_safe_evidence_is_partial() -
     assert evaluation.extension_observations[0].uncertainty_reasons == (UncertaintyKind.MATCHER_FAILURE,)
     assert evaluation.minimum_action == "block"
     payload = evaluation.extension_observations[0].to_dict()
-    assert payload["match_class"] == "unsafe"
+    assert payload["match_class"] == "uncertainty"
     assert payload["match_classes"] == ["unsafe", "uncertainty"]
 
 
