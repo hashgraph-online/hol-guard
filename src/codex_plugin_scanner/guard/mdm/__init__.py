@@ -12,6 +12,12 @@ from .contracts import (
 )
 from .integrity import machine_integrity_snapshot
 from .manifest import verify_release_manifest
+from .observer_conformance import (
+    observer_conformance_cases,
+    observer_conformance_public_key_base64,
+    run_observer_adapter_conformance,
+    sign_observer_assertion,
+)
 from .policy import apply_managed_policy, load_managed_policy
 from .supervisor import install_machine_supervisor, remove_machine_supervisor, verify_machine_supervisor
 
@@ -28,7 +34,11 @@ __all__ = [
     "install_machine_supervisor",
     "load_managed_policy",
     "machine_integrity_snapshot",
+    "observer_conformance_cases",
+    "observer_conformance_public_key_base64",
     "remove_machine_supervisor",
+    "run_observer_adapter_conformance",
+    "sign_observer_assertion",
     "verify_machine_supervisor",
     "verify_release_manifest",
 ]
