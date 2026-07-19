@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -3119,6 +3120,94 @@ def test_explicitly_benign_tool_action_request_requires_all_command_variants_to_
             "command": "python3 - <<'PY'\nprint('rows')\nPY",
             "argv": ["rm", "-rf", "dangerous-marker.json"],
         },
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git status --short",
+        "git status --porcelain=v2 --branch",
+        "cd src && git status -sb",
+        "rg -n 'GuardStore' src tests | sed -n '1,40p'",
+        "grep -n 'default_action' README.md",
+    ),
+)
+def test_explicitly_benign_tool_action_request_allows_verified_observers(command: str):
+    assert is_explicitly_benign_tool_action_request("bash", {"command": command})
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git -c core.fsmonitor='rm -rf ./build' status --short",
+        "PATH=/tmp/evil:$PATH git status --short",
+        ("GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=/tmp/payload git status --short"),
+        "/tmp/evil/git status --short",
+        "cd src >marker && git status --short",
+        "git status --short && rm -rf ./build",
+        "git status --short $(rm -rf ./build)",
+        "git diff --output=/tmp/diff",
+        "rg GuardStore src | tee /tmp/results",
+        "rg --pre /tmp/payload GuardStore src",
+        "rg --pre=/tmp/payload GuardStore src",
+        "rg --hostname-bin=/tmp/payload GuardStore src",
+        "rg --config-path=/tmp/rg.conf GuardStore src",
+    ),
+)
+def test_explicitly_benign_tool_action_request_rejects_unverified_observers(command: str):
+    assert not is_explicitly_benign_tool_action_request("bash", {"command": command})
+
+
+def test_explicitly_benign_git_status_rejects_repository_fsmonitor(tmp_path: Path):
+    subprocess.run(
+        ["git", "init", "--quiet", str(tmp_path)],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "core.fsmonitor", "/tmp/payload"],
+        check=True,
+        capture_output=True,
+    )
+
+    assert not is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": "git status --short"},
+        cwd=tmp_path,
+    )
+
+
+def test_explicitly_benign_git_status_checks_effective_cd_repository(tmp_path: Path):
+    nested = tmp_path / "nested"
+    subprocess.run(
+        ["git", "init", "--quiet", str(nested)],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(nested), "config", "core.fsmonitor", "/tmp/payload"],
+        check=True,
+        capture_output=True,
+    )
+
+    assert not is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": "cd nested && git status --short"},
+        cwd=tmp_path,
+    )
+
+
+def test_explicitly_benign_git_status_rejects_global_fsmonitor(tmp_path: Path, monkeypatch):
+    global_config = tmp_path / "global.gitconfig"
+    global_config.write_text("[core]\n\tfsmonitor = /tmp/payload\n", encoding="utf-8")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+    assert not is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": "git status --short"},
+        cwd=tmp_path,
     )
 
 

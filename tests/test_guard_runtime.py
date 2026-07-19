@@ -14768,6 +14768,134 @@ def test_guard_hook_codex_emits_no_native_output_for_safe_requests(tmp_path, cap
     assert pending == []
 
 
+def test_guard_hook_codex_strict_default_allows_verified_benign_git_status(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", 'default_action = "require-reapproval"\n')
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status --short"},
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    output = capsys.readouterr().out
+    store = GuardStore(home_dir)
+
+    assert rc == 0
+    assert output == ""
+    assert store.list_approval_requests(limit=10) == []
+    assert store.list_receipts(limit=1) == []
+
+
+@pytest.mark.parametrize("explicit_action", ("block", "require-reapproval"))
+def test_guard_hook_codex_verified_benign_does_not_override_explicit_policy(
+    explicit_action,
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(
+        home_dir / "config.toml",
+        (
+            'default_action = "require-reapproval"\n'
+            "approval_wait_timeout_seconds = 0\n"
+            f'[artifacts."codex:project:Bash"]\naction = "{explicit_action}"\n'
+        ),
+    )
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status --short"},
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_guard_hook_codex_strict_default_still_denies_destructive_shell_command(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(
+        home_dir / "config.toml",
+        'default_action = "require-reapproval"\napproval_wait_timeout_seconds = 0\n',
+    )
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status --short && rm -rf ./build"},
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "destructive shell command" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
 def test_guard_hook_codex_emits_no_native_output_for_safe_github_node_review_thread_command(
     tmp_path,
     capsys,

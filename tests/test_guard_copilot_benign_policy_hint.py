@@ -282,12 +282,13 @@ def test_copilot_payload_allow_cannot_lower_stronger_current_policy(tmp_path: Pa
 
 
 @pytest.mark.parametrize(
-    ("current_action", "expected_permission"),
-    (("review", "deny"), ("block", "deny")),
+    ("current_action", "expected_action", "expected_permission"),
+    (("review", "warn", "allow"), ("block", "block", "deny")),
 )
-def test_untrusted_permissive_daemon_hint_never_lowers_current_policy(
+def test_untrusted_permissive_daemon_hint_never_lowers_effective_policy(
     tmp_path: Path,
     current_action: GuardAction,
+    expected_action: GuardAction,
     expected_permission: str,
 ) -> None:
     workspace = tmp_path / "workspace"
@@ -308,13 +309,14 @@ def test_untrusted_permissive_daemon_hint_never_lowers_current_policy(
 
     assert rc == 0
     assert response["permissionDecision"] == expected_permission
-    assert receipt["policy_decision"] == current_action
+    assert receipt["policy_decision"] == expected_action
     composition = _receipt_evidence(receipt, "policy_composition")
     assert composition["daemon_hint_trust"] == "untrusted_hook_payload"
     assert composition["daemon_hint_disposition"] == "preserved_current_action"
     assert composition["daemon_hint_reason_code"] == ("untrusted_daemon_permissive_hint_preserved_current_action")
-    assert composition["current_composed_action"] == current_action
-    assert composition["authoritative_action"] == current_action
+    assert composition["configured_policy_action"] == current_action
+    assert composition["current_composed_action"] == expected_action
+    assert composition["authoritative_action"] == expected_action
     daemon_evidence = _receipt_evidence(receipt, "daemon_hint_trust")
     assert daemon_evidence == {
         "source": "daemon_hint_trust",
