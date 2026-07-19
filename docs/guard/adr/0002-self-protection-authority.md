@@ -22,4 +22,3 @@ A Guard process can report its own health but cannot prove that it still exists 
 Machine reporting requires enrollment of the device public key and generation before Cloud acceptance. Observer integrations require explicit credentials and mapping operations instead of embedding vendor logic in Guard core. Recovery and authorized removal require independent evidence. Compromise of one authority does not automatically grant another authority.
 
 The normative guarantee, schema set, state precedence, bounds, key assurance, privacy rules, and authority matrix are in [the self-protection contract](../self-protection-contract.md). Abuse analysis is in [the self-protection threat model](../self-protection-threat-model.md).
-

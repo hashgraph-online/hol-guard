@@ -44,4 +44,3 @@ Trust boundaries separate the standard user, local administrator/root, Guard mac
 ## Verification obligations
 
 Unit and property tests cover schema strictness, state transitions, ordering, replay, expiry, generation monotonicity, and remediation idempotency. Platform tests cover standard-user and administrator tamper on macOS and Windows. Conformance tests cover clock skew, duplicates, mapping collision, partial data, stale observation, and adapter outage. Certified-device tests and an independent red-team exercise remain mandatory before enforcement GA.
-
