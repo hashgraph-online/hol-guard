@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode_artifacts import runtime_config_path
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
+from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.consumer.service import _consumer_execution_identity
@@ -177,6 +178,14 @@ def _write_test_executable(path: Path, body: str = "#!/bin/sh\nexit 0\n") -> Pat
     path.write_text(body, encoding="utf-8")
     path.chmod(0o755)
     return path
+
+
+def _install_codex_native_hooks(context: HarnessContext) -> None:
+    payload: dict[str, object] = {"features": {"hooks": True}}
+    CodexHarnessAdapter._install_config_hooks(payload, context)
+    config_path = CodexHarnessAdapter._hook_config_path(context)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(dump_toml(payload), encoding="utf-8")
 
 
 def test_guard_run_launch_environment_hash_is_canonical_and_value_sensitive() -> None:
@@ -581,6 +590,12 @@ def test_codex_postclaim_setup_uses_authorized_canonical_prefix_after_symlink_sw
     executable_alias.parent.mkdir(parents=True)
     executable_alias.symlink_to(safe_codex)
     monkeypatch.setenv("PATH", f"{executable_alias.parent}{os.pathsep}{os.environ.get('PATH', '')}")
+    context = HarnessContext(
+        home_dir=tmp_path,
+        workspace_dir=tmp_path / "workspace",
+        guard_home=config.guard_home,
+    )
+    _install_codex_native_hooks(context)
 
     class SwapAtAuthorizedSetupAdapter(CodexHarnessAdapter):
         def launch_command_from_authorized_plan(self, *args, **kwargs) -> list[str]:
@@ -598,11 +613,7 @@ def test_codex_postclaim_setup_uses_authorized_canonical_prefix_after_symlink_sw
 
     result = guard_runner_module.guard_run(
         "codex",
-        HarnessContext(
-            home_dir=tmp_path,
-            workspace_dir=tmp_path / "workspace",
-            guard_home=config.guard_home,
-        ),
+        context,
         store,
         config,
         dry_run=False,
@@ -634,6 +645,12 @@ def test_no_saved_codex_setup_uses_previewed_canonical_prefix_after_symlink_swap
     executable_alias.parent.mkdir(parents=True)
     executable_alias.symlink_to(safe_codex)
     monkeypatch.setenv("PATH", f"{executable_alias.parent}{os.pathsep}{os.environ.get('PATH', '')}")
+    context = HarnessContext(
+        home_dir=tmp_path,
+        workspace_dir=tmp_path / "workspace",
+        guard_home=config.guard_home,
+    )
+    _install_codex_native_hooks(context)
 
     class SwapAtAuthorizedSetupAdapter(CodexHarnessAdapter):
         def launch_command_from_authorized_plan(self, *args, **kwargs) -> list[str]:
@@ -651,11 +668,7 @@ def test_no_saved_codex_setup_uses_previewed_canonical_prefix_after_symlink_swap
 
     result = guard_runner_module.guard_run(
         "codex",
-        HarnessContext(
-            home_dir=tmp_path,
-            workspace_dir=tmp_path / "workspace",
-            guard_home=config.guard_home,
-        ),
+        context,
         store,
         config,
         dry_run=False,

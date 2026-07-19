@@ -35,6 +35,7 @@ from codex_plugin_scanner.guard.cli import product as guard_product_module
 from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli import update_commands as guard_update_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
+from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, resolve_risk_action
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.policy_bundle_parser import (
@@ -4258,17 +4259,39 @@ args = ["workspace-skill.js", "--changed"]
 
     def test_guard_update_repairs_stale_codex_native_hooks(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
-        _write_text(
-            home_dir / ".codex" / "config.toml",
-            """
-approval_policy = "never"
-
-[mcp_servers.test-stdio]
-command = "/bin/sh"
-args = ["-lc", "echo hi"]
-""".strip()
-            + "\n",
+        context = HarnessContext(
+            home_dir=home_dir,
+            workspace_dir=None,
+            guard_home=home_dir,
+            home_override_explicit=True,
         )
+        config_payload: dict[str, object] = {
+            "approval_policy": "never",
+            "features": {"hooks": True},
+            "mcp_servers": {
+                "test-stdio": {
+                    "command": "/bin/sh",
+                    "args": ["-lc", "echo hi"],
+                }
+            },
+        }
+        guard_update_commands_module.CodexHarnessAdapter._install_config_hooks(config_payload, context)
+        hooks = config_payload["hooks"]
+        assert isinstance(hooks, dict)
+        pre_tool_groups = hooks["PreToolUse"]
+        assert isinstance(pre_tool_groups, list)
+        pre_tool_group = pre_tool_groups[-1]
+        assert isinstance(pre_tool_group, dict)
+        entries = pre_tool_group["hooks"]
+        assert isinstance(entries, list)
+        entry = entries[0]
+        assert isinstance(entry, dict)
+        entry["command"] = f"{entry['command']} --tampered"
+        config_path = home_dir / ".codex" / "config.toml"
+        _write_text(config_path, dump_toml(config_payload))
+        stale_state = guard_update_commands_module.codex_native_hook_state(context)
+        assert stale_state["protection_active"] is True
+        assert stale_state["shell_protection_active"] is False
         GuardStore(home_dir).set_managed_install(
             "codex",
             True,
@@ -4296,8 +4319,9 @@ args = ["-lc", "echo hi"]
 
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
-        config_text = (home_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
-        hooks_payload = _read_codex_hooks(home_dir / ".codex" / "config.toml")
+        config_text = config_path.read_text(encoding="utf-8")
+        hooks_payload = _read_codex_hooks(config_path)
+        repaired_state = guard_update_commands_module.codex_native_hook_state(context)
 
         assert rc == 0
         assert output["status"] == "current"
@@ -4306,6 +4330,7 @@ args = ["-lc", "echo hi"]
         assert "hooks = true" in config_text
         assert "codex_hooks" not in config_text
         assert hooks_payload["PreToolUse"]
+        assert repaired_state["shell_protection_active"] is True
 
     def test_guard_update_repairs_authenticated_codex_hook_tampering_despite_shape_match(
         self, tmp_path, monkeypatch, capsys
