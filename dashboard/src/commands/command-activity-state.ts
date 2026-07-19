@@ -23,9 +23,10 @@ export function failCommandActivityLoad<T>(
   state: CommandActivityLoadState<T>,
   error: unknown,
 ): CommandActivityLoadState<T> {
-  const message = error instanceof Error && error.message.trim()
-    ? error.message
-    : "Command activity is temporarily unavailable.";
+  let message = "Command activity is temporarily unavailable.";
+  if (error instanceof Error && error.message.trim()) {
+    message = error.message;
+  }
   return { kind: "error", message, previous: previousCommandActivityData(state) };
 }
 

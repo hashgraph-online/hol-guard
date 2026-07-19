@@ -152,6 +152,14 @@ expectContractError(
   }),
   "response.items[0].match_count",
 );
+expectContractError(
+  () => normalizeCommandActivityPage({
+    schema_version: "guard.command-activity-api.v1",
+    items: [activity({ receipt_id: undefined })],
+    next_cursor: null,
+  }),
+  "response.items[0].receipt_id",
+);
 
 const normalizedAnalytics = normalizeCommandActivityAnalytics(analytics());
 assert(normalizedAnalytics.commands_checked === 3, "analytics preserves total");
@@ -298,6 +306,11 @@ const loadingState = beginCommandActivityLoad(readyState);
 assert(loadingState.kind === "loading" && loadingState.previous === normalizedPage, "refresh retains last good data");
 const failedState = failCommandActivityLoad(loadingState, new Error("daemon unavailable"));
 assert(failedState.kind === "error" && failedState.previous === normalizedPage, "refresh error retains last good data");
+const opaqueFailure = failCommandActivityLoad(loadingState, "raw command detail must not render");
+assert(
+  opaqueFailure.kind === "error" && opaqueFailure.message === "Command activity is temporarily unavailable.",
+  "non-Error throws use privacy-safe fallback copy",
+);
 const emptyState = await loadCommandActivity(
   { kind: "idle" },
   async () => ({ ...normalizedPage, items: [] }),

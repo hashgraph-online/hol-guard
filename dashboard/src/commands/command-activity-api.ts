@@ -102,17 +102,21 @@ function validHarness(value: string | null): boolean {
 }
 
 function validateFilters(filters: CommandActivityFilters): void {
-  const rangeDays = filters.occurredFrom !== null && filters.occurredThrough !== null
-    ? (Date.parse(`${filters.occurredThrough}T00:00:00Z`) - Date.parse(`${filters.occurredFrom}T00:00:00Z`)) /
-      86_400_000
-    : null;
   if (
     !Number.isInteger(filters.limit) || filters.limit < 1 || filters.limit > 100 ||
     !validStableId(filters.extensionId) || !validStableId(filters.ruleId) ||
-    !validDate(filters.occurredFrom) || !validDate(filters.occurredThrough) ||
-    (rangeDays !== null && (rangeDays < 0 || rangeDays >= 397))
+    !validDate(filters.occurredFrom) || !validDate(filters.occurredThrough)
   ) {
     throw new CommandActivityRequestError("invalid_filters");
+  }
+  if (filters.occurredFrom !== null && filters.occurredThrough !== null) {
+    const rangeDays = (
+      Date.parse(`${filters.occurredThrough}T00:00:00Z`) -
+      Date.parse(`${filters.occurredFrom}T00:00:00Z`)
+    ) / 86_400_000;
+    if (rangeDays < 0 || rangeDays >= 397) {
+      throw new CommandActivityRequestError("invalid_filters");
+    }
   }
 }
 
@@ -217,7 +221,9 @@ export function parseCommandActivityUrlState(params: URLSearchParams): CommandAc
     ? rawLimit
     : DEFAULT_COMMAND_ACTIVITY_FILTERS.limit;
   const promptedValue = params.get("commandPrompted");
-  const prompted = promptedValue === "true" ? true : promptedValue === "false" ? false : null;
+  let prompted: boolean | null = null;
+  if (promptedValue === "true") prompted = true;
+  if (promptedValue === "false") prompted = false;
   let occurredFrom = dateParam(params, "commandFrom");
   let occurredThrough = dateParam(params, "commandThrough");
   const rangeDays = occurredFrom !== null && occurredThrough !== null
