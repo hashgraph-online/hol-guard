@@ -1145,6 +1145,7 @@ def build_runtime_snapshot(
     receipt_limit: int = 25,
     active_request_id: str | None = None,
     include_items: bool = True,
+    containment_health: object = None,
 ) -> dict[str, object]:
     queue_page = store.list_pending_approval_summaries(limit=1)
     queue_items = queue_page["items"] if isinstance(queue_page["items"], list) else []
@@ -1167,9 +1168,12 @@ def build_runtime_snapshot(
     trust_status = store.get_cached_policy_trust_status()
     managed_installs = store.list_managed_installs()
     runtime_state = store.get_runtime_state()
+    health_runtime_state = dict(runtime_state) if runtime_state is not None else None
+    if health_runtime_state is not None and containment_health is not None:
+        health_runtime_state["containment_health"] = containment_health
     protection_health = build_runtime_protection_health(
         store=store,
-        runtime_state=runtime_state,
+        runtime_state=health_runtime_state,
         managed_installs=managed_installs,
         trust_status=trust_status,
         now=datetime.fromisoformat(snapshot_now.replace("Z", "+00:00")),
@@ -1182,7 +1186,7 @@ def build_runtime_snapshot(
     return {
         "generated_at": snapshot_now,
         "approval_center_url": approval_center_url,
-        "runtime_state": runtime_state,
+        "runtime_state": health_runtime_state,
         "oauth_storage_health": oauth_storage_health,
         "device": _build_runtime_device_context(store),
         "latest_connect_state": latest_connect_state,

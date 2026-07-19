@@ -98,8 +98,9 @@ def test_report_distinguishes_failed_and_unproven_facts() -> None:
     assert by_id["daemon"]["status"] == "pass"
     assert by_id["harness_hooks"]["status"] == "unknown"
     assert by_id["harness_hooks"]["reason_code"] == "hook_attestation_unavailable"
-    assert by_id["decision_plane_compatibility"]["status"] == "unknown"
-    assert by_id["sandbox"]["status"] == "unknown"
+    assert by_id["decision_plane_compatibility"]["status"] == "fail"
+    assert by_id["decision_plane_compatibility"]["reason_code"] == "containment_health_invalid"
+    assert by_id["sandbox"]["status"] == "fail"
 
     degraded = _payload(
         installs=[{"harness": "codex", "active": False}],

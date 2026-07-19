@@ -143,6 +143,34 @@ class GuardSurfaceDaemonClient:
         operation = response.get("operation")
         return dict(operation) if _is_string_object_dict(operation) else response
 
+    def containment_health(self) -> dict[str, object]:
+        response = self._get("/v1/runtime/containment-health", timeout=5.0)
+        value = response.get("containment_health")
+        if not _is_string_object_dict(value):
+            raise GuardDaemonRequestError("Guard daemon returned invalid containment health")
+        return value
+
+    def _get(self, path: str, *, timeout: float) -> dict[str, object]:
+        request = urllib.request.Request(
+            f"{self.daemon_url}{path}",
+            headers={"X-Guard-Token": self.auth_token},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return self._decode_json_response(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            try:
+                payload = self._decode_json_response(error.read().decode("utf-8"))
+                message = payload.get("error", str(error))
+            except (OSError, json.JSONDecodeError):
+                message = str(error)
+            raise GuardDaemonRequestError(f"Guard daemon request failed: {message}") from error
+        except GuardDaemonRequestError:
+            raise
+        except (OSError, urllib.error.URLError) as error:
+            raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
+
     def _post(
         self,
         path: str,

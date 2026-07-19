@@ -12,6 +12,7 @@ from typing import Literal
 
 from ..models import GuardArtifact
 from .mcp_protection import _split_package_token
+from .typescript_launch_evidence import TypeScriptLaunchEvidence
 from .workspace_path_guard import existing_paths_within_workspace
 
 IntentKind = Literal["install", "execute", "sync"]
@@ -70,6 +71,7 @@ class LocalPackageExecutionEvidence:
     local_executable: PackageExecutionFileEvidence | None
     manifests: tuple[PackageExecutionFileEvidence, ...] = ()
     lockfiles: tuple[PackageExecutionFileEvidence, ...] = ()
+    typescript_launch: TypeScriptLaunchEvidence | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
