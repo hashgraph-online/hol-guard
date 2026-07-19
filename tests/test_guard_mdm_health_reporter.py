@@ -248,7 +248,77 @@ def test_delivery_failure_is_exposed_without_weakening_local_enforcement(
     assert result["localEnforcementHealthy"] is True
     assert result["state"] == "delivery-failed"
     assert result["reasonCodes"] == ["health_lease_delivery_failed"]
-    assert cast(dict[str, object], result["metrics"])["rejectionReason"] == "cloud delivery timed out"
+    assert cast(dict[str, object], result["metrics"])["rejectionReason"] == "health_transport_timeout"
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Authorization: Bearer secret-token-value",
+        "-----BEGIN PRIVATE KEY-----",
+        "host=/private/customer/path command=rm -rf /",
+        "https://user:password@example.test/health",
+    ],
+)
+def test_delivery_diagnostics_never_echo_transport_exception_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, message: str
+) -> None:
+    class UnsafeTransport:
+        def register_key(self, _payload: bytes) -> None:
+            return None
+
+        def deliver_lease(self, _outbox: HealthLeaseOutbox) -> HealthLeaseAck:
+            raise RuntimeError(message)
+
+        def poll_challenge(self, **_kwargs: object) -> None:
+            pytest.fail("challenge polling must not run after failed delivery")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.mdm.health_reporter.build_machine_health_key_registration",
+        lambda *_args, **_kwargs: b"registration",
+    )
+    result = run_machine_health_cadence(
+        paths=_paths(tmp_path),
+        system_name="Darwin",
+        policy_loader=lambda **_kwargs: _policy(),
+        lease_issuer=lambda *_args, **_kwargs: _outbox(),
+        transport=UnsafeTransport(),
+    )
+
+    metrics = cast(dict[str, object], result["metrics"])
+    assert metrics["rejectionReason"] == "health_transport_failure"
+    assert message not in json.dumps(result, sort_keys=True)
+
+
+def test_delivery_diagnostics_preserve_structured_http_context_without_echoing_cloud_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class StructuredErrorTransport:
+        def register_key(self, _payload: bytes) -> None:
+            return None
+
+        def deliver_lease(self, _outbox: HealthLeaseOutbox) -> HealthLeaseAck:
+            raise OSError("health_lease_delivery_http_403:customer_secret_value")
+
+        def poll_challenge(self, **_kwargs: object) -> None:
+            pytest.fail("challenge polling must not run after failed delivery")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.mdm.health_reporter.build_machine_health_key_registration",
+        lambda *_args, **_kwargs: b"registration",
+    )
+    result = run_machine_health_cadence(
+        paths=_paths(tmp_path),
+        system_name="Darwin",
+        policy_loader=lambda **_kwargs: _policy(),
+        lease_issuer=lambda *_args, **_kwargs: _outbox(),
+        transport=StructuredErrorTransport(),
+    )
+
+    reason = cast(dict[str, object], result["metrics"])["rejectionReason"]
+    assert isinstance(reason, str)
+    assert reason.startswith("health_lease_delivery_http_403:cloud_error_")
+    assert "customer_secret_value" not in reason
 
 
 @pytest.mark.parametrize(

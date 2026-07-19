@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import platform
+import re
 import time
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
@@ -160,8 +162,18 @@ def run_machine_health_cadence(
 
 
 def _bounded_reason(error: BaseException) -> str:
-    reason = str(error).strip().splitlines()[0] if str(error).strip() else type(error).__name__
-    return reason[:128]
+    reason = str(error).strip()
+    if len(reason) <= 128 and re.fullmatch(r"health_[a-z0-9_]+", reason):
+        return reason
+    structured = re.fullmatch(r"(health_[a-z0-9_]+):(.+)", reason)
+    if structured is not None:
+        cloud_code_digest = hashlib.sha256(structured.group(2).encode("utf-8")).hexdigest()[:12]
+        return f"{structured.group(1)}:cloud_error_{cloud_code_digest}"[:128]
+    if isinstance(error, TimeoutError):
+        return "health_transport_timeout"
+    if isinstance(error, ConnectionError):
+        return "health_transport_unavailable"
+    return "health_transport_failure"
 
 
 def _key_storage_health(outbox: HealthLeaseOutbox) -> str:
