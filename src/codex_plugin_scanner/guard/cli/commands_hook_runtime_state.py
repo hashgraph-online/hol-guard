@@ -161,7 +161,10 @@ def _record_runtime_command_activity(state: RuntimeArtifactHookState, store: Gua
         payload=state.hook_payload,
         policy_action=state.receipt.policy_decision,
         receipt_id=state.receipt.receipt_id,
-        prompted=command_activity_was_prompted(state.initial_policy_action, approval_reuse_status),
+        prompted=command_activity_was_prompted(
+            normalize_guard_action(state.initial_policy_action),
+            approval_reuse_status,
+        ),
         approval_reuse_status=approval_reuse_status,
     )
 
