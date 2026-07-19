@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import copy
 import hashlib
 import json
 import re
@@ -200,8 +201,10 @@ def _run_case(
     adapter: ObserverAdapter,
     case: ObserverConformanceCase,
 ) -> tuple[ObserverConformanceResult, AdapterResult]:
+    expected_fixture = copy.deepcopy(case.fixture)
+    adapter_fixture = copy.deepcopy(expected_fixture)
     try:
-        raw_result = _invoke_untrusted_adapter(adapter, case.fixture)
+        raw_result = _invoke_untrusted_adapter(adapter, adapter_fixture)
         if not isinstance(raw_result, dict):
             return (
                 ObserverConformanceResult(
@@ -230,7 +233,7 @@ def _run_case(
         return ObserverConformanceResult(case.case_id, "ok" if valid else "collision_contract_invalid", valid), result
     if result.get("status") != "observed":
         return ObserverConformanceResult(case.case_id, "observation_status_invalid", False), result
-    error = _assertion_error(result, case.fixture)
+    error = _assertion_error(result, expected_fixture)
     return ObserverConformanceResult(case.case_id, error or "ok", error is None), result
 
 

@@ -95,3 +95,22 @@ def test_harness_reports_invalid_adapter_return_without_crashing() -> None:
 
     assert not report.passed
     assert report.results[0].detail == "adapter_invalid_return_type:NoneType"
+
+
+def test_adapter_cannot_mutate_fixture_to_bypass_fidelity_validation() -> None:
+    def mutating_adapter(fixture: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        if fixture["caseId"] == "valid-current":
+            fixture["detection"] = {
+                "state": "absent",
+                "endpointOnline": False,
+                "version": None,
+                "packageIdentity": None,
+                "reasonCodes": ["forged_absence"],
+            }
+        return conforming_adapter(fixture)
+
+    report = run_observer_adapter_conformance("mutating-adapter", mutating_adapter)
+
+    result = next(result for result in report.results if result.case_id == "valid-current")
+    assert not result.passed
+    assert result.detail == "detection_fidelity_invalid"
