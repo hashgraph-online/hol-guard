@@ -59,6 +59,17 @@ _SEVERITY: dict[str, EvidenceSeverity] = {
     "high": EvidenceSeverity.HIGH,
     "critical": EvidenceSeverity.CRITICAL,
 }
+_RISK_EFFECTS: dict[str, frozenset[EffectKind]] = {
+    "credential_exfiltration": frozenset({EffectKind.CREDENTIAL_OR_SECRET_OPERATION, EffectKind.NETWORK_WRITE}),
+    "data_flow_exfiltration": frozenset({EffectKind.NETWORK_WRITE}),
+    "destructive_shell": frozenset({EffectKind.DESTRUCTIVE_OR_IRREVERSIBLE_OPERATION}),
+    "encoded_execution": frozenset({EffectKind.PROCESS_EXECUTION}),
+    "execution": frozenset({EffectKind.PROCESS_EXECUTION}),
+    "local_secret_read": frozenset({EffectKind.CREDENTIAL_OR_SECRET_OPERATION}),
+    "network_egress": frozenset({EffectKind.NETWORK_WRITE}),
+    "policy_bypass": frozenset({EffectKind.GUARD_CONTROL_OPERATION}),
+    "supply_chain": frozenset({EffectKind.PROCESS_EXECUTION}),
+}
 
 
 def legacy_rule_floor(extension: CommandSafetyExtension, rule: CommandSafetyRule) -> LegacyCommandFloor:
@@ -263,14 +274,5 @@ def _extension_proof_requirements() -> frozenset[ProofRequirement]:
 def _effect_claims(risk_classes: tuple[str, ...]) -> frozenset[EffectKind]:
     effects: set[EffectKind] = set()
     for risk in risk_classes:
-        if "destructive" in risk:
-            effects.add(EffectKind.DESTRUCTIVE_OR_IRREVERSIBLE_OPERATION)
-        if "network" in risk or "exfiltration" in risk:
-            effects.add(EffectKind.NETWORK_WRITE)
-        if "secret" in risk or "credential" in risk:
-            effects.add(EffectKind.CREDENTIAL_OR_SECRET_OPERATION)
-        if "execution" in risk:
-            effects.add(EffectKind.PROCESS_EXECUTION)
-        if "policy" in risk:
-            effects.add(EffectKind.GUARD_CONTROL_OPERATION)
+        effects.update(_RISK_EFFECTS.get(risk, ()))
     return frozenset(effects or {EffectKind.PROCESS_EXECUTION})

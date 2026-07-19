@@ -6,10 +6,13 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import secret_file_requests
+from codex_plugin_scanner.guard.runtime import command_extension_interaction, secret_file_requests
 from codex_plugin_scanner.guard.runtime.command_decision_adapter import extension_evidence_batch
 from codex_plugin_scanner.guard.runtime.command_evaluation import CommandDecisionFloor, evaluate_command
-from codex_plugin_scanner.guard.runtime.command_extension_observations import observe_command_extensions
+from codex_plugin_scanner.guard.runtime.command_extension_observations import (
+    CommandExtensionObservation,
+    observe_command_extensions,
+)
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtension,
@@ -24,7 +27,14 @@ from codex_plugin_scanner.guard.runtime.command_rules import (
     CommandSafeVariant,
     ExecutableMatcher,
 )
-from codex_plugin_scanner.guard.runtime.effect_contract import UncertaintyKind
+from codex_plugin_scanner.guard.runtime.effect_contract import DecisionBasis, EffectKind, UncertaintyKind
+from codex_plugin_scanner.guard.runtime.effect_decision import (
+    DecisionFactor,
+    DecisionFactorSource,
+    EffectDecision,
+    EffectDecisionRequest,
+    evaluate_effect_decision,
+)
 
 
 class _FailingMatcher:
@@ -72,6 +82,7 @@ def _registry(
     action_classes: tuple[str, ...] = (),
     compatibility_fallback: bool = False,
     required: bool = False,
+    risk_classes: tuple[str, ...] = ("destructive_shell",),
     severity: CommandRuleSeverity = "high",
     matcher: object | None = None,
     safe_variants: tuple[CommandSafeVariant, ...] = (),
@@ -81,7 +92,7 @@ def _registry(
         title="Test rule",
         description="Exercises decision routing compatibility.",
         severity=severity,
-        risk_classes=("destructive_shell",),
+        risk_classes=risk_classes,
         action_classes=action_classes,
         safer_alternatives=("Preview the operation.",),
         default_mode=mode,
@@ -97,7 +108,7 @@ def _registry(
         name="Test extension",
         description="Exercises decision routing compatibility.",
         action_classes=action_classes,
-        risk_classes=("destructive_shell",),
+        risk_classes=risk_classes,
         safer_alternatives=("Preview the operation.",),
         rules=(rule,),
         required=required,
@@ -230,8 +241,21 @@ def test_matcher_failure_becomes_typed_blocking_uncertainty(matcher: object) -> 
     )
     assert evaluation.minimum_action == "block"
     assert evaluation.decision_plane.action == "block"
-    assert evaluation.extension_observations[0].to_dict()["uncertainty_reasons"] == ["matcher-failure"]
+    payload = evaluation.extension_observations[0].to_dict()
+    assert payload["match_class"] == "uncertainty"
+    assert payload["uncertainty_reasons"] == ["matcher-failure"]
     assert "private matcher detail" not in repr(evaluation.to_dict())
+
+
+def test_risk_effect_mapping_does_not_use_substring_classification() -> None:
+    evaluation = evaluate_command(
+        "test-tool target",
+        registry=_registry("review", risk_classes=("non-destructive",)),
+    )
+    batch = extension_evidence_batch(evaluation.command, evaluation.extension_observations)
+    effect_claims = frozenset(effect for item in batch.evidence for effect in item.effect_claims)
+    assert EffectKind.DESTRUCTIVE_OR_IRREVERSIBLE_OPERATION not in effect_claims
+    assert EffectKind.PROCESS_EXECUTION in effect_claims
 
 
 def test_typed_matcher_evidence_is_bounded_and_privacy_normalized() -> None:
@@ -262,6 +286,38 @@ def test_live_request_classifier_routes_matcher_failure_through_plane(
     assert match is not None
     assert match.action_class == "command extension matcher failure"
     assert "invalid index" not in match.reason
+
+
+def test_matcher_failure_projection_requires_a_controlling_uncertainty_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    decision = evaluate_effect_decision(
+        EffectDecisionRequest(
+            factors=(
+                DecisionFactor(
+                    source=DecisionFactorSource.POLICY,
+                    reason_code="rule-match",
+                    basis=DecisionBasis("block", None),
+                    producer_ref="test:controlling-rule",
+                ),
+            )
+        )
+    )
+
+    def fixed_decision(
+        command: CanonicalCommand,
+        observations: tuple[CommandExtensionObservation[CommandSafetyExtension], ...],
+    ) -> EffectDecision:
+        del command, observations
+        return decision
+
+    monkeypatch.setattr(command_extension_interaction, "evaluate_extension_interaction", fixed_decision)
+    interaction = command_extension_interaction.classify_command_extension_interaction(
+        parse_shell_command("test-tool target"),
+        _registry("disabled", matcher=_FailingMatcher()),
+    )
+    assert interaction.priority is None
+    assert interaction.fallback is None
 
 
 def test_legacy_matching_projection_cannot_silence_matcher_failure() -> None:

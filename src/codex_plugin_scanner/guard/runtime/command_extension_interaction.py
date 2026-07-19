@@ -34,7 +34,11 @@ def classify_command_extension_interaction(
     requires_interaction = has_signal and guard_action_severity(decision.action) >= guard_action_severity("review")
     if not requires_interaction:
         return CommandExtensionInteraction(None, None)
-    if any(item.uncertainty_reasons for item in observations):
+    matcher_failure_controls = any(
+        reason.reason_code in {"matcher-failure", "uncertainty.matcher-failure"}
+        for reason in decision.controlling_reasons
+    )
+    if matcher_failure_controls:
         return CommandExtensionInteraction(
             CommandExtensionInteractionMatch(
                 "command extension matcher failure",
