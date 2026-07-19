@@ -315,6 +315,7 @@ _READ_ONLY_LOOKUP_FILTERS = frozenset({"grep", "egrep", "fgrep", "head", "sed", 
 _READ_ONLY_SEARCH_EXECUTION_FLAGS = {
     "rg": frozenset({"--config-path", "--hostname-bin", "--pre", "--pre-glob"}),
 }
+_READ_ONLY_SEARCH_FILE_INPUT_FLAGS = frozenset({"-f", "--file", "--ignore-file"})
 _READ_ONLY_GIT_STATUS_FLAGS = frozenset(
     {
         "--ahead-behind",
@@ -1196,7 +1197,7 @@ def _git_status_has_execution_free_config(cwd: Path | None) -> bool:
 
 def _git_binary_path_is_trusted(git_path: Path, *, cwd: Path) -> bool:
     try:
-        untrusted_roots = (
+        candidate_untrusted_roots = (
             cwd.resolve(),
             Path.home().resolve(),
             Path("/tmp").resolve(),
@@ -1204,6 +1205,7 @@ def _git_binary_path_is_trusted(git_path: Path, *, cwd: Path) -> bool:
         )
     except (OSError, RuntimeError):
         return False
+    untrusted_roots = tuple(root for root in candidate_untrusted_roots if root != root.parent)
     for untrusted_root in untrusted_roots:
         try:
             _ = git_path.relative_to(untrusted_root)
@@ -5213,10 +5215,34 @@ def _read_only_lookup_search_args_are_safe(
     execution_flags = _READ_ONLY_SEARCH_EXECUTION_FLAGS.get(command, frozenset())
     if any(arg in execution_flags or any(arg.startswith(f"{flag}=") for flag in execution_flags) for arg in args):
         return False
+    if _read_only_lookup_search_uses_file_input(args):
+        return False
+    if command == "rg" and os.environ.get("RIPGREP_CONFIG_PATH") and not _ripgrep_config_is_disabled(args):
+        return False
     targets = [arg for arg in args if arg and not arg.startswith("-")]
     return len(targets) < 2 or all(
         _read_only_lookup_target_is_safe(target, allow_dirs=True, home_dir=home_dir) for target in targets[1:]
     )
+
+
+def _read_only_lookup_search_uses_file_input(args: list[str]) -> bool:
+    for arg in args:
+        if arg in _READ_ONLY_SEARCH_FILE_INPUT_FLAGS:
+            return True
+        if arg.startswith(("--file=", "--ignore-file=")):
+            return True
+        if arg.startswith("-f") and not arg.startswith("--"):
+            return True
+    return False
+
+
+def _ripgrep_config_is_disabled(args: list[str]) -> bool:
+    for arg in args:
+        if arg == "--":
+            return False
+        if arg == "--no-config":
+            return True
+    return False
 
 
 def _read_only_lookup_fd_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
