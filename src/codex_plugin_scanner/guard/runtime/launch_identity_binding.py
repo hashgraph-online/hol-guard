@@ -1,10 +1,7 @@
-"""Observation-only launch binding until Guard owns an execution boundary."""
-
 from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import secrets
 from collections.abc import Mapping
@@ -21,8 +18,18 @@ from .approval_context import (
     runtime_launch_identity_is_reusable,
 )
 from .command_model import CanonicalCommand
-from .command_tokens import leading_environment
+from .command_tokens import shell_tokens
 from .effect_contract import ProofRequirement, UncertaintyKind, maximum_action_floor
+from .launch_identity_environment import (
+    LaunchEnvironmentPlan,
+    environment_observation_material,
+    inherited_launch_environment,
+    launch_environment_scope_is_ambiguous,
+    launch_search_path,
+    plan_command_segment_environment,
+    plan_launch_environment,
+    unresolved_launch_observation,
+)
 
 LAUNCH_IDENTITY_BINDING_VERSION: Final = "1.0.0"
 _SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -210,31 +217,11 @@ def observe_launch_identity_binding(
     launch_env: Mapping[str, str] | None = None,
     package_contexts: tuple[PackageExecutionContext, ...] = (),
 ) -> LaunchIdentityBindingObservation:
-    """Build fresh drift evidence without claiming execution or effect authority."""
-
     if _VERSION.fullmatch(policy_version) is None or not rules:
         raise ValueError("policy and rule versions are required")
     if len({item.rule_id for item in rules}) != len(rules):
         raise ValueError("rule bindings must be unique")
     cwd = _resolved(working_directory)
-    runtime_identities = tuple(
-        build_runtime_launch_identity(
-            segment.executable,
-            args=segment.arguments,
-            structured_command=True,
-            cwd=cwd,
-            launch_env=_segment_launch_environment(segment.tokens, launch_env),
-        )
-        for segment in command.segments
-    )
-    executable_material = [
-        {
-            "segment_index": index,
-            "identity_digest": _framed_digest("hol-guard.runtime-launch", identity),
-            "reusable_observation": runtime_launch_identity_is_reusable(identity),
-        }
-        for index, identity in enumerate(runtime_identities)
-    ]
     segment_wrapper_order = tuple(
         dict.fromkeys(
             wrapper
@@ -245,19 +232,78 @@ def observe_launch_identity_binding(
     )
     normalization_wrapper_count = len(command.wrapper_chain) - len(segment_wrapper_order)
     normalization_wrappers = command.wrapper_chain[:normalization_wrapper_count]
-    if normalization_wrapper_count < 0 or command.wrapper_chain[normalization_wrapper_count:] != segment_wrapper_order:
-        executable_material.append(
-            {
-                "segment_index": "unresolved-wrapper-chain",
-                "identity_digest": secrets.token_hex(32),
-                "reusable_observation": False,
-            }
-        )
+    wrapper_chain_complete = (
+        normalization_wrapper_count >= 0
+        and command.wrapper_chain[normalization_wrapper_count:] == segment_wrapper_order
+    )
+    if not wrapper_chain_complete:
         normalization_wrappers = ()
+    inherited_plan = inherited_launch_environment(launch_env)
+    inherited_environment = inherited_plan.executable_environment
+    raw_tokens, _raw_tokens_exact = shell_tokens(command.raw_text)
+    raw_plan = (
+        plan_launch_environment(raw_tokens, inherited_environment, inherited_complete=inherited_plan.complete)
+        if command.raw_text != command.normalized_text
+        else inherited_plan
+    )
+    first_top_level_index = next(
+        (index for index, segment in enumerate(command.segments) if segment.execution_context.startswith("top:")),
+        None,
+    )
+    script_scope_ambiguous = launch_environment_scope_is_ambiguous(normalization_wrappers, len(command.segments))
+    planned_segments = tuple(
+        plan_command_segment_environment(
+            segment,
+            command.embedded_commands,
+            (
+                raw_plan.executable_environment
+                if command.raw_text != command.normalized_text and index == first_top_level_index
+                else inherited_environment
+            ),
+        )
+        for index, segment in enumerate(command.segments)
+    )
+    segment_plans = tuple(
+        LaunchEnvironmentPlan(
+            plan.executable_environment,
+            plan.wrapper_environments,
+            inherited_plan.complete and plan.complete and not script_scope_ambiguous,
+        )
+        for plan in planned_segments
+    )
+    runtime_identities = tuple(
+        build_runtime_launch_identity(
+            segment.executable,
+            args=segment.arguments,
+            structured_command=True,
+            cwd=cwd,
+            launch_env=plan.executable_environment,
+        )
+        for segment, plan in zip(command.segments, segment_plans, strict=True)
+    )
+    executable_material: list[dict[str, object]] = [
+        {
+            "segment_index": index,
+            "identity_digest": _framed_digest("hol-guard.runtime-launch", identity),
+            "reusable_observation": runtime_launch_identity_is_reusable(identity),
+        }
+        for index, identity in enumerate(runtime_identities)
+    ]
+    if not wrapper_chain_complete:
+        executable_material.append(unresolved_launch_observation("unresolved-wrapper-chain"))
+    if script_scope_ambiguous:
+        executable_material.append(unresolved_launch_observation("unresolved-script-environment-scope"))
+    raw_wrapper_environments = list(raw_plan.wrapper_environments)
     for index, wrapper in enumerate(normalization_wrappers):
+        wrapper_environment = raw_plan.executable_environment
+        for wrapper_environment_index, candidate in enumerate(raw_wrapper_environments):
+            if candidate.name == wrapper:
+                wrapper_environment = candidate.environment
+                del raw_wrapper_environments[wrapper_environment_index]
+                break
         wrapper_identity = build_runtime_executable_identity(
             wrapper,
-            search_path=_launch_search_path(launch_env),
+            search_path=launch_search_path(wrapper_environment),
             cwd=cwd,
         )
         executable_material.append(
@@ -267,12 +313,15 @@ def observe_launch_identity_binding(
                 "reusable_observation": runtime_launch_identity_is_reusable(wrapper_identity),
             }
         )
-    for segment_index, segment in enumerate(command.segments):
-        segment_environment = _segment_launch_environment(segment.tokens, launch_env)
+    for segment_index, (segment, plan) in enumerate(zip(command.segments, segment_plans, strict=True)):
         for wrapper_index, wrapper in enumerate(segment.wrapper_chain):
+            if wrapper_index >= len(plan.wrapper_environments):
+                executable_material.append(unresolved_launch_observation(f"segment:{segment_index}:wrapper-unresolved"))
+                continue
+            wrapper_environment = plan.wrapper_environments[wrapper_index].environment
             wrapper_identity = build_runtime_executable_identity(
                 wrapper,
-                search_path=_launch_search_path(segment_environment),
+                search_path=launch_search_path(wrapper_environment),
                 cwd=cwd,
             )
             executable_material.append(
@@ -283,6 +332,13 @@ def observe_launch_identity_binding(
                 }
             )
     package_material = [_validated_package_observation(context) for context in package_contexts]
+    environment_plans = [*segment_plans]
+    for plan in (raw_plan, *segment_plans):
+        environment_plans.extend(
+            LaunchEnvironmentPlan(wrapper.environment, (), plan.complete) for wrapper in plan.wrapper_environments
+        )
+    if not environment_plans:
+        environment_plans.append(raw_plan)
     dimensions = tuple(
         sorted(
             (
@@ -290,7 +346,7 @@ def observe_launch_identity_binding(
                 _dimension(LaunchBindingDimension.EXECUTABLE_OBSERVATION, executable_material),
                 _dimension(
                     LaunchBindingDimension.LAUNCH_ENVIRONMENT_OBSERVATION,
-                    _launch_environment_material(launch_env),
+                    environment_observation_material(tuple(environment_plans)),
                 ),
                 _dimension(
                     LaunchBindingDimension.REDIRECTION_TARGET_OBSERVATION,
@@ -370,41 +426,6 @@ def _command_requires_package_context(command: CanonicalCommand) -> bool:
         ):
             return True
     return False
-
-
-def _launch_environment_material(launch_env: Mapping[str, str] | None) -> dict[str, object]:
-    environment = os.environ if launch_env is None else launch_env
-    raw_environment = cast(Mapping[object, object], cast(object, environment))
-    items = [
-        (name, value) for name, value in raw_environment.items() if isinstance(name, str) and isinstance(value, str)
-    ]
-    if len(items) != len(environment):
-        return {"status": "invalid", "reuse_nonce": secrets.token_hex(16)}
-    return {
-        "status": "observed",
-        "entry_count": len(items),
-        "environment_digest": _framed_digest("hol-guard.launch-environment", sorted(items)),
-    }
-
-
-def _segment_launch_environment(
-    tokens: tuple[str, ...],
-    launch_env: Mapping[str, str] | None,
-) -> dict[str, str]:
-    environment = dict(os.environ if launch_env is None else launch_env)
-    names, executable_index, _wrappers = leading_environment(tokens)
-    assignment_names = frozenset(names)
-    for token in tokens[:executable_index]:
-        name, separator, value = token.partition("=")
-        if separator and name in assignment_names:
-            environment[name] = value
-    return environment
-
-
-def _launch_search_path(launch_env: Mapping[str, str] | None) -> str:
-    environment = os.environ if launch_env is None else launch_env
-    search_path = environment.get("PATH")
-    return search_path if isinstance(search_path, str) else os.defpath
 
 
 def _wrapper_identity_digest(identity: Mapping[str, object]) -> str:
