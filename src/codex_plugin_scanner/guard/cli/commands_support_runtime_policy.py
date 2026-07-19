@@ -749,8 +749,9 @@ def _runtime_artifact_guard_default_action(artifact: GuardArtifact) -> GuardActi
 def _runtime_artifact_command_action_floor(artifact: GuardArtifact) -> GuardAction | None:
     if artifact.artifact_type != "tool_action_request":
         return None
-    value = artifact.metadata.get("command_action_floor")
-    return normalize_guard_action(value, unknown_action="block") if value is not None else None
+    if "command_action_floor" not in artifact.metadata:
+        return None
+    return normalize_guard_action(artifact.metadata.get("command_action_floor"), unknown_action="block")
 
 def _runtime_action_data_flow_signals(
     action_envelope: GuardActionEnvelope | None,

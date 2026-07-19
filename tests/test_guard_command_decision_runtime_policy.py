@@ -77,3 +77,12 @@ def test_matcher_failure_central_block_reaches_final_runtime_policy(
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path, default_action="allow")
     assert _runtime_artifact_policy_action(config, artifact, "codex") == "block"
     assert "private matcher detail" not in repr(artifact.metadata)
+
+    floor = artifact.metadata.pop("command_action_floor")
+    assert _runtime_artifact_policy_action(config, artifact, "codex") == "require-reapproval"
+    artifact.metadata["command_action_floor"] = None
+    assert _runtime_artifact_policy_action(config, artifact, "codex") == "block"
+    artifact.metadata["command_action_floor"] = "invalid"
+    assert _runtime_artifact_policy_action(config, artifact, "codex") == "block"
+    artifact.metadata["command_action_floor"] = floor
+    assert _runtime_artifact_policy_action(config, artifact, "codex") == "block"
