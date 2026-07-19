@@ -306,3 +306,71 @@ def test_owned_safe_variant_failure_remains_blocking_uncertainty() -> None:
 
     assert evaluation.minimum_action == "block"
     assert evaluation.extension_observations[0].uncertainty_reasons[0].value == "matcher-failure"
+
+
+def test_successful_owned_safe_variant_covers_failed_alternative() -> None:
+    executable_matcher = ExecutableMatcher(executables=frozenset({"test-tool"}))
+    rule = CommandSafetyRule(
+        rule_id="command.test.safe-alternatives",
+        title="Safe alternatives rule",
+        description="Exercises complete safe-variant coverage.",
+        severity="high",
+        risk_classes=("test_risk",),
+        action_classes=(),
+        safer_alternatives=("Review the operation.",),
+        matcher=executable_matcher,
+        safe_variants=(
+            CommandSafeVariant("broken-safe", "Broken safe matcher", _FailingMatcher()),
+            CommandSafeVariant("verified-safe", "Verified safe matcher", executable_matcher),
+        ),
+    )
+    extension = CommandSafetyExtension(
+        extension_id="command.test",
+        version="1.0.0",
+        name="Test extension",
+        description="Exercises complete safe-variant coverage.",
+        action_classes=(),
+        risk_classes=("test_risk",),
+        safer_alternatives=("Review the operation.",),
+        rules=(rule,),
+    )
+
+    evaluation = evaluate_command("test-tool target", registry=CommandSafetyExtensionRegistry((extension,)))
+
+    assert evaluation.minimum_action == "allow"
+    assert evaluation.extension_observations[0].uncertainty_reasons == ()
+    assert evaluation.extension_observations[0].safe_variants[0].variant_id == "verified-safe"
+
+
+def test_compatibility_fallback_matcher_failure_has_unique_candidates() -> None:
+    action_class = "test compatibility failure"
+    rule = CommandSafetyRule(
+        rule_id="command.test.compatibility-failure",
+        title="Compatibility failure rule",
+        description="Exercises compatibility fallback matcher failure.",
+        severity="high",
+        risk_classes=("test_risk",),
+        action_classes=(action_class,),
+        safer_alternatives=("Review the operation.",),
+        matcher=_FailingMatcher(),
+        compatibility_fallback=True,
+    )
+    extension = CommandSafetyExtension(
+        extension_id="command.test",
+        version="1.0.0",
+        name="Test extension",
+        description="Exercises compatibility fallback matcher failure.",
+        action_classes=(action_class,),
+        risk_classes=("test_risk",),
+        safer_alternatives=("Review the operation.",),
+        rules=(rule,),
+    )
+
+    evaluation = evaluate_command(
+        "test-tool target",
+        compatibility_action_class=action_class,
+        registry=CommandSafetyExtensionRegistry((extension,)),
+    )
+
+    assert evaluation.minimum_action == "block"
+    assert len(evaluation.decision_plane.controlling_sources) == len(set(evaluation.decision_plane.controlling_sources))

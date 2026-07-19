@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import itertools
+from collections.abc import Callable
 from dataclasses import FrozenInstanceError, replace
+from typing import cast
 
 import pytest
 
 from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.runtime import effect_decision_plane as effect_decision_plane_module
 from codex_plugin_scanner.guard.runtime.effect_contract import (
     ContainmentRequirement,
     EffectAssessment,
@@ -340,3 +343,13 @@ def test_contracts_are_immutable_and_reject_untyped_boundaries() -> None:
         _ = replace(_request(), schema_version="2.0.0")
     with pytest.raises(ValueError, match="EffectDecisionRequest"):
         _ = evaluate_effect_decision({})  # pyright: ignore[reportArgumentType]
+
+
+def test_unexpected_future_action_cannot_fall_through_to_silent_verified() -> None:
+    disposition = cast(
+        Callable[[GuardAction, set[ProofRoute]], DecisionDisposition],
+        effect_decision_plane_module.decision_disposition,
+    )
+
+    with pytest.raises(ValueError, match="unexpected Guard action"):
+        _ = disposition(cast(GuardAction, cast(object, "future-action")), set())

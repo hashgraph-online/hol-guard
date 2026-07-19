@@ -304,7 +304,7 @@ def evaluate_effect_decision(request: EffectDecisionRequest) -> EffectDecision:
     controlling = tuple(item for item in ordered if item.action_floor == action)
     return EffectDecision(
         action=action,
-        disposition=_disposition(action, proof_routes),
+        disposition=decision_disposition(action, proof_routes),
         controlling_sources=tuple(item.source_id for item in controlling),
         reason_codes=tuple(sorted({item.reason_code for item in ordered})),
         segment_actions=tuple(
@@ -346,13 +346,15 @@ def _effect_floor(effect: EffectObservation) -> tuple[GuardAction, ProofRoute | 
     return base_floor, proof.route, "reason:positive-proof-complete"
 
 
-def _disposition(action: GuardAction, proof_routes: set[ProofRoute]) -> DecisionDisposition:
+def decision_disposition(action: GuardAction, proof_routes: set[ProofRoute]) -> DecisionDisposition:
     if action == "block":
         return DecisionDisposition.BLOCK
     if action in {"require-reapproval", "sandbox-required"}:
         return DecisionDisposition.REQUIRE_REAPPROVAL
     if action in {"review", "warn"}:
         return DecisionDisposition.REVIEW
+    if action != "allow":
+        raise ValueError(f"unexpected Guard action: {action}")
     if ProofRoute.WORKFLOW_AUTHORIZED in proof_routes:
         return DecisionDisposition.WORKFLOW_AUTHORIZED
     if ProofRoute.CONTAINED in proof_routes:
