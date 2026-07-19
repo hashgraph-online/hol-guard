@@ -10,6 +10,8 @@ Builds require Python 3.12, the locked `uv` environment, and PyInstaller. macOS 
 
 All MDM products use the same signed package, machine-policy schema, lifecycle commands, JSON status schema, and exit-code contract. Organization-specific assignment, proxy, trust, enrollment, retention, and policy values remain external configuration. Vendor adapters may translate these contracts into native packaging and detection formats, but must not fork Guard behavior or require a custom binary.
 
+Observer and remediation integrations additionally follow the [vendor-neutral MDM/EDR adapter contract](mdm-adapter-contract.md) and its executable conformance matrix.
+
 ### Policy-bundle signing trust
 
 Organizations that enable signed Guard Cloud policy bundles must provision the initial workspace signing trust through the optional top-level `policyBundleKeyring` field in the machine policy. The value uses the `guard-policy-keyring.v1` contract and contains:
