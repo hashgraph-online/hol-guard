@@ -695,13 +695,15 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         artifact.artifact_id,
         artifact.publisher,
     )
+    command_action_floor = _runtime_artifact_command_action_floor(artifact)
 
     def with_config_policy(action: GuardAction) -> GuardAction:
         # Artifact/publisher/harness settings are more-specific resolutions of
         # the global default, not additional inputs.  Scanner/risk results are
         # independent and therefore remain a floor even for an exact allow.
         current_config_action = configured_override if configured_override is not None else config.default_action
-        return most_restrictive_guard_action(action, current_config_action)
+        actions = (action, current_config_action, command_action_floor)
+        return most_restrictive_guard_action(*(item for item in actions if item is not None))
 
     risk_classes = _runtime_artifact_risk_classes(artifact)
     has_configured_risk_action = any(
@@ -743,6 +745,12 @@ def _resolve_configured_risk_action(config: GuardConfig, risk_class: str, *, har
 def _runtime_artifact_guard_default_action(artifact: GuardArtifact) -> GuardAction | None:
     value = artifact.metadata.get("guard_default_action")
     return normalize_guard_action(value, unknown_action="require-reapproval") if value is not None else None
+
+def _runtime_artifact_command_action_floor(artifact: GuardArtifact) -> GuardAction | None:
+    if artifact.artifact_type != "tool_action_request":
+        return None
+    value = artifact.metadata.get("command_action_floor")
+    return normalize_guard_action(value, unknown_action="block") if value is not None else None
 
 def _runtime_action_data_flow_signals(
     action_envelope: GuardActionEnvelope | None,

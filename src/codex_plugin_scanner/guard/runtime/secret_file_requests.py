@@ -17,6 +17,7 @@ from pathlib import Path
 
 from ..models import GuardArtifact
 from .actions import GuardActionEnvelope, apply_patch_target_paths
+from .command_decision_adapter import effect_decision_to_dict
 from .command_evaluation import evaluate_command
 from .command_extension_interaction import classify_command_extension_interaction
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -3918,6 +3919,8 @@ def build_tool_action_request_artifact(
             "raw_command_text": request.raw_command_text,
             "wrapper_chain": list(wrapper_chain),
             "command_security_identity": evaluation.command.security_identity,
+            "command_action_floor": evaluation.decision_plane.action,
+            "command_decision_plane": effect_decision_to_dict(evaluation.decision_plane),
             "command_rule_matches": [owned.to_dict() for owned in evaluation.matches],
             "risk_classes": list(evaluation.risk_classes),
             "command_parse_confidence": evaluation.command.confidence,
