@@ -17,4 +17,6 @@ The adapter receives bounded dictionaries and must return one of three outcomes:
 
 The deterministic suite covers a current observation, positive clock skew, replay and duplicate idempotency, partial detection data, mapping collision, and provider outage. It verifies fixture identity binding, detection fidelity, the independent observer authority, Ed25519 signature validity, absence of fabricated remediation state, stable duplicate output, and a replay digest.
 
+Adapter code and returned objects are untrusted. The harness gives each invocation an isolated fixture copy, retains an independent expected fixture, snapshots every returned result before the next call, and compares duplicate outputs only after both individual assertions pass validation. Mutation, aliasing, recursive/invalid objects, and exceptions produce bounded failed results; they cannot rewrite expected evidence, satisfy duplicate idempotency, or crash the conformance run.
+
 The bundled key is test-only. Production adapters must use their own independently managed observer signing credential and register only its public key with Guard Cloud. Passing this kit proves protocol conformance; it does not replace real managed-device or vendor certification.
