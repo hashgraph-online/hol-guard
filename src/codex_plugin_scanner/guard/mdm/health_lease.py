@@ -12,7 +12,7 @@ import stat
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
@@ -37,7 +37,10 @@ from .health_lease_contract import (
     HealthLeaseBinding,
     HealthLeaseClaims,
     HealthLeaseOutbox,
+    ProtectionLeaseChallenge,
+    ProtectionLeaseClaims,
     SignedHealthLease,
+    SignedProtectionLease,
     canonical_json_bytes,
     canonical_timestamp,
 )
@@ -46,7 +49,8 @@ from .integrity import machine_integrity_snapshot
 _OUTBOX_NAME = "health-lease-outbox.json"
 _ACK_NAME = "health-lease-ack.json"
 SnapshotFactory = Callable[[], LocalIntegritySnapshot]
-LeaseSigner = Callable[[MachinePaths, KeyGeneration, HealthLeaseClaims, str], bytes]
+LeaseClaims = HealthLeaseClaims | ProtectionLeaseClaims
+LeaseSigner = Callable[[MachinePaths, KeyGeneration, LeaseClaims, str], bytes]
 CrashHook = Callable[[str], None]
 
 
@@ -227,7 +231,7 @@ def _normalized_snapshot(
     return payload
 
 
-def _verify_signature(generation: KeyGeneration, claims: HealthLeaseClaims, signature: bytes) -> None:
+def _verify_signature(generation: KeyGeneration, claims: LeaseClaims, signature: bytes) -> None:
     try:
         public_key = serialization.load_der_public_key(base64.b64decode(generation.public_key_spki, validate=True))
         if not isinstance(public_key, ec.EllipticCurvePublicKey) or not isinstance(public_key.curve, ec.SECP256R1):
@@ -237,17 +241,17 @@ def _verify_signature(generation: KeyGeneration, claims: HealthLeaseClaims, sign
         raise OSError("health_lease_signature_invalid") from exc
 
 
-def _default_signer(
-    paths: MachinePaths, generation: KeyGeneration, claims: HealthLeaseClaims, system_name: str
-) -> bytes:
-    from .device_key_native import sign_health_lease
+def _default_signer(paths: MachinePaths, generation: KeyGeneration, claims: LeaseClaims, system_name: str) -> bytes:
+    from .device_key_native import sign_health_lease, sign_protection_lease
 
-    result = sign_health_lease(
-        paths,
-        generation.generation,
-        canonical_json_bytes(claims.to_dict()),
-        system_name=system_name,
-    )
+    if isinstance(claims, ProtectionLeaseClaims):
+        result = sign_protection_lease(
+            paths, generation.generation, claims.signing_payload(), system_name=system_name
+        )
+    else:
+        result = sign_health_lease(
+            paths, generation.generation, canonical_json_bytes(claims.to_dict()), system_name=system_name
+        )
     return result.signature
 
 
@@ -272,7 +276,10 @@ def _validate_pending(
         raise OSError("health_lease_pending_conflict")
     if (
         claims.previous_lease_digest != record.last_lease_digest
-        or claims.previous_lease_key_id != record.last_lease_key_id
+        or (
+            isinstance(claims, HealthLeaseClaims)
+            and claims.previous_lease_key_id != record.last_lease_key_id
+        )
     ):
         raise OSError("health_lease_pending_conflict")
     return True
@@ -325,7 +332,7 @@ def _retire_outbox(paths: MachinePaths) -> None:
 
 def _advanced_record(
     record: InstallationContinuityRecord,
-    lease: SignedHealthLease,
+    lease: SignedHealthLease | SignedProtectionLease,
     *,
     system_name: str,
     now: datetime,
@@ -400,6 +407,7 @@ def issue_or_load_pending_health_lease(
     snapshot_factory: SnapshotFactory = machine_integrity_snapshot,
     signer: LeaseSigner = _default_signer,
     crash_hook: CrashHook | None = None,
+    challenge: ProtectionLeaseChallenge | None = None,
 ) -> HealthLeaseOutbox:
     """Issue one lease or recover the exact pending artifact after a crash."""
 
@@ -449,25 +457,24 @@ def issue_or_load_pending_health_lease(
             raise OSError("health_lease_outbox_absent")
         generation = verified_machine_device_key_by_id(paths, system_name=resolved_system)
         snapshot_bytes = _normalized_snapshot(snapshot_factory(), binding, record)
-        claims = HealthLeaseClaims.parse(
+        claims = ProtectionLeaseClaims.parse(
             {
-                "schemaVersion": "hol-guard-health-lease.v1",
                 "workspaceId": binding.workspace_id,
                 "deviceId": binding.device_id,
                 "machineInstallationId": record.machine_installation_id,
                 "installationGeneration": record.installation_generation,
                 "sequence": record.last_issued_sequence + 1,
                 "issuedAt": canonical_timestamp(resolved_now),
-                "leaseExpiresAt": canonical_timestamp(resolved_now + timedelta(seconds=lease_seconds)),
+                "validForSeconds": lease_seconds,
                 "snapshotSchemaVersion": LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION,
                 "snapshotDigest": hashlib.sha256(snapshot_bytes).hexdigest(),
                 "previousLeaseDigest": record.last_lease_digest,
-                "previousLeaseKeyId": record.last_lease_key_id,
                 "signingKeyId": generation.key_id,
+                "challenge": challenge.to_dict() if challenge is not None else None,
             }
         )
         signature = signer(paths, generation, claims, resolved_system)
-        lease = SignedHealthLease.parse(SignedHealthLease(claims, signature).canonical_bytes())
+        lease = SignedProtectionLease.parse(SignedProtectionLease(claims, signature).canonical_bytes())
         _verify_signature(generation, claims, lease.signature)
         outbox = HealthLeaseOutbox(lease, snapshot_bytes)
         _atomic_outbox_write(paths, outbox)

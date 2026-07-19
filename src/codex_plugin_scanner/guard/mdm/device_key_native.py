@@ -37,6 +37,18 @@ _HEALTH_LEASE_KEYS = {
     "snapshotSchemaVersion",
     "workspaceId",
 }
+_HEALTH_KEY_REGISTRATION_KEYS = {
+    "algorithm",
+    "deviceId",
+    "installationGeneration",
+    "keyId",
+    "machineInstallationId",
+    "previousInstallationGeneration",
+    "publicKeySpki",
+    "registeredAt",
+    "schemaVersion",
+    "workspaceId",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +88,57 @@ def _validated_canonical_health_lease_claims(claims: bytes) -> str:
         HealthLeaseClaims.parse(payload)
     except ValueError as exc:
         raise ValueError("health_lease_claims_invalid") from exc
+    return text
+
+
+def _validated_canonical_protection_lease(unsigned_lease: bytes) -> str:
+    if not unsigned_lease or len(unsigned_lease) > _MAX_HEALTH_LEASE_CLAIMS_BYTES:
+        raise ValueError("health_lease_claims_invalid")
+    try:
+        text = unsigned_lease.decode("utf-8")
+        decoded = cast(object, json.loads(text))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("health_lease_claims_invalid") from exc
+    if not isinstance(decoded, dict) or set(decoded) != {"claims", "schemaVersion"}:
+        raise ValueError("health_lease_claims_invalid")
+    payload = cast(dict[str, object], decoded)
+    if payload.get("schemaVersion") != "protection-lease.v1":
+        raise ValueError("health_lease_claims_invalid")
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    if canonical != text:
+        raise ValueError("health_lease_claims_invalid")
+    from .health_lease_contract import ProtectionLeaseClaims
+
+    try:
+        ProtectionLeaseClaims.parse(payload.get("claims"))
+    except ValueError as exc:
+        raise ValueError("health_lease_claims_invalid") from exc
+    return text
+
+
+def _validated_canonical_health_key_registration(registration: bytes) -> str:
+    if not registration or len(registration) > _MAX_HEALTH_LEASE_CLAIMS_BYTES:
+        raise ValueError("health_key_registration_invalid")
+    try:
+        text = registration.decode("utf-8")
+        decoded = cast(object, json.loads(text))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("health_key_registration_invalid") from exc
+    if not isinstance(decoded, dict):
+        raise ValueError("health_key_registration_invalid")
+    payload = cast(dict[str, object], decoded)
+    if (
+        set(payload) != _HEALTH_KEY_REGISTRATION_KEYS
+        or payload.get("schemaVersion") != "hol-guard-health-key-registration.v1"
+        or payload.get("algorithm") != "ecdsa-p256-sha256"
+    ):
+        raise ValueError("health_key_registration_invalid")
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    if canonical != text:
+        raise ValueError("health_key_registration_invalid")
+    key_id = payload.get("keyId")
+    if not isinstance(key_id, str) or re.fullmatch(r"[A-Za-z0-9_-]{43}", key_id) is None:
+        raise ValueError("health_key_registration_invalid")
     return text
 
 
@@ -265,6 +328,82 @@ def sign_health_lease(
     return NativeHealthLeaseSignature(_validated_der_signature(payload.get("signature")))
 
 
+def sign_protection_lease(
+    paths: MachinePaths, generation: str, canonical_unsigned_lease: bytes, *, system_name: str
+) -> NativeHealthLeaseSignature:
+    if re.fullmatch(r"[0-9a-f]{32}", generation) is None:
+        raise ValueError("device_key_request_invalid")
+    lease_text = _validated_canonical_protection_lease(canonical_unsigned_lease)
+    command, environment, cwd = _helper_invocation(paths, "sign-protection-lease", generation, system_name)
+    result = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        cwd=cwd,
+        env=environment,
+        input=lease_text,
+        text=True,
+        timeout=_HELPER_TIMEOUT_SECONDS,
+    )
+    if (
+        len(result.stdout.encode("utf-8")) > _MAX_HELPER_OUTPUT_BYTES
+        or len(result.stderr.encode("utf-8")) > _MAX_HELPER_STDERR_BYTES
+    ):
+        raise OSError("device_key_probe_failed")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise OSError("device_key_probe_failed") from exc
+    if (
+        result.returncode != 0
+        or not isinstance(payload, dict)
+        or set(payload) != {"ok", "signature", "signatureAlgorithm", "signatureEncoding"}
+        or payload.get("ok") is not True
+        or payload.get("signatureAlgorithm") != "ecdsa-p256-sha256"
+        or payload.get("signatureEncoding") != "asn1-der"
+    ):
+        raise OSError("device_key_probe_failed")
+    return NativeHealthLeaseSignature(_validated_der_signature(payload.get("signature")))
+
+
+def sign_health_key_registration(
+    paths: MachinePaths, generation: str, canonical_registration: bytes, *, system_name: str
+) -> NativeHealthLeaseSignature:
+    if re.fullmatch(r"[0-9a-f]{32}", generation) is None:
+        raise ValueError("device_key_request_invalid")
+    registration_text = _validated_canonical_health_key_registration(canonical_registration)
+    command, environment, cwd = _helper_invocation(paths, "sign-health-key-registration", generation, system_name)
+    result = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        cwd=cwd,
+        env=environment,
+        input=registration_text,
+        text=True,
+        timeout=_HELPER_TIMEOUT_SECONDS,
+    )
+    if (
+        len(result.stdout.encode("utf-8")) > _MAX_HELPER_OUTPUT_BYTES
+        or len(result.stderr.encode("utf-8")) > _MAX_HELPER_STDERR_BYTES
+    ):
+        raise OSError("device_key_probe_failed")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise OSError("device_key_probe_failed") from exc
+    if (
+        result.returncode != 0
+        or not isinstance(payload, dict)
+        or set(payload) != {"ok", "signature", "signatureAlgorithm", "signatureEncoding"}
+        or payload.get("ok") is not True
+        or payload.get("signatureAlgorithm") != "ecdsa-p256-sha256"
+        or payload.get("signatureEncoding") != "asn1-der"
+    ):
+        raise OSError("device_key_probe_failed")
+    return NativeHealthLeaseSignature(_validated_der_signature(payload.get("signature")))
+
+
 def windows_current_user_sid() -> str:
     from ctypes import wintypes
 
@@ -308,6 +447,8 @@ __all__ = [
     "NativeKeyEvidence",
     "require_machine_context",
     "run_helper",
+    "sign_health_key_registration",
     "sign_health_lease",
+    "sign_protection_lease",
     "windows_current_user_sid",
 ]
