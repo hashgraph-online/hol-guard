@@ -9,12 +9,24 @@ allowlist: a command is prompt-free only when its complete remote capability is 
 | --- | --- | --- |
 | Local metadata | CLI version, help, and completion | Allow without approval |
 | Proven remote read | `pr view`, `issue list`, and explicit API GET requests | Allow without approval |
-| Remote mutation | Known state-changing subcommands, write-capable REST methods, and GraphQL mutations | Require approval |
+| Bounded maintenance | Review-thread resolution and narrow metadata maintenance | Require approval; eligible for a future signed workflow claim |
+| Content mutation | Issue, pull-request, review, comment, and repository content changes | Require approval |
+| Merge | Pull-request merge and auto-merge operations | Require approval |
+| Publication | Release creation, editing, and artifact upload | Require approval |
+| Workflow | Dispatch, rerun, cancellation, enablement, and workflow-file changes | Require approval |
+| Force or delete | Forced ref changes and local or remote deletion | Require approval |
+| Secret or access | Secrets, keys, collaborators, permissions, protection, and visibility | Require approval |
+| Other remote mutation | Known state-changing operations without a narrower class | Require approval |
 | Unverified | Extensions, aliases, dynamic arguments, file/stdin request bodies, or unreviewed pipeline stages | Require approval |
 
 For `gh api`, fields select a write-capable request unless `GET` is explicit. GraphQL is prompt-free only for one
 static query document. Mutation and subscription operations require approval; multiple operations, method overrides,
 external query files, and external variable files are treated as unverified.
+
+One command may retain multiple capabilities. For example, `gh pr merge --delete-branch` records both merge and
+deletion, and mixed GraphQL root fields retain every classified mutation. Guard applies the strongest resulting floor.
+Bounded maintenance is only marked as potentially workflow-authorizable; without a valid signed workflow claim it
+still requires approval.
 
 ## Pipeline composition
 

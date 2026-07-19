@@ -6,6 +6,7 @@ from .command_backup_extensions import BACKUP_COMMAND_RULES
 from .command_cloud_extensions import CLOUD_COMMAND_RULES
 from .command_database_extensions import DATABASE_COMMAND_RULES
 from .command_domain_extensions import DOMAIN_COMMAND_RULES
+from .command_github_rules import GITHUB_ACTION_RISK_CLASSES, GITHUB_COMMAND_RULES
 from .command_remote_extensions import REMOTE_COMMAND_RULES
 from .command_rules import (
     AnyMatcher,
@@ -37,8 +38,6 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "destructive shell command": ("destructive_shell",),
     "guard approval self-authorization command": ("policy_bypass",),
     "github pr body shell substitution": ("execution",),
-    "github remote mutation command": ("destructive_shell", "network_egress"),
-    "unverified github command capability": ("destructive_shell", "network_egress"),
     "filesystem destructive command": ("destructive_shell",),
     "git destructive command": ("destructive_shell",),
     "system destructive command": ("destructive_shell",),
@@ -67,11 +66,13 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "sqlite destructive command": ("destructive_shell",),
     "supabase destructive command": ("destructive_shell", "network_egress"),
     "rsync remote shell command": ("execution", "network_egress"),
+    **GITHUB_ACTION_RISK_CLASSES,
 }
 _GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {"-c", "-C", "--config-env", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree"}
 )
 _GIT_SUBCOMMAND_OPTIONS_WITH_VALUES = {
+    "branch": frozenset(),
     "clean": frozenset({"-e", "--exclude"}),
     "push": frozenset({"--exec", "--push-option", "--receive-pack", "--repo", "-o"}),
     "reset": frozenset({"--pathspec-from-file"}),
@@ -232,25 +233,7 @@ BUILT_IN_COMMAND_RULES = (
         action_class="sensitive local file write",
         safer_alternative="Write to a scoped temporary path and review the final destination.",
     ),
-    _compatibility_rule(
-        rule_id="command.github.remote-mutation",
-        title="GitHub remote mutation",
-        description="Identifies GitHub CLI operations that can change GitHub-hosted state.",
-        action_class="GitHub remote mutation command",
-        safer_alternative=(
-            "Inspect the target with a read-only `gh view`, `gh list`, or explicit API GET before confirming "
-            "the mutation."
-        ),
-    ),
-    _compatibility_rule(
-        rule_id="command.github.capability-unknown",
-        title="Unverified GitHub command capability",
-        description=(
-            "Identifies GitHub CLI operations or pipeline compositions that are not statically proven read-only."
-        ),
-        action_class="Unverified GitHub command capability",
-        safer_alternative="Use a built-in read-only GitHub command or an explicit API GET with static arguments.",
-    ),
+    *GITHUB_COMMAND_RULES,
     _compatibility_rule(
         rule_id="command.shell-mutations.github-body-substitution",
         title="Command substitution in remote body",
@@ -349,6 +332,22 @@ BUILT_IN_COMMAND_RULES = (
                 ),
             ),
         ),
+    ),
+    _structured_rule(
+        rule_id="command.git.remote-branch-delete",
+        title="Remote Git branch deletion",
+        description="Identifies pushes that delete a remote branch reference.",
+        matcher=_git_matcher("push", required_flags=frozenset({"--delete"})),
+        action_class="git destructive command",
+        safer_alternative="List the exact remote branch and confirm its merge state before deletion.",
+    ),
+    _structured_rule(
+        rule_id="command.git.local-branch-delete",
+        title="Local Git branch deletion",
+        description="Identifies forced deletion of a local branch reference.",
+        matcher=_git_matcher("branch", required_flags=frozenset({"-D"})),
+        action_class="git destructive command",
+        safer_alternative="Inspect the branch commits and use `git branch -d` when it is fully merged.",
     ),
     _structured_rule(
         rule_id="command.system.disk-or-power-mutation",
