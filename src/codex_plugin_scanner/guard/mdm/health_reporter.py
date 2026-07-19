@@ -86,7 +86,12 @@ def run_machine_health_cadence(
                 )
             )
             ack = resolved_transport.deliver_lease(outbox)
-            lease_acknowledger(resolved_paths, binding, ack, system_name=resolved_system)
+            lease_acknowledger(
+                resolved_paths,
+                binding,
+                ack.canonical_bytes(),
+                system_name=resolved_system,
+            )
             queue_depth = 0
             challenge = resolved_transport.poll_challenge(
                 binding=binding,
@@ -102,7 +107,12 @@ def run_machine_health_cadence(
                     challenge=challenge,
                 )
                 challenge_ack = resolved_transport.deliver_lease(outbox)
-                lease_acknowledger(resolved_paths, binding, challenge_ack, system_name=resolved_system)
+                lease_acknowledger(
+                    resolved_paths,
+                    binding,
+                    challenge_ack.canonical_bytes(),
+                    system_name=resolved_system,
+                )
                 queue_depth = 0
                 challenge_responded = True
             state = "lease-delivered"

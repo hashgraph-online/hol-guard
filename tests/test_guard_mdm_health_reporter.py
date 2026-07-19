@@ -156,7 +156,7 @@ def test_machine_cadence_delivers_then_answers_only_purpose_bound_challenge(
         system_name="Darwin",
         policy_loader=lambda **_kwargs: _policy(),
         lease_issuer=issue,
-        lease_acknowledger=lambda _paths, _binding, ack, **_kwargs: acknowledgements.append(ack) or ack,
+        lease_acknowledger=lambda _paths, _binding, ack, **_kwargs: acknowledgements.append(HealthLeaseAck.parse(ack)),
         transport=Transport(),
     )
 
