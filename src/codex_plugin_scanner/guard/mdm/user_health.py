@@ -364,7 +364,10 @@ def _registration(state: UserHealthState, now: datetime) -> bytes:
 
 def _outbox(state: UserHealthState, now: datetime) -> HealthLeaseOutbox:
     if state.pending_outbox is not None:
-        return HealthLeaseOutbox.parse(base64.b64decode(state.pending_outbox, validate=True))
+        pending = HealthLeaseOutbox.parse(base64.b64decode(state.pending_outbox, validate=True))
+        expires_at = datetime.fromisoformat(pending.lease.claims.lease_expires_at.replace("Z", "+00:00"))
+        if now < expires_at:
+            return pending
     snapshot = dict(machine_integrity_snapshot())
     snapshot["assuranceLevel"] = "user-managed"
     snapshot["installOwner"] = "user"
@@ -412,10 +415,11 @@ def run_user_health_cadence(
         if state is None or not state.enabled:
             raise PermissionError("user_health_opt_in_required")
         outbox = _outbox(state, resolved_now)
-        if state.pending_outbox is None:
+        encoded_outbox = base64.b64encode(outbox.canonical_bytes()).decode("ascii")
+        if state.pending_outbox != encoded_outbox:
             state = replace(
                 state,
-                pending_outbox=base64.b64encode(outbox.canonical_bytes()).decode("ascii"),
+                pending_outbox=encoded_outbox,
                 updated_at=resolved_now.isoformat(),
             )
             _write_state(guard_home, state)

@@ -159,6 +159,24 @@ def test_user_health_retries_exact_pending_lease_after_transport_failure(guard_h
     assert user_health.user_health_status(guard_home)["pending"] is False
 
 
+def test_user_health_refreshes_expired_unaccepted_lease(guard_home: Path) -> None:
+    user_health.configure_user_health_leases(guard_home, enabled=True, now=NOW)
+    failed = FailingTransport()
+    with pytest.raises(ConnectionError, match="offline"):
+        user_health.run_user_health_cadence(guard_home, now=NOW, transport=failed)
+
+    recovered = Transport()
+    result = user_health.run_user_health_cadence(
+        guard_home,
+        now=NOW.replace(minute=16),
+        transport=recovered,
+    )
+
+    assert result["sequence"] == 1
+    assert recovered.outboxes[0].lease.digest != failed.outboxes[0].lease.digest
+    assert recovered.outboxes[0].lease.claims.previous_lease_digest is None
+
+
 def test_user_health_due_gate_is_bounded_and_cadenced(guard_home: Path) -> None:
     user_health.configure_user_health_leases(guard_home, enabled=True, now=NOW)
     assert user_health.user_health_report_due(guard_home, now=NOW.replace(minute=4)) is False
