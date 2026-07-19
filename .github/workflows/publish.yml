@@ -195,8 +195,14 @@ jobs:
             )
           elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
             CHANNEL="stable"
-            VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+            PYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
               list-versions --registry pypi)
+            TESTPYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+              list-versions --registry testpypi)
+            VERSIONS=$(jq -n \
+              --argjson pypi "$PYPI_VERSIONS" \
+              --argjson testpypi "$TESTPYPI_VERSIONS" \
+              '$pypi + $testpypi | unique')
             VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
               --base-version "$BASE_VERSION" <<< "$VERSIONS")
           fi
@@ -423,6 +429,8 @@ jobs:
         if: steps.testpypi.outputs.upload == 'true'
         with:
           repository-url: https://test.pypi.org/legacy/
+      - name: Remove generated upload attestations
+        run: rm -f dist/*.publish.attestation
       - name: Download and verify exact TestPyPI artifacts
         env:
           VERSION: ${{ needs.build.outputs.version }}
@@ -538,6 +546,8 @@ jobs:
           uv run --with packaging==25.0 python scripts/validate_alpha_release.py "${validator_args[@]}"
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         if: steps.pypi.outputs.upload == 'true'
+      - name: Remove generated upload attestations
+        run: rm -f dist/*.publish.attestation
       - name: Download and verify exact PyPI artifacts
         env:
           VERSION: ${{ needs.build.outputs.version }}
@@ -623,6 +633,8 @@ jobs:
         if: steps.testpypi.outputs.upload == 'true'
         with:
           repository-url: https://test.pypi.org/legacy/
+      - name: Remove generated upload attestations
+        run: rm -f dist/*.publish.attestation
       - name: Download and verify exact TestPyPI artifacts
         env:
           VERSION: ${{ needs.build.outputs.version }}
@@ -691,17 +703,26 @@ jobs:
           git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
           git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main
           BASE_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
-          VERSIONS=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
+          PYPI_VERSIONS=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
             list-versions --registry pypi)
-          PRIOR_VERSIONS=$(jq --arg version "$VERSION" '[.[] | select(. != $version)]' <<< "$VERSIONS")
+          TESTPYPI_VERSIONS=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
+            list-versions --registry testpypi)
+          RELEASE_VERSIONS=$(jq -n \
+            --argjson pypi "$PYPI_VERSIONS" \
+            --argjson testpypi "$TESTPYPI_VERSIONS" \
+            '$pypi + $testpypi | unique')
+          PRIOR_RELEASE_VERSIONS=$(jq --arg version "$VERSION" \
+            '[.[] | select(. != $version)]' <<< "$RELEASE_VERSIONS")
           EXPECTED_VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
-            --base-version "$BASE_VERSION" <<< "$PRIOR_VERSIONS")
+            --base-version "$BASE_VERSION" <<< "$PRIOR_RELEASE_VERSIONS")
           if [[ "$EXPECTED_VERSION" != "$VERSION" ]]; then
             echo "Main release version changed before publication" >&2
             exit 1
           fi
+          PRIOR_PYPI_VERSIONS=$(jq --arg version "$VERSION" \
+            '[.[] | select(. != $version)]' <<< "$PYPI_VERSIONS")
           LATEST_VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
-            --base-version "$BASE_VERSION" --latest-existing <<< "$PRIOR_VERSIONS")
+            --base-version "$BASE_VERSION" --latest-existing <<< "$PRIOR_PYPI_VERSIONS")
           if [[ -n "$LATEST_VERSION" ]]; then
             git fetch --no-tags origin "+refs/tags/v${LATEST_VERSION}:refs/tags/v${LATEST_VERSION}"
             if ! git merge-base --is-ancestor "v${LATEST_VERSION}^{commit}" "$SOURCE_SHA"; then
@@ -727,6 +748,8 @@ jobs:
           fi
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         if: steps.pypi.outputs.upload == 'true'
+      - name: Remove generated upload attestations
+        run: rm -f dist/*.publish.attestation
       - name: Download and verify exact PyPI artifacts
         env:
           VERSION: ${{ needs.build.outputs.version }}
