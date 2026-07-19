@@ -162,6 +162,11 @@ def test_observer_and_remediation_authorities_are_separate_and_allowlisted() -> 
     assert isinstance(detection, dict)
     detection["reasonCodes"] = ["package_absent"]
     assert list(_validator("observer-assertion.v1").iter_errors(assertion))
+    detection["reasonCodes"] = ["observer_current_absent"]
+    assertion["remediation"] = {"state": "unknown", "jobId": None}
+    assert list(_validator("observer-assertion.v1").iter_errors(assertion))
+    assertion["remediation"] = {"state": "none", "jobId": "unexpected-job"}
+    assert list(_validator("observer-assertion.v1").iter_errors(assertion))
 
     job: dict[str, JsonValue] = {
         "schemaVersion": "remediation-job.v1",

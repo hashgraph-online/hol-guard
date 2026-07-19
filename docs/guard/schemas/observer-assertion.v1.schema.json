@@ -30,7 +30,10 @@
       "properties": {
         "state": {"enum": ["none", "queued", "accepted", "running", "succeeded", "failed", "paused", "unknown"]},
         "jobId": {"oneOf": [{"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"}, {"type": "null"}]}
-      }
+      },
+      "if": {"properties": {"state": {"const": "none"}}},
+      "then": {"properties": {"jobId": {"type": "null"}}},
+      "else": {"properties": {"jobId": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"}}}
     },
     "signature": {"$ref": "self-protection-common.v1.schema.json#/$defs/signature"}
   }
