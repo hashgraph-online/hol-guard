@@ -2386,6 +2386,15 @@ function SettingsToggleRow({
   ] });
 }
 const IDLE_STATE = { status: "idle", message: "" };
+function actionFeedbackClassName(status) {
+  if (status === "error") {
+    return "rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700";
+  }
+  if (status === "success") {
+    return "rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700";
+  }
+  return "rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600";
+}
 function TraySettingsPanel() {
   const [trayStatus, setTrayStatus] = reactExports.useState(null);
   const [statusLoading, setStatusLoading] = reactExports.useState(true);
@@ -2470,7 +2479,7 @@ function TraySettingsPanel() {
           actionState.status !== "idle" && /* @__PURE__ */ jsxRuntimeExports.jsx(
             "div",
             {
-              className: actionState.status === "error" ? "rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" : actionState.status === "success" ? "rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700" : "rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600",
+              className: actionFeedbackClassName(actionState.status),
               role: actionState.status === "error" ? "alert" : "status",
               children: actionState.status === "loading" ? "Working…" : actionState.message
             }
