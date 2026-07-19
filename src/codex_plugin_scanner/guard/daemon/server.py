@@ -178,6 +178,14 @@ from ..store_evidence import (
     export_evidence_json,
     list_evidence,
 )
+from .command_activity_api import (
+    handle_command_activity_analytics,
+    handle_command_activity_feedback,
+    handle_command_activity_list,
+    handle_command_extensions,
+    parse_command_activity_event_cursor,
+    stream_command_activity_events,
+)
 from .command_queue_worker import CommandQueueWorker, start_command_queue_worker, stop_command_queue_worker
 from .dashboard_update import merge_dashboard_update_progress, schedule_guard_dashboard_update
 from .discovery import (
@@ -1326,7 +1334,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         headers = self._cors_headers_for_request(
             allow_methods="GET, POST, DELETE, OPTIONS",
-            allow_headers="Authorization, Content-Type, X-Guard-Dashboard-Session, X-Guard-Token",
+            allow_headers=("Authorization, Content-Type, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token"),
         )
         if headers is None:
             self._write_empty(status=403)
@@ -1359,6 +1367,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
                 return
             self._stream_events(_int_query_value(parsed.query, "cursor"))
+            return
+        if parsed.path == "/v1/command-activity/events":
+            if self._query_has_guard_token(parsed.query):
+                self._record_query_token_rejection()
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            if not self._header_token_is_valid():
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            try:
+                cursor = parse_command_activity_event_cursor(
+                    parsed.query,
+                    last_event_id=self.headers.get("Last-Event-ID"),
+                )
+            except ValueError as error:
+                self._write_json({"error": str(error)}, status=400)
+                return
+            stream_command_activity_events(self, cursor)
             return
         if parsed.path.startswith("/v1/") and not self._header_token_is_valid():
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
@@ -1476,6 +1502,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/requests":
             self._handle_requests_list(parsed.query)
+            return
+        if parsed.path == "/v1/command-activity":
+            handle_command_activity_list(self, parsed.query)
+            return
+        if parsed.path == "/v1/command-activity/analytics":
+            handle_command_activity_analytics(self, parsed.query)
+            return
+        if parsed.path == "/v1/command-extensions":
+            handle_command_extensions(self, parsed.query)
             return
         if parsed.path == "/v1/connect/state":
             self._write_legacy_pairing_disabled()
@@ -1758,6 +1793,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
+            return
+        if parsed.path == "/v1/command-activity/feedback":
+            handle_command_activity_feedback(self, payload)
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]:
             self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
@@ -4775,6 +4813,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/settings/export",
             "/v1/events",
             "/v1/events/stream",
+            "/v1/command-activity",
+            "/v1/command-activity/analytics",
+            "/v1/command-activity/events",
+            "/v1/command-activity/feedback",
+            "/v1/command-extensions",
             "/v1/requests",
             "/v1/receipts",
             "/v1/receipts/analytics",
@@ -4996,6 +5039,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         with self.server.active_stream_clients_lock:  # type: ignore[attr-defined]
             self.server.active_stream_clients += 1  # type: ignore[attr-defined]
 
+    def _try_increment_active_stream_clients(self, maximum: int) -> bool:
+        with self.server.active_stream_clients_lock:  # type: ignore[attr-defined]
+            if self.server.active_stream_clients >= maximum:  # type: ignore[attr-defined]
+                return False
+            self.server.active_stream_clients += 1  # type: ignore[attr-defined]
+            return True
+
     def _decrement_active_stream_clients(self) -> None:
         with self.server.active_stream_clients_lock:  # type: ignore[attr-defined]
             self.server.active_stream_clients = max(0, self.server.active_stream_clients - 1)  # type: ignore[attr-defined]
@@ -5063,6 +5113,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/daemon/repair",
             "/v1/evidence",
             "/v1/evidence/export",
+            "/v1/command-activity",
+            "/v1/command-activity/analytics",
+            "/v1/command-activity/events",
+            "/v1/command-activity/feedback",
+            "/v1/command-extensions",
             "/v1/harnesses",
             "/v1/notifications/setup",
             "/v1/policy",
@@ -5478,6 +5533,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/cloud/connect",
             "/v1/notifications/setup",
             "/v1/update",
+            "/v1/command-activity/feedback",
         }:
             return True
         if len(path_parts) >= 3 and path_parts[:2] == ["v1", "hooks"]:
