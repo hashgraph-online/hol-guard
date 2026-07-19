@@ -10,8 +10,6 @@ Builds require Python 3.12, the locked `uv` environment, and PyInstaller. macOS 
 
 All MDM products use the same signed package, machine-policy schema, lifecycle commands, JSON status schema, and exit-code contract. Organization-specific assignment, proxy, trust, enrollment, retention, and policy values remain external configuration. Vendor adapters may translate these contracts into native packaging and detection formats, but must not fork Guard behavior or require a custom binary.
 
-Observer and remediation integrations additionally follow the [vendor-neutral MDM/EDR adapter contract](mdm-adapter-contract.md) and its executable conformance matrix.
-
 ### Policy-bundle signing trust
 
 Organizations that enable signed Guard Cloud policy bundles must provision the initial workspace signing trust through the optional top-level `policyBundleKeyring` field in the machine policy. The value uses the `guard-policy-keyring.v1` contract and contains:
@@ -34,19 +32,6 @@ On Unix platforms the native policy file and every path component must be root-o
 
 The machine-status JSON reports only whether this trust is configured, its workspace, and its key count. Public keys and fingerprints are not included in status output. The package's `release-trusted-keys.json` is a separate Ed25519 release-manifest trust domain and must not be used as policy-bundle signing authority.
 
-### Machine health Cloud enrollment
-
-Signed health delivery uses a dedicated machine-owned OAuth/DPoP profile. It never borrows credentials from a logged-in user. After the package and locked `selfProtection.workspaceId` / `selfProtection.deviceId` policy are deployed, an endpoint administrator completes device authorization once in root/SYSTEM context with the machine Cloud directory:
-
-- macOS: `hol-guard connect --guard-home "/Library/Application Support/HOL Guard State/cloud" --source machine-health --headless`
-- Windows: `hol-guard connect --guard-home "C:\ProgramData\HOL Guard\cloud" --source machine-health --headless`
-
-The administrator completes the displayed authorization URL using an identity permitted to enroll that organization’s device. MDM may orchestrate this command and collect only its bounded enrollment status; it must not place refresh tokens, DPoP private keys, or bearer tokens in managed policy. The resulting credential store is machine-owned and the scheduled reporter can refresh it without a user session.
-
-Each cadence registers the current non-exportable P-256 health key idempotently, submits one canonical `protection-lease.v1` outbox item, persists the authenticated acknowledgement, then polls only the fixed pending-attestation-challenge endpoint. A pending challenge can produce only a new signed lease bound to its exact nonce, lifetime, workspace, device, installation, and generation. Unknown fields and command-shaped responses are rejected.
-
-`mdm health-report --scope machine --json` exposes bounded diagnostics: snapshot duration, lease age, delivery latency, rejection reason, queue depth, and key-storage health. Cloud or proxy failure reports `delivery-failed` while retaining the current outbox and leaves local enforcement unchanged. A missing machine OAuth profile reports `lease-ready`; it never falls back to user credentials.
-
 ## Intune adapter example
 
 - macOS install: `/usr/sbin/installer -pkg hol-guard.pkg -target /`
@@ -54,7 +39,7 @@ Each cadence registers the current non-exportable P-256 health key idempotently,
 - Windows install: `msiexec /i hol-guard.msi /qn /norestart /l*v hol-guard-install.log`
 - Windows uninstall: `msiexec /x {product-code} /qn /norestart /l*v hol-guard-uninstall.log`
 - Detection runs the platform `detect` script in device context. Exit `0` means healthy, `1` means absent/degraded, `2` means invalid input, and `3` means removal authorization is required.
-- User activation runs the platform activation command in user context. Device installation must never substitute SYSTEM/root's home. After activation, device context runs `mdm harness-coverage-register` for that user; macOS can assign `register-current-user-coverage.sh`, while Windows device remediation uses `register-user-coverage.ps1` with the assigned user's home and identity.
-- Managed deactivation is two-context: the device authority creates a ≤2-minute authorization under machine state, then the user-context command consumes it and restores that user's adapters. Device context finalizes removal with `mdm harness-coverage-unregister`; it fails while active installs or the activation marker remain. macOS `deactivate-user.sh` performs every phase. Windows uses `authorize-deactivation.ps1`, assigns `deactivate-user.ps1` in user context, then runs `unregister-user-coverage.ps1` and removes the authorization in device context.
+- User activation runs the platform activation command in user context. Device installation must never substitute SYSTEM/root's home.
+- Managed deactivation is two-context: the device authority creates a ≤2-minute authorization under machine state, then the user-context command consumes it and restores that user's adapters. macOS `deactivate-user.sh` performs both steps; Windows uses `authorize-deactivation.ps1`, assigns `deactivate-user.ps1` in user context, then removes the authorization in device context.
 
 Use Intune supersedence for upgrades. The MSI blocks downgrades. Rollback requires an administrator-authorized package and managed policy permitting the target version. Preserve user evidence by default; remove it only through an explicit organization retention decision.

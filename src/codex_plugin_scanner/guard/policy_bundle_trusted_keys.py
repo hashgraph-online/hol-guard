@@ -6,7 +6,6 @@ import hashlib
 import importlib
 import time
 from dataclasses import dataclass
-from typing import Protocol, cast
 
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
@@ -15,7 +14,6 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from .runtime.supply_chain_bundle_base import SupplyChainBundleMalformedError, _parse_iso_timestamp
 
 _VERIFICATION_KEY_STATES = frozenset({"active", "grace", "revoked"})
-_POLICY_BUNDLE_V2_CONTRACT = "guard-policy-bundle.v2"
 POLICY_BUNDLE_KEY_PURPOSE = "policy_bundle"
 POLICY_BUNDLE_KEYRING_CONTRACT_VERSION = "guard-policy-keyring.v1"
 MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY = "managed_policy_bundle_keyring_provenance"
@@ -129,21 +127,6 @@ class PolicyBundleVerificationKey:
             valid_from=normalized_valid_from,
             valid_until=normalized_valid_until,
         )
-
-
-class _PolicyBundleV2Module(Protocol):
-    def validated_policy_bundle_v2_payload(
-        self,
-        policy_bundle: dict[str, object],
-        *,
-        trusted_verification_keys: tuple[PolicyBundleVerificationKey, ...],
-        anchored_verification_keys: tuple[PolicyBundleVerificationKey, ...],
-    ) -> tuple[dict[str, object] | None, str | None]: ...
-
-
-def _policy_bundle_v2_module() -> _PolicyBundleV2Module:
-    module = importlib.import_module(".policy_bundle_v2", __package__)
-    return cast(_PolicyBundleV2Module, cast(object, module))
 
 
 def policy_bundle_key_fingerprint(public_key_pem: str) -> str:
@@ -506,26 +489,13 @@ def validate_synced_policy_bundle(
         supply_chain_keyring=supply_chain_keyring,
         managed_keyring_provenance=managed_keyring_provenance,
     )
-    if policy_bundle.get("contractVersion") == _POLICY_BUNDLE_V2_CONTRACT:
-        validated_policy_bundle_v2_payload = _policy_bundle_v2_module().validated_policy_bundle_v2_payload
-
-        validated_bundle, rejection_reason = validated_policy_bundle_v2_payload(
-            policy_bundle,
-            trusted_verification_keys=trusted_keys,
-            anchored_verification_keys=anchored_keys,
-        )
-        if validated_bundle is not None and expected_workspace_id is not None:
-            workspace_id = validated_bundle.get("workspaceId")
-            if not isinstance(workspace_id, str) or workspace_id != expected_workspace_id:
-                validated_bundle, rejection_reason = None, "wrong_workspace"
-    else:
-        validated_bundle, rejection_reason = _policy_bundle_parser_module().validated_policy_bundle_payload(
-            policy_bundle,
-            trusted_verification_keys=trusted_keys,
-            anchored_verification_keys=anchored_keys,
-            expected_workspace_id=expected_workspace_id,
-            now=now,
-        )
+    validated_bundle, rejection_reason = _policy_bundle_parser_module().validated_policy_bundle_payload(
+        policy_bundle,
+        trusted_verification_keys=trusted_keys,
+        anchored_verification_keys=anchored_keys,
+        expected_workspace_id=expected_workspace_id,
+        now=now,
+    )
     if validated_bundle is None:
         return None, rejection_reason, anchored_keys
     # Live machine authority remains exclusively root-owned. Never copy its
@@ -551,13 +521,8 @@ def persistable_policy_bundle_keyring(
     workspace_id = policy_bundle.get("workspaceId")
     if not isinstance(workspace_id, str) or not workspace_id.strip():
         return ()
-    allowed_workspace_ids = (
-        {None, workspace_id} if policy_bundle.get("contractVersion") == _POLICY_BUNDLE_V2_CONTRACT else {workspace_id}
-    )
     policy_anchors = tuple(
-        key
-        for key in anchored_keys
-        if key.purpose == POLICY_BUNDLE_KEY_PURPOSE and key.workspace_id in allowed_workspace_ids
+        key for key in anchored_keys if key.purpose == POLICY_BUNDLE_KEY_PURPOSE and key.workspace_id == workspace_id
     )
     verifier = policy_bundle.get("verifier")
     if not isinstance(verifier, dict):

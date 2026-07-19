@@ -130,8 +130,6 @@ from ..policy_bundle_trusted_keys import (
     policy_bundle_keyring_payload,
     validate_synced_policy_bundle,
 )
-from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
-from ..policy_document_io import PolicyCompilationError
 from ..receipts.manager import build_receipt
 from ..review_contracts import (
     GuardReviewContractError,
@@ -147,15 +145,14 @@ from ..runtime.runner import (
     GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
     _build_policy_bundle_decisions,
-    _canonical_policy_enforcement_enabled,
     _daemon_version_supported,
     _guard_device_metadata,
     _persist_cloud_receipt_redaction_level,
     _policy_bundle_acceptance_checkpoint,
     _policy_bundle_acknowledgement_payload,
     _policy_bundle_cloud_exception_items,
+    _policy_bundle_downgrade_reference,
     _policy_bundle_is_version_downgrade,
-    _policy_shadow_mismatch_reason_codes,
     _reset_cloud_receipt_redaction_authority,
     _resolve_guard_sync_auth_context,
     _validate_cached_policy_bundle,
@@ -1448,9 +1445,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             config = load_guard_config(store.guard_home)
             self._write_json(_settings_response_payload(store.guard_home, editable_guard_settings(config)))
             return
-        if parsed.path == "/v1/tray/status":
-            self._handle_tray_status()
-            return
         if parsed.path == "/v1/update/status":
             self._write_json(
                 merge_dashboard_update_progress(
@@ -1901,24 +1895,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
             )
             return
-        if parsed.path == "/v1/tray/start":
-            self._handle_tray_action("start", payload)
-            return
-        if parsed.path == "/v1/tray/stop":
-            self._handle_tray_action("stop", payload)
-            return
-        if parsed.path == "/v1/tray/restart":
-            self._handle_tray_action("restart", payload)
-            return
-        if parsed.path == "/v1/tray/repair":
-            self._handle_tray_action("repair", payload)
-            return
-        if parsed.path == "/v1/tray/install":
-            self._handle_tray_action("install", payload)
-            return
-        if parsed.path == "/v1/tray/uninstall":
-            self._handle_tray_action("uninstall", payload)
-            return
         if parsed.path == "/v1/notifications/setup":
             self._handle_notification_setup(payload)
             return
@@ -2362,19 +2338,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self.server.store,  # type: ignore[attr-defined]
                 self.server.store.get_sync_payload("policy_bundle"),  # type: ignore[attr-defined]
             )
-            canonical_last_good = self.server.store.get_sync_payload(  # type: ignore[attr-defined]
-                "policy_bundle_canonical_last_good"
-            )
-            canonical_previous_good = self.server.store.get_sync_payload(  # type: ignore[attr-defined]
-                "policy_bundle_canonical_previous_good"
-            )
-            transition_baseline = existing_policy_bundle
-            if (
-                validated_policy_bundle is not None
-                and validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
-                and isinstance(canonical_last_good, dict)
-            ):
-                transition_baseline = canonical_last_good
             if validated_policy_bundle is None:
                 resolved_reason = rejection_reason or "invalid_policy_bundle"
                 error_payload: dict[str, object] = {"error": resolved_reason}
@@ -2396,98 +2359,23 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 return
             if _policy_bundle_is_version_downgrade(
-                transition_baseline,
+                _policy_bundle_downgrade_reference(self.server.store, existing_policy_bundle),  # type: ignore[attr-defined]
                 validated_policy_bundle,
-                expected_last_good_bundle=(
-                    canonical_previous_good if isinstance(canonical_previous_good, dict) else None
-                ),
             ):
                 self._write_json({"error": "bundle_version_downgrade"}, status=400)
                 return
             applied_at = _now()
             device_id, device_name = _guard_device_metadata(self.server.store)  # type: ignore[attr-defined]
-            workspace_id = (  # type: ignore[attr-defined]
-                self.server.store.get_cloud_workspace_id()
-                or self._optional_string(validated_policy_bundle.get("workspaceId"))
-                or ""
-            )
-            canonical_enforcement = _canonical_policy_enforcement_enabled(
-                workspace_id=workspace_id,
+            signed_remote_decisions = _build_policy_bundle_decisions(
+                validated_policy_bundle,
                 device_id=device_id,
-            )
-            bundle_is_v2 = validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
-            try:
-                if bundle_is_v2:
-                    canonical_decisions = _build_policy_bundle_decisions(
-                        validated_policy_bundle,
-                        device_id=device_id,
-                        device_name=device_name,
-                        canonical_enforcement=True,
-                    )
-                    legacy_payload = self.server.store.get_sync_payload(  # type: ignore[attr-defined]
-                        "policy_bundle_legacy_last_good"
-                    )
-                    if not isinstance(legacy_payload, dict):
-                        legacy_payload = (
-                            existing_policy_bundle
-                            if isinstance(existing_policy_bundle, dict)
-                            and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
-                            else None
-                        )
-                    legacy_decisions = (
-                        _build_policy_bundle_decisions(
-                            legacy_payload,
-                            device_id=device_id,
-                            device_name=device_name,
-                        )
-                        if isinstance(legacy_payload, dict)
-                        else []
-                    )
-                    mismatch_reasons = _policy_shadow_mismatch_reason_codes(
-                        legacy_decisions,
-                        canonical_decisions,
-                    )
-                    blocking_mismatch_reasons = tuple(
-                        reason for reason in mismatch_reasons if reason != "legacy_unavailable"
-                    )
-                    candidate_policy_decisions = (
-                        canonical_decisions
-                        if canonical_enforcement and not blocking_mismatch_reasons
-                        else legacy_decisions
-                    )
-                    if mismatch_reasons:
-                        self.server.store.add_event(  # type: ignore[attr-defined]
-                            "policy_bundle/semantic_mismatch",
-                            {
-                                "canonicalRuleCount": len(canonical_decisions),
-                                "legacyRuleCount": len(legacy_decisions),
-                                "reasonCodes": mismatch_reasons,
-                                "schemaVersion": 1,
-                            },
-                            applied_at,
-                        )
-                    if canonical_enforcement and blocking_mismatch_reasons:
-                        self._write_json({"error": "canonical_shadow_mismatch"}, status=409)
-                        return
-                else:
-                    candidate_policy_decisions = _build_policy_bundle_decisions(
-                        validated_policy_bundle,
-                        device_id=device_id,
-                        device_name=device_name,
-                    )
-            except PolicyCompilationError as error:
-                self._write_json({"error": f"canonical_compile_{error.code}"}, status=400)
-                return
-            previous_policy_bundle_ack = self.server.store.get_sync_payload(  # type: ignore[attr-defined]
-                "policy_bundle_ack"
+                device_name=device_name,
             )
             policy_bundle_ack = _policy_bundle_acknowledgement_payload(
                 device_id=device_id,
                 device_name=device_name,
                 policy_bundle=validated_policy_bundle,
                 synced_at=applied_at,
-                status=("applied" if canonical_enforcement or not bundle_is_v2 else "validated"),
-                previous=(previous_policy_bundle_ack if isinstance(previous_policy_bundle_ack, dict) else None),
             )
             cloud_exception_items = _policy_bundle_cloud_exception_items(
                 self.server.store,  # type: ignore[attr-defined]
@@ -2497,12 +2385,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 device_id=device_id,
             )
             activated = self.server.store.apply_policy_bundle_authority(  # type: ignore[attr-defined]
-                candidate_policy_decisions,
+                signed_remote_decisions,
                 applied_at,
                 policy_bundle=validated_policy_bundle,
                 policy_bundle_keyring=policy_bundle_keyring_payload(
                     trusted_policy_bundle_keys,
-                    workspace_id=workspace_id,
+                    workspace_id=self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
                 ),
                 cloud_exceptions=cloud_exception_items,
                 policy_bundle_ack=policy_bundle_ack,
@@ -2515,26 +2403,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if not activated:
                 self._write_json({"error": "bundle_version_downgrade"}, status=400)
                 return
-            if bundle_is_v2:
-                if isinstance(canonical_last_good, dict) and canonical_last_good.get(
-                    "bundleHash"
-                ) != validated_policy_bundle.get("bundleHash"):
-                    self.server.store.set_sync_payload(  # type: ignore[attr-defined]
-                        "policy_bundle_canonical_previous_good",
-                        canonical_last_good,
-                        applied_at,
-                    )
-                self.server.store.set_sync_payload(  # type: ignore[attr-defined]
-                    "policy_bundle_canonical_last_good",
-                    validated_policy_bundle,
-                    applied_at,
-                )
-            else:
-                self.server.store.set_sync_payload(  # type: ignore[attr-defined]
-                    "policy_bundle_legacy_last_good",
-                    validated_policy_bundle,
-                    applied_at,
-                )
             receipt_redaction_level = validated_policy_bundle.get("receiptRedactionLevel")
             if isinstance(receipt_redaction_level, str) and receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
                 _persist_cloud_receipt_redaction_level(
@@ -3754,105 +3622,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         guidance = macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None
         self._write_json(desktop_notification_setup_payload(result, guidance=guidance))
 
-    def _handle_tray_status(self) -> None:
-        """Return the current tray status as JSON.
-
-        Delegates to ``tray.lifecycle.get_status`` which returns a
-        ``TrayLifecycleResult`` (already redacted; no tokens emitted).
-        """
-        from ..tray.lifecycle import get_status as get_tray_status
-
-        try:
-            state, capability, locator = get_tray_status(self.server.store.guard_home)  # type: ignore[attr-defined]
-        except Exception as error:
-            self._write_json({"error": "tray_status_failed", "message": str(error)}, status=500)
-            return
-        self._write_json(
-            {
-                "state": state.value,
-                "capability": capability.to_payload(),
-                "locator": locator.to_payload() if locator else None,
-            }
-        )
-
-    def _handle_tray_action(self, action: str, payload: dict[str, object]) -> None:
-        """Dispatch a tray lifecycle action (start/stop/restart/repair/install/uninstall).
-
-        All actions return the ``TrayLifecycleResult`` payload from the tray
-        service. No tokens or secrets are emitted — ``TrayLifecycleResult``
-        only carries state, reason code, message, and the redacted locator.
-        """
-        del payload  # no action currently accepts a payload body
-        from ..tray.contracts import TrayLifecycleResult, TrayReasonCode, TrayState
-        from ..tray.lifecycle import (
-            install_registration,
-            remove_registration,
-            repair_tray,
-            start_tray,
-            stop_tray,
-        )
-        from ..tray.platforms import detect_platform_adapter
-
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-
-        # install/uninstall require a platform adapter (LaunchAgent/Run-key/XDG).
-        # Detect once; if unsupported, all actions return UNSUPPORTED.
-        adapter = detect_platform_adapter()
-
-        try:
-            if action == "start":
-                result = start_tray(guard_home)
-            elif action == "stop":
-                result = stop_tray(guard_home)
-            elif action == "repair":
-                result = repair_tray(guard_home)
-            elif action == "install":
-                if adapter is None:
-                    result = TrayLifecycleResult(
-                        ok=False,
-                        state=TrayState.UNSUPPORTED,
-                        reason=TrayReasonCode.UNSUPPORTED_PLATFORM,
-                        message="Tray startup registration is not supported on this platform",
-                    )
-                else:
-                    result = install_registration(guard_home, adapter=adapter)
-            elif action == "uninstall":
-                if adapter is None:
-                    result = TrayLifecycleResult(
-                        ok=False,
-                        state=TrayState.UNSUPPORTED,
-                        reason=TrayReasonCode.UNSUPPORTED_PLATFORM,
-                        message="Tray startup registration is not supported on this platform",
-                    )
-                else:
-                    result = remove_registration(guard_home, adapter=adapter)
-            elif action == "restart":
-                # Match the CLI restart path: stop, then start with force=True
-                # so a failed/timed-out stop doesn't leave start_tray() returning
-                # already_running (which would report success without restarting).
-                stop_result = stop_tray(guard_home)
-                result = start_tray(guard_home, force=True)
-                if not result.ok:
-                    result = TrayLifecycleResult(
-                        ok=result.ok,
-                        state=result.state,
-                        reason=result.reason,
-                        message=f"{result.message} (stop_reason={stop_result.reason.value})",
-                        recovery_command=result.recovery_command,
-                    )
-            else:
-                self._write_json({"error": "unknown_action", "action": action}, status=400)
-                return
-        except Exception as error:
-            # Error message is returned to the dashboard; no logger available
-            # in the daemon server module (no logging imported here).
-            self._write_json(
-                {"error": "tray_action_failed", "action": action, "message": str(error)},
-                status=500,
-            )
-            return
-        self._write_json(result.to_payload())
-
     def _handle_requests_list(self, query_string: str) -> None:
         limit = self._query_limit(query_string, default=200, maximum=200)
         if limit is None:
@@ -5044,7 +4813,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/daemon/repair",
             "/v1/notifications/setup",
             "/v1/update/status",
-            "/v1/tray/status",
         }:
             return True
         # Hosted dashboard access is blocked for these routes, but local
@@ -5707,12 +5475,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/cloud/connect",
             "/v1/notifications/setup",
             "/v1/update",
-            "/v1/tray/start",
-            "/v1/tray/stop",
-            "/v1/tray/restart",
-            "/v1/tray/repair",
-            "/v1/tray/install",
-            "/v1/tray/uninstall",
         }:
             return True
         if len(path_parts) >= 3 and path_parts[:2] == ["v1", "hooks"]:

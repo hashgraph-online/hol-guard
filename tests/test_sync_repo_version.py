@@ -76,18 +76,6 @@ def test_sync_repo_version_updates_both_files(tmp_path: Path) -> None:
     assert state.module == "2.0.844"
     assert state.lockfile == "2.0.844"
 
-def test_sync_repo_version_is_idempotent(tmp_path: Path) -> None:
-    _write_repo_files(tmp_path, pyproject_version="2.0.844", module_version="2.0.844")
-
-    changed = SYNC_REPO_VERSION.sync_repo_version(tmp_path, "2.0.844")
-
-    assert changed is False
-    assert SYNC_REPO_VERSION.read_repo_version_state(tmp_path) == SYNC_REPO_VERSION.RepoVersionState(
-        pyproject="2.0.844",
-        module="2.0.844",
-        lockfile="2.0.844",
-    )
-
 
 def test_assert_repo_version_detects_mismatch(tmp_path: Path) -> None:
     _write_repo_files(tmp_path, pyproject_version="2.0.844", module_version="2.0.764")

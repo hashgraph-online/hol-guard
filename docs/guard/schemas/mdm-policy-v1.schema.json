@@ -72,23 +72,6 @@
         }
       }
     },
-    "integrityTrust": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "releasePublicKeys": {
-          "type": "object",
-          "propertyNames": {"minLength": 1},
-          "additionalProperties": {"type": "string", "contentEncoding": "base64"}
-        },
-        "macosTeamId": {"type": ["string", "null"], "minLength": 1},
-        "windowsSignerThumbprints": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {"type": "string", "pattern": "^[A-Fa-f0-9 ]{40,59}$"}
-        }
-      }
-    },
     "daemonStartup": {"enum": ["on-demand", "login"]}
   }
 }
