@@ -235,7 +235,7 @@ def test_inspect_release_rejects_release_with_only_publish_attestation_sidecars(
         inspect_release(Registry.TESTPYPI, VERSION, fetcher=fetcher)
 
 
-def test_inspect_release_rejects_publish_attestation_for_invalid_distribution() -> None:
+def test_rejects_publish_attestation_for_invalid_distribution(tmp_path: Path) -> None:
     attestation = "not-a-distribution.publish.attestation"
     payload = _release_payload(
         Registry.TESTPYPI,
@@ -245,6 +245,10 @@ def test_inspect_release_rejects_publish_attestation_for_invalid_distribution() 
 
     with pytest.raises(RegistryVerificationError, match="Invalid distribution filename"):
         inspect_release(Registry.TESTPYPI, VERSION, fetcher=fetcher)
+    dist = _local_dist(tmp_path)
+    (dist / attestation).write_bytes(b"invalid")
+    with pytest.raises(RegistryVerificationError, match="Invalid distribution filename"):
+        compute_local_distribution_hashes(dist, VERSION)
 
 
 def test_inspect_release_rejects_an_invalid_distribution_port() -> None:
@@ -264,7 +268,10 @@ def test_inspect_release_rejects_an_invalid_distribution_port() -> None:
 def test_computes_local_guard_wheel_and_sdist_hashes(tmp_path: Path) -> None:
     dist = _local_dist(tmp_path)
     (dist / f"plugin_scanner-{VERSION}-py3-none-any.whl").write_bytes(b"scanner")
-
+    (dist / f"{WHEEL}.publish.attestation").write_bytes(b"wheel-attestation")
+    (dist / f"{SDIST}.publish.attestation.publish.attestation").write_bytes(
+        b"nested-sdist-attestation"
+    )
     assert compute_local_distribution_hashes(dist, VERSION) == {
         SDIST: _sha(SDIST_BYTES),
         WHEEL: _sha(WHEEL_BYTES),
