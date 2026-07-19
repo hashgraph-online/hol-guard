@@ -193,3 +193,11 @@ def test_observer_and_remediation_authorities_are_separate_and_allowlisted() -> 
     assert list(validator.iter_errors(job))
     job["action"] = "run-command"
     assert list(validator.iter_errors(job))
+
+
+def test_confirmed_authorized_removal_precedes_pending_removal() -> None:
+    contract = (SCHEMA_ROOT.parent / "self-protection-contract.md").read_text(encoding="utf-8")
+
+    assert contract.index("Fresh observer confirms absence under a valid removal authorization") < contract.index(
+        "Valid removal authorization is active and removal is not yet confirmed"
+    )

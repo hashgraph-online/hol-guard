@@ -52,8 +52,8 @@ Inputs are evaluated in this order. The first matching row wins.
 | Priority | Condition | State |
 | --- | --- | --- |
 | 1 | Device explicitly retired | `retired` |
-| 2 | Valid removal authorization is active | `removal_pending` |
-| 3 | Fresh observer confirms absence under that authorization | `removed_authorized` |
+| 2 | Fresh observer confirms absence under a valid removal authorization | `removed_authorized` |
+| 3 | Valid removal authorization is active and removal is not yet confirmed | `removal_pending` |
 | 4 | Remediation adapter accepted an eligible bounded job | `repairing` |
 | 5 | Fresh observer reports online and complete absence without valid removal | `unexpectedly_absent` |
 | 6 | Current local or observer evidence reports modification/partial health | `tampered` or `degraded` according to the frozen severity mapping |
