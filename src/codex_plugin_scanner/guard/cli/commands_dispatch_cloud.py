@@ -34,6 +34,7 @@ from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_reso
 from ..mdm.user_health import (
     configure_user_health_leases,
     run_user_health_cadence,
+    user_health_report_due,
     user_health_status,
 )
 from ..runtime.command_capability import (
@@ -325,7 +326,9 @@ def _run_guard_sync_command(
                     )
                 )
             with suppress(OSError, PermissionError, RuntimeError, ValueError):
-                if user_health_status(context.guard_home)["enabled"] is True:
+                if user_health_status(context.guard_home)["enabled"] is True and user_health_report_due(
+                    context.guard_home
+                ):
                     payload["health_lease"] = run_user_health_cadence(context.guard_home)
             bar.done("Sync complete")
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
