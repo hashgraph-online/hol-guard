@@ -206,6 +206,18 @@ def test_inspect_release_ignores_valid_publish_attestation_sidecars() -> None:
     assert {item.filename for item in inspection.files} == {WHEEL, SDIST}
 
 
+def test_inspect_release_rejects_nested_publish_attestation_sidecars() -> None:
+    nested_attestation = f"{WHEEL}.publish.attestation.publish.attestation"
+    payload = _release_payload(
+        Registry.TESTPYPI,
+        {nested_attestation: (b"attestation", None)},
+    )
+    fetcher = FakeFetcher({_release_url(Registry.TESTPYPI): payload})
+
+    with pytest.raises(RegistryVerificationError, match="Invalid distribution filename"):
+        inspect_release(Registry.TESTPYPI, VERSION, fetcher=fetcher)
+
+
 def test_inspect_release_rejects_release_with_only_publish_attestation_sidecars() -> None:
     attestation = f"{WHEEL}.publish.attestation"
     payload = _release_payload(
