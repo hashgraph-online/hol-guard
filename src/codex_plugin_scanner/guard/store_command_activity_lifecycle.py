@@ -31,6 +31,7 @@ from .runtime.command_activity_contract import (
     validate_activity_transition,
 )
 from .runtime.effect_contract import UncertaintyKind
+from .store_command_activity_rollups import transition_command_activity_rollups
 
 _MAX_COUNTER: Final = 9_223_372_036_854_775_807
 _ERROR_CODE: Final = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
@@ -155,6 +156,7 @@ class StoreCommandActivityLifecycleMixin:
             )
             if result.rowcount != 1:
                 raise RuntimeError("command activity changed during lifecycle transition")
+            transition_command_activity_rollups(connection, previous, current)
             return True
 
     def record_command_activity_persistence_failure(
