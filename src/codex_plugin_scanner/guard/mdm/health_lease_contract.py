@@ -432,7 +432,7 @@ def _validate_snapshot_binding(snapshot: bytes, claims: HealthLeaseClaims) -> No
         or raw.get("installOwner") not in get_args(InstallOwner)
         or raw.get("remediationClass") not in get_args(RemediationClass)
         or not isinstance(reason_codes, list)
-        or len(reason_codes) > 128
+        or len(reason_codes) > 64
         or any(not isinstance(reason, str) or reason not in _REASON_CODES for reason in reason_codes)
         or reason_codes != sorted(set(reason_codes))
     ):
