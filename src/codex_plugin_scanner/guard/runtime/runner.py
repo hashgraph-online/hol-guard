@@ -134,6 +134,8 @@ def _canonical_policy_enforcement_enabled(
     if percentage in {0, 100}:
         return percentage == 100
     cohort_key = f"{workspace_id or 'local'}:{device_id}".encode()
+    # This is an in-memory rollout bucket for opaque installation IDs, not a password verifier.
+    # codeql[py/weak-sensitive-data-hashing]
     cohort = int.from_bytes(hashlib.sha256(cohort_key).digest()[:8], "big") % 100
     return cohort < percentage
 
