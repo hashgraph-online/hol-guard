@@ -252,6 +252,24 @@ def test_observer_and_remediation_authorities_are_separate_and_allowlisted() -> 
     assert list(validator.iter_errors(job))
 
 
+def test_protection_state_accepts_legacy_unattested_clients() -> None:
+    payload: dict[str, JsonValue] = {
+        "schemaVersion": "protection-state.v1",
+        "workspaceId": "workspace-a",
+        "deviceId": "device-a",
+        "installationGeneration": None,
+        "state": "legacy_unattested",
+        "reasonCodes": ["legacy_unattested"],
+        "assuranceLevel": "user-managed",
+        "leaseFreshUntil": None,
+        "observerFreshUntil": None,
+        "remediationState": "none",
+        "lastTransitionAt": "2026-07-18T22:00:00Z",
+        "evidenceDigests": [],
+    }
+    _validator("protection-state.v1").validate(payload)
+
+
 def test_confirmed_authorized_removal_precedes_pending_removal() -> None:
     contract = (SCHEMA_ROOT.parent / "self-protection-contract.md").read_text(encoding="utf-8")
 

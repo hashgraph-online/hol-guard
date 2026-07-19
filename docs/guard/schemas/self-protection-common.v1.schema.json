@@ -14,7 +14,8 @@
     "protectionState": {
       "enum": [
         "healthy", "degraded", "late", "offline", "unknown", "suspected_absent", "tampered",
-        "unexpectedly_absent", "removal_pending", "removed_authorized", "repairing", "recovered", "retired"
+        "unexpectedly_absent", "removal_pending", "removed_authorized", "repairing", "recovered", "retired",
+        "legacy_unattested"
       ]
     },
     "reasonCode": {
