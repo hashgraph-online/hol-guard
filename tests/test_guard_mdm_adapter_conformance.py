@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from datetime import datetime, timezone
+from typing import cast
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -83,6 +84,14 @@ def test_accepts_signed_assertion_and_treats_exact_duplicate_as_idempotent() -> 
     assert duplicate.digest == first.digest
 
 
+def test_rejects_non_bytes_payload_with_stable_error() -> None:
+    with pytest.raises(AdapterConformanceError) as invalid:
+        ObserverAdapterConformanceHarness().evaluate(
+            cast(bytes, "not-bytes"), mapping_candidates=1, now=NOW, public_key=PUBLIC_KEY
+        )
+    assert reason(invalid) == "adapter_assertion_invalid"
+
+
 def test_rejects_replay_with_changed_payload_and_bad_signature() -> None:
     harness = ObserverAdapterConformanceHarness()
     harness.evaluate(assertion(), mapping_candidates=1, now=NOW, public_key=PUBLIC_KEY)
@@ -146,6 +155,34 @@ def test_enforces_clock_skew_expiry_and_partial_evidence() -> None:
             public_key=PUBLIC_KEY,
         )
     assert reason(partial) == "adapter_partial_without_reason"
+
+
+@pytest.mark.parametrize(
+    "detection",
+    [
+        {
+            "state": "present",
+            "endpointOnline": "yes",
+            "version": "3.1.0a9",
+            "packageIdentity": "org.hiero.hol-guard",
+            "reasonCodes": [],
+        },
+        {
+            "state": "present",
+            "endpointOnline": True,
+            "version": 31,
+            "packageIdentity": "org.hiero.hol-guard",
+            "reasonCodes": [],
+        },
+        {"state": "present", "endpointOnline": True, "version": "3.1.0a9", "packageIdentity": {}, "reasonCodes": []},
+    ],
+)
+def test_rejects_signed_schema_invalid_detection_fields(detection: dict[str, object]) -> None:
+    with pytest.raises(AdapterConformanceError) as invalid:
+        ObserverAdapterConformanceHarness().evaluate(
+            assertion(detection=detection), mapping_candidates=1, now=NOW, public_key=PUBLIC_KEY
+        )
+    assert reason(invalid) == "adapter_assertion_invalid"
 
 
 def test_quarantines_mapping_collisions_and_represents_outage_without_evidence() -> None:

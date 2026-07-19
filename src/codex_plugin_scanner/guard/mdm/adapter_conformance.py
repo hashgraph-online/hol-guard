@@ -79,16 +79,14 @@ def _timestamp(value: object, reason: str) -> datetime:
     if not isinstance(value, str) or _TIMESTAMP.fullmatch(value) is None:
         raise _error(reason)
     try:
-        parsed = datetime.fromisoformat(f"{value[:-1]}+00:00")
+        parsed = datetime.fromisoformat(value)
     except ValueError as exc:
         raise _error(reason) from exc
-    if parsed.tzinfo is None:
-        raise _error(reason)
     return parsed.astimezone(timezone.utc)
 
 
 def _strict_json(payload: bytes, *, maximum: int, reason: str) -> dict[str, object]:
-    if not payload or len(payload) > maximum:
+    if not isinstance(payload, bytes) or not payload or len(payload) > maximum:
         raise _error(reason)
     try:
         text = payload.decode("utf-8")
@@ -187,8 +185,17 @@ class ObserverAdapterConformanceHarness:
             "adapter_assertion_invalid",
         )
         state = detection.get("state")
+        endpoint_online = detection.get("endpointOnline")
+        version = detection.get("version")
+        package_identity = detection.get("packageIdentity")
         reasons = detection.get("reasonCodes")
         if state not in {"present", "absent", "partial", "unknown", "unsupported"}:
+            raise _error("adapter_assertion_invalid")
+        if endpoint_online is not None and not isinstance(endpoint_online, bool):
+            raise _error("adapter_assertion_invalid")
+        if version is not None and (not isinstance(version, str) or len(version) > 128):
+            raise _error("adapter_assertion_invalid")
+        if package_identity is not None and (not isinstance(package_identity, str) or len(package_identity) > 256):
             raise _error("adapter_assertion_invalid")
         if (
             not isinstance(reasons, list)
