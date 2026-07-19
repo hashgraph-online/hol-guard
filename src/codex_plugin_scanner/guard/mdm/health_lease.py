@@ -245,9 +245,7 @@ def _default_signer(paths: MachinePaths, generation: KeyGeneration, claims: Leas
     from .device_key_native import sign_health_lease, sign_protection_lease
 
     if isinstance(claims, ProtectionLeaseClaims):
-        result = sign_protection_lease(
-            paths, generation.generation, claims.signing_payload(), system_name=system_name
-        )
+        result = sign_protection_lease(paths, generation.generation, claims.signing_payload(), system_name=system_name)
     else:
         result = sign_health_lease(
             paths, generation.generation, canonical_json_bytes(claims.to_dict()), system_name=system_name
@@ -274,12 +272,8 @@ def _validate_pending(
         return False
     if claims.sequence != record.last_issued_sequence + 1:
         raise OSError("health_lease_pending_conflict")
-    if (
-        claims.previous_lease_digest != record.last_lease_digest
-        or (
-            isinstance(claims, HealthLeaseClaims)
-            and claims.previous_lease_key_id != record.last_lease_key_id
-        )
+    if claims.previous_lease_digest != record.last_lease_digest or (
+        isinstance(claims, HealthLeaseClaims) and claims.previous_lease_key_id != record.last_lease_key_id
     ):
         raise OSError("health_lease_pending_conflict")
     return True
