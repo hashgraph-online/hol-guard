@@ -71,6 +71,7 @@ _COMMON_HANDLERS = {
     "disconnect": "_run_guard_disconnect_command",
     "bridge": "_run_guard_bridge_command",
     "sync": "_run_guard_sync_command",
+    "health-leases": "_run_guard_health_leases_command",
     "cloud": "_run_guard_cloud_command",
     "supply-chain": "_run_guard_supply_chain_command",
     "service": "_run_guard_service_command",
