@@ -133,16 +133,23 @@ def decision_factors(
     batch: ExtensionEvidenceBatch,
     *,
     compatibility_action_class: str | None,
+    compatibility_rule: tuple[CommandSafetyExtension, CommandSafetyRule] | None = None,
 ) -> tuple[DecisionFactor, ...]:
     factors = list(factors_from_extension_evidence(batch))
     if compatibility_action_class is not None:
         identity = hashlib.sha256(compatibility_action_class.strip().lower().encode("utf-8")).hexdigest()
+        compatibility_floor: GuardAction = "review"
+        producer_ref = f"legacy:{identity}"
+        if compatibility_rule is not None:
+            extension, rule = compatibility_rule
+            compatibility_floor = maximum_action_floor(("review", _CANONICAL_FLOOR[legacy_rule_floor(extension, rule)]))
+            producer_ref = f"rule:{rule.rule_id}"
         factors.append(
             DecisionFactor(
                 source=DecisionFactorSource.POLICY,
                 reason_code="compatibility-action",
-                basis=DecisionBasis("review", None),
-                producer_ref=f"legacy:{identity}",
+                basis=DecisionBasis(compatibility_floor, None),
+                producer_ref=producer_ref,
             )
         )
     return tuple(factors)

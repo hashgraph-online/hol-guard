@@ -69,6 +69,8 @@ class _SegmentMatcher:
 def _registry(
     mode: CommandRuleMode,
     *,
+    action_classes: tuple[str, ...] = (),
+    compatibility_fallback: bool = False,
     required: bool = False,
     severity: CommandRuleSeverity = "high",
     matcher: object | None = None,
@@ -80,20 +82,21 @@ def _registry(
         description="Exercises decision routing compatibility.",
         severity=severity,
         risk_classes=("destructive_shell",),
-        action_classes=(),
+        action_classes=action_classes,
         safer_alternatives=("Preview the operation.",),
         default_mode=mode,
         matcher=cast(ExecutableMatcher, matcher)
         if matcher is not None
         else ExecutableMatcher(executables=frozenset({"test-tool"})),
         safe_variants=safe_variants,
+        compatibility_fallback=compatibility_fallback,
     )
     extension = CommandSafetyExtension(
         extension_id="command.test",
         version="1.0.0",
         name="Test extension",
         description="Exercises decision routing compatibility.",
-        action_classes=(),
+        action_classes=action_classes,
         risk_classes=("destructive_shell",),
         safer_alternatives=("Preview the operation.",),
         rules=(rule,),
@@ -176,6 +179,38 @@ def test_parallel_legacy_heuristics_route_through_plane(action_class: str) -> No
     assert evaluation.minimum_action == "review"
     assert evaluation.decision_plane.action == "review"
     assert any(reason.reason_code == "compatibility-action" for reason in evaluation.decision_plane.reasons)
+
+
+@pytest.mark.parametrize(
+    ("mode", "required", "severity", "expected"),
+    [
+        ("disabled", False, "high", "review"),
+        ("monitor", False, "high", "review"),
+        ("enforce", False, "high", "block"),
+        ("disabled", True, "critical", "block"),
+    ],
+)
+def test_compatibility_fallback_preserves_its_block_floor_in_central_decision(
+    mode: CommandRuleMode,
+    required: bool,
+    severity: CommandRuleSeverity,
+    expected: CommandDecisionFloor,
+) -> None:
+    action_class = "compatibility fallback"
+    evaluation = evaluate_command(
+        "unmatched-tool target",
+        compatibility_action_class=action_class,
+        registry=_registry(
+            mode,
+            action_classes=(action_class,),
+            compatibility_fallback=True,
+            required=required,
+            severity=severity,
+            matcher=_EmptyMatcher(),
+        ),
+    )
+    assert evaluation.minimum_action == expected
+    assert evaluation.decision_plane.action == expected
 
 
 def test_public_payload_contains_versions_without_raw_command_or_failure_detail() -> None:

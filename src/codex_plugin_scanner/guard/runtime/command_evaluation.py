@@ -20,7 +20,7 @@ from .command_extensions import (
     CommandSafetyExtensionRegistry,
 )
 from .command_model import CanonicalCommand, parse_shell_command
-from .command_rules import CommandRuleMatch, CommandRuleMode
+from .command_rules import CommandRuleMatch, CommandRuleMode, CommandSafetyRule
 from .effect_decision import EffectDecision, EffectDecisionRequest, evaluate_effect_decision
 
 CommandDecisionFloor = Literal["allow", "monitor", "review", "block"]
@@ -105,11 +105,13 @@ def evaluate_command(
     )
     selected = list(structured)
     selected_rule_ids = {rule.rule_id for _extension, rule, _evidence in selected}
+    compatibility_rule: tuple[CommandSafetyExtension, CommandSafetyRule] | None = None
     if compatibility_action_class is not None:
         extension = registry.for_action_class(compatibility_action_class)
         rule = registry.rule_for_action_class(compatibility_action_class)
         if extension is not None and rule is not None and rule.rule_id not in selected_rule_ids:
             selected.append((extension, rule, ()))
+            compatibility_rule = (extension, rule)
 
     owned_matches: list[OwnedCommandRuleMatch] = []
     for extension, rule, evidence in selected:
@@ -151,6 +153,7 @@ def evaluate_command(
             factors=decision_factors(
                 evidence_batch,
                 compatibility_action_class=compatibility_action_class,
+                compatibility_rule=compatibility_rule,
             ),
             uncertainties=tuple(
                 sorted(
