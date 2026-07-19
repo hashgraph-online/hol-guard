@@ -9,9 +9,11 @@ from typing import Literal, final
 
 from .command_builtin_extension_catalog import DIRECT_COMMAND_EXTENSION_VALUES
 from .command_builtin_rules import COMMAND_ACTION_RISK_CLASSES, rules_for_extension
+from .command_extension_observations import CommandExtensionObservation, observe_command_extensions
+from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand
 from .command_package_extensions import PACKAGE_COMMAND_EXTENSION_SPECS, PackageCommandExtensionSpec
-from .command_rules import CommandSafetyRule, MatcherEvidence, matcher_index_hints
+from .command_rules import CommandSafetyRule, matcher_index_hints
 
 COMMAND_EXTENSION_SCHEMA_VERSION = 2
 _VERSION_PATTERN = re.compile(r"^[1-9][0-9]*\.[0-9]+\.[0-9]+$")
@@ -210,26 +212,22 @@ class CommandSafetyExtensionRegistry:
         self,
         command: CanonicalCommand,
     ) -> tuple[tuple[CommandSafetyExtension, CommandSafetyRule, tuple[MatcherEvidence, ...]], ...]:
-        """Return every structured rule match in deterministic registry order."""
+        """Return the effective compatibility projection of lossless observations."""
 
-        matches: list[tuple[CommandSafetyExtension, CommandSafetyRule, tuple[MatcherEvidence, ...]]] = []
-        candidate_rule_ids = frozenset(self.candidate_rule_ids(command))
-        for extension, rule in self._rule_records:
-            if rule.matcher is None or rule.rule_id not in candidate_rule_ids:
-                continue
-            evidence = rule.matcher.match(command)
-            if not evidence:
-                continue
-            safe_segment_indexes = {
-                safe_evidence.segment_index
-                for variant in rule.safe_variants
-                for safe_evidence in variant.matcher.match(command)
-            }
-            effective_evidence = tuple(item for item in evidence if item.segment_index not in safe_segment_indexes)
-            if not effective_evidence:
-                continue
-            matches.append((extension, rule, effective_evidence))
-        return tuple(matches)
+        observations = self.observations(command)
+        if any(item.uncertainty_reasons for item in observations):
+            raise RuntimeError("command extension matcher boundary failure")
+        return tuple(
+            (item.extension, item.rule, item.effective_evidence) for item in observations if item.effective_evidence
+        )
+
+    def observations(
+        self,
+        command: CanonicalCommand,
+    ) -> tuple[CommandExtensionObservation[CommandSafetyExtension], ...]:
+        """Return lossless base, safe-variant, and uncertainty evidence."""
+
+        return observe_command_extensions(command, self.extensions, self.candidate_rule_ids(command))
 
 
 def _validate_extension(extension: CommandSafetyExtension) -> None:

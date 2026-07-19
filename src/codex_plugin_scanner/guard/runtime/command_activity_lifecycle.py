@@ -26,8 +26,9 @@ from .command_activity_contract import (
     ReceiptLinkStatus,
 )
 from .command_evaluation import CompositeCommandEvaluation, OwnedCommandRuleMatch
+from .command_risk_effects import command_risk_effects
 from .command_rules import CommandRuleMode
-from .effect_contract import EffectKind, UncertaintyKind
+from .effect_contract import UncertaintyKind
 from .extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
 
 
@@ -52,19 +53,6 @@ class CommandActivityDecisionFacts:
             raise ValueError("approval_reuse_status must be an ActivityApprovalReuseStatus")
 
 
-_RISK_EFFECTS: Final = MappingProxyType(
-    {
-        "credential_exfiltration": frozenset({EffectKind.CREDENTIAL_OR_SECRET_OPERATION}),
-        "data_flow_exfiltration": frozenset({EffectKind.NETWORK_WRITE}),
-        "destructive_shell": frozenset({EffectKind.DESTRUCTIVE_OR_IRREVERSIBLE_OPERATION}),
-        "encoded_execution": frozenset({EffectKind.PROCESS_EXECUTION}),
-        "execution": frozenset({EffectKind.PROCESS_EXECUTION}),
-        "local_secret_read": frozenset({EffectKind.SENSITIVE_READ}),
-        "network_egress": frozenset({EffectKind.NETWORK_WRITE}),
-        "policy_bypass": frozenset({EffectKind.GUARD_CONTROL_OPERATION}),
-        "supply_chain": frozenset({EffectKind.PACKAGE_OR_SOURCE_INSTALLATION}),
-    }
-)
 _RULE_MODE_FLOOR: Final[dict[CommandRuleMode, GuardAction]] = {
     "disabled": "allow",
     "monitor": "warn",
@@ -217,12 +205,7 @@ def build_unpaired_post_evidence(
 
 
 def _activity_match(activity_id: str, ordinal: int, owned: OwnedCommandRuleMatch) -> CommandActivityMatch:
-    effects: set[EffectKind] = set()
-    for risk_class in owned.match.rule.risk_classes:
-        mapped = _RISK_EFFECTS.get(risk_class)
-        if mapped is None:
-            raise ValueError(f"unsupported command risk class: {risk_class}")
-        effects.update(mapped)
+    effects = command_risk_effects(owned.match.rule.risk_classes)
     rule = owned.match.rule
     default_floor = _RULE_MODE_FLOOR[rule.default_mode]
     if owned.extension.required:

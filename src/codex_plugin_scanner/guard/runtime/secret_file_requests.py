@@ -17,7 +17,9 @@ from pathlib import Path
 
 from ..models import GuardArtifact
 from .actions import GuardActionEnvelope, apply_patch_target_paths
+from .command_decision_adapter import effect_decision_to_dict
 from .command_evaluation import evaluate_command
+from .command_extension_interaction import classify_command_extension_interaction
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .command_model import CanonicalCommand, parse_shell_command
 from .data_flow import extract_heredocs
@@ -1186,15 +1188,17 @@ def _destructive_shell_tool_action_request(
             ),
             canonical_command=canonical_command,
         )
-    for _extension, rule, _evidence in BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command):
-        if not rule.action_classes or rule.action_classes[0] != "GitHub Actions administrative command":
-            continue
+    extension_interaction = classify_command_extension_interaction(
+        canonical_command,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    )
+    if extension_interaction.priority is not None:
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
-            action_class=rule.action_classes[0],
-            reason=rule.description,
+            action_class=extension_interaction.priority.action_class,
+            reason=extension_interaction.priority.reason,
             canonical_command=canonical_command,
         )
     if _looks_destructive_shell_command(detection_command_text, cwd=cwd, home_dir=home_dir):
@@ -1233,15 +1237,13 @@ def _destructive_shell_tool_action_request(
             ),
             canonical_command=canonical_command,
         )
-    for _extension, rule, _evidence in BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command):
-        if not rule.action_classes:
-            continue
+    if extension_interaction.fallback is not None:
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
-            action_class=rule.action_classes[0],
-            reason=rule.description,
+            action_class=extension_interaction.fallback.action_class,
+            reason=extension_interaction.fallback.reason,
             canonical_command=canonical_command,
         )
     return None
@@ -3917,6 +3919,8 @@ def build_tool_action_request_artifact(
             "raw_command_text": request.raw_command_text,
             "wrapper_chain": list(wrapper_chain),
             "command_security_identity": evaluation.command.security_identity,
+            "command_action_floor": evaluation.decision_plane.action,
+            "command_decision_plane": effect_decision_to_dict(evaluation.decision_plane),
             "command_rule_matches": [owned.to_dict() for owned in evaluation.matches],
             "risk_classes": list(evaluation.risk_classes),
             "command_parse_confidence": evaluation.command.confidence,
