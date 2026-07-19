@@ -14,6 +14,7 @@ from .store_approval_facade import StoreApprovalsMixin
 from .store_cloud_events import StoreCloudEventsMixin
 from .store_command_activity import StoreCommandActivityMixin
 from .store_command_activity_lifecycle import StoreCommandActivityLifecycleMixin
+from .store_command_activity_maintenance import StoreCommandActivityMaintenanceMixin
 from .store_connection_schema import StoreConnectionSchemaMixin
 from .store_event_receipts import StoreEventReceiptsMixin
 from .store_evidence_facade import StoreEvidenceMixin
@@ -36,6 +37,7 @@ class GuardStore(
     StoreConnectionSchemaMixin,
     StoreCommandActivityMixin,
     StoreCommandActivityLifecycleMixin,
+    StoreCommandActivityMaintenanceMixin,
     StoreInventoryMixin,
     StorePolicyMixin,
     StorePolicyIntegrityAdminMixin,

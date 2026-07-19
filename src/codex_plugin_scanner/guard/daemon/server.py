@@ -5676,6 +5676,7 @@ class GuardDaemonServer:
         self._bundle_refresh_thread: threading.Thread | None = None
         self._command_queue_worker: CommandQueueWorker | None = None
         self._headless_cloud_sync_thread: threading.Thread | None = None
+        self._command_activity_maintenance_thread: threading.Thread | None = None
         self._live_request_sync_worker: LiveRequestSyncWorker | None = None
         self._thread: threading.Thread | None = None
         self._watchdog_thread: threading.Thread | None = None
@@ -5714,6 +5715,7 @@ class GuardDaemonServer:
         if self._headless_cloud_sync_thread is not None:
             self._headless_cloud_sync_thread.join(timeout=5)
             self._headless_cloud_sync_thread = None
+        self._join_command_activity_maintenance()
         self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
         self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
 
@@ -5722,7 +5724,9 @@ class GuardDaemonServer:
             if self._aibom_refresh_thread.is_alive():
                 raise RuntimeError("AIBOM inventory refresh is still stopping")
             self._aibom_refresh_thread = None
+        self._require_command_activity_maintenance_stopped()
         self._shutdown_started.clear()
+        self._maintain_command_activity_best_effort()
         self._persist_aibom_inventory_context()
         self._server.last_activity_monotonic = time.monotonic()
         write_guard_daemon_state(
@@ -5752,6 +5756,54 @@ class GuardDaemonServer:
             self._server.store,
             self._live_request_sync_worker,
         )
+        self._start_command_activity_maintenance()
+
+    def _maintain_command_activity_best_effort(self) -> None:
+        now = datetime.now(timezone.utc)
+        try:
+            config = load_guard_config(
+                self._server.store.guard_home,
+            )
+            self._server.store.maintain_command_activity(
+                now=now,
+                detail_retain_days=config.evidence_retain_days,
+            )
+        except Exception:
+            with suppress(Exception):
+                self._server.store.record_command_activity_persistence_failure(
+                    error_code="maintenance_failed",
+                    occurred_at=now,
+                )
+
+    def _start_command_activity_maintenance(self) -> None:
+        if (
+            self._command_activity_maintenance_thread is not None
+            and self._command_activity_maintenance_thread.is_alive()
+        ):
+            return
+        self._command_activity_maintenance_thread = threading.Thread(
+            target=self._command_activity_maintenance_loop,
+            daemon=True,
+        )
+        self._command_activity_maintenance_thread.start()
+
+    def _require_command_activity_maintenance_stopped(self) -> None:
+        if self._command_activity_maintenance_thread is None:
+            return
+        if self._command_activity_maintenance_thread.is_alive():
+            raise RuntimeError("command activity maintenance is still stopping")
+        self._command_activity_maintenance_thread = None
+
+    def _join_command_activity_maintenance(self) -> None:
+        if self._command_activity_maintenance_thread is None:
+            return
+        self._command_activity_maintenance_thread.join(timeout=5)
+        if not self._command_activity_maintenance_thread.is_alive():
+            self._command_activity_maintenance_thread = None
+
+    def _command_activity_maintenance_loop(self) -> None:
+        while not self._shutdown_started.wait(3_600):
+            self._maintain_command_activity_best_effort()
 
     def _persist_aibom_inventory_context(self) -> None:
         workspace_id = self._server.store.get_cloud_workspace_id()

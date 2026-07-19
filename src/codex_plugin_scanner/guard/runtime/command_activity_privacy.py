@@ -312,7 +312,9 @@ def _require_cloud_dimension_value(dimension: CloudAggregateDimension, value: st
         CloudAggregateDimension.EXECUTION_STATUS: frozenset(item.value for item in CommandExecutionStatus),
         CloudAggregateDimension.PROMPT_STATUS: frozenset({"prompted", "not_prompted"}),
         CloudAggregateDimension.PROOF_LEVEL: frozenset(item.value for item in CommandProofLevel),
-        CloudAggregateDimension.LATENCY: frozenset(item.value for item in ActivityLatencyBucket),
+        CloudAggregateDimension.LATENCY: frozenset(
+            f"{kind}.{bucket.value}" for kind in ("evaluation", "persistence") for bucket in ActivityLatencyBucket
+        ),
     }
     if value not in allowed[dimension]:
         raise ValueError("dimension_value must belong to the selected bounded aggregate dimension")

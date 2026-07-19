@@ -452,6 +452,11 @@ def load_guard_config(
         receipt_redaction_level=_coerce_loaded_receipt_redaction_level(
             merged.get("receipt_redaction_level"),
         ),
+        evidence_retain_days=_coerce_loaded_bounded_positive_int(
+            merged.get("evidence_retain_days"),
+            default=90,
+            maximum=3_650,
+        ),
         managed_policy_status=managed_state.status,
         managed_policy_hash=effective_managed_policy.content_hash if effective_managed_policy is not None else None,
         managed_locked_settings=tuple(sorted(effective_managed_policy.locked_settings))
@@ -634,6 +639,12 @@ def _coerce_loaded_non_negative_int(value: object, fallback: int) -> int:
 
 def _coerce_loaded_bounded_int(value: object, *, default: int, maximum: int) -> int:
     if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= maximum:
+        return value
+    return default
+
+
+def _coerce_loaded_bounded_positive_int(value: object, *, default: int, maximum: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= maximum:
         return value
     return default
 

@@ -15,6 +15,7 @@ from .runtime.command_activity_contract import (
     CommandActivityMatch,
     CorrelationHandle,
 )
+from .store_command_activity_rollups import record_command_activity_rollups
 
 
 class _ConnectionOwner(Protocol):
@@ -38,6 +39,14 @@ class StoreCommandActivityMixin:
             )
             if existing is not None:
                 _require_exact_replay(connection, evidence, existing)
+                return False
+            if (
+                connection.execute(
+                    "select 1 from command_activity_rollup_membership where activity_id = ?",
+                    (evidence.activity.activity_id,),
+                ).fetchone()
+                is not None
+            ):
                 return False
             connection.execute(
                 """
@@ -77,6 +86,7 @@ class StoreCommandActivityMixin:
                 """,
                 _correlation_values(evidence.activity),
             )
+            record_command_activity_rollups(connection, evidence)
             return True
 
     def count_command_activities(self: _ConnectionOwner) -> int:
