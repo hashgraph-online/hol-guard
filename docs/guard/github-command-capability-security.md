@@ -39,6 +39,7 @@ Output formatting does not downgrade the capability of the producer. A known rem
 when its output is piped through `jq` or a read-only Python observer. Conversely, a proven GitHub read remains
 prompt-free when every downstream stage is a reviewed, output-only formatter. Redirection or an unreviewed consumer
 requires approval because the complete composition is not proven read-only.
+Compound shell programs that combine GitHub-backed variables with branches, loops, or case arms also require approval.
 
 ## Developer experience
 

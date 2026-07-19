@@ -23,7 +23,14 @@ def contains_github_command_text(text: str) -> bool:
     """Return whether text contains a literal GitHub CLI command token."""
 
     executable = r"(?:[A-Za-z]:)?(?:[/\\][A-Za-z0-9_.~-]+)*[/\\]?gh(?:\.exe)?"
-    return re.search(rf"(?:^|[=;&|()\s]){executable}(?:\s|$)", text, re.IGNORECASE) is not None
+    return (
+        re.search(
+            rf"(?:^|[=;&|()\s])[\"']?{executable}(?:[;&|)\s]|$)",
+            text,
+            re.IGNORECASE,
+        )
+        is not None
+    )
 
 
 def pipeline_executes_github_text(
@@ -223,7 +230,34 @@ def pipeline_control_flow(
         previous_command, _previous_index = primary_command(pipelines[pipeline_index - 1][-1])
         if (connector == "&&" and previous_command == "false") or (connector == "||" and previous_command == "true"):
             skipped.add(pipeline_index)
-    return frozenset(connectors), frozenset(skipped)
+    conditional = set(connectors)
+    if_stack: list[tuple[bool | None, str | None]] = []
+    for pipeline_index, pipeline in enumerate(pipelines):
+        segment = pipeline[0] if pipeline else []
+        first = segment[0].strip("\"'").lower() if segment else ""
+        if first == "if":
+            condition = segment[1].strip("\"'").lower() if len(segment) > 1 else ""
+            truth = True if condition == "true" else False if condition == "false" else None
+            if_stack.append((truth, None))
+            continue
+        if first == "fi":
+            if if_stack:
+                _ = if_stack.pop()
+            continue
+        if first in {"then", "else", "elif"} and if_stack:
+            truth, _branch = if_stack[-1]
+            if first == "elif":
+                truth = None
+            branch = "else" if first == "else" else "then"
+            if_stack[-1] = (truth, branch)
+        if not if_stack or if_stack[-1][1] is None:
+            continue
+        truth, branch = if_stack[-1]
+        if truth is None:
+            conditional.add(pipeline_index)
+        elif (branch == "then" and not truth) or (branch == "else" and truth):
+            skipped.add(pipeline_index)
+    return frozenset(conditional), frozenset(skipped)
 
 
 def parent_expanded_variable_names(command_text: str) -> frozenset[str]:
@@ -238,6 +272,37 @@ def parent_expanded_variable_names(command_text: str) -> frozenset[str]:
         )
     }
     return frozenset(name for name in names if name is not None)
+
+
+def complex_control_flow_may_invoke_github(
+    command_text: str,
+    *,
+    github_command_variables: frozenset[str],
+    github_command_text_variables: frozenset[str],
+) -> bool:
+    """Fail closed when compound shell state can affect a GitHub invocation."""
+
+    has_compound_flow = re.search(
+        r"(?:^|[;&|]\s*)(?:case|for|if|until|while)\b|(?:^|[;&|]\s*)[({]\s+",
+        command_text,
+    )
+    if has_compound_flow is None:
+        return False
+    github_assignment = re.search(
+        r"\b[A-Za-z_][A-Za-z0-9_]*\s*=\s*[\"']?"
+        + r"(?:(?:[A-Za-z]:)?(?:[/\\][A-Za-z0-9_.~-]+)*[/\\])?gh(?:\.exe)?(?:[\"']|[;&|\s]|$)",
+        command_text,
+        re.IGNORECASE,
+    )
+    return (
+        github_assignment is not None
+        or _GH_LOOKUP_ASSIGNMENT.search(command_text) is not None
+        or tokens_reference_github_variable(
+            [command_text],
+            github_command_variables=github_command_variables,
+            github_command_text_variables=github_command_text_variables,
+        )
+    )
 
 
 def segment_starts_function_definition(segment: list[str], *, command_index: int, normalized_tokens: list[str]) -> bool:
@@ -271,18 +336,41 @@ def definition_payload(segment: list[str], *, command_name: str, command_index: 
 def executable_control_flow_segment(segment: list[str]) -> list[str]:
     """Strip shell reserved words that prefix an executable command."""
 
-    if not segment:
-        return segment
-    first = segment[0].strip("\"'").lower()
-    if first in {"do", "elif", "else", "if", "then", "until", "while"}:
-        return segment[1:]
-    if first == "case":
-        for index, token in enumerate(segment[1:], start=1):
-            if token.endswith(")"):
-                return segment[index + 1 :]
-    if first.endswith(")") and len(segment) > 1:
-        return segment[1:]
-    return segment
+    normalized = segment
+    while normalized:
+        first = normalized[0].strip("\"'").lower()
+        if first == "coproc":
+            normalized = normalized[1:]
+            if len(normalized) > 1 and normalized[1] in {"(", "{"}:
+                normalized = normalized[1:]
+            continue
+        if first in {"!", "(", "{", "do", "elif", "else", "if", "then", "until", "while"}:
+            normalized = normalized[1:]
+            continue
+        if first.endswith(")") and len(normalized) > 1:
+            normalized = normalized[1:]
+            continue
+        break
+    return normalized
+
+
+def case_arm_segments(segment: list[str]) -> tuple[list[str], ...]:
+    """Return every executable arm from a shell case segment."""
+
+    if not segment or segment[0].strip("\"'").lower() != "case":
+        return ()
+    arms: list[list[str]] = []
+    current: list[str] = []
+    for token in segment[3:]:
+        if token in {";;", ";&", ";;&"}:
+            if current:
+                arms.append(executable_control_flow_segment(current))
+            current = []
+            continue
+        current.append(token)
+    if current:
+        arms.append(executable_control_flow_segment(current))
+    return tuple(arm for arm in arms if arm)
 
 
 def scoped_command_substitutions(
@@ -305,7 +393,7 @@ def scoped_command_substitutions(
     return tuple(scoped)
 
 
-def function_definition_payloads(command_text: str) -> tuple[tuple[str, str], ...]:
+def function_definition_payloads(command_text: str) -> tuple[tuple[str, str, int, int], ...]:
     """Extract balanced shell function bodies from common definition forms."""
 
     pattern = re.compile(
@@ -313,7 +401,7 @@ def function_definition_payloads(command_text: str) -> tuple[tuple[str, str], ..
         + r"\b[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*)"
         + r"(?P<opener>[{(])"
     )
-    payloads: list[tuple[str, str]] = []
+    payloads: list[tuple[str, str, int, int]] = []
     for match in pattern.finditer(command_text):
         opener = match.group("opener")
         closer = "}" if opener == "{" else ")"
@@ -338,7 +426,14 @@ def function_definition_payloads(command_text: str) -> tuple[tuple[str, str], ..
                 depth -= 1
             index += 1
         if depth == 0:
-            payloads.append((command_text[match.end() : index - 1], command_text[: match.start()]))
+            payloads.append(
+                (
+                    command_text[match.end() : index - 1],
+                    command_text[: match.start()],
+                    match.start(),
+                    index,
+                )
+            )
     return tuple(payloads)
 
 

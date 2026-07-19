@@ -13,14 +13,6 @@ from .github_capability_contract import (
 )
 from .github_command_capabilities import classify_github_cli
 
-_apply_assignment_updates = _bindings.apply_assignment_updates
-_executable_control_flow_segment = _bindings.executable_control_flow_segment
-_normalize_github_lookup_assignments = _bindings.normalize_github_lookup_assignments
-_persistent_assignment_updates = _bindings.persistent_assignment_updates
-_update_exported_bindings = _bindings.update_exported_bindings
-
-_GH_EXECUTORS = frozenset({"builtin", "eval", "exec", "timeout", "watch", "xargs"})
-
 
 def _text_assignment_updates(
     segment: list[str],
@@ -55,7 +47,7 @@ def _persistent_text_assignment_updates(
     github_command_variables: frozenset[str],
     github_command_text_variables: frozenset[str],
 ) -> tuple[tuple[str, bool], ...]:
-    return _persistent_assignment_updates(
+    return _bindings.persistent_assignment_updates(
         segment,
         command_name=command_name,
         command_index=command_index,
@@ -124,7 +116,11 @@ def classify_github_shell_capabilities(
             "github.shell.nesting-depth",
             "The nested shell composition exceeds the statically reviewed depth.",
         )
-    analysis_text = _normalize_github_lookup_assignments(command_text)
+    function_definitions = _bindings.function_definition_payloads(command_text)
+    analysis_text = command_text
+    for _body, _prefix, start, end in reversed(function_definitions):
+        analysis_text = analysis_text[:start] + (" " * (end - start)) + analysis_text[end:]
+    analysis_text = _bindings.normalize_github_lookup_assignments(analysis_text)
     parts = analysis.split_parts(analysis_text)
     pipelines = analysis.pipelines(parts)
     conditional_pipeline_indexes, definitely_skipped_pipelines = _bindings.pipeline_control_flow(
@@ -137,8 +133,18 @@ def classify_github_shell_capabilities(
     persistent_github_text_variables = set(github_command_text_variables or ())
     exported_github_variables = set(github_exported_variables or ())
     exported_github_text_variables = set(github_exported_text_variables or ())
+    if _bindings.complex_control_flow_may_invoke_github(
+        command_text,
+        github_command_variables=frozenset(persistent_github_variables),
+        github_command_text_variables=frozenset(persistent_github_text_variables),
+    ):
+        return github_assessment(
+            "unknown",
+            "github.shell.compound-control-flow",
+            "Compound shell control flow prevents a statically proven GitHub capability classification.",
+        )
     assessments: list[GitHubCommandAssessment] = []
-    for function_body, function_prefix in _bindings.function_definition_payloads(command_text):
+    for function_body, function_prefix, _start, _end in function_definitions:
         function_assessment = classify_github_shell_capabilities(
             function_body,
             analysis=analysis,
@@ -191,7 +197,21 @@ def classify_github_shell_capabilities(
             continue
         contains_github_command = False
         for raw_segment in pipeline:
-            segment = _executable_control_flow_segment(raw_segment)
+            case_arms = _bindings.case_arm_segments(raw_segment)
+            if case_arms:
+                for case_arm in case_arms:
+                    case_assessment = classify_github_shell_capabilities(
+                        " ".join(case_arm),
+                        analysis=analysis,
+                        depth=depth + 1,
+                        github_command_variables=frozenset(persistent_github_variables),
+                        github_command_text_variables=frozenset(persistent_github_text_variables),
+                    )
+                    if case_assessment is not None:
+                        assessments.append(case_assessment)
+                        contains_github_command = True
+                continue
+            segment = _bindings.executable_control_flow_segment(raw_segment)
             if not segment:
                 continue
             command_name, command_index = analysis.primary_command(segment)
@@ -206,14 +226,14 @@ def classify_github_shell_capabilities(
             )
             segment_github_variables = set(persistent_github_variables)
             segment_github_text_variables = set(persistent_github_text_variables)
-            _apply_assignment_updates(segment_github_variables, assignment_updates)
-            _apply_assignment_updates(segment_github_text_variables, text_assignment_updates)
+            _bindings.apply_assignment_updates(segment_github_variables, assignment_updates)
+            _bindings.apply_assignment_updates(segment_github_text_variables, text_assignment_updates)
             nested_github_variables = set(exported_github_variables)
             nested_github_text_variables = set(exported_github_text_variables)
             nested_github_variables.update(persistent_github_variables & parent_expanded_variables)
             nested_github_text_variables.update(persistent_github_text_variables & parent_expanded_variables)
-            _apply_assignment_updates(nested_github_variables, assignment_updates)
-            _apply_assignment_updates(nested_github_text_variables, text_assignment_updates)
+            _bindings.apply_assignment_updates(nested_github_variables, assignment_updates)
+            _bindings.apply_assignment_updates(nested_github_text_variables, text_assignment_updates)
             for nested_command in analysis.nested_commands(segment):
                 assessment = classify_github_shell_capabilities(
                     nested_command,
@@ -260,10 +280,10 @@ def classify_github_shell_capabilities(
             contains_github_command = True
             assessments.append(_classify_github_shell_segment(segment, command_index))
         if len(pipeline) == 1:
-            persistent_segment = _executable_control_flow_segment(pipeline[0])
+            persistent_segment = _bindings.executable_control_flow_segment(pipeline[0])
             persistent_command, persistent_index = analysis.primary_command(persistent_segment)
             conditional_pipeline = pipeline_index in conditional_pipeline_indexes
-            executable_updates = _persistent_assignment_updates(
+            executable_updates = _bindings.persistent_assignment_updates(
                 persistent_segment,
                 command_name=persistent_command,
                 command_index=persistent_index,
@@ -281,15 +301,15 @@ def classify_github_shell_capabilities(
             if conditional_pipeline:
                 executable_updates = tuple(update for update in executable_updates if update[1])
                 text_updates = tuple(update for update in text_updates if update[1])
-            _apply_assignment_updates(
+            _bindings.apply_assignment_updates(
                 persistent_github_variables,
                 executable_updates,
             )
-            _apply_assignment_updates(
+            _bindings.apply_assignment_updates(
                 persistent_github_text_variables,
                 text_updates,
             )
-            _update_exported_bindings(
+            _bindings.update_exported_bindings(
                 persistent_segment,
                 command_name=persistent_command,
                 command_index=persistent_index,
@@ -297,7 +317,7 @@ def classify_github_shell_capabilities(
                 exported_bindings=exported_github_variables,
                 suppress_removals=conditional_pipeline,
             )
-            _update_exported_bindings(
+            _bindings.update_exported_bindings(
                 persistent_segment,
                 command_name=persistent_command,
                 command_index=persistent_index,
@@ -341,13 +361,13 @@ def _github_variables_after_prefix(
     initial: frozenset[str],
 ) -> frozenset[str]:
     bindings = set(initial)
-    normalized_prefix = _normalize_github_lookup_assignments(command_prefix)
+    normalized_prefix = _bindings.normalize_github_lookup_assignments(command_prefix)
     parts = analysis.split_parts(normalized_prefix)
     conditional_indexes = _bindings.conditional_pipeline_indexes(parts)
     for pipeline_index, pipeline in enumerate(analysis.pipelines(parts)):
         if len(pipeline) == 1:
             command_name, command_index = analysis.primary_command(pipeline[0])
-            updates = _persistent_assignment_updates(
+            updates = _bindings.persistent_assignment_updates(
                 pipeline[0],
                 command_name=command_name,
                 command_index=command_index,
@@ -355,7 +375,7 @@ def _github_variables_after_prefix(
             )
             if pipeline_index in conditional_indexes:
                 updates = tuple(update for update in updates if update[1])
-            _apply_assignment_updates(
+            _bindings.apply_assignment_updates(
                 bindings,
                 updates,
             )
@@ -369,7 +389,7 @@ def _github_text_variables_after_prefix(
     initial: frozenset[str],
 ) -> frozenset[str]:
     bindings = set(initial)
-    normalized_prefix = _normalize_github_lookup_assignments(command_prefix)
+    normalized_prefix = _bindings.normalize_github_lookup_assignments(command_prefix)
     parts = analysis.split_parts(normalized_prefix)
     conditional_indexes = _bindings.conditional_pipeline_indexes(parts)
     for pipeline_index, pipeline in enumerate(analysis.pipelines(parts)):
@@ -386,7 +406,7 @@ def _github_text_variables_after_prefix(
             )
             if pipeline_index in conditional_indexes:
                 updates = tuple(update for update in updates if update[1])
-            _apply_assignment_updates(
+            _bindings.apply_assignment_updates(
                 bindings,
                 updates,
             )
@@ -421,7 +441,7 @@ def _classify_indirect_github_segment(
                 "A shell function or alias defers execution of a GitHub command.",
             )
         return None
-    if command_name not in _GH_EXECUTORS:
+    if command_name not in {"builtin", "eval", "exec", "timeout", "trap", "watch", "xargs"}:
         return None
     gh_indices = [
         index

@@ -374,6 +374,19 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
         ("if true; then gh repo delete o/r --yes; fi", "GitHub delete command"),
         ("for item in one; do gh repo delete o/r --yes; done", "GitHub delete command"),
         ("case one in one) gh repo delete o/r --yes;; esac", "GitHub delete command"),
+        ("{ gh repo delete o/r --yes; }", "GitHub delete command"),
+        ("( gh repo delete o/r --yes )", "GitHub delete command"),
+        ("! gh repo delete o/r --yes", "GitHub delete command"),
+        ("coproc gh repo delete o/r --yes", "GitHub delete command"),
+        ("coproc JOB { gh repo delete o/r --yes; }", "GitHub delete command"),
+        ("coproc JOB ( gh repo delete o/r --yes )", "GitHub delete command"),
+        ("trap 'gh repo delete o/r --yes' EXIT", "GitHub delete command"),
+        ('trap "gh repo delete o/r --yes" 0', "GitHub delete command"),
+        ("if ( gh repo delete o/r --yes ); then :; fi", "GitHub delete command"),
+        (
+            "case x in y) echo no;; x) gh repo delete o/r --yes;; esac",
+            "GitHub delete command",
+        ),
         ("alias zap='gh repo delete o/r --yes'; zap", "Unverified GitHub command capability"),
         ("TOOL=$(command -v gh); $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
         ("export TOOL=gh; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
@@ -386,6 +399,44 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
         ("TOOL=gh; false && TOOL=python; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
         ("TOOL=gh; true || TOOL=python; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
         ("TOOL=gh; false && unset TOOL; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
+        (
+            "TOOL=gh; if false; then TOOL=python; fi; $TOOL repo delete o/r --yes",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "TOOL=gh; if maybe; then TOOL=python; fi; $TOOL repo delete o/r --yes",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "TOOL=python; case x in x) TOOL=gh;; esac; $TOOL repo delete o/r --yes",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "CMD='echo ok'; case x in x) CMD='gh repo delete o/r --yes';; esac; eval \"$CMD\"",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "TOOL=gh; while false; do TOOL=python; done; $TOOL repo delete o/r --yes",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "TOOL=gh; until true; do TOOL=python; done; $TOOL repo delete o/r --yes",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "TOOL=gh; for item in; do TOOL=python; done; $TOOL repo delete o/r --yes",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "f(){ local TOOL=python; case x in x) TOOL=gh;; esac; $TOOL repo delete o/r --yes; }; f",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "f(){ local TOOL=gh; while false; do TOOL=python; done; $TOOL repo delete o/r --yes; }; f",
+            "Unverified GitHub command capability",
+        ),
+        ("case x in x) : ;& y) gh repo delete o/r --yes;; esac", "GitHub delete command"),
+        ("case x in x) : ;;& x) gh repo delete o/r --yes;; esac", "GitHub delete command"),
         (
             "CMD='gh repo delete o/r --yes'; false && CMD='echo ok'; eval \"$CMD\"",
             "Unverified GitHub command capability",
@@ -471,9 +522,14 @@ def test_guard_requires_confirmation_for_github_mutations_and_unverified_composi
         "CMD='echo gh repo delete'; eval \"$CMD\"",
         "CMD='printf gh'; sh -c \"$CMD\"",
         "CMD='printf /usr/local/bin/gh'; sh -c \"$CMD\"",
+        "TOOL=gh; f(){ local TOOL=python; $TOOL --version; }; f",
         "echo '$(gh repo delete o/r --yes)'",
         "echo 'gh repo delete o/r --yes'",
         "printf '%s\\n' 'gh repo delete o/r --yes'",
+        "if true; then echo gh; fi",
+        "case gh in gh) echo ok;; esac",
+        'for x in gh; do echo "$x"; done',
+        'if true; then printf "gh repo delete"; fi',
     ),
 )
 def test_unrelated_dynamic_commands_are_not_labeled_as_github(tmp_path: Path, command: str) -> None:
