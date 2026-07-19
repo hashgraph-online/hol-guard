@@ -564,7 +564,7 @@ def test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_sta
     assert converted_handles and converted_handles[0][0] == 71
     assert closed_handles == []
     assert len(create_arguments) == 1
-    assert create_arguments[0][0] == "C:/Guard/update.whl"
+    assert create_arguments[0][0] == str(Path("C:/Guard/update.whl"))
     assert create_arguments[0][1] == artifact_module._WINDOWS_GENERIC_READ
     assert create_arguments[0][2] == (
         artifact_module._WINDOWS_FILE_SHARE_READ | artifact_module._WINDOWS_FILE_SHARE_WRITE
@@ -654,7 +654,7 @@ def test_windows_receipt_child_lock_is_atomic_non_delete_shared_and_delete_on_cl
     locks.close()
 
     assert len(create_arguments) == 1
-    assert create_arguments[0][0] == ("C:/Guard Home/.local-wheel-source.json.lock.4102." + "ab" * 16)
+    assert create_arguments[0][0] == str(Path("C:/Guard Home") / (".local-wheel-source.json.lock.4102." + "ab" * 16))
     assert create_arguments[0][1] == (
         artifact_module._WINDOWS_GENERIC_READ | artifact_module._WINDOWS_GENERIC_WRITE | artifact_module._WINDOWS_DELETE
     )
@@ -1022,7 +1022,19 @@ def test_stage_rejects_source_identity_change_during_copy(
     assert list((neutral / "wheels").iterdir()) == []
 
 
-@pytest.mark.parametrize("failing_operation", ["fstat", "lstat"])
+@pytest.mark.parametrize(
+    "failing_operation",
+    [
+        "fstat",
+        pytest.param(
+            "lstat",
+            marks=pytest.mark.skipif(
+                os.name == "nt",
+                reason="Windows source descriptors are bound atomically without path lstat metadata",
+            ),
+        ),
+    ],
+)
 def test_stage_translates_source_metadata_errors_to_stable_reason(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
