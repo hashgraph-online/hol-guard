@@ -270,9 +270,7 @@ def compute_local_distribution_hashes(
             if path.name.startswith(("hol_guard-", "hol-guard-")):
                 raise RegistryVerificationError("Local Guard distributions cannot be symbolic links")
             continue
-        if not path.is_file():
-            continue
-        if _is_publish_attestation(path.name, version):
+        if not path.is_file() or _is_publish_attestation(path.name, version):
             continue
         try:
             name, file_version = _distribution_identity(path.name)
