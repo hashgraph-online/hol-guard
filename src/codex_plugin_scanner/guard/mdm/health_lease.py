@@ -32,7 +32,6 @@ from .device_key import KeyGeneration
 from .device_key_access import verified_machine_device_key_by_id
 from .health_lease_ack import MAX_ACK_BYTES, HealthLeaseAck
 from .health_lease_contract import (
-    MAX_LEASE_SECONDS,
     MAX_OUTBOX_BYTES,
     MAX_SNAPSHOT_BYTES,
     HealthLeaseBinding,
@@ -44,6 +43,8 @@ from .health_lease_contract import (
 )
 from .integrity import machine_integrity_snapshot
 from .protection_lease_contract import (
+    MAX_PROTECTION_LEASE_SECONDS,
+    MIN_PROTECTION_LEASE_SECONDS,
     ProtectionLeaseChallenge,
     ProtectionLeaseClaims,
     SignedProtectionLease,
@@ -413,7 +414,7 @@ def issue_or_load_pending_health_lease(
         raise ValueError("health_lease_time_invalid")
     resolved_now = requested_now.astimezone(timezone.utc).replace(microsecond=0)
     resolved_system = system_name or platform.system()
-    if not 1 <= lease_seconds <= MAX_LEASE_SECONDS:
+    if not MIN_PROTECTION_LEASE_SECONDS <= lease_seconds <= MAX_PROTECTION_LEASE_SECONDS:
         raise ValueError("health_lease_duration_invalid")
     with _continuity_lock(paths):
         record = _read_record(paths)

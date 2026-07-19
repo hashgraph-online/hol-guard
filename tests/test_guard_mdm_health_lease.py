@@ -315,6 +315,47 @@ def test_issue_binds_exact_normalized_snapshot_digest_and_verifies_signature(
     assert outbox.lease.claims.signing_key_id == key.key_id
 
 
+@pytest.mark.parametrize("lease_seconds", [180, 1800])
+def test_issue_accepts_frozen_protection_lease_duration_boundaries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    lease_seconds: int,
+) -> None:
+    paths, private, _key_generation = _prepare(tmp_path, monkeypatch)
+
+    outbox = health_lease.issue_or_load_pending_health_lease(
+        paths,
+        HealthLeaseBinding("workspace-a", "device-a"),
+        lease_seconds=lease_seconds,
+        now=_NOW,
+        system_name="Darwin",
+        snapshot_factory=_snapshot,
+        signer=_signer(private),
+    )
+
+    assert outbox.lease.claims.valid_for_seconds == lease_seconds
+
+
+@pytest.mark.parametrize("lease_seconds", [179, 1801])
+def test_issue_rejects_durations_outside_frozen_protection_lease_bounds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    lease_seconds: int,
+) -> None:
+    paths, private, _key_generation = _prepare(tmp_path, monkeypatch)
+
+    with pytest.raises(ValueError, match="health_lease_duration_invalid"):
+        health_lease.issue_or_load_pending_health_lease(
+            paths,
+            HealthLeaseBinding("workspace-a", "device-a"),
+            lease_seconds=lease_seconds,
+            now=_NOW,
+            system_name="Darwin",
+            snapshot_factory=_snapshot,
+            signer=_signer(private),
+        )
+
+
 def test_issue_rejects_signature_from_an_unrelated_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths, _private, _key_generation = _prepare(tmp_path, monkeypatch)
     attacker = ec.generate_private_key(ec.SECP256R1())
