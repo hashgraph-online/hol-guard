@@ -101,6 +101,8 @@ def observe_command_extensions(
                     )
                 )
                 continue
+            if not matcher_evidence:
+                continue
             safe_variants: list[SafeVariantObservation] = []
             uncertainty_reasons: tuple[UncertaintyKind, ...] = ()
             for variant in rule.safe_variants:

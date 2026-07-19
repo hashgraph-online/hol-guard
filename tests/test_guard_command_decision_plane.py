@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.runtime.command_rules import (
     CommandRuleMode,
     CommandRuleSeverity,
     CommandSafetyRule,
+    CommandSafeVariant,
     ExecutableMatcher,
 )
 
@@ -34,6 +35,12 @@ class _MalformedMatcher:
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         del command
         return cast(tuple[MatcherEvidence, ...], ("not-evidence",))
+
+
+class _EmptyMatcher:
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        del command
+        return ()
 
 
 def _registry(
@@ -234,6 +241,68 @@ def test_malformed_matcher_evidence_becomes_typed_uncertainty() -> None:
     )
 
     evaluation = evaluate_command("test-tool target", registry=registry)
+
+    assert evaluation.minimum_action == "block"
+    assert evaluation.extension_observations[0].uncertainty_reasons[0].value == "matcher-failure"
+
+
+def test_safe_variant_failure_is_scoped_to_an_owning_base_match() -> None:
+    safe_variant = CommandSafeVariant("broken-safe", "Broken safe matcher", _FailingMatcher())
+    rule = CommandSafetyRule(
+        rule_id="command.test.scoped-safe",
+        title="Scoped safe rule",
+        description="Exercises owned safe-variant failure scoping.",
+        severity="high",
+        risk_classes=("test_risk",),
+        action_classes=(),
+        safer_alternatives=("Review the operation.",),
+        matcher=_EmptyMatcher(),
+        safe_variants=(safe_variant,),
+    )
+    extension = CommandSafetyExtension(
+        extension_id="command.test",
+        version="1.0.0",
+        name="Test extension",
+        description="Exercises owned safe-variant failure scoping.",
+        action_classes=(),
+        risk_classes=("test_risk",),
+        safer_alternatives=("Review the operation.",),
+        rules=(rule,),
+    )
+
+    evaluation = evaluate_command(
+        "unrelated-tool inspect",
+        registry=CommandSafetyExtensionRegistry((extension,)),
+    )
+
+    assert evaluation.minimum_action == "allow"
+    assert evaluation.extension_observations == ()
+
+
+def test_owned_safe_variant_failure_remains_blocking_uncertainty() -> None:
+    rule = CommandSafetyRule(
+        rule_id="command.test.owned-safe",
+        title="Owned safe rule",
+        description="Exercises matched safe-variant failure handling.",
+        severity="high",
+        risk_classes=("test_risk",),
+        action_classes=(),
+        safer_alternatives=("Review the operation.",),
+        matcher=ExecutableMatcher(executables=frozenset({"test-tool"})),
+        safe_variants=(CommandSafeVariant("broken-safe", "Broken safe matcher", _FailingMatcher()),),
+    )
+    extension = CommandSafetyExtension(
+        extension_id="command.test",
+        version="1.0.0",
+        name="Test extension",
+        description="Exercises matched safe-variant failure handling.",
+        action_classes=(),
+        risk_classes=("test_risk",),
+        safer_alternatives=("Review the operation.",),
+        rules=(rule,),
+    )
+
+    evaluation = evaluate_command("test-tool target", registry=CommandSafetyExtensionRegistry((extension,)))
 
     assert evaluation.minimum_action == "block"
     assert evaluation.extension_observations[0].uncertainty_reasons[0].value == "matcher-failure"
