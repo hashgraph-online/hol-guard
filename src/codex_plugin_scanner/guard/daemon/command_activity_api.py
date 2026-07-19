@@ -9,6 +9,7 @@ import base64
 import hashlib
 import hmac
 import json
+import threading
 import time
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
@@ -191,6 +192,7 @@ class _Writable(Protocol):
 
 class _ApiServer(Protocol):
     auth_token: str
+    shutdown_started: threading.Event
     store: GuardStore
 
 
@@ -300,7 +302,7 @@ def stream_command_activity_events(handler: object, cursor: int) -> None:
         target.end_headers()
         next_cursor = max(0, cursor)
         deadline = time.monotonic() + _COMMAND_ACTIVITY_STREAM_MAX_SECONDS
-        while time.monotonic() < deadline:
+        while time.monotonic() < deadline and not target.server.shutdown_started.is_set():
             target._touch_runtime_heartbeat("/v1/command-activity/events")
             page = target.server.store.list_command_activity_invalidations(next_cursor, limit=100)
             reset_required = page.get("reset_required")
@@ -338,7 +340,8 @@ def stream_command_activity_events(handler: object, cursor: int) -> None:
                     target.wfile.flush()
                 except (BrokenPipeError, ConnectionResetError):
                     return
-            time.sleep(0.5)
+            if target.server.shutdown_started.wait(0.5):
+                return
     finally:
         target._decrement_active_stream_clients()
 
@@ -425,15 +428,23 @@ def _verified_cursor(cursor: str, *, auth_token: str) -> dict[str, object]:
         if prefix != _CURSOR_PREFIX or not encoded or not signature:
             raise ValueError
         expected = hmac.new(auth_token.encode("utf-8"), encoded.encode("ascii"), hashlib.sha256).digest()
-        supplied = base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4))
+        supplied = _decode_base64url_canonical(signature)
         if not hmac.compare_digest(supplied, expected):
             raise ValueError
-        raw = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        raw = _decode_base64url_canonical(encoded)
         decoded: object = json.loads(raw)
     except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("invalid_cursor") from error
     if not _is_string_object_dict(decoded):
         raise ValueError("invalid_cursor")
+    return decoded
+
+
+def _decode_base64url_canonical(value: str) -> bytes:
+    decoded = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    canonical = base64.urlsafe_b64encode(decoded).decode("ascii").rstrip("=")
+    if not hmac.compare_digest(value, canonical):
+        raise ValueError
     return decoded
 
 

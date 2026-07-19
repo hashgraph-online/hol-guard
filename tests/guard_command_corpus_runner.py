@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TypedDict, cast
 
 EVALUATION_SHARD_COUNT = 4
-MAX_CONCURRENT_WORKERS = 2
+MAX_CONCURRENT_WORKERS = 1
 WORKER_TIMEOUT_SECONDS = 15
 REPO_ROOT = Path(__file__).parents[1]
 SYNTHETIC_CWD = REPO_ROOT / "workspace"

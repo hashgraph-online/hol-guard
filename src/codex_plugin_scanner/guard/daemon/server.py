@@ -283,6 +283,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     start_monotonic: float
     active_stream_clients: int
     active_stream_clients_lock: threading.Lock
+    shutdown_started: threading.Event
     package_firewall_connect_state: dict[str, object] | None
     package_firewall_connect_state_lock: threading.Lock
     guard_cloud_connect_state: dict[str, object] | None
@@ -306,6 +307,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         runtime_session_id: str,
         runtime_started_at: str,
         idle_timeout_seconds: float | None,
+        shutdown_started: threading.Event,
     ) -> None:
         super().__init__(server_address, handler_class)
         self.store = store
@@ -319,6 +321,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.start_monotonic = time.monotonic()
         self.active_stream_clients = 0
         self.active_stream_clients_lock = threading.Lock()
+        self.shutdown_started = shutdown_started
         self.package_firewall_connect_state = None
         self.package_firewall_connect_state_lock = threading.Lock()
         self.guard_cloud_connect_state = None
@@ -5703,6 +5706,7 @@ class GuardDaemonServer:
         workspace_dir: Path | None = None,
     ) -> None:
         _validate_dashboard_bundle()
+        self._shutdown_started = threading.Event()
         self._server = _GuardDaemonHttpServer(
             (host, port),
             _GuardDaemonHandler,
@@ -5715,6 +5719,7 @@ class GuardDaemonServer:
                 store.guard_home,
                 idle_timeout_seconds=idle_timeout_seconds,
             ),
+            shutdown_started=self._shutdown_started,
         )
         self.port = self._server.daemon_port()
         self._bundle_refresh_backoff_seconds = bundle_refresh_backoff_seconds
@@ -5736,7 +5741,6 @@ class GuardDaemonServer:
         self._live_request_sync_worker: LiveRequestSyncWorker | None = None
         self._thread: threading.Thread | None = None
         self._watchdog_thread: threading.Thread | None = None
-        self._shutdown_started = threading.Event()
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():

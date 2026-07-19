@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import urllib.parse
 import urllib.request
@@ -100,7 +101,15 @@ def test_signed_cursor_rejects_tampering_and_filter_rebinding(tmp_path: Path) ->
             f"/v1/command-activity?limit=2&cursor={urllib.parse.quote(cursor)}",
             token=token,
         )
-        tampered = cursor[:-1] + ("A" if cursor[-1] != "A" else "B")
+        prefix, encoded, signature = cursor.split(".")
+        decoded_signature = base64.urlsafe_b64decode(signature + "=")
+        alias = next(
+            candidate
+            for character in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+            if (candidate := signature[:-1] + character) != signature
+            and base64.urlsafe_b64decode(candidate + "=") == decoded_signature
+        )
+        tampered = f"{prefix}.{encoded}.{alias}"
         tampered_status, tampered_body, _ = json_request(
             daemon,
             f"/v1/command-activity?limit=2&cursor={urllib.parse.quote(tampered)}",
@@ -248,6 +257,7 @@ def test_sse_emits_only_invalidation_type_and_activity_id(tmp_path: Path) -> Non
             response.close()
         daemon.stop()
 
+    assert daemon._server.active_stream_clients == 0
     assert query_token_status == 401
     assert event_id.startswith("id: ")
     assert payload == {"event": "command_activity_invalidated", "activity_id": "activity:01"}
