@@ -99,6 +99,34 @@ def test_protection_lease_requires_bounded_attestation_not_commands() -> None:
     assert list(validator.iter_errors(payload))
 
 
+@pytest.mark.parametrize("value", ["not base64!", "AQI", "AQ=ID", "===="])
+def test_signed_evidence_rejects_malformed_base64_signatures(value: str) -> None:
+    payload: dict[str, JsonValue] = {
+        "schemaVersion": "protection-lease.v1",
+        "claims": {
+            "workspaceId": "workspace-a",
+            "deviceId": "device-a",
+            "machineInstallationId": "1" * 32,
+            "installationGeneration": "2" * 32,
+            "sequence": 7,
+            "issuedAt": "2026-07-18T22:00:00Z",
+            "expiresAt": "2026-07-18T22:15:00Z",
+            "snapshotSchemaVersion": "local-integrity-snapshot.v1",
+            "snapshotDigest": "3" * 64,
+            "previousLeaseDigest": "4" * 64,
+            "signingKeyId": "device-key-a",
+            "challenge": None,
+        },
+        "signature": {
+            "algorithm": "ecdsa-p256-sha256",
+            "keyId": "device-key-a",
+            "value": value,
+        },
+    }
+
+    assert list(_validator("protection-lease.v1").iter_errors(payload))
+
+
 def test_observer_and_remediation_authorities_are_separate_and_allowlisted() -> None:
     assertion: dict[str, JsonValue] = {
         "schemaVersion": "observer-assertion.v1",
