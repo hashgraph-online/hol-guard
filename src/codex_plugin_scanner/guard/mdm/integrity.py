@@ -36,7 +36,7 @@ from .supervisor import machine_executable, verify_machine_supervisor
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _component(state: str, reason_code: str) -> IntegrityComponent:

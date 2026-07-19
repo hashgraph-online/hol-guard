@@ -3,12 +3,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-from typing import cast
+from typing import cast, get_args
 
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from codex_plugin_scanner.guard.mdm.contracts import IntegrityReasonCode
 from codex_plugin_scanner.guard.mdm.health_lease_contract import (
     HEALTH_LEASE_SCHEMA,
     MAX_LEASE_BYTES,
@@ -195,6 +196,15 @@ def test_snapshot_canonicalization_rejects_non_finite_numbers() -> None:
 
     with pytest.raises(ValueError, match="health_lease_json_invalid"):
         canonical_json_bytes(snapshot)
+
+
+def test_outbox_rejects_more_than_64_snapshot_reason_codes() -> None:
+    snapshot = _snapshot()
+    snapshot["generatedAt"] = "2026-07-18T14:00:00Z"
+    snapshot["reasonCodes"] = sorted(get_args(IntegrityReasonCode))[:65]
+
+    with pytest.raises(ValueError, match="health_lease_outbox_invalid"):
+        _outbox(snapshot).canonical_bytes()
 
 
 @pytest.mark.parametrize(
