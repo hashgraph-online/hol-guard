@@ -6,6 +6,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from .command_decision_adapter import (
+    command_uncertainties,
+    decision_factors,
+    effect_decision_to_dict,
+    extension_evidence_batch,
+    extension_uncertainties,
+)
+from .command_extension_observations import CommandExtensionObservation
 from .command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtension,
@@ -13,6 +21,7 @@ from .command_extensions import (
 )
 from .command_model import CanonicalCommand, parse_shell_command
 from .command_rules import CommandRuleMatch, CommandRuleMode
+from .effect_decision import EffectDecision, EffectDecisionRequest, evaluate_effect_decision
 
 CommandDecisionFloor = Literal["allow", "monitor", "review", "block"]
 _FLOOR_RANK: dict[CommandDecisionFloor, int] = {"allow": 0, "monitor": 1, "review": 2, "block": 3}
@@ -50,6 +59,8 @@ class CompositeCommandEvaluation:
     controlling_reason: str | None
     controlling_rule_id: str | None
     minimum_action: CommandDecisionFloor
+    extension_observations: tuple[CommandExtensionObservation[CommandSafetyExtension], ...]
+    decision_plane: EffectDecision
 
     @property
     def risk_classes(self) -> tuple[str, ...]:
@@ -68,6 +79,8 @@ class CompositeCommandEvaluation:
             "minimum_action": self.minimum_action,
             "risk_classes": list(self.risk_classes),
             "matches": [owned.to_dict() for owned in self.matches],
+            "extension_observations": [item.to_dict() for item in self.extension_observations],
+            "decision_plane": effect_decision_to_dict(self.decision_plane),
             "parse_confidence": self.command.confidence,
             "uncertainty_reason": self.command.uncertainty_reason,
         }
@@ -86,7 +99,10 @@ def evaluate_command(
     """Evaluate every built-in rule without executing or persisting the command."""
 
     command = canonical_command or parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
-    structured = registry.matching_rules(command)
+    observations = registry.observations(command)
+    structured = tuple(
+        (item.extension, item.rule, item.effective_evidence) for item in observations if item.effective_evidence
+    )
     selected = list(structured)
     selected_rule_ids = {rule.rule_id for _extension, rule, _evidence in selected}
     if compatibility_action_class is not None:
@@ -127,6 +143,29 @@ def evaluate_command(
         minimum_action = _stronger_floor(minimum_action, "review")
     if command.confidence != "exact" and (compatibility_action_class is not None or owned_matches):
         minimum_action = _stronger_floor(minimum_action, "review")
+    if extension_uncertainties(observations):
+        minimum_action = "block"
+    evidence_batch = extension_evidence_batch(command, observations)
+    decision_plane = evaluate_effect_decision(
+        EffectDecisionRequest(
+            factors=decision_factors(
+                evidence_batch,
+                compatibility_action_class=compatibility_action_class,
+            ),
+            uncertainties=tuple(
+                sorted(
+                    {
+                        *command_uncertainties(
+                            command,
+                            sensitive=compatibility_action_class is not None or bool(owned_matches),
+                        ),
+                        *extension_uncertainties(observations),
+                    },
+                    key=lambda item: item.value,
+                )
+            ),
+        )
+    )
     return CompositeCommandEvaluation(
         command=command,
         matches=tuple(owned_matches),
@@ -134,6 +173,8 @@ def evaluate_command(
         controlling_reason=controlling_reason,
         controlling_rule_id=controlling_match.match.rule.rule_id if controlling_match is not None else None,
         minimum_action=minimum_action,
+        extension_observations=observations,
+        decision_plane=decision_plane,
     )
 
 

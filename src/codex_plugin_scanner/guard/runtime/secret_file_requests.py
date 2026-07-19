@@ -15,8 +15,10 @@ import stat
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from ..action_lattice import guard_action_severity
 from ..models import GuardArtifact
 from .actions import GuardActionEnvelope, apply_patch_target_paths
+from .command_decision_adapter import evaluate_extension_interaction
 from .command_evaluation import evaluate_command
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .command_model import CanonicalCommand, parse_shell_command
@@ -1186,7 +1188,29 @@ def _destructive_shell_tool_action_request(
             ),
             canonical_command=canonical_command,
         )
-    for _extension, rule, _evidence in BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command):
+    extension_observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(canonical_command)
+    has_extension_signal = any(
+        observation.effective_evidence or observation.uncertainty_reasons for observation in extension_observations
+    )
+    extension_decision = evaluate_extension_interaction(canonical_command, extension_observations)
+    extension_requires_interaction = has_extension_signal and guard_action_severity(extension_decision.action) >= (
+        guard_action_severity("review")
+    )
+    if extension_requires_interaction and any(
+        observation.uncertainty_reasons for observation in extension_observations
+    ):
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="command extension matcher failure",
+            reason="Guard blocked an extension matcher boundary failure without exposing matcher-provided data.",
+            canonical_command=canonical_command,
+        )
+    for observation in extension_observations:
+        rule = observation.rule
+        if not extension_requires_interaction or not observation.effective_evidence:
+            continue
         if not rule.action_classes or rule.action_classes[0] != "GitHub Actions administrative command":
             continue
         return ToolActionRequestMatch(
@@ -1233,7 +1257,10 @@ def _destructive_shell_tool_action_request(
             ),
             canonical_command=canonical_command,
         )
-    for _extension, rule, _evidence in BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command):
+    for observation in extension_observations:
+        rule = observation.rule
+        if not extension_requires_interaction or not observation.effective_evidence:
+            continue
         if not rule.action_classes:
             continue
         return ToolActionRequestMatch(
