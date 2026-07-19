@@ -4,26 +4,36 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
+from .command_decision_adapter import (
+    LegacyCommandFloor,
+    command_rule_candidates,
+    command_uncertainties,
+    compatibility_candidate,
+    extension_evidence_batch,
+    extension_uncertainties,
+    legacy_floor_for_action,
+    legacy_rule_floor,
+)
+from .command_extension_observations import CommandExtensionObservation, observe_command_extensions
 from .command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtension,
     CommandSafetyExtensionRegistry,
 )
 from .command_model import CanonicalCommand, parse_shell_command
-from .command_rules import CommandRuleMatch, CommandRuleMode
+from .command_rules import CommandRuleMatch
+from .effect_decision_plane import (
+    DecisionCandidate,
+    DecisionSourceKind,
+    EffectDecision,
+    EffectDecisionRequest,
+    evaluate_effect_decision,
+)
 
-CommandDecisionFloor = Literal["allow", "monitor", "review", "block"]
+CommandDecisionFloor = LegacyCommandFloor
 _FLOOR_RANK: dict[CommandDecisionFloor, int] = {"allow": 0, "monitor": 1, "review": 2, "block": 3}
 _SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
-_MODE_FLOOR: dict[CommandRuleMode, CommandDecisionFloor] = {
-    "disabled": "allow",
-    "monitor": "monitor",
-    "review": "review",
-    "enforce": "block",
-    "required": "review",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +60,8 @@ class CompositeCommandEvaluation:
     controlling_reason: str | None
     controlling_rule_id: str | None
     minimum_action: CommandDecisionFloor
+    extension_observations: tuple[CommandExtensionObservation[CommandSafetyExtension], ...]
+    decision_plane: EffectDecision
 
     @property
     def risk_classes(self) -> tuple[str, ...]:
@@ -68,6 +80,8 @@ class CompositeCommandEvaluation:
             "minimum_action": self.minimum_action,
             "risk_classes": list(self.risk_classes),
             "matches": [owned.to_dict() for owned in self.matches],
+            "extension_observations": [item.to_dict() for item in self.extension_observations],
+            "decision_plane": self.decision_plane.to_dict(),
             "parse_confidence": self.command.confidence,
             "uncertainty_reason": self.command.uncertainty_reason,
         }
@@ -86,7 +100,10 @@ def evaluate_command(
     """Evaluate every built-in rule without executing or persisting the command."""
 
     command = canonical_command or parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
-    structured = registry.matching_rules(command)
+    observations = observe_command_extensions(command, registry.extensions, registry.candidate_rule_ids(command))
+    structured = tuple(
+        (item.extension, item.rule, item.effective_evidence) for item in observations if item.effective_evidence
+    )
     selected = list(structured)
     selected_rule_ids = {rule.rule_id for _extension, rule, _evidence in selected}
     if compatibility_action_class is not None:
@@ -120,34 +137,46 @@ def evaluate_command(
     if controlling_action_class is None and controlling_match is not None:
         controlling_action_class = controlling_match.match.action_class
         controlling_reason = controlling_match.match.reason
-    minimum_action: CommandDecisionFloor = "allow"
-    for owned in owned_matches:
-        minimum_action = _stronger_floor(minimum_action, _rule_floor(owned))
+    selected_tuple = tuple(selected)
+    candidates = list(command_rule_candidates(selected_tuple))
+    candidates.append(
+        DecisionCandidate("policy:legacy-baseline", DecisionSourceKind.POLICY, "allow", "reason:legacy-baseline")
+    )
     if compatibility_action_class is not None:
-        minimum_action = _stronger_floor(minimum_action, "review")
-    if command.confidence != "exact" and (compatibility_action_class is not None or owned_matches):
-        minimum_action = _stronger_floor(minimum_action, "review")
+        candidates.append(compatibility_candidate(compatibility_action_class))
+    decision = evaluate_effect_decision(
+        EffectDecisionRequest(
+            effects=(),
+            extension_evidence=extension_evidence_batch(command, observations),
+            candidates=tuple(candidates),
+            uncertainties=tuple(
+                sorted(
+                    {
+                        *command_uncertainties(
+                            command,
+                            sensitive=compatibility_action_class is not None or bool(owned_matches),
+                        ),
+                        *extension_uncertainties(observations),
+                    },
+                    key=str,
+                )
+            ),
+        )
+    )
     return CompositeCommandEvaluation(
         command=command,
         matches=tuple(owned_matches),
         controlling_action_class=controlling_action_class,
         controlling_reason=controlling_reason,
         controlling_rule_id=controlling_match.match.rule.rule_id if controlling_match is not None else None,
-        minimum_action=minimum_action,
+        minimum_action=legacy_floor_for_action(decision.action),
+        extension_observations=observations,
+        decision_plane=decision,
     )
 
 
 def _rule_floor(owned: OwnedCommandRuleMatch) -> CommandDecisionFloor:
-    rule = owned.match.rule
-    if owned.extension.required and rule.severity == "critical":
-        return "block"
-    if owned.extension.required:
-        return "review"
-    return _MODE_FLOOR[rule.default_mode]
-
-
-def _stronger_floor(left: CommandDecisionFloor, right: CommandDecisionFloor) -> CommandDecisionFloor:
-    return left if _FLOOR_RANK[left] >= _FLOOR_RANK[right] else right
+    return legacy_rule_floor(owned.extension, owned.match.rule)
 
 
 def _match_precedence_key(owned: OwnedCommandRuleMatch) -> tuple[int, int, int]:

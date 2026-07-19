@@ -9,9 +9,10 @@ from typing import Literal, final
 
 from .command_builtin_extension_catalog import DIRECT_COMMAND_EXTENSION_VALUES
 from .command_builtin_rules import COMMAND_ACTION_RISK_CLASSES, rules_for_extension
+from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand
 from .command_package_extensions import PACKAGE_COMMAND_EXTENSION_SPECS, PackageCommandExtensionSpec
-from .command_rules import CommandSafetyRule, MatcherEvidence, matcher_index_hints
+from .command_rules import CommandSafetyRule, matcher_index_hints
 
 COMMAND_EXTENSION_SCHEMA_VERSION = 2
 _VERSION_PATTERN = re.compile(r"^[1-9][0-9]*\.[0-9]+\.[0-9]+$")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal, final
 
@@ -298,6 +299,7 @@ class CommandSafetyRule:
     matcher: CommandMatcher | None = None
     safe_variants: tuple[CommandSafeVariant, ...] = ()
     compatibility_fallback: bool = False
+    rule_version: str = "1.0.0"
 
     def __post_init__(self) -> None:
         if not self.rule_id.startswith("command.") or self.rule_id != self.rule_id.lower():
@@ -308,6 +310,8 @@ class CommandSafetyRule:
             raise ValueError(f"Command safety rule {self.rule_id} has invalid severity")
         if self.default_mode not in _VALID_MODES:
             raise ValueError(f"Command safety rule {self.rule_id} has invalid default mode")
+        if re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", self.rule_version) is None:
+            raise ValueError(f"Command safety rule {self.rule_id} has invalid rule version")
         for field_name, values in (
             ("risk classes", self.risk_classes),
             ("safer alternatives", self.safer_alternatives),
@@ -325,6 +329,7 @@ class CommandSafetyRule:
     def to_dict(self) -> dict[str, object]:
         return {
             "rule_id": self.rule_id,
+            "rule_version": self.rule_version,
             "title": self.title,
             "description": self.description,
             "severity": self.severity,
@@ -439,11 +444,6 @@ def _segment_matches_executable(segment: CommandSegment, executables: frozenset[
         return False
     executable = segment.executable.replace("\\", "/").rsplit("/", 1)[-1].lower()
     return executable in executables
-
-
-def _normalize_option_token(value: str) -> str:
-    stripped = value.strip()
-    return stripped.lower() if stripped.startswith("--") else stripped
 
 
 def _after_leading_options(
