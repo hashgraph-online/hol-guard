@@ -1,4 +1,7 @@
 import {
+  commandActivityAnalyticsQueryForFilters,
+  completeCommandFeedback,
+  commandSummaryIsOutsideTableFilters,
   DEFAULT_COMMAND_ACTIVITY_FILTERS,
   INITIAL_COMMAND_ACTIVITY_CURSOR_STATE,
   advanceCommandActivityCursor,
@@ -10,6 +13,7 @@ import {
   parseCommandActivityFilters,
   retreatCommandActivityCursor,
   serializeCommandActivityFilters,
+  updateCommandActivityFilters,
 } from "./command-activity-state";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -30,6 +34,11 @@ assert(parsed.occurred_through === "2026-07-19", "command filters preserve canon
 const roundTrip = parseCommandActivityFilters(serializeCommandActivityFilters(parsed));
 assert(JSON.stringify(roundTrip) === JSON.stringify(parsed), "command filter URL state round trips exactly");
 
+const clearedHarness = updateCommandActivityFilters(parsed, { harness: null }, null);
+assert(clearedHarness.harness === null, "global app filters can return to all apps");
+const lockedHarness = updateCommandActivityFilters(parsed, { harness: null }, "claude-code");
+assert(lockedHarness.harness === "claude-code", "per-app activity cannot clear its harness scope");
+
 const malformed = parseCommandActivityFilters(
   new URLSearchParams(
     "command_limit=999&command_harness=../../private&command_status=executed&command_prompted=1&command_from=2026-02-30",
@@ -40,9 +49,42 @@ assert(malformed.harness === null, "unstable harness IDs are discarded");
 assert(malformed.execution_status === null, "unknown execution states are discarded");
 assert(malformed.prompted === null, "non-canonical booleans are discarded");
 assert(malformed.occurred_from === null, "impossible dates are discarded");
+assert(
+  parseCommandActivityFilters(new URLSearchParams("command_from=0000-01-01")).occurred_from === null,
+  "year zero is rejected before transport",
+);
 
 const query = buildCommandActivityQuery(parsed, "gca1.opaque.signature");
 assert(query.includes("prompted=false"), "server queries preserve explicit false values");
+const ruleAnalyticsQuery = commandActivityAnalyticsQueryForFilters({
+  ...parsed,
+  extension_id: "command.git",
+  rule_id: "command.git.fetch",
+});
+assert(
+  ruleAnalyticsQuery.dimension === "rule" && ruleAnalyticsQuery.dimension_value === "command.git.fetch",
+  "rule analytics scope takes priority over its parent extension",
+);
+assert(
+  commandSummaryIsOutsideTableFilters({
+    ...DEFAULT_COMMAND_ACTIVITY_FILTERS,
+    harness: "codex",
+    extension_id: "command.git",
+  }),
+  "app plus extension filters disclose the one-dimension analytics limit",
+);
+assert(
+  commandSummaryIsOutsideTableFilters({
+    ...DEFAULT_COMMAND_ACTIVITY_FILTERS,
+    harness: "codex",
+    rule_id: "command.git.fetch",
+  }),
+  "app plus rule filters disclose the one-dimension analytics limit",
+);
+assert(
+  commandSummaryIsOutsideTableFilters({ ...parsed, execution_status: "confirmed_success" }),
+  "table-only filters require an explicit analytics-scope disclosure",
+);
 assert(query.includes("cursor=gca1.opaque.signature"), "signed cursors remain opaque query values");
 assert(!query.includes("command_"), "browser-only filter prefixes never reach the daemon");
 
@@ -107,6 +149,43 @@ const staleError = commandActivityLoadFailed(loading, 6, new Error("stale"));
 assert(staleError.kind === "loading", "stale errors cannot overwrite a newer request");
 const error = commandActivityLoadFailed(loading, 7, new Error("SECRET_TRANSPORT_DETAIL".repeat(1_000)));
 assert(
-  error.kind === "error" && error.message === "Unable to load command activity.",
-  "current failures produce fixed privacy-safe error state",
+  error.kind === "error" &&
+    error.message === "Unable to load command activity." &&
+    error.previous?.[0] === "previous",
+  "current failures preserve prior data behind fixed privacy-safe copy",
+);
+
+const savingFeedback = {
+  kind: "saving" as const,
+  activity_id: "activity:one",
+  label: "should_not_have_interrupted" as const,
+};
+const staleFeedbackCompletion = completeCommandFeedback(
+  { kind: "idle" },
+  "activity:one",
+  { kind: "saved", label: "should_not_have_interrupted" },
+);
+assert(staleFeedbackCompletion.kind === "idle", "row switches ignore delayed feedback completion");
+const newerFeedback = {
+  kind: "saving" as const,
+  activity_id: "activity:two",
+  label: "expected_guard_to_stop_this" as const,
+};
+const olderFeedbackCompletion = completeCommandFeedback(
+  newerFeedback,
+  "activity:one",
+  { kind: "saved", label: "should_not_have_interrupted" },
+);
+assert(
+  olderFeedbackCompletion.kind === "saving" && olderFeedbackCompletion.activity_id === "activity:two",
+  "an older completion cannot overwrite feedback in flight for the newly selected row",
+);
+const savedFeedback = completeCommandFeedback(
+  savingFeedback,
+  "activity:one",
+  { kind: "saved", label: "should_not_have_interrupted" },
+);
+assert(
+  savedFeedback.kind === "saved" && savedFeedback.activity_id === "activity:one",
+  "current-row feedback completion remains activity scoped",
 );

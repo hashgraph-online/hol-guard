@@ -494,7 +494,7 @@ function requireReact_production() {
   react_production.useTransition = function() {
     return ReactSharedInternals.H.useTransition();
   };
-  react_production.version = "19.2.5";
+  react_production.version = "19.2.7";
   return react_production;
 }
 var hasRequiredReact;
@@ -508,7 +508,7 @@ function requireReact() {
 }
 var reactExports = requireReact();
 const React = /* @__PURE__ */ getDefaultExportFromCjs(reactExports);
-var client = { exports: {} };
+var client$1 = { exports: {} };
 var reactDomClient_production = {};
 var scheduler = { exports: {} };
 var scheduler_production = {};
@@ -516,7 +516,7 @@ var hasRequiredScheduler_production;
 function requireScheduler_production() {
   if (hasRequiredScheduler_production) return scheduler_production;
   hasRequiredScheduler_production = 1;
-  (function(exports$1) {
+  (function(exports) {
     function push(heap, node) {
       var index = heap.length;
       heap.push(node);
@@ -550,15 +550,15 @@ function requireScheduler_production() {
       var diff = a.sortIndex - b.sortIndex;
       return 0 !== diff ? diff : a.id - b.id;
     }
-    exports$1.unstable_now = void 0;
+    exports.unstable_now = void 0;
     if ("object" === typeof performance && "function" === typeof performance.now) {
       var localPerformance = performance;
-      exports$1.unstable_now = function() {
+      exports.unstable_now = function() {
         return localPerformance.now();
       };
     } else {
       var localDate = Date, initialTime = localDate.now();
-      exports$1.unstable_now = function() {
+      exports.unstable_now = function() {
         return localDate.now() - initialTime;
       };
     }
@@ -585,12 +585,12 @@ function requireScheduler_production() {
     }
     var isMessageLoopRunning = false, taskTimeoutID = -1, frameInterval = 5, startTime = -1;
     function shouldYieldToHost() {
-      return needsPaint ? true : exports$1.unstable_now() - startTime < frameInterval ? false : true;
+      return needsPaint ? true : exports.unstable_now() - startTime < frameInterval ? false : true;
     }
     function performWorkUntilDeadline() {
       needsPaint = false;
       if (isMessageLoopRunning) {
-        var currentTime = exports$1.unstable_now();
+        var currentTime = exports.unstable_now();
         startTime = currentTime;
         var hasMoreWork = true;
         try {
@@ -610,7 +610,7 @@ function requireScheduler_production() {
                     var continuationCallback = callback(
                       currentTask.expirationTime <= currentTime
                     );
-                    currentTime = exports$1.unstable_now();
+                    currentTime = exports.unstable_now();
                     if ("function" === typeof continuationCallback) {
                       currentTask.callback = continuationCallback;
                       advanceTimers(currentTime);
@@ -660,27 +660,27 @@ function requireScheduler_production() {
       };
     function requestHostTimeout(callback, ms) {
       taskTimeoutID = localSetTimeout(function() {
-        callback(exports$1.unstable_now());
+        callback(exports.unstable_now());
       }, ms);
     }
-    exports$1.unstable_IdlePriority = 5;
-    exports$1.unstable_ImmediatePriority = 1;
-    exports$1.unstable_LowPriority = 4;
-    exports$1.unstable_NormalPriority = 3;
-    exports$1.unstable_Profiling = null;
-    exports$1.unstable_UserBlockingPriority = 2;
-    exports$1.unstable_cancelCallback = function(task) {
+    exports.unstable_IdlePriority = 5;
+    exports.unstable_ImmediatePriority = 1;
+    exports.unstable_LowPriority = 4;
+    exports.unstable_NormalPriority = 3;
+    exports.unstable_Profiling = null;
+    exports.unstable_UserBlockingPriority = 2;
+    exports.unstable_cancelCallback = function(task) {
       task.callback = null;
     };
-    exports$1.unstable_forceFrameRate = function(fps) {
+    exports.unstable_forceFrameRate = function(fps) {
       0 > fps || 125 < fps ? console.error(
         "forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported"
       ) : frameInterval = 0 < fps ? Math.floor(1e3 / fps) : 5;
     };
-    exports$1.unstable_getCurrentPriorityLevel = function() {
+    exports.unstable_getCurrentPriorityLevel = function() {
       return currentPriorityLevel;
     };
-    exports$1.unstable_next = function(eventHandler) {
+    exports.unstable_next = function(eventHandler) {
       switch (currentPriorityLevel) {
         case 1:
         case 2:
@@ -698,10 +698,10 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports$1.unstable_requestPaint = function() {
+    exports.unstable_requestPaint = function() {
       needsPaint = true;
     };
-    exports$1.unstable_runWithPriority = function(priorityLevel, eventHandler) {
+    exports.unstable_runWithPriority = function(priorityLevel, eventHandler) {
       switch (priorityLevel) {
         case 1:
         case 2:
@@ -720,8 +720,8 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports$1.unstable_scheduleCallback = function(priorityLevel, callback, options) {
-      var currentTime = exports$1.unstable_now();
+    exports.unstable_scheduleCallback = function(priorityLevel, callback, options) {
+      var currentTime = exports.unstable_now();
       "object" === typeof options && null !== options ? (options = options.delay, options = "number" === typeof options && 0 < options ? currentTime + options : currentTime) : options = currentTime;
       switch (priorityLevel) {
         case 1:
@@ -751,8 +751,8 @@ function requireScheduler_production() {
       options > currentTime ? (priorityLevel.sortIndex = options, push(timerQueue, priorityLevel), null === peek(taskQueue) && priorityLevel === peek(timerQueue) && (isHostTimeoutScheduled ? (localClearTimeout(taskTimeoutID), taskTimeoutID = -1) : isHostTimeoutScheduled = true, requestHostTimeout(handleTimeout, options - currentTime))) : (priorityLevel.sortIndex = timeout, push(taskQueue, priorityLevel), isHostCallbackScheduled || isPerformingWork || (isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline())));
       return priorityLevel;
     };
-    exports$1.unstable_shouldYield = shouldYieldToHost;
-    exports$1.unstable_wrapCallback = function(callback) {
+    exports.unstable_shouldYield = shouldYieldToHost;
+    exports.unstable_wrapCallback = function(callback) {
       var parentPriorityLevel = currentPriorityLevel;
       return function() {
         var previousPriorityLevel = currentPriorityLevel;
@@ -922,7 +922,7 @@ function requireReactDom_production() {
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
   };
-  reactDom_production.version = "19.2.5";
+  reactDom_production.version = "19.2.7";
   return reactDom_production;
 }
 var hasRequiredReactDom;
@@ -12366,12 +12366,12 @@ function requireReactDomClient_production() {
     }
   };
   var isomorphicReactPackageVersion$jscomp$inline_1840 = React2.version;
-  if ("19.2.5" !== isomorphicReactPackageVersion$jscomp$inline_1840)
+  if ("19.2.7" !== isomorphicReactPackageVersion$jscomp$inline_1840)
     throw Error(
       formatProdErrorMessage(
         527,
         isomorphicReactPackageVersion$jscomp$inline_1840,
-        "19.2.5"
+        "19.2.7"
       )
     );
   ReactDOMSharedInternals.findDOMNode = function(componentOrElement) {
@@ -12389,10 +12389,10 @@ function requireReactDomClient_production() {
   };
   var internals$jscomp$inline_2347 = {
     bundleType: 0,
-    version: "19.2.5",
+    version: "19.2.7",
     rendererPackageName: "react-dom",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.2.5"
+    reconcilerVersion: "19.2.7"
   };
   if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
     var hook$jscomp$inline_2348 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -12459,12 +12459,12 @@ function requireReactDomClient_production() {
     listenToAllSupportedEvents(container2);
     return new ReactDOMHydrationRoot(initialChildren);
   };
-  reactDomClient_production.version = "19.2.5";
+  reactDomClient_production.version = "19.2.7";
   return reactDomClient_production;
 }
 var hasRequiredClient;
 function requireClient() {
-  if (hasRequiredClient) return client.exports;
+  if (hasRequiredClient) return client$1.exports;
   hasRequiredClient = 1;
   function checkDCE() {
     if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") {
@@ -12478,9 +12478,9 @@ function requireClient() {
   }
   {
     checkDCE();
-    client.exports = requireReactDomClient_production();
+    client$1.exports = requireReactDomClient_production();
   }
-  return client.exports;
+  return client$1.exports;
 }
 var clientExports = requireClient();
 const scriptRel = "modulepreload";
@@ -15397,6 +15397,15 @@ async function fetchWithGuardAuth(input, init) {
   saveGuardToken(refreshedGuardToken);
   return fetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
 }
+async function fetchCommandActivityApi(input, init) {
+  const approvedPath = typeof input === "string" && /^\/v1\/(?:command-activity(?:\/(?:analytics|diagnostics|events|feedback))?|command-extensions)(?:\?[^#]*)?$/.test(
+    input
+  );
+  if (!approvedPath) {
+    throw new Error("Invalid command activity API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
 function guardAuthHeaders() {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
@@ -16322,19 +16331,19 @@ async function publishInsightsShare(input) {
   if (!payload || typeof payload !== "object") {
     throw new Error("Invalid insights share response");
   }
-  const record = payload;
-  const slug = record.slug;
-  const publicUrl = record.publicUrl;
-  const ogImageUrl = record.ogImageUrl;
-  const expiresAt = record.expiresAt;
+  const record2 = payload;
+  const slug = record2.slug;
+  const publicUrl = record2.publicUrl;
+  const ogImageUrl = record2.ogImageUrl;
+  const expiresAt = record2.expiresAt;
   if (typeof slug === "string" && typeof publicUrl === "string" && typeof ogImageUrl === "string" && typeof expiresAt === "string") {
     return { slug, publicUrl, ogImageUrl, expiresAt };
   }
-  if (typeof record.message === "string" && record.message.trim()) {
-    throw new Error(record.message);
+  if (typeof record2.message === "string" && record2.message.trim()) {
+    throw new Error(record2.message);
   }
-  if (typeof record.error === "string" && record.error.trim()) {
-    throw new Error(record.error);
+  if (typeof record2.error === "string" && record2.error.trim()) {
+    throw new Error(record2.error);
   }
   throw new Error("Invalid insights share response");
 }
@@ -16720,26 +16729,26 @@ async function repairApprovalCenter() {
 function normalizeGuardUpdateVersionCheck(raw) {
   const value = isRecord$1(raw) ? raw : {};
   return {
-    source: stringValue(value.source) ?? "pypi",
-    status: stringValue(value.status) ?? "unavailable",
-    current_version: stringValue(value.current_version),
-    latest_version: stringValue(value.latest_version),
+    source: stringValue$1(value.source) ?? "pypi",
+    status: stringValue$1(value.status) ?? "unavailable",
+    current_version: stringValue$1(value.current_version),
+    latest_version: stringValue$1(value.latest_version),
     update_available: typeof value.update_available === "boolean" ? value.update_available : null
   };
 }
 function normalizeGuardUpdateStatus(raw) {
   const value = isRecord$1(raw) ? raw : {};
   const versionCheck = normalizeGuardUpdateVersionCheck(value.version_check);
-  const currentVersion = stringValue(value.current_version) ?? versionCheck.current_version ?? "unknown";
-  const latestVersion = stringValue(value.latest_version) ?? versionCheck.latest_version;
+  const currentVersion = stringValue$1(value.current_version) ?? versionCheck.current_version ?? "unknown";
+  const latestVersion = stringValue$1(value.latest_version) ?? versionCheck.latest_version;
   return {
     current_version: currentVersion,
     latest_version: latestVersion,
-    installer: stringValue(value.installer) ?? "pip",
+    installer: stringValue$1(value.installer) ?? "pip",
     version_check: versionCheck,
-    auto_updatable: booleanValue(value.auto_updatable),
-    update_available: booleanValue(value.update_available),
-    blocked_reason: stringValue(value.blocked_reason),
+    auto_updatable: booleanValue$1(value.auto_updatable),
+    update_available: booleanValue$1(value.update_available),
+    blocked_reason: stringValue$1(value.blocked_reason),
     recovery_reinstall_available: value.recovery_reinstall_available === true ? true : void 0,
     recovery_reinstall_command: typeof value.recovery_reinstall_command === "string" ? value.recovery_reinstall_command : void 0,
     update_in_progress: typeof value.update_in_progress === "boolean" ? value.update_in_progress : void 0,
@@ -16783,13 +16792,13 @@ async function scheduleGuardUpdate(options) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = stringValue(payload.message) ?? stringValue(payload.error) ?? `Guard update failed with ${response.status}`;
+    const message = stringValue$1(payload.message) ?? stringValue$1(payload.error) ?? `Guard update failed with ${response.status}`;
     throw new Error(message);
   }
   return {
-    scheduled: booleanValue(payload.scheduled),
-    message: stringValue(payload.message) ?? void 0,
-    error: stringValue(payload.error) ?? void 0
+    scheduled: booleanValue$1(payload.scheduled),
+    message: stringValue$1(payload.message) ?? void 0,
+    error: stringValue$1(payload.error) ?? void 0
   };
 }
 async function setupDesktopNotifications() {
@@ -16831,33 +16840,33 @@ async function retryResume(requestId) {
   const payload = await response.json();
   return normalizeCodexResume(payload);
 }
-function stringValue(value) {
+function stringValue$1(value) {
   return typeof value === "string" && value.trim() ? value : null;
 }
-function booleanValue(value) {
+function booleanValue$1(value) {
   return value === true;
 }
 function numberValue(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 function normalizePackageFirewallEntitlement(value) {
-  const record = isRecord$1(value) ? value : {};
+  const record2 = isRecord$1(value) ? value : {};
   return {
-    allowed: booleanValue(record.allowed),
-    reason: stringValue(record.reason) ?? "unknown",
-    tier: stringValue(record.tier) ?? "free",
-    upgrade_cta: stringValue(record.upgrade_cta),
-    upgrade_url: stringValue(record.upgrade_url)
+    allowed: booleanValue$1(record2.allowed),
+    reason: stringValue$1(record2.reason) ?? "unknown",
+    tier: stringValue$1(record2.tier) ?? "free",
+    upgrade_cta: stringValue$1(record2.upgrade_cta),
+    upgrade_url: stringValue$1(record2.upgrade_url)
   };
 }
 function normalizePackageFirewallReceipt(value) {
   if (!isRecord$1(value)) {
     return null;
   }
-  const id = stringValue(value.id);
-  const operation = stringValue(value.operation);
-  const status = stringValue(value.status);
-  const timestamp = stringValue(value.timestamp);
+  const id = stringValue$1(value.id);
+  const operation = stringValue$1(value.operation);
+  const status = stringValue$1(value.status);
+  const timestamp = stringValue$1(value.timestamp);
   if (id === null || operation === null || status === null || timestamp === null) {
     return null;
   }
@@ -16885,10 +16894,10 @@ function normalizePackageFirewallCliFallback(value) {
     return null;
   }
   const fallback = {};
-  const connect = stringValue(value.connect);
-  const install = stringValue(value.install);
-  const status = stringValue(value.status);
-  const remove = stringValue(value.remove);
+  const connect = stringValue$1(value.connect);
+  const install = stringValue$1(value.install);
+  const status = stringValue$1(value.status);
+  const remove = stringValue$1(value.remove);
   if (connect !== null) {
     fallback.connect = connect;
   }
@@ -16911,10 +16920,10 @@ function normalizePackageFirewallConnectFlow(value) {
   if (state !== "idle" && state !== "starting" && state !== "running" && state !== "failed") {
     return null;
   }
-  const title = stringValue(value.title);
-  const detail = stringValue(value.detail);
-  const actionLabel = stringValue(value.action_label);
-  const connectUrl = stringValue(value.connect_url);
+  const title = stringValue$1(value.title);
+  const detail = stringValue$1(value.detail);
+  const actionLabel = stringValue$1(value.action_label);
+  const connectUrl = stringValue$1(value.connect_url);
   if (title === null || detail === null || actionLabel === null || connectUrl === null) {
     return null;
   }
@@ -16943,16 +16952,16 @@ function buildPackageShimPathSummary(detail) {
   if (detail === null) {
     return null;
   }
-  const shimPath = stringValue(detail.shim_path);
-  const realBinaryPath = stringValue(detail.real_binary_path);
-  const pathActive = booleanValue(detail.path_active);
+  const shimPath = stringValue$1(detail.shim_path);
+  const realBinaryPath = stringValue$1(detail.real_binary_path);
+  const pathActive = booleanValue$1(detail.path_active);
   if (shimPath !== null && realBinaryPath !== null) {
     return pathActive ? `${shimPath} precedes ${realBinaryPath}` : `${realBinaryPath} precedes ${shimPath}`;
   }
   if (shimPath !== null) {
     return shimPath;
   }
-  return stringValue(detail.path_state);
+  return stringValue$1(detail.path_state);
 }
 function readLastInterceptProofAtByManager(status) {
   const merged = {};
@@ -16965,7 +16974,7 @@ function readLastInterceptProofAtByManager(status) {
       continue;
     }
     for (const [manager, timestamp] of Object.entries(source)) {
-      const normalized = stringValue(timestamp);
+      const normalized = stringValue$1(timestamp);
       if (normalized !== null) {
         merged[manager] = normalized;
       }
@@ -16974,9 +16983,9 @@ function readLastInterceptProofAtByManager(status) {
   return merged;
 }
 function normalizePackageShimEntry(manager, detail, pathStatus, coverage) {
-  const integrity = stringValue(detail?.integrity) ?? "uninstalled";
+  const integrity = stringValue$1(detail?.integrity) ?? "uninstalled";
   const installed = detail !== null && integrity !== "missing";
-  const active = booleanValue(detail?.path_active);
+  const active = booleanValue$1(detail?.path_active);
   const pathBroken = pathStatus !== "restart_required" && (coverage.pathBroken || detail?.path_broken === true);
   let activation_state;
   if (!installed) {
@@ -17001,10 +17010,10 @@ function normalizePackageShimEntry(manager, detail, pathStatus, coverage) {
     path_broken: pathBroken,
     path_index: numberValue(detail?.path_index),
     path_summary: buildPackageShimPathSummary(detail),
-    real_binary_found: booleanValue(detail?.real_binary_found),
-    real_binary_path: stringValue(detail?.real_binary_path),
+    real_binary_found: booleanValue$1(detail?.real_binary_found),
+    real_binary_path: stringValue$1(detail?.real_binary_path),
     real_binary_path_index: numberValue(detail?.real_binary_path_index),
-    shim_path: stringValue(detail?.shim_path),
+    shim_path: stringValue$1(detail?.shim_path),
     tested: coverage.tested
   };
 }
@@ -17014,7 +17023,7 @@ function normalizePackageShimEntries(value, supportedManagers, pathStatus) {
   const detailRows = Array.isArray(managerDetailsValue) ? managerDetailsValue.filter(isRecord$1) : [];
   const detailByManager = /* @__PURE__ */ new Map();
   for (const detail of detailRows) {
-    const manager = stringValue(detail.manager);
+    const manager = stringValue$1(detail.manager);
     if (manager !== null) {
       detailByManager.set(manager, detail);
     }
@@ -17031,7 +17040,7 @@ function normalizePackageShimEntries(value, supportedManagers, pathStatus) {
       if (!isRecord$1(entry)) {
         continue;
       }
-      const manager = stringValue(entry.manager);
+      const manager = stringValue$1(entry.manager);
       if (manager !== null) {
         pathBrokenManagers.add(manager);
       }
@@ -17071,20 +17080,20 @@ function actionResultSummary(operation, detail) {
   return `${operation} completed.`;
 }
 function normalizePackageFirewallStatus(value) {
-  const record = isRecord$1(value) ? value : {};
-  const supportedManagers = normalizeStringArray(record.supported_managers);
-  const shimStatus = isRecord$1(record.package_shims) ? record.package_shims : {};
+  const record2 = isRecord$1(value) ? value : {};
+  const supportedManagers = normalizeStringArray(record2.supported_managers);
+  const shimStatus = isRecord$1(record2.package_shims) ? record2.package_shims : {};
   const installedManagers = readPackageShimStringArray(shimStatus, "installed_managers", "installedManagers");
   const activeManagers = readPackageShimStringArray(shimStatus, "active_managers", "activeManagers");
   const missingManagers = readPackageShimStringArray(shimStatus, "missing_managers", "missingManagers");
   const detectedManagers = readPackageShimStringArray(shimStatus, "detected_managers", "detectedManagers");
   const pathStatusValue = readPackageShimField(shimStatus, "path_status", "pathStatus");
   const rawPathStatus = pathStatusValue === "in_path" ? "in_path" : pathStatusValue === "restart_required" ? "restart_required" : "missing_from_path";
-  const packageShims = normalizePackageShimEntries(record.package_shims, supportedManagers, rawPathStatus);
+  const packageShims = normalizePackageShimEntries(record2.package_shims, supportedManagers, rawPathStatus);
   const protectedManagers = packageShims.filter((shim) => shim.activation_state === "protected").map((shim) => shim.manager);
   const protectedSet = new Set(protectedManagers);
-  const lastAuditProofAt = stringValue(readPackageShimField(shimStatus, "last_audit_proof_at", "lastAuditProofAt")) ?? null;
-  const auditWorkspaceDir = stringValue(record.audit_workspace_dir) ?? null;
+  const lastAuditProofAt = stringValue$1(readPackageShimField(shimStatus, "last_audit_proof_at", "lastAuditProofAt")) ?? null;
+  const auditWorkspaceDir = stringValue$1(record2.audit_workspace_dir) ?? null;
   const shellProfilePath = readPackageShimField(shimStatus, "shell_profile_path", "shellProfilePath");
   const protection = {
     path_status: rawPathStatus,
@@ -17092,7 +17101,7 @@ function normalizePackageFirewallStatus(value) {
     restart_shell_required: readPackageShimField(shimStatus, "restart_shell_required", "restartShellRequired") === true,
     shell_profile_configured: readPackageShimField(shimStatus, "shell_profile_configured", "shellProfileConfigured") === true,
     shell_profile_path: isStringOrNull(shellProfilePath) ? shellProfilePath : null,
-    shim_dir: stringValue(readPackageShimField(shimStatus, "shim_dir", "shimDir")) ?? "",
+    shim_dir: stringValue$1(readPackageShimField(shimStatus, "shim_dir", "shimDir")) ?? "",
     supported_managers: supportedManagers,
     installed_managers: installedManagers,
     active_managers: activeManagers,
@@ -17101,31 +17110,31 @@ function normalizePackageFirewallStatus(value) {
     unprotected_managers: supportedManagers.filter((manager) => !protectedSet.has(manager))
   };
   return {
-    actions: normalizePackageFirewallActions(record.actions),
+    actions: normalizePackageFirewallActions(record2.actions),
     audit_workspace_dir: auditWorkspaceDir,
-    cli_fallback: normalizePackageFirewallCliFallback(record.cli_fallback),
-    connect_flow: normalizePackageFirewallConnectFlow(record.connect_flow),
+    cli_fallback: normalizePackageFirewallCliFallback(record2.cli_fallback),
+    connect_flow: normalizePackageFirewallConnectFlow(record2.connect_flow),
     detected_managers: detectedManagers,
-    entitlement: normalizePackageFirewallEntitlement(record.entitlement),
+    entitlement: normalizePackageFirewallEntitlement(record2.entitlement),
     last_audit_proof_at: lastAuditProofAt,
-    operation: stringValue(record.operation) ?? "status",
+    operation: stringValue$1(record2.operation) ?? "status",
     package_shims: packageShims,
     protection,
-    status: stringValue(record.status) ?? "unknown",
+    status: stringValue$1(record2.status) ?? "unknown",
     supported_managers: supportedManagers
   };
 }
 function normalizePackageFirewallAction(value) {
-  const record = isRecord$1(value) ? value : {};
-  const result = isRecord$1(record.result) ? record.result : {};
-  const operation = stringValue(record.operation) ?? "unknown";
+  const record2 = isRecord$1(value) ? value : {};
+  const result = isRecord$1(record2.result) ? record2.result : {};
+  const operation = stringValue$1(record2.operation) ?? "unknown";
   return {
-    entitlement: normalizePackageFirewallEntitlement(record.entitlement),
+    entitlement: normalizePackageFirewallEntitlement(record2.entitlement),
     operation,
-    receipt: normalizePackageFirewallReceipt(record.receipt),
-    result: typeof record.result === "string" ? record.result : actionResultSummary(operation, result),
+    receipt: normalizePackageFirewallReceipt(record2.receipt),
+    result: typeof record2.result === "string" ? record2.result : actionResultSummary(operation, result),
     result_detail: result,
-    status: stringValue(record.status) ?? "unknown"
+    status: stringValue$1(record2.status) ?? "unknown"
   };
 }
 async function fetchPackageFirewallStatus() {
@@ -18476,7 +18485,8 @@ const VALID_SORT = [
   "category",
   "artifact"
 ];
-const VALID_VIEW = ["actions", "insights", "apps", "export", "story", "categories"];
+const VALID_VIEW = ["actions", "commands", "insights", "apps", "export", "story", "categories"];
+const OWNED_PARAMS = ["search", "time", "decision", "harness", "category", "sourceScope", "day", "sort", "view", "selected"];
 function parseEvidenceUrlState(params) {
   const time = params.get("time");
   const decision = params.get("decision");
@@ -18522,9 +18532,9 @@ function readEvidenceUrlState(params) {
   return parseEvidenceUrlState(p);
 }
 function writeEvidenceUrlState(state) {
-  const params = serializeEvidenceUrlState(state);
   const url = new URL(window.location.href);
-  url.search = params.toString();
+  for (const key of OWNED_PARAMS) url.searchParams.delete(key);
+  for (const [key, value] of serializeEvidenceUrlState(state)) url.searchParams.set(key, value);
   window.history.replaceState({}, "", url.toString());
 }
 function EvidenceHero({ totalCount, lastActivityAt }) {
@@ -18563,6 +18573,7 @@ function EvidenceHero({ totalCount, lastActivityAt }) {
 }
 const VIEW_TABS = [
   { key: "actions", label: "All actions" },
+  { key: "commands", label: "Commands" },
   { key: "insights", label: "Insights" },
   { key: "apps", label: "Apps" },
   { key: "categories", label: "Categories" },
@@ -22737,6 +22748,1573 @@ function WorkspacePageHeader(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(WorkspacePageHeaderToolbar, { tabConfig, actions })
   ] });
 }
+const DECISION_LABELS = {
+  allow: "Allowed",
+  warn: "Allowed with warning",
+  review: "Review required",
+  "require-reapproval": "Reapproval required",
+  "sandbox-required": "Sandbox required",
+  block: "Blocked"
+};
+const EXECUTION_LABELS = {
+  attempted: "Attempt recorded",
+  prevented: "Prevented before execution",
+  allowed_unconfirmed: "Allowed; execution not confirmed",
+  confirmed_success: "Execution confirmed successful",
+  confirmed_failure: "Execution confirmed failed",
+  unpaired_post: "Execution observed; initial decision unavailable"
+};
+const PROOF_LABELS = {
+  pre_hook: "Pre-execution check only",
+  post_hook: "Post-execution proof recorded",
+  unpaired_post: "Unpaired post-execution proof"
+};
+const REASON_LABELS = {
+  no_match: "No command rule controlled the decision",
+  extension_match: "A command rule controlled the decision",
+  uncertainty: "Uncertainty retained a stricter review floor",
+  policy: "A saved policy controlled the decision",
+  approval_reuse: "A prior approval was evaluated for reuse",
+  containment: "Verified containment evidence controlled the decision",
+  capability: "A workflow capability controlled the decision"
+};
+const EFFECT_LABELS = {
+  "workspace-or-public-read": "Workspace or public read",
+  "sensitive-read": "Sensitive read",
+  "workspace-write": "Workspace write",
+  "external-filesystem-write": "External filesystem write",
+  "process-execution": "Process execution",
+  "network-read": "Network read",
+  "network-write": "Network write",
+  "remote-state-read": "Remote state read",
+  "remote-state-mutation": "Remote state mutation",
+  "permission-or-access-change": "Permission or access change",
+  "credential-or-secret-operation": "Credential or secret operation",
+  "system-or-privilege-operation": "System or privilege operation",
+  "package-or-source-installation": "Package or source installation",
+  "destructive-or-irreversible-operation": "Destructive or irreversible operation",
+  "guard-control-operation": "Guard control operation"
+};
+const FEEDBACK_LABELS$1 = {
+  should_not_have_interrupted: "Should not have interrupted",
+  expected_guard_to_stop_this: "Expected Guard to stop this"
+};
+function commandDecisionLabel(action) {
+  return action === null ? "Decision unavailable" : DECISION_LABELS[action];
+}
+function commandExecutionLabel(status) {
+  return EXECUTION_LABELS[status];
+}
+function commandProofLabel(level) {
+  return PROOF_LABELS[level];
+}
+function commandReasonLabel(reason) {
+  if (reason === null) return "Reason unavailable";
+  return REASON_LABELS[reason] ?? "Other recorded reason";
+}
+function commandInteractionLabel(item) {
+  return item.prompted ? "Guard asked for review" : "No review prompt recorded";
+}
+function safeEvidenceId(value) {
+  if (value === null || value.length > 256 || !/^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$/.test(value)) {
+    return "Unavailable";
+  }
+  return value;
+}
+function safeVersion(value) {
+  return value.length <= 64 && /^[0-9]+(?:\.[0-9]+){1,3}(?:[-+][a-z0-9.-]+)?$/i.test(value) ? value : "Unavailable";
+}
+function commandEffectLabels(match) {
+  return match.effect_classes.map((effect) => EFFECT_LABELS[effect]).filter((label) => label !== void 0);
+}
+function analyticsBucketCount(analytics, dimension, value) {
+  return analytics.dimensions[dimension].find((bucket) => bucket.value === value)?.count ?? 0;
+}
+function commandMetricSummary(analytics) {
+  return {
+    commandsChecked: analytics.commands_checked,
+    prompted: analyticsBucketCount(analytics, "prompt_status", "prompted"),
+    postProof: analyticsBucketCount(analytics, "proof_level", "post_hook"),
+    unconfirmed: analyticsBucketCount(analytics, "execution_status", "allowed_unconfirmed")
+  };
+}
+function commandBreakdownsAreGlobalOnly(analytics) {
+  return analytics.scope.dimension !== null && analytics.dimension_breakdowns_scope === "global";
+}
+function commandProofCoveragePercent(analytics) {
+  if (analytics.commands_checked === 0) return 0;
+  const postProof = analyticsBucketCount(analytics, "proof_level", "post_hook");
+  return Math.round(postProof / analytics.commands_checked * 100);
+}
+function commandTrendPoints(analytics, limit = 14) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 397) return [];
+  const through = /* @__PURE__ */ new Date(`${analytics.window.through}T00:00:00Z`);
+  if (Number.isNaN(through.valueOf())) return analytics.trend.slice(-limit);
+  const counts = new Map(analytics.trend.map((point) => [point.day, point.count]));
+  return Array.from({ length: limit }, (_, index) => {
+    const day = new Date(through);
+    day.setUTCDate(day.getUTCDate() - (limit - index - 1));
+    const key = day.toISOString().slice(0, 10);
+    return { day: key, count: counts.get(key) ?? 0 };
+  });
+}
+function commandExecutionEvidenceCopy(harness, hasPostProof) {
+  if (harness === null) {
+    return hasPostProof ? "This view includes correlated post-execution evidence on this page." : "No correlated post-execution evidence appears on this page. Allowed commands remain unconfirmed unless post-execution proof is recorded.";
+  }
+  const source = harnessDisplayName(harness);
+  if (hasPostProof) return `${source} includes correlated post-execution evidence on this page.`;
+  return `No correlated post-execution evidence from ${source} appears on this page. Allowed commands remain unconfirmed unless post-execution proof is recorded.`;
+}
+function homeCommandActivityModel(analytics) {
+  if (analytics.commands_checked === 0) return null;
+  return {
+    metrics: commandMetricSummary(analytics),
+    health: commandHealthCopy(analytics),
+    window: commandWindowLabel(analytics)
+  };
+}
+function commandHealthCopy(analytics) {
+  if (analytics.health.status === "healthy") return null;
+  return "Command activity evidence is degraded. Counts may be incomplete.";
+}
+function commandWindowLabel(analytics) {
+  return `${analytics.window.days}-day window ending ${analytics.window.through}`;
+}
+function recordedTime$1(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? "Time unavailable" : date.toLocaleString();
+}
+function parseConfidenceLabel(value) {
+  if (value === "exact") return "Exact parse";
+  if (value === "fallback") return "Compatibility fallback";
+  if (value === "uncertain") return "Uncertain parse";
+  return "Parse confidence unavailable";
+}
+function matchClassLabel(value) {
+  if (value === "unsafe") return "Unsafe evidence";
+  if (value === "safe_variant") return "Safe variant evidence";
+  return "Uncertainty evidence";
+}
+function approvalReuseLabel(value) {
+  if (value === "accepted") return "Existing authorization reused";
+  if (value === "rejected") return "Existing authorization rejected";
+  return "Not applicable";
+}
+function feedbackStatusMessage(feedback) {
+  if (feedback.kind === "saved") return "Feedback saved to local evidence.";
+  if (feedback.kind === "error") return feedback.message;
+  return null;
+}
+function EvidenceField(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-medium text-slate-500", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-sm font-medium text-brand-dark", children: props.value })
+  ] });
+}
+function MatchEvidence(props) {
+  const effects = commandEffectLabels(props.match);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "rounded-lg border border-slate-200 bg-slate-50/60 p-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: safeEvidenceId(props.match.rule_id) }),
+      props.controlling ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "info", children: "Controlling rule" }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-slate-500", children: [
+      safeEvidenceId(props.match.extension_id),
+      " ",
+      safeVersion(props.match.extension_version),
+      " · rule ",
+      safeVersion(props.match.rule_version)
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-2 gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Evidence", value: matchClassLabel(props.match.match_class) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Policy floor", value: commandDecisionLabel(props.match.default_floor) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-1.5", children: effects.length > 0 ? effects.map((effect) => /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { children: effect }, effect)) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: "Effect details unavailable" }) })
+  ] });
+}
+function CommandActivityDetail(props) {
+  const handleShouldNotInterrupt = reactExports.useCallback(
+    () => props.onFeedback("should_not_have_interrupted"),
+    [props.onFeedback]
+  );
+  const handleExpectedStop = reactExports.useCallback(
+    () => props.onFeedback("expected_guard_to_stop_this"),
+    [props.onFeedback]
+  );
+  const saving = props.feedback.kind === "saving";
+  const feedbackMessage = feedbackStatusMessage(props.feedback);
+  const recordedFeedback = props.activity.feedback_label ? `Saved feedback: ${FEEDBACK_LABELS$1[props.activity.feedback_label]}` : null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { ref: props.detailRef, tabIndex: -1, "aria-label": "Command activity detail", className: "space-y-5 p-4 outline-none sm:p-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Command activity" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: recordedTime$1(props.activity.occurred_at) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: props.onClose,
+          "aria-label": "Close command activity detail",
+          className: "inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand-dark",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" })
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Decision", value: commandDecisionLabel(props.activity.policy_action) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Execution proof", value: commandExecutionLabel(props.activity.execution_status) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Proof source", value: commandProofLabel(props.activity.proof_level) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Interaction", value: commandInteractionLabel(props.activity) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Decision reason", value: commandReasonLabel(props.activity.decision_reason_code) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Parse result", value: parseConfidenceLabel(props.activity.parse_confidence) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Authorization reuse", value: approvalReuseLabel(props.activity.approval_reuse_status) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        EvidenceField,
+        {
+          label: "Containment evidence",
+          value: props.activity.decision_reason_code === "containment" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        EvidenceField,
+        {
+          label: "Workflow capability",
+          value: props.activity.decision_reason_code === "capability" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Rule evidence" }),
+      props.activity.matches.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-2", children: props.activity.matches.map((match) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        MatchEvidence,
+        {
+          match,
+          controlling: match.rule_id === props.activity.controlling_rule_id
+        },
+        `${match.ordinal}:${safeEvidenceId(match.rule_id)}`
+      )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-500", children: "No rule match was recorded." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 pt-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Was this interaction expected?" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 grid gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            disabled: saving,
+            onClick: handleShouldNotInterrupt,
+            className: "min-h-10 rounded-lg border border-slate-200 px-3 text-left text-sm font-medium text-brand-dark hover:bg-slate-50 disabled:opacity-50",
+            children: FEEDBACK_LABELS$1.should_not_have_interrupted
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            disabled: saving,
+            onClick: handleExpectedStop,
+            className: "min-h-10 rounded-lg border border-slate-200 px-3 text-left text-sm font-medium text-brand-dark hover:bg-slate-50 disabled:opacity-50",
+            children: FEEDBACK_LABELS$1.expected_guard_to_stop_this
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 min-h-5 text-xs text-slate-500", "aria-live": "polite", children: saving ? "Saving feedback…" : feedbackMessage ?? recordedFeedback })
+    ] })
+  ] });
+}
+function preserveActiveOption(options, activeValue) {
+  if (activeValue === null || options.some((option) => option.value === activeValue)) return options;
+  const label = safeEvidenceId(activeValue);
+  if (label === "Unavailable") return options;
+  return [...options, { label, value: activeValue }];
+}
+function SelectField(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "min-w-0 text-xs font-medium text-slate-600", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 block", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "select",
+      {
+        value: props.value,
+        onChange: props.onChange,
+        className: "h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/15",
+        children: props.children
+      }
+    )
+  ] });
+}
+function CommandActivityFiltersPanel(props) {
+  let interactionValue = "";
+  if (props.filters.prompted === true) interactionValue = "prompted";
+  if (props.filters.prompted === false) interactionValue = "not_prompted";
+  const harnesses = reactExports.useMemo(
+    () => preserveActiveOption(
+      props.analytics?.dimensions.harness.map((bucket) => safeEvidenceId(bucket.value)).filter((value) => value !== "Unavailable").map((value) => ({ label: value, value })) ?? [],
+      props.filters.harness
+    ),
+    [props.analytics, props.filters.harness]
+  );
+  const selectedExtension = props.extensions?.items.find(
+    (extension) => extension.extension_id === props.filters.extension_id
+  );
+  const extensions = reactExports.useMemo(
+    () => preserveActiveOption(
+      props.extensions?.items.map((extension) => ({ label: extension.name, value: extension.extension_id })) ?? [],
+      props.filters.extension_id
+    ),
+    [props.extensions, props.filters.extension_id]
+  );
+  const rules = reactExports.useMemo(
+    () => preserveActiveOption(
+      selectedExtension?.rules.map((rule) => ({ label: rule.title, value: rule.rule_id })) ?? [],
+      props.filters.rule_id
+    ),
+    [props.filters.rule_id, selectedExtension]
+  );
+  const handleHarness = reactExports.useCallback(
+    (event) => props.onChange({ harness: event.target.value || null }),
+    [props.onChange]
+  );
+  const handleExtension = reactExports.useCallback(
+    (event) => props.onChange({ extension_id: event.target.value || null, rule_id: null }),
+    [props.onChange]
+  );
+  const handleRule = reactExports.useCallback(
+    (event) => props.onChange({ rule_id: event.target.value || null }),
+    [props.onChange]
+  );
+  const handleExecution = reactExports.useCallback(
+    (event) => props.onChange({ execution_status: event.target.value || null }),
+    [props.onChange]
+  );
+  const handleProof = reactExports.useCallback(
+    (event) => props.onChange({ proof_level: event.target.value || null }),
+    [props.onChange]
+  );
+  const handlePrompted = reactExports.useCallback(
+    (event) => {
+      const value = event.target.value;
+      let prompted = null;
+      if (value === "prompted") prompted = true;
+      if (value === "not_prompted") prompted = false;
+      props.onChange({ prompted });
+    },
+    [props.onChange]
+  );
+  const handleReuse = reactExports.useCallback(
+    (event) => props.onChange({ approval_reuse_status: event.target.value || null }),
+    [props.onChange]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Command activity filters", className: "rounded-lg border border-slate-200 bg-slate-50/60 p-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7", children: [
+      props.lockedHarness === null ? /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "App", value: props.filters.harness ?? "", onChange: handleHarness, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All apps" }),
+        harnesses.map((harness) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: harness.value, children: harness.label }, harness.value))
+      ] }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Extension", value: props.filters.extension_id ?? "", onChange: handleExtension, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All extensions" }),
+        extensions.map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: extension.value, children: extension.label }, extension.value))
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Rule", value: props.filters.rule_id ?? "", onChange: handleRule, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All rules" }),
+        rules.map((rule) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: rule.value, children: rule.label }, rule.value))
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Execution proof", value: props.filters.execution_status ?? "", onChange: handleExecution, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All execution states" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "attempted", children: "Attempt recorded" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "prevented", children: "Prevented" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "allowed_unconfirmed", children: "Allowed, unconfirmed" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "confirmed_success", children: "Confirmed success" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "confirmed_failure", children: "Confirmed failure" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "unpaired_post", children: "Unpaired post proof" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Proof source", value: props.filters.proof_level ?? "", onChange: handleProof, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All proof sources" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "pre_hook", children: "Pre-execution only" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "post_hook", children: "Post-execution" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "unpaired_post", children: "Unpaired post proof" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        SelectField,
+        {
+          label: "Interaction",
+          value: interactionValue,
+          onChange: handlePrompted,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All interactions" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "prompted", children: "Review requested" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "not_prompted", children: "No review prompt" })
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Authorization reuse", value: props.filters.approval_reuse_status ?? "", onChange: handleReuse, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All reuse states" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "accepted", children: "Accepted" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "rejected", children: "Rejected" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "not-applicable", children: "Not applicable" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 min-h-5 text-xs text-slate-500", "aria-live": "polite", children: props.resultCount === null ? "Loading command activity…" : `${props.resultCount.toLocaleString()} records on this page` })
+  ] });
+}
+const EXECUTION_STATUSES$1 = [
+  "attempted",
+  "prevented",
+  "allowed_unconfirmed",
+  "confirmed_success",
+  "confirmed_failure",
+  "unpaired_post"
+];
+const PROOF_LEVELS$1 = ["pre_hook", "post_hook", "unpaired_post"];
+const REUSE_STATUSES$1 = ["accepted", "rejected", "not-applicable"];
+const DIMENSIONS = ["harness", "extension", "rule"];
+const STABLE_ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+function completeCommandFeedback(current, activityId, outcome) {
+  if (current.kind !== "saving" || current.activity_id !== activityId) return current;
+  return { ...outcome, activity_id: activityId };
+}
+const DEFAULT_COMMAND_ACTIVITY_FILTERS = {
+  limit: 50,
+  harness: null,
+  execution_status: null,
+  proof_level: null,
+  prompted: null,
+  approval_reuse_status: null,
+  extension_id: null,
+  rule_id: null,
+  occurred_from: null,
+  occurred_through: null
+};
+const DEFAULT_COMMAND_ACTIVITY_ANALYTICS_QUERY = {
+  days: 90,
+  top_limit: 10,
+  dimension: null,
+  dimension_value: null
+};
+function commandActivityAnalyticsQueryForFilters(filters) {
+  if (filters.rule_id) return { days: 90, top_limit: 10, dimension: "rule", dimension_value: filters.rule_id };
+  if (filters.extension_id) {
+    return { days: 90, top_limit: 10, dimension: "extension", dimension_value: filters.extension_id };
+  }
+  if (filters.harness) return { days: 90, top_limit: 10, dimension: "harness", dimension_value: filters.harness };
+  return { ...DEFAULT_COMMAND_ACTIVITY_ANALYTICS_QUERY };
+}
+function commandSummaryIsOutsideTableFilters(filters) {
+  const dimensionFilterCount = [filters.harness, filters.extension_id, filters.rule_id].filter(
+    (value) => value !== null
+  ).length;
+  return dimensionFilterCount > 1 || filters.execution_status !== null || filters.proof_level !== null || filters.prompted !== null || filters.approval_reuse_status !== null || filters.occurred_from !== null || filters.occurred_through !== null;
+}
+function updateCommandActivityFilters(current, patch, lockedHarness) {
+  const harness = lockedHarness ?? (patch.harness === void 0 ? current.harness : patch.harness);
+  return { ...current, ...patch, harness };
+}
+function boundedInteger(value, fallback, minimum, maximum) {
+  if (value === null || !/^\d+$/.test(value)) return fallback;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
+}
+function enumParam(value, allowed) {
+  return value !== null && allowed.includes(value) ? value : null;
+}
+function stableParam(value) {
+  return value !== null && value.length <= 256 && STABLE_ID.test(value) ? value : null;
+}
+function dateParam(value) {
+  if (value === null || !ISO_DATE.test(value)) return null;
+  const year = Number(value.slice(0, 4));
+  if (year < 1) return null;
+  const date = /* @__PURE__ */ new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== value ? null : value;
+}
+function booleanParam(value) {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
+}
+function parseCommandActivityFilters(params) {
+  const prompted = params.get("command_prompted");
+  return {
+    limit: boundedInteger(params.get("command_limit"), 50, 1, 100),
+    harness: stableParam(params.get("command_harness")),
+    execution_status: enumParam(params.get("command_status"), EXECUTION_STATUSES$1),
+    proof_level: enumParam(params.get("command_proof"), PROOF_LEVELS$1),
+    prompted: booleanParam(prompted),
+    approval_reuse_status: enumParam(params.get("command_reuse"), REUSE_STATUSES$1),
+    extension_id: stableParam(params.get("command_extension")),
+    rule_id: stableParam(params.get("command_rule")),
+    occurred_from: dateParam(params.get("command_from")),
+    occurred_through: dateParam(params.get("command_through"))
+  };
+}
+function serializeCommandActivityFilters(filters) {
+  const params = new URLSearchParams();
+  if (filters.limit !== 50) params.set("command_limit", String(filters.limit));
+  if (filters.harness) params.set("command_harness", filters.harness);
+  if (filters.execution_status) params.set("command_status", filters.execution_status);
+  if (filters.proof_level) params.set("command_proof", filters.proof_level);
+  if (filters.prompted !== null) params.set("command_prompted", String(filters.prompted));
+  if (filters.approval_reuse_status) params.set("command_reuse", filters.approval_reuse_status);
+  if (filters.extension_id) params.set("command_extension", filters.extension_id);
+  if (filters.rule_id) params.set("command_rule", filters.rule_id);
+  if (filters.occurred_from) params.set("command_from", filters.occurred_from);
+  if (filters.occurred_through) params.set("command_through", filters.occurred_through);
+  return params;
+}
+function buildCommandActivityQuery(filters, cursor = null) {
+  const invalidStableValue = [filters.harness, filters.extension_id, filters.rule_id].some(
+    (value) => value !== null && stableParam(value) !== value
+  );
+  const invalidDateValue = [filters.occurred_from, filters.occurred_through].some(
+    (value) => value !== null && dateParam(value) !== value
+  );
+  const invalidDateRange = filters.occurred_from !== null && filters.occurred_through !== null && (filters.occurred_from > filters.occurred_through || (Date.parse(`${filters.occurred_through}T00:00:00Z`) - Date.parse(`${filters.occurred_from}T00:00:00Z`)) / 864e5 >= 397);
+  if (!Number.isInteger(filters.limit) || filters.limit < 1 || filters.limit > 100 || filters.execution_status !== null && !EXECUTION_STATUSES$1.includes(filters.execution_status) || filters.proof_level !== null && !PROOF_LEVELS$1.includes(filters.proof_level) || filters.approval_reuse_status !== null && !REUSE_STATUSES$1.includes(filters.approval_reuse_status) || filters.prompted !== null && typeof filters.prompted !== "boolean" || invalidStableValue || invalidDateValue || invalidDateRange) {
+    throw new Error("Invalid command activity filters");
+  }
+  const params = new URLSearchParams({ limit: String(filters.limit) });
+  for (const [key, value] of [
+    ["harness", filters.harness],
+    ["execution_status", filters.execution_status],
+    ["proof_level", filters.proof_level],
+    ["approval_reuse_status", filters.approval_reuse_status],
+    ["extension_id", filters.extension_id],
+    ["rule_id", filters.rule_id],
+    ["occurred_from", filters.occurred_from],
+    ["occurred_through", filters.occurred_through]
+  ]) {
+    if (value) params.set(key, value);
+  }
+  if (filters.prompted !== null) params.set("prompted", String(filters.prompted));
+  if (cursor) {
+    if (cursor.length > 2048) throw new Error("Invalid command activity cursor");
+    params.set("cursor", cursor);
+  }
+  return params.toString();
+}
+function buildCommandActivityAnalyticsQuery(query) {
+  if (!Number.isInteger(query.days) || query.days < 1 || query.days > 397 || !Number.isInteger(query.top_limit) || query.top_limit < 1 || query.top_limit > 50 || query.dimension === null !== (query.dimension_value === null) || query.dimension !== null && !DIMENSIONS.includes(query.dimension) || query.dimension_value !== null && stableParam(query.dimension_value) !== query.dimension_value) {
+    throw new Error("Invalid command activity analytics query");
+  }
+  const params = new URLSearchParams({ days: String(query.days), top_limit: String(query.top_limit) });
+  if (query.dimension && query.dimension_value) {
+    params.set("dimension", query.dimension);
+    params.set("dimension_value", query.dimension_value);
+  }
+  return params.toString();
+}
+const INITIAL_COMMAND_ACTIVITY_CURSOR_STATE = { current: null, back: [] };
+function advanceCommandActivityCursor(state, nextCursor) {
+  if (!nextCursor || nextCursor.length > 2048) throw new Error("Invalid command activity cursor");
+  return { current: nextCursor, back: [...state.back, state.current] };
+}
+function retreatCommandActivityCursor(state) {
+  if (state.back.length === 0) return INITIAL_COMMAND_ACTIVITY_CURSOR_STATE;
+  return { current: state.back[state.back.length - 1] ?? null, back: state.back.slice(0, -1) };
+}
+function commandActivityLoadStarted(requestId, previous = null) {
+  return { kind: "loading", request_id: requestId, previous };
+}
+function commandActivityLoadSucceeded(current, requestId, data, isEmpty) {
+  if (current.kind !== "loading" || current.request_id !== requestId) return current;
+  return isEmpty(data) ? { kind: "empty", request_id: requestId } : { kind: "ready", request_id: requestId, data };
+}
+function commandActivityLoadFailed(current, requestId, _error) {
+  if (current.kind !== "loading" || current.request_id !== requestId) return current;
+  return {
+    kind: "error",
+    request_id: requestId,
+    message: "Unable to load command activity.",
+    previous: current.previous
+  };
+}
+function Metric(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-l-2 border-slate-200 pl-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-slate-500", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xl font-semibold text-brand-dark", children: typeof props.value === "number" ? props.value.toLocaleString() : props.value }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-500", children: props.detail })
+  ] });
+}
+function Trend({ analytics }) {
+  const recent = commandTrendPoints(analytics);
+  const maximum = Math.max(1, ...recent.map((point) => point.count));
+  const accessibleSummary = recent.map((point) => `${point.day}: ${point.count}`).join("; ");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent command checks" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: commandWindowLabel(analytics) })
+    ] }),
+    recent.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex h-28 items-end gap-1", role: "img", "aria-label": `Command checks by day: ${accessibleSummary}`, children: recent.map((point) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "group relative flex min-w-0 flex-1 items-end self-stretch", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "w-full rounded-t-sm bg-brand-blue/70 motion-safe:transition-[height]",
+        style: { height: `${point.count === 0 ? 0 : Math.max(4, Math.round(point.count / maximum * 100))}%` }
+      }
+    ) }, point.day)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-slate-500", children: "No trend points are available for this window." })
+  ] });
+}
+function safeBuckets(buckets) {
+  return buckets.filter((bucket) => safeEvidenceId(bucket.value) !== "Unavailable").slice(0, 5);
+}
+function FrequencyList(props) {
+  const buckets = reactExports.useMemo(() => safeBuckets(props.buckets), [props.buckets]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: props.title }),
+    buckets.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-2 space-y-2", children: buckets.map((bucket) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-center justify-between gap-3 text-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate text-brand-dark", children: safeEvidenceId(bucket.value) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tabular-nums text-slate-500", children: bucket.count.toLocaleString() })
+    ] }, bucket.value)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-500", children: "No frequency data in this window." })
+  ] });
+}
+function CommandActivitySummary(props) {
+  if (props.state.kind === "idle" || props.state.kind === "loading" && props.state.previous === null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-52 w-full", "aria-label": "Loading command activity summary" });
+  }
+  if (props.state.kind === "error" && props.state.previous === null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", children: "Command activity summary is unavailable." });
+  }
+  if (props.state.kind === "empty") return null;
+  let analytics = null;
+  if (props.state.kind === "ready") analytics = props.state.data;
+  if (props.state.kind === "loading" || props.state.kind === "error") analytics = props.state.previous;
+  if (!analytics) return null;
+  const metrics = commandMetricSummary(analytics);
+  const globalOnly = commandBreakdownsAreGlobalOnly(analytics);
+  const healthCopy = commandHealthCopy(analytics);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "min-w-0 max-w-full space-y-5", "aria-label": "Command activity summary", children: [
+    props.outsideTableFilters ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700", role: "status", children: "Summary and trend totals do not include every active filter below." }) : null,
+    healthCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status", children: healthCopy }) : null,
+    props.state.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status", children: "Refresh failed. Showing the last loaded command activity summary." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 xl:grid-cols-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Metric, { label: "Commands checked", value: metrics.commandsChecked, detail: "One per recorded activity" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Metric,
+        {
+          label: "Review prompts",
+          value: globalOnly ? "Global only" : metrics.prompted,
+          detail: globalOnly ? "Not available for this filter" : "Guard asked for a decision"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Metric,
+        {
+          label: "Post-proof coverage",
+          value: globalOnly ? "Global only" : metrics.postProof,
+          detail: globalOnly ? "Not available for this filter" : `${commandProofCoveragePercent(analytics)}% of checks have correlated proof`
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Metric,
+        {
+          label: "Allowed, unconfirmed",
+          value: globalOnly ? "Global only" : metrics.unconfirmed,
+          detail: globalOnly ? "Not available for this filter" : "Execution not confirmed"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-5 border-t border-slate-100 pt-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.8fr)]", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Trend, { analytics }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(FrequencyList, { title: "Top extensions by frequency", buckets: analytics.dimensions.extension }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(FrequencyList, { title: "Top rules by frequency", buckets: analytics.dimensions.rule })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Breakdown rankings are global frequency counts, not danger scores." })
+  ] });
+}
+function recordedTime(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? "Time unavailable" : date.toLocaleString();
+}
+function CommandRow(props) {
+  const handleSelect = reactExports.useCallback(() => {
+    props.onSelect(props.item.activity_id);
+  }, [props.item.activity_id, props.onSelect]);
+  const firstRule = props.item.matches[0];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: props.selected ? "bg-brand-blue/[0.04]" : "hover:bg-slate-50/70", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "whitespace-nowrap px-3 py-3 text-xs text-slate-600", children: recordedTime(props.item.occurred_at) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm font-medium text-brand-dark", children: safeEvidenceId(props.item.harness) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandDecisionLabel(props.item.policy_action) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-sm text-brand-dark", children: commandExecutionLabel(props.item.execution_status) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "px-3 py-3 text-sm text-slate-600", children: [
+      firstRule ? safeEvidenceId(firstRule.rule_id) : "No rule match",
+      props.item.match_count > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "info", children: [
+        "+",
+        props.item.match_count - 1
+      ] }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-right", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        ref: props.selected ? props.triggerRef : void 0,
+        type: "button",
+        onClick: handleSelect,
+        "aria-expanded": props.selected,
+        className: "min-h-9 rounded-lg px-3 text-sm font-medium text-brand-blue hover:bg-brand-blue/[0.06]",
+        children: "Details"
+      }
+    ) })
+  ] });
+}
+function CommandActivityTable(props) {
+  if (props.items.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: "No command activity", body: "No recorded commands match these filters.", tone: "teach" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Command activity records", className: "w-full min-w-0 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-slate-200 bg-white [contain:inline-size]", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-full overflow-x-auto [contain:paint]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "w-full min-w-[760px] border-collapse text-left", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { className: "border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Time" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "App" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Decision" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Execution proof" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Rule evidence" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Open detail" }) })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { className: "divide-y divide-slate-100", children: props.items.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(CommandRow, { item, selected: item.activity_id === props.selectedId, triggerRef: props.triggerRef, onSelect: props.onSelect }, item.activity_id)) })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-end gap-2 border-t border-slate-100 px-3 py-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(IconActionButton, { label: "Previous page", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronLeft, { className: "h-4 w-4" }), disabled: !props.canGoBack, onClick: props.onPrevious }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(IconActionButton, { label: "Next page", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4" }), disabled: !props.canGoForward, onClick: props.onNext })
+    ] })
+  ] });
+}
+const COMMAND_ACTIVITY_API_SCHEMA_VERSION = "guard.command-activity-api.v1";
+const COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION = "guard.command-activity-diagnostics.v1";
+const COMMAND_EXTENSION_SCHEMA_VERSION = 2;
+const GUARD_ACTIONS = ["allow", "warn", "review", "require-reapproval", "sandbox-required", "block"];
+const HOOK_PHASES = ["pre", "post_success", "post_failure"];
+const EXECUTION_STATUSES = [
+  "attempted",
+  "prevented",
+  "allowed_unconfirmed",
+  "confirmed_success",
+  "confirmed_failure",
+  "unpaired_post"
+];
+const PROOF_LEVELS = ["pre_hook", "post_hook", "unpaired_post"];
+const REUSE_STATUSES = ["accepted", "rejected", "not-applicable"];
+const FEEDBACK_LABELS = ["should_not_have_interrupted", "expected_guard_to_stop_this"];
+const ANALYTICS_DIMENSIONS = [
+  "harness",
+  "extension",
+  "rule",
+  "disposition",
+  "execution_status",
+  "prompt_status",
+  "proof_level",
+  "latency"
+];
+const COUNT_KEYS = [
+  "activities",
+  "matches",
+  "effects",
+  "correlations",
+  "rollup_days",
+  "rollup_cells",
+  "rollup_memberships",
+  "rollup_pending",
+  "feedback",
+  "invalidations"
+];
+const FORBIDDEN_KEYS = /* @__PURE__ */ new Set([
+  "command",
+  "command_text",
+  "raw_command",
+  "args",
+  "argv",
+  "cwd",
+  "environment",
+  "env",
+  "token",
+  "authorization",
+  "correlation",
+  "digest",
+  "url",
+  "redirect"
+]);
+function invalid(kind) {
+  throw new Error(`Invalid ${kind} payload`);
+}
+function record(value, kind) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) invalid(kind);
+  return value;
+}
+function rejectForbidden(value, kind, depth = 0) {
+  if (depth > 16) invalid(kind);
+  if (Array.isArray(value)) {
+    if (value.length > 4096) invalid(kind);
+    for (const item of value) rejectForbidden(item, kind, depth + 1);
+    return;
+  }
+  if (value === null || typeof value !== "object") return;
+  const entries = Object.entries(value);
+  if (entries.length > 256) invalid(kind);
+  for (const [key, child] of entries) {
+    if (FORBIDDEN_KEYS.has(key.toLowerCase())) invalid(kind);
+    rejectForbidden(child, kind, depth + 1);
+  }
+}
+function stringValue(value, kind, max = 256) {
+  if (typeof value !== "string" || value.length === 0 || value.length > max) invalid(kind);
+  return value;
+}
+function nullableString(value, kind, max = 256) {
+  return value === null ? null : stringValue(value, kind, max);
+}
+function booleanValue(value, kind) {
+  if (typeof value !== "boolean") invalid(kind);
+  return value;
+}
+function integer(value, kind) {
+  if (!Number.isSafeInteger(value) || value < 0) invalid(kind);
+  return value;
+}
+function enumValue(value, values, kind) {
+  if (typeof value !== "string" || !values.includes(value)) invalid(kind);
+  return value;
+}
+function stringArray(value, kind, limit = 100) {
+  if (!Array.isArray(value) || value.length > limit) invalid(kind);
+  return value.map((item) => stringValue(item, kind));
+}
+function objectArray(value, kind, limit = 100) {
+  if (!Array.isArray(value) || value.length > limit) invalid(kind);
+  return value;
+}
+function normalizeMatch(value) {
+  const item = record(value, "command activity");
+  return {
+    ordinal: integer(item.ordinal, "command activity"),
+    extension_id: stringValue(item.extension_id, "command activity"),
+    extension_version: stringValue(item.extension_version, "command activity"),
+    rule_id: stringValue(item.rule_id, "command activity"),
+    rule_version: stringValue(item.rule_version, "command activity"),
+    match_class: enumValue(item.match_class, ["unsafe", "safe_variant", "uncertainty"], "command activity"),
+    severity: stringValue(item.severity, "command activity"),
+    default_floor: enumValue(item.default_floor, GUARD_ACTIONS, "command activity"),
+    safe_variant_id: nullableString(item.safe_variant_id, "command activity"),
+    effect_classes: stringArray(item.effect_classes, "command activity", 32),
+    schema_version: stringValue(item.schema_version, "command activity")
+  };
+}
+function normalizeActivity(value) {
+  const item = record(value, "command activity");
+  const matches = objectArray(item.matches, "command activity").map(normalizeMatch);
+  const matchCount = integer(item.match_count, "command activity");
+  if (matches.length !== matchCount) invalid("command activity");
+  return {
+    activity_id: stringValue(item.activity_id, "command activity"),
+    occurred_at: stringValue(item.occurred_at, "command activity"),
+    harness: stringValue(item.harness, "command activity"),
+    hook_phase: enumValue(item.hook_phase, HOOK_PHASES, "command activity"),
+    execution_status: enumValue(
+      item.execution_status,
+      EXECUTION_STATUSES,
+      "command activity"
+    ),
+    proof_level: enumValue(item.proof_level, PROOF_LEVELS, "command activity"),
+    policy_action: item.policy_action === null ? null : enumValue(item.policy_action, GUARD_ACTIONS, "command activity"),
+    decision_reason_code: nullableString(item.decision_reason_code, "command activity"),
+    controlling_rule_id: nullableString(item.controlling_rule_id, "command activity"),
+    parse_confidence: item.parse_confidence === null ? null : enumValue(item.parse_confidence, ["exact", "fallback", "uncertain"], "command activity"),
+    uncertainty_class: nullableString(item.uncertainty_class, "command activity"),
+    match_count: matchCount,
+    prompted: booleanValue(item.prompted, "command activity"),
+    approval_reuse_status: enumValue(
+      item.approval_reuse_status,
+      REUSE_STATUSES,
+      "command activity"
+    ),
+    receipt_link_status: enumValue(item.receipt_link_status, ["not_applicable", "linked"], "command activity"),
+    receipt_id: nullableString(item.receipt_id, "command activity"),
+    evaluation_latency_bucket: stringValue(item.evaluation_latency_bucket, "command activity"),
+    persistence_latency_bucket: stringValue(item.persistence_latency_bucket, "command activity"),
+    feedback_label: item.feedback_label === null ? null : enumValue(item.feedback_label, FEEDBACK_LABELS, "command activity"),
+    schema_version: stringValue(item.schema_version, "command activity"),
+    matches
+  };
+}
+function normalizeCommandActivityPage(value) {
+  rejectForbidden(value, "command activity");
+  const payload = record(value, "command activity");
+  if (payload.schema_version !== COMMAND_ACTIVITY_API_SCHEMA_VERSION) invalid("command activity");
+  return {
+    schema_version: COMMAND_ACTIVITY_API_SCHEMA_VERSION,
+    items: objectArray(payload.items, "command activity").map(normalizeActivity),
+    next_cursor: nullableString(payload.next_cursor, "command activity", 2048)
+  };
+}
+function countBuckets(value, kind) {
+  return objectArray(value, kind, 50).map((raw) => {
+    const item = record(raw, kind);
+    return { value: stringValue(item.value, kind), count: integer(item.count, kind) };
+  });
+}
+function normalizeCommandActivityAnalytics(value) {
+  rejectForbidden(value, "command activity analytics");
+  const payload = record(value, "command activity analytics");
+  const window2 = record(payload.window, "command activity analytics");
+  const scope = record(payload.scope, "command activity analytics");
+  const dimensions = record(payload.dimensions, "command activity analytics");
+  const health = record(payload.health, "command activity analytics");
+  if (payload.schema_version !== COMMAND_ACTIVITY_API_SCHEMA_VERSION) invalid("command activity analytics");
+  const normalizedDimensions = Object.fromEntries(
+    ANALYTICS_DIMENSIONS.map((name) => [name, countBuckets(dimensions[name], "command activity analytics")])
+  );
+  return {
+    schema_version: COMMAND_ACTIVITY_API_SCHEMA_VERSION,
+    window: {
+      from: stringValue(window2.from, "command activity analytics"),
+      through: stringValue(window2.through, "command activity analytics"),
+      days: integer(window2.days, "command activity analytics")
+    },
+    scope: {
+      dimension: scope.dimension === null ? null : enumValue(scope.dimension, ["harness", "extension", "rule"], "command activity analytics"),
+      dimension_value: nullableString(scope.dimension_value, "command activity analytics")
+    },
+    commands_checked: integer(payload.commands_checked, "command activity analytics"),
+    trend: objectArray(payload.trend, "command activity analytics", 397).map((raw) => {
+      const item = record(raw, "command activity analytics");
+      return { day: stringValue(item.day, "command activity analytics"), count: integer(item.count, "command activity analytics") };
+    }),
+    dimensions: normalizedDimensions,
+    dimension_breakdowns_scope: enumValue(payload.dimension_breakdowns_scope, ["global"], "command activity analytics"),
+    feedback: objectArray(payload.feedback, "command activity analytics", 2).map((raw) => {
+      const item = record(raw, "command activity analytics");
+      return {
+        label: enumValue(item.label, FEEDBACK_LABELS, "command activity analytics"),
+        count: integer(item.count, "command activity analytics")
+      };
+    }),
+    health: {
+      status: enumValue(health.status, ["healthy", "degraded"], "command activity analytics"),
+      dropped_events: integer(health.dropped_events, "command activity analytics"),
+      persistence_errors: integer(health.persistence_errors, "command activity analytics"),
+      last_error_class: nullableString(health.last_error_class ?? null, "command activity analytics"),
+      last_error_at: nullableString(health.last_error_at ?? null, "command activity analytics")
+    }
+  };
+}
+function normalizeCommandExtensionsPage(value) {
+  rejectForbidden(value, "command extensions");
+  const payload = record(value, "command extensions");
+  if (payload.schema_version !== COMMAND_EXTENSION_SCHEMA_VERSION || payload.source !== "built-in") {
+    invalid("command extensions");
+  }
+  return {
+    schema_version: COMMAND_EXTENSION_SCHEMA_VERSION,
+    source: "built-in",
+    items: objectArray(payload.items, "command extensions").map((raw) => {
+      const item = record(raw, "command extensions");
+      const rules = objectArray(item.rules, "command extensions").map((ruleRaw) => {
+        const rule = record(ruleRaw, "command extensions");
+        return {
+          rule_id: stringValue(rule.rule_id, "command extensions"),
+          title: stringValue(rule.title, "command extensions", 512),
+          description: stringValue(rule.description, "command extensions", 2048),
+          severity: stringValue(rule.severity, "command extensions"),
+          risk_classes: stringArray(rule.risk_classes, "command extensions"),
+          action_classes: stringArray(rule.action_classes, "command extensions"),
+          default_mode: stringValue(rule.default_mode, "command extensions"),
+          safe_variant_ids: stringArray(rule.safe_variant_ids, "command extensions"),
+          compatibility_fallback: booleanValue(rule.compatibility_fallback, "command extensions")
+        };
+      });
+      const ruleCount = integer(item.rule_count, "command extensions");
+      if (rules.length !== ruleCount) invalid("command extensions");
+      return {
+        extension_id: stringValue(item.extension_id, "command extensions"),
+        version: stringValue(item.version, "command extensions"),
+        name: stringValue(item.name, "command extensions", 512),
+        description: stringValue(item.description, "command extensions", 2048),
+        enabled: booleanValue(item.enabled, "command extensions"),
+        required: booleanValue(item.required, "command extensions"),
+        source: stringValue(item.source, "command extensions"),
+        dependencies: stringArray(item.dependencies, "command extensions"),
+        conflicts: stringArray(item.conflicts, "command extensions"),
+        delegated_protection: nullableString(item.delegated_protection, "command extensions"),
+        action_classes: stringArray(item.action_classes, "command extensions"),
+        risk_classes: stringArray(item.risk_classes, "command extensions"),
+        rule_count: ruleCount,
+        rules
+      };
+    }),
+    next_cursor: nullableString(payload.next_cursor, "command extensions", 2048)
+  };
+}
+function normalizeCommandFeedbackResult(value) {
+  rejectForbidden(value, "command feedback");
+  const payload = record(value, "command feedback");
+  if (payload.schema_version !== COMMAND_ACTIVITY_API_SCHEMA_VERSION) invalid("command feedback");
+  return {
+    schema_version: COMMAND_ACTIVITY_API_SCHEMA_VERSION,
+    activity_id: stringValue(payload.activity_id, "command feedback"),
+    label: enumValue(payload.label, FEEDBACK_LABELS, "command feedback"),
+    created_at: stringValue(payload.created_at, "command feedback"),
+    updated_at: stringValue(payload.updated_at, "command feedback"),
+    changed: booleanValue(payload.changed, "command feedback")
+  };
+}
+function normalizedCounts(value, keys, kind) {
+  const payload = record(value, kind);
+  return Object.fromEntries(keys.map((key) => [key, integer(payload[key], kind)]));
+}
+function normalizeCommandActivityDiagnostics(value) {
+  rejectForbidden(value, "command activity diagnostics");
+  const payload = record(value, "command activity diagnostics");
+  const schemas = record(payload.schemas, "command activity diagnostics");
+  const stableIds = record(payload.stable_ids, "command activity diagnostics");
+  if (payload.schema_version !== COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION) invalid("command activity diagnostics");
+  return {
+    schema_version: COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION,
+    schemas: {
+      activity: stringValue(schemas.activity, "command activity diagnostics"),
+      api: stringValue(schemas.api, "command activity diagnostics"),
+      health: stringValue(schemas.health, "command activity diagnostics"),
+      maintenance: stringValue(schemas.maintenance, "command activity diagnostics")
+    },
+    counts: normalizedCounts(
+      payload.counts,
+      [...COUNT_KEYS, "dropped_events", "persistence_errors"],
+      "command activity diagnostics"
+    ),
+    proof_coverage: objectArray(payload.proof_coverage, "command activity diagnostics", 3).map((raw) => {
+      const item = record(raw, "command activity diagnostics");
+      return {
+        proof_level: enumValue(item.proof_level, PROOF_LEVELS, "command activity diagnostics"),
+        count: integer(item.count, "command activity diagnostics")
+      };
+    }),
+    stable_ids: {
+      harnesses: stringArray(stableIds.harnesses, "command activity diagnostics"),
+      extensions: stringArray(stableIds.extensions, "command activity diagnostics"),
+      rules: stringArray(stableIds.rules, "command activity diagnostics", 1e3)
+    },
+    error_classes: objectArray(payload.error_classes, "command activity diagnostics", 4).map((raw) => {
+      const item = record(raw, "command activity diagnostics");
+      return {
+        error_class: stringValue(item.error_class, "command activity diagnostics"),
+        count: integer(item.count, "command activity diagnostics")
+      };
+    })
+  };
+}
+function normalizeCommandActivityDeletion(value) {
+  rejectForbidden(value, "command activity deletion");
+  const payload = record(value, "command activity deletion");
+  if (payload.schema_version !== COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION) invalid("command activity deletion");
+  return {
+    schema_version: COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION,
+    deleted: normalizedCounts(payload.deleted, COUNT_KEYS, "command activity deletion")
+  };
+}
+function normalizeCommandActivityInvalidation(sequence, value) {
+  rejectForbidden(value, "command activity invalidation");
+  const id = integer(sequence, "command activity invalidation");
+  const payload = record(value, "command activity invalidation");
+  if (payload.event === "command_activity_invalidated") {
+    return {
+      sequence: id,
+      event: "command_activity_invalidated",
+      activity_id: stringValue(payload.activity_id, "command activity invalidation")
+    };
+  }
+  if (payload.event === "command_activity_reset" && payload.reset_required === true) {
+    return { sequence: id, event: "command_activity_reset", reset_required: true };
+  }
+  return invalid("command activity invalidation");
+}
+const MAX_ERROR_RESPONSE_BYTES = 16384;
+const MAX_JSON_RESPONSE_BYTES = 2097152;
+const FIXED_RESPONSE_ERRORS = /* @__PURE__ */ new Set([
+  "Command activity response too large",
+  "Command activity response unavailable"
+]);
+const API_ERROR_CODES = /* @__PURE__ */ new Set([
+  "activity_not_found",
+  "approval_gate_grant_expired",
+  "approval_gate_invalid_cooldown",
+  "approval_gate_invalid_password",
+  "approval_gate_locked",
+  "approval_gate_password_mismatch",
+  "approval_gate_password_required",
+  "approval_gate_recovery_required",
+  "approval_gate_required",
+  "approval_gate_totp_enabled",
+  "approval_gate_totp_invalid",
+  "approval_gate_totp_pending_required",
+  "approval_gate_totp_required",
+  "approval_gate_weak_password",
+  "confirmation_required",
+  "date_range_out_of_range",
+  "days_out_of_range",
+  "forbidden_origin",
+  "incomplete_dimension_filter",
+  "invalid_activity_id",
+  "invalid_approval_reuse_status",
+  "invalid_cursor",
+  "invalid_date_range",
+  "invalid_dimension",
+  "invalid_dimension_value",
+  "invalid_execution_status",
+  "invalid_extension_id",
+  "invalid_feedback_label",
+  "invalid_feedback_payload",
+  "invalid_harness",
+  "invalid_integer",
+  "invalid_occurred_from",
+  "invalid_occurred_through",
+  "invalid_prompted",
+  "invalid_proof_level",
+  "invalid_query_parameter",
+  "invalid_request",
+  "invalid_rule_id",
+  "limit_out_of_range",
+  "query_too_long",
+  "top_limit_out_of_range",
+  "too_many_streams",
+  "unauthorized",
+  "unknown_query_parameter"
+]);
+class CommandActivityApiError extends Error {
+  status;
+  code;
+  constructor(status, code) {
+    super(code ? `Command activity request failed: ${code} (${status})` : `Command activity request failed (${status})`);
+    this.name = "CommandActivityApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+async function readBoundedJson(response, maxBytes) {
+  const contentLength = response.headers.get("Content-Length");
+  if (contentLength && /^\d+$/.test(contentLength) && Number(contentLength) > maxBytes) {
+    throw new Error("Command activity response too large");
+  }
+  if (!response.body) throw new Error("Command activity response unavailable");
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.value) {
+        total += chunk.value.byteLength;
+        if (total > maxBytes) throw new Error("Command activity response too large");
+        chunks.push(chunk.value);
+      }
+      if (chunk.done) break;
+    }
+  } finally {
+    await reader.cancel().catch(() => void 0);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+}
+async function responseError(response) {
+  let code = null;
+  try {
+    const payload = await readBoundedJson(response, MAX_ERROR_RESPONSE_BYTES);
+    if (payload && typeof payload === "object") {
+      if (typeof payload.error === "string" && API_ERROR_CODES.has(payload.error)) code = payload.error;
+      else if (typeof payload.message === "string" && API_ERROR_CODES.has(payload.message)) code = payload.message;
+    }
+  } catch {
+    code = null;
+  }
+  return new CommandActivityApiError(response.status, code);
+}
+async function requestJson(path, init, transport) {
+  const response = await transport(path, init);
+  if (!response.ok) throw await responseError(response);
+  try {
+    return await readBoundedJson(response, MAX_JSON_RESPONSE_BYTES);
+  } catch (error) {
+    if (error instanceof Error && FIXED_RESPONSE_ERRORS.has(error.message)) throw error;
+    throw new Error("Invalid command activity JSON payload");
+  }
+}
+async function fetchCommandActivityPage(filters, cursor, signal, transport) {
+  const query = buildCommandActivityQuery(filters, cursor);
+  return normalizeCommandActivityPage(await requestJson(`/v1/command-activity?${query}`, { signal }, transport));
+}
+async function fetchCommandActivityAnalytics(query, signal, transport) {
+  const encoded = buildCommandActivityAnalyticsQuery(query);
+  return normalizeCommandActivityAnalytics(
+    await requestJson(`/v1/command-activity/analytics?${encoded}`, { signal }, transport)
+  );
+}
+async function fetchCommandExtensionsPage(input = {}, signal, transport) {
+  const limit = input.limit ?? 50;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Invalid command extensions query");
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (input.cursor) {
+    if (input.cursor.length > 2048) throw new Error("Invalid command extensions cursor");
+    params.set("cursor", input.cursor);
+  }
+  return normalizeCommandExtensionsPage(
+    await requestJson(`/v1/command-extensions?${params.toString()}`, { signal }, transport)
+  );
+}
+async function recordCommandActivityFeedback(input, signal, transport) {
+  if (!input.activity_id || input.activity_id.length > 256 || !["should_not_have_interrupted", "expected_guard_to_stop_this"].includes(input.label)) {
+    throw new Error("Invalid command feedback request");
+  }
+  return normalizeCommandFeedbackResult(
+    await requestJson(
+      "/v1/command-activity/feedback",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activity_id: input.activity_id, label: input.label }),
+        signal
+      },
+      transport
+    )
+  );
+}
+async function fetchCommandActivityDiagnostics(signal, transport) {
+  return normalizeCommandActivityDiagnostics(
+    await requestJson("/v1/command-activity/diagnostics", { signal }, transport)
+  );
+}
+async function clearCommandActivityEvidence(proof = {}, signal, transport) {
+  if (proof.approval_password !== void 0 && typeof proof.approval_password !== "string" || proof.approval_totp_code !== void 0 && typeof proof.approval_totp_code !== "string" || proof.approval_gate_use_cooldown !== void 0 && typeof proof.approval_gate_use_cooldown !== "boolean") {
+    throw new Error("Invalid command activity deletion proof");
+  }
+  const body = {
+    confirm: "clear-command-activity",
+    ...proof.approval_password !== void 0 ? { approval_password: proof.approval_password } : {},
+    ...proof.approval_totp_code !== void 0 ? { approval_totp_code: proof.approval_totp_code } : {},
+    ...proof.approval_gate_use_cooldown !== void 0 ? { approval_gate_use_cooldown: proof.approval_gate_use_cooldown } : {}
+  };
+  return normalizeCommandActivityDeletion(
+    await requestJson(
+      "/v1/command-activity",
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal
+      },
+      transport
+    )
+  );
+}
+function parseCommandActivitySseFrame(frame) {
+  let id = null;
+  const data = [];
+  for (const rawLine of frame.split(/\r?\n/)) {
+    if (!rawLine || rawLine.startsWith(":")) continue;
+    const separator = rawLine.indexOf(":");
+    const field = separator === -1 ? rawLine : rawLine.slice(0, separator);
+    const value = separator === -1 ? "" : rawLine.slice(separator + 1).replace(/^ /, "");
+    if (field === "id") id = value;
+    else if (field === "data") data.push(value);
+  }
+  if (id === null || !/^\d+$/.test(id) || data.length === 0) return null;
+  const sequence = Number(id);
+  if (!Number.isSafeInteger(sequence)) return null;
+  try {
+    return normalizeCommandActivityInvalidation(sequence, JSON.parse(data.join("\n")));
+  } catch {
+    return null;
+  }
+}
+async function* streamCommandActivityInvalidations(cursor, signal, transport) {
+  if (!Number.isSafeInteger(cursor) || cursor < 0) throw new Error("Invalid command activity event cursor");
+  const response = await transport(`/v1/command-activity/events?cursor=${cursor}`, {
+    headers: { Accept: "text/event-stream", "Last-Event-ID": String(cursor) },
+    signal
+  });
+  if (!response.ok) throw await responseError(response);
+  if (!response.body) throw new Error("Command activity event stream unavailable");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (!signal.aborted) {
+      const chunk = await reader.read();
+      buffer += decoder.decode(chunk.value ?? new Uint8Array(), { stream: !chunk.done });
+      let boundary = buffer.search(/\r?\n\r?\n/);
+      while (boundary >= 0) {
+        const separator = buffer.slice(boundary).match(/^\r?\n\r?\n/)?.[0] ?? "\n\n";
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + separator.length);
+        if (frame.length > 65536) throw new Error("Command activity event frame too large");
+        const event = parseCommandActivitySseFrame(frame);
+        if (event) yield event;
+        boundary = buffer.search(/\r?\n\r?\n/);
+      }
+      if (buffer.length > 65536) throw new Error("Command activity event frame too large");
+      if (chunk.done) break;
+    }
+  } finally {
+    await reader.cancel().catch(() => void 0);
+  }
+}
+function createCommandActivityClient(transport) {
+  return {
+    fetchPage: (filters, cursor = null, signal) => fetchCommandActivityPage(filters, cursor, signal, transport),
+    fetchAnalytics: (query, signal) => fetchCommandActivityAnalytics(query, signal, transport),
+    fetchExtensions: (input = {}, signal) => fetchCommandExtensionsPage(input, signal, transport),
+    recordFeedback: (input, signal) => recordCommandActivityFeedback(input, signal, transport),
+    fetchDiagnostics: (signal) => fetchCommandActivityDiagnostics(signal, transport),
+    clearEvidence: (proof, signal) => clearCommandActivityEvidence(proof, signal, transport),
+    streamInvalidations: (cursor, signal) => streamCommandActivityInvalidations(cursor, signal, transport)
+  };
+}
+const client = createCommandActivityClient(fetchCommandActivityApi);
+const COMMAND_SELECTED_PARAM = "command_selected";
+function initialFilters(harness) {
+  if (typeof window === "undefined") return { ...DEFAULT_COMMAND_ACTIVITY_FILTERS, harness };
+  const parsed = parseCommandActivityFilters(new URLSearchParams(window.location.search));
+  return { ...parsed, harness: harness ?? parsed.harness };
+}
+function initialSelectedId() {
+  if (typeof window === "undefined") return null;
+  const value = new URLSearchParams(window.location.search).get(COMMAND_SELECTED_PARAM);
+  return value !== null && value.length <= 256 && /^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$/.test(value) ? value : null;
+}
+function writeCommandUrl(filters, selectedId, globalView) {
+  const url = new URL(window.location.href);
+  for (const key of [...url.searchParams.keys()]) {
+    if (key.startsWith("command_")) url.searchParams.delete(key);
+  }
+  const urlFilters = globalView ? filters : { ...filters, harness: null };
+  for (const [key, value] of serializeCommandActivityFilters(urlFilters)) url.searchParams.set(key, value);
+  if (selectedId) url.searchParams.set(COMMAND_SELECTED_PARAM, selectedId);
+  if (globalView) url.searchParams.set("view", "commands");
+  else url.searchParams.set("activity", "commands");
+  window.history.replaceState({}, "", url.toString());
+}
+function previousPage(state) {
+  if (state.kind === "ready") return state.data;
+  if (state.kind === "loading" || state.kind === "error") return state.previous;
+  return null;
+}
+function previousData(state) {
+  if (state.kind === "ready") return state.data;
+  if (state.kind === "loading" || state.kind === "error") return state.previous;
+  return null;
+}
+function useCommandActivity(harness = null) {
+  const [filters, setFilters] = reactExports.useState(() => initialFilters(harness));
+  const [cursor, setCursor] = reactExports.useState(INITIAL_COMMAND_ACTIVITY_CURSOR_STATE);
+  const [selectedId, setSelectedId] = reactExports.useState(initialSelectedId);
+  const [page, setPage] = reactExports.useState({ kind: "idle" });
+  const [analytics, setAnalytics] = reactExports.useState({ kind: "idle" });
+  const [extensions, setExtensions] = reactExports.useState({ kind: "idle" });
+  const [feedback, setFeedback] = reactExports.useState({ kind: "idle" });
+  const [refreshKey, setRefreshKey] = reactExports.useState(0);
+  const requestIdRef = reactExports.useRef(0);
+  const previousHarnessRef = reactExports.useRef(harness);
+  const effectiveFilters = reactExports.useMemo(
+    () => ({ ...filters, harness: harness ?? filters.harness }),
+    [filters, harness]
+  );
+  reactExports.useEffect(() => {
+    if (previousHarnessRef.current === harness) return;
+    previousHarnessRef.current = harness;
+    setFilters((current) => ({ ...current, harness }));
+    setCursor(INITIAL_COMMAND_ACTIVITY_CURSOR_STATE);
+    setSelectedId(null);
+    setFeedback({ kind: "idle" });
+    setPage({ kind: "idle" });
+    setAnalytics({ kind: "idle" });
+  }, [harness]);
+  reactExports.useEffect(() => {
+    writeCommandUrl(effectiveFilters, selectedId, harness === null);
+  }, [effectiveFilters, harness, selectedId]);
+  reactExports.useEffect(() => {
+    const controller = new AbortController();
+    const requestId = ++requestIdRef.current;
+    setPage((current) => commandActivityLoadStarted(requestId, previousPage(current)));
+    setAnalytics((current) => commandActivityLoadStarted(requestId, previousData(current)));
+    Promise.allSettled([
+      client.fetchPage(effectiveFilters, cursor.current, controller.signal),
+      client.fetchAnalytics(commandActivityAnalyticsQueryForFilters(effectiveFilters), controller.signal)
+    ]).then(([pageResult, analyticsResult]) => {
+      if (controller.signal.aborted) return;
+      if (pageResult.status === "fulfilled") {
+        setPage((current) => commandActivityLoadSucceeded(current, requestId, pageResult.value, (value) => value.items.length === 0));
+      } else {
+        setPage((current) => commandActivityLoadFailed(current, requestId, pageResult.reason));
+      }
+      if (analyticsResult.status === "fulfilled") {
+        setAnalytics((current) => commandActivityLoadSucceeded(current, requestId, analyticsResult.value, () => false));
+      } else {
+        setAnalytics((current) => commandActivityLoadFailed(current, requestId, analyticsResult.reason));
+      }
+    });
+    return () => controller.abort();
+  }, [cursor.current, effectiveFilters, refreshKey]);
+  reactExports.useEffect(() => {
+    const controller = new AbortController();
+    const requestId = ++requestIdRef.current;
+    setExtensions((current) => commandActivityLoadStarted(requestId, previousData(current)));
+    client.fetchExtensions({ limit: 100 }, controller.signal).then(
+      (data) => setExtensions((current) => commandActivityLoadSucceeded(current, requestId, data, (value) => value.items.length === 0)),
+      (error) => setExtensions((current) => commandActivityLoadFailed(current, requestId))
+    );
+    return () => controller.abort();
+  }, []);
+  reactExports.useEffect(() => {
+    const controller = new AbortController();
+    let stopped = false;
+    let eventCursor = 0;
+    async function listen() {
+      while (!stopped) {
+        try {
+          for await (const event of client.streamInvalidations(eventCursor, controller.signal)) {
+            eventCursor = event.sequence;
+            setRefreshKey((value) => value + 1);
+          }
+          if (!stopped) await new Promise((resolve) => setTimeout(resolve, 1e3));
+        } catch {
+          if (!controller.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 1e3));
+        }
+      }
+    }
+    void listen();
+    return () => {
+      stopped = true;
+      controller.abort();
+    };
+  }, []);
+  const updateFilters = reactExports.useCallback(
+    (patch) => {
+      setFilters((current) => updateCommandActivityFilters(current, patch, harness));
+      setCursor(INITIAL_COMMAND_ACTIVITY_CURSOR_STATE);
+      setSelectedId(null);
+      setFeedback({ kind: "idle" });
+      setPage({ kind: "idle" });
+      setAnalytics({ kind: "idle" });
+    },
+    [harness]
+  );
+  const selectActivity = reactExports.useCallback((activityId) => {
+    setSelectedId(activityId);
+    setFeedback({ kind: "idle" });
+  }, []);
+  const nextPage = reactExports.useCallback(() => {
+    const data = previousPage(page);
+    const nextCursor = data?.next_cursor;
+    if (nextCursor) {
+      setPage({ kind: "idle" });
+      setCursor((current) => advanceCommandActivityCursor(current, nextCursor));
+    }
+  }, [page]);
+  const previousPageAction = reactExports.useCallback(() => {
+    setPage({ kind: "idle" });
+    setCursor((current) => retreatCommandActivityCursor(current));
+  }, []);
+  const recordFeedback = reactExports.useCallback(
+    async (label) => {
+      if (!selectedId) return;
+      const activityId = selectedId;
+      setFeedback({ kind: "saving", activity_id: activityId, label });
+      try {
+        const result = await client.recordFeedback({ activity_id: activityId, label });
+        setPage((current) => {
+          if (current.kind !== "ready") return current;
+          return {
+            ...current,
+            data: { ...current.data, items: current.data.items.map((item) => item.activity_id === activityId ? { ...item, feedback_label: result.label } : item) }
+          };
+        });
+        setFeedback((current) => completeCommandFeedback(current, activityId, { kind: "saved", label: result.label }));
+      } catch {
+        setFeedback((current) => completeCommandFeedback(current, activityId, { kind: "error", message: "Unable to save feedback." }));
+      }
+    },
+    [selectedId]
+  );
+  const pageData = previousPage(page);
+  const selectedActivity = reactExports.useMemo(
+    () => pageData?.items.find((item) => item.activity_id === selectedId) ?? null,
+    [pageData, selectedId]
+  );
+  const retry = reactExports.useCallback(() => {
+    setRefreshKey((value) => value + 1);
+  }, []);
+  return {
+    filters: effectiveFilters,
+    page,
+    pageData,
+    analytics,
+    extensions,
+    cursor,
+    selectedActivity,
+    selectedId,
+    feedback,
+    updateFilters,
+    selectActivity,
+    nextPage,
+    previousPage: previousPageAction,
+    recordFeedback,
+    retry
+  };
+}
+function availableData(state) {
+  if (state.kind === "ready" && state.data) return state.data;
+  if ((state.kind === "loading" || state.kind === "error") && state.previous) return state.previous;
+  return null;
+}
+function CommandActivityWorkspace(props) {
+  const activity = useCommandActivity(props.harness ?? null);
+  const detailTriggerRef = reactExports.useRef(null);
+  const detailRef = reactExports.useRef(null);
+  const handleClose = reactExports.useCallback(() => {
+    const trigger = detailTriggerRef.current;
+    activity.selectActivity(null);
+    requestAnimationFrame(() => trigger?.focus());
+  }, [activity.selectActivity]);
+  reactExports.useEffect(() => {
+    if (activity.selectedId !== null && activity.selectedActivity === null && activity.page.kind === "ready") {
+      activity.selectActivity(null);
+    }
+  }, [activity.page, activity.selectActivity, activity.selectedActivity, activity.selectedId]);
+  reactExports.useEffect(() => {
+    if (activity.selectedActivity) detailRef.current?.focus();
+  }, [activity.selectedActivity]);
+  const extensions = availableData(activity.extensions);
+  const analytics = availableData(activity.analytics);
+  const loadingWithoutData = (activity.page.kind === "idle" || activity.page.kind === "loading") && activity.pageData === null;
+  const failedWithoutData = activity.page.kind === "error" && activity.page.previous === null;
+  const refreshFailedWithData = activity.page.kind === "error" && activity.page.previous !== null;
+  const hasPostProof = activity.pageData?.items.some((item) => item.proof_level === "post_hook") ?? false;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full min-w-0 max-w-full space-y-5 overflow-x-clip", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      CommandActivitySummary,
+      {
+        state: activity.analytics,
+        outsideTableFilters: commandSummaryIsOutsideTableFilters(activity.filters)
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600", children: commandExecutionEvidenceCopy(props.harness ?? null, hasPostProof) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CommandActivityFiltersPanel, { filters: activity.filters, extensions, analytics, lockedHarness: props.harness ?? null, resultCount: activity.pageData?.items.length ?? null, onChange: activity.updateFilters }),
+    loadingWithoutData ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-64 w-full", "aria-label": "Loading command activity" }) : null,
+    failedWithoutData ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Command activity is unavailable." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: activity.retry, children: "Try again" })
+    ] }) : null,
+    refreshFailedWithData ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900", role: "status", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Refresh failed. Showing the last loaded command activity page." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: activity.retry, children: "Try again" })
+    ] }) : null,
+    activity.page.kind === "empty" ? /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: "No command activity", body: "No recorded commands match these filters.", tone: "teach" }) : null,
+    activity.pageData ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: activity.selectedActivity ? "grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]" : "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CommandActivityTable, { items: activity.pageData.items, selectedId: activity.selectedId, triggerRef: detailTriggerRef, canGoBack: activity.cursor.back.length > 0, canGoForward: activity.pageData.next_cursor !== null, onSelect: activity.selectActivity, onPrevious: activity.previousPage, onNext: activity.nextPage }),
+      activity.selectedActivity ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-slate-200 bg-white", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CommandActivityDetail, { detailRef, activity: activity.selectedActivity, feedback: activity.feedback, onFeedback: activity.recordFeedback, onClose: handleClose }) }) : null
+    ] }) : null
+  ] });
+}
 const PAGE_SIZE = 50;
 function evidenceTitleForView(view) {
   return VIEW_TABS.find((tab) => tab.key === view)?.label ?? "Evidence";
@@ -22885,7 +24463,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
-  if (receiptItems.length === 0) {
+  if (receiptItems.length === 0 && filters.view !== "commands") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
       {
@@ -22928,7 +24506,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     ] }),
     [handleOpenExport, handleOpenClear, onClearEvidence, receiptItems.length]
   );
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 max-w-full space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       WorkspacePageHeader,
       {
@@ -22938,11 +24516,12 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
         tabs: tabOptions,
         activeTab: filters.view,
         onTabChange: handleViewChange,
-        actions: headerActions
+        actions: filters.view === "commands" ? void 0 : headerActions
       }
     ),
-    filters.view !== "insights" && /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceHero, { totalCount: totalReceiptCount, lastActivityAt: metrics.lastActivityAt }),
+    filters.view !== "insights" && filters.view !== "commands" && /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceHero, { totalCount: totalReceiptCount, lastActivityAt: metrics.lastActivityAt }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-1", children: [
+      filters.view === "commands" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "tabpanel-commands", role: "tabpanel", "aria-labelledby": "tab-commands", className: "guard-fade-in", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CommandActivityWorkspace, {}) }),
       filters.view === "actions" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "div",
         {
@@ -23074,6 +24653,17 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
   ] });
 }
 function ReceiptsWorkspace(props) {
+  if (readEvidenceUrlState().view === "commands") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EvidenceWorkbench,
+      {
+        receiptItems: props.receipts.kind === "ready" ? props.receipts.items : [],
+        runtime: props.runtime?.kind === "ready" ? props.runtime.snapshot : null,
+        onClearEvidence: props.onClearEvidence,
+        onNavigate: props.onNavigate
+      }
+    );
+  }
   if (props.receipts.kind === "loading") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceLoadingState, {});
   }
@@ -23499,48 +25089,54 @@ function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, sele
   }
   return strictAllDecisions;
 }
-function approvalProofRequiresTotp(gate) {
-  return gate?.totp_enabled === true;
+function approvalProofRequiresPassword(gate) {
+  return gate?.totp_enabled !== true;
 }
 function isApprovalProofSubmitDisabled(gate, credentials, busy) {
   if (busy) {
     return true;
   }
-  return approvalProofRequiresTotp(gate) ? credentials.approvalTotpCode.trim() === "" : credentials.approvalPassword.trim() === "";
+  if (approvalProofRequiresPassword(gate)) {
+    return credentials.approvalPassword.trim() === "";
+  }
+  return credentials.approvalTotpCode.trim() === "";
 }
 function buildApprovalProofCredentials(gate, credentials) {
-  return approvalProofRequiresTotp(gate) ? { approval_totp_code: credentials.approvalTotpCode } : { approval_password: credentials.approvalPassword };
+  if (approvalProofRequiresPassword(gate)) {
+    return { approval_password: credentials.approvalPassword };
+  }
+  return { approval_totp_code: credentials.approvalTotpCode };
 }
 function ApprovalProofFieldInputs(props) {
-  const needsTotp = approvalProofRequiresTotp(props.approvalGate);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsTotp ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          type: "text",
-          inputMode: "numeric",
-          pattern: "[0-9]*",
-          autoComplete: "one-time-code",
-          value: props.approvalTotpCode,
-          onChange: props.onApprovalTotpCodeChange,
-          className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-        }
-      )
-    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          ref: props.passwordRef,
-          type: "password",
-          autoComplete: "current-password",
-          value: props.approvalPassword,
-          onChange: props.onApprovalPasswordChange,
-          className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-        }
-      )
-    ] }) });
+  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        ref: props.passwordRef,
+        type: "password",
+        autoComplete: "current-password",
+        value: props.approvalPassword,
+        onChange: props.onApprovalPasswordChange,
+        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      }
+    )
+  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        type: "text",
+        inputMode: "numeric",
+        pattern: "[0-9]*",
+        autoComplete: "one-time-code",
+        value: props.approvalTotpCode,
+        onChange: props.onApprovalTotpCodeChange,
+        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      }
+    )
+  ] }) });
 }
 function ApprovalProofInline(props) {
   const passwordRef = reactExports.useRef(null);
@@ -23596,18 +25192,18 @@ function ApprovalProofInline(props) {
 function ApprovalPasswordModal(props) {
   const passwordRef = reactExports.useRef(null);
   const totpRef = reactExports.useRef(null);
-  const needsTotp = approvalProofRequiresTotp(props.gate);
-  const submitDisabled = needsTotp ? props.approvalTotpCode.trim() === "" : props.approvalPassword.trim() === "";
+  const needsPassword = approvalProofRequiresPassword(props.gate);
+  const submitDisabled = needsPassword ? props.approvalPassword.trim() === "" : props.approvalTotpCode.trim() === "";
   reactExports.useEffect(() => {
     const timer = setTimeout(() => {
-      if (needsTotp) {
-        totpRef.current?.focus();
-      } else {
+      if (needsPassword) {
         passwordRef.current?.focus();
+      } else {
+        totpRef.current?.focus();
       }
     }, 50);
     return () => clearTimeout(timer);
-  }, [needsTotp]);
+  }, [needsPassword]);
   const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
   const handleBackdropClick = reactExports.useCallback(
     (e) => {
@@ -23642,14 +25238,14 @@ function ApprovalPasswordModal(props) {
               {
                 id: "approval-password-modal-title",
                 className: "text-lg font-semibold tracking-tight text-brand-dark",
-                children: needsTotp ? "Authenticator code required" : "Approval password required"
+                children: needsPassword ? "Approval password required" : "Authenticator code required"
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "Guard needs a fresh proof before it can save this decision." })
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3", children: [
-          !needsTotp ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "input",
@@ -23662,8 +25258,7 @@ function ApprovalPasswordModal(props) {
                 className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
-          ] }) : null,
-          needsTotp ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "input",
@@ -23678,7 +25273,7 @@ function ApprovalPasswordModal(props) {
                 className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
-          ] }) : null,
+          ] }),
           showCooldownOption && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-center gap-2 text-sm text-brand-dark", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "input",
@@ -23738,10 +25333,13 @@ function buildBulkGateCredentials(gate, password, totpCode) {
   if (!isBulkApproveGateReady(gate)) {
     return void 0;
   }
-  return gate?.totp_enabled === true ? {
-    approval_totp_code: totpCode.trim(),
-    approval_gate_use_cooldown: false
-  } : {
+  if (gate?.totp_enabled === true) {
+    return {
+      approval_totp_code: totpCode.trim(),
+      approval_gate_use_cooldown: false
+    };
+  }
+  return {
     approval_password: password.trim(),
     approval_gate_use_cooldown: false
   };
@@ -24049,21 +25647,21 @@ function QueueBulkDrawer(props) {
       gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
         props.approvalGate?.totp_enabled !== true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            id: "guard-bulk-approval-password",
-            type: "password",
-            value: props.bulkApprovePassword,
-            onChange: props.onBulkApprovePasswordChange,
-            placeholder: "Enter your approval password",
-            autoComplete: "current-password",
-            disabled: props.step === "submitting",
-            className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
-          }
+            "input",
+            {
+              id: "guard-bulk-approval-password",
+              type: "password",
+              value: props.bulkApprovePassword,
+              onChange: props.onBulkApprovePasswordChange,
+              placeholder: "Enter your approval password",
+              autoComplete: "current-password",
+              disabled: props.step === "submitting",
+              className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+            }
           )
         ] }),
         props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -25442,7 +27040,7 @@ function ReviewDecisionCard(props) {
       setErrorMessage(null);
       try {
         const gate = props.approvalGate;
-        const needsTotp = approvalProofRequiresTotp(gate);
+        const needsPassword = approvalProofRequiresPassword(gate);
         const includeGateFields = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
         await props.onResolve({
           ...buildDecisionPayload({
@@ -25451,8 +27049,8 @@ function ReviewDecisionCard(props) {
             scope,
             reason: action === "allow" ? "approved in review" : "blocked in review"
           }),
-          ...includeGateFields && !needsTotp ? { approval_password: approvalPassword } : {},
-          ...includeGateFields && needsTotp ? { approval_totp_code: approvalTotpCode } : {},
+          ...includeGateFields && needsPassword ? { approval_password: approvalPassword } : {},
+          ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
           ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
         });
         setResolved(action);
@@ -26610,6 +28208,7 @@ function App() {
   const handleOpenFleet = reactExports.useCallback(() => navigate(PROTECT_ROUTE), []);
   const handleOpenEvidence = reactExports.useCallback(() => navigate("/evidence"), []);
   const handleOpenInsights = reactExports.useCallback(() => navigate("/evidence?view=insights"), [navigate]);
+  const handleOpenCommands = reactExports.useCallback(() => navigate("/evidence?view=commands"), [navigate]);
   const handleOpenSettings = reactExports.useCallback(() => navigate("/settings"), []);
   const handleOpenSupplyChain = reactExports.useCallback(() => navigate("/supply-chain"), []);
   reactExports.useCallback(() => navigate("/policy"), []);
@@ -26918,6 +28517,7 @@ function App() {
             onOpenFleet: handleOpenFleet,
             onOpenEvidence: handleOpenEvidence,
             onOpenInsights: handleOpenInsights,
+            onOpenCommands: handleOpenCommands,
             onOpenSettings: handleOpenSettings,
             onOpenSupplyChain: handleOpenSupplyChain,
             onClearPolicies: handleClearPolicies,
@@ -26993,167 +28593,171 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  updateSettings as $,
+  TabBar as $,
   ActionButton as A,
-  Badge as B,
-  HiMiniMinusCircle as C,
+  useFocusTrap as B,
+  approvalProofRequiresPassword as C,
   DeviceProofCard as D,
   EvidenceInsightsShareButton as E,
-  HiMiniEye as F,
+  HiMiniExclamationTriangle as F,
   GuardStatMetric as G,
   HomeInsightsMetrics as H,
-  HiMiniWrenchScrewdriver as I,
-  HiMiniXCircle as J,
-  HiMiniExclamationCircle as K,
-  HiMiniClipboardDocumentCheck as L,
-  HiMiniClipboard as M,
-  requireReact as N,
-  getDefaultExportFromCjs as O,
+  HiMiniBolt as I,
+  Badge as J,
+  HiMiniMinusCircle as K,
+  HiMiniEye as L,
+  HiMiniWrenchScrewdriver as M,
+  HiMiniXCircle as N,
+  HiMiniExclamationCircle as O,
   ProofStrip as P,
-  HiMiniKey as Q,
-  HiMiniLockClosed as R,
+  HiMiniClipboardDocumentCheck as Q,
+  HiMiniClipboard as R,
   SectionLabel as S,
-  HiMiniBellAlert as T,
-  HiMiniAdjustmentsHorizontal as U,
-  HiMiniCog6Tooth as V,
-  HiMiniCircleStack as W,
-  TabBar as X,
-  resolveProtectionLevelCopy as Y,
-  fetchSettings as Z,
-  fetchRuntimeSnapshot as _,
+  getDefaultExportFromCjs as T,
+  React as U,
+  HiMiniKey as V,
+  HiMiniLockClosed as W,
+  HiMiniBellAlert as X,
+  HiMiniAdjustmentsHorizontal as Y,
+  HiMiniCog6Tooth as Z,
+  HiMiniCircleStack as _,
   EvidenceActivityHeatmapMini as a,
-  runPackageFirewallAction as a$,
-  clearPolicy as a0,
-  clearReviewQueue as a1,
-  revokeApprovalGateCooldown as a2,
-  disableApprovalGateTotp as a3,
-  importSettings as a4,
-  resetSettings as a5,
-  enrollApprovalGateTotp as a6,
-  verifyApprovalGateTotp as a7,
-  clearEvidence as a8,
-  exportDiagnostics as a9,
-  formatHarnessCommand as aA,
-  HiMiniCommandLine as aB,
-  isSupplyChainAuditIncomplete as aC,
-  isSupplyChainAuditEvidence as aD,
-  buildApprovalProofCredentials as aE,
-  isApprovalProofSubmitDisabled as aF,
-  ApprovalProofFieldInputs as aG,
-  readString$1 as aH,
-  isRecord$2 as aI,
-  HiMiniClock as aJ,
-  IconActionButton as aK,
-  HiMiniBeaker as aL,
-  ActivationSummary as aM,
-  ActionResultPanel as aN,
-  HiMiniBugAnt as aO,
-  GuardModalLayer as aP,
-  ConnectFlowCard as aQ,
-  ApprovalProofInline as aR,
-  HiMiniArrowTopRightOnSquare as aS,
-  HiMiniCloudArrowDown as aT,
-  fetchPackageFirewallStatus as aU,
-  runPackageAudit as aV,
-  resolveSupplyChainAuditFailure as aW,
-  runPackageSync as aX,
-  startPackageFirewallConnect as aY,
-  openPackageFirewallAuthorizeFallback as aZ,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as a_,
-  repairApprovalCenter as aa,
-  exportSettings as ab,
-  setupDesktopNotifications as ac,
-  Tag as ad,
-  HiMiniMagnifyingGlass as ae,
-  approvalGateCooldownLabel as af,
-  fetchApprovalPage as ag,
-  fetchPolicy as ah,
-  HiMiniArrowLeft as ai,
-  HiMiniHome as aj,
-  DEFAULT_FILTER_STATE as ak,
-  filterEvidence as al,
-  sortEvidence as am,
-  computeMetrics as an,
-  EvidenceFilterBar as ao,
-  EvidenceInsightStrip as ap,
-  EvidenceActionList as aq,
-  EvidenceActionDetail as ar,
-  policyIdentityKey as as,
-  HiMiniChartBar as at,
-  runHarnessAction as au,
-  GuardHarnessActionError as av,
-  HiMiniRocketLaunch as aw,
-  HiMiniArrowPath as ax,
-  HiMiniTrash as ay,
-  clearLabelForScope as az,
-  EmptyState as b,
-  parseInterceptProofSnapshot as b0,
-  activatePackageFirewallRuntime as b1,
-  EntitlementNotice as b2,
-  fetchReceipts as b3,
-  WorkspacePageHeader as b4,
-  __vitePreload as b5,
-  scopeLabel as b6,
-  guardAwareHref as b7,
-  HiMiniDocumentText as b8,
-  HiMiniCloudArrowUp as b9,
-  HiMiniDocumentMagnifyingGlass as bA,
-  HiMiniShieldExclamation as bB,
-  HiMiniComputerDesktop as bC,
-  HiMiniChevronLeft as bD,
-  HiMiniFunnel as bE,
-  HiMiniArrowDown as bF,
-  HiMiniArrowUp as bG,
-  runAuditRemediation as bH,
-  HiMiniSignal as bI,
-  HiMiniCheck as ba,
-  HiMiniCodeBracket as bb,
-  HiMiniClipboardDocument as bc,
-  HiMiniUsers as bd,
-  HiMiniFolder as be,
-  HiMiniInformationCircle as bf,
-  HiMiniIdentification as bg,
-  policyActionLabel as bh,
-  createCloudExceptionRequest as bi,
-  HiMiniArrowRight as bj,
-  HiMiniPuzzlePiece as bk,
-  HiMiniGlobeAlt as bl,
-  fetchCloudExceptions as bm,
-  fetchCloudExceptionRequests as bn,
-  downloadBlob as bo,
-  PolicyStatField as bp,
-  PaginationControls as bq,
-  HiMiniNoSymbol as br,
-  HiMiniCube as bs,
-  HiMiniArrowDownTray as bt,
-  HiMiniQueueList as bu,
-  HiMiniPlay as bv,
-  Surface as bw,
-  HiMiniCheckBadge as bx,
-  fetchSupplyChainBundle as by,
-  isSupplyChainScannerEvidence as bz,
-  EvidenceInsightsShareModal as c,
-  HiMiniCheckCircle as d,
-  GuardHero as e,
-  formatNumber as f,
+  runPackageSync as a$,
+  resolveProtectionLevelCopy as a0,
+  fetchSettings as a1,
+  fetchRuntimeSnapshot as a2,
+  updateSettings as a3,
+  clearPolicy as a4,
+  clearReviewQueue as a5,
+  revokeApprovalGateCooldown as a6,
+  disableApprovalGateTotp as a7,
+  importSettings as a8,
+  resetSettings as a9,
+  GuardHarnessActionError as aA,
+  HiMiniRocketLaunch as aB,
+  HiMiniArrowPath as aC,
+  HiMiniTrash as aD,
+  clearLabelForScope as aE,
+  formatHarnessCommand as aF,
+  isSupplyChainAuditIncomplete as aG,
+  isSupplyChainAuditEvidence as aH,
+  buildApprovalProofCredentials as aI,
+  isApprovalProofSubmitDisabled as aJ,
+  ApprovalProofFieldInputs as aK,
+  readString$1 as aL,
+  isRecord$2 as aM,
+  HiMiniClock as aN,
+  IconActionButton as aO,
+  HiMiniBeaker as aP,
+  ActivationSummary as aQ,
+  ActionResultPanel as aR,
+  HiMiniBugAnt as aS,
+  GuardModalLayer as aT,
+  ConnectFlowCard as aU,
+  ApprovalProofInline as aV,
+  HiMiniArrowTopRightOnSquare as aW,
+  HiMiniCloudArrowDown as aX,
+  fetchPackageFirewallStatus as aY,
+  runPackageAudit as aZ,
+  resolveSupplyChainAuditFailure as a_,
+  enrollApprovalGateTotp as aa,
+  verifyApprovalGateTotp as ab,
+  clearEvidence as ac,
+  exportDiagnostics as ad,
+  repairApprovalCenter as ae,
+  exportSettings as af,
+  setupDesktopNotifications as ag,
+  Tag as ah,
+  HiMiniMagnifyingGlass as ai,
+  approvalGateCooldownLabel as aj,
+  fetchApprovalPage as ak,
+  fetchPolicy as al,
+  HiMiniArrowLeft as am,
+  HiMiniHome as an,
+  DEFAULT_FILTER_STATE as ao,
+  filterEvidence as ap,
+  sortEvidence as aq,
+  computeMetrics as ar,
+  CommandActivityWorkspace as as,
+  EvidenceFilterBar as at,
+  EvidenceInsightStrip as au,
+  EvidenceActionList as av,
+  EvidenceActionDetail as aw,
+  policyIdentityKey as ax,
+  HiMiniChartBar as ay,
+  runHarnessAction as az,
+  HiMiniCommandLine as b,
+  startPackageFirewallConnect as b0,
+  openPackageFirewallAuthorizeFallback as b1,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as b2,
+  runPackageFirewallAction as b3,
+  parseInterceptProofSnapshot as b4,
+  activatePackageFirewallRuntime as b5,
+  EntitlementNotice as b6,
+  fetchReceipts as b7,
+  WorkspacePageHeader as b8,
+  __vitePreload as b9,
+  Surface as bA,
+  HiMiniCheckBadge as bB,
+  fetchSupplyChainBundle as bC,
+  isSupplyChainScannerEvidence as bD,
+  HiMiniDocumentMagnifyingGlass as bE,
+  HiMiniShieldExclamation as bF,
+  HiMiniComputerDesktop as bG,
+  HiMiniChevronLeft as bH,
+  HiMiniFunnel as bI,
+  HiMiniArrowDown as bJ,
+  HiMiniArrowUp as bK,
+  runAuditRemediation as bL,
+  HiMiniSignal as bM,
+  scopeLabel as ba,
+  guardAwareHref as bb,
+  HiMiniDocumentText as bc,
+  HiMiniCloudArrowUp as bd,
+  HiMiniCheck as be,
+  HiMiniCodeBracket as bf,
+  HiMiniClipboardDocument as bg,
+  HiMiniUsers as bh,
+  HiMiniFolder as bi,
+  HiMiniInformationCircle as bj,
+  HiMiniIdentification as bk,
+  policyActionLabel as bl,
+  createCloudExceptionRequest as bm,
+  HiMiniArrowRight as bn,
+  HiMiniPuzzlePiece as bo,
+  HiMiniGlobeAlt as bp,
+  fetchCloudExceptions as bq,
+  fetchCloudExceptionRequests as br,
+  downloadBlob as bs,
+  PolicyStatField as bt,
+  PaginationControls as bu,
+  HiMiniNoSymbol as bv,
+  HiMiniCube as bw,
+  HiMiniArrowDownTray as bx,
+  HiMiniQueueList as by,
+  HiMiniPlay as bz,
+  HiMiniChevronRight as c,
+  createCommandActivityClient as d,
+  harnessDisplayName as e,
+  fetchCommandActivityApi as f,
   getHeatmapLevel as g,
-  harnessDisplayName as h,
+  homeCommandActivityModel as h,
   isDisplayableHarness as i,
   jsxRuntimeExports as j,
-  HiMiniShieldCheck as k,
-  formatRelativeTime as l,
-  HiMiniSparkles as m,
-  HiMiniXMark as n,
-  HiMiniChevronUp as o,
-  HiMiniChevronDown as p,
-  resolveCloudIntelCopy as q,
+  EmptyState as k,
+  EvidenceInsightsShareModal as l,
+  HiMiniCheckCircle as m,
+  GuardHero as n,
+  formatNumber as o,
+  HiMiniShieldCheck as p,
+  formatRelativeTime as q,
   reactExports as r,
-  HiMiniCloud as s,
-  HiMiniQuestionMarkCircle as t,
+  HiMiniSparkles as s,
+  HiMiniXMark as t,
   useReceiptAnalytics as u,
-  useFocusTrap as v,
-  approvalProofRequiresTotp as w,
-  HiMiniExclamationTriangle as x,
-  HiMiniBolt as y,
-  HiMiniChevronRight as z
+  HiMiniChevronUp as v,
+  HiMiniChevronDown as w,
+  resolveCloudIntelCopy as x,
+  HiMiniCloud as y,
+  HiMiniQuestionMarkCircle as z
 };

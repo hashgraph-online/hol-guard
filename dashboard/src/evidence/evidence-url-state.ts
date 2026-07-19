@@ -36,7 +36,9 @@ const VALID_SORT: EvidenceSortKey[] = [
   "category",
   "artifact",
 ];
-const VALID_VIEW: EvidenceView[] = ["actions", "insights", "apps", "export", "story", "categories"];
+const VALID_VIEW: EvidenceView[] = ["actions", "commands", "insights", "apps", "export", "story", "categories"];
+
+const OWNED_PARAMS = ["search", "time", "decision", "harness", "category", "sourceScope", "day", "sort", "view", "selected"];
 
 export function parseEvidenceUrlState(
   params: URLSearchParams
@@ -93,8 +95,8 @@ export function readEvidenceUrlState(params?: URLSearchParams): EvidenceFilterSt
 }
 
 export function writeEvidenceUrlState(state: EvidenceFilterState): void {
-  const params = serializeEvidenceUrlState(state);
   const url = new URL(window.location.href);
-  url.search = params.toString();
+  for (const key of OWNED_PARAMS) url.searchParams.delete(key);
+  for (const [key, value] of serializeEvidenceUrlState(state)) url.searchParams.set(key, value);
   window.history.replaceState({}, "", url.toString());
 }

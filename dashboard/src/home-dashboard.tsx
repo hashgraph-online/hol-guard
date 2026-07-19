@@ -28,6 +28,7 @@ import { approvalProofRequiresPassword } from "./approval-proof-inline";
 import { EvidenceInsightsHomePreview } from "./evidence/evidence-insights-home-preview";
 import { EvidenceInsightsShareModal } from "./evidence/evidence-insights-share-modal";
 import { useReceiptAnalytics } from "./evidence/use-receipt-analytics";
+import { HomeCommandActivityCard } from "./command-activity/command-activity-home-card";
 import type {
   GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
@@ -132,6 +133,7 @@ export function HomeWorkspace(props: {
   onOpenFleet: () => void;
   onOpenEvidence: () => void;
   onOpenInsights?: () => void;
+  onOpenCommands: () => void;
   onOpenSettings: () => void;
   onOpenSupplyChain?: () => void;
   onClearPolicies: (scope: { harness?: string; all?: boolean }) => void;
@@ -324,6 +326,8 @@ export function HomeWorkspace(props: {
         onOpenInsights={props.onOpenInsights}
         onShare={handleShareOpen}
       />
+
+      <HomeCommandActivityCard onOpen={props.onOpenCommands} />
 
       <StreakMilestoneBanner streak={streak} />
 

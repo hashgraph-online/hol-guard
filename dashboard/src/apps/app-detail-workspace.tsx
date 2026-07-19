@@ -47,6 +47,11 @@ import { sortEvidence } from "../evidence/evidence-sort";
 import { computeMetrics } from "../evidence/evidence-metrics";
 import { DEFAULT_FILTER_STATE } from "../evidence/evidence-url-state";
 import type { EvidenceFilterState, EvidenceSortKey } from "../evidence/evidence-types";
+import { CommandActivityWorkspace } from "../command-activity/command-activity-workspace";
+import {
+  AppCommandActivityModeTabs,
+  type AppActivityMode,
+} from "../command-activity/app-command-activity-mode-tabs";
 import type {
   GuardApprovalRequest,
   GuardInventoryItem,
@@ -775,6 +780,19 @@ function firstRunIntro(harness: string): string {
 
 const ACTIVITY_PAGE_SIZE = 50;
 
+function readActivityMode(): AppActivityMode {
+  const value = new URLSearchParams(window.location.search).get("activity");
+  if (value === "commands" || value === "pending") return value;
+  return "recorded";
+}
+
+function writeActivityMode(mode: AppActivityMode): void {
+  const url = new URL(window.location.href);
+  if (mode === "recorded") url.searchParams.delete("activity");
+  else url.searchParams.set("activity", mode);
+  window.history.replaceState({}, "", url.toString());
+}
+
 function AppActivityTab(props: {
   harness: string;
   pendingItems: GuardApprovalRequest[];
@@ -783,7 +801,7 @@ function AppActivityTab(props: {
   queueError: string | null;
   onRetry: () => void;
 }) {
-  const [showPending, setShowPending] = useState(false);
+  const [activityMode, setActivityMode] = useState<AppActivityMode>(readActivityMode);
   const [filters, setFilters] = useState<EvidenceFilterState>(() => ({
     ...DEFAULT_FILTER_STATE,
     view: "actions",
@@ -861,13 +879,10 @@ function AppActivityTab(props: {
     setPage((prev) => prev + 1);
   }, []);
 
-  const handleShowActions = useCallback(() => {
-    setShowPending(false);
-  }, []);
-
-  const handleShowPending = useCallback(() => {
-    setShowPending(true);
-    setFilters((prev) => ({ ...prev, selectedId: "" }));
+  const handleActivityModeChange = useCallback((mode: AppActivityMode) => {
+    setActivityMode(mode);
+    writeActivityMode(mode);
+    if (mode !== "recorded") setFilters((prev) => ({ ...prev, selectedId: "" }));
   }, []);
 
   const noopHarnessFilter = useCallback((_harness: string) => {}, []);
@@ -894,95 +909,88 @@ function AppActivityTab(props: {
         </div>
       )}
 
-      {hasPending && (
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleShowActions}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-              !showPending
-                ? "bg-brand-blue text-white shadow-sm"
-                : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
-            }`}
-          >
-            Actions
-          </button>
-          <button
-            type="button"
-            onClick={handleShowPending}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-              showPending
-                ? "bg-brand-blue text-white shadow-sm"
-                : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
-            }`}
-          >
-            Pending ({props.pendingItems.length})
-          </button>
+      <AppCommandActivityModeTabs
+        mode={activityMode}
+        pendingCount={props.pendingItems.length}
+        onChange={handleActivityModeChange}
+      />
+
+      {activityMode === "commands" && (
+        <div id="app-activity-panel-commands" role="tabpanel" aria-labelledby="app-activity-tab-commands">
+          <CommandActivityWorkspace harness={props.harness} />
         </div>
       )}
 
-      {showPending ? (
-        hasPending ? (
-          <div className="space-y-3">
-            {props.pendingItems.map((item) => (
-              <button
-                key={item.request_id}
-                onClick={() => props.onOpenRequest(item.request_id)}
-                className="flex w-full items-center justify-between rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-left transition-shadow hover:shadow-sm"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-brand-dark">{item.artifact_name ?? item.artifact_id}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {item.artifact_type} · {formatRelativeTime(item.created_at)}
-                  </p>
+      {activityMode === "pending" && (
+        <div id="app-activity-panel-pending" role="tabpanel" aria-labelledby="app-activity-tab-pending">
+          {hasPending ? (
+            <div className="space-y-3">
+              {props.pendingItems.map((item) => (
+                <button
+                  key={item.request_id}
+                  onClick={() => props.onOpenRequest(item.request_id)}
+                  className="flex w-full items-center justify-between rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-left transition-shadow hover:shadow-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-brand-dark">{item.artifact_name ?? item.artifact_id}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {item.artifact_type} · {formatRelativeTime(item.created_at)}
+                    </p>
+                  </div>
+                  <Badge tone="info">Pending</Badge>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No pending reviews"
+              body="Guard will surface blocked actions here when this app needs a decision."
+              tone="teach"
+            />
+          )}
+        </div>
+      )}
+
+      {activityMode === "recorded" && (
+        <div id="app-activity-panel-recorded" role="tabpanel" aria-labelledby="app-activity-tab-recorded">
+          {props.harnessReceipts.length === 0 ? (
+            <EmptyState
+              title="No activity yet"
+              body="Guard has not recorded any decisions for this app yet. Allow or block an action and it will appear here."
+              tone="teach"
+            />
+          ) : (
+            <div className={selectedReceipt ? "grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]" : ""}>
+              <div className="space-y-3">
+                <EvidenceFilterBar
+                  filters={filters}
+                  onChange={handleFilterChange}
+                  totalCount={props.harnessReceipts.length}
+                  filteredCount={filtered.length}
+                  harnesses={[]}
+                  hideHarnessFilter={true}
+                />
+                <EvidenceInsightStrip metrics={metrics} />
+                <EvidenceActionList
+                  receipts={sorted}
+                  selectedId={filters.selectedId}
+                  onSelectId={handleSelectId}
+                  onFilterHarness={noopHarnessFilter}
+                  onFilterCategory={handleFilterCategory}
+                  sort={filters.sort}
+                  onSortChange={handleSortChange}
+                  page={page}
+                  pageSize={ACTIVITY_PAGE_SIZE}
+                  onLoadMore={handleLoadMore}
+                  hideHarnessColumn={true}
+                  tableLabel={`${harnessDisplayName(props.harness)} actions`}
+                />
+              </div>
+              {selectedReceipt && (
+                <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+                  <EvidenceActionDetail receipt={selectedReceipt} onClose={handleCloseDetail} />
                 </div>
-                <Badge tone="info">Pending</Badge>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="No pending reviews"
-            body="Guard will surface blocked actions here when this app needs a decision."
-            tone="teach"
-          />
-        )
-      ) : props.harnessReceipts.length === 0 ? (
-        <EmptyState
-          title="No activity yet"
-          body="Guard has not recorded any decisions for this app yet. Allow or block an action and it will appear here."
-          tone="teach"
-        />
-      ) : (
-        <div className={selectedReceipt ? "grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]" : ""}>
-          <div className="space-y-3">
-            <EvidenceFilterBar
-              filters={filters}
-              onChange={handleFilterChange}
-              totalCount={props.harnessReceipts.length}
-              filteredCount={filtered.length}
-              harnesses={[]}
-              hideHarnessFilter={true}
-            />
-            <EvidenceInsightStrip metrics={metrics} />
-            <EvidenceActionList
-              receipts={sorted}
-              selectedId={filters.selectedId}
-              onSelectId={handleSelectId}
-              onFilterHarness={noopHarnessFilter}
-              onFilterCategory={handleFilterCategory}
-              sort={filters.sort}
-              onSortChange={handleSortChange}
-              page={page}
-              pageSize={ACTIVITY_PAGE_SIZE}
-              onLoadMore={handleLoadMore}
-              hideHarnessColumn={true}
-              tableLabel={`${harnessDisplayName(props.harness)} actions`}
-            />
-          </div>
-          {selectedReceipt && (
-            <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-              <EvidenceActionDetail receipt={selectedReceipt} onClose={handleCloseDetail} />
+              )}
             </div>
           )}
         </div>

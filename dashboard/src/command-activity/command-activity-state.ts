@@ -2,6 +2,7 @@ import type {
   CommandAnalyticsDimension,
   CommandApprovalReuseStatus,
   CommandExecutionStatus,
+  CommandFeedbackLabel,
   CommandProofLevel,
 } from "./command-activity-types";
 
@@ -39,6 +40,23 @@ export interface CommandActivityAnalyticsQuery {
   dimension_value: string | null;
 }
 
+export type CommandFeedbackState =
+  | { kind: "idle" }
+  | { kind: "saving"; activity_id: string; label: CommandFeedbackLabel }
+  | { kind: "saved"; activity_id: string; label: CommandFeedbackLabel }
+  | { kind: "error"; activity_id: string; message: string };
+
+export function completeCommandFeedback(
+  current: CommandFeedbackState,
+  activityId: string,
+  outcome:
+    | { kind: "saved"; label: CommandFeedbackLabel }
+    | { kind: "error"; message: string },
+): CommandFeedbackState {
+  if (current.kind !== "saving" || current.activity_id !== activityId) return current;
+  return { ...outcome, activity_id: activityId };
+}
+
 export const DEFAULT_COMMAND_ACTIVITY_FILTERS: CommandActivityFilters = {
   limit: 50,
   harness: null,
@@ -59,6 +77,41 @@ export const DEFAULT_COMMAND_ACTIVITY_ANALYTICS_QUERY: CommandActivityAnalyticsQ
   dimension_value: null,
 };
 
+export function commandActivityAnalyticsQueryForFilters(
+  filters: CommandActivityFilters,
+): CommandActivityAnalyticsQuery {
+  if (filters.rule_id) return { days: 90, top_limit: 10, dimension: "rule", dimension_value: filters.rule_id };
+  if (filters.extension_id) {
+    return { days: 90, top_limit: 10, dimension: "extension", dimension_value: filters.extension_id };
+  }
+  if (filters.harness) return { days: 90, top_limit: 10, dimension: "harness", dimension_value: filters.harness };
+  return { ...DEFAULT_COMMAND_ACTIVITY_ANALYTICS_QUERY };
+}
+
+export function commandSummaryIsOutsideTableFilters(filters: CommandActivityFilters): boolean {
+  const dimensionFilterCount = [filters.harness, filters.extension_id, filters.rule_id].filter(
+    (value) => value !== null,
+  ).length;
+  return (
+    dimensionFilterCount > 1 ||
+    filters.execution_status !== null ||
+    filters.proof_level !== null ||
+    filters.prompted !== null ||
+    filters.approval_reuse_status !== null ||
+    filters.occurred_from !== null ||
+    filters.occurred_through !== null
+  );
+}
+
+export function updateCommandActivityFilters(
+  current: CommandActivityFilters,
+  patch: Partial<CommandActivityFilters>,
+  lockedHarness: string | null,
+): CommandActivityFilters {
+  const harness = lockedHarness ?? (patch.harness === undefined ? current.harness : patch.harness);
+  return { ...current, ...patch, harness };
+}
+
 function boundedInteger(value: string | null, fallback: number, minimum: number, maximum: number): number {
   if (value === null || !/^\d+$/.test(value)) return fallback;
   const parsed = Number(value);
@@ -75,6 +128,8 @@ function stableParam(value: string | null): string | null {
 
 function dateParam(value: string | null): string | null {
   if (value === null || !ISO_DATE.test(value)) return null;
+  const year = Number(value.slice(0, 4));
+  if (year < 1) return null;
   const date = new Date(`${value}T00:00:00Z`);
   return Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== value ? null : value;
 }
@@ -222,7 +277,7 @@ export type CommandActivityLoadState<T> =
   | { kind: "loading"; request_id: number; previous: T | null }
   | { kind: "ready"; request_id: number; data: T }
   | { kind: "empty"; request_id: number }
-  | { kind: "error"; request_id: number; message: string };
+  | { kind: "error"; request_id: number; message: string; previous: T | null };
 
 export function commandActivityLoadStarted<T>(requestId: number, previous: T | null = null): CommandActivityLoadState<T> {
   return { kind: "loading", request_id: requestId, previous };
@@ -244,5 +299,10 @@ export function commandActivityLoadFailed<T>(
   _error: unknown,
 ): CommandActivityLoadState<T> {
   if (current.kind !== "loading" || current.request_id !== requestId) return current;
-  return { kind: "error", request_id: requestId, message: "Unable to load command activity." };
+  return {
+    kind: "error",
+    request_id: requestId,
+    message: "Unable to load command activity.",
+    previous: current.previous,
+  };
 }
