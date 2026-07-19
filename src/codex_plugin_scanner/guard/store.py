@@ -12,6 +12,7 @@ from .store_base import (
 )
 from .store_approval_facade import StoreApprovalsMixin
 from .store_cloud_events import StoreCloudEventsMixin
+from .store_command_activity import StoreCommandActivityMixin
 from .store_connection_schema import StoreConnectionSchemaMixin
 from .store_event_receipts import StoreEventReceiptsMixin
 from .store_evidence_facade import StoreEvidenceMixin
@@ -32,6 +33,7 @@ from .store_sessions import StoreSessionsMixin
 class GuardStore(
     StoreSecretPolicyIntegrityMixin,
     StoreConnectionSchemaMixin,
+    StoreCommandActivityMixin,
     StoreInventoryMixin,
     StorePolicyMixin,
     StorePolicyIntegrityAdminMixin,
