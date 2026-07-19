@@ -611,8 +611,11 @@ jobs:
         env:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
         run: |
-          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
-          git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main
+          remote_main_sha=$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')
+          if [[ "$remote_main_sha" != "$SOURCE_SHA" ]]; then
+            echo "Main publication source is no longer the branch head" >&2
+            exit 1
+          fi
       - name: Inspect TestPyPI release state
         id: testpypi
         env:
@@ -700,8 +703,11 @@ jobs:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
-          git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main
+          remote_main_sha=$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')
+          if [[ "$remote_main_sha" != "$SOURCE_SHA" ]]; then
+            echo "Main publication source is no longer the branch head" >&2
+            exit 1
+          fi
           BASE_VERSION=$(uv run --with packaging==25.0 python scripts/sync_repo_version.py --check)
           PYPI_VERSIONS=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
             list-versions --registry pypi)
