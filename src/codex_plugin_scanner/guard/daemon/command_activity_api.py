@@ -144,7 +144,12 @@ def command_extensions_page(query_string: str, *, auth_token: str) -> dict[str, 
         if payload.get("kind") != "extensions" or not isinstance(payload.get("after"), str):
             raise ValueError("invalid_cursor")
         after = str(payload["after"])
-    extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+    extensions = tuple(
+        sorted(
+            BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions,
+            key=lambda extension: extension.extension_id,
+        )
+    )
     if after is not None:
         extensions = tuple(extension for extension in extensions if extension.extension_id > after)
     page = extensions[:limit]

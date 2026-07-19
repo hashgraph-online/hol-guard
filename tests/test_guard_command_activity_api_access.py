@@ -206,6 +206,10 @@ def test_analytics_and_extensions_are_paginated_bounded_contracts(tmp_path: Path
     assert analytics["scope"] == {"dimension": "harness", "dimension_value": "codex"}
     assert first_status == second_status == 200
     assert len(first["items"]) == len(second["items"]) == 2
+    first_extension_ids = [str(item["extension_id"]) for item in first["items"]]
+    second_extension_ids = [str(item["extension_id"]) for item in second["items"]]
+    extension_ids = first_extension_ids + second_extension_ids
+    assert extension_ids == sorted(extension_ids)
     assert {item["extension_id"] for item in first["items"]}.isdisjoint(
         {item["extension_id"] for item in second["items"]}
     )
