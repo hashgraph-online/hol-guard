@@ -31,6 +31,11 @@ if TYPE_CHECKING:
 
 
 from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
+from ..mdm.user_health import (
+    configure_user_health_leases,
+    run_user_health_cadence,
+    user_health_status,
+)
 from ..runtime.command_capability import (
     READ_ONLY_COMMAND_OPERATIONS,
     CommandCapabilityError,
@@ -319,6 +324,9 @@ def _run_guard_sync_command(
                         workspace_dir=context.workspace_dir,
                     )
                 )
+            with suppress(OSError, PermissionError, RuntimeError, ValueError):
+                if user_health_status(context.guard_home)["enabled"] is True:
+                    payload["health_lease"] = run_user_health_cadence(context.guard_home)
             bar.done("Sync complete")
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
         message = _guard_sync_failure_message(error)
@@ -334,6 +342,36 @@ def _run_guard_sync_command(
             print(str(error), file=sys.stderr)
         return 1
     _emit("sync", payload, getattr(args, "json", False))
+    return 0
+
+
+def _run_guard_health_leases_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    **_kwargs: object,
+) -> int:
+    resolved_guard_home = guard_home or resolve_guard_home(getattr(args, "guard_home", None))
+    command = str(args.health_leases_command)
+    try:
+        if command == "enable":
+            payload = configure_user_health_leases(resolved_guard_home, enabled=True)
+        elif command == "disable":
+            payload = configure_user_health_leases(resolved_guard_home, enabled=False)
+        elif command == "report":
+            payload = run_user_health_cadence(resolved_guard_home)
+        else:
+            payload = user_health_status(resolved_guard_home)
+    except (OSError, PermissionError, RuntimeError, ValueError):
+        payload = {
+            "schemaVersion": "hol-guard-user-health-status.v1",
+            "ok": False,
+            "error": "user_health_operation_failed",
+            "assuranceLevel": "user-managed",
+        }
+        _emit("health-leases", payload, bool(getattr(args, "json", False)))
+        return 1
+    _emit("health-leases", payload, bool(getattr(args, "json", False)))
     return 0
 
 
@@ -689,6 +727,7 @@ __all__ = [
     "_run_guard_daemon_command",
     "_run_guard_device_command",
     "_run_guard_disconnect_command",
+    "_run_guard_health_leases_command",
     "_run_guard_login_command",
     "_run_guard_remote_pair_command",
     "_run_guard_service_command",
