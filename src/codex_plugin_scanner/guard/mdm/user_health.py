@@ -8,12 +8,14 @@ import json
 import os
 import secrets
 import stat
-from contextlib import suppress
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
@@ -27,6 +29,7 @@ from .protection_lease_contract import ProtectionLeaseClaims, SignedProtectionLe
 
 _SCHEMA = "hol-guard-user-health-state.v1"
 _STATE_NAME = "user-health-state.json"
+_LOCK_NAME = "user-health-state.lock"
 _MAX_STATE_BYTES = 512 * 1024
 _MAX_UINT64 = (1 << 64) - 1
 _P256_ORDER = int("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16)
@@ -88,7 +91,10 @@ def _private_directory(guard_home: Path) -> None:
 
 
 def _read_state(guard_home: Path) -> UserHealthState | None:
-    _private_directory(guard_home)
+    try:
+        _private_directory(guard_home)
+    except FileNotFoundError:
+        return None
     try:
         descriptor = os.open(
             _state_path(guard_home),
@@ -172,9 +178,15 @@ def _validate_state(state: UserHealthState) -> None:
     ):
         raise ValueError("user_health_state_invalid")
     try:
+        updated_at = datetime.fromisoformat(state.updated_at)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("user_health_state_invalid") from exc
+    if updated_at.tzinfo is None:
+        raise ValueError("user_health_state_invalid")
+    try:
         private_key = serialization.load_pem_private_key(state.private_key_pem.encode(), password=None)
         public_der = base64.b64decode(state.public_key_spki, validate=True)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, UnsupportedAlgorithm, ValueError) as exc:
         raise ValueError("user_health_state_invalid") from exc
     if not isinstance(private_key, ec.EllipticCurvePrivateKey) or not isinstance(private_key.curve, ec.SECP256R1):
         raise ValueError("user_health_state_invalid")
@@ -185,6 +197,49 @@ def _validate_state(state: UserHealthState) -> None:
         f"{state.key_id}="
     ):
         raise ValueError("user_health_state_invalid")
+
+
+@contextmanager
+def _state_lock(guard_home: Path) -> Iterator[None]:
+    """Serialize state mutation across foreground and background processes."""
+
+    _private_directory(guard_home)
+    descriptor = os.open(
+        guard_home / _LOCK_NAME,
+        os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or (
+            os.name != "nt" and (metadata.st_uid != os.geteuid() or stat.S_IMODE(metadata.st_mode) & 0o077)
+        ):
+            raise PermissionError("user_health_state_acl_invalid")
+        if os.name == "nt":
+            import msvcrt
+
+            if metadata.st_size == 0:
+                os.write(descriptor, b"0")
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                import msvcrt
+
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+    finally:
+        os.close(descriptor)
 
 
 def _write_state(guard_home: Path, state: UserHealthState) -> None:
@@ -235,11 +290,12 @@ def configure_user_health_leases(guard_home: Path, *, enabled: bool, now: dateti
     resolved_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     store = GuardStore(guard_home, prime_policy_integrity=False, source="user-health")
     identity = guard_review_oauth_metadata(store)
-    state = _read_state(guard_home)
-    if state is None or (state.workspace_id, state.device_id) != (identity.workspace_id, identity.device_id):
-        state = _new_state(identity.workspace_id, identity.device_id, resolved_now)
-    state = replace(state, enabled=enabled, updated_at=resolved_now.isoformat())
-    _write_state(guard_home, state)
+    with _state_lock(guard_home):
+        state = _read_state(guard_home)
+        if state is None or (state.workspace_id, state.device_id) != (identity.workspace_id, identity.device_id):
+            state = _new_state(identity.workspace_id, identity.device_id, resolved_now)
+        state = replace(state, enabled=enabled, updated_at=resolved_now.isoformat())
+        _write_state(guard_home, state)
     return user_health_status(guard_home)
 
 
@@ -351,49 +407,51 @@ def run_user_health_cadence(
     """Register and deliver the exact durable pending user-managed lease."""
 
     resolved_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(microsecond=0)
-    state = _read_state(guard_home)
-    if state is None or not state.enabled:
-        raise PermissionError("user_health_opt_in_required")
-    outbox = _outbox(state, resolved_now)
-    if state.pending_outbox is None:
-        state = replace(
-            state,
-            pending_outbox=base64.b64encode(outbox.canonical_bytes()).decode("ascii"),
-            updated_at=resolved_now.isoformat(),
+    with _state_lock(guard_home):
+        state = _read_state(guard_home)
+        if state is None or not state.enabled:
+            raise PermissionError("user_health_opt_in_required")
+        outbox = _outbox(state, resolved_now)
+        if state.pending_outbox is None:
+            state = replace(
+                state,
+                pending_outbox=base64.b64encode(outbox.canonical_bytes()).decode("ascii"),
+                updated_at=resolved_now.isoformat(),
+            )
+            _write_state(guard_home, state)
+        resolved_transport = transport or GuardCloudMachineHealthTransport(guard_home)
+        if state.sequence == 0:
+            resolved_transport.register_key(_registration(state, resolved_now))
+        ack = resolved_transport.deliver_lease(outbox)
+        claims = outbox.lease.claims
+        expected = (
+            state.workspace_id,
+            state.device_id,
+            state.machine_installation_id,
+            state.installation_generation,
+            claims.sequence,
+            outbox.lease.digest,
         )
-        _write_state(guard_home, state)
-    resolved_transport = transport or GuardCloudMachineHealthTransport(guard_home)
-    resolved_transport.register_key(_registration(state, resolved_now))
-    ack = resolved_transport.deliver_lease(outbox)
-    claims = outbox.lease.claims
-    expected = (
-        state.workspace_id,
-        state.device_id,
-        state.machine_installation_id,
-        state.installation_generation,
-        claims.sequence,
-        outbox.lease.digest,
-    )
-    actual = (
-        ack.workspace_id,
-        ack.device_id,
-        ack.machine_installation_id,
-        ack.installation_generation,
-        ack.sequence,
-        ack.lease_digest,
-    )
-    if actual != expected:
-        raise OSError("health_lease_ack_conflict")
-    _write_state(
-        guard_home,
-        replace(
-            state,
-            sequence=claims.sequence,
-            last_lease_digest=outbox.lease.digest,
-            pending_outbox=None,
-            updated_at=ack.received_datetime.isoformat(),
-        ),
-    )
+        actual = (
+            ack.workspace_id,
+            ack.device_id,
+            ack.machine_installation_id,
+            ack.installation_generation,
+            ack.sequence,
+            ack.lease_digest,
+        )
+        if actual != expected:
+            raise OSError("health_lease_ack_conflict")
+        _write_state(
+            guard_home,
+            replace(
+                state,
+                sequence=claims.sequence,
+                last_lease_digest=outbox.lease.digest,
+                pending_outbox=None,
+                updated_at=ack.received_datetime.isoformat(),
+            ),
+        )
     return {
         "schemaVersion": "hol-guard-user-health-report.v1",
         "delivered": True,

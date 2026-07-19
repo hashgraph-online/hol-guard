@@ -363,7 +363,7 @@ def _run_guard_health_leases_command(
         else:
             payload = user_health_status(resolved_guard_home)
     except (OSError, PermissionError, RuntimeError, ValueError):
-        payload = {
+        payload: dict[str, object] = {
             "schemaVersion": "hol-guard-user-health-status.v1",
             "ok": False,
             "error": "user_health_operation_failed",

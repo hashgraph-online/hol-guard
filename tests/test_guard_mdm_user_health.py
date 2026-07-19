@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -97,7 +98,7 @@ def test_user_health_registers_and_delivers_signed_monotonic_leases(guard_home: 
     assert first["sequence"] == 1
     assert second["sequence"] == 2
     assert first["assuranceLevel"] == "user-managed"
-    assert len(transport.registrations) == 2
+    assert len(transport.registrations) == 1
     registration = json.loads(transport.registrations[0])
     assert registration["deviceId"] == "device-a"
     assert registration["workspaceId"] == "workspace-a"
@@ -105,6 +106,27 @@ def test_user_health_registers_and_delivers_signed_monotonic_leases(guard_home: 
     assert first_snapshot["assuranceLevel"] == "user-managed"
     assert first_snapshot["installOwner"] == "user"
     assert transport.outboxes[1].lease.claims.previous_lease_digest == transport.outboxes[0].lease.digest
+
+
+def test_user_health_serializes_concurrent_cadence_runs(guard_home: Path) -> None:
+    user_health.configure_user_health_leases(guard_home, enabled=True, now=NOW)
+    transport = Transport()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        reports = list(
+            executor.map(
+                lambda minute: user_health.run_user_health_cadence(
+                    guard_home,
+                    now=NOW.replace(minute=minute),
+                    transport=transport,
+                ),
+                (0, 1),
+            )
+        )
+
+    assert {report["sequence"] for report in reports} == {1, 2}
+    ordered = sorted(transport.outboxes, key=lambda outbox: outbox.lease.claims.sequence)
+    assert ordered[1].lease.claims.previous_lease_digest == ordered[0].lease.digest
 
 
 def test_user_health_disable_preserves_continuity_but_stops_delivery(guard_home: Path) -> None:
