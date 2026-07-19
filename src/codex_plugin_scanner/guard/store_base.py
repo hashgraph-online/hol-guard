@@ -27,6 +27,7 @@ from uuid import uuid4
 from cryptography.fernet import Fernet, InvalidToken
 
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
+from .approval_resolution import require_resolvable_approval_request
 from .cli.oauth_client import resolve_guard_oauth_client_config
 from .edge_events import build_receipt_event
 from .local_trust_contract import (
@@ -61,6 +62,7 @@ from .sqlite_tuning import SQLITE_BUSY_TIMEOUT_MS, SQLITE_CONNECT_TIMEOUT_SECOND
 from .store_approvals import (
     _json_object,
     _json_object_list,
+    approval_request_surfaces_are_resolvable,
     approval_index_statements,
     approval_schema_statement,
     backfill_approval_queue_columns,

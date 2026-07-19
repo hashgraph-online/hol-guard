@@ -14,6 +14,7 @@ import {
 import type { GuardReceipt } from "./guard-types";
 import { harnessDisplayName } from "./approval-center-utils";
 import { detectCategory } from "./evidence/categories";
+import { guardActionDisposition } from "./guard-action";
 
 // ──────────────────────────────────────────
 // Types
@@ -143,7 +144,7 @@ function computeInsights(
   const insights: InsightCard[] = [];
 
   // Most blocked action this week
-  const blockedWeek = weekReceipts.filter((r) => r.policy_decision === "block");
+  const blockedWeek = weekReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked");
   if (blockedWeek.length > 0) {
     const topBlocked = aggregateByAction(blockedWeek)[0];
     if (topBlocked) {
@@ -186,7 +187,7 @@ function computeInsights(
       const d = new Date(r.timestamp);
       return d >= prevWeekStart && d < weekAgo;
     });
-    const prevBlockedCount = prevWeekReceipts.filter((r) => r.policy_decision === "block").length;
+    const prevBlockedCount = prevWeekReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
     const hasPrevWeekData = prevWeekReceipts.length > 0;
     const prevBlockRate = hasPrevWeekData
       ? Math.round((prevBlockedCount / prevWeekReceipts.length) * 100)
@@ -547,15 +548,16 @@ function aggregateByAction(receipts: GuardReceipt[]): ActionAggregate[] {
     const existing = map.get(name);
     if (existing) {
       existing.total += 1;
-      if (r.policy_decision === "allow") existing.allowed += 1;
-      if (r.policy_decision === "block") existing.blocked += 1;
+      const disposition = guardActionDisposition(r.policy_decision);
+      if (disposition === "allowed") existing.allowed += 1;
+      if (disposition === "blocked") existing.blocked += 1;
       if (r.timestamp > existing.lastSeen) existing.lastSeen = r.timestamp;
     } else {
       map.set(name, {
         name,
         total: 1,
-        allowed: r.policy_decision === "allow" ? 1 : 0,
-        blocked: r.policy_decision === "block" ? 1 : 0,
+        allowed: guardActionDisposition(r.policy_decision) === "allowed" ? 1 : 0,
+        blocked: guardActionDisposition(r.policy_decision) === "blocked" ? 1 : 0,
         lastSeen: r.timestamp,
       });
     }

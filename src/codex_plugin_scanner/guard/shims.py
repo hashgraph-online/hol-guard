@@ -347,7 +347,8 @@ def get_path_order_status(
         return {"shim_precedes_real": False, "real_binary_found": False, "path_broken": True, "shim_dir": None}
     shim_dir = (context.guard_home / "package-shims" / "bin").expanduser().resolve()
     shim_path = shim_dir / command
-    path_dirs = (path_env or os.environ.get("PATH", "")).split(os.pathsep)
+    effective_path = path_env if path_env is not None else os.environ.get("PATH", "")
+    path_dirs = effective_path.split(os.pathsep)
     shim_dir_index: int | None = None
     real_dir_index: int | None = None
     foreign_shim_index: int | None = None
@@ -469,6 +470,7 @@ def install_package_shims(
     context: HarnessContext,
     *,
     managers: tuple[str, ...] | None = None,
+    path_env: str | None = None,
 ) -> dict[str, object]:
     shim_root = context.guard_home / "package-shims"
     shim_dir = shim_root / "bin"
@@ -507,7 +509,7 @@ def install_package_shims(
     path_repair_required = [
         manager
         for manager in tracked_managers
-        if not bool(get_path_order_status(context, manager=manager).get("shim_precedes_real"))
+        if not bool(get_path_order_status(context, manager=manager, path_env=path_env).get("shim_precedes_real"))
     ]
     return {
         "installed_managers": list(tracked_managers),
@@ -547,14 +549,14 @@ def activate_package_shims(
     }
 
 
-def package_shim_status(context: HarnessContext) -> dict[str, object]:
+def package_shim_status(context: HarnessContext, *, path_env: str | None = None) -> dict[str, object]:
     manifest = _load_package_shim_manifest(context)
     installed_managers = [
         manager for manager in _string_items(manifest.get("installed_managers")) if manager in _PACKAGE_SHIM_COMMANDS
     ]
     last_test_at = manifest.get("last_test_at", {})
     normalized_last_tests = last_test_at if isinstance(last_test_at, dict) else {}
-    detected_managers, undetected_managers = _detect_system_package_managers(context)
+    detected_managers, undetected_managers = _detect_system_package_managers(context, path_env=path_env)
     detected_set = set(detected_managers)
     shim_dir = context.guard_home / "package-shims" / "bin"
     stored_hashes = _string_map(manifest.get("content_hashes"))
@@ -563,13 +565,14 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
     missing_managers: list[str] = []
     bypasses: list[dict[str, str]] = []
     manager_details: list[dict[str, object]] = []
-    path_entries = [entry for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
+    effective_path = path_env if path_env is not None else os.environ.get("PATH", "")
+    path_entries = [entry for entry in effective_path.split(os.pathsep) if entry]
     path_contains_shim_dir = any(Path(entry).expanduser() == shim_dir.expanduser() for entry in path_entries)
     for manager in installed_managers:
         command = _PACKAGE_SHIM_COMMANDS[manager]
         shim_path = shim_dir / command
         exists = shim_path.exists()
-        path_status = get_path_order_status(context, manager=manager)
+        path_status = get_path_order_status(context, manager=manager, path_env=path_env)
         if exists:
             active_managers.append(manager)
             current_content = shim_path.read_bytes()
@@ -721,9 +724,10 @@ def repair_package_shims(
     context: HarnessContext,
     *,
     managers: tuple[str, ...] | None = None,
+    path_env: str | None = None,
 ) -> dict[str, object]:
     """Detect missing or tampered shims and reinstall them. Returns repair summary."""
-    status = package_shim_status(context)
+    status = package_shim_status(context, path_env=path_env)
     selected_managers = set(_normalize_package_shim_managers(managers)) if managers else None
     managers_to_repair: list[str] = []
     path_repair_required: list[str] = []
@@ -746,7 +750,7 @@ def repair_package_shims(
             "shell_hints": status.get("shell_hints", {}),
             "nothing_to_repair": True,
         }
-    result = install_package_shims(context, managers=tuple(managers_to_repair))
+    result = install_package_shims(context, managers=tuple(managers_to_repair), path_env=path_env)
     return {
         "repaired": managers_to_repair,
         "repaired_count": len(managers_to_repair),
@@ -1119,18 +1123,23 @@ def _package_shim_manifest_path(context: HarnessContext) -> Path:
     return context.guard_home / "package-shims" / _PACKAGE_SHIM_MANIFEST
 
 
-def _filtered_manager_path(context: HarnessContext) -> str:
+def _filtered_manager_path(context: HarnessContext, *, path_env: str | None = None) -> str:
     shim_dir = context.guard_home / "package-shims" / "bin"
     shim_dir_abs = os.path.abspath(os.path.expanduser(str(shim_dir)))
-    path_entries = [entry for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
+    effective_path = path_env if path_env is not None else os.environ.get("PATH", "")
+    path_entries = [entry for entry in effective_path.split(os.pathsep) if entry]
     filtered_entries = [entry for entry in path_entries if os.path.abspath(os.path.expanduser(entry)) != shim_dir_abs]
     return os.pathsep.join(filtered_entries)
 
 
-def _detect_system_package_managers(context: HarnessContext) -> tuple[list[str], list[str]]:
+def _detect_system_package_managers(
+    context: HarnessContext,
+    *,
+    path_env: str | None = None,
+) -> tuple[list[str], list[str]]:
     """Return supported managers with and without a real binary on PATH."""
 
-    filtered_path = _filtered_manager_path(context)
+    filtered_path = _filtered_manager_path(context, path_env=path_env)
     if filtered_path == "":
         return [], list(package_shim_supported_managers())
     detected: list[str] = []

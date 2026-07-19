@@ -49,12 +49,41 @@ if TYPE_CHECKING:
     )
 
 
+from ..action_lattice import is_guard_action, most_restrictive_guard_action
+from ..models import GuardAction
 from ._commands_shared import *
 from .commands_hook_runtime_state import (
     RuntimeArtifactHookState,
     record_runtime_artifact_hook_receipt,
+    set_runtime_artifact_hook_final_action,
 )
 from .commands_parser_helpers import *
+
+_OBSERVE_EXECUTION_SOURCE_FIELDS = (
+    "current_config_action",
+    "current_action_override",
+    "trusted_cli_override",
+    "untrusted_hook_payload_hint",
+    "package_action",
+    "data_flow_action",
+    "scanner_action",
+)
+
+
+def _observe_mode_executable_action(state: RuntimeArtifactHookState) -> GuardAction:
+    """Recompose sources that remain executable after observe-only gates are removed."""
+
+    candidates: list[GuardAction] = ["allow"]
+    composition = state.response_payload.get("policy_composition")
+    if isinstance(composition, Mapping):
+        for key in _OBSERVE_EXECUTION_SOURCE_FIELDS:
+            source_action = composition.get(key)
+            if is_guard_action(source_action) and source_action in {"allow", "warn"}:
+                candidates.append(source_action)
+    package_action = getattr(state.package_evaluation, "policy_action", None)
+    if is_guard_action(package_action) and package_action in {"allow", "warn"}:
+        candidates.append(package_action)
+    return most_restrictive_guard_action(*candidates)
 
 
 def _review_runtime_artifact_hook(
@@ -127,11 +156,6 @@ def _review_runtime_artifact_hook(
                 approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
                 approval_center_url = ensure_guard_daemon(guard_home)
                 runtime_detection = _runtime_detection(args.harness, runtime_artifact)
-                queued_policy_action = (
-                    "require-reapproval"
-                    if cursor_native_queue and policy_action in {"warn", "review"}
-                    else policy_action
-                )
                 package_evaluation_to_dict = getattr(package_evaluation, "to_dict", None)
                 evaluation_payload: dict[str, object] = {
                     "artifacts": [
@@ -139,7 +163,7 @@ def _review_runtime_artifact_hook(
                             "artifact_id": artifact_id,
                             "artifact_name": artifact_name,
                             "artifact_hash": runtime_artifact_hash,
-                            "policy_action": queued_policy_action,
+                            "policy_action": policy_action,
                             "changed_fields": changed_capabilities,
                             "artifact_type": runtime_artifact.artifact_type,
                             "source_scope": runtime_artifact.source_scope,
@@ -246,12 +270,16 @@ def _review_runtime_artifact_hook(
                     managed_install=managed_install,
                 )
                 _localize_pending_approval_copy(response_payload, harness=args.harness)
-            policy_action = "allow"
-            response_payload["policy_action"] = "allow"
-            state.action_envelope = action_envelope
+            observed_policy_action = policy_action
+            set_runtime_artifact_hook_final_action(
+                state,
+                _observe_mode_executable_action(state),
+                observed_policy_action=observed_policy_action,
+            )
+            action_envelope = state.action_envelope
+            policy_action = state.policy_action
+            response_payload = state.response_payload
             state.browser_approval_daemon_client = locals().get("browser_approval_daemon_client")
-            state.policy_action = policy_action
-            state.response_payload = response_payload
             return None
         native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
         additional_context = _claude_prompt_additional_context(
@@ -332,9 +360,6 @@ def _review_runtime_artifact_hook(
             approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
             approval_center_url = ensure_guard_daemon(guard_home)
             runtime_detection = _runtime_detection(args.harness, runtime_artifact)
-            queued_policy_action = (
-                "require-reapproval" if cursor_native_queue and policy_action in {"warn", "review"} else policy_action
-            )
             package_evaluation_to_dict = getattr(package_evaluation, "to_dict", None)
             evaluation_payload: dict[str, object] = {
                 "artifacts": [
@@ -342,7 +367,7 @@ def _review_runtime_artifact_hook(
                         "artifact_id": artifact_id,
                         "artifact_name": artifact_name,
                         "artifact_hash": runtime_artifact_hash,
-                        "policy_action": queued_policy_action,
+                        "policy_action": policy_action,
                         "changed_fields": changed_capabilities,
                         "artifact_type": runtime_artifact.artifact_type,
                         "source_scope": runtime_artifact.source_scope,

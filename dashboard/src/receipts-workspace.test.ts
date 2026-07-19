@@ -1,5 +1,5 @@
 import { filterReceiptItems } from "./receipts-workspace";
-import type { GuardReceipt } from "./guard-types";
+import type { GuardAction, GuardReceipt } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -7,7 +7,7 @@ function assert(condition: boolean, message: string): void {
   }
 }
 
-function makeReceipt(index: number, harness = "codex", decision = "allow"): GuardReceipt {
+function makeReceipt(index: number, harness = "codex", decision: GuardAction = "allow"): GuardReceipt {
   return {
     receipt_id: `receipt-${index}`,
     harness,
@@ -26,7 +26,7 @@ function makeReceipt(index: number, harness = "codex", decision = "allow"): Guar
 
 const receipts500: GuardReceipt[] = Array.from({ length: 500 }, (_, i) => {
   const harnesses = ["codex", "claude", "cursor", "copilot", "gemini"];
-  const decisions = ["allow", "block", "ask"];
+  const decisions: GuardAction[] = ["allow", "block", "review"];
   return makeReceipt(i, harnesses[i % harnesses.length], decisions[i % decisions.length]);
 });
 
@@ -43,6 +43,13 @@ assert(wildcardHarnessFilter.length === 500, "T521: wildcard pseudo-harness filt
 const blockedOnly = filterReceiptItems(receipts500, "", "all", "block", "all");
 assert(blockedOnly.length > 0, "T520: filtering by block decision should return results");
 assert(blockedOnly.every((r) => r.policy_decision === "block"), "T520: decision filter should only return matching receipts");
+
+const warningReceipt = makeReceipt(501, "codex", "warn");
+const allowedWithWarnings = filterReceiptItems([...receipts500, warningReceipt], "", "all", "allow", "all");
+assert(
+  allowedWithWarnings.some((receipt) => receipt.policy_decision === "warn"),
+  "P45: legacy receipt filter treats warning launches as allowed",
+);
 
 const searchResult = filterReceiptItems(receipts500, "Tool 42", "all", "all", "all");
 assert(searchResult.length > 0, "T520: search by name should return results");

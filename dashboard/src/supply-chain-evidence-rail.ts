@@ -3,6 +3,7 @@ import type {
   GuardRuntimeSnapshot,
 } from "./guard-types";
 import { isSupplyChainScannerEvidence } from "./guard-types";
+import { guardActionPresentation, isBlockedGuardAction } from "./guard-action";
 
 export type SupplyChainEvidenceRailKind = "block" | "audit" | "sync";
 
@@ -48,7 +49,7 @@ function receiptEvidenceOperations(receipt: GuardReceipt): string[] {
 }
 
 function isPackageBlockReceipt(receipt: GuardReceipt): boolean {
-  if (receipt.policy_decision !== "block") {
+  if (!isBlockedGuardAction(receipt.policy_decision)) {
     return false;
   }
   const operations = receiptEvidenceOperations(receipt);
@@ -133,10 +134,7 @@ function auditRailItem(receipt: GuardReceipt): SupplyChainEvidenceRailItem {
       tone: "attention",
     };
   }
-  const decision =
-    evidence !== undefined && typeof evidence.audit_decision === "string"
-      ? evidence.audit_decision
-      : receipt.policy_decision;
+  const action = guardActionPresentation(receipt.policy_decision);
   const blockedCount =
     evidence !== undefined && typeof evidence.blocked_package_count === "number"
       ? evidence.blocked_package_count
@@ -148,15 +146,29 @@ function auditRailItem(receipt: GuardReceipt): SupplyChainEvidenceRailItem {
   const detail =
     receipt.capabilities_summary.trim().length > 0
       ? receipt.capabilities_summary
-      : `Workspace audit returned ${decision} across ${totalPackages} package(s).`;
+      : `Workspace audit returned ${action.copy} across ${totalPackages} package(s).`;
+  let title = "Workspace audit completed";
+  if (blockedCount > 0) {
+    title = `Audit flagged ${blockedCount} package(s)`;
+  } else if (action.action === "warn") {
+    title = "Workspace audit completed with warning";
+  } else if (action.action === "review") {
+    title = "Workspace audit needs review";
+  } else if (action.action === "require-reapproval") {
+    title = "Workspace audit needs fresh approval";
+  } else if (action.action === "sandbox-required") {
+    title = "Workspace audit requires a sandbox";
+  } else if (action.action === "block") {
+    title = "Workspace audit blocked";
+  }
   return {
     kind: "audit",
     timestamp: receipt.timestamp,
-    title: blockedCount > 0 ? `Audit flagged ${blockedCount} package(s)` : "Workspace audit completed",
+    title,
     detail,
     receiptId: receipt.receipt_id,
     harness: receipt.harness,
-    tone: blockedCount > 0 || decision === "block" ? "attention" : "green",
+    tone: blockedCount > 0 || action.action !== "allow" ? "attention" : "green",
   };
 }
 

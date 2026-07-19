@@ -1,6 +1,7 @@
 import type { GuardReceipt } from "../guard-types";
 import { detectCategory } from "./categories";
 import { harnessDisplayName } from "../approval-center-utils";
+import { guardActionDisposition } from "../guard-action";
 
 export interface PeriodComparison {
   periodDays: number;
@@ -92,8 +93,9 @@ export function computeTrendBuckets(
       const key = formatDateKey(d);
       const bucket = bucketMap.get(key);
       if (!bucket) continue;
-      if (r.policy_decision === "allow") bucket.allowed++;
-      else if (r.policy_decision === "block") bucket.blocked++;
+      const disposition = guardActionDisposition(r.policy_decision);
+      if (disposition === "allowed") bucket.allowed++;
+      else if (disposition === "blocked") bucket.blocked++;
       else bucket.reviewed++;
     } catch {
     }
@@ -128,8 +130,9 @@ export function computeMetrics(
       continue;
     }
 
-    if (r.policy_decision === "allow") allowed++;
-    else if (r.policy_decision === "block") blocked++;
+    const disposition = guardActionDisposition(r.policy_decision);
+    if (disposition === "allowed") allowed++;
+    else if (disposition === "blocked") blocked++;
     else reviewed++;
 
     if (!lastActivityAt || r.timestamp > lastActivityAt) {
@@ -143,14 +146,14 @@ export function computeMetrics(
       allowed: 0,
     };
     hEntry.total++;
-    if (r.policy_decision === "block") hEntry.blocked++;
-    if (r.policy_decision === "allow") hEntry.allowed++;
+    if (disposition === "blocked") hEntry.blocked++;
+    if (disposition === "allowed") hEntry.allowed++;
     byHarness.set(harness, hEntry);
 
     const cat = detectCategory(r);
     const cEntry = byCategory.get(cat) ?? { total: 0, blocked: 0 };
     cEntry.total++;
-    if (r.policy_decision === "block") cEntry.blocked++;
+    if (disposition === "blocked") cEntry.blocked++;
     byCategory.set(cat, cEntry);
 
     const name = r.artifact_name ?? r.artifact_id;
@@ -160,8 +163,8 @@ export function computeMetrics(
       allowed: 0,
     };
     rEntry.total++;
-    if (r.policy_decision === "block") rEntry.blocked++;
-    if (r.policy_decision === "allow") rEntry.allowed++;
+    if (disposition === "blocked") rEntry.blocked++;
+    if (disposition === "allowed") rEntry.allowed++;
     recurringMap.set(name, rEntry);
   }
 
@@ -299,10 +302,10 @@ export function computePeriodComparison(
       if (isNaN(ts)) continue;
       if (ts >= currentStart.getTime() && ts <= base.getTime()) {
         currentTotal++;
-        if (r.policy_decision === "block") currentBlocked++;
+        if (guardActionDisposition(r.policy_decision) === "blocked") currentBlocked++;
       } else if (ts >= previousStart.getTime() && ts < currentStart.getTime()) {
         previousTotal++;
-        if (r.policy_decision === "block") previousBlocked++;
+        if (guardActionDisposition(r.policy_decision) === "blocked") previousBlocked++;
       }
     } catch {
       continue;

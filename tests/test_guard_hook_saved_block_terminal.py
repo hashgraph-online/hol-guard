@@ -6,6 +6,7 @@ import argparse
 import io
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -13,7 +14,10 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_copilot as copilot_hook
 from codex_plugin_scanner.guard.cli import commands_hook_runtime_review as runtime_review
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_state import RuntimeArtifactHookState
+from codex_plugin_scanner.guard.cli.commands_hook_runtime_state import (
+    RuntimeArtifactHookState,
+    set_runtime_artifact_hook_final_action,
+)
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.models import GuardArtifact
@@ -217,8 +221,170 @@ def test_runtime_review_observe_mode_allows_fresh_block_without_approval_queue(
     assert result is None
     assert state.policy_action == "allow"
     assert state.response_payload["policy_action"] == "allow"
+    assert state.response_payload["resolved_policy_action"] == "allow"
     assert state.response_payload["approval_requests"] == []
     assert state.response_payload["observed_terminal_action"] == "block"
+    assert state.response_payload["observed_policy_action"] == "block"
+    assert "terminal_action" not in state.response_payload
+    assert "blocked" not in str(state.response_payload["trigger_summary"]).lower()
+    assert "reviewed" in str(state.response_payload["trigger_summary"]).lower()
+    assert "allows" in str(state.response_payload["why_now"]).lower()
+    assert state.decision_v2_payload["action"] == "allow"
+    assert state.receipt.policy_decision == "allow"
+
+
+def test_runtime_final_action_rewrites_package_copy_and_preserves_observation(
+    tmp_path: Path,
+) -> None:
+    artifact = _artifact(tmp_path)
+    artifact_hash = "guard-approval-context:v1:package-review"
+    observed_user_copy = {
+        "title": "Package warning",
+        "summary": "Guard found a package warning.",
+        "next_step": "Inspect the warning.",
+        "harness_message": "Package action allowed with a warning.",
+    }
+    state = RuntimeArtifactHookState(
+        action_envelope=None,
+        artifact_id=artifact.artifact_id,
+        artifact_name=artifact.name,
+        browser_approval_daemon_client=None,
+        changed_capabilities=["runtime_tool_call"],
+        decision_signals=(),
+        decision_v2_payload={},
+        event_name="PreToolUse",
+        initial_policy_action="review",
+        package_evaluation=object(),
+        policy_action="review",
+        receipt=_runtime_receipt(artifact, artifact_hash, "review"),
+        requested_policy_action="review",
+        response_payload={
+            "policy_action": "review",
+            "risk_summary": "Guard paused this package action for review.",
+            "supply_chain_evaluation": {
+                "decision": "warn",
+                "policy_action": "warn",
+                "risk_summary": "Guard found a package warning.",
+                "user_copy": observed_user_copy,
+            },
+        },
+        risk_summary="Guard paused this package action for review.",
+        runtime_artifact=artifact,
+        runtime_artifact_hash=artifact_hash,
+        scanner_evidence_payload=[],
+        stored_policy_action=None,
+    )
+
+    set_runtime_artifact_hook_final_action(
+        state,
+        "allow",
+        observed_policy_action="review",
+    )
+
+    decision = state.decision_v2_payload
+    package = cast(dict[str, object], state.response_payload["supply_chain_evaluation"])
+    user_copy = cast(dict[str, object], package["user_copy"])
+    assert state.response_payload["policy_action"] == "allow"
+    assert state.response_payload["risk_summary"] == decision["dashboard_primary_detail"]
+    assert "review" not in str(state.response_payload["risk_summary"]).lower()
+    assert "allows" in str(state.response_payload["risk_headline"]).lower()
+    assert package["decision"] == "allow"
+    assert package["policy_action"] == "allow"
+    assert package["risk_summary"] == decision["dashboard_primary_detail"]
+    assert user_copy == {
+        "title": decision["user_title"],
+        "summary": decision["user_body"],
+        "next_step": decision["user_body"],
+        "harness_message": decision["harness_message"],
+    }
+    assert state.response_payload["observed_policy_action"] == "review"
+    assert package["observed_policy_action"] == "warn"
+    assert package["observed_risk_summary"] == "Guard found a package warning."
+    assert package["observed_user_copy"] == observed_user_copy
+
+
+def test_runtime_observe_mode_preserves_executable_package_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact = _artifact(tmp_path)
+    context = _context(tmp_path)
+    artifact_hash = "guard-approval-context:v1:mixed-review-warning"
+    package_evaluation = SimpleNamespace(
+        policy_action="warn",
+        to_dict=lambda: {
+            "decision": "warn",
+            "policy_action": "warn",
+            "risk_summary": "Package warning remains executable.",
+        },
+    )
+    state = RuntimeArtifactHookState(
+        action_envelope=None,
+        artifact_id=artifact.artifact_id,
+        artifact_name=artifact.name,
+        browser_approval_daemon_client=None,
+        changed_capabilities=["runtime_tool_call"],
+        decision_signals=(),
+        decision_v2_payload={},
+        event_name="PreToolUse",
+        initial_policy_action="review",
+        package_evaluation=package_evaluation,
+        policy_action="review",
+        receipt=_runtime_receipt(artifact, artifact_hash, "review"),
+        requested_policy_action="review",
+        response_payload={
+            "policy_action": "review",
+            "risk_summary": "Overall policy requires review.",
+            "policy_composition": {
+                "current_config_action": "review",
+                "package_action": "warn",
+                "authoritative_action": "review",
+            },
+            "supply_chain_evaluation": {
+                "decision": "warn",
+                "policy_action": "warn",
+                "risk_summary": "Package warning remains executable.",
+                "user_copy": {
+                    "title": "Package warning",
+                    "summary": "Package warning remains executable.",
+                },
+            },
+        },
+        risk_summary="Overall policy requires review.",
+        runtime_artifact=artifact,
+        runtime_artifact_hash=artifact_hash,
+        scanner_evidence_payload=[],
+        stored_policy_action=None,
+    )
+    monkeypatch.setattr(runtime_review, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(
+        runtime_review,
+        "load_guard_surface_daemon_client",
+        lambda _guard_home: (_ for _ in ()).throw(RuntimeError("offline fixture")),
+    )
+    monkeypatch.setattr(runtime_review, "queue_blocked_approvals", lambda **_kwargs: [])
+
+    result = runtime_review._review_runtime_artifact_hook(
+        state,
+        _copilot_args(json_output=True),
+        config=GuardConfig(context.guard_home, context.workspace_dir, mode="observe"),
+        context=context,
+        guard_home=context.guard_home,
+        managed_install=None,
+        payload={"hook_event_name": "PreToolUse", "tool_name": "dangerous_delete"},
+        store=GuardStore(context.guard_home),
+        workspace=context.workspace_dir,
+    )
+
+    package = cast(dict[str, object], state.response_payload["supply_chain_evaluation"])
+    assert result is None
+    assert state.policy_action == "warn"
+    assert state.response_payload["policy_action"] == "warn"
+    assert state.response_payload["observed_policy_action"] == "review"
+    assert state.decision_v2_payload["guard_action"] == "warn"
+    assert state.receipt.policy_decision == "warn"
+    assert package["policy_action"] == "warn"
+    assert package["observed_policy_action"] == "warn"
 
 
 def test_copilot_pretool_observe_mode_keeps_saved_block_terminal_with_evidence(

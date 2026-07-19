@@ -165,13 +165,16 @@ class TestGuardApprovals:
         assert pending[0]["approval_url"] == "http://127.0.0.1:4455/approvals/req-123"
         assert pending[0]["workspace"] == str(workspace_dir)
         assert pending[0]["action_envelope_json"] == action_envelope_json
-        assert pending[0]["decision_v2_json"] == decision_v2_json
+        assert pending[0]["decision_v2_json"]["action"] == "ask"
+        assert pending[0]["decision_v2_json"]["reason"] == "require-reapproval"
+        assert pending[0]["decision_v2_json"]["user_title"] == "Fresh approval required"
+        assert pending[0]["decision_v2_json"]["signals"] == []
         assert resolved is not None
         assert resolved["status"] == "resolved"
         assert resolved["resolution_action"] == "allow"
         assert resolved["resolution_scope"] == "artifact"
         assert resolved["action_envelope_json"] == action_envelope_json
-        assert resolved["decision_v2_json"] == decision_v2_json
+        assert resolved["decision_v2_json"] == pending[0]["decision_v2_json"]
 
     def test_guard_store_runtime_snapshot_exposes_pending_request_payload_contract(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -191,6 +194,13 @@ class TestGuardApprovals:
             approval_url="http://127.0.0.1:4455/approvals/req-snapshot-contract",
         )
         store.add_approval_request(request, "2026-04-11T00:00:00+00:00")
+        store.upsert_runtime_state(
+            session_id="session-snapshot-contract",
+            daemon_host="127.0.0.1",
+            daemon_port=4455,
+            started_at="2026-04-11T00:00:00+00:00",
+            last_heartbeat_at="2026-04-11T00:01:00+00:00",
+        )
 
         snapshot = build_runtime_snapshot(
             store=store,
@@ -201,6 +211,10 @@ class TestGuardApprovals:
         items = snapshot["items"]
 
         assert snapshot["pending_count"] == 1
+        assert snapshot["headline_state"] == "needs_decision"
+        assert snapshot["headline_label"] == "Decision needed"
+        assert "waiting for a decision" in snapshot["headline_detail"]
+        assert "blocked" not in snapshot["headline_detail"].lower()
         assert isinstance(queue_summary, dict)
         assert queue_summary["next_request_id"] == "req-snapshot-contract"
         assert isinstance(items, list)
@@ -306,7 +320,8 @@ class TestGuardApprovals:
         assert request is not None
         assert request["request_id"] == "req-old"
         assert request["action_envelope_json"] is None
-        assert request["decision_v2_json"] is None
+        assert request["decision_v2_json"]["action"] == "ask"
+        assert "decision_contract_error" not in request
 
     def test_guard_store_ignores_malformed_action_and_decision_json(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -370,7 +385,8 @@ class TestGuardApprovals:
 
         assert request is not None
         assert request["action_envelope_json"] is None
-        assert request["decision_v2_json"] is None
+        assert request["decision_v2_json"]["action"] == "ask"
+        assert request["decision_contract_error"] == "authoritative_decision_inconsistent"
 
     def test_guard_surface_daemon_client_recovers_missing_auth_token(self, tmp_path, monkeypatch):
         guard_home = tmp_path / "guard-home"

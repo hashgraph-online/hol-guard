@@ -13,6 +13,19 @@ from .store_base import *
 _LOCAL_ONCE_INTEGRITY_PURPOSE = "guard-local-once-approval"
 
 
+def _list_events_query(limit: int, event_name: str | None) -> tuple[str, tuple[object, ...]]:
+    query = """
+        select event_id, event_name, payload_json, occurred_at
+        from guard_events
+    """
+    params: tuple[object, ...] = ()
+    if event_name is not None:
+        query += " where event_name = ?"
+        params = (event_name,)
+    query += " order by occurred_at desc, event_id desc limit ?"
+    return query, (*params, limit)
+
+
 def _local_once_approval_is_reusable(artifact_id: str) -> bool:
     return ":package-request:" in artifact_id
 
@@ -393,16 +406,7 @@ class StoreEventReceiptsMixin:
         return row is not None
 
     def list_events(self, limit: int = 100, event_name: str | None = None) -> list[dict[str, object]]:
-        query = """
-            select event_id, event_name, payload_json, occurred_at
-            from guard_events
-        """
-        params: tuple[object, ...] = ()
-        if event_name is not None:
-            query += " where event_name = ?"
-            params = (event_name,)
-        query += " order by occurred_at desc, event_id desc limit ?"
-        params = (*params, limit)
+        query, params = _list_events_query(limit, event_name)
         with self._connect() as connection:
             rows = connection.execute(query, params).fetchall()
         items: list[dict[str, object]] = []

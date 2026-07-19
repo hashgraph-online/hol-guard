@@ -8,6 +8,8 @@ import {
   HiMiniQuestionMarkCircle,
 } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
+import { guardActionDisposition } from "../guard-action";
+import { filterByDecision } from "./evidence-filters";
 import { groupByCategory, getCategoryInfo, type ReceiptCategory, CATEGORIES, detectCategory } from "./categories";
 import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionSubtitle } from "./plain-english";
 import { formatRelativeTime, harnessDisplayName } from "../approval-center-utils";
@@ -78,7 +80,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
     if (!selectedCategory) return [];
     let items = groups.get(selectedCategory) ?? [];
     if (decisionFilter !== "all") {
-      items = items.filter((r) => r.policy_decision === decisionFilter);
+      items = filterByDecision(items, decisionFilter);
     }
     if (harnessFilter) {
       items = items.filter((r) => r.harness === harnessFilter);
@@ -133,6 +135,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
           >
             <option value="all">All decisions</option>
             <option value="allow">Allowed</option>
+            <option value="ask">Review</option>
             <option value="block">Stopped</option>
           </select>
           <select
@@ -222,7 +225,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
             key={cat.key}
             cat={cat}
             count={items.length}
-            blocked={items.filter((r) => r.policy_decision === "block").length}
+            blocked={items.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length}
             onSelect={handleSelectCategory}
           />
         );

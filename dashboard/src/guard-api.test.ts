@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import {
   buildDemoRuntimeSnapshot,
   clearReviewQueue,
@@ -36,6 +38,47 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const snapshot = buildDemoRuntimeSnapshot();
+
+const normalizedAuthoritySnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  latest_receipts: [
+    {
+      ...snapshot.latest_receipts[0],
+      policy_decision: "future-action",
+    },
+  ],
+  inventory: [
+    {
+      artifact_id: "artifact-unknown-action",
+      harness: "codex",
+      artifact_name: "unknown-action",
+      artifact_type: "mcp_server",
+      source_scope: "project",
+      config_path: ".codex/config.toml",
+      publisher: null,
+      origin_url: null,
+      launch_command: null,
+      transport: "stdio",
+      first_seen_at: "2026-07-18T00:00:00Z",
+      last_seen_at: "2026-07-18T00:00:00Z",
+      last_changed_at: null,
+      last_approved_at: null,
+      removed_at: null,
+      present: true,
+      last_policy_action: "future-action",
+      artifact_hash: "sha256-unknown",
+    },
+  ],
+});
+assert(
+  normalizedAuthoritySnapshot.latest_receipts[0].policy_decision === "require-reapproval" &&
+    normalizedAuthoritySnapshot.latest_receipts[0].decision_contract_error ===
+      "authoritative_decision_inconsistent" &&
+    normalizedAuthoritySnapshot.inventory?.[0].last_policy_action === "require-reapproval" &&
+    normalizedAuthoritySnapshot.inventory?.[0].decision_contract_error ===
+      "authoritative_decision_inconsistent",
+  "P45: runtime receipt and inventory actions fail closed through one normalizer",
+);
 
 const partialSupplyChainSnapshot = normalizeRuntimeSnapshot({
   ...snapshot,
@@ -214,6 +257,50 @@ assert(
   parseActionEnvelope({ ...BASE_ENVELOPE, target_paths: undefined }) === null,
   "T070: missing target_paths falls back to null"
 );
+assert(
+  parseActionEnvelope({ ...BASE_ENVELOPE, pre_execution_result: "future-action" }) === null,
+  "P45: unknown pre-execution action invalidates the envelope",
+);
+
+const parsedBlockedEnvelope = parseActionEnvelope({
+  ...BASE_ENVELOPE,
+  package_intent_kind: "install",
+  package_targets: ["left-pad@1.3.0"],
+  pre_execution_result: "block",
+});
+assert(
+  parsedBlockedEnvelope?.pre_execution_result === "block",
+  "P45: exact pre-execution action survives envelope parsing",
+);
+const cloudActionEnvelopeFixture = JSON.parse(
+  readFileSync(new URL("./test-fixtures/cloud-action-envelope.json", import.meta.url), "utf8"),
+) as unknown;
+const parsedCloudActionEnvelope = parseActionEnvelope(cloudActionEnvelopeFixture);
+assert(
+  parsedCloudActionEnvelope?.policy_action === "sandbox-required" &&
+    parsedCloudActionEnvelope.pre_execution_result === "sandbox-required",
+  "P45: the actual Python cloud envelope fixture round-trips through the dashboard parser",
+);
+for (const [key, value] of [
+  ["actionId", "other-action"],
+  ["actionType", "file_read"],
+  ["policyAction", "block"],
+  ["preExecutionResult", "block"],
+] as const) {
+  assert(
+    parseActionEnvelope({ ...(cloudActionEnvelopeFixture as Record<string, unknown>), [key]: value }) === null,
+    `P45: conflicting documented envelope alias ${key} is rejected`,
+  );
+}
+assert(
+  parsedBlockedEnvelope?.package_intent_kind === "install" &&
+    parsedBlockedEnvelope.package_targets?.[0] === "left-pad@1.3.0",
+  "P45: package intent fields survive envelope parsing",
+);
+assert(
+  parseActionEnvelope({ ...BASE_ENVELOPE, package_targets: ["left-pad", 7] }) === null,
+  "P45: malformed package targets invalidate the envelope",
+);
 
 const parsedShell = parseActionEnvelope({ ...BASE_ENVELOPE, action_type: "shell_command", command: "git diff HEAD~1 -- src/" });
 assert(parsedShell !== null && parsedShell.action_type === "shell_command", "T070: valid shell_command envelope parses correctly");
@@ -320,7 +407,7 @@ const BASE_REQUEST: GuardApprovalRequest = {
   artifact_type: "command",
   artifact_hash: "sha256-shell",
   publisher: null,
-  policy_action: "require-reapproval",
+  policy_action: "block",
   recommended_scope: "artifact",
   changed_fields: ["first_seen"],
   source_scope: "project",
@@ -348,6 +435,7 @@ assert(
 );
 
 const BASE_DECISION_V2: GuardDecisionV2 = {
+  guard_action: "block",
   action: "block",
   reason: "Credential file access detected",
   user_title: "Wants to read a credential file",
@@ -380,9 +468,27 @@ assert(parseDecisionV2(null) === null, "T080: null decision_v2_json falls back t
 assert(parseDecisionV2({}) === null, "T080: empty object falls back to null");
 assert(parseDecisionV2("block") === null, "T080: string decision_v2_json falls back to null");
 assert(
+  parseDecisionV2({ ...BASE_DECISION_V2, guard_action: undefined }) === null,
+  "P45: missing exact Guard action invalidates DecisionV2",
+);
+assert(
+  parseDecisionV2({ ...BASE_DECISION_V2, guard_action: "future-action" }) === null,
+  "P45: unknown exact Guard action invalidates DecisionV2",
+);
+assert(
   parseDecisionV2({ ...BASE_DECISION_V2, action: "unknown_action" }) === null,
   "T080: invalid action value falls back to null"
 );
+assert(
+  parseDecisionV2({ ...BASE_DECISION_V2, guard_action: "allow", action: "block" }) === null,
+  "P45: contradictory exact and product DecisionV2 actions are rejected",
+);
+for (const guardAction of ["review", "require-reapproval", "sandbox-required"] as const) {
+  assert(
+    parseDecisionV2({ ...BASE_DECISION_V2, guard_action: guardAction, action: "ask" }) !== null,
+    `P45: ${guardAction} projects exactly to the legacy ask action`,
+  );
+}
 assert(
   parseDecisionV2({ ...BASE_DECISION_V2, confidence: "unsure" }) === null,
   "T080: invalid confidence value falls back to null"
@@ -407,6 +513,7 @@ assert(
 
 const parsedDecisionV2 = parseDecisionV2(BASE_DECISION_V2);
 assert(parsedDecisionV2 !== null, "T080: valid decision_v2 object parses correctly");
+assert(parsedDecisionV2?.guard_action === "block", "P45: parsed DecisionV2 preserves the exact Guard action");
 assert(parsedDecisionV2?.action === "block", "T080: parsed action matches source");
 assert(parsedDecisionV2?.user_title === "Wants to read a credential file", "T080: parsed user_title matches source");
 assert(parsedDecisionV2?.dashboard_primary_detail === "cat ~/.aws/credentials", "T080: parsed dashboard_primary_detail matches source");
@@ -414,6 +521,14 @@ assert(parsedDecisionV2?.confidence === "strong", "T080: parsed confidence match
 assert(parsedDecisionV2?.retry_instruction === null, "T080: null retry_instruction preserved");
 assert(parsedDecisionV2?.signals.length === 1, "T080: signals array length preserved");
 assert(parsedDecisionV2?.signals[0].signal_id === "secret:filesystem:env", "T080: signal_id preserved");
+assert(
+  parseDecisionV2({ ...BASE_DECISION_V2, final_action: "allow" }) === null,
+  "P45: DecisionV2 rejects hidden action-bearing aliases",
+);
+assert(
+  parseActionEnvelope({ ...BASE_ENVELOPE, final_action: "block" }) === null,
+  "P45: typed action envelopes reject hidden action-bearing aliases",
+);
 
 const normalizedWithV2 = normalizeApprovalRequest({ ...BASE_REQUEST, decision_v2_json: BASE_DECISION_V2 });
 assert(normalizedWithV2.decision_v2_json !== null, "T081: valid decision_v2_json normalizes to non-null");
@@ -427,6 +542,164 @@ const normalizedMalformedV2 = normalizeApprovalRequest({
   decision_v2_json: { action: "not-a-real-action" }
 });
 assert(normalizedMalformedV2.decision_v2_json === null, "T081: malformed decision_v2_json normalizes to null");
+assert(
+  normalizedMalformedV2.decision_contract_error === "authoritative_decision_inconsistent",
+  "P45: malformed decision v2 is flagged as a contract error",
+);
+
+const normalizedContradictoryV2 = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  policy_action: "require-reapproval",
+  decision_v2_json: BASE_DECISION_V2,
+});
+assert(
+  normalizedContradictoryV2.policy_action === "block" &&
+    normalizedContradictoryV2.decision_v2_json === null &&
+    normalizedContradictoryV2.decision_contract_error === "authoritative_decision_inconsistent",
+  "P45: dashboard flags and suppresses copy from contradictory action fields",
+);
+
+const normalizedExactActionContradiction = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  policy_action: "review",
+  decision_v2_json: {
+    ...BASE_DECISION_V2,
+    guard_action: "require-reapproval",
+    action: "ask",
+  },
+});
+assert(
+  normalizedExactActionContradiction.decision_v2_json === null &&
+    normalizedExactActionContradiction.decision_contract_error === "authoritative_decision_inconsistent",
+  "P45: exact review and reapproval actions cannot hide behind the same legacy ask projection",
+);
+
+for (const [guardAction, productAction] of [
+  ["allow", "allow"],
+  ["warn", "warn"],
+  ["review", "ask"],
+  ["require-reapproval", "ask"],
+  ["sandbox-required", "ask"],
+  ["block", "block"],
+] as const) {
+  const normalized = normalizeApprovalRequest({
+    ...BASE_REQUEST,
+    policy_action: guardAction,
+    decision_v2_json: {
+      ...BASE_DECISION_V2,
+      guard_action: guardAction,
+      action: productAction,
+    },
+  });
+  assert(
+    normalized.decision_v2_json?.guard_action === guardAction && normalized.decision_contract_error === undefined,
+    `P45: exact ${guardAction} DecisionV2 survives normalization`,
+  );
+}
+
+const normalizedUnknownAction = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  policy_action: "future-action",
+});
+assert(
+  normalizedUnknownAction.policy_action === "require-reapproval" &&
+    normalizedUnknownAction.decision_contract_error === "authoritative_decision_inconsistent",
+  "P45: unknown approval actions fail closed to review",
+);
+
+const normalizedContradictoryEnvelope = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  policy_action: "require-reapproval",
+  action_envelope_json: { ...BASE_ENVELOPE, pre_execution_result: "block" },
+});
+assert(
+  normalizedContradictoryEnvelope.action_envelope_json === null &&
+    normalizedContradictoryEnvelope.decision_contract_error === "authoritative_decision_inconsistent",
+  "P45: approval normalization suppresses an envelope with contradictory authority",
+);
+
+const normalizedMalformedEnvelope = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  action_envelope_json: ["not-an-envelope"],
+});
+assert(
+  normalizedMalformedEnvelope.action_envelope_json === null &&
+    normalizedMalformedEnvelope.decision_contract_error === "authoritative_decision_inconsistent",
+  "P45: approval normalization flags a malformed non-null envelope",
+);
+
+const contradictoryReceiptSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  latest_receipts: [
+    {
+      ...snapshot.latest_receipts[0],
+      policy_decision: "allow",
+      action_envelope_json: { ...BASE_ENVELOPE, pre_execution_result: "block" },
+    },
+  ],
+});
+assert(
+  contradictoryReceiptSnapshot.latest_receipts[0].policy_decision === "block" &&
+    contradictoryReceiptSnapshot.latest_receipts[0].action_envelope_json === null &&
+    contradictoryReceiptSnapshot.latest_receipts[0].decision_contract_error ===
+      "authoritative_decision_inconsistent",
+  "P45: receipt normalization suppresses an envelope with contradictory authority",
+);
+
+const serverFlaggedAllowSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  latest_receipts: [
+    {
+      ...snapshot.latest_receipts[0],
+      policy_decision: "allow",
+      decision_contract_error: "authoritative_decision_inconsistent",
+    },
+  ],
+});
+assert(
+  serverFlaggedAllowSnapshot.latest_receipts[0].policy_decision === "require-reapproval" &&
+    serverFlaggedAllowSnapshot.latest_receipts[0].decision_contract_error ===
+      "authoritative_decision_inconsistent",
+  "P45: server-flagged receipt contradictions can never render as Allowed",
+);
+
+const {
+  decision_contract_error: _ignoredInventoryContractError,
+  ...legacyAskInventory
+} = normalizedAuthoritySnapshot.inventory![0];
+const legacyAskSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  latest_receipts: [{ ...snapshot.latest_receipts[0], policy_decision: "ask" }],
+  inventory: [{ ...legacyAskInventory, last_policy_action: "ask" }],
+});
+assert(
+  legacyAskSnapshot.latest_receipts[0].policy_decision === "review" &&
+    legacyAskSnapshot.latest_receipts[0].decision_contract_error === undefined &&
+    legacyAskSnapshot.inventory?.[0].last_policy_action === "review" &&
+    legacyAskSnapshot.inventory?.[0].decision_contract_error === undefined,
+  "P45: legacy ask has one exact review projection across receipt and inventory surfaces",
+);
+
+const compatibleLegacyPackageReceiptSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  latest_receipts: [
+    {
+      ...snapshot.latest_receipts[0],
+      policy_decision: "allow",
+      action_envelope_json: {
+        package_manager: "npm",
+        package_targets: ["left-pad@1.3.0"],
+        policy_action: "allow",
+        redacted_command: "npm install left-pad@1.3.0",
+      },
+    },
+  ],
+});
+assert(
+  compatibleLegacyPackageReceiptSnapshot.latest_receipts[0].action_envelope_json === null &&
+    compatibleLegacyPackageReceiptSnapshot.latest_receipts[0].decision_contract_error === undefined,
+  "P45: historical package receipt metadata remains compatible without pretending to be a typed envelope",
+);
 
 const normalizedMissingV2 = normalizeApprovalRequest({ ...BASE_REQUEST });
 assert(normalizedMissingV2.decision_v2_json === null, "T081: absent decision_v2_json normalizes to null");
@@ -1101,7 +1374,7 @@ const fetchResolveCalls = installFetchStub({
     next_selectable_request_id: "req-next",
     remaining_pending_summaries: [{ ...pageItem, request_id: "req-next" }],
     resolved_duplicate_ids: ["req-dupe"],
-    resolution_summary: "Decision saved. 1 blocked action remains.",
+    resolution_summary: "Decision saved. 1 action is awaiting a decision.",
     retry_hint: "Retry the action in your AI assistant if you approved it.",
     copy: {
       title: "Approved. Retry in chat.",

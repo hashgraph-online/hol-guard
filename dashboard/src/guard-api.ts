@@ -8,8 +8,19 @@ import {
   CODEX_RESUME_STATUSES
 } from "./guard-types";
 import { computeTrendBuckets } from "./evidence/evidence-metrics";
+import {
+  AUTHORITATIVE_DECISION_INCONSISTENT,
+  guardActionDisposition,
+  guardDecisionV2Action,
+  isActionBearingKey,
+  isGuardAction,
+  isRecognizedGuardActionInput,
+  mostRestrictiveGuardAction,
+  normalizeGuardAction,
+} from "./guard-action";
 import type {
   GuardActionEnvelope,
+  GuardAction,
   GuardActionType,
   GuardApprovalPage,
   GuardApprovalPageFilters,
@@ -85,9 +96,23 @@ const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
 let guardTokenOverride: string | null = null;
 let guardTokenLocationKey: string | null = null;
 
-type RawGuardApprovalRequest = Omit<GuardApprovalRequest, "action_envelope_json" | "decision_v2_json"> & {
+type RawGuardApprovalRequest = Omit<
+  GuardApprovalRequest,
+  "action_envelope_json" | "decision_v2_json" | "policy_action" | "decision_contract_error"
+> & {
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
+  policy_action?: unknown;
+  decision_contract_error?: unknown;
+};
+
+type RawGuardReceipt = Omit<GuardReceipt, "action_envelope_json" | "policy_decision"> & {
+  action_envelope_json?: unknown;
+  policy_decision?: unknown;
+};
+
+type RawGuardInventoryItem = Omit<GuardInventoryItem, "last_policy_action"> & {
+  last_policy_action?: unknown;
 };
 
 type ApprovalRequestListPayload = {
@@ -100,9 +125,17 @@ type ApprovalRequestListPayload = {
 
 type RuntimeSnapshotPayload = Omit<
   GuardRuntimeSnapshot,
-  "items" | "queue_summary" | "supply_chain" | "managed_installs" | "cloud_command_capability"
+  | "items"
+  | "queue_summary"
+  | "supply_chain"
+  | "managed_installs"
+  | "cloud_command_capability"
+  | "latest_receipts"
+  | "inventory"
 > & {
   items?: RawGuardApprovalRequest[] | null;
+  latest_receipts?: RawGuardReceipt[] | null;
+  inventory?: RawGuardInventoryItem[] | null;
   queue_summary?: unknown;
   supply_chain?: unknown;
   managed_installs?: unknown;
@@ -620,15 +653,57 @@ function isApprovalPageStatus(value: unknown): value is GuardApprovalPageStatus 
   return value === "pending" || value === "resolved" || value === "all";
 }
 
+function matchingAliasedField(
+  raw: Record<string, unknown>,
+  snakeKey: string,
+  camelKey: string,
+): { matches: boolean; value: unknown } {
+  const hasSnake = Object.prototype.hasOwnProperty.call(raw, snakeKey);
+  const hasCamel = Object.prototype.hasOwnProperty.call(raw, camelKey);
+  if (hasSnake && hasCamel && raw[snakeKey] !== raw[camelKey]) {
+    return { matches: false, value: undefined };
+  }
+  return { matches: true, value: hasSnake ? raw[snakeKey] : raw[camelKey] };
+}
+
 export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   if (!isRecord(raw)) {
     return null;
   }
+  const allowedActionFields = new Set([
+    "action_id",
+    "action_type",
+    "pre_execution_result",
+    "policy_action",
+    "actionId",
+    "actionType",
+    "preExecutionResult",
+    "policyAction",
+  ]);
+  if (Object.keys(raw).some((key) => isActionBearingKey(key) && !allowedActionFields.has(key))) {
+    return null;
+  }
+  const aliasedActionId = matchingAliasedField(raw, "action_id", "actionId");
+  const aliasedActionType = matchingAliasedField(raw, "action_type", "actionType");
+  const aliasedPreExecutionResult = matchingAliasedField(
+    raw,
+    "pre_execution_result",
+    "preExecutionResult",
+  );
+  const aliasedPolicyAction = matchingAliasedField(raw, "policy_action", "policyAction");
+  if (
+    !aliasedActionId.matches ||
+    !aliasedActionType.matches ||
+    !aliasedPreExecutionResult.matches ||
+    !aliasedPolicyAction.matches
+  ) {
+    return null;
+  }
   const schemaVersion = raw["schema_version"];
-  const actionId = raw["action_id"];
+  const actionId = aliasedActionId.value;
   const harness = raw["harness"];
   const eventName = raw["event_name"];
-  const actionType = raw["action_type"];
+  const actionType = aliasedActionType.value;
   const workspace = raw["workspace"];
   const workspaceHash = raw["workspace_hash"];
   const toolName = raw["tool_name"];
@@ -641,6 +716,10 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   const mcpTool = raw["mcp_tool"];
   const packageManager = raw["package_manager"];
   const packageName = raw["package_name"];
+  const packageIntentKind = raw["package_intent_kind"];
+  const packageTargets = raw["package_targets"];
+  const preExecutionResult = aliasedPreExecutionResult.value;
+  const policyAction = aliasedPolicyAction.value;
   const scriptName = raw["script_name"];
   const rawPayloadRedacted = raw["raw_payload_redacted"];
   if (
@@ -663,11 +742,18 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
     !isStringOrNull(mcpTool) ||
     !isStringOrNull(packageManager) ||
     !isStringOrNull(packageName) ||
+    (packageIntentKind !== undefined && !isStringOrNull(packageIntentKind)) ||
+    (preExecutionResult !== undefined && preExecutionResult !== null && !isGuardAction(preExecutionResult)) ||
+    (policyAction !== undefined && policyAction !== null && !isGuardAction(policyAction)) ||
     !isStringOrNull(scriptName)
   ) {
     return null;
   }
-  if (!isStringArray(targetPaths) || !isStringArray(networkHosts)) {
+  if (
+    !isStringArray(targetPaths) ||
+    !isStringArray(networkHosts) ||
+    (packageTargets !== undefined && !isStringArray(packageTargets))
+  ) {
     return null;
   }
   if (!isRecord(rawPayloadRedacted)) {
@@ -691,6 +777,12 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
     mcp_tool: mcpTool,
     package_manager: packageManager,
     package_name: packageName,
+    package_intent_kind: isStringOrNull(packageIntentKind) ? packageIntentKind : null,
+    package_targets: isStringArray(packageTargets) ? packageTargets : [],
+    pre_execution_result: isGuardAction(preExecutionResult) ? preExecutionResult : null,
+    ...(policyAction === undefined
+      ? {}
+      : { policy_action: isGuardAction(policyAction) ? policyAction : null }),
     script_name: scriptName,
     raw_payload_redacted: rawPayloadRedacted
   };
@@ -745,6 +837,11 @@ export function parseDecisionV2(raw: unknown): GuardDecisionV2 | null {
   if (!isRecord(raw)) {
     return null;
   }
+  const allowedActionFields = new Set(["guard_action", "action"]);
+  if (Object.keys(raw).some((key) => isActionBearingKey(key) && !allowedActionFields.has(key))) {
+    return null;
+  }
+  const guardAction = raw["guard_action"];
   const action = raw["action"];
   const reason = raw["reason"];
   const userTitle = raw["user_title"];
@@ -756,7 +853,9 @@ export function parseDecisionV2(raw: unknown): GuardDecisionV2 | null {
   const signals = raw["signals"];
   const confidence = raw["confidence"];
   if (
+    !isGuardAction(guardAction) ||
     !isDecisionV2Action(action) ||
+    action !== guardDecisionV2Action(guardAction) ||
     !isNonEmptyString(reason) ||
     !isNonEmptyString(userTitle) ||
     !isNonEmptyString(userBody) ||
@@ -770,6 +869,7 @@ export function parseDecisionV2(raw: unknown): GuardDecisionV2 | null {
     return null;
   }
   return {
+    guard_action: guardAction,
     action,
     reason,
     user_title: userTitle,
@@ -783,11 +883,74 @@ export function parseDecisionV2(raw: unknown): GuardDecisionV2 | null {
   };
 }
 
+type LegacyPackageActionMetadata = Readonly<{
+  recognized: boolean;
+  action: GuardAction | null;
+}>;
+
+/** Recognize the historical package-receipt metadata shape without treating it as a typed action envelope. */
+function parseLegacyPackageActionMetadata(raw: unknown): LegacyPackageActionMetadata {
+  if (
+    !isRecord(raw) ||
+    raw["schema_version"] !== undefined ||
+    !("policy_action" in raw) ||
+    typeof raw["package_manager"] !== "string" ||
+    !isStringArray(raw["package_targets"]) ||
+    typeof raw["redacted_command"] !== "string"
+  ) {
+    return { recognized: false, action: null };
+  }
+  if (Object.keys(raw).some((key) => isActionBearingKey(key) && key !== "policy_action")) {
+    return { recognized: false, action: null };
+  }
+  const action = raw["policy_action"];
+  return { recognized: true, action: isRecognizedGuardActionInput(action) ? normalizeGuardAction(action) : null };
+}
+
 export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardApprovalRequest {
+  const { decision_contract_error: rawContractError, ...baseItem } = item;
+  const policyAction = normalizeGuardAction(item.policy_action);
+  const decisionV2 = parseDecisionV2(item.decision_v2_json);
+  const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
+  const legacyActionMetadata = parseLegacyPackageActionMetadata(item.action_envelope_json);
+  const hasUnknownPolicyAction = !isRecognizedGuardActionInput(item.policy_action);
+  const hasMalformedActionEnvelope =
+    item.action_envelope_json !== undefined &&
+    item.action_envelope_json !== null &&
+    actionEnvelope === null &&
+    !(legacyActionMetadata.recognized && legacyActionMetadata.action !== null);
+  const hasContradictoryActionEnvelope =
+    (actionEnvelope !== null &&
+      [actionEnvelope.pre_execution_result, actionEnvelope.policy_action].some(
+        (action) => action !== undefined && action !== null && action !== policyAction,
+      )) ||
+    (legacyActionMetadata.recognized && legacyActionMetadata.action !== policyAction);
+  const hasDecisionContractError =
+    rawContractError !== undefined ||
+    hasUnknownPolicyAction ||
+    hasMalformedActionEnvelope ||
+    hasContradictoryActionEnvelope ||
+    (item.decision_v2_json !== undefined && item.decision_v2_json !== null && decisionV2 === null) ||
+    (decisionV2 !== null &&
+      (decisionV2.guard_action !== policyAction || decisionV2.action !== guardDecisionV2Action(policyAction)));
+  const failClosedPolicyAction = hasDecisionContractError
+    ? mostRestrictiveGuardAction(
+        policyAction,
+        "require-reapproval",
+        decisionV2?.guard_action,
+        actionEnvelope?.pre_execution_result,
+        actionEnvelope?.policy_action,
+        legacyActionMetadata.action,
+      )
+    : policyAction;
   return {
-    ...item,
-    action_envelope_json: parseActionEnvelope(item.action_envelope_json),
-    decision_v2_json: parseDecisionV2(item.decision_v2_json)
+    ...baseItem,
+    policy_action: failClosedPolicyAction,
+    action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
+    decision_v2_json: hasDecisionContractError ? null : decisionV2,
+    ...(hasDecisionContractError
+      ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT }
+      : {}),
   };
 }
 
@@ -961,6 +1124,8 @@ export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): Guar
   return {
     ...snapshot,
     items: normalizeApprovalRequests(snapshot.items),
+    latest_receipts: normalizeReceipts(snapshot.latest_receipts),
+    inventory: normalizeInventory(snapshot.inventory),
     queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count),
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
     managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
@@ -1267,11 +1432,11 @@ export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
     },
     pending_count: demoRequests.length,
     receipt_count: demoReceipts.length,
-    headline_state: demoRequests.length > 0 ? "blocked" : "connected",
-    headline_label: demoRequests.length > 0 ? "Blocked" : "Connected",
+    headline_state: demoRequests.length > 0 ? "needs_decision" : "connected",
+    headline_label: demoRequests.length > 0 ? "Decision needed" : "Connected",
     headline_detail:
       demoRequests.length > 0
-        ? "A blocked action is waiting for review."
+        ? "An action is waiting for a decision in the review queue."
         : "This machine is connected to Guard Cloud and waiting for the first protected session to appear.",
     sync_configured: true,
     cloud_user_profile: {
@@ -1327,8 +1492,8 @@ export async function fetchInventory(): Promise<GuardInventoryItem[]> {
   if (isGuardDemoMode()) {
     return [];
   }
-  const payload = await readJson<{ items: GuardInventoryItem[] }>("/v1/inventory");
-  return payload.items;
+  const payload = await readJson<{ items: RawGuardInventoryItem[] }>("/v1/inventory");
+  return normalizeInventory(payload.items);
 }
 
 export async function fetchSettings(): Promise<GuardSettingsPayload> {
@@ -1448,14 +1613,43 @@ export async function fetchRequest(requestId: string): Promise<GuardApprovalRequ
   return normalizeApprovalRequest(payload);
 }
 
-type RawGuardReceipt = Omit<GuardReceipt, "action_envelope_json"> & {
-  action_envelope_json?: unknown;
-};
-
 function normalizeReceipt(item: RawGuardReceipt): GuardReceipt {
+  const policyAction = normalizeGuardAction(item.policy_decision);
+  const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
+  const legacyActionMetadata = parseLegacyPackageActionMetadata(item.action_envelope_json);
+  const hasUnknownPolicyAction = !isRecognizedGuardActionInput(item.policy_decision);
+  const hasMalformedActionEnvelope =
+    item.action_envelope_json !== undefined &&
+    item.action_envelope_json !== null &&
+    actionEnvelope === null &&
+    !(legacyActionMetadata.recognized && legacyActionMetadata.action !== null);
+  const hasContradictoryActionEnvelope =
+    (actionEnvelope !== null &&
+      [actionEnvelope.pre_execution_result, actionEnvelope.policy_action].some(
+        (action) => action !== undefined && action !== null && action !== policyAction,
+      )) ||
+    (legacyActionMetadata.recognized && legacyActionMetadata.action !== policyAction);
+  const hasDecisionContractError =
+    item.decision_contract_error !== undefined ||
+    hasUnknownPolicyAction ||
+    hasMalformedActionEnvelope ||
+    hasContradictoryActionEnvelope;
+  const failClosedPolicyAction = hasDecisionContractError
+    ? mostRestrictiveGuardAction(
+        policyAction,
+        "require-reapproval",
+        actionEnvelope?.pre_execution_result,
+        actionEnvelope?.policy_action,
+        legacyActionMetadata.action,
+      )
+    : policyAction;
   return {
     ...item,
-    action_envelope_json: parseActionEnvelope(item.action_envelope_json)
+    policy_decision: failClosedPolicyAction,
+    action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
+    ...(hasDecisionContractError
+      ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT }
+      : {}),
   };
 }
 
@@ -1464,6 +1658,25 @@ function normalizeReceipts(items: RawGuardReceipt[] | null | undefined): GuardRe
     return [];
   }
   return items.map(normalizeReceipt);
+}
+
+function normalizeInventory(items: RawGuardInventoryItem[] | null | undefined): GuardInventoryItem[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items.map((item) => {
+    const hasDecisionContractError =
+      item.decision_contract_error !== undefined || !isRecognizedGuardActionInput(item.last_policy_action);
+    return {
+      ...item,
+      last_policy_action: hasDecisionContractError
+        ? mostRestrictiveGuardAction(item.last_policy_action, "require-reapproval")
+        : normalizeGuardAction(item.last_policy_action),
+      ...(hasDecisionContractError
+        ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT }
+        : {}),
+    };
+  });
 }
 
 export async function fetchReceipts(): Promise<GuardReceipt[]> {
@@ -1553,8 +1766,8 @@ export function normalizeReceiptAnalytics(raw: unknown): GuardReceiptAnalytics |
 }
 
 function buildReceiptAnalyticsFromSample(receipts: GuardReceipt[]): GuardReceiptAnalytics {
-  const allowed = receipts.filter((r) => r.policy_decision === "allow").length;
-  const blocked = receipts.filter((r) => r.policy_decision === "block").length;
+  const allowed = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+  const blocked = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
   const reviewed = receipts.length - allowed - blocked;
   const timestamps = receipts.map((r) => r.timestamp).sort();
   const trend_buckets: GuardReceiptAnalyticsBucket[] = computeTrendBuckets(receipts, 7).map((bucket) => ({
