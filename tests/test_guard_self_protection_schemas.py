@@ -43,6 +43,18 @@ def test_self_protection_schemas_are_valid_draft_2020_12(name: str) -> None:
     Draft202012Validator.check_schema(_schemas()[name])
 
 
+def test_local_integrity_snapshot_rejects_unknown_fields_and_invalid_time() -> None:
+    payload: dict[str, JsonValue] = {
+        "schemaVersion": "local-integrity-snapshot.v1",
+        "generatedAt": "not-a-dateZ",
+        "unexpected": "field",
+    }
+    errors = list(_validator("local-integrity-snapshot.v1").iter_errors(payload))
+    messages = [error.message for error in errors]
+    assert any("does not match" in message for message in messages)
+    assert any("Additional properties are not allowed" in message for message in messages)
+
+
 def test_protection_lease_requires_bounded_attestation_not_commands() -> None:
     payload: dict[str, JsonValue] = {
         "schemaVersion": "protection-lease.v1",

@@ -3,6 +3,7 @@
   "$id": "https://hol.org/schemas/guard/local-integrity-snapshot-v1.schema.json",
   "title": "HOL Guard local integrity snapshot v1",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "schemaVersion",
     "generatedAt",
@@ -22,7 +23,7 @@
   ],
   "properties": {
     "schemaVersion": {"const": "local-integrity-snapshot.v1"},
-    "generatedAt": {"type": "string", "format": "date-time"},
+    "generatedAt": {"type": "string", "format": "date-time", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"},
     "scope": {"const": "machine"},
     "healthy": {"type": "boolean"},
     "assuranceLevel": {"enum": ["user-managed", "mdm-managed-unverified", "mdm-managed"]},
@@ -111,6 +112,7 @@
     },
     "reasonCodes": {
       "type": "array",
+      "maxItems": 64,
       "uniqueItems": true,
       "items": {"$ref": "#/$defs/reasonCode"}
     },
@@ -154,6 +156,7 @@
     },
     "healthyComponent": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["healthy"],
       "properties": {"healthy": {"const": true}}
     },
