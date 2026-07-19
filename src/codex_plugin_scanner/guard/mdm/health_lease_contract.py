@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib
 import json
 import math
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Final, get_args
+from datetime import datetime, timezone
+from typing import Final, Protocol, cast, get_args
 
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
 
@@ -24,8 +25,51 @@ from .contracts import (
     SupervisorState,
 )
 
+
+class LeaseClaims(Protocol):
+    @property
+    def workspace_id(self) -> str: ...
+    @property
+    def device_id(self) -> str: ...
+    @property
+    def machine_installation_id(self) -> str: ...
+    @property
+    def installation_generation(self) -> str: ...
+    @property
+    def sequence(self) -> int: ...
+    @property
+    def issued_at(self) -> str: ...
+    @property
+    def lease_expires_at(self) -> str: ...
+    @property
+    def snapshot_schema_version(self) -> str: ...
+    @property
+    def snapshot_digest(self) -> str: ...
+    @property
+    def previous_lease_digest(self) -> str | None: ...
+    @property
+    def signing_key_id(self) -> str: ...
+
+
+class ProtectionLease(Protocol):
+    @property
+    def claims(self) -> LeaseClaims: ...
+
+    @property
+    def signature(self) -> bytes: ...
+
+    @property
+    def digest(self) -> str: ...
+
+    def to_dict(self) -> dict[str, object]: ...
+
+    def canonical_bytes(self) -> bytes: ...
+
+    @classmethod
+    def parse(cls, payload: bytes) -> ProtectionLease: ...
+
+
 HEALTH_LEASE_SCHEMA: Final = "hol-guard-health-lease.v1"
-PROTECTION_LEASE_SCHEMA: Final = "protection-lease.v1"
 HEALTH_LEASE_OUTBOX_SCHEMA: Final = "hol-guard-health-lease-outbox.v1"
 HEALTH_LEASE_SIGNING_DOMAIN: Final = b"HOL-GUARD-HEALTH-LEASE-V1\x00"
 SIGNATURE_ALGORITHM: Final = "ecdsa-p256-sha256"
@@ -58,21 +102,6 @@ _CLAIM_KEYS = {
     "previousLeaseKeyId",
     "signingKeyId",
 }
-_PROTECTION_CLAIM_KEYS = {
-    "workspaceId",
-    "deviceId",
-    "machineInstallationId",
-    "installationGeneration",
-    "sequence",
-    "issuedAt",
-    "validForSeconds",
-    "snapshotSchemaVersion",
-    "snapshotDigest",
-    "previousLeaseDigest",
-    "signingKeyId",
-    "challenge",
-}
-_CHALLENGE_KEYS = {"challengeId", "issuedAt", "nonce", "validForSeconds"}
 _SNAPSHOT_KEYS = {
     "schemaVersion",
     "generatedAt",
@@ -280,139 +309,6 @@ class HealthLeaseClaims:
         return HEALTH_LEASE_SIGNING_DOMAIN + canonical_json_bytes(self.to_dict())
 
 
-@dataclass(frozen=True, slots=True)
-class ProtectionLeaseChallenge:
-    challenge_id: str
-    issued_at: str
-    nonce: str
-    valid_for_seconds: int
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "challengeId": self.challenge_id,
-            "issuedAt": self.issued_at,
-            "nonce": self.nonce,
-            "validForSeconds": self.valid_for_seconds,
-        }
-
-    @classmethod
-    def parse(cls, raw: object) -> ProtectionLeaseChallenge:
-        if not isinstance(raw, dict):
-            raise ValueError("health_lease_challenge_invalid")
-        _exact_keys(raw, _CHALLENGE_KEYS, "health_lease_challenge_invalid")
-        challenge_id = _safe_id(raw.get("challengeId"))
-        issued_at = raw.get("issuedAt")
-        nonce = raw.get("nonce")
-        valid_for_seconds = raw.get("validForSeconds")
-        if (
-            not isinstance(issued_at, str)
-            or _SNAPSHOT_TIMESTAMP.fullmatch(issued_at) is None
-            or not isinstance(nonce, str)
-            or re.fullmatch(r"[A-Za-z0-9_-]{32,128}", nonce) is None
-            or not isinstance(valid_for_seconds, int)
-            or isinstance(valid_for_seconds, bool)
-            or not 30 <= valid_for_seconds <= 300
-        ):
-            raise ValueError("health_lease_challenge_invalid")
-        try:
-            parsed = datetime.fromisoformat(f"{issued_at[:-1]}+00:00")
-        except ValueError as exc:
-            raise ValueError("health_lease_challenge_invalid") from exc
-        if parsed.tzinfo is None:
-            raise ValueError("health_lease_challenge_invalid")
-        return cls(challenge_id, issued_at, nonce, valid_for_seconds)
-
-
-@dataclass(frozen=True, slots=True)
-class ProtectionLeaseClaims:
-    workspace_id: str
-    device_id: str
-    machine_installation_id: str
-    installation_generation: str
-    sequence: int
-    issued_at: str
-    valid_for_seconds: int
-    snapshot_schema_version: str
-    snapshot_digest: str
-    previous_lease_digest: str | None
-    signing_key_id: str
-    challenge: ProtectionLeaseChallenge | None
-
-    @property
-    def lease_expires_at(self) -> str:
-        issued = _parse_timestamp(self.issued_at)
-        return canonical_timestamp(issued + timedelta(seconds=self.valid_for_seconds))
-
-    @property
-    def previous_lease_key_id(self) -> None:
-        return None
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "workspaceId": self.workspace_id,
-            "deviceId": self.device_id,
-            "machineInstallationId": self.machine_installation_id,
-            "installationGeneration": self.installation_generation,
-            "sequence": self.sequence,
-            "issuedAt": self.issued_at,
-            "validForSeconds": self.valid_for_seconds,
-            "snapshotSchemaVersion": self.snapshot_schema_version,
-            "snapshotDigest": self.snapshot_digest,
-            "previousLeaseDigest": self.previous_lease_digest,
-            "signingKeyId": self.signing_key_id,
-            "challenge": self.challenge.to_dict() if self.challenge is not None else None,
-        }
-
-    @classmethod
-    def parse(cls, raw: object) -> ProtectionLeaseClaims:
-        if not isinstance(raw, dict):
-            raise ValueError("health_lease_invalid")
-        _exact_keys(raw, _PROTECTION_CLAIM_KEYS)
-        sequence = raw.get("sequence")
-        valid_for_seconds = raw.get("validForSeconds")
-        if (
-            not isinstance(sequence, int)
-            or isinstance(sequence, bool)
-            or not 1 <= sequence <= MAX_UINT64
-            or not isinstance(valid_for_seconds, int)
-            or isinstance(valid_for_seconds, bool)
-            or not 180 <= valid_for_seconds <= 1800
-        ):
-            raise ValueError("health_lease_invalid")
-        previous_digest = raw.get("previousLeaseDigest")
-        if (sequence == 1 and previous_digest is not None) or (
-            sequence > 1 and (not isinstance(previous_digest, str) or _HEX_64.fullmatch(previous_digest) is None)
-        ):
-            raise ValueError("health_lease_invalid")
-        issued_at = canonical_timestamp(_parse_timestamp(raw.get("issuedAt")))
-        challenge_raw = raw.get("challenge")
-        challenge = None if challenge_raw is None else ProtectionLeaseChallenge.parse(challenge_raw)
-        if raw.get("snapshotSchemaVersion") != LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION:
-            raise ValueError("health_lease_invalid")
-        if challenge is not None:
-            challenge_issued = datetime.fromisoformat(f"{challenge.issued_at[:-1]}+00:00")
-            lease_issued = _parse_timestamp(issued_at)
-            if not challenge_issued <= lease_issued < challenge_issued + timedelta(seconds=challenge.valid_for_seconds):
-                raise ValueError("health_lease_challenge_invalid")
-        return cls(
-            _safe_id(raw.get("workspaceId")),
-            _safe_id(raw.get("deviceId")),
-            _match(raw.get("machineInstallationId"), _HEX_32),
-            _match(raw.get("installationGeneration"), _HEX_32),
-            sequence,
-            issued_at,
-            valid_for_seconds,
-            LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION,
-            _match(raw.get("snapshotDigest"), _HEX_64),
-            None if previous_digest is None else previous_digest,
-            _match(raw.get("signingKeyId"), _KEY_ID),
-            challenge,
-        )
-
-    def signing_payload(self) -> bytes:
-        return canonical_json_bytes({"claims": self.to_dict(), "schemaVersion": PROTECTION_LEASE_SCHEMA})
-
-
 def _canonical_ecdsa_signature(signature: bytes) -> bytes:
     try:
         r, s = decode_dss_signature(signature)
@@ -474,80 +370,9 @@ class SignedHealthLease:
         return cls(HealthLeaseClaims.parse(raw.get("claims")), signature)
 
 
-def _der_to_p1363(signature: bytes) -> bytes:
-    canonical = _canonical_ecdsa_signature(signature)
-    r, s = decode_dss_signature(canonical)
-    return r.to_bytes(32, "big") + s.to_bytes(32, "big")
-
-
-def _p1363_to_der(signature: bytes) -> bytes:
-    if len(signature) != 64:
-        raise ValueError("health_lease_invalid")
-    r = int.from_bytes(signature[:32], "big")
-    s = int.from_bytes(signature[32:], "big")
-    if not 1 <= r < P256_ORDER or not 1 <= s <= P256_ORDER // 2:
-        raise ValueError("health_lease_invalid")
-    return encode_dss_signature(r, s)
-
-
-@dataclass(frozen=True, slots=True)
-class SignedProtectionLease:
-    claims: ProtectionLeaseClaims
-    signature: bytes
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "schemaVersion": PROTECTION_LEASE_SCHEMA,
-            "claims": self.claims.to_dict(),
-            "signature": {
-                "algorithm": SIGNATURE_ALGORITHM,
-                "keyId": self.claims.signing_key_id,
-                "value": base64.b64encode(_der_to_p1363(self.signature)).decode("ascii"),
-            },
-        }
-
-    def canonical_bytes(self) -> bytes:
-        payload = canonical_json_bytes(self.to_dict())
-        if len(payload) > MAX_LEASE_BYTES:
-            raise ValueError("health_lease_invalid")
-        return payload
-
-    @property
-    def digest(self) -> str:
-        return hashlib.sha256(self.canonical_bytes()).hexdigest()
-
-    @classmethod
-    def parse(cls, payload: bytes) -> SignedProtectionLease:
-        raw = _strict_json(payload, maximum=MAX_LEASE_BYTES, reason="health_lease_invalid")
-        _exact_keys(raw, {"schemaVersion", "claims", "signature"})
-        if raw.get("schemaVersion") != PROTECTION_LEASE_SCHEMA:
-            raise ValueError("health_lease_invalid")
-        claims = ProtectionLeaseClaims.parse(raw.get("claims"))
-        signature_raw = raw.get("signature")
-        if not isinstance(signature_raw, dict):
-            raise ValueError("health_lease_invalid")
-        _exact_keys(signature_raw, {"algorithm", "keyId", "value"})
-        value = signature_raw.get("value")
-        if (
-            signature_raw.get("algorithm") != SIGNATURE_ALGORITHM
-            or signature_raw.get("keyId") != claims.signing_key_id
-            or not isinstance(value, str)
-            or len(value) > 128
-        ):
-            raise ValueError("health_lease_invalid")
-        try:
-            raw_signature = base64.b64decode(value, validate=True)
-            signature = _p1363_to_der(raw_signature)
-        except (ValueError, TypeError) as exc:
-            raise ValueError("health_lease_invalid") from exc
-        if base64.b64encode(raw_signature).decode("ascii") != value:
-            raise ValueError("health_lease_invalid")
-        return cls(claims, signature)
-
-
 @dataclass(frozen=True, slots=True)
 class HealthLeaseOutbox:
-    lease: SignedHealthLease | SignedProtectionLease
+    lease: SignedHealthLease | ProtectionLease
     snapshot_bytes: bytes
 
     def to_dict(self) -> dict[str, object]:
@@ -574,11 +399,12 @@ class HealthLeaseOutbox:
         lease_raw = raw.get("lease")
         if not isinstance(lease_raw, dict):
             raise ValueError("health_lease_outbox_invalid")
-        lease = (
-            SignedProtectionLease.parse(canonical_json_bytes(lease_raw))
-            if lease_raw.get("schemaVersion") == PROTECTION_LEASE_SCHEMA
-            else SignedHealthLease.parse(canonical_json_bytes(lease_raw))
-        )
+        if lease_raw.get("schemaVersion") == "protection-lease.v1":
+            module = importlib.import_module(".protection_lease_contract", __package__)
+            lease_type = cast(type[ProtectionLease], module.SignedProtectionLease)
+            lease: SignedHealthLease | ProtectionLease = lease_type.parse(canonical_json_bytes(lease_raw))
+        else:
+            lease = SignedHealthLease.parse(canonical_json_bytes(lease_raw))
         snapshot_raw = raw.get("snapshot")
         if not isinstance(snapshot_raw, str):
             raise ValueError("health_lease_outbox_invalid")
@@ -596,7 +422,7 @@ class HealthLeaseOutbox:
         return outbox
 
 
-def _validate_snapshot_binding(snapshot: bytes, claims: HealthLeaseClaims | ProtectionLeaseClaims) -> None:
+def _validate_snapshot_binding(snapshot: bytes, claims: LeaseClaims) -> None:
     raw = _strict_json(snapshot, maximum=MAX_SNAPSHOT_BYTES, reason="health_lease_outbox_invalid")
     _exact_keys(raw, _SNAPSHOT_KEYS, "health_lease_outbox_invalid")
     if raw.get("schemaVersion") != claims.snapshot_schema_version:
@@ -703,14 +529,10 @@ def _validate_snapshot_binding(snapshot: bytes, claims: HealthLeaseClaims | Prot
 
 __all__ = [
     "HEALTH_LEASE_SIGNING_DOMAIN",
-    "PROTECTION_LEASE_SCHEMA",
     "HealthLeaseBinding",
     "HealthLeaseClaims",
     "HealthLeaseOutbox",
-    "ProtectionLeaseChallenge",
-    "ProtectionLeaseClaims",
     "SignedHealthLease",
-    "SignedProtectionLease",
     "canonical_json_bytes",
     "canonical_timestamp",
 ]

@@ -21,9 +21,9 @@ from codex_plugin_scanner.guard.mdm.health_lease_ack import HealthLeaseAck
 from codex_plugin_scanner.guard.mdm.health_lease_contract import (
     HealthLeaseBinding,
     HealthLeaseOutbox,
-    ProtectionLeaseChallenge,
 )
 from codex_plugin_scanner.guard.mdm.health_reporter import run_machine_health_cadence
+from codex_plugin_scanner.guard.mdm.protection_lease_contract import ProtectionLeaseChallenge
 
 
 def _paths(root: Path) -> MachinePaths:
@@ -57,6 +57,7 @@ def _outbox() -> HealthLeaseOutbox:
         device_id="device-a",
         machine_installation_id="1" * 32,
         installation_generation="2" * 32,
+        signing_key_id="A" * 43,
         sequence=7,
         issued_at="2026-07-18T18:00:00Z",
         lease_expires_at="2026-07-18T18:15:00Z",
@@ -114,9 +115,7 @@ def test_machine_cadence_delivers_then_answers_only_purpose_bound_challenge(
     delivered: list[HealthLeaseOutbox] = []
     issued_challenges: list[ProtectionLeaseChallenge | None] = []
     acknowledgements: list[HealthLeaseAck] = []
-    challenge = ProtectionLeaseChallenge(
-        "challenge-a", "2026-07-18T17:59:30Z", "n" * 43, 120
-    )
+    challenge = ProtectionLeaseChallenge("challenge-a", "2026-07-18T17:59:30Z", "n" * 43, 120)
 
     class Transport:
         def register_key(self, _payload: bytes) -> None:
@@ -167,6 +166,54 @@ def test_machine_cadence_delivers_then_answers_only_purpose_bound_challenge(
     assert result["state"] == "lease-delivered"
     assert result["challengeResponded"] is True
     assert cast(dict[str, object], result["metrics"])["queueDepth"] == 0
+
+
+def test_machine_cadence_registers_the_recovered_lease_signing_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    recovered = _outbox()
+    recovered.lease.claims.signing_key_id = "p" * 43
+    registered_key_ids: list[str | None] = []
+
+    class Transport:
+        def register_key(self, _payload: bytes) -> None:
+            return None
+
+        def deliver_lease(self, outbox: HealthLeaseOutbox) -> HealthLeaseAck:
+            claims = outbox.lease.claims
+            return HealthLeaseAck(
+                "accepted",
+                claims.workspace_id,
+                claims.device_id,
+                claims.machine_installation_id,
+                claims.installation_generation,
+                claims.sequence,
+                outbox.lease.digest,
+                "2026-07-18T18:00:01.000Z",
+            )
+
+        def poll_challenge(self, **_kwargs: object) -> None:
+            return None
+
+    def registration(*_args: object, key_id: str | None = None, **_kwargs: object) -> bytes:
+        registered_key_ids.append(key_id)
+        return b"registration"
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.mdm.health_reporter.build_machine_health_key_registration",
+        registration,
+    )
+
+    run_machine_health_cadence(
+        paths=_paths(tmp_path),
+        system_name="Darwin",
+        policy_loader=lambda **_kwargs: _policy(),
+        lease_issuer=lambda *_args, **_kwargs: recovered,
+        lease_acknowledger=lambda _paths, _binding, ack, **_kwargs: ack,
+        transport=Transport(),
+    )
+
+    assert registered_key_ids == ["p" * 43]
 
 
 def test_delivery_failure_is_exposed_without_weakening_local_enforcement(

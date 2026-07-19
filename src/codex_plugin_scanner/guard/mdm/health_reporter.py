@@ -81,6 +81,7 @@ def run_machine_health_cadence(
                     binding,
                     installation_generation=outbox.lease.claims.installation_generation,
                     machine_installation_id=outbox.lease.claims.machine_installation_id,
+                    key_id=outbox.lease.claims.signing_key_id,
                     system_name=resolved_system,
                 )
             )

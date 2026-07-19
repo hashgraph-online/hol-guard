@@ -14,6 +14,7 @@ from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import cast
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
@@ -37,14 +38,16 @@ from .health_lease_contract import (
     HealthLeaseBinding,
     HealthLeaseClaims,
     HealthLeaseOutbox,
-    ProtectionLeaseChallenge,
-    ProtectionLeaseClaims,
     SignedHealthLease,
-    SignedProtectionLease,
     canonical_json_bytes,
     canonical_timestamp,
 )
 from .integrity import machine_integrity_snapshot
+from .protection_lease_contract import (
+    ProtectionLeaseChallenge,
+    ProtectionLeaseClaims,
+    SignedProtectionLease,
+)
 
 _OUTBOX_NAME = "health-lease-outbox.json"
 _ACK_NAME = "health-lease-ack.json"
@@ -371,12 +374,12 @@ def acknowledge_pending_health_lease(
             pending.lease.claims.signing_key_id,
             system_name=resolved_system,
         )
-        _verify_signature(generation, pending.lease.claims, pending.lease.signature)
+        _verify_signature(generation, cast(LeaseClaims, pending.lease.claims), pending.lease.signature)
         _validate_ack(ack, pending)
         if requires_recovery:
             recovered = _advanced_record(
                 record,
-                pending.lease,
+                cast(SignedHealthLease | SignedProtectionLease, pending.lease),
                 system_name=resolved_system,
                 now=ack.received_datetime,
             )
@@ -425,9 +428,14 @@ def issue_or_load_pending_health_lease(
                 pending.lease.claims.signing_key_id,
                 system_name=resolved_system,
             )
-            _verify_signature(generation, pending.lease.claims, pending.lease.signature)
+            _verify_signature(generation, cast(LeaseClaims, pending.lease.claims), pending.lease.signature)
             if requires_recovery:
-                recovered = _advanced_record(record, pending.lease, system_name=resolved_system, now=resolved_now)
+                recovered = _advanced_record(
+                    record,
+                    cast(SignedHealthLease | SignedProtectionLease, pending.lease),
+                    system_name=resolved_system,
+                    now=resolved_now,
+                )
                 _atomic_write(paths, recovered)
                 record = recovered
             if ack is not None and _ack_matches_pending(ack, pending):

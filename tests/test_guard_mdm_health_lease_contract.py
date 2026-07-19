@@ -15,11 +15,13 @@ from codex_plugin_scanner.guard.mdm.health_lease_contract import (
     MAX_LEASE_BYTES,
     HealthLeaseClaims,
     HealthLeaseOutbox,
+    SignedHealthLease,
+    canonical_json_bytes,
+)
+from codex_plugin_scanner.guard.mdm.protection_lease_contract import (
     ProtectionLeaseChallenge,
     ProtectionLeaseClaims,
-    SignedHealthLease,
     SignedProtectionLease,
-    canonical_json_bytes,
 )
 
 
@@ -92,9 +94,7 @@ def test_protection_lease_round_trips_frozen_p1363_contract_and_challenge() -> N
     parsed = SignedProtectionLease.parse(lease.canonical_bytes())
 
     assert parsed == SignedProtectionLease(claims, parsed.signature)
-    assert parsed.claims.challenge == ProtectionLeaseChallenge(
-        "challenge-a", "2026-07-18T13:59:30Z", "n" * 43, 120
-    )
+    assert parsed.claims.challenge == ProtectionLeaseChallenge("challenge-a", "2026-07-18T13:59:30Z", "n" * 43, 120)
     assert parsed.claims.lease_expires_at == "2026-07-18T14:15:00Z"
     signature = cast(dict[str, object], parsed.to_dict()["signature"])
     assert signature["keyId"] == key_id

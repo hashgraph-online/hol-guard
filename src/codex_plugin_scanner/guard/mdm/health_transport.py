@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from .health_lease_ack import HealthLeaseAck
-from .health_lease_contract import HealthLeaseBinding, HealthLeaseOutbox, ProtectionLeaseChallenge
+from .health_lease_contract import HealthLeaseBinding, HealthLeaseOutbox
+from .protection_lease_contract import ProtectionLeaseChallenge
 
 _CHALLENGE_SCHEMA = "guard-protection-attestation-challenge.v1"
 _CHALLENGE_KEYS = {

@@ -21,6 +21,7 @@ def build_machine_health_key_registration(
     *,
     installation_generation: str,
     machine_installation_id: str,
+    key_id: str | None = None,
     now: datetime | None = None,
     system_name: str,
 ) -> bytes:
@@ -28,7 +29,7 @@ def build_machine_health_key_registration(
 
     from .device_key_native import sign_health_key_registration
 
-    generation = verified_machine_device_key_by_id(paths, system_name=system_name)
+    generation = verified_machine_device_key_by_id(paths, key_id, system_name=system_name)
     timestamp = canonical_timestamp((now or datetime.now(timezone.utc)).astimezone(timezone.utc))
     registration: dict[str, object] = {
         "algorithm": "ecdsa-p256-sha256",

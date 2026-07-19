@@ -107,7 +107,7 @@ def _validated_canonical_protection_lease(unsigned_lease: bytes) -> str:
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     if canonical != text:
         raise ValueError("health_lease_claims_invalid")
-    from .health_lease_contract import ProtectionLeaseClaims
+    from .protection_lease_contract import ProtectionLeaseClaims
 
     try:
         ProtectionLeaseClaims.parse(payload.get("claims"))
