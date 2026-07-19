@@ -336,12 +336,25 @@ class GuardConfig:
         artifact_id: str | None,
         publisher: str | None,
     ) -> GuardAction | None:
+        narrow_override = self.resolve_artifact_or_publisher_action_override(
+            artifact_id,
+            publisher,
+        )
+        if narrow_override is not None:
+            return narrow_override
+        if self.harness_actions is not None and harness in self.harness_actions:
+            return self.harness_actions[harness]
+        return None
+
+    def resolve_artifact_or_publisher_action_override(
+        self,
+        artifact_id: str | None,
+        publisher: str | None,
+    ) -> GuardAction | None:
         if artifact_id is not None and self.artifact_actions is not None and artifact_id in self.artifact_actions:
             return self.artifact_actions[artifact_id]
         if publisher is not None and self.publisher_actions is not None and publisher in self.publisher_actions:
             return self.publisher_actions[publisher]
-        if self.harness_actions is not None and harness in self.harness_actions:
-            return self.harness_actions[harness]
         return None
 
 
