@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import platform
+import re
 import time
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
@@ -22,6 +24,17 @@ _DEVICE_LOCK = "selfProtection.deviceId"
 PolicyLoader = Callable[..., ManagedPolicyState]
 LeaseIssuer = Callable[..., HealthLeaseOutbox]
 LeaseAcknowledger = Callable[..., HealthLeaseAck]
+
+_SAFE_TRANSPORT_REASON_CODES = frozenset(
+    {
+        "health_key_registration_ack_invalid",
+        "health_lease_challenge_invalid",
+        "health_lease_delivery_auth_invalid",
+        "health_lease_delivery_response_oversized",
+    }
+)
+_SAFE_HTTP_REASON = re.compile(r"health_(?:key_registration|lease_challenge|lease_delivery)_http_[1-5][0-9]{2}")
+_SAFE_STRUCTURED_HTTP_REASON = re.compile(r"(health_lease_delivery_http_[1-5][0-9]{2}):(.+)")
 
 
 def _machine_binding(policy_state: ManagedPolicyState) -> HealthLeaseBinding:
@@ -160,8 +173,18 @@ def run_machine_health_cadence(
 
 
 def _bounded_reason(error: BaseException) -> str:
-    reason = str(error).strip().splitlines()[0] if str(error).strip() else type(error).__name__
-    return reason[:128]
+    reason = str(error).strip()
+    if reason in _SAFE_TRANSPORT_REASON_CODES or _SAFE_HTTP_REASON.fullmatch(reason):
+        return reason
+    structured = _SAFE_STRUCTURED_HTTP_REASON.fullmatch(reason)
+    if structured is not None:
+        cloud_code_digest = hashlib.sha256(structured.group(2).encode("utf-8")).hexdigest()[:12]
+        return f"{structured.group(1)}:cloud_error_{cloud_code_digest}"[:128]
+    if isinstance(error, TimeoutError):
+        return "health_transport_timeout"
+    if isinstance(error, ConnectionError):
+        return "health_transport_unavailable"
+    return "health_transport_failure"
 
 
 def _key_storage_health(outbox: HealthLeaseOutbox) -> str:
