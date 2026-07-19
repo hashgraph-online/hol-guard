@@ -77,7 +77,9 @@ jobs:
 
   build:
     name: Build + Verify
-    if: github.event_name != 'workflow_dispatch' || github.run_attempt == 1
+    if: >-
+      (github.event_name != 'workflow_dispatch' || github.run_attempt == 1) &&
+      (github.event_name != 'push' || github.run_attempt == 1)
     needs: authorize-release
     runs-on: ubuntu-latest
     outputs:
@@ -191,6 +193,12 @@ jobs:
           print(f"{os.environ['BASE_VERSION']}.dev{pair(pair(int(os.environ['PR_NUMBER']), int(os.environ['GITHUB_RUN_NUMBER'])), int(os.environ['GITHUB_RUN_ATTEMPT']))}")
           PY
             )
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+            CHANNEL="stable"
+            VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+              list-versions --registry pypi)
+            VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
+              --base-version "$BASE_VERSION" <<< "$VERSIONS")
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
@@ -554,6 +562,308 @@ jobs:
           [[ -n "$wheel" ]]
           [[ "$(uv tool run --from "$wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
 
+  publish-main-testpypi:
+    name: Verify main artifact on TestPyPI
+    if: >-
+      always() &&
+      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      github.event_name == 'push' &&
+      github.run_attempt == 1 &&
+      github.ref == 'refs/heads/main' &&
+      needs.build.result == 'success' &&
+      needs.build.outputs.channel == 'stable'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.build.outputs.source_sha }}
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: distributions
+          path: dist/
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: distribution-sha256
+      - name: Verify immutable build artifact
+        run: sha256sum --check distribution-sha256.txt
+      - name: Keep only the Guard release distribution
+        run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
+      - name: Revalidate main source before TestPyPI
+        env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main
+      - name: Inspect TestPyPI release state
+        id: testpypi
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
+            verify-release --registry testpypi --version "$VERSION" --dist-dir dist)
+          status=$(jq -r '.status' <<< "$result")
+          if [[ "$status" == "absent" ]]; then
+            echo "upload=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$status" == "exact" ]]; then
+            echo "upload=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unexpected TestPyPI status: $status" >&2
+            exit 1
+          fi
+      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        if: steps.testpypi.outputs.upload == 'true'
+        with:
+          repository-url: https://test.pypi.org/legacy/
+      - name: Download and verify exact TestPyPI artifacts
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          for attempt in {1..12}; do
+            if ! result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
+              verify-release --registry testpypi --version "$VERSION" --dist-dir dist \
+              --download-dir verified-testpypi); then
+              exit 1
+            fi
+            status=$(jq -r '.status' <<< "$result")
+            if [[ "$status" == "exact" ]]; then
+              break
+            fi
+            if [[ "$status" != "absent" || "$attempt" == "12" ]]; then
+              echo "TestPyPI did not expose the exact release artifacts" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          wheel=$(jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$result")
+          [[ -n "$wheel" ]]
+          [[ "$(uv tool run --from "$wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
+
+  publish-main-pypi:
+    name: Publish main release to PyPI
+    if: >-
+      always() &&
+      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      github.event_name == 'push' &&
+      github.run_attempt == 1 &&
+      github.ref == 'refs/heads/main' &&
+      needs.build.result == 'success' &&
+      needs.publish-main-testpypi.result == 'success' &&
+      needs.build.outputs.channel == 'stable'
+    needs: [build, publish-main-testpypi]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.build.outputs.source_sha }}
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: distributions
+          path: dist/
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: distribution-sha256
+      - name: Verify the TestPyPI-proven artifact
+        run: sha256sum --check distribution-sha256.txt
+      - name: Keep only the Guard release distribution
+        run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
+      - name: Revalidate main publication
+        env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main
+          BASE_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          VERSIONS=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
+            list-versions --registry pypi)
+          PRIOR_VERSIONS=$(jq --arg version "$VERSION" '[.[] | select(. != $version)]' <<< "$VERSIONS")
+          EXPECTED_VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
+            --base-version "$BASE_VERSION" <<< "$PRIOR_VERSIONS")
+          if [[ "$EXPECTED_VERSION" != "$VERSION" ]]; then
+            echo "Main release version changed before publication" >&2
+            exit 1
+          fi
+          LATEST_VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
+            --base-version "$BASE_VERSION" --latest-existing <<< "$PRIOR_VERSIONS")
+          if [[ -n "$LATEST_VERSION" ]]; then
+            git fetch --no-tags origin "+refs/tags/v${LATEST_VERSION}:refs/tags/v${LATEST_VERSION}"
+            if ! git merge-base --is-ancestor "v${LATEST_VERSION}^{commit}" "$SOURCE_SHA"; then
+              echo "Main release source predates the latest stable release" >&2
+              exit 1
+            fi
+          fi
+      - name: Inspect PyPI release state
+        id: pypi
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
+            verify-release --registry pypi --version "$VERSION" --dist-dir dist)
+          status=$(jq -r '.status' <<< "$result")
+          if [[ "$status" == "absent" ]]; then
+            echo "upload=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$status" == "exact" ]]; then
+            echo "upload=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unexpected PyPI status: $status" >&2
+            exit 1
+          fi
+      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        if: steps.pypi.outputs.upload == 'true'
+      - name: Download and verify exact PyPI artifacts
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          for attempt in {1..12}; do
+            if ! result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
+              verify-release --registry pypi --version "$VERSION" --dist-dir dist \
+              --download-dir verified-pypi); then
+              exit 1
+            fi
+            status=$(jq -r '.status' <<< "$result")
+            if [[ "$status" == "exact" ]]; then
+              break
+            fi
+            if [[ "$status" != "absent" || "$attempt" == "12" ]]; then
+              echo "PyPI did not expose the exact release artifacts" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          wheel=$(jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$result")
+          [[ -n "$wheel" ]]
+          [[ "$(uv tool run --from "$wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
+
+  release-main:
+    name: Create main GitHub release
+    if: >-
+      always() &&
+      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      github.event_name == 'push' &&
+      github.run_attempt == 1 &&
+      github.ref == 'refs/heads/main' &&
+      needs.build.result == 'success' &&
+      needs.publish-main-pypi.result == 'success' &&
+      needs.build.outputs.channel == 'stable'
+    needs: [build, publish-main-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.build.outputs.source_sha }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: distributions
+          path: dist/
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: distribution-sha256
+      - name: Download release toolchain SBOM
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-toolchain-sbom
+          path: dist/
+      - name: Verify and select release assets
+        run: |
+          sha256sum --check distribution-sha256.txt
+          rm -f dist/plugin_scanner-* dist/plugin-scanner-*
+      - name: Attest main release assets
+        id: provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
+        with:
+          subject-path: dist/*
+      - name: Materialize provenance bundle
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: cp "${{ steps.provenance.outputs.bundle-path }}" "dist/hol-guard-v${VERSION}.intoto.jsonl"
+      - name: Create discoverable main release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          tag="v${VERSION}"
+          remote_tag_sha=$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1}')
+          if [[ -z "$remote_tag_sha" ]]; then
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${tag}" \
+              -f sha="$SOURCE_SHA" >/dev/null
+            remote_tag_sha=$(git ls-remote --exit-code origin "refs/tags/${tag}" | awk '{print $1}')
+          fi
+          if [[ "$remote_tag_sha" != "$SOURCE_SHA" ]]; then
+            echo "Stable tag does not target the published source" >&2
+            exit 1
+          fi
+          if release_json=$(gh release view "$tag" --json isDraft,isPrerelease 2>/dev/null); then
+            if ! jq -e '.isDraft == false and .isPrerelease == false' <<< "$release_json" >/dev/null; then
+              echo "Existing stable release is a draft or prerelease" >&2
+              exit 1
+            fi
+            existing_dir=$(mktemp -d)
+            gh release download "$tag" --dir "$existing_dir"
+            mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
+            mapfile -d '' remote_files < <(find "$existing_dir" -maxdepth 1 -type f -print0 | sort -z)
+            [[ "${#local_files[@]}" -gt 0 ]]
+            [[ "${#local_files[@]}" == "${#remote_files[@]}" ]]
+            for local_file in "${local_files[@]}"; do
+              remote_file="$existing_dir/$(basename "$local_file")"
+              [[ -f "$remote_file" ]]
+              if [[ "$remote_file" != *.intoto.jsonl ]]; then
+                cmp --silent "$local_file" "$remote_file"
+              fi
+            done
+            bundle="$existing_dir/hol-guard-v${VERSION}.intoto.jsonl"
+            [[ -s "$bundle" ]]
+            shopt -s nullglob
+            remote_guard_files=("$existing_dir"/hol_guard-*)
+            [[ "${#remote_guard_files[@]}" -gt 0 ]]
+            for remote_file in "${remote_guard_files[@]}"; do
+              gh attestation verify "$remote_file" --repo "$GITHUB_REPOSITORY" \
+                --bundle "$bundle" --source-digest "$SOURCE_SHA" >/dev/null
+            done
+            exit 0
+          fi
+          body_file=$(mktemp)
+          cat > "$body_file" <<EOF
+          Guard ${VERSION}
+
+          Install this release:
+
+          \`\`\`bash
+          uv tool install "hol-guard[cisco]==${VERSION}"
+          \`\`\`
+          EOF
+          mapfile -d '' ASSET_FILES < <(find dist -maxdepth 1 -type f -print0 | sort -z)
+          gh release create "$tag" \
+            --repo "${{ github.repository }}" \
+            --target "$SOURCE_SHA" \
+            --title "Guard ${VERSION}" \
+            --notes-file "$body_file" \
+            --verify-tag \
+            "${ASSET_FILES[@]}"
+
   release-alpha:
     name: Create alpha GitHub prerelease
     if: >-
@@ -663,13 +973,25 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      github.event_name == 'workflow_dispatch' &&
-      github.run_attempt == 1 &&
       needs.build.result == 'success' &&
-      needs.build.outputs.channel == 'alpha' &&
-      needs.publish-alpha-pypi.result == 'success' &&
-      needs.release-alpha.result == 'success'
-    needs: [build, publish-alpha-pypi, release-alpha]
+      (
+        (
+          github.event_name == 'workflow_dispatch' &&
+          github.run_attempt == 1 &&
+          needs.build.outputs.channel == 'alpha' &&
+          needs.publish-alpha-pypi.result == 'success' &&
+          needs.release-alpha.result == 'success'
+        ) ||
+        (
+          github.event_name == 'push' &&
+          github.run_attempt == 1 &&
+          github.ref == 'refs/heads/main' &&
+          needs.build.outputs.channel == 'stable' &&
+          needs.publish-main-pypi.result == 'success' &&
+          needs.release-main.result == 'success'
+        )
+      )
+    needs: [build, publish-alpha-pypi, publish-main-pypi, release-alpha, release-main]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -699,6 +1021,9 @@ jobs:
           {
             echo "value<<EOF"
             echo "${IMAGE_NAME}:${VERSION}"
+            if [[ "${{ needs.build.outputs.channel }}" == "stable" ]]; then
+              echo "${IMAGE_NAME}:latest"
+            fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5
