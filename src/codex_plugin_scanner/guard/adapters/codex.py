@@ -11,7 +11,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlencode
 
 from ...version import __version__
@@ -201,6 +201,8 @@ _CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.
 _CODEX_GUARD_PERMISSION_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
 _SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
+_AUTHORITATIVE_ENFORCEMENT_BOUNDARY = "codex-native-hooks"
+_AUTHORITATIVE_HOOK_UNAVAILABLE_REASON = "codex_authoritative_hook_unavailable"
 _DAEMON_BRIDGE_PATH_SUFFIX = (
     "codex_plugin_scanner",
     "guard",
@@ -237,22 +239,25 @@ def _strict_json_object(path: Path, *, label: str) -> dict[str, object]:
     return payload
 
 
-def _local_hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
-    resolved_home = context.home_dir.resolve()
-    resolved_user_home = Path.home().resolve()
+def _local_hook_command_parts_for_home_mode(
+    context: HarnessContext,
+    *,
+    home_is_current: bool,
+    python_executable: str,
+) -> tuple[str, ...]:
     guard_args = [
         "guard",
         "hook",
         "--harness",
         "codex",
     ]
-    if resolved_home != resolved_user_home:
+    if not home_is_current:
         guard_args.extend(["--home", str(context.home_dir)])
-        if context.guard_home.resolve() != resolved_home:
+        if context.guard_home.resolve() != context.home_dir.resolve():
             guard_args.extend(["--guard-home", str(context.guard_home)])
     if context.workspace_dir is not None:
         guard_args.extend(["--workspace", str(context.workspace_dir)])
-    return (_guard_python_executable(), "-m", "codex_plugin_scanner.cli", *guard_args)
+    return (python_executable, "-m", "codex_plugin_scanner.cli", *guard_args)
 
 
 def _guard_python_executable() -> str:
@@ -261,13 +266,7 @@ def _guard_python_executable() -> str:
     return str(Path(sys.executable).expanduser().absolute())
 
 
-def _runtime_guard_home(context: HarnessContext) -> Path:
-    if context.home_dir.resolve() == Path.home().resolve():
-        return resolve_guard_home()
-    return context.guard_home
-
-
-def _daemon_start_command(guard_home: Path) -> tuple[str, ...]:
+def _daemon_start_command(guard_home: Path, *, python_executable: str = sys.executable) -> tuple[str, ...]:
     package_root = Path(__file__).resolve().parents[3]
     code = (
         "import sys;"
@@ -276,21 +275,32 @@ def _daemon_start_command(guard_home: Path) -> tuple[str, ...]:
         "from codex_plugin_scanner.guard.daemon import ensure_guard_daemon;"
         f"ensure_guard_daemon(Path({str(guard_home)!r}))"
     )
-    return (_guard_python_executable(), "-c", code)
+    return (python_executable, "-c", code)
 
 
-def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
-    guard_home = _runtime_guard_home(context)
+def _hook_command_parts_for_home_mode(
+    context: HarnessContext,
+    *,
+    home_is_current: bool,
+    python_executable: str,
+) -> tuple[str, ...]:
+    guard_home = resolve_guard_home() if home_is_current else context.guard_home
     query = {"guard-home": str(guard_home)}
-    if context.home_dir.resolve() != Path.home().resolve():
+    if not home_is_current:
         query["home"] = str(context.home_dir)
     if context.workspace_dir is not None:
         query["workspace"] = str(context.workspace_dir)
     long_timeout = _post_tool_hook_timeout_seconds(context)
     config = {
         "state_path": str(guard_home / "daemon-state.json"),
-        "fallback_command": list(_local_hook_command_parts(context)),
-        "start_command": list(_daemon_start_command(guard_home)),
+        "fallback_command": list(
+            _local_hook_command_parts_for_home_mode(
+                context,
+                home_is_current=home_is_current,
+                python_executable=python_executable,
+            )
+        ),
+        "start_command": list(_daemon_start_command(guard_home, python_executable=python_executable)),
         "query": urlencode(query),
         "hook_timeouts": {
             "PreToolUse": long_timeout,
@@ -300,7 +310,15 @@ def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
         },
     }
     bridge_path = Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()
-    return (_guard_python_executable(), str(bridge_path), json.dumps(config, separators=(",", ":")))
+    return (python_executable, str(bridge_path), json.dumps(config, separators=(",", ":")))
+
+
+def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
+    return _hook_command_parts_for_home_mode(
+        context,
+        home_is_current=context.home_dir.resolve() == Path.home().resolve(),
+        python_executable=_guard_python_executable(),
+    )
 
 
 def _hook_command(context: HarnessContext) -> str:
@@ -620,6 +638,63 @@ def _is_managed_hook_group(group: object) -> bool:
     return any(_is_managed_hook_entry(entry) for entry in hooks)
 
 
+def _hook_command_matches_current_boundary(command: object, context: HarnessContext) -> bool:
+    tokens = _split_hook_command(command)
+    if tokens is None or len(tokens) != 3:
+        return False
+    try:
+        if Path(tokens[0]).resolve() != Path(sys.executable).resolve():
+            return False
+        if Path(tokens[1]).resolve() != Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve():
+            return False
+    except OSError:
+        return False
+    current_home_mode = context.home_dir.resolve() == Path.home().resolve()
+    for home_is_current in (current_home_mode, not current_home_mode):
+        expected_tokens = _hook_command_parts_for_home_mode(
+            context,
+            home_is_current=home_is_current,
+            python_executable=tokens[0],
+        )
+        if tuple(tokens) == expected_tokens:
+            return True
+    return False
+
+
+def _is_current_managed_hook_group(
+    group: object,
+    expected: Mapping[str, object],
+    context: HarnessContext,
+) -> bool:
+    """Require an intact Guard-owned group used by the launch security boundary."""
+
+    if not isinstance(group, dict):
+        return False
+    group_payload = cast(dict[str, object], group)
+    actual_hooks = group_payload.get("hooks")
+    expected_hooks = expected.get("hooks")
+    if not isinstance(actual_hooks, list):
+        return False
+    if not isinstance(expected_hooks, list):
+        return False
+    actual_hook_entries = cast(list[object], actual_hooks)
+    expected_hook_entries = cast(list[object], expected_hooks)
+    if len(actual_hook_entries) != 1 or len(expected_hook_entries) != 1:
+        return False
+    actual_entry_value = actual_hook_entries[0]
+    expected_entry_value = expected_hook_entries[0]
+    if not isinstance(actual_entry_value, dict) or not isinstance(expected_entry_value, dict):
+        return False
+    actual_entry = cast(dict[str, object], actual_entry_value)
+    expected_entry = cast(dict[str, object], expected_entry_value)
+    if not _hook_command_matches_current_boundary(actual_entry.get("command"), context):
+        return False
+    comparison_entry = dict(expected_entry)
+    comparison_entry["command"] = actual_entry.get("command")
+    comparison = {**expected, "hooks": [comparison_entry]}
+    return group_payload == comparison
+
+
 def _is_managed_hook_entry(entry: object) -> bool:
     if not isinstance(entry, dict):
         return False
@@ -748,79 +823,54 @@ def _payload_has_hooks_feature_enabled(config_payload: dict[str, object]) -> boo
     return features.get("hooks") is True or features.get("codex_hooks") is True
 
 
-def _remove_managed_shell_guard_block(text: str) -> str:
-    pattern = re.compile(
-        rf"\n?{re.escape(_SHELL_GUARD_BEGIN)}.*?{re.escape(_SHELL_GUARD_END)}\n?",
-        re.DOTALL,
-    )
-    return pattern.sub("\n", text).strip("\n")
+def _line_marker_at(content: bytes, index: int, marker: bytes) -> bool:
+    if index < 0 or content[index : index + len(marker)] != marker:
+        return False
+    before_is_boundary = index == 0 or content[index - 1 : index] == b"\n"
+    after_index = index + len(marker)
+    after_is_boundary = after_index == len(content) or content[after_index : after_index + 1] in {b"\r", b"\n"}
+    return before_is_boundary and after_is_boundary
 
 
-def _codex_zshenv_guard_script() -> str:
-    return """# Managed by HOL Guard. Loaded by zsh only for Codex-owned shell commands.
-if [[ -n "${CODEX_MANAGED_BY_BUN:-}" || -n "${CODEX_MANAGED_PACKAGE_ROOT:-}" ]]; then
-  function TRAPDEBUG() {
-    emulate -L zsh
-    local cmd="${ZSH_DEBUG_CMD:-}"
-    [[ -z "$cmd" ]] && return 0
-    [[ "$cmd" == "TRAPDEBUG () {"* ]] && return 0
-    [[ "$cmd" == *"codex-zshenv-guard.zsh"* ]] && return 0
-    local normalized_cmd="${cmd//\\\"/}"
-    normalized_cmd="${normalized_cmd//\\'/}"
-    case "$normalized_cmd" in
-      *".npmrc"*|*".pypirc"*|*".netrc"*|*"id_rsa"*|*"id_ed25519"*|*"npm_token"*|*"NPM_TOKEN"*|*"_authToken"*|*".env"* )
-        print -u2 "HOL Guard blocked Codex before it could read a secret-looking local file."
-        print -u2 "Blocked command: ${cmd}"
+def _find_line_marker(content: bytes, marker: bytes, start: int) -> int:
+    index = content.find(marker, start)
+    while index >= 0 and not _line_marker_at(content, index, marker):
+        index = content.find(marker, index + len(marker))
+    return index
+
+
+def _trailing_line_break_length(content: bytes) -> int:
+    if content.endswith(b"\r\n"):
+        return 2
+    if content.endswith(b"\n"):
         return 1
-        ;;
-    esac
     return 0
-  }
-fi
-"""
 
 
-def _codex_bashenv_guard_script() -> str:
-    return """# Managed by HOL Guard. Loaded by bash only for Codex-owned shell commands.
-if [[ -n "${CODEX_MANAGED_BY_BUN:-}" || -n "${CODEX_MANAGED_PACKAGE_ROOT:-}" ]]; then
-  shopt -s extdebug 2>/dev/null || true
-  __hol_guard_codex_bash_debug_trap() {
-    local cmd="${BASH_COMMAND:-}"
-    [[ -z "$cmd" ]] && return 0
-    [[ "$cmd" == "__hol_guard_codex_bash_debug_trap"* ]] && return 0
-    [[ "$cmd" == *"codex-bashenv-guard.bash"* ]] && return 0
-    local normalized_cmd="${cmd//\\\"/}"
-    normalized_cmd="${normalized_cmd//\\'/}"
-    case "$normalized_cmd" in
-      *".npmrc"*|*".pypirc"*|*".netrc"*|*"id_rsa"*|*"id_ed25519"*|*"npm_token"*|*"NPM_TOKEN"*|*"_authToken"*|*".env"* )
-        printf '%s\\n' "HOL Guard blocked Codex before it could read a secret-looking local file." >&2
-        printf '%s\\n' "Blocked command: ${cmd}" >&2
-        exit 126
-        ;;
-    esac
-    return 0
-  }
-  trap '__hol_guard_codex_bash_debug_trap' DEBUG
-fi
-"""
+def _remove_managed_shell_guard_blocks(content: bytes) -> bytes:
+    """Remove only legacy Guard marker blocks while preserving every other byte."""
 
-
-def _codex_fish_guard_script() -> str:
-    return """# Managed by HOL Guard. Loaded by fish only for Codex-owned shell commands.
-if set -q CODEX_MANAGED_BY_BUN; or set -q CODEX_MANAGED_PACKAGE_ROOT
-  function __hol_guard_codex_fish_preexec --on-event fish_preexec
-    set -l cmd "$argv"
-    set -l normalized_cmd (string replace -a '"' '' -- "$cmd")
-    set normalized_cmd (string replace -a "'" "" -- "$normalized_cmd")
-    switch "$normalized_cmd"
-      case "*.npmrc*" "*.pypirc*" "*.netrc*" "*id_rsa*" "*id_ed25519*" "*token*" "*TOKEN*" "*authToken*" "*.env*"
-        echo "HOL Guard blocked Codex before it could read a secret-looking local file." >&2
-        echo "Blocked command: $cmd" >&2
-        exit 126
-    end
-  end
-end
-"""
+    begin = _SHELL_GUARD_BEGIN.encode("utf-8")
+    end = _SHELL_GUARD_END.encode("utf-8")
+    search_from = 0
+    while (block_start := _find_line_marker(content, begin, search_from)) >= 0:
+        block_end_start = _find_line_marker(content, end, block_start + len(begin))
+        if block_end_start < 0:
+            break
+        removal_start = block_start
+        prefix = content[:block_start]
+        last_break_length = _trailing_line_break_length(prefix)
+        if last_break_length and _trailing_line_break_length(prefix[:-last_break_length]):
+            # Legacy installation inserted one blank separator before its block.
+            removal_start -= last_break_length
+        removal_end = block_end_start + len(end)
+        if content[removal_end : removal_end + 2] == b"\r\n":
+            removal_end += 2
+        elif content[removal_end : removal_end + 1] == b"\n":
+            removal_end += 1
+        content = content[:removal_start] + content[removal_end:]
+        search_from = removal_start
+    return content
 
 
 def _hooks_have_registered_entries(hooks: object) -> bool:
@@ -862,6 +912,8 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     managed_hook_installed = all(
         (pre_tool_hook_installed, permission_hook_installed, prompt_hook_installed, post_tool_hook_installed)
     )
+    authoritative_shell_hook_installed = pre_tool_hook_installed and permission_hook_installed
+    integrity_valid = integrity.get("integrity_status") == "valid"
     features_is_table = isinstance(features, dict)
     hooks_feature_enabled = not features_is_table or features.get("hooks") is not False
     legacy_codex_hooks_enabled = features_is_table and features.get("codex_hooks") is True
@@ -885,11 +937,28 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
         "managed_prompt_hook_installed": prompt_hook_installed,
         "managed_post_tool_hook_installed": post_tool_hook_installed,
         "managed_hook_installed": managed_hook_installed,
-        "protection_active": hooks_feature_enabled
-        and managed_hook_installed
-        and integrity.get("integrity_status") == "valid",
+        "shell_enforcement_boundary": _AUTHORITATIVE_ENFORCEMENT_BOUNDARY,
+        "shell_hook_installed": authoritative_shell_hook_installed,
+        "shell_protection_active": hooks_feature_enabled and authoritative_shell_hook_installed and integrity_valid,
+        "shell_reason_code": (
+            None
+            if hooks_feature_enabled and authoritative_shell_hook_installed and integrity_valid
+            else _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON
+        ),
+        "protection_active": hooks_feature_enabled and managed_hook_installed and integrity_valid,
         **{key: value for key, value in integrity.items() if key != "event_matches"},
     }
+
+
+def _require_codex_authoritative_shell_hook(context: HarnessContext) -> None:
+    hook_state = codex_native_hook_state(context)
+    if bool(hook_state["shell_protection_active"]):
+        return
+    raise RuntimeError(
+        f"{_AUTHORITATIVE_HOOK_UNAVAILABLE_REASON}: Guard refused to launch Codex because the managed "
+        "PreToolUse and PermissionRequest hooks are missing or disabled. Run `hol-guard install codex` "
+        "or `hol-guard update` to repair the native-hook enforcement boundary."
+    )
 
 
 class CodexHarnessAdapter(HarnessAdapter):
@@ -899,18 +968,20 @@ class CodexHarnessAdapter(HarnessAdapter):
     executable = "codex"
     approval_tier = "native-or-center"
     approval_summary = (
-        "Guard installs native Codex Bash hooks for shell interception, PermissionRequest hooks for Codex approval "
-        "prompts, prompt hooks for sensitive file-read requests, keeps same-chat approvals for managed MCP tool "
-        "calls, and falls back to the local approval center when Codex cannot answer."
+        "Guard uses native Codex PreToolUse hooks as the authoritative complete-command boundary, "
+        "PermissionRequest hooks for Codex approval prompts, prompt hooks for sensitive file-read requests, "
+        "keeps same-chat approvals for managed MCP tool calls, and falls back to the local approval center when "
+        "Codex cannot answer."
     )
     fallback_hint = (
-        "If Codex cannot render or return the inline approval request, or a native Bash hook blocks a "
-        "sensitive command, Guard will queue it in the local approval center."
+        "If Codex cannot render or return the inline approval request, or the native PreToolUse hook blocks a "
+        "sensitive complete command, Guard will queue it in the local approval center."
     )
     approval_prompt_channel = "native"
     approval_auto_open_browser = False
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
+        _require_codex_authoritative_shell_hook(context)
         return guarded_codex_launch_command(
             executable=self.resolved_executable(context) or self.executable,
             home_dir=context.home_dir,
@@ -922,6 +993,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         context: HarnessContext,
         passthrough_args: list[str],
     ) -> tuple[list[str], ...]:
+        _require_codex_authoritative_shell_hook(context)
         return guarded_codex_launch_command_candidates(
             executable=self.resolved_executable(context) or self.executable,
             home_dir=context.home_dir,
@@ -936,6 +1008,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         authorized_executable_prefixes: Sequence[Sequence[str]],
         launch_environment: Mapping[str, str],
     ) -> list[str]:
+        _require_codex_authoritative_shell_hook(context)
         prefixes = {tuple(prefix) for prefix in authorized_executable_prefixes if prefix}
         if len(prefixes) != 1:
             raise ValueError("Codex launch candidates do not share one authorized executable prefix.")
@@ -1198,7 +1271,8 @@ class CodexHarnessAdapter(HarnessAdapter):
             skip_config_path=target_config_path,
         )
         hooks_path = self._remove_json_hook_files(context, payloads=hook_payloads)
-        shell_guard_paths = self._install_shell_guards(context)
+        self._uninstall_shell_guard(context)
+        _require_codex_authoritative_shell_hook(context)
         shim_manifest = install_guard_shim(self.harness, context)
         return {
             "harness": self.harness,
@@ -1211,8 +1285,8 @@ class CodexHarnessAdapter(HarnessAdapter):
             "managed_hook_manifest_path": str(hook_state["manifest_path"]),
             "managed_hook_integrity": str(hook_state["integrity_status"]),
             "managed_hooks_path": str(hooks_path),
-            "managed_shell_guard_path": str(shell_guard_paths["zsh"]),
-            "managed_shell_guard_paths": {shell: str(path) for shell, path in shell_guard_paths.items()},
+            "enforcement_boundary": _AUTHORITATIVE_ENFORCEMENT_BOUNDARY,
+            "legacy_shell_guard_cleanup": "complete",
             "backup_path": str(backup_path),
             "managed_servers": [server.name for server in managed_servers],
             "skipped_servers": list(skipped_servers),
@@ -1550,82 +1624,6 @@ class CodexHarnessAdapter(HarnessAdapter):
                 ) from rollback_error
             raise
 
-    @staticmethod
-    def _install_shell_guards(context: HarnessContext) -> dict[str, Path]:
-        guard_root = context.guard_home / "managed" / "codex"
-        guard_root.mkdir(parents=True, exist_ok=True)
-        zsh_guard_path = guard_root / "codex-zshenv-guard.zsh"
-        bash_guard_path = guard_root / "codex-bashenv-guard.bash"
-        fish_guard_path = guard_root / "codex-fish-guard.fish"
-
-        zsh_guard_path.write_text(_codex_zshenv_guard_script(), encoding="utf-8")
-        bash_guard_path.write_text(_codex_bashenv_guard_script(), encoding="utf-8")
-        fish_guard_path.write_text(_codex_fish_guard_script(), encoding="utf-8")
-
-        CodexHarnessAdapter._install_shell_guard_block(
-            context.home_dir / ".zshenv",
-            [
-                _SHELL_GUARD_BEGIN,
-                f'if [ -r "{zsh_guard_path}" ]; then',
-                f'  source "{zsh_guard_path}"',
-                "fi",
-                _SHELL_GUARD_END,
-            ],
-        )
-        bash_block = [
-            _SHELL_GUARD_BEGIN,
-            f'if [ -r "{bash_guard_path}" ]; then',
-            f'  export BASH_ENV="{bash_guard_path}"',
-            '  if [ -n "${BASH_VERSION:-}" ]; then',
-            f'    . "{bash_guard_path}"',
-            "  fi",
-            "fi",
-            _SHELL_GUARD_END,
-        ]
-        bash_login_files = [
-            context.home_dir / ".bash_profile",
-            context.home_dir / ".bash_login",
-            context.home_dir / ".profile",
-        ]
-        bash_startup_paths = [path for path in bash_login_files if path.is_file()]
-        bashrc_path = context.home_dir / ".bashrc"
-        if bashrc_path.is_file():
-            bash_startup_paths.append(bashrc_path)
-        if not bash_startup_paths:
-            bash_startup_paths = [context.home_dir / ".bash_profile", bashrc_path]
-        for bash_startup_path in bash_startup_paths:
-            CodexHarnessAdapter._install_shell_guard_block(bash_startup_path, bash_block)
-        fish_conf_path = context.home_dir / ".config" / "fish" / "conf.d" / "hol-guard-codex.fish"
-        fish_conf_path.parent.mkdir(parents=True, exist_ok=True)
-        fish_conf_path.write_text(
-            "\n".join(
-                [
-                    _SHELL_GUARD_BEGIN,
-                    f'if test -r "{fish_guard_path}"',
-                    f'  source "{fish_guard_path}"',
-                    "end",
-                    _SHELL_GUARD_END,
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        return {
-            "zsh": zsh_guard_path,
-            "bash": bash_guard_path,
-            "fish": fish_guard_path,
-            "fish_conf": fish_conf_path,
-        }
-
-    @staticmethod
-    def _install_shell_guard_block(path: Path, block_lines: list[str]) -> None:
-        original = path.read_text(encoding="utf-8") if path.is_file() else ""
-        source_block = "\n".join(block_lines)
-        cleaned = _remove_managed_shell_guard_block(original).rstrip()
-        updated = f"{cleaned}\n\n{source_block}\n" if cleaned else f"{source_block}\n"
-        if updated != original:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(updated, encoding="utf-8")
 
     @staticmethod
     def _uninstall_shell_guard(context: HarnessContext) -> None:
@@ -1652,10 +1650,12 @@ class CodexHarnessAdapter(HarnessAdapter):
     def _remove_shell_guard_block(path: Path) -> None:
         if not path.is_file():
             return
-        original = path.read_text(encoding="utf-8")
-        cleaned = _remove_managed_shell_guard_block(original).rstrip()
+        original = path.read_bytes()
+        cleaned = _remove_managed_shell_guard_blocks(original)
+        if cleaned == original:
+            return
         if cleaned:
-            path.write_text(f"{cleaned}\n", encoding="utf-8")
+            path.write_bytes(cleaned)
         else:
             path.unlink()
 
