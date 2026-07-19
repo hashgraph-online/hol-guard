@@ -11,7 +11,8 @@ import base64
 import binascii
 import hashlib
 import json
-from collections.abc import Callable, Mapping
+import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final, Literal, TypeAlias, cast
 
@@ -19,13 +20,14 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 JsonValue: TypeAlias = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
-AdapterResult: TypeAlias = Mapping[str, JsonValue]
-ObserverAdapter: TypeAlias = Callable[[Mapping[str, JsonValue]], AdapterResult]
+AdapterResult: TypeAlias = dict[str, JsonValue]
+ObserverAdapter: TypeAlias = Callable[[dict[str, JsonValue]], AdapterResult]
 
 _PRIVATE_KEY_BYTES: Final = bytes(range(32))
 _PRIVATE_KEY: Final = Ed25519PrivateKey.from_private_bytes(_PRIVATE_KEY_BYTES)
 _PUBLIC_KEY: Final = _PRIVATE_KEY.public_key()
 _SIGNATURE_KEYS: Final = frozenset({"algorithm", "keyId", "value"})
+_SAFE_ID: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _ASSERTION_KEYS: Final = frozenset(
     {
         "schemaVersion",
@@ -46,7 +48,7 @@ _ASSERTION_KEYS: Final = frozenset(
 @dataclass(frozen=True)
 class ObserverConformanceCase:
     case_id: str
-    fixture: Mapping[str, JsonValue]
+    fixture: dict[str, JsonValue]
     expected: Literal["assertion", "collision", "outage"]
 
 
@@ -68,11 +70,11 @@ class ObserverConformanceReport:
         return all(result.passed for result in self.results)
 
 
-def _canonical(value: Mapping[str, JsonValue]) -> bytes:
+def _canonical(value: dict[str, JsonValue]) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
 
 
-def sign_observer_assertion(assertion: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+def sign_observer_assertion(assertion: dict[str, JsonValue]) -> dict[str, JsonValue]:
     """Return a deterministic Ed25519-signed copy for fixture authors."""
 
     unsigned = {key: value for key, value in assertion.items() if key != "signature"}
@@ -93,11 +95,13 @@ def observer_conformance_public_key_base64() -> str:
     return base64.b64encode(_PUBLIC_KEY.public_bytes_raw()).decode("ascii")
 
 
-def observer_conformance_cases() -> tuple[ObserverConformanceCase, ...]:
+def observer_conformance_cases(adapter_id: str = "adapter-under-test") -> tuple[ObserverConformanceCase, ...]:
+    if not _SAFE_ID.fullmatch(adapter_id):
+        raise ValueError("adapter_id must be a safe identifier")
     base: dict[str, JsonValue] = {
         "workspaceId": "workspace-conformance",
         "observerId": "observer-conformance",
-        "adapterId": "adapter-under-test",
+        "adapterId": adapter_id,
         "externalDeviceId": "vendor-device-1",
         "sourceEventId": "source-event-1",
         "observedAt": "2026-07-19T06:00:00Z",
@@ -153,7 +157,7 @@ def observer_conformance_cases() -> tuple[ObserverConformanceCase, ...]:
     )
 
 
-def _assertion_error(result: AdapterResult, fixture: Mapping[str, JsonValue]) -> str | None:
+def _assertion_error(result: AdapterResult, fixture: dict[str, JsonValue]) -> str | None:
     assertion_value = result.get("assertion")
     if not isinstance(assertion_value, dict) or set(assertion_value) != set(_ASSERTION_KEYS):
         return "assertion_shape_invalid"
@@ -166,6 +170,9 @@ def _assertion_error(result: AdapterResult, fixture: Mapping[str, JsonValue]) ->
         return "signature_authority_invalid"
     if assertion.get("schemaVersion") != "observer-assertion.v1":
         return "schema_version_invalid"
+    assertion_id = assertion.get("assertionId")
+    if not isinstance(assertion_id, str) or not _SAFE_ID.fullmatch(assertion_id):
+        return "assertion_id_invalid"
     for field in ("workspaceId", "observerId", "adapterId", "externalDeviceId", "observedAt", "expiresAt"):
         if assertion.get(field) != fixture.get(field):
             return f"{field}_binding_invalid"
@@ -185,12 +192,26 @@ def _assertion_error(result: AdapterResult, fixture: Mapping[str, JsonValue]) ->
     return None
 
 
+def _invoke_untrusted_adapter(adapter: ObserverAdapter, fixture: dict[str, JsonValue]) -> object:
+    return adapter(fixture)
+
+
 def _run_case(
     adapter: ObserverAdapter,
     case: ObserverConformanceCase,
 ) -> tuple[ObserverConformanceResult, AdapterResult]:
     try:
-        result = adapter(case.fixture)
+        raw_result = _invoke_untrusted_adapter(adapter, case.fixture)
+        if not isinstance(raw_result, dict):
+            return (
+                ObserverConformanceResult(
+                    case.case_id,
+                    f"adapter_invalid_return_type:{type(raw_result).__name__}",
+                    False,
+                ),
+                {},
+            )
+        result = cast(AdapterResult, raw_result)
     except Exception as exc:
         return ObserverConformanceResult(case.case_id, f"adapter_exception:{type(exc).__name__}", False), {}
     if case.expected == "outage":
@@ -218,7 +239,7 @@ def run_observer_adapter_conformance(adapter_id: str, adapter: ObserverAdapter) 
 
     results: list[ObserverConformanceResult] = []
     outputs: dict[str, AdapterResult] = {}
-    for case in observer_conformance_cases():
+    for case in observer_conformance_cases(adapter_id):
         result, output = _run_case(adapter, case)
         results.append(result)
         outputs[case.case_id] = output

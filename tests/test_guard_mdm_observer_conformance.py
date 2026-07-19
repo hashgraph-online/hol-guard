@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from typing import cast
 
 from codex_plugin_scanner.guard.mdm.observer_conformance import (
     JsonValue,
+    ObserverAdapter,
     run_observer_adapter_conformance,
     sign_observer_assertion,
 )
 
 
-def conforming_adapter(fixture: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
+def conforming_adapter(fixture: dict[str, JsonValue]) -> dict[str, JsonValue]:
     case_id = fixture["caseId"]
     if case_id == "provider-outage":
         return {"status": "outage", "assertion": None, "errorCode": "provider_unavailable"}
@@ -38,6 +39,7 @@ def test_conforming_adapter_passes_all_signed_cases() -> None:
     report = run_observer_adapter_conformance("reference-adapter", conforming_adapter)
 
     assert report.passed
+    assert report.adapter_id == "reference-adapter"
     assert {result.case_id for result in report.results} >= {
         "clock-skew",
         "duplicate-idempotency",
@@ -51,7 +53,7 @@ def test_conforming_adapter_passes_all_signed_cases() -> None:
 
 
 def test_harness_rejects_fabricated_outage_evidence() -> None:
-    def unsafe_adapter(fixture: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
+    def unsafe_adapter(fixture: dict[str, JsonValue]) -> dict[str, JsonValue]:
         result = dict(conforming_adapter(fixture))
         if fixture["caseId"] == "provider-outage":
             result["assertion"] = conforming_adapter({**fixture, "caseId": "valid-current"})["assertion"]
@@ -68,7 +70,7 @@ def test_harness_rejects_fabricated_outage_evidence() -> None:
 def test_harness_rejects_non_idempotent_duplicate_outputs() -> None:
     counter = 0
 
-    def unstable_adapter(fixture: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
+    def unstable_adapter(fixture: dict[str, JsonValue]) -> dict[str, JsonValue]:
         nonlocal counter
         counter += 1
         if fixture["caseId"] not in {"duplicate-a", "duplicate-b"}:
@@ -83,3 +85,13 @@ def test_harness_rejects_non_idempotent_duplicate_outputs() -> None:
     assert next(result for result in report.results if result.case_id == "duplicate-idempotency").detail == (
         "duplicate_output_changed"
     )
+
+
+def test_harness_reports_invalid_adapter_return_without_crashing() -> None:
+    def invalid_adapter(_fixture: dict[str, JsonValue]) -> object:
+        return None
+
+    report = run_observer_adapter_conformance("invalid-adapter", cast(ObserverAdapter, invalid_adapter))
+
+    assert not report.passed
+    assert report.results[0].detail == "adapter_invalid_return_type:NoneType"
