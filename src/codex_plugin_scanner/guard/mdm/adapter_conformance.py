@@ -79,7 +79,7 @@ def _timestamp(value: object, reason: str) -> datetime:
     if not isinstance(value, str) or _TIMESTAMP.fullmatch(value) is None:
         raise _error(reason)
     try:
-        parsed = datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(f"{value[:-1]}+00:00")
     except ValueError as exc:
         raise _error(reason) from exc
     return parsed.astimezone(timezone.utc)
