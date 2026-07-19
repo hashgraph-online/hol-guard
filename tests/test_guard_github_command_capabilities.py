@@ -11,8 +11,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
     (
         (("pr", "view", "17"), "read_remote", "github.command.proven-read"),
         (("issue", "list"), "read_remote", "github.command.proven-read"),
-        (("auth", "token"), "read_local", "github.command.local-auth-read"),
-        (("run", "cancel", "--help"), "read_local", "github.command.local-help"),
+        (("auth", "status"), "read_local", "github.command.local-auth-read"),
+        (("auth", "token"), "secret_remote", "github.command.auth-token-read"),
+        (("auth", "status", "--show-token"), "secret_remote", "github.command.auth-token-read"),
+        (("auth", "status", "-t"), "secret_remote", "github.command.auth-token-read"),
+        (("run", "cancel", "--help"), "workflow_remote", "github.command.workflow-mutation"),
         (
             ("--repo", "example/project", "workflow", "view", "release.yml"),
             "read_remote",
@@ -39,41 +42,46 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
                 "threadId=PRRT_example",
             ),
             "maintain_remote",
-            "github.graphql.routine-mutation",
+            "github.graphql.maintain",
         ),
-        (("pr", "merge", "17", "--squash", "--delete-branch"), "maintain_remote", "github.command.pr-maintenance"),
-        (("pr", "merge", "17", "--admin"), "mutate_remote", "github.command.high-impact-mutation"),
-        (("pr", "edit", "17", "--title", "updated"), "maintain_remote", "github.command.routine-mutation"),
-        (("issue", "close", "17"), "maintain_remote", "github.command.routine-mutation"),
-        (("issue", "delete", "17"), "mutate_remote", "github.command.high-impact-mutation"),
-        (("cache", "delete", "123"), "mutate_remote", "github.command.high-impact-mutation"),
-        (("release", "create", "v1.2.3"), "maintain_remote", "github.command.routine-mutation"),
-        (("release", "delete", "v1.2.3"), "mutate_remote", "github.command.high-impact-mutation"),
-        (("repo", "edit", "--visibility", "private"), "mutate_remote", "github.command.high-impact-mutation"),
-        (("repo", "sync", "--force"), "mutate_remote", "github.command.high-impact-mutation"),
-        (("secret", "set", "TOKEN"), "mutate_remote", "github.command.high-impact-mutation"),
+        (("pr", "merge", "17", "--squash", "--delete-branch"), "delete_remote", "github.command.pr-merge"),
+        (("pr", "merge", "17", "--admin"), "merge_remote", "github.command.pr-merge"),
+        (("pr", "edit", "17", "--title", "updated"), "content_remote", "github.command.content-mutation"),
+        (("issue", "close", "17"), "content_remote", "github.command.content-mutation"),
+        (("issue", "delete", "17"), "delete_remote", "github.command.delete-mutation"),
+        (("cache", "delete", "123"), "delete_remote", "github.command.delete-mutation"),
+        (("release", "create", "v1.2.3"), "publish_remote", "github.command.release-publication"),
+        (("release", "delete", "v1.2.3"), "delete_remote", "github.command.delete-mutation"),
+        (("repo", "edit", "--visibility", "private"), "access_remote", "github.command.repository-access-mutation"),
+        (("repo", "sync", "--force"), "force_remote", "github.command.force-mutation"),
+        (("secret", "set", "TOKEN"), "secret_remote", "github.command.secret-mutation"),
         (
             ("api", "repos/example/project", "-f", "name=updated"),
-            "maintain_remote",
-            "github.api.routine-mutation",
+            "mutate_remote",
+            "github.api.mutate",
+        ),
+        (
+            ("api", "repos/example/project", "-X", "PATCH", "-f", "visibility=private"),
+            "access_remote",
+            "github.api.access",
         ),
         (
             ("api", "graphql", "-f", "query=mutation { updateThing(input: {}) { id } }"),
             "mutate_remote",
-            "github.graphql.remote-mutation",
+            "github.graphql.mutate",
         ),
         (
             ("api", "graphql", "-f", "query=mutation { closeIssue(input: {}) { issue { id } } }"),
-            "maintain_remote",
-            "github.graphql.routine-mutation",
+            "content_remote",
+            "github.graphql.content",
         ),
         (
             (
                 "api",
                 "graphql",
                 "-f",
-                "query=fragment Maint on Mutation { resolveReviewThread(input: {threadId: \"T_1\"}) "
-                "{ thread { id } } } mutation { deleteRepository(input: {repositoryId: \"R_1\"}) "
+                'query=fragment Maint on Mutation { resolveReviewThread(input: {threadId: "T_1"}) '
+                '{ thread { id } } } mutation { deleteRepository(input: {repositoryId: "R_1"}) '
                 "{ repository { id } } }",
             ),
             "mutate_remote",
@@ -86,13 +94,13 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ),
         (
             ("api", "repos/example/project", "-X", "DELETE"),
-            "mutate_remote",
-            "github.api.high-impact-mutation",
+            "delete_remote",
+            "github.api.delete",
         ),
         (
             ("api", "repos/example/project/git/refs/heads/main", "-X", "PATCH", "-f", "force=true"),
-            "mutate_remote",
-            "github.api.high-impact-mutation",
+            "force_remote",
+            "github.api.force",
         ),
         (
             (
@@ -105,28 +113,28 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
                 "-f",
                 "content=ZWNobyBvaw==",
             ),
-            "mutate_remote",
-            "github.api.high-impact-mutation",
+            "workflow_remote",
+            "github.api.workflow",
         ),
         (
             ("api", "graphql", "-f", "query=mutation { updateRepository(input: {}) { repository { id } } }"),
-            "mutate_remote",
-            "github.graphql.remote-mutation",
+            "access_remote",
+            "github.graphql.access",
         ),
         (
             ("api", "graphql", "-f", "query=mutation { createDeployKey(input: {}) { clientMutationId } }"),
-            "mutate_remote",
-            "github.graphql.remote-mutation",
+            "access_remote",
+            "github.graphql.access",
         ),
         (
             ("api", "graphql", "-f", "query=mutation { createRef(input: {}) { ref { id } } }"),
             "mutate_remote",
-            "github.graphql.remote-mutation",
+            "github.graphql.mutate",
         ),
         (
             ("api", "graphql", "-f", "query=mutation { deleteIssue(input: {}) { clientMutationId } }"),
-            "mutate_remote",
-            "github.graphql.remote-mutation",
+            "delete_remote",
+            "github.graphql.delete",
         ),
         (
             (
@@ -135,44 +143,44 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
                 "-f",
                 "query=mutation { removeOutsideCollaborator(input: {}) { clientMutationId } }",
             ),
-            "mutate_remote",
-            "github.graphql.remote-mutation",
+            "access_remote",
+            "github.graphql.mixed-mutation",
         ),
         (
             ("api", "repos/example/project/issues/comments/123", "-X", "DELETE"),
-            "mutate_remote",
-            "github.api.high-impact-mutation",
+            "delete_remote",
+            "github.api.mixed-mutation",
         ),
         (
             ("api", "orgs/example/memberships/alice", "-X", "PUT", "-f", "role=admin"),
-            "mutate_remote",
-            "github.api.high-impact-mutation",
+            "access_remote",
+            "github.api.access",
         ),
         (
             ("api", "repos/example/project/pages", "-X", "POST", "-f", "source=main"),
             "mutate_remote",
-            "github.api.high-impact-mutation",
+            "github.api.mutate",
         ),
         (
             ("api", "repos/example/project/actions/runners/registration-token", "-X", "POST"),
-            "mutate_remote",
-            "github.api.high-impact-mutation",
+            "secret_remote",
+            "github.api.secret",
         ),
         (
             ("api", "repos/example/project/actions/runs/123/rerun", "-X", "POST"),
-            "maintain_remote",
-            "github.api.routine-mutation",
+            "workflow_remote",
+            "github.api.workflow",
         ),
         (
             (
                 "api",
                 "graphql",
                 "-f",
-                "query=mutation { resolveReviewThread(input: {threadId: \"T_1\"}) { thread { id } } "
-                "deleteRepository(input: {repositoryId: \"R_1\"}) { repository { id } } }",
+                'query=mutation { resolveReviewThread(input: {threadId: "T_1"}) { thread { id } } '
+                'deleteRepository(input: {repositoryId: "R_1"}) { repository { id } } }',
             ),
-            "mutate_remote",
-            "github.graphql.remote-mutation",
+            "access_remote",
+            "github.graphql.mixed-mutation",
         ),
         (("api", "graphql", "--input", "-"), "unknown", "github.api.input-body"),
         (
@@ -225,20 +233,6 @@ def test_classify_github_cli_rejects_ambiguous_graphql_inputs(args):
         "gh api repos/example/project -X GET -f per_page=1 --jq '.name'",
         "gh api graphql -f 'query=query { viewer { login } }' | jq -r '.data.viewer.login'",
         (
-            "gh api graphql -f "
-            "'query=mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}' "
-            "-f threadId=PRRT_example"
-        ),
-        (
-            "gh api graphql -f query='mutation { resolveReviewThread(input: "
-            "{threadId: \"PRRT_example\"}) { thread { isResolved } } }'"
-        ),
-        "gh pr edit 17 --title updated",
-        "gh issue close 17",
-        "gh release create v1.2.3 --notes 'release notes'",
-        "gh api repos/example/project/issues/17/comments -f body='looks good'",
-        "gh pr merge 17 --repo example/project --squash --delete-branch",
-        (
             "gh api graphql -f 'query=query { viewer { login } }' 2>&1 | "
             "python3 -c \"import json,sys; print(json.load(sys.stdin)['data']['viewer']['login'])\""
         ),
@@ -254,22 +248,46 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path, command):
     ("command", "action_class"),
     (
         (
-            "gh api graphql -f 'query=mutation { deleteRepository(input: {repositoryId: \"R_1\"}) "
+            'gh api graphql -f \'query=mutation { deleteRepository(input: {repositoryId: "R_1"}) '
             "{ clientMutationId } }' | jq -r '.data'",
-            "GitHub remote mutation command",
+            "GitHub access mutation command",
         ),
         (
             "gh api graphql -f "
             "'query=mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}} "
             "deleteRepository(input:{repositoryId:$threadId}){repository{id}}}' -f threadId=R_123",
-            "GitHub remote mutation command",
+            "GitHub access mutation command",
         ),
-        ("gh pr merge 17 --admin", "GitHub remote mutation command"),
-        ("gh repo delete example/project --yes", "GitHub remote mutation command"),
-        ("gh issue delete 17 --yes", "GitHub remote mutation command"),
-        ("gh release delete v1.2.3 --yes", "GitHub remote mutation command"),
-        ("gh secret set TOKEN --body value", "GitHub remote mutation command"),
-        ("gh api repos/example/project -X DELETE", "GitHub remote mutation command"),
+        (
+            "gh api graphql -f "
+            "'query=mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}' "
+            "-f threadId=PRRT_example",
+            "GitHub bounded maintenance command",
+        ),
+        ("gh pr edit 17 --title updated", "GitHub content mutation command"),
+        ("gh issue close 17", "GitHub content mutation command"),
+        ("gh release create v1.2.3 --notes 'release notes'", "GitHub release publication command"),
+        ("gh api repos/example/project/issues/17/comments -f body='looks good'", "GitHub content mutation command"),
+        ("gh pr merge 17 --repo example/project --squash --delete-branch", "GitHub delete command"),
+        ("gh pr merge 17 --admin", "GitHub merge command"),
+        ("gh workflow run ci.yml", "GitHub workflow mutation command"),
+        ("gh repo sync --force", "GitHub force mutation command"),
+        ("gh repo delete example/project --yes", "GitHub delete command"),
+        ("gh issue delete 17 --yes", "GitHub delete command"),
+        ("gh release delete v1.2.3 --yes", "GitHub delete command"),
+        ("gh secret set TOKEN --body value", "GitHub secret mutation command"),
+        ("gh secret set TOKEN --body --help", "GitHub secret mutation command"),
+        ("gh pr edit 17 --title --help", "GitHub content mutation command"),
+        ("gh auth token", "GitHub secret mutation command"),
+        ("gh auth status --show-token", "GitHub secret mutation command"),
+        ("gh repo edit --visibility private", "GitHub access mutation command"),
+        ("gh pr lock 1; gh repo delete o/r --yes", "GitHub delete command"),
+        (
+            "gh api graphql -f 'query=mutation { resolveReviewThread(input: {}) { thread { id } } }'; "
+            "gh secret set TOKEN --body value",
+            "GitHub secret mutation command",
+        ),
+        ("gh api repos/example/project -X DELETE", "GitHub delete command"),
         ("gh project-alias | jq -r '.'", "Unverified GitHub command capability"),
         ("gh pr view 17 | tee result.json", "destructive shell command"),
         ("gh pr view 17 > result.json", "destructive shell command"),
