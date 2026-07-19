@@ -199,6 +199,7 @@ from .discovery import (
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     clear_guard_daemon_state_if_current,
+    current_guard_daemon_runtime_fingerprint,
     load_guard_daemon_auth_token,
     repair_approval_center_locator,
     write_guard_daemon_state,
@@ -296,6 +297,9 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     approval_attention: ApprovalAttentionCoordinator
     daemon_discovery_challenges: dict[str, dict[str, object]]
     daemon_discovery_challenges_lock: threading.Lock
+    containment_health_cache: dict[str, object] | None
+    containment_health_cache_monotonic: float
+    containment_health_cache_lock: threading.Lock
 
     def __init__(
         self,
@@ -333,6 +337,9 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.package_firewall_session_nonces_lock = threading.Lock()
         self.daemon_discovery_challenges = {}
         self.daemon_discovery_challenges_lock = threading.Lock()
+        self.containment_health_cache = None
+        self.containment_health_cache_monotonic = 0.0
+        self.containment_health_cache_lock = threading.Lock()
         from .hook_worker import HookWorker
 
         self.hook_worker = HookWorker(store=store)
@@ -1396,6 +1403,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/capabilities":
             self._handle_capabilities()
             return
+        if parsed.path == "/v1/runtime/containment-health":
+            self._write_json(
+                {"containment_health": self._containment_health_payload(force_refresh=True)},
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
         if parsed.path == "/v1/sessions":
             self._write_json({"items": store.list_guard_sessions(limit=200)})
             return
@@ -1412,6 +1425,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 active_request_id=self._query_string(parsed.query, "active_request_id"),
                 include_items=self._query_bool(parsed.query, "include_items", default=True),
                 receipt_limit=25 if include_receipts else 0,
+                containment_health=self._containment_health_payload(),
             )
             self._write_json({**snapshot, "security_level": config.security_level})
             return
@@ -5209,6 +5223,26 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "ok": True,
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
         }
+
+    def _containment_health_payload(self, *, force_refresh: bool = False) -> dict[str, object] | None:
+        from ..runtime.containment_health import probe_containment_health
+
+        server = self._daemon_server()
+        with server.containment_health_cache_lock:
+            age = time.monotonic() - server.containment_health_cache_monotonic
+            if not force_refresh and server.containment_health_cache is not None and age <= 10.0:
+                return dict(server.containment_health_cache)
+            try:
+                payload = probe_containment_health(
+                    daemon_fingerprint=current_guard_daemon_runtime_fingerprint(),
+                ).to_dict()
+            except (OSError, RuntimeError, TypeError, ValueError):
+                server.containment_health_cache = None
+                server.containment_health_cache_monotonic = time.monotonic()
+                return None
+            server.containment_health_cache = payload
+            server.containment_health_cache_monotonic = time.monotonic()
+            return dict(payload)
 
     def _detailed_healthz_payload(self) -> dict[str, object]:
         uptime = round(time.monotonic() - self.server.start_monotonic, 1)  # type: ignore[attr-defined]

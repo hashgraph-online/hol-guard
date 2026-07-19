@@ -249,6 +249,9 @@ def _normalized_package_shim_content(content: bytes) -> str:
         if line.startswith("guard_cwd = ") or line.startswith("guard_cli_cwd = "):
             normalized_lines.append("guard_cli_cwd = '<path>'")
             continue
+        if line.startswith("guard_home = "):
+            normalized_lines.append("guard_home = '<path>'")
+            continue
         if line.startswith("guard_workspace = "):
             normalized_lines.append("guard_workspace = <workspace-path>")
             continue
@@ -1015,6 +1018,7 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             f"command_name = {command!r}",
             f"guard_cli_cwd = {str(_trusted_import_root())!r}",
             f"guard_workspace = {str(context.workspace_dir) if context.workspace_dir is not None else None!r}",
+            f"guard_home = {str(context.guard_home)!r}",
             f"guard_has_explicit_workspace = {context.workspace_dir is not None!r}",
             f"shim_dir = {str(shim_dir.resolve())!r}",
             f"local_test_runners = {tuple(sorted(_LOCAL_TEST_RUNNER_COMMANDS))!r}",
@@ -1067,6 +1071,26 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "    guard_required = True",
             "if not guard_required:",
             "    _exec_real_manager()",
+            "try:",
+            "    from codex_plugin_scanner.guard.contained_typescript_execution import (",
+            "        try_execute_contained_typescript,",
+            "    )",
+            "    contained_result = try_execute_contained_typescript(",
+            "        command_name,",
+            "        tuple(sys.argv[1:]),",
+            "        workspace=Path(guard_workspace) if guard_workspace is not None else Path.cwd(),",
+            "        guard_home=Path(guard_home),",
+            "        shim_directory=Path(shim_dir),",
+            "        environment=dict(os.environ),",
+            "    )",
+            "except Exception:",
+            "    contained_result = None",
+            "if contained_result is not None:",
+            "    if contained_result.stdout:",
+            "        sys.stdout.write(contained_result.stdout)",
+            "    if contained_result.stderr:",
+            "        sys.stderr.write(contained_result.stderr)",
+            "    raise SystemExit(contained_result.exit_code)",
             "guard_env = dict(os.environ)",
             "guard_env.pop('PYTHONPATH', None)",
             "guard_command = [*base_command, command_name]",

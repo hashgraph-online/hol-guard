@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
+from .containment_health import ContainmentHealthEvidence, containment_health_signals
 from .protection_health import (
     ProtectionCheckStatus,
     ProtectionSignal,
@@ -86,6 +87,14 @@ def _daemon_signal(runtime_state: Mapping[str, object] | None, *, now: datetime)
         return _signal(ProtectionCheckStatus.UNKNOWN, "daemon_heartbeat_future")
     if age > _DAEMON_HEARTBEAT_MAX_AGE:
         return _signal(ProtectionCheckStatus.FAIL, "daemon_heartbeat_stale")
+    containment_health = runtime_state.get("containment_health")
+    if containment_health is not None:
+        try:
+            evidence = ContainmentHealthEvidence.from_mapping(containment_health)
+        except (TypeError, ValueError):
+            return _signal(ProtectionCheckStatus.FAIL, "daemon_containment_health_invalid")
+        if evidence.daemon_fingerprint != evidence.runtime_fingerprint:
+            return _signal(ProtectionCheckStatus.FAIL, "daemon_runtime_drift")
     return _signal(ProtectionCheckStatus.PASS, "daemon_healthy")
 
 
@@ -124,14 +133,18 @@ def build_runtime_protection_health(
     """Build current health without treating configuration as runtime proof."""
 
     harness_signals = _hook_signals(managed_installs)
+    containment_signals = containment_health_signals(
+        runtime_state.get("containment_health") if runtime_state is not None else None,
+        now=now,
+    )
     signals = {
         "harness_hooks": _global_hook_signal(harness_signals),
         "daemon": _daemon_signal(runtime_state, now=now),
-        "policy_engine": _signal(ProtectionCheckStatus.UNKNOWN, "policy_engine_health_unavailable"),
+        "policy_engine": containment_signals["policy_engine"],
         "rule_packs": _rule_pack_signal(),
-        "decision_plane_compatibility": _signal(ProtectionCheckStatus.UNKNOWN, "decision_plane_proof_unavailable"),
-        "containment_compatibility": _signal(ProtectionCheckStatus.UNKNOWN, "containment_proof_unavailable"),
-        "sandbox": _signal(ProtectionCheckStatus.UNKNOWN, "sandbox_proof_unavailable"),
+        "decision_plane_compatibility": containment_signals["decision_plane_compatibility"],
+        "containment_compatibility": containment_signals["containment_compatibility"],
+        "sandbox": containment_signals["sandbox"],
         "decision_stream": _decision_stream_signal(store),
         "tamper_checks": _tamper_signal(trust_status),
     }
