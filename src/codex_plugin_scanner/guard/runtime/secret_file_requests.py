@@ -35,16 +35,13 @@ from .false_positive_rules import (
     split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
-from .github_capability_contract import (
-    GitHubCommandAssessment,
-    combine_github_assessments,
-    github_assessment,
-)
+from .github_capability_contract import GitHubCommandAssessment
 from .github_capability_interaction import (
     github_capability_action_class,
     github_capability_requires_confirmation,
 )
-from .github_command_capabilities import classify_github_cli
+from .github_shell_capabilities import GitHubShellAnalysis
+from .github_shell_capabilities import classify_github_shell_capabilities as _classify_github_shell_capabilities
 from .interpreter_options import shell_interpreter_command_payload as _shell_interpreter_command_payload
 from .kubernetes_commands import kubernetes_secret_read_source
 from .secret_sensitivity import SecretPathMatch as SensitivePathMatch
@@ -1222,11 +1219,7 @@ def _destructive_shell_tool_action_request(
             ),
             canonical_command=canonical_command,
         )
-    github_assessment = classify_github_shell_capabilities(
-        detection_command_text,
-        cwd=cwd,
-        home_dir=home_dir,
-    )
+    github_assessment = classify_github_shell_capabilities(detection_command_text, home_dir=home_dir)
     if github_assessment is not None and github_capability_requires_confirmation(github_assessment):
         return ToolActionRequestMatch(
             tool_name=tool_name,
@@ -1254,66 +1247,25 @@ def _destructive_shell_tool_action_request(
 def classify_github_shell_capabilities(
     command_text: str,
     *,
-    cwd: Path | None,
     home_dir: Path | None,
-    depth: int = 0,
 ) -> GitHubCommandAssessment | None:
-    """Return every GitHub capability observed in the shell composition."""
+    """Adapt the shared shell parser to focused GitHub capability composition."""
 
-    if depth > 3:
-        return github_assessment(
-            "unknown",
-            "github.shell.nesting-depth",
-            "The nested shell composition exceeds the statically reviewed depth.",
-        )
-    assessments: list[GitHubCommandAssessment] = []
-    for nested_command in _shell_command_substitution_payloads(command_text):
-        assessment = classify_github_shell_capabilities(
-            nested_command,
-            cwd=cwd,
-            home_dir=home_dir,
-            depth=depth + 1,
-        )
-        if assessment is not None:
-            assessments.append(assessment)
-
-    parts = _split_shell_parts(command_text)
-    for nested_command in (*_env_split_string_payloads(parts), *_shell_command_scripts(parts)):
-        assessment = classify_github_shell_capabilities(
-            nested_command,
-            cwd=cwd,
-            home_dir=home_dir,
-            depth=depth + 1,
-        )
-        if assessment is not None:
-            assessments.append(assessment)
-
-    for pipeline in _iter_shell_pipelines(parts):
-        contains_github_command = False
-        for segment in pipeline:
-            if _shell_segment_is_command_builtin_lookup(segment):
-                continue
-            command_name, command_index = _shell_segment_primary_command(segment)
-            if command_name != "gh" or command_index is None:
-                continue
-            contains_github_command = True
-            assessment = _classify_github_shell_segment(segment, command_index)
-            assessments.append(assessment)
-        if not contains_github_command or len(pipeline) < 2:
-            continue
-        for segment in pipeline:
-            command_name, _command_index = _shell_segment_primary_command(segment)
-            if command_name == "gh":
-                continue
-            if not _github_pipeline_companion_is_read_only(segment, home_dir=home_dir):
-                assessments.append(
-                    github_assessment(
-                        "unknown",
-                        "github.pipeline.unverified-companion",
-                        "A GitHub command is composed with a pipeline stage that has not been proven read-only.",
-                    )
-                )
-    return combine_github_assessments(assessments)
+    return _classify_github_shell_capabilities(
+        command_text,
+        analysis=GitHubShellAnalysis(
+            command_substitution_payloads=_shell_command_substitution_payloads,
+            split_parts=_split_shell_parts,
+            nested_commands=lambda parts: (*_env_split_string_payloads(parts), *_shell_command_scripts(parts)),
+            pipelines=_iter_shell_pipelines,
+            command_builtin_is_lookup=_shell_segment_is_command_builtin_lookup,
+            primary_command=_shell_segment_primary_command,
+            pipeline_companion_is_read_only=lambda segment: _github_pipeline_companion_is_read_only(
+                segment,
+                home_dir=home_dir,
+            ),
+        ),
+    )
 
 
 def _shell_segment_is_command_builtin_lookup(segment: list[str]) -> bool:
@@ -1323,25 +1275,6 @@ def _shell_segment_is_command_builtin_lookup(segment: list[str]) -> bool:
         if command_name == "command":
             return _command_builtin_options_are_lookup_only(contextual_segment, index + 1)
     return False
-
-
-def _classify_github_shell_segment(segment: list[str], command_index: int) -> GitHubCommandAssessment:
-    args: list[str] = []
-    index = command_index + 1
-    while index < len(segment):
-        token = segment[index]
-        if token in {"2>&1", "1>&2"}:
-            index += 1
-            continue
-        if token in {">", ">>", ">|", "<", "<<", "<<<"} or any(marker in token for marker in (">", "<")):
-            return GitHubCommandAssessment(
-                capability="write_local",
-                reason_code="github.command.shell-redirection",
-                detail="The GitHub CLI invocation includes local input or output redirection.",
-            )
-        args.append(token)
-        index += 1
-    return classify_github_cli(args)
 
 
 def _github_pipeline_companion_is_read_only(

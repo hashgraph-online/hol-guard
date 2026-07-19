@@ -123,8 +123,20 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
             "The command changes GitHub secrets.",
         )
     if top_level in _ACCESS_GROUPS:
+        subcommand = _group_subcommand(normalized[1:])
+        if subcommand == "help":
+            return _assessment("read_local", "github.command.local-help", "The command displays local CLI help.")
+        if subcommand == "list":
+            return _assessment(
+                "read_remote",
+                "github.command.proven-access-read",
+                "The command reads public-key metadata from GitHub.",
+            )
+        access_capabilities: GitHubCommandCapability | tuple[GitHubCommandCapability, ...] = "access_remote"
+        if subcommand == "delete":
+            access_capabilities = ("delete_remote", "access_remote")
         return _assessment(
-            "access_remote",
+            access_capabilities,
             "github.command.access-mutation",
             "The command changes GitHub access credentials.",
         )

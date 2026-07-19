@@ -99,7 +99,7 @@ def test_command_extension_registry_is_deterministic_and_complete() -> None:
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("destructive shell command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("GitHub merge command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("GitHub merge command") is not None
-    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 82
+    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 83
 
 
 @pytest.mark.parametrize(
@@ -374,6 +374,7 @@ def test_runtime_risk_class_mapping_remains_compatible() -> None:
         "destructive_shell",
         "network_egress",
     )
+    assert risk_classes_for_command_action("GitHub local configuration write") == ("destructive_shell",)
     assert risk_classes_for_command_action("Guard approval self-authorization command") == ("policy_bypass",)
 
 

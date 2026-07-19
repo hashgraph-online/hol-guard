@@ -8,6 +8,7 @@ from .command_extension_specs import CommandExtensionSpec
 from .command_rules import CommandSafetyRule
 
 _REMOTE_MUTATION_RISKS: Final = ("destructive_shell", "network_egress")
+_LOCAL_WRITE_RISKS: Final = ("destructive_shell",)
 GITHUB_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     "github bounded maintenance command": _REMOTE_MUTATION_RISKS,
     "github content mutation command": _REMOTE_MUTATION_RISKS,
@@ -19,6 +20,7 @@ GITHUB_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     "github secret mutation command": _REMOTE_MUTATION_RISKS,
     "github access mutation command": _REMOTE_MUTATION_RISKS,
     "github remote mutation command": _REMOTE_MUTATION_RISKS,
+    "github local configuration write": _LOCAL_WRITE_RISKS,
     "unverified github command capability": _REMOTE_MUTATION_RISKS,
 }
 
@@ -33,6 +35,7 @@ _RULE_DEFINITIONS: Final = (
     ("secret", "GitHub secret mutation", "GitHub secret mutation command"),
     ("access", "GitHub access mutation", "GitHub access mutation command"),
     ("mutation", "GitHub remote mutation", "GitHub remote mutation command"),
+    ("local-write", "GitHub local configuration write", "GitHub local configuration write"),
     ("unknown", "Unverified GitHub command capability", "Unverified GitHub command capability"),
 )
 
@@ -40,7 +43,11 @@ GITHUB_COMMAND_RULES: Final = tuple(
     CommandSafetyRule(
         rule_id=f"command.github.{suffix}",
         title=title,
-        description=f"Identifies {title.lower()} operations that change or may change GitHub-hosted state.",
+        description=(
+            "Identifies GitHub CLI operations that change local repository configuration."
+            if suffix == "local-write"
+            else f"Identifies {title.lower()} operations that change or may change GitHub-hosted state."
+        ),
         severity="high",
         risk_classes=GITHUB_ACTION_RISK_CLASSES[action_class.lower()],
         action_classes=(action_class,),

@@ -14,6 +14,7 @@ from ..models import GuardAction
 GitHubCommandCapability = Literal[
     "read_local",
     "read_remote",
+    "write_local",
     "maintain_remote",
     "content_remote",
     "merge_remote",
@@ -24,7 +25,6 @@ GitHubCommandCapability = Literal[
     "secret_remote",
     "access_remote",
     "mutate_remote",
-    "write_local",
     "unknown",
 ]
 
@@ -38,6 +38,7 @@ class GitHubCapabilityContract:
 _CAPABILITY_ORDER: Final[tuple[GitHubCommandCapability, ...]] = (
     "read_local",
     "read_remote",
+    "write_local",
     "maintain_remote",
     "content_remote",
     "merge_remote",
@@ -48,7 +49,6 @@ _CAPABILITY_ORDER: Final[tuple[GitHubCommandCapability, ...]] = (
     "secret_remote",
     "access_remote",
     "mutate_remote",
-    "write_local",
     "unknown",
 )
 _CAPABILITY_RANK: Final = MappingProxyType({capability: rank for rank, capability in enumerate(_CAPABILITY_ORDER)})

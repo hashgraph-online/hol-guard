@@ -15,6 +15,9 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         (("auth", "token"), "secret_remote", "github.command.auth-token-read"),
         (("auth", "status", "--show-token"), "secret_remote", "github.command.auth-token-read"),
         (("auth", "status", "-t"), "secret_remote", "github.command.auth-token-read"),
+        (("ssh-key", "list"), "read_remote", "github.command.proven-access-read"),
+        (("gpg-key", "list"), "read_remote", "github.command.proven-access-read"),
+        (("ssh-key", "delete", "123"), "access_remote", "github.command.access-mutation"),
         (("run", "cancel", "--help"), "workflow_remote", "github.command.workflow-mutation"),
         (
             ("--repo", "example/project", "workflow", "view", "release.yml"),
@@ -230,6 +233,8 @@ def test_classify_github_cli_rejects_ambiguous_graphql_inputs(args):
         "gh pr view ${PR_NUMBER}",
         "gh issue list --limit 10",
         "gh issue list --repo ${REPO}",
+        "gh ssh-key list",
+        "gh gpg-key list",
         "gh api repos/example/project -X GET -f per_page=1 --jq '.name'",
         "gh api graphql -f 'query=query { viewer { login } }' | jq -r '.data.viewer.login'",
         (
@@ -281,6 +286,8 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path, command):
         ("gh auth token", "GitHub secret mutation command"),
         ("gh auth status --show-token", "GitHub secret mutation command"),
         ("gh repo edit --visibility private", "GitHub access mutation command"),
+        ("gh ssh-key delete 123 --yes", "GitHub access mutation command"),
+        ("gh repo set-default o/r", "GitHub local configuration write"),
         ("gh pr lock 1; gh repo delete o/r --yes", "GitHub delete command"),
         (
             "gh api graphql -f 'query=mutation { resolveReviewThread(input: {}) { thread { id } } }'; "

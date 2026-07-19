@@ -14570,7 +14570,7 @@ def test_guard_hook_codex_emits_no_native_output_for_safe_requests(tmp_path, cap
     assert pending == []
 
 
-def test_guard_hook_codex_emits_no_native_output_for_safe_github_node_review_thread_command(
+def test_guard_hook_codex_reviews_github_token_substitution_command(
     tmp_path,
     capsys,
     monkeypatch,
@@ -14610,9 +14610,11 @@ def test_guard_hook_codex_emits_no_native_output_for_safe_github_node_review_thr
     pending = GuardStore(home_dir).list_approval_requests(limit=10)
 
     assert rc == 0
-    assert output == ""
-    assert GuardStore(home_dir).list_receipts(limit=10) == []
-    assert pending == []
+    payload = json.loads(output)
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "GitHub secret mutation command" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert len(GuardStore(home_dir).list_receipts(limit=10)) == 1
+    assert len(pending) == 1
 
 
 def test_guard_hook_codex_current_block_is_terminal_before_native_deny_output(tmp_path, capsys, monkeypatch):
@@ -15762,7 +15764,7 @@ def test_guard_runtime_allows_lean_ctx_wrapped_gh_graphql_pipeline(tmp_path):
     assert match is None
 
 
-def test_guard_hook_allows_routine_github_repository_update(tmp_path, capsys, monkeypatch):
+def test_guard_hook_reviews_github_repository_update(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -15789,7 +15791,8 @@ def test_guard_hook_allows_routine_github_repository_update(tmp_path, capsys, mo
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert output["permissionDecision"] == "deny"
+    assert "GitHub remote mutation command" in output["permissionDecisionReason"]
 
 
 def test_guard_runtime_blocks_unsafe_cd_before_pytest_module_invocation(tmp_path):

@@ -17,7 +17,7 @@ _ACTION_CLASSES: Final[dict[GitHubCommandCapability, str]] = {
     "secret_remote": "GitHub secret mutation command",
     "access_remote": "GitHub access mutation command",
     "mutate_remote": "GitHub remote mutation command",
-    "write_local": "Unverified GitHub command capability",
+    "write_local": "GitHub local configuration write",
     "unknown": "Unverified GitHub command capability",
     "read_local": "Unverified GitHub command capability",
     "read_remote": "Unverified GitHub command capability",
