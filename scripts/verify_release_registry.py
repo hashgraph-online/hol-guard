@@ -27,7 +27,7 @@ if __package__:
         TestPyPIResult,
     )
 else:
-    from release_registry_types import (
+    from release_registry_types import (  # pyright: ignore[reportImplicitRelativeImport]
         Registry,
         RegistryResult,
         RegistryVerificationError,
@@ -161,7 +161,9 @@ def _validate_distribution_filename(filename: object, version: Version) -> str:
 def _is_publish_attestation(filename: object, version: Version) -> bool:
     if not isinstance(filename, str) or not filename.endswith(".publish.attestation"):
         return False
-    distribution_filename = filename.removesuffix(".publish.attestation")
+    distribution_filename = filename
+    while distribution_filename.endswith(".publish.attestation"):
+        distribution_filename = distribution_filename.removesuffix(".publish.attestation")
     _validate_distribution_filename(distribution_filename, version)
     return True
 
