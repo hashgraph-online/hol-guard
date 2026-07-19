@@ -62,10 +62,14 @@ async function mountCommandFixture(page: Page): Promise<{
   activityQueries: string[];
   feedbackLabels: string[];
   setActivityDelay: (milliseconds: number) => void;
+  setActivityMode: (mode: "normal" | "empty" | "error") => void;
+  setActivityCount: (count: number) => void;
 }> {
   const activityQueries: string[] = [];
   const feedbackLabels: string[] = [];
   let activityDelay = 0;
+  let activityMode: "normal" | "empty" | "error" = "normal";
+  let activityCount = 1;
   await page.route("**/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -88,7 +92,7 @@ async function mountCommandFixture(page: Page): Promise<{
           dimension: url.searchParams.get("dimension"),
           dimension_value: url.searchParams.get("dimension_value"),
         },
-        commands_checked: 1,
+        commands_checked: activityCount,
         trend: [{ day: "2026-07-18", count: 0 }, { day: "2026-07-19", count: 1 }],
         dimensions,
         dimension_breakdowns_scope: "global",
@@ -104,9 +108,19 @@ async function mountCommandFixture(page: Page): Promise<{
     } else if (path.endsWith("/command-activity")) {
       activityQueries.push(url.search);
       if (activityDelay > 0) await new Promise((resolve) => setTimeout(resolve, activityDelay));
+      if (activityMode === "error") {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: SECRET_SENTINEL }) });
+        return;
+      }
       body = {
         schema_version: "guard.command-activity-api.v1",
-        items: [{ ...activity, harness: url.searchParams.get("harness") ?? activity.harness }],
+        items: activityMode === "empty"
+          ? []
+          : Array.from({ length: activityCount }, (_, index) => ({
+              ...activity,
+              activity_id: `activity:${index.toString().padStart(3, "0")}`,
+              harness: url.searchParams.get("harness") ?? activity.harness,
+            })),
         next_cursor: null,
       };
     }
@@ -118,10 +132,17 @@ async function mountCommandFixture(page: Page): Promise<{
     setActivityDelay: (milliseconds) => {
       activityDelay = milliseconds;
     },
+    setActivityMode: (mode) => {
+      activityMode = mode;
+    },
+    setActivityCount: (count) => {
+      activityCount = count;
+    },
   };
 }
 
 test("Commands evidence renders with zero receipts and keeps private fields hidden", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const fixture = await mountCommandFixture(page);
   await page.goto(`/evidence?view=commands&${DAEMON}`);
   await expect(page.getByRole("heading", { name: "Commands" })).toBeVisible();
@@ -132,8 +153,13 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
     const zeroDay = element.children.item(element.children.length - 2)?.firstElementChild as HTMLElement | null;
     return zeroDay?.style.height ?? null;
   })).toBe("0%");
+  await expect.poll(() => trend.locator(":scope > div > div").last().evaluate((element) => {
+    const durationSeconds = Number.parseFloat(getComputedStyle(element).transitionDuration);
+    return Number.isFinite(durationSeconds) ? durationSeconds : 1;
+  })).toBeLessThanOrEqual(0.001);
   const detailsButton = page.getByRole("button", { name: "Details" });
-  await detailsButton.click();
+  await detailsButton.focus();
+  await page.keyboard.press("Enter");
   await expect(page.getByRole("complementary", { name: "Command activity detail" })).toBeFocused();
   await expect(page.getByText("Other recorded reason")).toBeVisible();
   await expect(page.getByText(SECRET_SENTINEL)).toHaveCount(0);
@@ -142,6 +168,38 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
   await page.getByRole("button", { name: "Close command activity detail" }).click();
   await expect(detailsButton).toBeFocused();
   await expect.poll(() => new URL(page.url()).searchParams.get("guardDaemon")).toBe("http://127.0.0.1:4175");
+});
+
+test("Commands exposes bounded empty and error states", async ({ page }) => {
+  const fixture = await mountCommandFixture(page);
+  fixture.setActivityMode("empty");
+  await page.goto(`/evidence?view=commands&${DAEMON}`);
+  await expect(page.getByRole("heading", { name: "No command activity" })).toBeVisible();
+
+  fixture.setActivityMode("error");
+  await page.reload();
+  await expect(page.getByText("Command activity is unavailable.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again" }).first()).toBeVisible();
+  await expect(page.getByText(SECRET_SENTINEL)).toHaveCount(0);
+});
+
+test("Commands remains responsive with a full 100-row page", async ({ context, page }, testInfo) => {
+  const fixture = await mountCommandFixture(page);
+  fixture.setActivityCount(100);
+  await context.tracing.start({ screenshots: true, snapshots: true });
+  await page.goto(`/evidence?view=commands&${DAEMON}`);
+  const detailsButtons = page.getByRole("button", { name: "Details" });
+  await expect(detailsButtons).toHaveCount(100);
+  const lastButton = detailsButtons.last();
+  const interactionMs = await lastButton.evaluate(async (button) => {
+    const started = performance.now();
+    button.click();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    return performance.now() - started;
+  });
+  await expect(page.getByRole("complementary", { name: "Command activity detail" })).toBeVisible();
+  expect(interactionMs).toBeLessThan(250);
+  await context.tracing.stop({ path: testInfo.outputPath("command-activity-100-row-trace.zip") });
 });
 
 test("Commands deep links keep active filters visible outside aggregate options", async ({ page }) => {

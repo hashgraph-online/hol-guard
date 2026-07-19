@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ from codex_plugin_scanner.guard import store_command_activity as activity_store
 from codex_plugin_scanner.guard import store_command_activity_maintenance as activity_maintenance
 from codex_plugin_scanner.guard import store_command_activity_maintenance_schema as maintenance_schema
 from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.runtime.command_activity_api_contract import CommandActivityAnalyticsQuery
 from codex_plugin_scanner.guard.runtime.command_activity_contract import (
     ActivityApprovalReuseStatus,
     ActivityDecisionReason,
@@ -240,7 +242,7 @@ def test_rollup_failure_rolls_back_parent_and_children(tmp_path: Path, monkeypat
     assert store.count_command_activity_rule_hits() == 0
 
 
-def test_rebuild_reconciles_one_hundred_thousand_rows(tmp_path: Path) -> None:
+def test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     template = _evidence("activity:1")
     store.record_command_activity(template)
@@ -299,6 +301,18 @@ def test_rebuild_reconciles_one_hundred_thousand_rows(tmp_path: Path) -> None:
     store.rebuild_command_activity_rollups(now=_NOW)
     assert store.count_command_activities() == 100_000
     assert store.command_activity_rollups_are_reconciled() is True
+    analytics_query = CommandActivityAnalyticsQuery(days=90, top_limit=10)
+    analytics_as_of = (_NOW - timedelta(days=400)).date()
+    store.command_activity_analytics(analytics_query, as_of=analytics_as_of)
+    aggregate_timings: list[float] = []
+    for _ in range(5):
+        started = time.perf_counter()
+        analytics = store.command_activity_analytics(analytics_query, as_of=analytics_as_of)
+        aggregate_timings.append(time.perf_counter() - started)
+        assert analytics["commands_checked"] == 100_000
+    assert max(aggregate_timings) < 0.05, (
+        f"command activity aggregate took {max(aggregate_timings) * 1000:.1f}ms, expected < 50ms"
+    )
     with sqlite3.connect(store.path) as connection:
         assert connection.execute("select sum(total) from command_activity_daily_totals").fetchone() == (100_000,)
         assert connection.execute("select count(*) from command_activity_rollup_membership").fetchone() == (100_000,)

@@ -49,6 +49,7 @@ from .redaction import redact_text
 from .risk import artifact_risk_signals, artifact_risk_summary
 from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
+from .runtime.protection_health_runtime import build_runtime_protection_health
 from .store import (
     GuardStore,
     _runtime_scoped_exact_match_key,
@@ -1164,15 +1165,24 @@ def build_runtime_snapshot(
         oauth_storage_health=oauth_storage_health,
     )
     trust_status = store.get_cached_policy_trust_status()
+    managed_installs = store.list_managed_installs()
+    runtime_state = store.get_runtime_state()
+    protection_health = build_runtime_protection_health(
+        store=store,
+        runtime_state=runtime_state,
+        managed_installs=managed_installs,
+        trust_status=trust_status,
+        now=datetime.fromisoformat(snapshot_now.replace("Z", "+00:00")),
+    )
     headline_state = _resolve_runtime_headline_state(
         pending_count=pending_count,
-        runtime_state=store.get_runtime_state(),
-        cloud_state=str(cloud_context["cloud_state"]),
+        runtime_state=runtime_state,
+        protection_state=str(protection_health["state"]),
     )
     return {
         "generated_at": snapshot_now,
         "approval_center_url": approval_center_url,
-        "runtime_state": store.get_runtime_state(),
+        "runtime_state": runtime_state,
         "oauth_storage_health": oauth_storage_health,
         "device": _build_runtime_device_context(store),
         "latest_connect_state": latest_connect_state,
@@ -1192,11 +1202,12 @@ def build_runtime_snapshot(
         "thread_count": threading.active_count(),
         "items": pending_requests,
         "latest_receipts": latest_receipts,
-        "managed_installs": store.list_managed_installs(),
+        "managed_installs": managed_installs,
         "cloud_command_capability": command_capability_status(store, now=snapshot_now),
         "supply_chain": build_local_supply_chain_posture(store, config, now=snapshot_now),
         **cloud_context,
         "trust_status": trust_status,
+        "protection_health": protection_health,
     }
 
 
@@ -1661,7 +1672,7 @@ def _runtime_proof_status_detail(state: str) -> str:
         "sync_unavailable": "Local Guard is connected. Shared cloud sync needs a paid Guard plan.",
         "failed": "Guard Cloud sign-in on this machine needs repair. Run hol-guard connect again.",
         "stalled": (
-            "Local protection stays active. The first shared Guard Cloud proof stalled after a refresh-token race. "
+            "Local Guard remains available. The first shared Guard Cloud proof stalled after a refresh-token race. "
             "Run hol-guard connect once on this machine when you want shared proof restored."
         ),
         "pending": (
@@ -1796,7 +1807,7 @@ def _cloud_sync_health_detail(
     if state == "failed":
         if connect_retry_refresh_race:
             return (
-                "Local protection is active. The first shared Guard Cloud proof stalled after a refresh-token race. "
+                "Local Guard remains available. The first shared Guard Cloud proof stalled after a refresh-token race. "
                 "Run hol-guard connect once to mint a fresh Cloud refresh token."
             )
         if oauth_repair_required or connect_retry_required:
@@ -1808,9 +1819,12 @@ def _cloud_sync_health_detail(
             "or run hol-guard sync to try again now."
         )
     if state == "degraded":
-        return "Cloud accepted legacy sync, but v1 Guard event ingest is unavailable. Local protection stayed active."
+        return (
+            "Cloud accepted legacy sync, but v1 Guard event ingest is unavailable. "
+            "Review local protection health separately."
+        )
     if state == "disabled":
-        return "Local protection is active. Connect Cloud when you want shared team proof."
+        return "Cloud sync is disabled. Review local protection health separately or connect for shared team proof."
     if state == "stale":
         return "Cloud has not seen fresh local proof recently. Keep this runtime open or run sync again."
     if pending_events == 1:
@@ -1844,7 +1858,7 @@ def _runtime_cloud_state_detail(
         )
     if connect_retry_refresh_race:
         return (
-            "This machine stays locally protected. "
+            "Local Guard remains available. "
             "The first shared Guard Cloud proof stalled after a refresh-token race. "
             "Run hol-guard connect once when you want shared proof restored."
         )
@@ -1870,7 +1884,7 @@ def _runtime_cloud_state_detail(
             "This machine is connected to Guard Cloud. Open Home, Inbox, or Fleet in the portal "
             "to continue with shared review and proof."
         )
-    return "Guard is protecting this machine locally. Connect when you want Home, Inbox, Fleet, and shared team memory."
+    return "Guard is running on this machine. Review protection health locally or connect for shared team memory."
 
 
 def _resolve_guard_urls(sync_url: object) -> tuple[str, str, str, str]:
@@ -1893,23 +1907,23 @@ def _resolve_runtime_headline_state(
     *,
     pending_count: int,
     runtime_state: dict[str, object] | None,
-    cloud_state: str,
+    protection_state: str,
 ) -> str:
     if runtime_state is None:
         return "setup"
     if pending_count > 0:
         return "blocked"
-    if cloud_state == "local_only":
-        return "local_only"
-    if cloud_state == "paired_waiting":
-        return "connected"
-    return "protected"
+    if protection_state in {"protected", "partial"}:
+        return protection_state
+    return "degraded"
 
 
 def _runtime_headline_label(headline_state: str) -> str:
     labels = {
         "setup": "Setup required",
         "protected": "Protected",
+        "partial": "Partial",
+        "degraded": "Degraded",
         "blocked": "Blocked",
         "local_only": "Local only",
         "connected": "Connected",
@@ -1921,11 +1935,13 @@ def _runtime_headline_detail(headline_state: str) -> str:
     details = {
         "setup": "The local Guard runtime is offline. Start the daemon or rerun hol-guard bootstrap.",
         "protected": "This machine is protected and the local queue is clear.",
+        "partial": "Core protection checks pass, but complete local evidence health cannot be proven.",
+        "degraded": "One or more required protection checks failed or remain unproven.",
         "blocked": "A blocked launch is waiting for review in the current request queue.",
-        "local_only": "This machine is protected locally and can connect later when shared memory matters.",
+        "local_only": "This machine is running locally and can connect later when shared memory matters.",
         "connected": "This machine is connected to Guard Cloud. Local Guard is sending the first shared proof now.",
     }
-    return details.get(headline_state, "This machine is protected locally.")
+    return details.get(headline_state, "Complete local protection cannot be proven.")
 
 
 _BULK_SECRET_TEXT_HINTS = (

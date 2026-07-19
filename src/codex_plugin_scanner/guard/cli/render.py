@@ -1776,11 +1776,11 @@ def _connect_status_text(payload: dict[str, object]) -> str:
     status = str(payload.get("status") or "unknown")
     milestone = str(payload.get("milestone") or "")
     if status == "connected" and milestone == "sync_not_available":
-        return "This device is protected locally"
+        return "Guard is running locally"
     if status == "connected" and milestone == "first_sync_pending":
         reason = _connect_reason_text(payload)
         if _connect_reason_requires_login(reason) or _connect_reason_requires_paid_plan(reason):
-            return "This device is protected locally"
+            return "Guard is running locally"
         return "This device is connected"
     if status == "connected" and milestone == "first_sync_succeeded":
         return "This device is connected to Guard Cloud"
@@ -1860,10 +1860,10 @@ def _connect_sync_note_text(payload: dict[str, object]) -> str | None:
         return None
     reason = message.lower()
     if _connect_reason_requires_login(reason):
-        return "Local protection is active. Sign in on the Guard connect page to finish Guard Cloud setup."
+        return "Local Guard is available. Sign in on the Guard connect page to finish Guard Cloud setup."
     if _connect_reason_requires_paid_plan(reason):
         return (
-            "Local protection is active. Upgrade your Guard plan to sync shared "
+            "Local Guard is available. Upgrade your Guard plan to sync shared "
             "proof, receipts, and Fleet history to Guard Cloud."
         )
     return message
@@ -2668,7 +2668,7 @@ def _build_cloud_summary_panel(payload: dict[str, object]) -> Panel:
     cloud_state = str(payload.get("cloud_state") or "local_only")
     body = Table.grid(padding=(0, 1))
     body.add_row("State", f"[bold]{payload.get('cloud_state_label', 'Local only')}[/bold]")
-    body.add_row("Summary", str(payload.get("cloud_state_detail") or "Guard is protecting this machine locally."))
+    body.add_row("Summary", str(payload.get("cloud_state_detail") or "Guard is running on this machine."))
     body.add_row("Home", str(payload.get("dashboard_url") or "https://hol.org/guard"))
     if payload.get("inbox_url"):
         body.add_row("Inbox", str(payload.get("inbox_url")))

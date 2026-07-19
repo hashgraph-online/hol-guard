@@ -1060,8 +1060,10 @@ class TestGuardSurfaceServer:
         finally:
             daemon.stop()
 
-        assert payload["headline_state"] == "protected"
-        assert payload["headline_label"] == "Protected"
+        assert payload["headline_state"] == "degraded"
+        assert payload["headline_label"] == "Degraded"
+        assert payload["protection_health"]["state"] == "degraded"
+        assert "no_managed_harness" in payload["protection_health"]["reason_codes"]
         assert payload["cloud_state"] == "paired_active"
         assert payload["cloud_state_label"] == "Connected"
         assert payload["cloud_pairing_state"] == {
@@ -1361,12 +1363,13 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         assert payload["cloud_state"] == "paired_waiting"
-        assert "stays locally protected" in payload["cloud_state_detail"]
+        assert "Local Guard remains available" in payload["cloud_state_detail"]
+        assert "protected" not in payload["cloud_state_detail"].lower()
         assert payload["cloud_pairing_state"]["detail"] == payload["cloud_state_detail"]
         assert payload["proof_status"]["state"] == "stalled"
-        assert payload["proof_status"]["detail"].startswith("Local protection stays active.")
+        assert payload["proof_status"]["detail"].startswith("Local Guard remains available.")
         assert payload["cloud_sync_health"]["state"] == "failed"
-        assert payload["cloud_sync_health"]["detail"].startswith("Local protection is active.")
+        assert payload["cloud_sync_health"]["detail"].startswith("Local Guard remains available.")
 
     def test_guard_daemon_runtime_snapshot_reports_post_sync_reauth_as_local_only(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")

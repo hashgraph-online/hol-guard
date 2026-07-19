@@ -1,4 +1,4 @@
-import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, u as useReceiptAnalytics, e as harnessDisplayName, i as isDisplayableHarness, k as EmptyState, A as ActionButton, l as EvidenceInsightsShareModal, m as HiMiniCheckCircle, n as GuardHero, o as formatNumber, p as HiMiniShieldCheck, D as DeviceProofCard, q as formatRelativeTime, s as HiMiniSparkles, t as HiMiniXMark, v as HiMiniChevronUp, w as HiMiniChevronDown, x as resolveCloudIntelCopy, y as HiMiniCloud, z as HiMiniQuestionMarkCircle, B as useFocusTrap, C as approvalProofRequiresPassword, F as HiMiniExclamationTriangle, I as HiMiniBolt, J as Badge, K as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, u as useReceiptAnalytics, e as harnessDisplayName, i as isDisplayableHarness, p as protectionHealthFor, k as EmptyState, A as ActionButton, l as EvidenceInsightsShareModal, m as HiMiniCheckCircle, n as GuardHero, o as formatNumber, q as HiMiniShieldCheck, D as DeviceProofCard, s as formatRelativeTime, t as HiMiniSparkles, v as HiMiniXMark, w as HiMiniChevronUp, x as HiMiniChevronDown, y as resolveCloudIntelCopy, z as HiMiniCloud, B as HiMiniQuestionMarkCircle, C as useFocusTrap, F as approvalProofRequiresPassword, I as HiMiniExclamationTriangle, J as HiMiniBolt, K as Badge, L as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { H as HomeProtectionModule } from "./home-protection-module.js";
 function HomeInsightsSkeleton() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -237,14 +237,16 @@ function HomeWorkspace(props) {
   ).sort() : [];
   const clearHarnesses = activeInstalls.length > 0 ? activeInstalls.map((i) => i.harness) : observedHarnesses;
   const watchedAppsCount = activeInstalls.length > 0 ? activeInstalls.length : observedHarnesses.length;
+  const protectionState = snapshot ? protectionHealthFor(snapshot).state : "degraded";
   const state = reactExports.useMemo(
     () => deriveHomeState({
       hasActiveInstalls: activeInstalls.length > 0,
       hasObservedHarnesses: observedHarnesses.length > 0,
       queuedCount,
-      watchedAppsCount
+      watchedAppsCount,
+      protectionState
     }),
-    [activeInstalls.length, observedHarnesses.length, queuedCount, watchedAppsCount]
+    [activeInstalls.length, observedHarnesses.length, protectionState, queuedCount, watchedAppsCount]
   );
   const dailyStory = reactExports.useMemo(
     () => snapshot ? buildDailyStory(snapshot.latest_receipts, queuedCount) : null,
@@ -494,7 +496,7 @@ function ClearConfirmDialog(props) {
   ] }) });
 }
 function deriveHomeState(input) {
-  const { hasActiveInstalls, hasObservedHarnesses, queuedCount, watchedAppsCount } = input;
+  const { hasActiveInstalls, hasObservedHarnesses, protectionState, queuedCount, watchedAppsCount } = input;
   if (queuedCount > 0) {
     return {
       heroStatus: "needs_review",
@@ -519,6 +521,24 @@ function deriveHomeState(input) {
       headline: "Finish setup",
       subheadline: "Guard detected apps but they need setup to be fully protected.",
       ctaLabel: "Open Protect",
+      ctaTarget: "protect"
+    };
+  }
+  if (protectionState === "degraded") {
+    return {
+      heroStatus: "degraded",
+      headline: "Protection is degraded",
+      subheadline: "Guard is running, but one or more required protection checks failed or remain unproven.",
+      ctaLabel: "Review protection",
+      ctaTarget: "protect"
+    };
+  }
+  if (protectionState === "partial") {
+    return {
+      heroStatus: "partial",
+      headline: "Protection is partial",
+      subheadline: "Core protection passes, but complete decision-stream evidence is not available.",
+      ctaLabel: "Review protection",
       ctaTarget: "protect"
     };
   }

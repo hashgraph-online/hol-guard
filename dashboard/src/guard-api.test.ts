@@ -38,6 +38,79 @@ function assert(condition: unknown, message: string): asserts condition {
 
 const snapshot = buildDemoRuntimeSnapshot();
 
+const missingRuntimeStateSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  runtime_state: undefined,
+});
+assert(missingRuntimeStateSnapshot.runtime_state === null, "runtime normalizer rejects missing runtime proof");
+assert(
+  missingRuntimeStateSnapshot.headline_state === "setup",
+  "missing runtime proof cannot produce a protected headline"
+);
+
+const malformedRuntimeStateSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  runtime_state: { session_id: "unproven" },
+});
+assert(malformedRuntimeStateSnapshot.runtime_state === null, "runtime normalizer rejects malformed runtime proof");
+assert(
+  malformedRuntimeStateSnapshot.headline_state === "setup",
+  "malformed runtime proof cannot produce a protected headline"
+);
+
+const semanticallyInvalidRuntimeStateSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  runtime_state: {
+    session_id: "unproven",
+    daemon_host: "127.0.0.1",
+    daemon_port: 4455,
+    started_at: "not-a-time",
+    last_heartbeat_at: "not-a-time",
+    approval_center_url: "not-a-url",
+  },
+});
+assert(
+  semanticallyInvalidRuntimeStateSnapshot.runtime_state === null,
+  "runtime normalizer rejects invalid timestamps and endpoint proof"
+);
+assert(
+  semanticallyInvalidRuntimeStateSnapshot.headline_state === "setup",
+  "semantically invalid runtime proof cannot produce a protected headline"
+);
+assert(snapshot.runtime_state !== null, "demo snapshot includes valid runtime proof");
+for (const [label, runtimeState] of [
+  [
+    "non-local approval URL",
+    { ...snapshot.runtime_state, approval_center_url: "https://example.test/" },
+  ],
+  [
+    "stale heartbeat",
+    { ...snapshot.runtime_state, last_heartbeat_at: new Date(Date.now() - 60_000).toISOString() },
+  ],
+  [
+    "timezone-naive heartbeat",
+    { ...snapshot.runtime_state, last_heartbeat_at: "2026-07-18T12:00:00" },
+  ],
+] as const) {
+  const normalized = normalizeRuntimeSnapshot({ ...snapshot, runtime_state: runtimeState });
+  assert(normalized.runtime_state === null, `runtime normalizer rejects ${label}`);
+  assert(normalized.headline_state === "setup", `${label} cannot produce a protected headline`);
+}
+
+const ipv6RuntimeStateSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  runtime_state: {
+    ...snapshot.runtime_state,
+    daemon_host: "::1",
+    approval_center_url: "http://[::1]:4455",
+  },
+});
+assert(ipv6RuntimeStateSnapshot.runtime_state !== null, "runtime normalizer accepts bracketed IPv6 loopback proof");
+assert(
+  ipv6RuntimeStateSnapshot.headline_state !== "setup",
+  "fresh IPv6 loopback proof does not report the runtime offline"
+);
+
 const partialSupplyChainSnapshot = normalizeRuntimeSnapshot({
   ...snapshot,
   items: null,

@@ -1317,7 +1317,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   return (
     <div className="flex min-h-[calc(100dvh-11rem)] flex-col gap-6">
       <GuardHero
-        status="clear"
+        status="neutral"
         headline="Set how hard Guard should push back"
         subheadline="Pick a security level, then fine-tune individual rules whenever you need more control."
         cta={<Tag tone="blue">{protectionModeLabel(draft.mode)}</Tag>}

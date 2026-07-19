@@ -112,7 +112,7 @@ from ..local_supply_chain import (
     resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
-from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision
+from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision, format_local_http_origin
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -931,7 +931,7 @@ def _default_package_firewall_connect_flow(
     else:
         title = "Connect HOL Guard Cloud to enable package firewall"
         detail = (
-            "Guard keeps this machine protected locally. Connect HOL Guard Cloud here so the daemon can verify "
+            "Guard continues running locally. Connect HOL Guard Cloud here so the daemon can verify "
             "package-firewall access before it changes package-manager routing."
         )
     return {
@@ -1087,7 +1087,7 @@ def _default_guard_cloud_connect_flow(*, store: GuardStore, repair_mode: bool) -
     else:
         title = "Connect Guard Cloud to publish insights"
         detail = (
-            "Guard keeps protecting this machine locally. Connect Guard Cloud here so the daemon can publish "
+            "Local Guard remains available. Connect Guard Cloud here so the daemon can publish "
             "a public share link with preview image support."
         )
     return {
@@ -1405,8 +1405,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             include_receipts = self._query_bool(parsed.query, "include_receipts", default=True)
             snapshot = build_runtime_snapshot(
                 store=store,
-                approval_center_url=(
-                    f"http://{self._daemon_server().daemon_host()}:{self._daemon_server().daemon_port()}"
+                approval_center_url=format_local_http_origin(
+                    self._daemon_server().daemon_host(),
+                    self._daemon_server().daemon_port(),
                 ),
                 active_request_id=self._query_string(parsed.query, "active_request_id"),
                 include_items=self._query_bool(parsed.query, "include_items", default=True),

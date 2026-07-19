@@ -1,6 +1,7 @@
 import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag, ProofStrip } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
 import type { GuardCloudCommandCapability, GuardCloudSyncHealth, GuardInventoryItem, GuardProofStatus, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
+import { protectionHealthFor } from "./protection-health";
 
 const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw", "kimi", "grok"] as const;
 
@@ -12,7 +13,7 @@ type RuntimeOverviewProps = {
 };
 
 function headlineTone(state: GuardRuntimeSnapshot["headline_state"]): "info" | "success" | "attention" {
-  if (state === "blocked") {
+  if (state === "blocked" || state === "degraded") {
     return "attention";
   }
   if (state === "connected" || state === "local_only") {
@@ -136,7 +137,7 @@ export function resolveProofStatusCopy(proofStatus: GuardProofStatus): ProofStat
   }
   return {
     label: "Local only",
-    detail: "Local protection is active. Cloud proof is optional.",
+    detail: "Local Guard is available. Protection health is reported separately; cloud proof is optional.",
     tone: "slate",
   };
 }
@@ -439,6 +440,7 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
   const latestReceipt = snapshot.latest_receipts[0];
   const daemonHealthLabel = snapshot.runtime_state !== null ? "running" : "offline";
   const resolvedInventory = inventory ?? snapshot.inventory ?? [];
+  const protectionHealth = protectionHealthFor(snapshot);
 
   return (
     <Surface className="mb-6" tone="accent">
@@ -480,12 +482,22 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
 
         <ProofStrip
           items={[
+            { label: "Protection health", value: protectionHealth.label, tone: protectionHealth.state === "protected" ? "green" : protectionHealth.state === "partial" ? "blue" : "slate" },
             { label: "Protection level", value: securityLevel ?? "balanced", tone: securityLevel === "strict" ? "purple" : "blue" },
             { label: "Recent decision", value: latestReceipt ? (latestReceipt.policy_decision) : "None", tone: latestReceipt ? (latestReceipt.policy_decision === "allow" ? "green" : "purple") : "slate" },
             { label: "Cloud state", value: snapshot.cloud_state === "local_only" ? "Local only" : "Syncing", tone: snapshot.cloud_state === "local_only" ? "slate" : "green" },
-            { label: "Apps seen", value: resolvedInventory.length, tone: resolvedInventory.length > 0 ? "green" : "slate" },
           ]}
         />
+
+        <div className="rounded-xl border border-border bg-white px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Protection health</p>
+            <Tag tone={protectionHealth.state === "protected" ? "green" : protectionHealth.state === "partial" ? "blue" : "attention"}>
+              {protectionHealth.label}
+            </Tag>
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{protectionHealth.detail}</p>
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
           <CloudSyncHealthCard health={snapshot.cloud_sync_health} />

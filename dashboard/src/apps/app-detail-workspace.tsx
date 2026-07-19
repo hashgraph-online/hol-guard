@@ -48,6 +48,7 @@ import { computeMetrics } from "../evidence/evidence-metrics";
 import { DEFAULT_FILTER_STATE } from "../evidence/evidence-url-state";
 import type { EvidenceFilterState, EvidenceSortKey } from "../evidence/evidence-types";
 import { CommandActivityWorkspace } from "../command-activity/command-activity-workspace";
+import { protectionHealthFor } from "../protection-health";
 import {
   AppCommandActivityModeTabs,
   type AppActivityMode,
@@ -56,6 +57,7 @@ import type {
   GuardApprovalRequest,
   GuardInventoryItem,
   GuardPolicyDecision,
+  GuardProtectionState,
   GuardReceipt,
   GuardRuntimeSnapshot,
   GuardManagedInstall,
@@ -110,21 +112,37 @@ function writeTabToUrl(tab: TabKey) {
   window.history.replaceState({}, "", url.toString());
 }
 
-function resolveHeroStatus(status: "active" | "needs_setup" | "observed" | "unknown"): "clear" | "setup_gap" | "needs_review" {
-  if (status === "active") return "clear";
+function resolveHeroStatus(
+  status: "active" | "needs_setup" | "observed" | "unknown",
+  protectionState: GuardProtectionState,
+): "clear" | "setup_gap" | "needs_review" | "partial" | "degraded" {
+  if (status === "active") return protectionState === "protected" ? "clear" : protectionState;
   if (status === "needs_setup") return "setup_gap";
   return "needs_review";
 }
 
-function resolveHeroHeadline(status: "active" | "needs_setup" | "observed" | "unknown", harness: string, isObserved: boolean): string {
-  if (status === "active") return `${harnessDisplayName(harness)} is protected`;
+function resolveHeroHeadline(
+  status: "active" | "needs_setup" | "observed" | "unknown",
+  harness: string,
+  isObserved: boolean,
+  protectionState: GuardProtectionState,
+): string {
+  if (status === "active" && protectionState === "protected") return `${harnessDisplayName(harness)} is protected`;
+  if (status === "active" && protectionState === "partial") return `${harnessDisplayName(harness)} is partially protected`;
+  if (status === "active") return `${harnessDisplayName(harness)} protection is degraded`;
   if (status === "needs_setup") return `${harnessDisplayName(harness)} needs setup`;
   if (isObserved) return `${harnessDisplayName(harness)} is observed`;
   return harnessDisplayName(harness);
 }
 
-function resolveHeroSubheadline(status: "active" | "needs_setup" | "observed" | "unknown", isObserved: boolean): string {
-  if (status === "active") return "Guard is watching this app. Review its activity and settings below.";
+function resolveHeroSubheadline(
+  status: "active" | "needs_setup" | "observed" | "unknown",
+  isObserved: boolean,
+  protectionState: GuardProtectionState,
+): string {
+  if (status === "active" && protectionState === "protected") return "All required protection checks have current proof.";
+  if (status === "active" && protectionState === "partial") return "Core protection passes, but decision-stream evidence is incomplete.";
+  if (status === "active") return "One or more required protection checks failed or remain unproven.";
   if (status === "needs_setup") return "Finish setup so Guard can protect this app.";
   if (isObserved) return "Guard has seen activity but install is not active.";
   return "This app has not been seen yet.";
@@ -133,6 +151,7 @@ function resolveHeroSubheadline(status: "active" | "needs_setup" | "observed" | 
 function resolveHeroCta(opts: {
   pendingCount: number;
   status: "active" | "needs_setup" | "observed" | "unknown";
+  protectionState: GuardProtectionState;
   onGoActivity: () => void;
   onGoSettings: () => void;
 }): React.ReactNode {
@@ -143,7 +162,7 @@ function resolveHeroCta(opts: {
       </ActionButton>
     );
   }
-  if (opts.status === "needs_setup") {
+  if (opts.status === "needs_setup" || (opts.status === "active" && opts.protectionState !== "protected")) {
     return (
       <ActionButton onClick={opts.onGoSettings} data-primary="true">
         Open Settings
@@ -296,9 +315,11 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
     ? "observed"
     : "unknown";
 
-  const heroStatus = resolveHeroStatus(status);
-  const heroHeadline = resolveHeroHeadline(status, harness, isObserved);
-  const heroSub = resolveHeroSubheadline(status, isObserved);
+  const appProtection = protectionHealthFor(runtime, harness);
+  const protectionState = appProtection.state;
+  const heroStatus = resolveHeroStatus(status, protectionState);
+  const heroHeadline = resolveHeroHeadline(status, harness, isObserved, protectionState);
+  const heroSub = resolveHeroSubheadline(status, isObserved, protectionState);
 
   const handleTabChange = useCallback((next: TabKey) => {
     const currentIndex = tabOrder.indexOf(activeTab);
@@ -331,7 +352,13 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
   const handleGoActivity = useCallback(() => handleTabChange("activity"), [handleTabChange]);
   const handleGoSettings = useCallback(() => handleTabChange("settings"), [handleTabChange]);
 
-  const heroCta = resolveHeroCta({ pendingCount: pendingItems.length, status, onGoActivity: handleGoActivity, onGoSettings: handleGoSettings });
+  const heroCta = resolveHeroCta({
+    pendingCount: pendingItems.length,
+    status,
+    protectionState,
+    onGoActivity: handleGoActivity,
+    onGoSettings: handleGoSettings,
+  });
 
   return (
     <div className="space-y-6">
@@ -361,7 +388,11 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
           { label: "Pending", value: pendingItems.length, tone: pendingItems.length > 0 ? "blue" : "slate" },
           { label: "Total actions", value: totalActions, tone: totalActions > 0 ? "purple" : "slate" },
           { label: "Blocked", value: `${blockRate}%`, tone: blockRate > 0 ? "blue" : "slate" },
-          { label: "Status", value: isActive ? "active" : "inactive", tone: isActive ? "green" : "slate" },
+          {
+            label: "Protection",
+            value: isActive ? appProtection.label : "Not active",
+            tone: isActive && protectionState === "protected" ? "green" : "slate",
+          },
         ]}
       />
 
@@ -1421,7 +1452,7 @@ function HarnessSetupPanel(props: {
       </div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <SetupMetric label="Install state" value={active ? "Protected" : props.status === "observed" ? "Observed" : "Not connected"} active={active} />
+        <SetupMetric label="Install state" value={active ? "Installed" : props.status === "observed" ? "Observed" : "Not connected"} active={active} />
         <SetupMetric label="Config source" value={props.install?.workspace ?? "Local machine"} />
         <SetupMetric label="Last changed" value={props.install ? formatRelativeTime(props.install.updated_at) : "Not yet"} />
       </div>

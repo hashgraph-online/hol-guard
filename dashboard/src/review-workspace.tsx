@@ -56,6 +56,7 @@ import {
   standardScopeChoicesForRequest,
 } from "./approval-scopes";
 import { ConsolidatedEvidenceAlert, type EvidenceItem } from "./consolidated-evidence-alert";
+import { protectionHealthFor, unavailableProtectionHealth } from "./protection-health";
 import { useRequestReadState, type RequestReadState, REQUEST_READ_STATE_LIMIT } from "./request-read-state";
 import {
   deriveDataFlowEvidence,
@@ -69,6 +70,7 @@ import type {
   GuardArtifactDiff,
   GuardCodexResumeResult,
   GuardPolicyDecision,
+  GuardProtectionState,
   GuardReceipt,
   GuardRuntimeSnapshot,
   DecisionScope,
@@ -108,6 +110,28 @@ export type ReviewViewModel = {
   receipt: GuardReceipt | null;
   policy: GuardPolicyDecision[];
 };
+
+const PROTECTION_APPEARANCE = {
+  protected: {
+    Icon: HiMiniShieldCheck,
+    cardClass: "border-emerald-200/60 bg-emerald-50/30",
+    iconClass: "bg-brand-green/10 text-brand-green",
+  },
+  partial: {
+    Icon: HiMiniInformationCircle,
+    cardClass: "border-brand-blue/20 bg-brand-blue/[0.04]",
+    iconClass: "bg-brand-blue/10 text-brand-blue",
+  },
+  degraded: {
+    Icon: HiMiniExclamationTriangle,
+    cardClass: "border-brand-attention/20 bg-brand-attention/[0.04]",
+    iconClass: "bg-brand-attention/10 text-brand-attention",
+  },
+} satisfies Record<GuardProtectionState, {
+  Icon: typeof HiMiniShieldCheck;
+  cardClass: string;
+  iconClass: string;
+}>;
 
 type ReviewWorkspaceProps = {
   requests: GuardApprovalRequest[];
@@ -1670,20 +1694,28 @@ function ReviewCodexResumePanel({ resume, onRetry }: ReviewCodexResumePanelProps
 }
 
 function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume }: { runtime: GuardRuntimeSnapshot | null; resolutionMessage: string | null; codexResume: GuardCodexResumeResult | null; onRetryResume?: () => void }) {
-  const appsCount = runtime?.managed_installs?.filter((i) => i.active).length ?? 0;
+  const protectionHealth = runtime ? protectionHealthFor(runtime) : unavailableProtectionHealth();
+  const protectedAppsCount = protectionHealth.apps.filter((app) => app.state === "protected").length;
+  const heroStatus = protectionHealth.state === "protected" ? "clear" : protectionHealth.state;
+  const {
+    Icon: ProtectionIcon,
+    cardClass: healthCardClass,
+    iconClass: healthIconClass,
+  } = PROTECTION_APPEARANCE[protectionHealth.state];
 
   return (
     <div className="space-y-6">
       <GuardHero
-        status="clear"
+        status={heroStatus}
         headline="Nothing to review"
-        subheadline="Guard is watching your AI work. No actions need your decision right now."
+        subheadline={`No actions need your decision right now. ${protectionHealth.detail}`}
       />
 
       <ProofStrip
         items={[
-          { label: "Status", value: "All clear", tone: "green" },
-          { label: "Apps protected", value: appsCount, tone: appsCount > 0 ? "green" : "slate" },
+          { label: "Queue", value: "All clear", tone: "green" },
+          { label: "Protection", value: protectionHealth.label, tone: protectionHealth.state === "protected" ? "green" : "slate" },
+          { label: "Apps protected", value: protectedAppsCount, tone: protectedAppsCount > 0 ? "green" : "slate" },
         ]}
       />
 
@@ -1699,15 +1731,15 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/30 p-4 sm:p-5">
+        <div className={`rounded-xl border p-4 sm:p-5 ${healthCardClass}`}>
           <div className="flex items-start gap-3">
-            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-green/10">
-              <HiMiniShieldCheck className="h-5 w-5 text-brand-green" aria-hidden="true" />
+            <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${healthIconClass}`}>
+              <ProtectionIcon className="h-5 w-5" aria-hidden="true" />
             </span>
             <div>
-              <SectionLabel>Protection active</SectionLabel>
+              <SectionLabel>{protectionHealth.label}</SectionLabel>
               <p className="mt-2 text-sm text-muted-foreground">
-                Guard is running and will pause any risky actions from your AI apps. When something needs review, it will appear here.
+                {protectionHealth.detail} When something needs review, it will appear here.
               </p>
             </div>
           </div>
