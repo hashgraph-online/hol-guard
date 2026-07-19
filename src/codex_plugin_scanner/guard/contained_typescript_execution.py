@@ -9,9 +9,8 @@ import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Final
 
-from .runtime.containment_contract import ContainmentInput, ContainmentPolicy, ContainmentRequest
+from .runtime.containment_contract import ContainmentPolicy, ContainmentRequest
 from .runtime.containment_executor import ContainmentExecutionResult, execute_contained, file_sha256
 from .runtime.containment_health import (
     ContainmentHealthEvidence,
@@ -39,13 +38,7 @@ from .runtime.effect_decision import (
     evaluate_effect_decision,
 )
 from .runtime.package_intent_parser import parse_package_intent
-
-_MAX_TREE_FILES: Final = 10_000
-_MAX_TREE_BYTES: Final = 128 * 1024 * 1024
-_MAX_SOURCE_BYTES: Final = 32 * 1024 * 1024
-_PROTECTED_NAMES: Final = frozenset(
-    {".git", ".ssh", ".aws", ".gnupg", ".guard", "credentials", "credentials.json", "secrets.json"}
-)
+from .runtime.typescript_snapshot_inputs import typescript_snapshot_inputs
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,8 +87,11 @@ def try_execute_contained_typescript(
     if compiler_args is None:
         return None
     try:
-        tree_digest, package_inputs = _tree_inputs(canonical_workspace, package_root)
-        source_digest, source_inputs = _source_inputs(canonical_workspace, evidence.source_files)
+        tree_digest, package_inputs, closure_digest, closure_inputs = typescript_snapshot_inputs(
+            canonical_workspace,
+            package_root,
+            evidence.source_files,
+        )
         compiler_digest = file_sha256(str(compiler))
         node_path = _resolve_node(environment.get("PATH", ""), shim_directory)
         node_digest = file_sha256(node_path)
@@ -105,7 +101,7 @@ def try_execute_contained_typescript(
         {
             "typescript_evidence": evidence.binding_digest,
             "tree_digest": tree_digest,
-            "source_digest": source_digest,
+            "closure_digest": closure_digest,
             "compiler_digest": compiler_digest,
             "node_digest": node_digest,
             "compiler_args": list(compiler_args),
@@ -116,7 +112,7 @@ def try_execute_contained_typescript(
         cwd=str(canonical_workspace),
         environment=_clean_environment(environment),
         policy=ContainmentPolicy(str(canonical_workspace), ()),
-        inputs=(*package_inputs, *source_inputs),
+        inputs=(*package_inputs, *closure_inputs),
         launch_digest=launch_digest,
         executable_digest=node_digest,
         operation_id="typecheck",
@@ -126,7 +122,7 @@ def try_execute_contained_typescript(
     except (OSError, RuntimeError, TypeError, ValueError):
         return None
     result = execute_contained(request, timeout_seconds=timeout_seconds)
-    if not result.enforced or result.exit_code is None:
+    if not result.enforced or result.exit_code != 0:
         return None
     try:
         proof = _proof_from_result(result, request, health, runtime_fingerprint)
@@ -217,57 +213,6 @@ def _contained_decision(proof: PositiveProof) -> EffectDecision:
     )
 
 
-def _tree_inputs(workspace: Path, root: Path) -> tuple[str, tuple[ContainmentInput, ...]]:
-    canonical_root = _canonical_directory(root)
-    records: list[tuple[str, str]] = []
-    inputs: list[ContainmentInput] = []
-    total_bytes = 0
-    for path in sorted(canonical_root.rglob("*")):
-        relative = path.relative_to(canonical_root)
-        if any(part.lower() in _PROTECTED_NAMES or part.lower().startswith(".env") for part in relative.parts):
-            raise ValueError("protected package-tree path")
-        if path.is_symlink():
-            raise ValueError("package tree cannot contain symlinks")
-        if not path.is_file():
-            continue
-        total_bytes += path.stat().st_size
-        if len(records) >= _MAX_TREE_FILES or total_bytes > _MAX_TREE_BYTES:
-            raise ValueError("package tree exceeds containment identity budget")
-        digest = _file_digest(path)
-        records.append((relative.as_posix(), digest))
-        snapshot_path = path.relative_to(workspace).as_posix()
-        inputs.append(ContainmentInput(str(path), snapshot_path, digest))
-    if not records:
-        raise ValueError("package tree is empty")
-    return _binding_digest({"files": records}), tuple(inputs)
-
-
-def _source_inputs(workspace: Path, sources: tuple[str, ...]) -> tuple[str, tuple[ContainmentInput, ...]]:
-    records: list[tuple[str, str]] = []
-    inputs: list[ContainmentInput] = []
-    total_bytes = 0
-    for raw_source in sources:
-        candidate = workspace / raw_source
-        if candidate.is_symlink() or not candidate.is_file():
-            raise ValueError("source must be a regular non-symlinked file")
-        canonical = candidate.resolve(strict=True)
-        try:
-            relative = canonical.relative_to(workspace)
-        except ValueError as exc:
-            raise ValueError("source escaped workspace") from exc
-        if any(part.lower() in _PROTECTED_NAMES or part.lower().startswith(".env") for part in relative.parts):
-            raise ValueError("protected source path")
-        total_bytes += canonical.stat().st_size
-        if total_bytes > _MAX_SOURCE_BYTES:
-            raise ValueError("source closure exceeds containment identity budget")
-        digest = _file_digest(canonical)
-        records.append((relative.as_posix(), digest))
-        inputs.append(ContainmentInput(str(canonical), relative.as_posix(), digest))
-    if len(records) != len(set(path for path, _ in records)):
-        raise ValueError("source closure cannot contain aliases")
-    return _binding_digest({"sources": records}), tuple(inputs)
-
-
 def _compiler_args(argv: tuple[str, ...]) -> tuple[str, ...] | None:
     try:
         index = argv.index("tsc")
@@ -307,10 +252,6 @@ def _canonical_directory(path: Path) -> Path:
     if canonical != Path(os.path.normpath(str(path))):
         raise ValueError("workspace cannot contain aliases")
     return canonical
-
-
-def _file_digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _binding_digest(payload: dict[str, object]) -> str:

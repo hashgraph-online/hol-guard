@@ -149,6 +149,90 @@ def test_exact_local_typecheck_routes_through_central_contained_decision(
     assert "GITHUB_TOKEN" not in request.environment_dict()
 
 
+def test_typecheck_snapshot_includes_imports_and_ambient_declarations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write(workspace / "src" / "example.ts", "import { value } from './util';\nexport { value };\n")
+    _write(workspace / "src" / "util.ts", "export const value: number = 1;\n")
+    _write(workspace / "node_modules" / "@types" / "example" / "index.d.ts", "declare const ambient: string;\n")
+    _write(workspace / "node_modules" / "@types" / "example" / "package.json", '{"types":"index.d.ts"}\n')
+    shim_directory, node = _manager(tmp_path, monkeypatch)
+    captured: list[ContainmentRequest] = []
+
+    def fake_execute(request: ContainmentRequest, *, timeout_seconds: float) -> ContainmentExecutionResult:
+        del timeout_seconds
+        captured.append(request)
+        return _success(request)
+
+    monkeypatch.setattr(execution_module, "execute_contained", fake_execute)
+    monkeypatch.setattr(execution_module, "_resolve_node", _node_resolver(node))
+
+    result = try_execute_contained_typescript(
+        "npx",
+        ("--no-install", "tsc", "--noEmit", "src/example.ts"),
+        workspace=workspace,
+        guard_home=tmp_path,
+        shim_directory=shim_directory,
+        environment={"PATH": str(shim_directory)},
+    )
+
+    assert result is not None
+    snapshot_paths = {item.snapshot_path for item in captured[0].inputs}
+    assert "src/example.ts" in snapshot_paths
+    assert "src/util.ts" in snapshot_paths
+    assert "node_modules/@types/example/index.d.ts" in snapshot_paths
+    assert "node_modules/@types/example/package.json" in snapshot_paths
+
+
+def test_typecheck_dependency_drift_changes_launch_binding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _workspace(tmp_path)
+    dependency = workspace / "src" / "util.ts"
+    _write(dependency, "export const value = 1;\n")
+    shim_directory, node = _manager(tmp_path, monkeypatch)
+    observed: list[str] = []
+
+    def fake_execute(request: ContainmentRequest, *, timeout_seconds: float) -> ContainmentExecutionResult:
+        del timeout_seconds
+        observed.append(request.launch_digest)
+        return _success(request)
+
+    monkeypatch.setattr(execution_module, "execute_contained", fake_execute)
+    monkeypatch.setattr(execution_module, "_resolve_node", _node_resolver(node))
+    arguments = ("--no-install", "tsc", "--noEmit", "src/example.ts")
+
+    assert (
+        try_execute_contained_typescript(
+            "npx",
+            arguments,
+            workspace=workspace,
+            guard_home=tmp_path,
+            shim_directory=shim_directory,
+            environment={"PATH": str(shim_directory)},
+        )
+        is not None
+    )
+    _write(dependency, "export const value = 2;\n")
+    assert (
+        try_execute_contained_typescript(
+            "npx",
+            arguments,
+            workspace=workspace,
+            guard_home=tmp_path,
+            shim_directory=shim_directory,
+            environment={"PATH": str(shim_directory)},
+        )
+        is not None
+    )
+
+    assert len(observed) == 2
+    assert observed[0] != observed[1]
+
+
 def test_backend_failure_falls_back_to_guard_without_executing_manager(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -176,6 +260,48 @@ def test_backend_failure_falls_back_to_guard_without_executing_manager(
         )
 
     monkeypatch.setattr(execution_module, "execute_contained", failed_execute)
+    monkeypatch.setattr(execution_module, "_resolve_node", _node_resolver(node))
+
+    assert (
+        try_execute_contained_typescript(
+            "npx",
+            ("--no-install", "tsc", "--noEmit", "src/example.ts"),
+            workspace=workspace,
+            guard_home=tmp_path,
+            shim_directory=shim_directory,
+            environment={"PATH": str(shim_directory)},
+        )
+        is None
+    )
+
+
+def test_contained_typecheck_failure_returns_to_guard_review(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _workspace(tmp_path)
+    shim_directory, node = _manager(tmp_path, monkeypatch)
+
+    def failed_typecheck(request: ContainmentRequest, *, timeout_seconds: float) -> ContainmentExecutionResult:
+        del timeout_seconds
+        return ContainmentExecutionResult(
+            exit_code=2,
+            stdout="",
+            stderr="TS2307: dependency unavailable",
+            timed_out=False,
+            attestation=ContainmentAttestation(
+                backend=ContainmentBackend.LINUX_BWRAP,
+                backend_digest=hashlib.sha256(b"backend").hexdigest(),
+                request_digest=request.binding_digest,
+                policy_digest=request.policy.digest,
+                launch_digest=request.launch_digest,
+                executable_digest=request.executable_digest,
+                enforced=True,
+                failure=None,
+            ),
+        )
+
+    monkeypatch.setattr(execution_module, "execute_contained", failed_typecheck)
     monkeypatch.setattr(execution_module, "_resolve_node", _node_resolver(node))
 
     assert (

@@ -5,10 +5,12 @@ import os
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard.runtime.containment_contract import (
+    ContainmentBackend,
     ContainmentFailure,
     ContainmentInput,
     ContainmentPolicy,
@@ -32,6 +34,22 @@ def _request(workspace: Path, argv: tuple[str, ...]) -> ContainmentRequest:
     )
 
 
+def _force_available_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = SimpleNamespace(
+        kind=ContainmentBackend.LINUX_BWRAP,
+        path="/usr/bin/true",
+        digest=file_sha256("/usr/bin/true"),
+    )
+
+    def select_backend(_platform: str) -> object:
+        return backend
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.containment_executor._select_backend",
+        select_backend,
+    )
+
+
 def test_unsupported_platform_fails_closed(tmp_path: Path) -> None:
     request = _request(tmp_path.resolve(), ("/usr/bin/true",))
     result = execute_contained(request, platform="win32")
@@ -41,7 +59,8 @@ def test_unsupported_platform_fails_closed(tmp_path: Path) -> None:
     assert result.attestation.failure is ContainmentFailure.UNSUPPORTED_PLATFORM
 
 
-def test_executable_drift_fails_before_spawn(tmp_path: Path) -> None:
+def test_executable_drift_fails_before_spawn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _force_available_backend(monkeypatch)
     workspace = tmp_path.resolve()
     executable = workspace / "runner"
     _ = executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -56,7 +75,8 @@ def test_executable_drift_fails_before_spawn(tmp_path: Path) -> None:
     assert result.attestation.failure is ContainmentFailure.APPLY_FAILED
 
 
-def test_input_drift_fails_before_spawn(tmp_path: Path) -> None:
+def test_input_drift_fails_before_spawn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _force_available_backend(monkeypatch)
     workspace = tmp_path.resolve()
     source = workspace / "input.txt"
     _ = source.write_text("reviewed", encoding="utf-8")

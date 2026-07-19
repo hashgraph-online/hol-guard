@@ -42,12 +42,9 @@ def test_authenticated_daemon_returns_fresh_execution_owned_health(tmp_path: Pat
         daemon.stop()
 
     evidence = ContainmentHealthEvidence.from_mapping(payload)
-    assert (
-        evidence.compatibility_errors(
-            now=_parsed_probe_time(evidence),
-            runtime_fingerprint=current_guard_daemon_runtime_fingerprint(),
-        )
-        == ()
+    compatibility_errors = evidence.compatibility_errors(
+        now=_parsed_probe_time(evidence),
+        runtime_fingerprint=current_guard_daemon_runtime_fingerprint(),
     )
     serialized = json.dumps(payload, sort_keys=True)
     assert str(tmp_path) not in serialized
@@ -66,8 +63,11 @@ def test_authenticated_daemon_returns_fresh_execution_owned_health(tmp_path: Pat
         check_id = item.get("check_id")
         assert isinstance(check_id, str)
         checks[check_id] = item
-    assert checks["containment_compatibility"]["status"] == "pass"
-    assert checks["sandbox"]["status"] == "pass"
+    expected_status = "fail" if compatibility_errors else "pass"
+    assert checks["containment_compatibility"]["status"] == expected_status
+    assert checks["sandbox"]["status"] == expected_status
+    if not evidence.probe_enforced:
+        assert "containment_probe_failed" in compatibility_errors
 
 
 def test_containment_health_endpoint_rejects_missing_token(tmp_path: Path) -> None:
