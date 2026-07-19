@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from .commands_support_hook_payload import _hook_action_envelope, _load_hook_payload, _normalize_hook_payload
     from .commands_support_interaction import _emit
     from .commands_support_permission_store import (
+        _cursor_conversation_id,
+        _cursor_shell_command_from_payload,
         _discard_claude_pending_permissions,
         _persist_cursor_native_permission_after_shell,
     )
@@ -44,6 +46,11 @@ from .commands_hook_runtime_eval import _evaluate_runtime_artifact_hook
 from .commands_hook_runtime_finish import _finalize_runtime_artifact_hook
 from .commands_hook_runtime_review import _review_runtime_artifact_hook
 from .commands_parser_helpers import *
+from .commands_support_command_activity import (
+    hook_post_succeeded,
+    record_command_activity_failure_best_effort,
+    record_post_hook_command_activity_best_effort,
+)
 
 
 def _run_guard_hook_command(
@@ -98,6 +105,25 @@ def _run_guard_hook_command(
     }:
         if runtime_workspace is None:
             runtime_workspace = _workspace_from_cursor_project_dir()
+        from ..runtime.command_activity_cursor import cursor_command_activity_observer_trusted
+
+        cursor_conversation_id = _cursor_conversation_id(payload)
+        cursor_command = _cursor_shell_command_from_payload(payload)
+        try:
+            command_activity_observer_trusted = (
+                cursor_conversation_id is not None
+                and cursor_command is not None
+                and cursor_command_activity_observer_trusted(
+                    guard_home=context.guard_home,
+                    payload=payload,
+                    conversation_id=cursor_conversation_id,
+                    command=cursor_command,
+                    env=os.environ,
+                )
+            )
+        except Exception:
+            command_activity_observer_trusted = False
+            record_command_activity_failure_best_effort(store, "cursor_observer_verify_failed")
         saved = _persist_cursor_native_permission_after_shell(
             store=store,
             payload=payload,
@@ -107,6 +133,16 @@ def _run_guard_hook_command(
             workspace=runtime_workspace,
             hook_env=os.environ,
         )
+        if command_activity_observer_trusted:
+            event_name = _hook_event_name(payload) or "afterShellExecution"
+            _ = record_post_hook_command_activity_best_effort(
+                store=store,
+                guard_home=context.guard_home,
+                harness="cursor",
+                event=event_name,
+                payload=payload,
+                succeeded=hook_post_succeeded(event_name, payload),
+            )
         _emit(
             "hook",
             {
@@ -461,6 +497,15 @@ def _try_source_ref_fast_path(
     )
 
     response = engine.review(request)
+    event_name = _hook_event_name(payload) or "PostToolUse"
+    record_post_hook_command_activity_best_effort(
+        store=store,
+        guard_home=context.guard_home,
+        harness=_canonical_harness_name(args.harness),
+        event=event_name,
+        payload=payload,
+        succeeded=hook_post_succeeded(event_name, payload),
+    )
     _emit("hook", response.to_harness_json(), getattr(args, "json", False))
     return 0
 

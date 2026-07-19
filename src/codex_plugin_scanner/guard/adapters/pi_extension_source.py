@@ -311,6 +311,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      {\n"
         '        hook_event_name: "PreToolUse",\n'
         "        config_path: GUARD_CONFIG_PATH,\n"
+        "        tool_call_id: event.toolCallId,\n"
         "        tool_name: event.toolName,\n"
         "        tool_input: toolInput,\n"
         "      },\n"
@@ -356,6 +357,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    const guardPayload: Record<string, unknown> = {\n"
         '        hook_event_name: "PostToolUse",\n'
         "        config_path: GUARD_CONFIG_PATH,\n"
+        "        tool_call_id: event.toolCallId,\n"
         "        tool_name: event.toolName,\n"
         "        tool_input: toolInput,\n"
         "        stdout: toolOutput,\n"

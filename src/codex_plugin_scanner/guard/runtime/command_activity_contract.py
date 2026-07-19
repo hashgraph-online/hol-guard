@@ -155,6 +155,8 @@ class CommandActivity:
         if type(self.prompted) is not bool:
             raise ValueError("prompted must be a boolean")
         _require_enum(self.approval_reuse_status, ActivityApprovalReuseStatus, "approval_reuse_status")
+        if self.prompted and self.approval_reuse_status is ActivityApprovalReuseStatus.ACCEPTED:
+            raise ValueError("accepted approval reuse cannot claim a prompt")
         _require_optional_correlation(self.request_correlation, CorrelationKind.REQUEST, self.harness)
         _require_optional_correlation(self.session_correlation, CorrelationKind.SESSION, self.harness)
         _require_enum(self.receipt_link_status, ReceiptLinkStatus, "receipt_link_status")

@@ -848,6 +848,8 @@ def _evaluate_runtime_artifact_hook(
         decision_signals=tuple(decision_signals),
         decision_v2_payload=decision_v2_payload,
         event_name=event_name,
+        guard_home=context.guard_home,
+        hook_payload=payload_map,
         initial_policy_action=policy_action,
         package_evaluation=package_evaluation,
         policy_action=policy_action,

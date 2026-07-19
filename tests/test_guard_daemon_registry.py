@@ -155,6 +155,28 @@ class TestHealthzEndpoint:
         finally:
             server.stop()
 
+    def test_healthz_details_exposes_bounded_command_activity_degradation(self, tmp_path: Path) -> None:
+        url, server = self._start_server(tmp_path)
+        try:
+            store = server._server.store
+            store.record_command_activity_persistence_failure(
+                error_code="fixture_failure",
+                occurred_at=datetime.now(timezone.utc),
+            )
+            payload = self._get_healthz_details(url, server)
+            evidence = payload["command_activity_evidence"]
+            assert evidence == {
+                "state": "degraded",
+                "dropped_event_count": 1,
+                "persistence_error_count": 1,
+                "last_error_code": "fixture_failure",
+                "last_error_at": evidence["last_error_at"],
+                "schema_version": "1.0.0",
+            }
+            assert isinstance(evidence["last_error_at"], str)
+        finally:
+            server.stop()
+
     def test_healthz_details_requires_auth(self, tmp_path: Path) -> None:
         url, server = self._start_server(tmp_path)
         try:
