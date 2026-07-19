@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_command_activity_schema import ensure_command_activity_schema
 from .store_live_request_outbox import ensure_live_request_outbox_schema, seed_live_request_outbox
 from .store_secret_policy_integrity import _POLICY_INTEGRITY_LOOKUP_UNSET
 
@@ -615,6 +616,7 @@ class StoreConnectionSchemaMixin:
         with self._connect() as connection:
             for statement in statements:
                 connection.execute(statement)
+            ensure_command_activity_schema(connection, applied_at=_now())
             ensure_evidence_schema(connection)
             if not self._schema_version_applied(connection, version=4):
                 self._record_schema_version(connection, version=4)
