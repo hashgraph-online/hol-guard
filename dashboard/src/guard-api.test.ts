@@ -97,6 +97,20 @@ for (const [label, runtimeState] of [
   assert(normalized.headline_state === "setup", `${label} cannot produce a protected headline`);
 }
 
+const ipv6RuntimeStateSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  runtime_state: {
+    ...snapshot.runtime_state,
+    daemon_host: "::1",
+    approval_center_url: "http://[::1]:4455",
+  },
+});
+assert(ipv6RuntimeStateSnapshot.runtime_state !== null, "runtime normalizer accepts bracketed IPv6 loopback proof");
+assert(
+  ipv6RuntimeStateSnapshot.headline_state !== "setup",
+  "fresh IPv6 loopback proof does not report the runtime offline"
+);
+
 const partialSupplyChainSnapshot = normalizeRuntimeSnapshot({
   ...snapshot,
   items: null,

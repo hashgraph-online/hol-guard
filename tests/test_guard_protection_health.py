@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import cast
 
+from codex_plugin_scanner.guard.models import GuardRuntimeState
 from codex_plugin_scanner.guard.runtime.protection_health import (
     PROTECTION_CHECK_IDS,
     PROTECTION_HEALTH_SCHEMA_VERSION,
@@ -17,6 +18,17 @@ from codex_plugin_scanner.guard.runtime.protection_health_runtime import (
 )
 
 _NOW = datetime(2026, 7, 19, 15, 0, tzinfo=timezone.utc)
+
+
+def test_runtime_state_brackets_ipv6_approval_center_origin() -> None:
+    state = GuardRuntimeState(
+        session_id="session-ipv6",
+        daemon_host="::1",
+        daemon_port=5474,
+        started_at=_NOW.isoformat(),
+        last_heartbeat_at=_NOW.isoformat(),
+    )
+    assert state.to_dict()["approval_center_url"] == "http://[::1]:5474"
 
 
 @dataclass(frozen=True)

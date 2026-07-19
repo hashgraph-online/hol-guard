@@ -112,7 +112,7 @@ from ..local_supply_chain import (
     resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
-from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision
+from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision, format_local_http_origin
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -1405,8 +1405,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             include_receipts = self._query_bool(parsed.query, "include_receipts", default=True)
             snapshot = build_runtime_snapshot(
                 store=store,
-                approval_center_url=(
-                    f"http://{self._daemon_server().daemon_host()}:{self._daemon_server().daemon_port()}"
+                approval_center_url=format_local_http_origin(
+                    self._daemon_server().daemon_host(),
+                    self._daemon_server().daemon_port(),
                 ),
                 active_request_id=self._query_string(parsed.query, "active_request_id"),
                 include_items=self._query_bool(parsed.query, "include_items", default=True),
