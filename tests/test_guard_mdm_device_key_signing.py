@@ -60,6 +60,85 @@ def _successful_result(signature: bytes) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _canonical_protection_lease(**changes: object) -> bytes:
+    claims: dict[str, object] = {
+        "workspaceId": "workspace-1",
+        "deviceId": "device-1",
+        "machineInstallationId": "a" * 32,
+        "installationGeneration": "b" * 32,
+        "sequence": 1,
+        "issuedAt": "2026-07-18T12:00:00Z",
+        "validForSeconds": 900,
+        "snapshotSchemaVersion": "local-integrity-snapshot.v1",
+        "snapshotDigest": "c" * 64,
+        "previousLeaseDigest": None,
+        "signingKeyId": "A" * 43,
+        "challenge": None,
+    }
+    claims.update(changes)
+    return json.dumps(
+        {"claims": claims, "schemaVersion": "protection-lease.v1"},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+
+
+def test_protection_lease_signing_uses_distinct_purpose_bound_native_operation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    signature = utils.encode_dss_signature(1, 2)
+    run = Mock(return_value=_successful_result(signature))
+    monkeypatch.setattr(device_key_native.subprocess, "run", run)
+    lease = _canonical_protection_lease()
+
+    result = device_key_native.sign_protection_lease(
+        _paths(tmp_path), "d" * 32, lease, system_name="Darwin"
+    )
+
+    assert result.signature == signature
+    assert run.call_args.args[0] == [
+        str(tmp_path / "runtime" / "hol-guard-device-key"),
+        "sign-protection-lease",
+        "d" * 32,
+    ]
+    assert run.call_args.kwargs["input"] == lease.decode()
+
+
+def test_health_key_registration_signing_uses_distinct_purpose_bound_native_operation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    signature = utils.encode_dss_signature(1, 2)
+    run = Mock(return_value=_successful_result(signature))
+    monkeypatch.setattr(device_key_native.subprocess, "run", run)
+    registration = json.dumps(
+        {
+            "algorithm": "ecdsa-p256-sha256",
+            "deviceId": "device-1",
+            "installationGeneration": "b" * 32,
+            "keyId": "A" * 43,
+            "machineInstallationId": "a" * 32,
+            "previousInstallationGeneration": None,
+            "publicKeySpki": base64.b64encode(b"public-key").decode(),
+            "registeredAt": "2026-07-18T12:00:00Z",
+            "schemaVersion": "hol-guard-health-key-registration.v1",
+            "workspaceId": "workspace-1",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+
+    result = device_key_native.sign_health_key_registration(
+        _paths(tmp_path), "d" * 32, registration, system_name="Darwin"
+    )
+
+    assert result.signature == signature
+    assert run.call_args.args[0] == [
+        str(tmp_path / "runtime" / "hol-guard-device-key"),
+        "sign-health-key-registration",
+        "d" * 32,
+    ]
+
+
 def test_health_lease_signing_uses_only_purpose_bound_native_operation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

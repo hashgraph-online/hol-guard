@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib
 import json
 import math
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Final, get_args
+from typing import Final, Protocol, cast, get_args
 
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
 
@@ -23,6 +24,50 @@ from .contracts import (
     RemediationClass,
     SupervisorState,
 )
+
+
+class LeaseClaims(Protocol):
+    @property
+    def workspace_id(self) -> str: ...
+    @property
+    def device_id(self) -> str: ...
+    @property
+    def machine_installation_id(self) -> str: ...
+    @property
+    def installation_generation(self) -> str: ...
+    @property
+    def sequence(self) -> int: ...
+    @property
+    def issued_at(self) -> str: ...
+    @property
+    def lease_expires_at(self) -> str: ...
+    @property
+    def snapshot_schema_version(self) -> str: ...
+    @property
+    def snapshot_digest(self) -> str: ...
+    @property
+    def previous_lease_digest(self) -> str | None: ...
+    @property
+    def signing_key_id(self) -> str: ...
+
+
+class ProtectionLease(Protocol):
+    @property
+    def claims(self) -> LeaseClaims: ...
+
+    @property
+    def signature(self) -> bytes: ...
+
+    @property
+    def digest(self) -> str: ...
+
+    def to_dict(self) -> dict[str, object]: ...
+
+    def canonical_bytes(self) -> bytes: ...
+
+    @classmethod
+    def parse(cls, payload: bytes) -> ProtectionLease: ...
+
 
 HEALTH_LEASE_SCHEMA: Final = "hol-guard-health-lease.v1"
 HEALTH_LEASE_OUTBOX_SCHEMA: Final = "hol-guard-health-lease-outbox.v1"
@@ -327,7 +372,7 @@ class SignedHealthLease:
 
 @dataclass(frozen=True, slots=True)
 class HealthLeaseOutbox:
-    lease: SignedHealthLease
+    lease: SignedHealthLease | ProtectionLease
     snapshot_bytes: bytes
 
     def to_dict(self) -> dict[str, object]:
@@ -354,7 +399,12 @@ class HealthLeaseOutbox:
         lease_raw = raw.get("lease")
         if not isinstance(lease_raw, dict):
             raise ValueError("health_lease_outbox_invalid")
-        lease = SignedHealthLease.parse(canonical_json_bytes(lease_raw))
+        if lease_raw.get("schemaVersion") == "protection-lease.v1":
+            module = importlib.import_module(".protection_lease_contract", __package__)
+            lease_type = cast(type[ProtectionLease], module.SignedProtectionLease)
+            lease: SignedHealthLease | ProtectionLease = lease_type.parse(canonical_json_bytes(lease_raw))
+        else:
+            lease = SignedHealthLease.parse(canonical_json_bytes(lease_raw))
         snapshot_raw = raw.get("snapshot")
         if not isinstance(snapshot_raw, str):
             raise ValueError("health_lease_outbox_invalid")
@@ -372,7 +422,7 @@ class HealthLeaseOutbox:
         return outbox
 
 
-def _validate_snapshot_binding(snapshot: bytes, claims: HealthLeaseClaims) -> None:
+def _validate_snapshot_binding(snapshot: bytes, claims: LeaseClaims) -> None:
     raw = _strict_json(snapshot, maximum=MAX_SNAPSHOT_BYTES, reason="health_lease_outbox_invalid")
     _exact_keys(raw, _SNAPSHOT_KEYS, "health_lease_outbox_invalid")
     if raw.get("schemaVersion") != claims.snapshot_schema_version:

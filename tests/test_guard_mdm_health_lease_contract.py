@@ -18,6 +18,11 @@ from codex_plugin_scanner.guard.mdm.health_lease_contract import (
     SignedHealthLease,
     canonical_json_bytes,
 )
+from codex_plugin_scanner.guard.mdm.protection_lease_contract import (
+    ProtectionLeaseChallenge,
+    ProtectionLeaseClaims,
+    SignedProtectionLease,
+)
 
 
 def _key() -> tuple[ec.EllipticCurvePrivateKey, str]:
@@ -57,6 +62,69 @@ def _signed_lease(private: ec.EllipticCurvePrivateKey, key_id: str) -> SignedHea
         private.sign(claims.signing_payload(), ec.ECDSA(hashes.SHA256())),
     )
     return SignedHealthLease.parse(signed.canonical_bytes())
+
+
+def test_protection_lease_round_trips_frozen_p1363_contract_and_challenge() -> None:
+    private, key_id = _key()
+    claims = ProtectionLeaseClaims.parse(
+        {
+            "workspaceId": "workspace-a",
+            "deviceId": "device-a",
+            "machineInstallationId": "1" * 32,
+            "installationGeneration": "2" * 32,
+            "sequence": 1,
+            "issuedAt": "2026-07-18T14:00:00Z",
+            "validForSeconds": 900,
+            "snapshotSchemaVersion": "local-integrity-snapshot.v1",
+            "snapshotDigest": "4" * 64,
+            "previousLeaseDigest": None,
+            "signingKeyId": key_id,
+            "challenge": {
+                "challengeId": "challenge-a",
+                "issuedAt": "2026-07-18T13:59:30Z",
+                "nonce": "n" * 43,
+                "validForSeconds": 120,
+            },
+        }
+    )
+    lease = SignedProtectionLease(
+        claims,
+        private.sign(claims.signing_payload(), ec.ECDSA(hashes.SHA256())),
+    )
+    parsed = SignedProtectionLease.parse(lease.canonical_bytes())
+
+    assert parsed == SignedProtectionLease(claims, parsed.signature)
+    assert parsed.claims.challenge == ProtectionLeaseChallenge("challenge-a", "2026-07-18T13:59:30Z", "n" * 43, 120)
+    assert parsed.claims.lease_expires_at == "2026-07-18T14:15:00Z"
+    signature = cast(dict[str, object], parsed.to_dict()["signature"])
+    assert signature["keyId"] == key_id
+    assert len(base64.b64decode(cast(str, signature["value"]), validate=True)) == 64
+
+
+def test_protection_lease_rejects_expired_challenge_at_issuance() -> None:
+    _, key_id = _key()
+    payload = {
+        "workspaceId": "workspace-a",
+        "deviceId": "device-a",
+        "machineInstallationId": "1" * 32,
+        "installationGeneration": "2" * 32,
+        "sequence": 1,
+        "issuedAt": "2026-07-18T14:02:00Z",
+        "validForSeconds": 900,
+        "snapshotSchemaVersion": "local-integrity-snapshot.v1",
+        "snapshotDigest": "4" * 64,
+        "previousLeaseDigest": None,
+        "signingKeyId": key_id,
+        "challenge": {
+            "challengeId": "challenge-a",
+            "issuedAt": "2026-07-18T13:59:30Z",
+            "nonce": "n" * 43,
+            "validForSeconds": 120,
+        },
+    }
+
+    with pytest.raises(ValueError, match="health_lease_challenge_invalid"):
+        ProtectionLeaseClaims.parse(payload)
 
 
 def _snapshot() -> dict[str, object]:

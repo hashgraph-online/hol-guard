@@ -11,6 +11,7 @@ private let keyIdPattern = try! NSRegularExpression(pattern: "^[A-Za-z0-9_-]{43}
 private let timestampPattern = try! NSRegularExpression(pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
 private let safeIdPattern = try! NSRegularExpression(pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 private let healthLeaseDomain = Data("HOL-GUARD-HEALTH-LEASE-V1\0".utf8)
+private let healthKeyRegistrationDomain = Data("HOL-GUARD-HEALTH-KEY-REGISTRATION-V1\0".utf8)
 private let maximumClaimsBytes = 4096
 private let p256IntegerBytes = 32
 
@@ -153,6 +154,67 @@ private func validateCanonicalHealthLeaseClaims(_ data: Data, expectedSigningKey
     }
     // Every v1 string claim is ASCII-only. Comparing the exact bytes supplied by Python keeps
     // the helper and verifier on one canonical representation; a broader schema requires v2.
+    let canonical = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])
+    guard canonical == data else { throw HelperError.invalidRequest }
+}
+
+private func validateCanonicalProtectionLease(_ data: Data, expectedSigningKeyId: String) throws {
+    guard !data.isEmpty, data.count <= maximumClaimsBytes,
+          let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+          Set(object.keys) == ["claims", "schemaVersion"],
+          object["schemaVersion"] as? String == "protection-lease.v1",
+          let claims = object["claims"] as? [String: Any] else {
+        throw HelperError.invalidRequest
+    }
+    let expectedClaimKeys: Set<String> = [
+        "challenge", "deviceId", "installationGeneration", "issuedAt", "machineInstallationId",
+        "previousLeaseDigest", "sequence", "signingKeyId", "snapshotDigest",
+        "snapshotSchemaVersion", "validForSeconds", "workspaceId",
+    ]
+    guard Set(claims.keys) == expectedClaimKeys,
+          claims["snapshotSchemaVersion"] as? String == "local-integrity-snapshot.v1",
+          try requiredString(claims, "signingKeyId", maximumLength: 43, pattern: keyIdPattern)
+            == expectedSigningKeyId else {
+        throw HelperError.invalidRequest
+    }
+    _ = try requiredString(claims, "workspaceId", maximumLength: 128, pattern: safeIdPattern)
+    _ = try requiredString(claims, "deviceId", maximumLength: 128, pattern: safeIdPattern)
+    _ = try requiredString(claims, "machineInstallationId", maximumLength: 32, pattern: generationPattern)
+    _ = try requiredString(claims, "installationGeneration", maximumLength: 32, pattern: generationPattern)
+    _ = try requiredString(claims, "issuedAt", maximumLength: 20, pattern: timestampPattern)
+    _ = try requiredString(claims, "snapshotDigest", maximumLength: 64, pattern: digestPattern)
+    guard let sequence = claims["sequence"] as? NSNumber,
+          CFGetTypeID(sequence) != CFBooleanGetTypeID(), sequence.uint64Value >= 1,
+          let validForSeconds = claims["validForSeconds"] as? NSNumber,
+          CFGetTypeID(validForSeconds) != CFBooleanGetTypeID(),
+          validForSeconds.intValue >= 180, validForSeconds.intValue <= 1800 else {
+        throw HelperError.invalidRequest
+    }
+    let canonical = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])
+    guard canonical == data else { throw HelperError.invalidRequest }
+}
+
+private func validateCanonicalHealthKeyRegistration(_ data: Data, expectedSigningKeyId: String) throws {
+    guard !data.isEmpty, data.count <= maximumClaimsBytes,
+          let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        throw HelperError.invalidRequest
+    }
+    let expectedKeys: Set<String> = [
+        "algorithm", "deviceId", "installationGeneration", "keyId", "machineInstallationId",
+        "previousInstallationGeneration", "publicKeySpki", "registeredAt", "schemaVersion", "workspaceId",
+    ]
+    guard Set(object.keys) == expectedKeys,
+          object["schemaVersion"] as? String == "hol-guard-health-key-registration.v1",
+          object["algorithm"] as? String == "ecdsa-p256-sha256",
+          try requiredString(object, "keyId", maximumLength: 43, pattern: keyIdPattern) == expectedSigningKeyId else {
+        throw HelperError.invalidRequest
+    }
+    _ = try requiredString(object, "workspaceId", maximumLength: 128, pattern: safeIdPattern)
+    _ = try requiredString(object, "deviceId", maximumLength: 128, pattern: safeIdPattern)
+    _ = try requiredString(object, "machineInstallationId", maximumLength: 32, pattern: generationPattern)
+    _ = try requiredString(object, "installationGeneration", maximumLength: 32, pattern: generationPattern)
+    _ = try requiredString(object, "registeredAt", maximumLength: 20, pattern: timestampPattern)
+    _ = try requiredString(object, "publicKeySpki", maximumLength: 1024)
     let canonical = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])
     guard canonical == data else { throw HelperError.invalidRequest }
 }
@@ -341,6 +403,41 @@ private func signHealthLease(_ privateKey: SecKey, publicKeyX963: Data) throws -
     return signature
 }
 
+private func signProtectionLease(_ privateKey: SecKey, publicKeyX963: Data) throws -> Data {
+    guard let lease = try FileHandle.standardInput.read(upToCount: maximumClaimsBytes + 1),
+          lease.count <= maximumClaimsBytes else {
+        throw HelperError.invalidRequest
+    }
+    try validateCanonicalProtectionLease(lease, expectedSigningKeyId: try signingKeyId(publicKeyX963: publicKeyX963))
+    guard SecKeyIsAlgorithmSupported(privateKey, .sign, .ecdsaSignatureMessageX962SHA256),
+          let signature = SecKeyCreateSignature(privateKey, .ecdsaSignatureMessageX962SHA256,
+                                                lease as CFData, nil) as Data? else {
+        throw HelperError.operationFailed
+    }
+    try validateCanonicalDERSignature(signature)
+    return signature
+}
+
+private func signHealthKeyRegistration(_ privateKey: SecKey, publicKeyX963: Data) throws -> Data {
+    guard let registration = try FileHandle.standardInput.read(upToCount: maximumClaimsBytes + 1),
+          registration.count <= maximumClaimsBytes else {
+        throw HelperError.invalidRequest
+    }
+    try validateCanonicalHealthKeyRegistration(
+        registration,
+        expectedSigningKeyId: try signingKeyId(publicKeyX963: publicKeyX963)
+    )
+    var message = healthKeyRegistrationDomain
+    message.append(registration)
+    guard SecKeyIsAlgorithmSupported(privateKey, .sign, .ecdsaSignatureMessageX962SHA256),
+          let signature = SecKeyCreateSignature(privateKey, .ecdsaSignatureMessageX962SHA256,
+                                                message as CFData, nil) as Data? else {
+        throw HelperError.operationFailed
+    }
+    try validateCanonicalDERSignature(signature)
+    return signature
+}
+
 private func run() throws -> PublicResult {
     guard geteuid() == 0, CommandLine.arguments.count == 3 else {
         throw HelperError.denied
@@ -365,7 +462,8 @@ private func run() throws -> PublicResult {
         } catch HelperError.keyAbsent {
             privateKey = try createKey(generation: generation, keychain: keychain)
         }
-    } else if verb == "inspect" || verb == "sign-health-lease" {
+    } else if verb == "inspect" || verb == "sign-health-lease" || verb == "sign-protection-lease"
+        || verb == "sign-health-key-registration" {
         privateKey = try copyPrivateKey(generation: generation, keychain: keychain)
     } else {
         throw HelperError.invalidRequest
@@ -373,6 +471,12 @@ private func run() throws -> PublicResult {
     let publicKey = try inspectKey(privateKey)
     if verb == "sign-health-lease" {
         emitSignature(try signHealthLease(privateKey, publicKeyX963: publicKey))
+    }
+    if verb == "sign-protection-lease" {
+        emitSignature(try signProtectionLease(privateKey, publicKeyX963: publicKey))
+    }
+    if verb == "sign-health-key-registration" {
+        emitSignature(try signHealthKeyRegistration(privateKey, publicKeyX963: publicKey))
     }
     return PublicResult(ok: true, state: "active", protectionLevel: "os-protected",
                         publicKeyX963: publicKey.base64EncodedString(), reasonCode: "device_key_active")

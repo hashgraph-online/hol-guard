@@ -32,6 +32,19 @@ On Unix platforms the native policy file and every path component must be root-o
 
 The machine-status JSON reports only whether this trust is configured, its workspace, and its key count. Public keys and fingerprints are not included in status output. The package's `release-trusted-keys.json` is a separate Ed25519 release-manifest trust domain and must not be used as policy-bundle signing authority.
 
+### Machine health Cloud enrollment
+
+Signed health delivery uses a dedicated machine-owned OAuth/DPoP profile. It never borrows credentials from a logged-in user. After the package and locked `selfProtection.workspaceId` / `selfProtection.deviceId` policy are deployed, an endpoint administrator completes device authorization once in root/SYSTEM context with the machine Cloud directory:
+
+- macOS: `hol-guard connect --guard-home "/Library/Application Support/HOL Guard State/cloud" --source machine-health --headless`
+- Windows: `hol-guard connect --guard-home "C:\ProgramData\HOL Guard\cloud" --source machine-health --headless`
+
+The administrator completes the displayed authorization URL using an identity permitted to enroll that organization’s device. MDM may orchestrate this command and collect only its bounded enrollment status; it must not place refresh tokens, DPoP private keys, or bearer tokens in managed policy. The resulting credential store is machine-owned and the scheduled reporter can refresh it without a user session.
+
+Each cadence registers the current non-exportable P-256 health key idempotently, submits one canonical `protection-lease.v1` outbox item, persists the authenticated acknowledgement, then polls only the fixed pending-attestation-challenge endpoint. A pending challenge can produce only a new signed lease bound to its exact nonce, lifetime, workspace, device, installation, and generation. Unknown fields and command-shaped responses are rejected.
+
+`mdm health-report --scope machine --json` exposes bounded diagnostics: snapshot duration, lease age, delivery latency, rejection reason, queue depth, and key-storage health. Cloud or proxy failure reports `delivery-failed` while retaining the current outbox and leaves local enforcement unchanged. A missing machine OAuth profile reports `lease-ready`; it never falls back to user credentials.
+
 ## Intune adapter example
 
 - macOS install: `/usr/sbin/installer -pkg hol-guard.pkg -target /`

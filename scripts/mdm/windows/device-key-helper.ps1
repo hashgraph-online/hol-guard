@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('create', 'inspect', 'delete', 'sign-health-lease')]
+    [ValidateSet('create', 'inspect', 'delete', 'sign-health-lease', 'sign-protection-lease', 'sign-health-key-registration')]
     [string]$Verb,
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^[0-9a-f]{32}$')]
@@ -16,6 +16,7 @@ $PlatformProvider = 'Microsoft Platform Crypto Provider'
 $SoftwareProvider = 'Microsoft Software Key Storage Provider'
 $ProtectedSddl = 'O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)'
 $HealthLeaseDomain = [System.Text.Encoding]::UTF8.GetBytes("HOL-GUARD-HEALTH-LEASE-V1`0")
+$HealthKeyRegistrationDomain = [System.Text.Encoding]::UTF8.GetBytes("HOL-GUARD-HEALTH-KEY-REGISTRATION-V1`0")
 $MaximumClaimsBytes = 4096
 
 function Emit-Result {
@@ -157,6 +158,96 @@ function Read-HealthLeaseClaims {
     return [System.Text.Encoding]::UTF8.GetBytes($Text)
 }
 
+function Read-ProtectionLease {
+    param([string]$ExpectedSigningKeyId)
+    $Buffer = [char[]]::new($MaximumClaimsBytes + 1)
+    $Count = [Console]::In.ReadBlock($Buffer, 0, $Buffer.Length)
+    if ($Count -eq 0 -or $Count -gt $MaximumClaimsBytes) { throw 'invalid' }
+    $Text = [string]::new($Buffer, 0, $Count)
+    $Utf8 = [System.Text.UTF8Encoding]::new($false, $true)
+    if ($Utf8.GetByteCount($Text) -gt $MaximumClaimsBytes) { throw 'invalid' }
+    $Lease = $Text | ConvertFrom-Json
+    if (@(Compare-Object @($Lease.PSObject.Properties.Name) @('claims', 'schemaVersion')).Count -ne 0 -or
+        $Lease.schemaVersion -ne 'protection-lease.v1') { throw 'invalid' }
+    $Claims = $Lease.claims
+    $ExpectedClaimKeys = @(
+        'challenge', 'deviceId', 'installationGeneration', 'issuedAt', 'machineInstallationId',
+        'previousLeaseDigest', 'sequence', 'signingKeyId', 'snapshotDigest', 'snapshotSchemaVersion',
+        'validForSeconds', 'workspaceId'
+    )
+    if (@(Compare-Object @($Claims.PSObject.Properties.Name) $ExpectedClaimKeys).Count -ne 0 -or
+        $Claims.snapshotSchemaVersion -ne 'local-integrity-snapshot.v1' -or
+        $Claims.workspaceId -notmatch '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' -or
+        $Claims.deviceId -notmatch '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' -or
+        $Claims.machineInstallationId -notmatch '^[0-9a-f]{32}$' -or
+        $Claims.installationGeneration -notmatch '^[0-9a-f]{32}$' -or
+        $Claims.issuedAt -notmatch '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' -or
+        $Claims.snapshotDigest -notmatch '^[0-9a-f]{64}$' -or
+        $Claims.signingKeyId -notmatch '^[A-Za-z0-9_-]{43}$' -or
+        $Claims.signingKeyId -ne $ExpectedSigningKeyId -or
+        $Claims.sequence -lt 1 -or $Claims.validForSeconds -lt 180 -or $Claims.validForSeconds -gt 1800) {
+        throw 'invalid'
+    }
+    $Canonical = [ordered]@{
+        claims = [ordered]@{
+            challenge = $Claims.challenge
+            deviceId = $Claims.deviceId
+            installationGeneration = $Claims.installationGeneration
+            issuedAt = $Claims.issuedAt
+            machineInstallationId = $Claims.machineInstallationId
+            previousLeaseDigest = $Claims.previousLeaseDigest
+            sequence = $Claims.sequence
+            signingKeyId = $Claims.signingKeyId
+            snapshotDigest = $Claims.snapshotDigest
+            snapshotSchemaVersion = $Claims.snapshotSchemaVersion
+            validForSeconds = $Claims.validForSeconds
+            workspaceId = $Claims.workspaceId
+        }
+        schemaVersion = $Lease.schemaVersion
+    } | ConvertTo-Json -Compress -Depth 5
+    if (-not [string]::Equals($Canonical, $Text, [System.StringComparison]::Ordinal)) { throw 'invalid' }
+    return [System.Text.Encoding]::UTF8.GetBytes($Text)
+}
+
+function Read-HealthKeyRegistration {
+    param([string]$ExpectedSigningKeyId)
+    $Buffer = [char[]]::new($MaximumClaimsBytes + 1)
+    $Count = [Console]::In.ReadBlock($Buffer, 0, $Buffer.Length)
+    if ($Count -eq 0 -or $Count -gt $MaximumClaimsBytes) { throw 'invalid' }
+    $Text = [string]::new($Buffer, 0, $Count)
+    $Registration = $Text | ConvertFrom-Json
+    $ExpectedKeys = @(
+        'algorithm', 'deviceId', 'installationGeneration', 'keyId', 'machineInstallationId',
+        'previousInstallationGeneration', 'publicKeySpki', 'registeredAt', 'schemaVersion', 'workspaceId'
+    )
+    if (@(Compare-Object @($Registration.PSObject.Properties.Name) $ExpectedKeys).Count -ne 0 -or
+        $Registration.schemaVersion -ne 'hol-guard-health-key-registration.v1' -or
+        $Registration.algorithm -ne 'ecdsa-p256-sha256' -or
+        $Registration.workspaceId -notmatch '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' -or
+        $Registration.deviceId -notmatch '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' -or
+        $Registration.machineInstallationId -notmatch '^[0-9a-f]{32}$' -or
+        $Registration.installationGeneration -notmatch '^[0-9a-f]{32}$' -or
+        $Registration.keyId -notmatch '^[A-Za-z0-9_-]{43}$' -or
+        $Registration.keyId -ne $ExpectedSigningKeyId -or
+        $Registration.registeredAt -notmatch '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$') {
+        throw 'invalid'
+    }
+    $Canonical = [ordered]@{
+        algorithm = $Registration.algorithm
+        deviceId = $Registration.deviceId
+        installationGeneration = $Registration.installationGeneration
+        keyId = $Registration.keyId
+        machineInstallationId = $Registration.machineInstallationId
+        previousInstallationGeneration = $Registration.previousInstallationGeneration
+        publicKeySpki = $Registration.publicKeySpki
+        registeredAt = $Registration.registeredAt
+        schemaVersion = $Registration.schemaVersion
+        workspaceId = $Registration.workspaceId
+    } | ConvertTo-Json -Compress
+    if (-not [string]::Equals($Canonical, $Text, [System.StringComparison]::Ordinal)) { throw 'invalid' }
+    return [System.Text.Encoding]::UTF8.GetBytes($Text)
+}
+
 function Get-SecurityDescriptorBytes {
     $Descriptor = [System.Security.AccessControl.RawSecurityDescriptor]::new($ProtectedSddl)
     $Bytes = [byte[]]::new($Descriptor.BinaryLength)
@@ -287,11 +378,23 @@ try {
     $HealthLeaseSignature = $null
     try {
         $PublicKey = Inspect-Key $Key $ProviderName
-        if ($Verb -eq 'sign-health-lease') {
-            $ClaimsBytes = Read-HealthLeaseClaims (Get-SigningKeyId $PublicKey)
-            $Message = [byte[]]::new($HealthLeaseDomain.Length + $ClaimsBytes.Length)
-            [Array]::Copy($HealthLeaseDomain, 0, $Message, 0, $HealthLeaseDomain.Length)
-            [Array]::Copy($ClaimsBytes, 0, $Message, $HealthLeaseDomain.Length, $ClaimsBytes.Length)
+        if ($Verb -eq 'sign-health-lease' -or $Verb -eq 'sign-protection-lease' -or
+            $Verb -eq 'sign-health-key-registration') {
+            if ($Verb -eq 'sign-health-lease') {
+                $ClaimsBytes = Read-HealthLeaseClaims (Get-SigningKeyId $PublicKey)
+                $Message = [byte[]]::new($HealthLeaseDomain.Length + $ClaimsBytes.Length)
+                [Array]::Copy($HealthLeaseDomain, 0, $Message, 0, $HealthLeaseDomain.Length)
+                [Array]::Copy($ClaimsBytes, 0, $Message, $HealthLeaseDomain.Length, $ClaimsBytes.Length)
+            } elseif ($Verb -eq 'sign-protection-lease') {
+                $Message = Read-ProtectionLease (Get-SigningKeyId $PublicKey)
+            } else {
+                $RegistrationBytes = Read-HealthKeyRegistration (Get-SigningKeyId $PublicKey)
+                $Message = [byte[]]::new($HealthKeyRegistrationDomain.Length + $RegistrationBytes.Length)
+                [Array]::Copy($HealthKeyRegistrationDomain, 0, $Message, 0, $HealthKeyRegistrationDomain.Length)
+                [Array]::Copy(
+                    $RegistrationBytes, 0, $Message, $HealthKeyRegistrationDomain.Length, $RegistrationBytes.Length
+                )
+            }
             $Signer = [System.Security.Cryptography.ECDsaCng]::new($Key)
             try {
                 $P1363 = $Signer.SignData($Message, [System.Security.Cryptography.HashAlgorithmName]::SHA256)

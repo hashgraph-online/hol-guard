@@ -87,7 +87,8 @@ def test_authenticated_ack_retires_one_item_and_advances_exact_chain(
     )
     assert second.lease.claims.sequence == 2
     assert second.lease.claims.previous_lease_digest == first.lease.digest
-    assert second.lease.claims.previous_lease_key_id == first.lease.claims.signing_key_id
+    assert second.lease.claims.previous_lease_key_id is None
+    assert second.lease.claims.signing_key_id == first.lease.claims.signing_key_id
 
 
 def test_replayed_ack_is_idempotent_after_retirement(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
