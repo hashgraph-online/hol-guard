@@ -189,6 +189,35 @@ def test_inspects_exact_release_without_exposing_urls_in_cli(capsys: pytest.Capt
     assert "pythonhosted.org" not in output
 
 
+def test_inspect_release_ignores_valid_publish_attestation_sidecars() -> None:
+    attestation = f"{WHEEL}.publish.attestation"
+    payload = _release_payload(
+        Registry.TESTPYPI,
+        {
+            WHEEL: (WHEEL_BYTES, None),
+            SDIST: (SDIST_BYTES, None),
+            attestation: (b"signed-attestation", None),
+        },
+    )
+    fetcher = FakeFetcher({_release_url(Registry.TESTPYPI): payload})
+
+    inspection = inspect_release(Registry.TESTPYPI, VERSION, fetcher=fetcher)
+
+    assert {item.filename for item in inspection.files} == {WHEEL, SDIST}
+
+
+def test_inspect_release_rejects_publish_attestation_for_invalid_distribution() -> None:
+    attestation = "not-a-distribution.publish.attestation"
+    payload = _release_payload(
+        Registry.TESTPYPI,
+        {attestation: (b"signed-attestation", None)},
+    )
+    fetcher = FakeFetcher({_release_url(Registry.TESTPYPI): payload})
+
+    with pytest.raises(RegistryVerificationError, match="Invalid distribution filename"):
+        inspect_release(Registry.TESTPYPI, VERSION, fetcher=fetcher)
+
+
 def test_inspect_release_rejects_an_invalid_distribution_port() -> None:
     document = json.loads(
         _release_payload(

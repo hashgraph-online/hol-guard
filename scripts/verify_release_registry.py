@@ -189,6 +189,14 @@ def _validate_distribution_filename(filename: object, version: Version) -> str:
     return filename
 
 
+def _is_publish_attestation(filename: object, version: Version) -> bool:
+    if not isinstance(filename, str) or not filename.endswith(".publish.attestation"):
+        return False
+    distribution_filename = filename.removesuffix(".publish.attestation")
+    _validate_distribution_filename(distribution_filename, version)
+    return True
+
+
 def _validated_download_url(url: object, filename: str, registry: Registry) -> str:
     if not isinstance(url, str):
         raise RegistryVerificationError("Registry distribution URL must be a string")
@@ -243,6 +251,8 @@ def inspect_release(
     for item in urls:
         if not isinstance(item, dict):
             raise RegistryVerificationError("Registry release file entry must be an object")
+        if _is_publish_attestation(item.get("filename"), version):
+            continue
         filename = _validate_distribution_filename(item.get("filename"), version)
         if filename in seen:
             raise RegistryVerificationError(f"Registry release repeats distribution filename: {filename}")
@@ -255,6 +265,8 @@ def inspect_release(
             raise RegistryVerificationError(f"Registry release has an invalid SHA-256 for {filename}")
         download_url = _validated_download_url(item.get("url"), filename, registry)
         files.append(ReleaseFile(filename=filename, sha256=sha256, download_url=download_url))
+    if not files:
+        raise RegistryVerificationError("Existing registry release has no distribution files")
     return ReleaseInspection(
         registry=registry,
         version=str(version),
