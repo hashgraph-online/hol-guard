@@ -206,6 +206,35 @@ def test_inspect_release_ignores_valid_publish_attestation_sidecars() -> None:
     assert {item.filename for item in inspection.files} == {WHEEL, SDIST}
 
 
+def test_inspect_release_ignores_nested_publish_attestation_sidecars() -> None:
+    nested_attestation = f"{WHEEL}.publish.attestation.publish.attestation"
+    payload = _release_payload(
+        Registry.TESTPYPI,
+        {
+            WHEEL: (b"wheel", hashlib.sha256(b"wheel").hexdigest()),
+            SDIST: (b"sdist", hashlib.sha256(b"sdist").hexdigest()),
+            nested_attestation: (b"attestation", None),
+        },
+    )
+    fetcher = FakeFetcher({_release_url(Registry.TESTPYPI): payload})
+
+    inspection = inspect_release(Registry.TESTPYPI, VERSION, fetcher=fetcher)
+
+    assert {item.filename for item in inspection.files} == {WHEEL, SDIST}
+
+
+def test_inspect_release_rejects_release_with_only_publish_attestation_sidecars() -> None:
+    attestation = f"{WHEEL}.publish.attestation"
+    payload = _release_payload(
+        Registry.TESTPYPI,
+        {attestation: (b"attestation", None)},
+    )
+    fetcher = FakeFetcher({_release_url(Registry.TESTPYPI): payload})
+
+    with pytest.raises(RegistryVerificationError, match="no distribution files"):
+        inspect_release(Registry.TESTPYPI, VERSION, fetcher=fetcher)
+
+
 def test_inspect_release_rejects_publish_attestation_for_invalid_distribution() -> None:
     attestation = "not-a-distribution.publish.attestation"
     payload = _release_payload(
