@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import sqlite3
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -147,6 +148,41 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
 
 
 class TestGuardEvents:
+    def test_recent_event_queries_use_covering_order_indexes(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "home")
+        store.add_event("alpha", {"sequence": 1}, "2026-07-18T00:00:00Z")
+        store.add_event("beta", {"sequence": 2}, "2026-07-18T00:00:01Z")
+        store.add_event("alpha", {"sequence": 3}, "2026-07-18T00:00:02Z")
+
+        with sqlite3.connect(store.path) as connection:
+            recent_plan = connection.execute(
+                """
+                explain query plan
+                select event_id, event_name, payload_json, occurred_at
+                from guard_events
+                order by occurred_at desc, event_id desc
+                limit ?
+                """,
+                (1000,),
+            ).fetchall()
+            named_plan = connection.execute(
+                """
+                explain query plan
+                select event_id, event_name, payload_json, occurred_at
+                from guard_events
+                where event_name = ?
+                order by occurred_at desc, event_id desc
+                limit ?
+                """,
+                ("alpha", 1000),
+            ).fetchall()
+
+        assert any("idx_guard_events_recent" in str(row[3]) for row in recent_plan)
+        assert any("idx_guard_events_name_recent" in str(row[3]) for row in named_plan)
+        assert all("USE TEMP B-TREE FOR ORDER BY" not in str(row[3]) for row in (*recent_plan, *named_plan))
+        assert [item["payload"]["sequence"] for item in store.list_events()] == [3, 2, 1]
+        assert [item["payload"]["sequence"] for item in store.list_events(event_name="alpha")] == [3, 1]
+
     def test_guard_run_records_first_session_and_change_event(self, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
