@@ -34,7 +34,7 @@ class LaunchEnvironmentPlan:
 
 def inherited_launch_environment(launch_env: Mapping[str, str] | None) -> LaunchEnvironmentPlan:
     environment = os.environ if launch_env is None else launch_env
-    raw_environment = cast(Mapping[object, object], cast(object, environment))
+    raw_environment = cast(Mapping[object, object], environment)
     items = [
         (name, value) for name, value in raw_environment.items() if isinstance(name, str) and isinstance(value, str)
     ]
