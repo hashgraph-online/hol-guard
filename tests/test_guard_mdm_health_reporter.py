@@ -321,6 +321,34 @@ def test_delivery_diagnostics_preserve_structured_http_context_without_echoing_c
     assert "customer_secret_value" not in reason
 
 
+def test_delivery_diagnostics_reject_arbitrary_health_prefixed_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class ArbitraryHealthErrorTransport:
+        def register_key(self, _payload: bytes) -> None:
+            return None
+
+        def deliver_lease(self, _outbox: HealthLeaseOutbox) -> HealthLeaseAck:
+            raise RuntimeError("health_secret_token_value")
+
+        def poll_challenge(self, **_kwargs: object) -> None:
+            pytest.fail("challenge polling must not run after failed delivery")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.mdm.health_reporter.build_machine_health_key_registration",
+        lambda *_args, **_kwargs: b"registration",
+    )
+    result = run_machine_health_cadence(
+        paths=_paths(tmp_path),
+        system_name="Darwin",
+        policy_loader=lambda **_kwargs: _policy(),
+        lease_issuer=lambda *_args, **_kwargs: _outbox(),
+        transport=ArbitraryHealthErrorTransport(),
+    )
+
+    assert cast(dict[str, object], result["metrics"])["rejectionReason"] == "health_transport_failure"
+
+
 @pytest.mark.parametrize(
     ("state", "reason"),
     [

@@ -25,6 +25,19 @@ PolicyLoader = Callable[..., ManagedPolicyState]
 LeaseIssuer = Callable[..., HealthLeaseOutbox]
 LeaseAcknowledger = Callable[..., HealthLeaseAck]
 
+_SAFE_TRANSPORT_REASON_CODES = frozenset(
+    {
+        "health_key_registration_ack_invalid",
+        "health_lease_challenge_invalid",
+        "health_lease_delivery_auth_invalid",
+        "health_lease_delivery_response_oversized",
+    }
+)
+_SAFE_HTTP_REASON = re.compile(
+    r"health_(?:key_registration|lease_challenge|lease_delivery)_http_[1-5][0-9]{2}"
+)
+_SAFE_STRUCTURED_HTTP_REASON = re.compile(r"(health_lease_delivery_http_[1-5][0-9]{2}):(.+)")
+
 
 def _machine_binding(policy_state: ManagedPolicyState) -> HealthLeaseBinding:
     policy = policy_state.policy
@@ -163,9 +176,9 @@ def run_machine_health_cadence(
 
 def _bounded_reason(error: BaseException) -> str:
     reason = str(error).strip()
-    if len(reason) <= 128 and re.fullmatch(r"health_[a-z0-9_]+", reason):
+    if reason in _SAFE_TRANSPORT_REASON_CODES or _SAFE_HTTP_REASON.fullmatch(reason):
         return reason
-    structured = re.fullmatch(r"(health_[a-z0-9_]+):(.+)", reason)
+    structured = _SAFE_STRUCTURED_HTTP_REASON.fullmatch(reason)
     if structured is not None:
         cloud_code_digest = hashlib.sha256(structured.group(2).encode("utf-8")).hexdigest()[:12]
         return f"{structured.group(1)}:cloud_error_{cloud_code_digest}"[:128]
