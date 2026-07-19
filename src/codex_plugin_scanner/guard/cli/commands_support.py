@@ -31,6 +31,7 @@ from . import commands_dispatch_local as _commands_dispatch_local
 from . import commands_dispatch_mdm as _commands_dispatch_mdm
 from . import commands_dispatch_proxy as _commands_dispatch_proxy
 from . import commands_dispatch_records as _commands_dispatch_records
+from . import commands_dispatch_policy_document as _commands_dispatch_policy_document
 from . import commands_dispatch_trust as _commands_dispatch_trust
 from . import commands_dispatch_admin as _commands_dispatch_admin
 from . import commands_dispatch_cloud as _commands_dispatch_cloud
@@ -66,6 +67,7 @@ _SOURCE_MODULES: tuple[ModuleType, ...] = (
     _commands_dispatch_mdm,
     _commands_dispatch_proxy,
     _commands_dispatch_records,
+    _commands_dispatch_policy_document,
     _commands_dispatch_trust,
     _commands_dispatch_admin,
     _commands_dispatch_cloud,

@@ -151,10 +151,13 @@ def _post_error(port: int, token: str, path: str, payload: dict[str, object]) ->
 
 
 def _start_fake_codex_app_server(socket_path: Path, received: list[dict[str, object]]) -> threading.Thread:
+    ready = threading.Event()
+
     def server() -> None:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
             listener.bind(str(socket_path))
             listener.listen(1)
+            ready.set()
             connection, _ = listener.accept()
             with connection:
                 headers = _recv_until(connection, b"\r\n\r\n").decode("iso-8859-1")
@@ -217,18 +220,18 @@ def _start_fake_codex_app_server(socket_path: Path, received: list[dict[str, obj
 
     thread = threading.Thread(target=server, daemon=True)
     thread.start()
-    for _ in range(50):
-        if socket_path.exists():
-            break
-        time.sleep(0.01)
+    assert ready.wait(timeout=1)
     return thread
 
 
 def _start_fake_streaming_codex_app_server(socket_path: Path, received: list[dict[str, object]]) -> threading.Thread:
+    ready = threading.Event()
+
     def server() -> None:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
             listener.bind(str(socket_path))
             listener.listen(1)
+            ready.set()
             connection, _ = listener.accept()
             with connection:
                 headers = _recv_until(connection, b"\r\n\r\n").decode("iso-8859-1")
@@ -289,20 +292,20 @@ def _start_fake_streaming_codex_app_server(socket_path: Path, received: list[dic
 
     thread = threading.Thread(target=server, daemon=True)
     thread.start()
-    for _ in range(50):
-        if socket_path.exists():
-            break
-        time.sleep(0.01)
+    assert ready.wait(timeout=1)
     return thread
 
 
 def _start_fake_pre_ack_streaming_codex_app_server(
     socket_path: Path, received: list[dict[str, object]]
 ) -> threading.Thread:
+    ready = threading.Event()
+
     def server() -> None:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
             listener.bind(str(socket_path))
             listener.listen(1)
+            ready.set()
             connection, _ = listener.accept()
             with connection:
                 headers = _recv_until(connection, b"\r\n\r\n").decode("iso-8859-1")
@@ -361,10 +364,7 @@ def _start_fake_pre_ack_streaming_codex_app_server(
 
     thread = threading.Thread(target=server, daemon=True)
     thread.start()
-    for _ in range(50):
-        if socket_path.exists():
-            break
-        time.sleep(0.01)
+    assert ready.wait(timeout=1)
     return thread
 
 
