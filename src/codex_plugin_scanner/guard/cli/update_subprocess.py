@@ -1383,13 +1383,19 @@ def _trusted_python_import_paths() -> tuple[Path, ...]:
 
 def _manager_home_from_prefix(installer_kind: str) -> tuple[Path, Path]:
     prefix = Path(sys.prefix).expanduser().resolve()
-    parts = tuple(part.lower() for part in prefix.parts)
     marker = "venvs" if installer_kind == "pipx" else "tools"
-    try:
-        marker_index = len(parts) - 1 - tuple(reversed(parts)).index(marker)
-    except ValueError as error:
-        raise UpdateSubprocessError("update_installer_untrusted") from error
-    if marker_index + 1 >= len(parts) or parts[marker_index + 1].replace("_", "-") != "hol-guard":
+    marker_index = next(
+        (
+            index
+            for index in range(len(prefix.parts) - 1, -1, -1)
+            if _manager_component_matches(Path(*prefix.parts[: index + 1]), marker)
+        ),
+        None,
+    )
+    if marker_index is None or marker_index + 1 >= len(prefix.parts):
+        raise UpdateSubprocessError("update_installer_untrusted")
+    package_root = Path(*prefix.parts[: marker_index + 2])
+    if not any(_manager_component_matches(package_root, expected_name) for expected_name in ("hol-guard", "hol_guard")):
         raise UpdateSubprocessError("update_installer_untrusted")
     marker_root = Path(*prefix.parts[: marker_index + 1])
     local_root = marker_root.parent
@@ -1400,7 +1406,11 @@ def _manager_home_from_prefix(installer_kind: str) -> tuple[Path, Path]:
         except OSError as error:
             raise UpdateSubprocessError("update_installer_untrusted") from error
         return manager_home, bin_dir
-    if os.name != "nt" and local_root.name == "pipx" and local_root.parent.name == "Application Support":
+    if (
+        os.name != "nt"
+        and _manager_component_matches(local_root, "pipx")
+        and _manager_component_matches(local_root.parent, "Application Support")
+    ):
         try:
             import pwd
 
@@ -1408,15 +1418,48 @@ def _manager_home_from_prefix(installer_kind: str) -> tuple[Path, Path]:
         except (ImportError, KeyError, OSError, RuntimeError) as error:
             raise UpdateSubprocessError("update_installer_untrusted") from error
         return manager_home, user_home / ".local" / "bin"
-    if os.name != "nt" and marker_root == Path("/opt/pipx/venvs"):
+    if os.name != "nt" and _manager_path_matches(marker_root, Path("/opt/pipx/venvs")):
         return manager_home, Path("/usr/local/bin")
-    if local_root.name in {"pipx", "uv"} and local_root.parent.name == "share":
+    manager_root_matches = any(
+        _manager_component_matches(local_root, expected_name) for expected_name in ("pipx", "uv")
+    )
+    if manager_root_matches and _manager_component_matches(local_root.parent, "share"):
         bin_dir = local_root.parent.parent / "bin"
-    elif local_root.name in {"pipx", "uv"}:
+    elif manager_root_matches:
         bin_dir = local_root.parent / "bin"
     else:
         raise UpdateSubprocessError("update_installer_untrusted")
     return manager_home, bin_dir
+
+
+def _manager_component_matches(path: Path, expected_name: str) -> bool:
+    """Match manager layout names without aliasing distinct POSIX paths."""
+
+    if path.name == expected_name:
+        return True
+    if path.name.casefold() != expected_name.casefold():
+        return False
+    if os.name == "nt":
+        return True
+    try:
+        return path.samefile(path.with_name(expected_name))
+    except OSError:
+        return False
+
+
+def _manager_path_matches(path: Path, expected_path: Path) -> bool:
+    """Match a fixed manager root only when casing aliases the same object."""
+
+    if path == expected_path:
+        return True
+    if str(path).casefold() != str(expected_path).casefold():
+        return False
+    if os.name == "nt":
+        return True
+    try:
+        return path.samefile(expected_path)
+    except OSError:
+        return False
 
 
 def _append_pip_source(command: list[str], index_url: str) -> list[str]:
@@ -1744,7 +1787,10 @@ def _resume_windows_process_primary_thread(process_id: int) -> None:
     try:
         entry = _WindowsThreadEntry32()
         entry.dwSize = ctypes.sizeof(entry)
+        ctypes.set_last_error(0)
         has_entry = bool(thread_first(snapshot, ctypes.byref(entry)))
+        first_failed = not has_entry
+        first_error = ctypes.get_last_error() if first_failed else 0
         while has_entry:
             if int(entry.th32OwnerProcessID) == process_id:
                 thread_ids.append(int(entry.th32ThreadID))
@@ -1755,6 +1801,8 @@ def _resume_windows_process_primary_thread(process_id: int) -> None:
                 enumeration_error = ctypes.get_last_error()
     finally:
         _ = close_handle(snapshot)
+    if first_failed:
+        raise OSError(first_error, "Thread32First failed")
     if enumeration_error != _WINDOWS_ERROR_NO_MORE_FILES:
         raise OSError(enumeration_error, "Thread32Next failed")
     if len(thread_ids) != 1:

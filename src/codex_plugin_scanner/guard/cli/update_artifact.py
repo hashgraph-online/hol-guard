@@ -15,6 +15,7 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
+from typing import final
 
 from packaging.utils import InvalidWheelFilename, canonicalize_name, parse_wheel_filename
 from packaging.version import InvalidVersion, Version
@@ -35,14 +36,35 @@ _POSIX_RECEIPT_DIR_FD_SUPPORTED = (
     and os.unlink in os.supports_dir_fd
 )
 _WINDOWS_FILE_ATTRIBUTE_DIRECTORY = 0x00000010
+_WINDOWS_FILE_ATTRIBUTE_NORMAL = 0x00000080
 _WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT = 0x00000400
 _WINDOWS_FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
+_WINDOWS_FILE_FLAG_DELETE_ON_CLOSE = 0x04000000
 _WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
 _WINDOWS_FILE_READ_ATTRIBUTES = 0x00000080
+_WINDOWS_DELETE = 0x00010000
 _WINDOWS_GENERIC_READ = 0x80000000
+_WINDOWS_GENERIC_WRITE = 0x40000000
 _WINDOWS_FILE_SHARE_READ = 0x00000001
 _WINDOWS_FILE_SHARE_WRITE = 0x00000002
+_WINDOWS_CREATE_NEW = 1
 _WINDOWS_OPEN_EXISTING = 3
+
+
+@final
+class _WindowsByHandleFileInformation(ctypes.Structure):
+    _fields_ = [
+        ("dwFileAttributes", wintypes.DWORD),
+        ("ftCreationTime", wintypes.FILETIME),
+        ("ftLastAccessTime", wintypes.FILETIME),
+        ("ftLastWriteTime", wintypes.FILETIME),
+        ("dwVolumeSerialNumber", wintypes.DWORD),
+        ("nFileSizeHigh", wintypes.DWORD),
+        ("nFileSizeLow", wintypes.DWORD),
+        ("nNumberOfLinks", wintypes.DWORD),
+        ("nFileIndexHigh", wintypes.DWORD),
+        ("nFileIndexLow", wintypes.DWORD),
+    ]
 
 
 class UpdateArtifactError(RuntimeError):
@@ -174,6 +196,18 @@ class TrustedWheelArtifact:
             return
 
 
+@dataclass(frozen=True, slots=True)
+class _WindowsReceiptDirectoryLocks:
+    directory_handle: object
+    child_handle: object
+
+    def close(self) -> None:
+        """Release the child first so its delete-on-close cleanup can complete."""
+
+        _close_windows_handle(self.child_handle)
+        _close_windows_handle(self.directory_handle)
+
+
 def record_local_wheel_receipt(
     artifact: TrustedWheelArtifact,
     *,
@@ -183,7 +217,7 @@ def record_local_wheel_receipt(
     """Persist the original source behind an ephemeral PEP 610 staging URL."""
 
     directory_descriptor: int | None = None
-    windows_directory_handle: object | None = None
+    windows_directory_locks: _WindowsReceiptDirectoryLocks | None = None
     temporary_name: str | None = None
     resolved_guard_home: Path | None = None
     try:
@@ -194,7 +228,7 @@ def record_local_wheel_receipt(
             kind="directory",
             failure_reason="update_artifact_receipt_failed",
         )
-        directory_descriptor, windows_directory_handle, directory_metadata = _open_receipt_directory(
+        directory_descriptor, windows_directory_locks, directory_metadata = _open_receipt_directory(
             resolved_guard_home,
             reason_code="update_artifact_receipt_failed",
         )
@@ -292,8 +326,8 @@ def record_local_wheel_receipt(
         if directory_descriptor is not None:
             with suppress(OSError):
                 os.close(directory_descriptor)
-        if windows_directory_handle is not None:
-            _close_windows_handle(windows_directory_handle)
+        if windows_directory_locks is not None:
+            windows_directory_locks.close()
 
 
 def recover_local_wheel_original(
@@ -309,7 +343,7 @@ def recover_local_wheel_original(
     if len(normalized_sha256) != 64 or any(character not in "0123456789abcdef" for character in normalized_sha256):
         return None
     directory_descriptor: int | None = None
-    windows_directory_handle: object | None = None
+    windows_directory_locks: _WindowsReceiptDirectoryLocks | None = None
     try:
         resolved_guard_home = guard_home.resolve(strict=True)
         guard_home_identity = FilesystemIdentity.capture(
@@ -317,7 +351,7 @@ def recover_local_wheel_original(
             kind="directory",
             failure_reason="update_artifact_receipt_invalid",
         )
-        directory_descriptor, windows_directory_handle, directory_metadata = _open_receipt_directory(
+        directory_descriptor, windows_directory_locks, directory_metadata = _open_receipt_directory(
             resolved_guard_home,
             reason_code="update_artifact_receipt_invalid",
         )
@@ -411,8 +445,8 @@ def recover_local_wheel_original(
         if directory_descriptor is not None:
             with suppress(OSError):
                 os.close(directory_descriptor)
-        if windows_directory_handle is not None:
-            _close_windows_handle(windows_directory_handle)
+        if windows_directory_locks is not None:
+            windows_directory_locks.close()
 
 
 def stage_trusted_wheel(source: Path, *, neutral_cwd: Path) -> TrustedWheelArtifact:
@@ -671,20 +705,26 @@ def _open_receipt_directory(
     path: Path,
     *,
     reason_code: str,
-) -> tuple[int | None, object | None, os.stat_result]:
+) -> tuple[int | None, _WindowsReceiptDirectoryLocks | None, os.stat_result]:
     """Pin the receipt directory against replacement for one transaction."""
 
     if os.name == "nt":
         directory_handle = _open_windows_directory_lock(path, reason_code=reason_code)
+        child_handle: object | None = None
         try:
+            child_handle = _open_windows_receipt_child_lock(path, reason_code=reason_code)
             metadata = os.lstat(path)
             if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode) or _metadata_is_reparse(metadata):
                 raise UpdateArtifactError(reason_code)
-            return None, directory_handle, metadata
+            return None, _WindowsReceiptDirectoryLocks(directory_handle, child_handle), metadata
         except UpdateArtifactError:
+            if child_handle is not None:
+                _close_windows_handle(child_handle)
             _close_windows_handle(directory_handle)
             raise
         except (OSError, RuntimeError, ValueError) as error:
+            if child_handle is not None:
+                _close_windows_handle(child_handle)
             _close_windows_handle(directory_handle)
             raise UpdateArtifactError(reason_code) from error
     if not _POSIX_RECEIPT_DIR_FD_SUPPORTED:
@@ -725,11 +765,6 @@ def _open_receipt_file(
     directory_descriptor: int | None,
     reason_code: str,
 ) -> tuple[int, os.stat_result]:
-    if os.name == "nt":
-        return _open_windows_receipt_file(
-            directory / _LOCAL_WHEEL_RECEIPT_NAME,
-            reason_code=reason_code,
-        )
     return _open_regular_descriptor(
         _LOCAL_WHEEL_RECEIPT_NAME if directory_descriptor is not None else directory / _LOCAL_WHEEL_RECEIPT_NAME,
         reason_code=reason_code,
@@ -848,20 +883,6 @@ def _open_windows_directory_lock(path: Path, *, reason_code: str) -> object:
     try:
         kernel32 = win_dll("kernel32", use_last_error=True)
 
-        class _ByHandleFileInformation(ctypes.Structure):
-            _fields_ = [
-                ("dwFileAttributes", wintypes.DWORD),
-                ("ftCreationTime", wintypes.FILETIME),
-                ("ftLastAccessTime", wintypes.FILETIME),
-                ("ftLastWriteTime", wintypes.FILETIME),
-                ("dwVolumeSerialNumber", wintypes.DWORD),
-                ("nFileSizeHigh", wintypes.DWORD),
-                ("nFileSizeLow", wintypes.DWORD),
-                ("nNumberOfLinks", wintypes.DWORD),
-                ("nFileIndexHigh", wintypes.DWORD),
-                ("nFileIndexLow", wintypes.DWORD),
-            ]
-
         create_file = kernel32.CreateFileW
         create_file.argtypes = [
             wintypes.LPCWSTR,
@@ -874,7 +895,7 @@ def _open_windows_directory_lock(path: Path, *, reason_code: str) -> object:
         ]
         create_file.restype = wintypes.HANDLE
         get_information = kernel32.GetFileInformationByHandle
-        get_information.argtypes = [wintypes.HANDLE, ctypes.POINTER(_ByHandleFileInformation)]
+        get_information.argtypes = [wintypes.HANDLE, ctypes.POINTER(_WindowsByHandleFileInformation)]
         get_information.restype = wintypes.BOOL
         handle = create_file(
             str(path),
@@ -888,7 +909,7 @@ def _open_windows_directory_lock(path: Path, *, reason_code: str) -> object:
         invalid_handle = ctypes.c_void_p(-1).value
         if handle in {None, invalid_handle}:
             raise UpdateArtifactError(reason_code)
-        information = _ByHandleFileInformation()
+        information = _WindowsByHandleFileInformation()
         if not get_information(handle, ctypes.byref(information)):
             _close_windows_handle(handle)
             raise UpdateArtifactError(reason_code)
@@ -905,31 +926,15 @@ def _open_windows_directory_lock(path: Path, *, reason_code: str) -> object:
         raise UpdateArtifactError(reason_code) from error
 
 
-def _open_windows_receipt_file(path: Path, *, reason_code: str) -> tuple[int, os.stat_result]:
-    """Open a receipt itself, rather than its reparse target, as a CRT descriptor."""
+def _open_windows_receipt_child_lock(path: Path, *, reason_code: str) -> object:
+    """Create a bound child that prevents its receipt directory from moving."""
 
     win_dll = getattr(ctypes, "WinDLL", None)
     if win_dll is None:
         raise UpdateArtifactError(reason_code)
     handle: object | None = None
-    descriptor: int | None = None
     try:
-        msvcrt = importlib.import_module("msvcrt")
         kernel32 = win_dll("kernel32", use_last_error=True)
-
-        class _ByHandleFileInformation(ctypes.Structure):
-            _fields_ = [
-                ("dwFileAttributes", wintypes.DWORD),
-                ("ftCreationTime", wintypes.FILETIME),
-                ("ftLastAccessTime", wintypes.FILETIME),
-                ("ftLastWriteTime", wintypes.FILETIME),
-                ("dwVolumeSerialNumber", wintypes.DWORD),
-                ("nFileSizeHigh", wintypes.DWORD),
-                ("nFileSizeLow", wintypes.DWORD),
-                ("nNumberOfLinks", wintypes.DWORD),
-                ("nFileIndexHigh", wintypes.DWORD),
-                ("nFileIndexLow", wintypes.DWORD),
-            ]
 
         create_file = kernel32.CreateFileW
         create_file.argtypes = [
@@ -943,7 +948,67 @@ def _open_windows_receipt_file(path: Path, *, reason_code: str) -> tuple[int, os
         ]
         create_file.restype = wintypes.HANDLE
         get_information = kernel32.GetFileInformationByHandle
-        get_information.argtypes = [wintypes.HANDLE, ctypes.POINTER(_ByHandleFileInformation)]
+        get_information.argtypes = [wintypes.HANDLE, ctypes.POINTER(_WindowsByHandleFileInformation)]
+        get_information.restype = wintypes.BOOL
+        lock_path = path / f".{_LOCAL_WHEEL_RECEIPT_NAME}.lock.{os.getpid()}.{os.urandom(16).hex()}"
+        handle = create_file(
+            str(lock_path),
+            _WINDOWS_GENERIC_READ | _WINDOWS_GENERIC_WRITE | _WINDOWS_DELETE,
+            _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE,
+            None,
+            _WINDOWS_CREATE_NEW,
+            _WINDOWS_FILE_ATTRIBUTE_NORMAL | _WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT | _WINDOWS_FILE_FLAG_DELETE_ON_CLOSE,
+            None,
+        )
+        invalid_handle = ctypes.c_void_p(-1).value
+        if handle in {None, invalid_handle}:
+            raise UpdateArtifactError(reason_code)
+        information = _WindowsByHandleFileInformation()
+        if not get_information(handle, ctypes.byref(information)):
+            raise UpdateArtifactError(reason_code)
+        attributes = int(information.dwFileAttributes)
+        if attributes & (_WINDOWS_FILE_ATTRIBUTE_DIRECTORY | _WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT):
+            raise UpdateArtifactError(reason_code)
+        return handle
+    except UpdateArtifactError:
+        if handle is not None:
+            _close_windows_handle(handle)
+        raise
+    except (AttributeError, ImportError, OSError, RuntimeError, TypeError, ValueError) as error:
+        if handle is not None:
+            _close_windows_handle(handle)
+        raise UpdateArtifactError(reason_code) from error
+
+
+def _open_windows_regular_descriptor(
+    path: Path | str,
+    *,
+    reason_code: str,
+) -> tuple[int, os.stat_result]:
+    """Atomically open a regular file itself, rather than its reparse target."""
+
+    win_dll = getattr(ctypes, "WinDLL", None)
+    if win_dll is None:
+        raise UpdateArtifactError(reason_code)
+    handle: object | None = None
+    descriptor: int | None = None
+    try:
+        msvcrt = importlib.import_module("msvcrt")
+        kernel32 = win_dll("kernel32", use_last_error=True)
+
+        create_file = kernel32.CreateFileW
+        create_file.argtypes = [
+            wintypes.LPCWSTR,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.HANDLE,
+        ]
+        create_file.restype = wintypes.HANDLE
+        get_information = kernel32.GetFileInformationByHandle
+        get_information.argtypes = [wintypes.HANDLE, ctypes.POINTER(_WindowsByHandleFileInformation)]
         get_information.restype = wintypes.BOOL
         handle = create_file(
             str(path),
@@ -957,7 +1022,7 @@ def _open_windows_receipt_file(path: Path, *, reason_code: str) -> tuple[int, os
         invalid_handle = ctypes.c_void_p(-1).value
         if handle in {None, invalid_handle}:
             raise UpdateArtifactError(reason_code)
-        information = _ByHandleFileInformation()
+        information = _WindowsByHandleFileInformation()
         if not get_information(handle, ctypes.byref(information)):
             raise UpdateArtifactError(reason_code)
         attributes = int(information.dwFileAttributes)
@@ -974,13 +1039,7 @@ def _open_windows_receipt_file(path: Path, *, reason_code: str) -> tuple[int, os
         )
         handle = None
         metadata = os.fstat(descriptor)
-        entry_metadata = os.lstat(path)
-        if (
-            not stat.S_ISREG(metadata.st_mode)
-            or stat.S_ISLNK(entry_metadata.st_mode)
-            or _metadata_is_reparse(entry_metadata)
-            or _stat_identity(entry_metadata) != _stat_identity(metadata)
-        ):
+        if not stat.S_ISREG(metadata.st_mode):
             raise UpdateArtifactError(reason_code)
         return descriptor, metadata
     except UpdateArtifactError:
@@ -1017,6 +1076,8 @@ def _open_regular_descriptor(
     reason_code: str,
     directory_descriptor: int | None = None,
 ) -> tuple[int, os.stat_result]:
+    if os.name == "nt" and directory_descriptor is None:
+        return _open_windows_regular_descriptor(path, reason_code=reason_code)
     flags = (
         os.O_RDONLY
         | getattr(os, "O_BINARY", 0)

@@ -209,7 +209,7 @@ def test_update_binary_diagnostics_accepts_same_environment_script(monkeypatch: 
 
     assert exit_code == 0
     assert payload["binary_diagnostics"]["path_status"] == "matches_installer"
-    assert payload["binary_diagnostics"]["expected_script_dir"] == "/opt/guard/bin"
+    assert payload["binary_diagnostics"]["expected_script_dir"] == str(Path("/opt/guard/bin").absolute())
 
 
 def test_update_binary_diagnostics_keeps_venv_script_dir_without_resolving_python(
@@ -230,7 +230,7 @@ def test_update_binary_diagnostics_keeps_venv_script_dir_without_resolving_pytho
 
     assert exit_code == 0
     assert payload["binary_diagnostics"]["path_status"] == "matches_installer"
-    assert payload["binary_diagnostics"]["expected_script_dir"] == "/workspace/.venv/bin"
+    assert payload["binary_diagnostics"]["expected_script_dir"] == str(Path("/workspace/.venv/bin").absolute())
 
 
 def test_update_binary_diagnostics_uses_python_scripts_dir(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -249,7 +249,7 @@ def test_update_binary_diagnostics_uses_python_scripts_dir(monkeypatch: pytest.M
 
     assert exit_code == 0
     assert payload["binary_diagnostics"]["path_status"] == "matches_installer"
-    assert payload["binary_diagnostics"]["expected_script_dir"] == "/opt/python/scripts"
+    assert payload["binary_diagnostics"]["expected_script_dir"] == str(Path("/opt/python/scripts").absolute())
 
 
 def test_update_binary_diagnostics_treats_pipx_shim_as_healthy(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1225,7 +1225,7 @@ def test_relative_direct_url_metadata_never_adopts_caller_cwd(
         "kind": "local_archive",
         "archive_type": "wheel",
         "url": "file:dist/hol_guard-2.0.345-py3-none-any.whl",
-        "path": "dist/hol_guard-2.0.345-py3-none-any.whl",
+        "path": str(Path("dist") / "hol_guard-2.0.345-py3-none-any.whl"),
         "path_exists": False,
         "path_resolution_error": "relative_file_url",
     }

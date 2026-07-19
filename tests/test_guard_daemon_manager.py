@@ -14,6 +14,7 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -71,9 +72,10 @@ def test_write_guard_daemon_state_keeps_auth_token_out_of_state_file(tmp_path):
     assert daemon_manager_module.load_guard_daemon_auth_token(guard_home) == "secret-token"
     assert token_path.read_text(encoding="utf-8") == "secret-token"
     assert load_authenticated_daemon_state(guard_home) == state_payload
-    assert stat.S_IMODE(state_path.stat().st_mode) & 0o077 == 0
-    assert stat.S_IMODE(token_path.stat().st_mode) & 0o077 == 0
-    assert stat.S_IMODE(discovery_key_path.stat().st_mode) & 0o077 == 0
+    if os.name != "nt":
+        assert stat.S_IMODE(state_path.stat().st_mode) & 0o077 == 0
+        assert stat.S_IMODE(token_path.stat().st_mode) & 0o077 == 0
+        assert stat.S_IMODE(discovery_key_path.stat().st_mode) & 0o077 == 0
 
 
 def test_clear_guard_daemon_state_preserves_auth_token_file(tmp_path):
@@ -219,6 +221,7 @@ def test_load_guard_daemon_url_accepts_matching_healthz_guard_home_for_in_proces
     assert requested_headers[1]["X-guard-token"] == "secret-token"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="requires POSIX os.fchmod permission semantics")
 def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     fchmod_calls: list[tuple[int, int]] = []
@@ -297,6 +300,7 @@ def test_concurrent_daemon_restarts_leave_matching_authenticated_state_and_token
     assert state["auth_token_id"] == hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="exercises the POSIX daemon process-adoption workflow")
 def test_ensure_guard_daemon_quarantines_unsigned_legacy_state_before_adoption(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(mode=0o700)
@@ -471,6 +475,7 @@ def test_running_guard_daemon_processes_for_guard_home_returns_empty_on_ps_timeo
     assert daemon_manager_module._running_guard_daemon_processes_for_guard_home(guard_home) == []
 
 
+@pytest.mark.skipif(os.name == "nt", reason="models POSIX ps output and console-script command syntax")
 def test_running_guard_daemon_processes_for_guard_home_accepts_console_script_launch(
     tmp_path,
     monkeypatch,
@@ -535,6 +540,7 @@ def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, mon
     assert url == "http://127.0.0.1:5409"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="exercises POSIX process discovery and daemon adoption")
 def test_ensure_guard_daemon_adopts_running_guard_daemon_before_respawning(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
 
@@ -606,6 +612,10 @@ def test_ensure_guard_daemon_retires_duplicate_ports_for_same_guard_home(tmp_pat
     assert killed == [222]
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="its fake Popen omits the native Windows process identity required by daemon launch",
+)
 def test_ensure_guard_daemon_serializes_parallel_start_attempts(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     launched_commands: list[list[str]] = []
@@ -666,6 +676,10 @@ def test_ensure_guard_daemon_serializes_parallel_start_attempts(tmp_path, monkey
     assert launched_envs[0]["PYTHONSAFEPATH"] == "1"
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="its fake Popen omits the native Windows process identity required by daemon launch",
+)
 def test_ensure_guard_daemon_advances_ports_after_early_process_exit(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     launched_commands: list[list[str]] = []
@@ -706,6 +720,10 @@ def test_ensure_guard_daemon_advances_ports_after_early_process_exit(tmp_path, m
     assert [command[-1] for command in launched_commands] == ["5410", "5411"]
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="models POSIX signal retirement and omits native Windows process creation identities",
+)
 def test_ensure_guard_daemon_retires_stale_daemon_from_different_source_root(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     launched_commands: list[list[str]] = []
@@ -759,6 +777,10 @@ def test_ensure_guard_daemon_retires_stale_daemon_from_different_source_root(tmp
     assert launched_commands[0][-2:] == ["--port", "5412"]
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="its fake Popen omits the native Windows process identity required by daemon launch",
+)
 def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     home_dir = tmp_path / "real-user-home"
@@ -931,6 +953,10 @@ def test_guard_daemon_process_query_ignores_hostile_path_and_loader_environment(
     }
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="models POSIX ephemeral-process enumeration and signal retirement",
+)
 def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monkeypatch):
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
@@ -1021,6 +1047,10 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monke
     assert json.loads(fresh_state_path.read_text(encoding="utf-8"))["pid"] == 22222
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="models POSIX ephemeral-process enumeration and uses an incomplete fake Popen",
+)
 def test_ensure_guard_daemon_skips_runtime_probe_for_dead_ephemeral_state_pid(tmp_path, monkeypatch):
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
@@ -1078,6 +1108,10 @@ def test_ensure_guard_daemon_skips_runtime_probe_for_dead_ephemeral_state_pid(tm
     assert json.loads(stale_state_path.read_text(encoding="utf-8")) == {}
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="models POSIX ephemeral-process enumeration and uses an incomplete fake Popen",
+)
 def test_ensure_guard_daemon_skips_runtime_probe_for_ephemeral_state_without_pid(tmp_path, monkeypatch):
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
@@ -1119,6 +1153,10 @@ def test_ensure_guard_daemon_skips_runtime_probe_for_ephemeral_state_without_pid
     assert json.loads(stale_state_path.read_text(encoding="utf-8")) == {}
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="models POSIX ephemeral-process enumeration and signal retirement",
+)
 def test_ensure_guard_daemon_keeps_ephemeral_state_with_recent_runtime_heartbeat(tmp_path, monkeypatch):
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
@@ -1218,6 +1256,10 @@ def test_ephemeral_runtime_probe_skips_policy_integrity_priming_and_preserves_he
     assert constructor_calls == [(guard_home, False), (guard_home, False)]
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="models POSIX ephemeral-process enumeration and uses an incomplete fake Popen",
+)
 def test_ensure_guard_daemon_does_not_clobber_unowned_ephemeral_state_files(tmp_path, monkeypatch):
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
@@ -1253,6 +1295,10 @@ def test_ensure_guard_daemon_does_not_clobber_unowned_ephemeral_state_files(tmp_
     assert foreign_state_path.read_text(encoding="utf-8") == '"not-json-dict"'
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="models POSIX ephemeral-process enumeration and uses an incomplete fake Popen",
+)
 def test_ensure_guard_daemon_clears_stale_state_when_pid_no_longer_matches_guard_home(tmp_path, monkeypatch):
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
@@ -1302,6 +1348,10 @@ def test_ensure_guard_daemon_clears_stale_state_when_pid_no_longer_matches_guard
     assert json.loads(stale_state_path.read_text(encoding="utf-8")) == {}
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="models POSIX ephemeral-process enumeration and signal retirement",
+)
 def test_ensure_guard_daemon_reaps_stale_ephemeral_processes_without_state_file(tmp_path, monkeypatch):
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
@@ -1665,6 +1715,51 @@ def test_windows_command_line_to_argv_round_trips_native_quoting() -> None:
     parsed = windows_paths_module.windows_command_line_to_argv(subprocess.list2cmdline(arguments))
 
     assert parsed == arguments
+
+
+@pytest.mark.parametrize("argument_count", [0, -1])
+def test_windows_command_line_to_argv_frees_non_null_allocation_for_invalid_count(
+    monkeypatch: pytest.MonkeyPatch,
+    argument_count: int,
+) -> None:
+    class FakeFunction:
+        def __init__(self, callback) -> None:
+            self.callback = callback
+            self.argtypes: list[object] = []
+            self.restype: object | None = None
+
+        def __call__(self, *args: object) -> object:
+            return self.callback(*args)
+
+    native_arguments = (windows_paths_module.wintypes.LPWSTR * 1)("unused")
+    allocated_arguments = windows_paths_module.ctypes.cast(
+        native_arguments,
+        windows_paths_module.ctypes.POINTER(windows_paths_module.wintypes.LPWSTR),
+    )
+    freed_addresses: list[int | None] = []
+
+    def fake_command_line_to_argv(_command: object, count_pointer: Any) -> object:
+        native_count_pointer = windows_paths_module.ctypes.cast(
+            count_pointer,
+            windows_paths_module.ctypes.POINTER(windows_paths_module.ctypes.c_int),
+        )
+        native_count_pointer[0] = argument_count
+        return allocated_arguments
+
+    def fake_local_free(address: Any) -> None:
+        freed_addresses.append(address.value)
+
+    shell32 = SimpleNamespace(CommandLineToArgvW=FakeFunction(fake_command_line_to_argv))
+    kernel32 = SimpleNamespace(LocalFree=FakeFunction(fake_local_free))
+
+    def fake_win_dll(name: str, **_kwargs: object) -> object:
+        return shell32 if name == "shell32" else kernel32
+
+    monkeypatch.setattr(windows_paths_module, "os", _WindowsOSProxy())
+    monkeypatch.setattr(windows_paths_module.ctypes, "WinDLL", fake_win_dll, raising=False)
+
+    assert windows_paths_module.windows_command_line_to_argv("guard.exe --status") is None
+    assert freed_addresses == [windows_paths_module.ctypes.addressof(native_arguments)]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires native Windows process handles")

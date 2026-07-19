@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 from pathlib import Path
 from types import SimpleNamespace
@@ -496,6 +497,10 @@ def test_native_machine_policy_source_rejects_insecure_provenance(
     assert not policy_module._machine_policy_source_is_trusted(policy_path, "Linux")
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="simulates Linux /etc provenance with a drive-less POSIX absolute path",
+)
 def test_native_machine_policy_source_accepts_root_owned_nonwritable_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

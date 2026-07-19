@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import os
 import stat
 import types
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -56,6 +58,16 @@ def _symlink_or_skip(link: Path, target: Path) -> None:
         link.symlink_to(target)
     except (NotImplementedError, OSError) as error:
         pytest.skip(f"symlinks unavailable: {error}")
+
+
+class _FakeWindowsFunction:
+    def __init__(self, callback: Callable[..., object]) -> None:
+        self.callback = callback
+        self.argtypes: list[object] = []
+        self.restype: object | None = None
+
+    def __call__(self, *args: object) -> object:
+        return self.callback(*args)
 
 
 def test_stage_valid_wheel_is_private_hashed_revalidated_and_cleaned(tmp_path: Path) -> None:
@@ -471,6 +483,191 @@ def test_local_wheel_receipt_recovery_never_follows_special_entry(
 
     assert recovered is None
     artifact.cleanup()
+
+
+def test_regular_descriptor_dispatches_to_atomic_windows_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = Path("C:/Guard/update.whl")
+    metadata = os.stat_result((stat.S_IFREG | 0o600, 17, 3, 1, 0, 0, 41, 0, 0, 0))
+    calls: list[tuple[Path | str, str]] = []
+
+    def fake_windows_open(
+        opened_path: Path | str,
+        *,
+        reason_code: str,
+    ) -> tuple[int, os.stat_result]:
+        calls.append((opened_path, reason_code))
+        return 83, metadata
+
+    monkeypatch.setattr(artifact_module.os, "name", "nt")
+    monkeypatch.setattr(artifact_module, "_open_windows_regular_descriptor", fake_windows_open)
+
+    result = artifact_module._open_regular_descriptor(path, reason_code="artifact-failed")
+
+    assert result == (83, metadata)
+    assert calls == [(path, "artifact-failed")]
+
+
+def test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_stat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata = os.stat_result((stat.S_IFREG | 0o600, 17, 3, 1, 0, 0, 41, 0, 0, 0))
+    create_arguments: list[tuple[object, ...]] = []
+    converted_handles: list[tuple[int, int]] = []
+    closed_handles: list[object] = []
+
+    def create_file(*arguments: object) -> int:
+        create_arguments.append(arguments)
+        return 71
+
+    def get_information(_handle: object, information_pointer: ctypes.c_void_p) -> int:
+        information = ctypes.cast(
+            information_pointer,
+            ctypes.POINTER(artifact_module._WindowsByHandleFileInformation),
+        ).contents
+        information.dwFileAttributes = 0x00000020
+        return 1
+
+    def close_handle(handle: object) -> int:
+        closed_handles.append(handle)
+        return 1
+
+    def open_osfhandle(handle: int, flags: int) -> int:
+        converted_handles.append((handle, flags))
+        return 83
+
+    kernel32 = types.SimpleNamespace(
+        CreateFileW=_FakeWindowsFunction(create_file),
+        GetFileInformationByHandle=_FakeWindowsFunction(get_information),
+        CloseHandle=_FakeWindowsFunction(close_handle),
+    )
+    fake_msvcrt = types.SimpleNamespace(open_osfhandle=open_osfhandle)
+    monkeypatch.setattr(artifact_module.ctypes, "WinDLL", lambda *_args, **_kwargs: kernel32, raising=False)
+    monkeypatch.setattr(artifact_module.importlib, "import_module", lambda _name: fake_msvcrt)
+    monkeypatch.setattr(artifact_module.os, "fstat", lambda descriptor: metadata if descriptor == 83 else None)
+    monkeypatch.setattr(
+        artifact_module.os,
+        "lstat",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("a Win32-bound file must not be compared with path lstat metadata")
+        ),
+    )
+
+    descriptor, opened_metadata = artifact_module._open_windows_regular_descriptor(
+        Path("C:/Guard/update.whl"),
+        reason_code="artifact-failed",
+    )
+
+    assert descriptor == 83
+    assert opened_metadata is metadata
+    assert converted_handles and converted_handles[0][0] == 71
+    assert closed_handles == []
+    assert len(create_arguments) == 1
+    assert create_arguments[0][0] == "C:/Guard/update.whl"
+    assert create_arguments[0][1] == artifact_module._WINDOWS_GENERIC_READ
+    assert create_arguments[0][2] == (
+        artifact_module._WINDOWS_FILE_SHARE_READ | artifact_module._WINDOWS_FILE_SHARE_WRITE
+    )
+    assert create_arguments[0][5] == artifact_module._WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT
+
+
+def test_windows_regular_descriptor_rejects_reparse_and_closes_bound_handle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    closed_handles: list[object] = []
+
+    def get_information(_handle: object, information_pointer: ctypes.c_void_p) -> int:
+        information = ctypes.cast(
+            information_pointer,
+            ctypes.POINTER(artifact_module._WindowsByHandleFileInformation),
+        ).contents
+        information.dwFileAttributes = artifact_module._WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT
+        return 1
+
+    def close_handle(handle: object) -> int:
+        closed_handles.append(handle)
+        return 1
+
+    def forbidden_conversion(_handle: int, _flags: int) -> int:
+        raise AssertionError("a reparse-point handle must not become a CRT descriptor")
+
+    kernel32 = types.SimpleNamespace(
+        CreateFileW=_FakeWindowsFunction(lambda *_args: 71),
+        GetFileInformationByHandle=_FakeWindowsFunction(get_information),
+        CloseHandle=_FakeWindowsFunction(close_handle),
+    )
+    fake_msvcrt = types.SimpleNamespace(open_osfhandle=forbidden_conversion)
+    monkeypatch.setattr(artifact_module.ctypes, "WinDLL", lambda *_args, **_kwargs: kernel32, raising=False)
+    monkeypatch.setattr(artifact_module.importlib, "import_module", lambda _name: fake_msvcrt)
+
+    _assert_reason(
+        "artifact-failed",
+        lambda: artifact_module._open_windows_regular_descriptor(
+            Path("C:/Guard/update.whl"),
+            reason_code="artifact-failed",
+        ),
+    )
+
+    assert closed_handles == [71]
+
+
+def test_windows_receipt_child_lock_is_atomic_non_delete_shared_and_delete_on_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    create_arguments: list[tuple[object, ...]] = []
+    closed_handles: list[object] = []
+
+    def create_file(*arguments: object) -> int:
+        create_arguments.append(arguments)
+        return 71
+
+    def get_information(_handle: object, information_pointer: ctypes.c_void_p) -> int:
+        information = ctypes.cast(
+            information_pointer,
+            ctypes.POINTER(artifact_module._WindowsByHandleFileInformation),
+        ).contents
+        information.dwFileAttributes = artifact_module._WINDOWS_FILE_ATTRIBUTE_NORMAL
+        return 1
+
+    def close_handle(handle: object) -> int:
+        closed_handles.append(handle)
+        return 1
+
+    kernel32 = types.SimpleNamespace(
+        CreateFileW=_FakeWindowsFunction(create_file),
+        GetFileInformationByHandle=_FakeWindowsFunction(get_information),
+        CloseHandle=_FakeWindowsFunction(close_handle),
+    )
+    monkeypatch.setattr(artifact_module.ctypes, "WinDLL", lambda *_args, **_kwargs: kernel32, raising=False)
+    monkeypatch.setattr(artifact_module.os, "getpid", lambda: 4102)
+    monkeypatch.setattr(artifact_module.os, "urandom", lambda _size: b"\xab" * 16)
+
+    child_handle = artifact_module._open_windows_receipt_child_lock(
+        Path("C:/Guard Home"),
+        reason_code="receipt-failed",
+    )
+    locks = artifact_module._WindowsReceiptDirectoryLocks(
+        directory_handle=72,
+        child_handle=child_handle,
+    )
+    locks.close()
+
+    assert len(create_arguments) == 1
+    assert create_arguments[0][0] == ("C:/Guard Home/.local-wheel-source.json.lock.4102." + "ab" * 16)
+    assert create_arguments[0][1] == (
+        artifact_module._WINDOWS_GENERIC_READ | artifact_module._WINDOWS_GENERIC_WRITE | artifact_module._WINDOWS_DELETE
+    )
+    assert create_arguments[0][2] == (
+        artifact_module._WINDOWS_FILE_SHARE_READ | artifact_module._WINDOWS_FILE_SHARE_WRITE
+    )
+    assert create_arguments[0][4] == artifact_module._WINDOWS_CREATE_NEW
+    assert create_arguments[0][5] == (
+        artifact_module._WINDOWS_FILE_ATTRIBUTE_NORMAL
+        | artifact_module._WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT
+        | artifact_module._WINDOWS_FILE_FLAG_DELETE_ON_CLOSE
+    )
+    assert closed_handles == [71, 72]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows directory sharing contract")

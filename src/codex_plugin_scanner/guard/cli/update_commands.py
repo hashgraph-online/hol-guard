@@ -281,13 +281,12 @@ def run_guard_update(
         return payload, 1
     if requested_wheel_path is not None:
         payload["requested_wheel"] = str(requested_wheel_path)
-    resolved_guard_home = (
-        guard_home.expanduser().resolve()
-        if guard_home is not None
-        else context.guard_home.expanduser().resolve()
-        if context is not None
-        else resolve_guard_home()
-    )
+    if guard_home is not None:
+        resolved_guard_home = guard_home.expanduser().resolve()
+    elif context is not None:
+        resolved_guard_home = context.guard_home.expanduser().resolve()
+    else:
+        resolved_guard_home = resolve_guard_home()
     daemon_refresh_required = context is not None and (resolved_guard_home / "daemon-state.json").is_file()
     if context is not None:
         trusted_workspace = context.workspace_dir

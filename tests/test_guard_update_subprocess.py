@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -255,6 +256,101 @@ def test_windows_legacy_pipx_prefix_uses_profile_local_bin(
 
     assert manager_home == profile / "pipx"
     assert manager_bin == profile / ".local" / "bin"
+
+
+def test_windows_manager_prefix_matching_is_case_insensitive(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile = tmp_path / "profile"
+    prefix = profile / "PIPX" / "VENVS" / "HOL-GUARD"
+    prefix.mkdir(parents=True)
+    monkeypatch.setattr(update_subprocess_module, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(update_subprocess_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(update_subprocess_module, "trusted_windows_user_profile", lambda: profile)
+
+    manager_home, manager_bin = update_subprocess_module._manager_home_from_prefix("pipx")
+
+    assert manager_home == profile / "PIPX"
+    assert manager_bin == profile / ".local" / "bin"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX same-file casing regression")
+@pytest.mark.parametrize(
+    "prefix_suffix",
+    [
+        ("UV", "tools", "hol-guard"),
+        ("uv", "Tools", "hol-guard"),
+        ("uv", "tools", "HOL-GUARD"),
+    ],
+)
+def test_case_sensitive_posix_manager_prefix_rejects_distinct_component_casing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    prefix_suffix: tuple[str, str, str],
+) -> None:
+    prefix = tmp_path.joinpath(*prefix_suffix)
+    prefix.mkdir(parents=True)
+    original_samefile = Path.samefile
+
+    def case_sensitive_samefile(path: Path, other: str | os.PathLike[str]) -> bool:
+        if str(path) != str(other) and str(path).casefold() == str(other).casefold():
+            return False
+        return original_samefile(path, other)
+
+    monkeypatch.setattr(Path, "samefile", case_sensitive_samefile)
+    monkeypatch.setattr(update_subprocess_module.sys, "prefix", str(prefix))
+
+    with pytest.raises(UpdateSubprocessError) as error:
+        update_subprocess_module._manager_home_from_prefix("uv")
+
+    assert _error_reason(error) == "update_installer_untrusted"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX same-file casing regression")
+def test_case_insensitive_posix_manager_prefix_accepts_samefile_aliases(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prefix = tmp_path / "Share" / "UV" / "Tools" / "HOL-GUARD"
+    prefix.mkdir(parents=True)
+    original_samefile = Path.samefile
+
+    def case_insensitive_samefile(path: Path, other: str | os.PathLike[str]) -> bool:
+        if str(path).casefold() == str(other).casefold():
+            return True
+        return original_samefile(path, other)
+
+    monkeypatch.setattr(Path, "samefile", case_insensitive_samefile)
+    monkeypatch.setattr(update_subprocess_module.sys, "prefix", str(prefix))
+
+    manager_home, manager_bin = update_subprocess_module._manager_home_from_prefix("uv")
+
+    assert manager_home == tmp_path / "Share" / "UV" / "Tools"
+    assert manager_bin == tmp_path / "bin"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX same-file casing regression")
+def test_case_sensitive_posix_share_like_parent_does_not_redirect_manager_bin(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prefix = tmp_path / "Share" / "uv" / "tools" / "hol-guard"
+    prefix.mkdir(parents=True)
+    original_samefile = Path.samefile
+
+    def case_sensitive_samefile(path: Path, other: str | os.PathLike[str]) -> bool:
+        if str(path) != str(other) and str(path).casefold() == str(other).casefold():
+            return False
+        return original_samefile(path, other)
+
+    monkeypatch.setattr(Path, "samefile", case_sensitive_samefile)
+    monkeypatch.setattr(update_subprocess_module.sys, "prefix", str(prefix))
+
+    manager_home, manager_bin = update_subprocess_module._manager_home_from_prefix("uv")
+
+    assert manager_home == tmp_path / "Share" / "uv" / "tools"
+    assert manager_bin == tmp_path / "Share" / "bin"
 
 
 def test_windows_search_uses_known_folder_roaming_appdata(
@@ -594,6 +690,10 @@ def test_pip_execution_argv_is_isolated_absolute_and_source_pinned(
     ]
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="uses an extensionless POSIX shebang executable as the uv manager fixture",
+)
 def test_uv_execution_argv_is_isolated_absolute_and_source_pinned(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -637,6 +737,10 @@ def test_uv_execution_argv_is_isolated_absolute_and_source_pinned(
         ["pipx", "install", "--force", "/tmp/hol_guard.whl"],
     ],
 )
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="uses an extensionless POSIX shebang executable as the pipx manager fixture",
+)
 def test_pipx_execution_argv_is_absolute_and_source_pinned(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -672,6 +776,10 @@ def test_pipx_execution_argv_is_absolute_and_source_pinned(
 
 
 @pytest.mark.parametrize("installer_kind", ["uv", "pipx"])
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="executes extensionless POSIX shebang manager fixtures to test workspace isolation",
+)
 def test_workspace_path_collision_is_excluded_and_never_executes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -732,6 +840,10 @@ def test_workspace_path_collision_is_excluded_and_never_executes(
     assert recorded["pythonpath"] is None
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="uses extensionless POSIX shebang files as the ambient and trusted manager fixtures",
+)
 def test_nonstandard_ambient_manager_path_is_rejected_without_workspace_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -763,6 +875,10 @@ def test_nonstandard_ambient_manager_path_is_rejected_without_workspace_context(
     assert attacker_marker.exists() is False
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="uses an extensionless POSIX shebang executable in a POSIX conventional manager root",
+)
 def test_conventional_manager_root_is_used_when_tool_bin_has_no_manager(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -770,8 +886,11 @@ def test_conventional_manager_root_is_used_when_tool_bin_has_no_manager(
     prefix, _tool_bin = _manager_layout(tmp_path, "pipx")
     conventional_bin = tmp_path / "conventional-system-bin"
     conventional_manager = _write_executable(conventional_bin / "pipx")
+    ambient_empty_bin = tmp_path / "ambient-empty-bin"
+    ambient_empty_bin.mkdir()
     monkeypatch.setattr(update_subprocess_module.sys, "prefix", str(prefix))
     monkeypatch.setattr(update_subprocess_module.os, "defpath", str(conventional_bin))
+    monkeypatch.setenv("PATH", str(ambient_empty_bin))
 
     context = build_trusted_update_context(
         guard_home=tmp_path / "guard-home",
@@ -783,8 +902,13 @@ def test_conventional_manager_root_is_used_when_tool_bin_has_no_manager(
     assert context.installer is not None
     assert context.installer.launch_path == conventional_manager
     assert context.installer.canonical_path == conventional_manager.resolve()
+    assert str(ambient_empty_bin) not in context.environment["PATH"].split(os.pathsep)
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="uses extensionless POSIX shebang manager fixtures across project working directories",
+)
 def test_update_context_has_identical_identity_and_source_from_two_project_cwds(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -833,8 +957,22 @@ def test_missing_manager_fails_before_any_spawn(
     prefix, _ = _manager_layout(tmp_path, "uv")
     empty_bin = tmp_path / "empty-bin"
     empty_bin.mkdir()
+
+    def unexpected_popen(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("unexpected process spawn")
+
     monkeypatch.setattr(update_subprocess_module.sys, "prefix", str(prefix))
     monkeypatch.setenv("PATH", str(empty_bin))
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "_trusted_runtime_search_path",
+        lambda *, installer_kind: str(empty_bin),
+    )
+    monkeypatch.setattr(
+        update_subprocess_module.subprocess,
+        "Popen",
+        unexpected_popen,
+    )
 
     with pytest.raises(UpdateSubprocessError) as error:
         build_trusted_update_context(
@@ -845,6 +983,134 @@ def test_missing_manager_fails_before_any_spawn(
         )
 
     assert _error_reason(error) == "update_installer_not_found"
+
+
+def test_uv_managed_prefix_resolves_derived_manager_with_empty_ambient_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trusted_python_import_paths = update_subprocess_module._trusted_python_import_paths()
+    prefix, manager_bin = _manager_layout(tmp_path, "uv")
+    if os.name == "nt":
+        profile = tmp_path / "windows-profile"
+        manager_bin = profile / ".local" / "bin"
+        manager_bin.mkdir(parents=True)
+        trusted_manager = manager_bin / "uv.exe"
+        shutil.copy2(sys.executable, trusted_manager)
+        monkeypatch.setattr(update_subprocess_module, "trusted_windows_user_profile", lambda: profile)
+    else:
+        trusted_manager = _write_executable(manager_bin / "uv")
+    empty_bin = tmp_path / "ambient-empty-bin"
+    empty_bin.mkdir()
+    monkeypatch.setattr(update_subprocess_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "_trusted_python_import_paths",
+        lambda: trusted_python_import_paths,
+    )
+    monkeypatch.setenv("PATH", str(empty_bin))
+
+    context = build_trusted_update_context(
+        guard_home=tmp_path / "guard-home",
+        workspace_dir=None,
+        installer_kind="uv",
+        proxy_mode="none",
+    )
+
+    assert context.installer is not None
+    assert context.installer.launch_path == trusted_manager
+    assert str(empty_bin) not in context.environment["PATH"].split(os.pathsep)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires native Windows executable resolution")
+def test_windows_manager_resolution_prefers_trusted_exe_over_extensionless_project_collision(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trusted_python_import_paths = update_subprocess_module._trusted_python_import_paths()
+    profile = tmp_path / "windows-profile"
+    trusted_bin = profile / ".local" / "bin"
+    trusted_bin.mkdir(parents=True)
+    trusted_manager = trusted_bin / "uv.exe"
+    shutil.copy2(sys.executable, trusted_manager)
+    workspace = tmp_path / "workspace"
+    project_bin = workspace / "bin"
+    project_manager = _write_executable(project_bin / "uv")
+    prefix = tmp_path / "uv" / "tools" / "hol-guard"
+    prefix.mkdir(parents=True)
+    monkeypatch.setattr(update_subprocess_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "_trusted_python_import_paths",
+        lambda: trusted_python_import_paths,
+    )
+    monkeypatch.setattr(update_subprocess_module, "trusted_windows_user_profile", lambda: profile)
+    monkeypatch.setenv("PATH", str(project_bin))
+
+    context = build_trusted_update_context(
+        guard_home=tmp_path / "guard-home",
+        workspace_dir=workspace,
+        installer_kind="uv",
+        proxy_mode="none",
+    )
+    command = context.build_installer_command(["uv", "tool", "upgrade", "hol-guard"])
+
+    assert context.installer is not None
+    assert context.installer.launch_path == trusted_manager
+    assert context.installer.canonical_path == trusted_manager.resolve()
+    assert command[0] == str(trusted_manager)
+    assert str(project_bin.resolve()) not in context.environment["PATH"].split(os.pathsep)
+    assert project_manager.exists()
+
+
+def test_windows_thread_first_failure_preserves_last_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    last_error = 0
+
+    def set_last_error(value: int) -> None:
+        nonlocal last_error
+        last_error = value
+
+    def get_last_error() -> int:
+        return last_error
+
+    def create_snapshot(_flags: int, _process_id: int) -> int:
+        return 71
+
+    def thread_first(_snapshot: int, _entry: object) -> int:
+        set_last_error(5)
+        return 0
+
+    def thread_next(_snapshot: int, _entry: object) -> int:
+        raise AssertionError("Thread32Next must not run after Thread32First fails")
+
+    def open_thread(_access: int, _inherit: bool, _thread_id: int) -> int:
+        raise AssertionError("OpenThread must not run after Thread32First fails")
+
+    def resume_thread(_thread_handle: int) -> int:
+        raise AssertionError("ResumeThread must not run after Thread32First fails")
+
+    def close_handle(_handle: int) -> int:
+        set_last_error(6)
+        return 1
+
+    kernel32 = SimpleNamespace(
+        CreateToolhelp32Snapshot=create_snapshot,
+        Thread32First=thread_first,
+        Thread32Next=thread_next,
+        OpenThread=open_thread,
+        ResumeThread=resume_thread,
+        CloseHandle=close_handle,
+    )
+    monkeypatch.setattr(update_subprocess_module.ctypes, "set_last_error", set_last_error, raising=False)
+    monkeypatch.setattr(update_subprocess_module.ctypes, "get_last_error", get_last_error, raising=False)
+    monkeypatch.setattr(update_subprocess_module, "_windows_kernel32", lambda: kernel32)
+
+    with pytest.raises(OSError, match="Thread32First failed") as error:
+        update_subprocess_module._resume_windows_process_primary_thread(4102)
+
+    assert error.value.errno == 5
 
 
 @pytest.mark.skipif(os.name == "nt", reason="symlink replacement semantics are POSIX-specific")
@@ -903,6 +1169,10 @@ def test_initial_manager_symlink_into_workspace_is_rejected(
     assert _error_reason(error) == "update_installer_untrusted"
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="mutates an extensionless POSIX shebang manager fixture before execution",
+)
 def test_manager_content_swap_is_rejected_before_execution(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -922,6 +1192,10 @@ def test_manager_content_swap_is_rejected_before_execution(
     assert replacement_marker.exists() is False
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="rewrites an extensionless POSIX shebang manager fixture before execution",
+)
 def test_manager_same_size_rewrite_with_restored_mtime_is_rejected_before_execution(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -942,6 +1216,10 @@ def test_manager_same_size_rewrite_with_restored_mtime_is_rejected_before_execut
     assert _error_reason(error) == "update_installer_identity_changed"
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="depends on POSIX shebang interpreter chaining for an extensionless manager",
+)
 def test_manager_shebang_interpreter_swap_is_rejected_before_execution(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

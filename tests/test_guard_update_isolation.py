@@ -141,6 +141,10 @@ def _apply_hostile_environment(
         monkeypatch.setenv(key, value)
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="executes an extensionless POSIX shebang uv fixture for the end-to-end isolation contract",
+)
 def test_run_guard_update_isolates_hostile_workspaces_and_redacts_managed_source(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

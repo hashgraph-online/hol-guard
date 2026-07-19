@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.daemon.manager import (
 from codex_plugin_scanner.guard.store import GuardStore
 
 _DASHBOARD_UPDATE_DAEMON_SETTLE_SECONDS = 1.5
+_DASHBOARD_UPDATE_FAILURE_STDERR = "Guard update failed. Review the dashboard update status for details."
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -77,8 +78,7 @@ def main(argv: list[str] | None = None) -> int:
             }
             exit_code = 1
         if exit_code != 0:
-            message = update_payload.get("message") or update_payload.get("error") or "Guard update failed."
-            print(str(message), file=sys.stderr)
+            print(_DASHBOARD_UPDATE_FAILURE_STDERR, file=sys.stderr)
             try:
                 write_dashboard_update_outcome(guard_home, update_payload)
             finally:

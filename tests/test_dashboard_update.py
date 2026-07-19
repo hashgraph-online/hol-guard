@@ -1015,9 +1015,18 @@ def test_dashboard_update_runner_missing_embedded_restart_uses_legacy_only_after
     assert "fresh interpreter" in str(written_payload["message"])
 
 
-def test_dashboard_update_runner_failure_prefers_isolated_daemon_refresh(
+@pytest.mark.parametrize(
+    "failure_detail",
+    [
+        {"message": "Installer rejected https://token:super-secret@example.invalid/package.whl"},
+        {"error": {"authorization": "Bearer super-secret"}},
+    ],
+)
+def test_dashboard_update_runner_failure_stderr_never_renders_payload_details(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure_detail: dict[str, object],
 ) -> None:
     from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
 
@@ -1032,7 +1041,7 @@ def test_dashboard_update_runner_failure_prefers_isolated_daemon_refresh(
     monkeypatch.setattr(
         runner_module.update_commands,
         "run_guard_update",
-        lambda **kwargs: ({"status": "failed", "message": "installer failed"}, 1),
+        lambda **kwargs: ({"status": "failed", **failure_detail}, 1),
     )
     isolated_refresh = MagicMock(return_value=({"status": "restarted"}, "restarted"))
     legacy_restart = MagicMock()
@@ -1060,6 +1069,10 @@ def test_dashboard_update_runner_failure_prefers_isolated_daemon_refresh(
     assert refresh_context.guard_home == guard_home.resolve()
     legacy_restart.assert_not_called()
     clear_lock.assert_called_once_with(guard_home.resolve(), token=update_token)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "Guard update failed. Review the dashboard update status for details.\n"
+    assert "super-secret" not in captured.err
 
 
 def test_dashboard_update_runner_failure_uses_availability_fallback_only_after_isolated_failure(

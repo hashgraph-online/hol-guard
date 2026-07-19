@@ -49,9 +49,11 @@ def windows_command_line_to_argv(command: str) -> list[str] | None:
         arguments = command_line_to_argv(command, ctypes.byref(argument_count))
     except (AttributeError, OSError, TypeError, ValueError):
         return None
-    if not arguments or argument_count.value <= 0:
+    if not arguments:
         return None
     try:
+        if argument_count.value <= 0:
+            return None
         return [str(arguments[index]) for index in range(argument_count.value)]
     except (OSError, TypeError, ValueError):
         return None
