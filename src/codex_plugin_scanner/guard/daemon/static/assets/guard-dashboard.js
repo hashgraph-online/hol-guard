@@ -23024,6 +23024,12 @@ function CommandActivityDetail(props) {
     ] })
   ] });
 }
+function preserveActiveOption(options, activeValue) {
+  if (activeValue === null || options.some((option) => option.value === activeValue)) return options;
+  const label = safeEvidenceId(activeValue);
+  if (label === "Unavailable") return options;
+  return [...options, { label, value: activeValue }];
+}
 function SelectField(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "min-w-0 text-xs font-medium text-slate-600", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 block", children: props.label }),
@@ -23043,11 +23049,28 @@ function CommandActivityFiltersPanel(props) {
   if (props.filters.prompted === true) interactionValue = "prompted";
   if (props.filters.prompted === false) interactionValue = "not_prompted";
   const harnesses = reactExports.useMemo(
-    () => props.analytics?.dimensions.harness.map((bucket) => safeEvidenceId(bucket.value)).filter((value) => value !== "Unavailable") ?? [],
-    [props.analytics]
+    () => preserveActiveOption(
+      props.analytics?.dimensions.harness.map((bucket) => safeEvidenceId(bucket.value)).filter((value) => value !== "Unavailable").map((value) => ({ label: value, value })) ?? [],
+      props.filters.harness
+    ),
+    [props.analytics, props.filters.harness]
   );
   const selectedExtension = props.extensions?.items.find(
     (extension) => extension.extension_id === props.filters.extension_id
+  );
+  const extensions = reactExports.useMemo(
+    () => preserveActiveOption(
+      props.extensions?.items.map((extension) => ({ label: extension.name, value: extension.extension_id })) ?? [],
+      props.filters.extension_id
+    ),
+    [props.extensions, props.filters.extension_id]
+  );
+  const rules = reactExports.useMemo(
+    () => preserveActiveOption(
+      selectedExtension?.rules.map((rule) => ({ label: rule.title, value: rule.rule_id })) ?? [],
+      props.filters.rule_id
+    ),
+    [props.filters.rule_id, selectedExtension]
   );
   const handleHarness = reactExports.useCallback(
     (event) => props.onChange({ harness: event.target.value || null }),
@@ -23087,15 +23110,15 @@ function CommandActivityFiltersPanel(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7", children: [
       props.lockedHarness === null ? /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "App", value: props.filters.harness ?? "", onChange: handleHarness, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All apps" }),
-        harnesses.map((harness) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: harness, children: harness }, harness))
+        harnesses.map((harness) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: harness.value, children: harness.label }, harness.value))
       ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Extension", value: props.filters.extension_id ?? "", onChange: handleExtension, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All extensions" }),
-        props.extensions?.items.map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: extension.extension_id, children: extension.name }, extension.extension_id))
+        extensions.map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: extension.value, children: extension.label }, extension.value))
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Rule", value: props.filters.rule_id ?? "", onChange: handleRule, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All rules" }),
-        selectedExtension?.rules.map((rule) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: rule.rule_id, children: rule.title }, rule.rule_id))
+        rules.map((rule) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: rule.value, children: rule.label }, rule.value))
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Execution proof", value: props.filters.execution_status ?? "", onChange: handleExecution, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All execution states" }),
@@ -23316,26 +23339,19 @@ function Metric(props) {
 function Trend({ analytics }) {
   const recent = commandTrendPoints(analytics);
   const maximum = Math.max(1, ...recent.map((point) => point.count));
+  const accessibleSummary = recent.map((point) => `${point.day}: ${point.count}`).join("; ");
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent command checks" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: commandWindowLabel(analytics) })
     ] }),
-    recent.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex h-28 items-end gap-1", role: "img", "aria-label": "Command checks by day", children: recent.map((point) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "group relative flex min-w-0 flex-1 items-end self-stretch", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "div",
-        {
-          className: "w-full rounded-t-sm bg-brand-blue/70 motion-safe:transition-[height]",
-          style: { height: `${Math.max(4, Math.round(point.count / maximum * 100))}%` },
-          "aria-label": `${point.day}: ${point.count} command checks`
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "sr-only", children: [
-        point.day,
-        ": ",
-        point.count
-      ] })
-    ] }, point.day)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-slate-500", children: "No trend points are available for this window." })
+    recent.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex h-28 items-end gap-1", role: "img", "aria-label": `Command checks by day: ${accessibleSummary}`, children: recent.map((point) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "group relative flex min-w-0 flex-1 items-end self-stretch", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "w-full rounded-t-sm bg-brand-blue/70 motion-safe:transition-[height]",
+        style: { height: `${Math.max(4, Math.round(point.count / maximum * 100))}%` }
+      }
+    ) }, point.day)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-slate-500", children: "No trend points are available for this window." })
   ] });
 }
 function safeBuckets(buckets) {

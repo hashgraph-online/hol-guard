@@ -138,6 +138,23 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
   await expect.poll(() => new URL(page.url()).searchParams.get("guardDaemon")).toBe("http://127.0.0.1:4175");
 });
 
+test("Commands deep links keep active filters visible outside aggregate options", async ({ page }) => {
+  const fixture = await mountCommandFixture(page);
+  await page.goto(`/evidence?view=commands&command_harness=cursor&command_extension=command.custom&command_rule=command.custom.read&${DAEMON}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get("command_harness")).toBe("cursor");
+  await expect.poll(() => new URL(page.url()).searchParams.get("command_extension")).toBe("command.custom");
+  await expect.poll(() => new URL(page.url()).searchParams.get("command_rule")).toBe("command.custom.read");
+  await expect(page.getByRole("combobox", { name: "App", exact: true })).toHaveValue("cursor");
+  await expect(page.getByRole("combobox", { name: "Extension", exact: true })).toHaveValue("command.custom");
+  await expect(page.getByRole("combobox", { name: "Rule", exact: true })).toHaveValue("command.custom.read");
+  await expect.poll(() => fixture.activityQueries.some((query) => {
+    const params = new URLSearchParams(query);
+    return params.get("harness") === "cursor"
+      && params.get("extension_id") === "command.custom"
+      && params.get("rule_id") === "command.custom.read";
+  })).toBe(true);
+});
+
 test("App Commands view enforces exact harness scope", async ({ page }) => {
   const fixture = await mountCommandFixture(page);
   await page.goto(`/apps/codex?tab=activity&activity=commands&${DAEMON}`);

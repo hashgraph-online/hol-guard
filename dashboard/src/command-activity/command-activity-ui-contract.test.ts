@@ -16,6 +16,7 @@ const appModes = readSource("command-activity/app-command-activity-mode-tabs.tsx
 const workspace = readSource("command-activity/command-activity-workspace.tsx");
 const detail = readSource("command-activity/command-activity-detail.tsx");
 const home = readSource("command-activity/command-activity-home-card.tsx");
+const filters = readSource("command-activity/command-activity-filters.tsx");
 
 assert(evidenceViews.includes('{ key: "commands", label: "Commands" }'), "Evidence exposes Commands as a sibling view");
 assert(receipts.includes('readEvidenceUrlState().view === "commands"'), "Commands remains reachable without receipt data");
@@ -27,11 +28,13 @@ assert(appModes.includes("ArrowLeft") && appModes.includes("ArrowRight"), "app a
 assert(workspace.includes("commandExecutionEvidenceCopy(props.harness ?? null"), "execution-proof disclosure is harness aware");
 assert(workspace.includes("Showing the last loaded command activity page"), "refresh failures retain prior valid page data");
 assert(workspace.includes('activity.page.kind === "empty"'), "empty command pages render an explicit state");
+assert(filters.includes("preserveActiveOption"), "deep-linked stable filters remain represented outside aggregate options");
 const summary = readSource("command-activity/command-activity-summary.tsx");
 assert(
   summary.includes("Summary and trend totals do not include every active filter below."),
   "unsupported filter intersections use generic truthful scope copy",
 );
+assert(summary.includes("Command checks by day: ${accessibleSummary}"), "trend values are included in the chart accessible name");
 assert(detail.includes('label="Containment evidence"'), "detail separates containment evidence");
 assert(detail.includes('label="Workflow capability"'), "detail separates workflow capability evidence");
 assert(detail.includes("FEEDBACK_LABELS.should_not_have_interrupted"), "detail exposes bounded interruption feedback");

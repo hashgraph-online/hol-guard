@@ -28,6 +28,7 @@ function Metric(props: { label: string; value: number | string; detail: string }
 function Trend({ analytics }: { analytics: CommandActivityAnalytics }) {
   const recent = commandTrendPoints(analytics);
   const maximum = Math.max(1, ...recent.map((point) => point.count));
+  const accessibleSummary = recent.map((point) => `${point.day}: ${point.count}`).join("; ");
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
@@ -35,15 +36,13 @@ function Trend({ analytics }: { analytics: CommandActivityAnalytics }) {
         <p className="text-xs text-slate-500">{commandWindowLabel(analytics)}</p>
       </div>
       {recent.length > 0 ? (
-        <div className="mt-3 flex h-28 items-end gap-1" role="img" aria-label="Command checks by day">
+        <div className="mt-3 flex h-28 items-end gap-1" role="img" aria-label={`Command checks by day: ${accessibleSummary}`}>
           {recent.map((point) => (
             <div key={point.day} className="group relative flex min-w-0 flex-1 items-end self-stretch">
               <div
                 className="w-full rounded-t-sm bg-brand-blue/70 motion-safe:transition-[height]"
                 style={{ height: `${Math.max(4, Math.round((point.count / maximum) * 100))}%` }}
-                aria-label={`${point.day}: ${point.count} command checks`}
               />
-              <span className="sr-only">{point.day}: {point.count}</span>
             </div>
           ))}
         </div>

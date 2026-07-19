@@ -4,6 +4,18 @@ import type { CommandActivityFilters } from "./command-activity-state";
 import { safeEvidenceId } from "./command-activity-presenters";
 import type { CommandActivityAnalytics, CommandExtensionsPage } from "./command-activity-types";
 
+interface FilterOption {
+  label: string;
+  value: string;
+}
+
+function preserveActiveOption(options: FilterOption[], activeValue: string | null): FilterOption[] {
+  if (activeValue === null || options.some((option) => option.value === activeValue)) return options;
+  const label = safeEvidenceId(activeValue);
+  if (label === "Unavailable") return options;
+  return [...options, { label, value: activeValue }];
+}
+
 function SelectField(props: {
   label: string;
   value: string;
@@ -36,11 +48,31 @@ export function CommandActivityFiltersPanel(props: {
   if (props.filters.prompted === true) interactionValue = "prompted";
   if (props.filters.prompted === false) interactionValue = "not_prompted";
   const harnesses = useMemo(
-    () => props.analytics?.dimensions.harness.map((bucket) => safeEvidenceId(bucket.value)).filter((value) => value !== "Unavailable") ?? [],
-    [props.analytics],
+    () => preserveActiveOption(
+      props.analytics?.dimensions.harness
+        .map((bucket) => safeEvidenceId(bucket.value))
+        .filter((value) => value !== "Unavailable")
+        .map((value) => ({ label: value, value })) ?? [],
+      props.filters.harness,
+    ),
+    [props.analytics, props.filters.harness],
   );
   const selectedExtension = props.extensions?.items.find(
     (extension) => extension.extension_id === props.filters.extension_id,
+  );
+  const extensions = useMemo(
+    () => preserveActiveOption(
+      props.extensions?.items.map((extension) => ({ label: extension.name, value: extension.extension_id })) ?? [],
+      props.filters.extension_id,
+    ),
+    [props.extensions, props.filters.extension_id],
+  );
+  const rules = useMemo(
+    () => preserveActiveOption(
+      selectedExtension?.rules.map((rule) => ({ label: rule.title, value: rule.rule_id })) ?? [],
+      props.filters.rule_id,
+    ),
+    [props.filters.rule_id, selectedExtension],
   );
 
   const handleHarness = useCallback(
@@ -84,19 +116,19 @@ export function CommandActivityFiltersPanel(props: {
         {props.lockedHarness === null ? (
           <SelectField label="App" value={props.filters.harness ?? ""} onChange={handleHarness}>
             <option value="">All apps</option>
-            {harnesses.map((harness) => <option key={harness} value={harness}>{harness}</option>)}
+            {harnesses.map((harness) => <option key={harness.value} value={harness.value}>{harness.label}</option>)}
           </SelectField>
         ) : null}
         <SelectField label="Extension" value={props.filters.extension_id ?? ""} onChange={handleExtension}>
           <option value="">All extensions</option>
-          {props.extensions?.items.map((extension) => (
-            <option key={extension.extension_id} value={extension.extension_id}>{extension.name}</option>
+          {extensions.map((extension) => (
+            <option key={extension.value} value={extension.value}>{extension.label}</option>
           ))}
         </SelectField>
         <SelectField label="Rule" value={props.filters.rule_id ?? ""} onChange={handleRule}>
           <option value="">All rules</option>
-          {selectedExtension?.rules.map((rule) => (
-            <option key={rule.rule_id} value={rule.rule_id}>{rule.title}</option>
+          {rules.map((rule) => (
+            <option key={rule.value} value={rule.value}>{rule.label}</option>
           ))}
         </SelectField>
         <SelectField label="Execution proof" value={props.filters.execution_status ?? ""} onChange={handleExecution}>
