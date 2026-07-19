@@ -2,6 +2,7 @@ import type {
   CommandAnalyticsDimension,
   CommandApprovalReuseStatus,
   CommandExecutionStatus,
+  CommandFeedbackLabel,
   CommandProofLevel,
 } from "./command-activity-types";
 
@@ -39,6 +40,23 @@ export interface CommandActivityAnalyticsQuery {
   dimension_value: string | null;
 }
 
+export type CommandFeedbackState =
+  | { kind: "idle" }
+  | { kind: "saving"; activity_id: string; label: CommandFeedbackLabel }
+  | { kind: "saved"; activity_id: string; label: CommandFeedbackLabel }
+  | { kind: "error"; activity_id: string; message: string };
+
+export function completeCommandFeedback(
+  current: CommandFeedbackState,
+  activityId: string,
+  outcome:
+    | { kind: "saved"; label: CommandFeedbackLabel }
+    | { kind: "error"; message: string },
+): CommandFeedbackState {
+  if (current.kind !== "saving" || current.activity_id !== activityId) return current;
+  return { ...outcome, activity_id: activityId };
+}
+
 export const DEFAULT_COMMAND_ACTIVITY_FILTERS: CommandActivityFilters = {
   limit: 50,
   harness: null,
@@ -62,16 +80,20 @@ export const DEFAULT_COMMAND_ACTIVITY_ANALYTICS_QUERY: CommandActivityAnalyticsQ
 export function commandActivityAnalyticsQueryForFilters(
   filters: CommandActivityFilters,
 ): CommandActivityAnalyticsQuery {
-  if (filters.harness) return { days: 90, top_limit: 10, dimension: "harness", dimension_value: filters.harness };
   if (filters.rule_id) return { days: 90, top_limit: 10, dimension: "rule", dimension_value: filters.rule_id };
   if (filters.extension_id) {
     return { days: 90, top_limit: 10, dimension: "extension", dimension_value: filters.extension_id };
   }
+  if (filters.harness) return { days: 90, top_limit: 10, dimension: "harness", dimension_value: filters.harness };
   return { ...DEFAULT_COMMAND_ACTIVITY_ANALYTICS_QUERY };
 }
 
 export function commandSummaryIsOutsideTableFilters(filters: CommandActivityFilters): boolean {
+  const dimensionFilterCount = [filters.harness, filters.extension_id, filters.rule_id].filter(
+    (value) => value !== null,
+  ).length;
   return (
+    dimensionFilterCount > 1 ||
     filters.execution_status !== null ||
     filters.proof_level !== null ||
     filters.prompted !== null ||

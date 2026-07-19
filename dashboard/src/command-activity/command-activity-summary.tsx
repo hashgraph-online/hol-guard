@@ -106,7 +106,7 @@ export function CommandActivitySummary(props: {
     <section className="min-w-0 max-w-full space-y-5" aria-label="Command activity summary">
       {props.outsideTableFilters ? (
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700" role="status">
-          Summary and trend totals do not apply to the execution, proof, interaction, reuse, or date filters below.
+          Summary and trend totals do not include every active filter below.
         </div>
       ) : null}
       {healthCopy ? (

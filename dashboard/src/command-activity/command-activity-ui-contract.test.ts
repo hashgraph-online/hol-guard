@@ -27,6 +27,11 @@ assert(appModes.includes("ArrowLeft") && appModes.includes("ArrowRight"), "app a
 assert(workspace.includes("commandExecutionEvidenceCopy(props.harness ?? null"), "execution-proof disclosure is harness aware");
 assert(workspace.includes("Showing the last loaded command activity page"), "refresh failures retain prior valid page data");
 assert(workspace.includes('activity.page.kind === "empty"'), "empty command pages render an explicit state");
+const summary = readSource("command-activity/command-activity-summary.tsx");
+assert(
+  summary.includes("Summary and trend totals do not include every active filter below."),
+  "unsupported filter intersections use generic truthful scope copy",
+);
 assert(detail.includes('label="Containment evidence"'), "detail separates containment evidence");
 assert(detail.includes('label="Workflow capability"'), "detail separates workflow capability evidence");
 assert(detail.includes("FEEDBACK_LABELS.should_not_have_interrupted"), "detail exposes bounded interruption feedback");

@@ -5,6 +5,7 @@ import { createCommandActivityClient } from "./command-activity-api";
 import {
   advanceCommandActivityCursor,
   commandActivityAnalyticsQueryForFilters,
+  completeCommandFeedback,
   commandActivityLoadFailed,
   commandActivityLoadStarted,
   commandActivityLoadSucceeded,
@@ -15,6 +16,7 @@ import {
   serializeCommandActivityFilters,
   updateCommandActivityFilters,
   type CommandActivityCursorState,
+  type CommandFeedbackState,
   type CommandActivityFilters,
   type CommandActivityLoadState,
 } from "./command-activity-state";
@@ -65,11 +67,7 @@ function previousData<T>(state: CommandActivityLoadState<T>): T | null {
   return null;
 }
 
-export type CommandFeedbackState =
-  | { kind: "idle" }
-  | { kind: "saving"; label: CommandFeedbackLabel }
-  | { kind: "saved"; label: CommandFeedbackLabel }
-  | { kind: "error"; message: string };
+export type { CommandFeedbackState } from "./command-activity-state";
 
 export function useCommandActivity(harness: string | null = null) {
   const [filters, setFilters] = useState<CommandActivityFilters>(() => initialFilters(harness));
@@ -167,6 +165,8 @@ export function useCommandActivity(harness: string | null = null) {
       setCursor(INITIAL_COMMAND_ACTIVITY_CURSOR_STATE);
       setSelectedId(null);
       setFeedback({ kind: "idle" });
+      setPage({ kind: "idle" });
+      setAnalytics({ kind: "idle" });
     },
     [harness],
   );
@@ -179,29 +179,34 @@ export function useCommandActivity(harness: string | null = null) {
   const nextPage = useCallback(() => {
     const data = previousPage(page);
     const nextCursor = data?.next_cursor;
-    if (nextCursor) setCursor((current) => advanceCommandActivityCursor(current, nextCursor));
+    if (nextCursor) {
+      setPage({ kind: "idle" });
+      setCursor((current) => advanceCommandActivityCursor(current, nextCursor));
+    }
   }, [page]);
 
   const previousPageAction = useCallback(() => {
+    setPage({ kind: "idle" });
     setCursor((current) => retreatCommandActivityCursor(current));
   }, []);
 
   const recordFeedback = useCallback(
     async (label: CommandFeedbackLabel) => {
       if (!selectedId) return;
-      setFeedback({ kind: "saving", label });
+      const activityId = selectedId;
+      setFeedback({ kind: "saving", activity_id: activityId, label });
       try {
-        const result = await client.recordFeedback({ activity_id: selectedId, label });
+        const result = await client.recordFeedback({ activity_id: activityId, label });
         setPage((current) => {
           if (current.kind !== "ready") return current;
           return {
             ...current,
-            data: { ...current.data, items: current.data.items.map((item) => (item.activity_id === selectedId ? { ...item, feedback_label: result.label } : item)) },
+            data: { ...current.data, items: current.data.items.map((item) => (item.activity_id === activityId ? { ...item, feedback_label: result.label } : item)) },
           };
         });
-        setFeedback({ kind: "saved", label: result.label });
+        setFeedback((current) => completeCommandFeedback(current, activityId, { kind: "saved", label: result.label }));
       } catch {
-        setFeedback({ kind: "error", message: "Unable to save feedback." });
+        setFeedback((current) => completeCommandFeedback(current, activityId, { kind: "error", message: "Unable to save feedback." }));
       }
     },
     [selectedId],

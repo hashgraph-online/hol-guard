@@ -1,5 +1,6 @@
 import {
   commandActivityAnalyticsQueryForFilters,
+  completeCommandFeedback,
   commandSummaryIsOutsideTableFilters,
   DEFAULT_COMMAND_ACTIVITY_FILTERS,
   INITIAL_COMMAND_ACTIVITY_CURSOR_STATE,
@@ -57,13 +58,28 @@ const query = buildCommandActivityQuery(parsed, "gca1.opaque.signature");
 assert(query.includes("prompted=false"), "server queries preserve explicit false values");
 const ruleAnalyticsQuery = commandActivityAnalyticsQueryForFilters({
   ...parsed,
-  harness: null,
   extension_id: "command.git",
   rule_id: "command.git.fetch",
 });
 assert(
   ruleAnalyticsQuery.dimension === "rule" && ruleAnalyticsQuery.dimension_value === "command.git.fetch",
   "rule analytics scope takes priority over its parent extension",
+);
+assert(
+  commandSummaryIsOutsideTableFilters({
+    ...DEFAULT_COMMAND_ACTIVITY_FILTERS,
+    harness: "codex",
+    extension_id: "command.git",
+  }),
+  "app plus extension filters disclose the one-dimension analytics limit",
+);
+assert(
+  commandSummaryIsOutsideTableFilters({
+    ...DEFAULT_COMMAND_ACTIVITY_FILTERS,
+    harness: "codex",
+    rule_id: "command.git.fetch",
+  }),
+  "app plus rule filters disclose the one-dimension analytics limit",
 );
 assert(
   commandSummaryIsOutsideTableFilters({ ...parsed, execution_status: "confirmed_success" }),
@@ -137,4 +153,39 @@ assert(
     error.message === "Unable to load command activity." &&
     error.previous?.[0] === "previous",
   "current failures preserve prior data behind fixed privacy-safe copy",
+);
+
+const savingFeedback = {
+  kind: "saving" as const,
+  activity_id: "activity:one",
+  label: "should_not_have_interrupted" as const,
+};
+const staleFeedbackCompletion = completeCommandFeedback(
+  { kind: "idle" },
+  "activity:one",
+  { kind: "saved", label: "should_not_have_interrupted" },
+);
+assert(staleFeedbackCompletion.kind === "idle", "row switches ignore delayed feedback completion");
+const newerFeedback = {
+  kind: "saving" as const,
+  activity_id: "activity:two",
+  label: "expected_guard_to_stop_this" as const,
+};
+const olderFeedbackCompletion = completeCommandFeedback(
+  newerFeedback,
+  "activity:one",
+  { kind: "saved", label: "should_not_have_interrupted" },
+);
+assert(
+  olderFeedbackCompletion.kind === "saving" && olderFeedbackCompletion.activity_id === "activity:two",
+  "an older completion cannot overwrite feedback in flight for the newly selected row",
+);
+const savedFeedback = completeCommandFeedback(
+  savingFeedback,
+  "activity:one",
+  { kind: "saved", label: "should_not_have_interrupted" },
+);
+assert(
+  savedFeedback.kind === "saved" && savedFeedback.activity_id === "activity:one",
+  "current-row feedback completion remains activity scoped",
 );

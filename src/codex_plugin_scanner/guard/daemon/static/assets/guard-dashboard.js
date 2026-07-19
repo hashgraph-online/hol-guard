@@ -23147,6 +23147,10 @@ const REUSE_STATUSES$1 = ["accepted", "rejected", "not-applicable"];
 const DIMENSIONS = ["harness", "extension", "rule"];
 const STABLE_ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+function completeCommandFeedback(current, activityId, outcome) {
+  if (current.kind !== "saving" || current.activity_id !== activityId) return current;
+  return { ...outcome, activity_id: activityId };
+}
 const DEFAULT_COMMAND_ACTIVITY_FILTERS = {
   limit: 50,
   harness: null,
@@ -23166,15 +23170,18 @@ const DEFAULT_COMMAND_ACTIVITY_ANALYTICS_QUERY = {
   dimension_value: null
 };
 function commandActivityAnalyticsQueryForFilters(filters) {
-  if (filters.harness) return { days: 90, top_limit: 10, dimension: "harness", dimension_value: filters.harness };
   if (filters.rule_id) return { days: 90, top_limit: 10, dimension: "rule", dimension_value: filters.rule_id };
   if (filters.extension_id) {
     return { days: 90, top_limit: 10, dimension: "extension", dimension_value: filters.extension_id };
   }
+  if (filters.harness) return { days: 90, top_limit: 10, dimension: "harness", dimension_value: filters.harness };
   return { ...DEFAULT_COMMAND_ACTIVITY_ANALYTICS_QUERY };
 }
 function commandSummaryIsOutsideTableFilters(filters) {
-  return filters.execution_status !== null || filters.proof_level !== null || filters.prompted !== null || filters.approval_reuse_status !== null || filters.occurred_from !== null || filters.occurred_through !== null;
+  const dimensionFilterCount = [filters.harness, filters.extension_id, filters.rule_id].filter(
+    (value) => value !== null
+  ).length;
+  return dimensionFilterCount > 1 || filters.execution_status !== null || filters.proof_level !== null || filters.prompted !== null || filters.approval_reuse_status !== null || filters.occurred_from !== null || filters.occurred_through !== null;
 }
 function updateCommandActivityFilters(current, patch, lockedHarness) {
   const harness = lockedHarness ?? (patch.harness === void 0 ? current.harness : patch.harness);
@@ -23360,7 +23367,7 @@ function CommandActivitySummary(props) {
   const globalOnly = commandBreakdownsAreGlobalOnly(analytics);
   const healthCopy = commandHealthCopy(analytics);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "min-w-0 max-w-full space-y-5", "aria-label": "Command activity summary", children: [
-    props.outsideTableFilters ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700", role: "status", children: "Summary and trend totals do not apply to the execution, proof, interaction, reuse, or date filters below." }) : null,
+    props.outsideTableFilters ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700", role: "status", children: "Summary and trend totals do not include every active filter below." }) : null,
     healthCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status", children: healthCopy }) : null,
     props.state.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status", children: "Refresh failed. Showing the last loaded command activity summary." }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 xl:grid-cols-4", children: [
@@ -24169,6 +24176,8 @@ function useCommandActivity(harness = null) {
       setCursor(INITIAL_COMMAND_ACTIVITY_CURSOR_STATE);
       setSelectedId(null);
       setFeedback({ kind: "idle" });
+      setPage({ kind: "idle" });
+      setAnalytics({ kind: "idle" });
     },
     [harness]
   );
@@ -24179,27 +24188,32 @@ function useCommandActivity(harness = null) {
   const nextPage = reactExports.useCallback(() => {
     const data = previousPage(page);
     const nextCursor = data?.next_cursor;
-    if (nextCursor) setCursor((current) => advanceCommandActivityCursor(current, nextCursor));
+    if (nextCursor) {
+      setPage({ kind: "idle" });
+      setCursor((current) => advanceCommandActivityCursor(current, nextCursor));
+    }
   }, [page]);
   const previousPageAction = reactExports.useCallback(() => {
+    setPage({ kind: "idle" });
     setCursor((current) => retreatCommandActivityCursor(current));
   }, []);
   const recordFeedback = reactExports.useCallback(
     async (label) => {
       if (!selectedId) return;
-      setFeedback({ kind: "saving", label });
+      const activityId = selectedId;
+      setFeedback({ kind: "saving", activity_id: activityId, label });
       try {
-        const result = await client.recordFeedback({ activity_id: selectedId, label });
+        const result = await client.recordFeedback({ activity_id: activityId, label });
         setPage((current) => {
           if (current.kind !== "ready") return current;
           return {
             ...current,
-            data: { ...current.data, items: current.data.items.map((item) => item.activity_id === selectedId ? { ...item, feedback_label: result.label } : item) }
+            data: { ...current.data, items: current.data.items.map((item) => item.activity_id === activityId ? { ...item, feedback_label: result.label } : item) }
           };
         });
-        setFeedback({ kind: "saved", label: result.label });
+        setFeedback((current) => completeCommandFeedback(current, activityId, { kind: "saved", label: result.label }));
       } catch {
-        setFeedback({ kind: "error", message: "Unable to save feedback." });
+        setFeedback((current) => completeCommandFeedback(current, activityId, { kind: "error", message: "Unable to save feedback." }));
       }
     },
     [selectedId]

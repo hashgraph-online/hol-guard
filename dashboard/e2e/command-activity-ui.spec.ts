@@ -58,9 +58,14 @@ const dimensions = {
   latency: [{ value: "le_2_ms", count: 1 }],
 };
 
-async function mountCommandFixture(page: Page): Promise<{ activityQueries: string[]; feedbackLabels: string[] }> {
+async function mountCommandFixture(page: Page): Promise<{
+  activityQueries: string[];
+  feedbackLabels: string[];
+  setActivityDelay: (milliseconds: number) => void;
+}> {
   const activityQueries: string[] = [];
   const feedbackLabels: string[] = [];
+  let activityDelay = 0;
   await page.route("**/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -98,6 +103,7 @@ async function mountCommandFixture(page: Page): Promise<{ activityQueries: strin
       body = { schema_version: "guard.command-activity-api.v1", activity_id: payload.activity_id, label: payload.label, created_at: activity.occurred_at, updated_at: activity.occurred_at, changed: true };
     } else if (path.endsWith("/command-activity")) {
       activityQueries.push(url.search);
+      if (activityDelay > 0) await new Promise((resolve) => setTimeout(resolve, activityDelay));
       body = {
         schema_version: "guard.command-activity-api.v1",
         items: [{ ...activity, harness: url.searchParams.get("harness") ?? activity.harness }],
@@ -106,7 +112,13 @@ async function mountCommandFixture(page: Page): Promise<{ activityQueries: strin
     }
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
-  return { activityQueries, feedbackLabels };
+  return {
+    activityQueries,
+    feedbackLabels,
+    setActivityDelay: (milliseconds) => {
+      activityDelay = milliseconds;
+    },
+  };
 }
 
 test("Commands evidence renders with zero receipts and keeps private fields hidden", async ({ page }) => {
@@ -133,8 +145,11 @@ test("App Commands view enforces exact harness scope", async ({ page }) => {
   await expect(page.getByText("Global only")).toHaveCount(3);
   await expect.poll(() => fixture.activityQueries.some((query) => new URLSearchParams(query).get("harness") === "codex")).toBe(true);
   await expect(page.getByRole("combobox", { name: "App", exact: true })).toHaveCount(0);
+  fixture.setActivityDelay(250);
   await page.getByRole("combobox", { name: "Execution proof" }).selectOption("confirmed_success");
-  await expect(page.getByText(/Summary and trend totals do not apply/)).toBeVisible();
+  await expect(page.getByLabel("Loading command activity", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Command activity records")).toHaveCount(0);
+  await expect(page.getByText("Summary and trend totals do not include every active filter below.")).toBeVisible();
   await expect.poll(() => new URL(page.url()).searchParams.get("command_status")).toBe("confirmed_success");
   await expect.poll(() => new URL(page.url()).searchParams.has("command_harness")).toBe(false);
   fixture.activityQueries.length = 0;
