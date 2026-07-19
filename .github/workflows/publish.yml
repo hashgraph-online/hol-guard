@@ -702,7 +702,7 @@ jobs:
         run: |
           git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
           git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main
-          BASE_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          BASE_VERSION=$(uv run --with packaging==25.0 python scripts/sync_repo_version.py --check)
           PYPI_VERSIONS=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
             list-versions --registry pypi)
           TESTPYPI_VERSIONS=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
@@ -713,7 +713,7 @@ jobs:
             '$pypi + $testpypi | unique')
           PRIOR_RELEASE_VERSIONS=$(jq --arg version "$VERSION" \
             '[.[] | select(. != $version)]' <<< "$RELEASE_VERSIONS")
-          EXPECTED_VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
+          EXPECTED_VERSION=$(uv run --with packaging==25.0 python scripts/compute_main_release_version.py \
             --base-version "$BASE_VERSION" <<< "$PRIOR_RELEASE_VERSIONS")
           if [[ "$EXPECTED_VERSION" != "$VERSION" ]]; then
             echo "Main release version changed before publication" >&2
@@ -721,7 +721,7 @@ jobs:
           fi
           PRIOR_PYPI_VERSIONS=$(jq --arg version "$VERSION" \
             '[.[] | select(. != $version)]' <<< "$PYPI_VERSIONS")
-          LATEST_VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
+          LATEST_VERSION=$(uv run --with packaging==25.0 python scripts/compute_main_release_version.py \
             --base-version "$BASE_VERSION" --latest-existing <<< "$PRIOR_PYPI_VERSIONS")
           if [[ -n "$LATEST_VERSION" ]]; then
             git fetch --no-tags origin "+refs/tags/v${LATEST_VERSION}:refs/tags/v${LATEST_VERSION}"

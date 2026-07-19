@@ -239,6 +239,8 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         step["run"] for step in jobs["publish-main-pypi"]["steps"] if step.get("name") == "Revalidate main publication"
     )
     assert "compute_main_release_version.py" in main_revalidation
+    assert main_revalidation.count("uv run --with packaging==25.0") == 5
+    assert "uv run --no-sync" not in main_revalidation
     assert "list-versions --registry pypi" in main_revalidation
     assert "list-versions --registry testpypi" in main_revalidation
     assert "'$pypi + $testpypi | unique'" in main_revalidation
