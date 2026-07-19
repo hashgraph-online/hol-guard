@@ -1154,7 +1154,7 @@ def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trai
     assert request is None
 
 
-def test_tool_action_request_classifier_allows_gh_pr_create_body_file():
+def test_tool_action_request_classifier_reviews_gh_pr_create_body_file():
     request = extract_sensitive_tool_action_request(
         "bash",
         {
@@ -1166,10 +1166,11 @@ def test_tool_action_request_classifier_allows_gh_pr_create_body_file():
         },
     )
 
-    assert request is None
+    assert request is not None
+    assert request.action_class == "GitHub content mutation command"
 
 
-def test_tool_action_request_classifier_allows_single_quoted_gh_pr_create_markdown_body():
+def test_tool_action_request_classifier_reviews_single_quoted_gh_pr_create_markdown_body():
     request = extract_sensitive_tool_action_request(
         "bash",
         {
@@ -1183,7 +1184,8 @@ def test_tool_action_request_classifier_allows_single_quoted_gh_pr_create_markdo
         },
     )
 
-    assert request is None
+    assert request is not None
+    assert request.action_class == "GitHub content mutation command"
 
 
 def test_tool_action_request_classifier_explains_gh_pr_create_double_quoted_markdown_substitution():
@@ -1239,7 +1241,7 @@ def test_tool_action_request_classifier_explains_wrapped_gh_pr_create_body_subst
     assert request.action_class == "GitHub PR body shell substitution"
 
 
-def test_tool_action_request_classifier_allows_pr_create_with_unrelated_substitution():
+def test_tool_action_request_classifier_reviews_pr_create_with_unrelated_substitution():
     request = extract_sensitive_tool_action_request(
         "bash",
         {
@@ -1252,10 +1254,11 @@ def test_tool_action_request_classifier_allows_pr_create_with_unrelated_substitu
         },
     )
 
-    assert request is None
+    assert request is not None
+    assert request.action_class == "GitHub content mutation command"
 
 
-def test_tool_action_request_classifier_allows_pr_create_with_attached_body_flag():
+def test_tool_action_request_classifier_reviews_pr_create_with_attached_body_flag():
     request = extract_sensitive_tool_action_request(
         "bash",
         {
@@ -1268,7 +1271,8 @@ def test_tool_action_request_classifier_allows_pr_create_with_attached_body_flag
         },
     )
 
-    assert request is None
+    assert request is not None
+    assert request.action_class == "GitHub content mutation command"
 
 
 def test_tool_action_request_classifier_ignores_single_quoted_env_split_string_body():
@@ -1760,7 +1764,7 @@ def test_tool_action_request_classifier_skips_benign_node_inline_transform_call(
     assert request is None
 
 
-def test_tool_action_request_classifier_skips_github_node_review_thread_mutation_script():
+def test_tool_action_request_classifier_reviews_github_token_substitution_script():
     request = extract_sensitive_tool_action_request(
         "bash",
         {
@@ -1772,7 +1776,8 @@ def test_tool_action_request_classifier_skips_github_node_review_thread_mutation
         },
     )
 
-    assert request is None
+    assert request is not None
+    assert request.action_class == "GitHub secret mutation command"
 
 
 def test_tool_action_request_classifier_skips_benign_mixed_case_node_identifier():
@@ -2219,7 +2224,7 @@ def test_tool_action_request_classifier_detects_redirection_to_quoted_space_targ
     assert request.action_class == "destructive shell command"
 
 
-def test_tool_action_request_classifier_allows_graphql_query_file_workflow(tmp_path):
+def test_tool_action_request_classifier_reviews_graphql_query_file_workflow(tmp_path):
     query_path = tmp_path / "pr-threads-query.graphql"
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -2238,7 +2243,8 @@ def test_tool_action_request_classifier_allows_graphql_query_file_workflow(tmp_p
         },
     )
 
-    assert request is None
+    assert request is not None
+    assert request.action_class == "Unverified GitHub command capability"
 
 
 def test_tool_action_request_classifier_rejects_graphql_mutation_file_workflow(tmp_path):
@@ -2532,7 +2538,7 @@ def test_tool_action_request_classifier_rejects_graphql_workflow_with_ansi_c_quo
     assert request.action_class == "destructive shell command"
 
 
-def test_tool_action_request_classifier_allows_graphql_query_for_env_named_repo(tmp_path):
+def test_tool_action_request_classifier_reviews_graphql_query_for_env_named_repo(tmp_path):
     query_path = tmp_path / "pr-threads-query.graphql"
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -2546,10 +2552,11 @@ def test_tool_action_request_classifier_allows_graphql_query_for_env_named_repo(
         },
     )
 
-    assert request is None
+    assert request is not None
+    assert request.action_class == "Unverified GitHub command capability"
 
 
-def test_tool_action_request_classifier_allows_graphql_at_file_workflow(tmp_path):
+def test_tool_action_request_classifier_reviews_graphql_at_file_workflow(tmp_path):
     query_path = tmp_path / "pr-threads-query.graphql"
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -2563,7 +2570,8 @@ def test_tool_action_request_classifier_allows_graphql_at_file_workflow(tmp_path
         },
     )
 
-    assert request is None
+    assert request is not None
+    assert request.action_class == "Unverified GitHub command capability"
 
 
 def test_tool_action_request_classifier_rejects_graphql_workflow_with_sensitive_input_file(tmp_path):
