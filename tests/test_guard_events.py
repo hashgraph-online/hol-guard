@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.runtime.runner import (
     _pain_signal_sync_url,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_event_receipts import _list_events_query
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
@@ -148,34 +149,36 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
 
 
 class TestGuardEvents:
-    def test_recent_event_queries_use_covering_order_indexes(self, tmp_path) -> None:
-        store = GuardStore(tmp_path / "home")
-        store.add_event("alpha", {"sequence": 1}, "2026-07-18T00:00:00Z")
-        store.add_event("beta", {"sequence": 2}, "2026-07-18T00:00:01Z")
-        store.add_event("alpha", {"sequence": 3}, "2026-07-18T00:00:02Z")
+    def test_recent_event_queries_use_order_indexes_after_schema_upgrade(self, tmp_path) -> None:
+        home_dir = tmp_path / "home"
+        home_dir.mkdir()
+        with sqlite3.connect(home_dir / "guard.db") as connection:
+            connection.execute(
+                """
+                create table guard_events (
+                  event_id integer primary key autoincrement,
+                  event_name text not null,
+                  payload_json text not null,
+                  occurred_at text not null
+                )
+                """
+            )
+            connection.executemany(
+                "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
+                (
+                    ("alpha", json.dumps({"sequence": 1}), "2026-07-18T00:00:00Z"),
+                    ("beta", json.dumps({"sequence": 2}), "2026-07-18T00:00:01Z"),
+                    ("alpha", json.dumps({"sequence": 3}), "2026-07-18T00:00:02Z"),
+                ),
+            )
+
+        store = GuardStore(home_dir)
+        recent_query, recent_params = _list_events_query(1000, None)
+        named_query, named_params = _list_events_query(1000, "alpha")
 
         with sqlite3.connect(store.path) as connection:
-            recent_plan = connection.execute(
-                """
-                explain query plan
-                select event_id, event_name, payload_json, occurred_at
-                from guard_events
-                order by occurred_at desc, event_id desc
-                limit ?
-                """,
-                (1000,),
-            ).fetchall()
-            named_plan = connection.execute(
-                """
-                explain query plan
-                select event_id, event_name, payload_json, occurred_at
-                from guard_events
-                where event_name = ?
-                order by occurred_at desc, event_id desc
-                limit ?
-                """,
-                ("alpha", 1000),
-            ).fetchall()
+            recent_plan = connection.execute(f"explain query plan {recent_query}", recent_params).fetchall()
+            named_plan = connection.execute(f"explain query plan {named_query}", named_params).fetchall()
 
         assert any("idx_guard_events_recent" in str(row[3]) for row in recent_plan)
         assert any("idx_guard_events_name_recent" in str(row[3]) for row in named_plan)
