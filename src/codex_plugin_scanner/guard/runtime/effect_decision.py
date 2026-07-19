@@ -265,11 +265,7 @@ def factors_from_extension_evidence(batch: ExtensionEvidenceBatch) -> tuple[Deci
                 basis=DecisionBasis(floor, None),
                 segment_ref=evidence.segment_ref,
                 operation_ref=evidence.operation_ref,
-                producer_ref=(
-                    "extension:"
-                    f"{evidence.identity.extension_id}/{evidence.identity.extension_version}/"
-                    f"{evidence.identity.rule_id}/{evidence.identity.rule_version}"
-                ),
+                producer_ref=(f"extension:{evidence.identity.extension_id}/{evidence.identity.rule_id}"),
                 evidence_digest=_extension_evidence_digest(evidence.semantic_key),
             )
         )

@@ -253,3 +253,15 @@ def test_extension_factor_identity_binds_the_complete_evidence_record() -> None:
     factors = factors_from_extension_evidence(ExtensionEvidenceBatch((first, second)))
     assert len({factor.evidence_digest for factor in factors}) == 2
     assert evaluate_effect_decision(EffectDecisionRequest(factors)).action == "review"
+
+
+def test_extension_versions_with_build_metadata_remain_valid() -> None:
+    evidence = _evidence("metadata", "review")
+    identity = replace(
+        evidence.identity,
+        extension_version="1.0.0+build.1",
+        rule_version="1.0.0+rule.2",
+    )
+    factors = factors_from_extension_evidence(ExtensionEvidenceBatch((replace(evidence, identity=identity),)))
+    assert factors[0].producer_ref == "extension:command.test/command.test.metadata"
+    assert evaluate_effect_decision(EffectDecisionRequest(factors)).action == "review"
