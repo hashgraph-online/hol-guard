@@ -496,6 +496,7 @@ export function App() {
   const handleOpenFleet = useCallback(() => navigate(PROTECT_ROUTE), []);
   const handleOpenEvidence = useCallback(() => navigate("/evidence"), []);
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
+  const handleOpenCommands = useCallback(() => navigate("/evidence?view=commands"), [navigate]);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);
   const handleOpenSupplyChain = useCallback(() => navigate("/supply-chain"), []);
   const handleOpenPolicy = useCallback(() => navigate("/policy"), []);
@@ -846,6 +847,7 @@ export function App() {
             onOpenFleet={handleOpenFleet}
             onOpenEvidence={handleOpenEvidence}
             onOpenInsights={handleOpenInsights}
+            onOpenCommands={handleOpenCommands}
             onOpenSettings={handleOpenSettings}
             onOpenSupplyChain={handleOpenSupplyChain}
             onClearPolicies={handleClearPolicies}

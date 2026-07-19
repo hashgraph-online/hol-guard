@@ -1,4 +1,52 @@
-import { r as reactExports, ag as fetchApprovalPage, ah as fetchPolicy, j as jsxRuntimeExports, ai as HiMiniArrowLeft, z as HiMiniChevronRight, h as harnessDisplayName, e as GuardHero, P as ProofStrip, aj as HiMiniHome, y as HiMiniBolt, U as HiMiniAdjustmentsHorizontal, A as ActionButton, S as SectionLabel, l as formatRelativeTime, x as HiMiniExclamationTriangle, ad as Tag, ak as DEFAULT_FILTER_STATE, al as filterEvidence, am as sortEvidence, an as computeMetrics, B as Badge, b as EmptyState, ao as EvidenceFilterBar, ap as EvidenceInsightStrip, aq as EvidenceActionList, ar as EvidenceActionDetail, v as useFocusTrap, as as policyIdentityKey, s as HiMiniCloud, at as HiMiniChartBar, d as HiMiniCheckCircle, J as HiMiniXCircle, au as runHarnessAction, av as GuardHarnessActionError, aw as HiMiniRocketLaunch, k as HiMiniShieldCheck, ax as HiMiniArrowPath, ay as HiMiniTrash, az as clearLabelForScope, aA as formatHarnessCommand } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, ak as fetchApprovalPage, al as fetchPolicy, am as HiMiniArrowLeft, c as HiMiniChevronRight, e as harnessDisplayName, n as GuardHero, P as ProofStrip, an as HiMiniHome, I as HiMiniBolt, Y as HiMiniAdjustmentsHorizontal, A as ActionButton, S as SectionLabel, q as formatRelativeTime, F as HiMiniExclamationTriangle, ah as Tag, ao as DEFAULT_FILTER_STATE, ap as filterEvidence, aq as sortEvidence, ar as computeMetrics, as as CommandActivityWorkspace, J as Badge, k as EmptyState, at as EvidenceFilterBar, au as EvidenceInsightStrip, av as EvidenceActionList, aw as EvidenceActionDetail, B as useFocusTrap, ax as policyIdentityKey, y as HiMiniCloud, ay as HiMiniChartBar, m as HiMiniCheckCircle, N as HiMiniXCircle, az as runHarnessAction, aA as GuardHarnessActionError, aB as HiMiniRocketLaunch, p as HiMiniShieldCheck, aC as HiMiniArrowPath, aD as HiMiniTrash, aE as clearLabelForScope, aF as formatHarnessCommand } from "../guard-dashboard.js";
+function ActivityModeButton(props) {
+  const active = props.mode === props.value;
+  const handleClick = reactExports.useCallback(() => props.onChange(props.value), [props.onChange, props.value]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      id: `app-activity-tab-${props.value}`,
+      type: "button",
+      role: "tab",
+      "aria-selected": active,
+      "aria-controls": `app-activity-panel-${props.value}`,
+      tabIndex: active ? 0 : -1,
+      onClick: handleClick,
+      className: `rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${active ? "bg-white text-brand-dark shadow-sm" : "text-slate-500 hover:text-brand-dark"}`,
+      children: props.label
+    }
+  );
+}
+function AppCommandActivityModeTabs(props) {
+  const handleKeyDown = reactExports.useCallback((event) => {
+    if (!(/* @__PURE__ */ new Set(["ArrowLeft", "ArrowRight", "Home", "End"])).has(event.key)) return;
+    const tabs = Array.from(event.currentTarget.querySelectorAll('[role="tab"]'));
+    const current = tabs.indexOf(document.activeElement);
+    if (current < 0) return;
+    event.preventDefault();
+    let next = current;
+    if (event.key === "ArrowLeft") next = (current - 1 + tabs.length) % tabs.length;
+    if (event.key === "ArrowRight") next = (current + 1) % tabs.length;
+    if (event.key === "Home") next = 0;
+    if (event.key === "End") next = tabs.length - 1;
+    tabs[next]?.focus();
+    tabs[next]?.click();
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "inline-flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-0.5",
+      role: "tablist",
+      "aria-label": "App activity type",
+      onKeyDown: handleKeyDown,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActivityModeButton, { mode: props.mode, value: "recorded", label: "Recorded actions", onChange: props.onChange }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActivityModeButton, { mode: props.mode, value: "commands", label: "Command protection", onChange: props.onChange }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActivityModeButton, { mode: props.mode, value: "pending", label: `Pending (${props.pendingCount})`, onChange: props.onChange })
+      ]
+    }
+  );
+}
 const tabOrder = ["overview", "activity", "settings"];
 const TAB_DEFINITIONS = [
   { key: "overview", label: "Overview", icon: HiMiniHome },
@@ -540,8 +588,19 @@ function firstRunIntro(harness) {
   return `Guard writes the ${harnessDisplayName(harness)} local configuration through the daemon. After connecting, restart the app so protected hooks load before your next agent run.`;
 }
 const ACTIVITY_PAGE_SIZE = 50;
+function readActivityMode() {
+  const value = new URLSearchParams(window.location.search).get("activity");
+  if (value === "commands" || value === "pending") return value;
+  return "recorded";
+}
+function writeActivityMode(mode) {
+  const url = new URL(window.location.href);
+  if (mode === "recorded") url.searchParams.delete("activity");
+  else url.searchParams.set("activity", mode);
+  window.history.replaceState({}, "", url.toString());
+}
 function AppActivityTab(props) {
-  const [showPending, setShowPending] = reactExports.useState(false);
+  const [activityMode, setActivityMode] = reactExports.useState(readActivityMode);
   const [filters, setFilters] = reactExports.useState(() => ({
     ...DEFAULT_FILTER_STATE,
     view: "actions"
@@ -605,12 +664,10 @@ function AppActivityTab(props) {
   const handleLoadMore = reactExports.useCallback(() => {
     setPage((prev) => prev + 1);
   }, []);
-  const handleShowActions = reactExports.useCallback(() => {
-    setShowPending(false);
-  }, []);
-  const handleShowPending = reactExports.useCallback(() => {
-    setShowPending(true);
-    setFilters((prev) => ({ ...prev, selectedId: "" }));
+  const handleActivityModeChange = reactExports.useCallback((mode) => {
+    setActivityMode(mode);
+    writeActivityMode(mode);
+    if (mode !== "recorded") setFilters((prev) => ({ ...prev, selectedId: "" }));
   }, []);
   const noopHarnessFilter = reactExports.useCallback((_harness) => {
   }, []);
@@ -631,31 +688,16 @@ function AppActivityTab(props) {
         )
       ] })
     ] }) }),
-    hasPending && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: handleShowActions,
-          className: `rounded-full px-3 py-1.5 text-xs font-medium transition-all ${!showPending ? "bg-brand-blue text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
-          children: "Actions"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          type: "button",
-          onClick: handleShowPending,
-          className: `rounded-full px-3 py-1.5 text-xs font-medium transition-all ${showPending ? "bg-brand-blue text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
-          children: [
-            "Pending (",
-            props.pendingItems.length,
-            ")"
-          ]
-        }
-      )
-    ] }),
-    showPending ? hasPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: props.pendingItems.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      AppCommandActivityModeTabs,
+      {
+        mode: activityMode,
+        pendingCount: props.pendingItems.length,
+        onChange: handleActivityModeChange
+      }
+    ),
+    activityMode === "commands" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "app-activity-panel-commands", role: "tabpanel", "aria-labelledby": "app-activity-tab-commands", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CommandActivityWorkspace, { harness: props.harness }) }),
+    activityMode === "pending" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "app-activity-panel-pending", role: "tabpanel", "aria-labelledby": "app-activity-tab-pending", children: hasPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: props.pendingItems.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
         onClick: () => props.onOpenRequest(item.request_id),
@@ -680,7 +722,8 @@ function AppActivityTab(props) {
         body: "Guard will surface blocked actions here when this app needs a decision.",
         tone: "teach"
       }
-    ) : props.harnessReceipts.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ) }),
+    activityMode === "recorded" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "app-activity-panel-recorded", role: "tabpanel", "aria-labelledby": "app-activity-tab-recorded", children: props.harnessReceipts.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
       {
         title: "No activity yet",
@@ -720,7 +763,7 @@ function AppActivityTab(props) {
         )
       ] }),
       selectedReceipt && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceActionDetail, { receipt: selectedReceipt, onClose: handleCloseDetail }) })
-    ] })
+    ] }) })
   ] });
 }
 function policyDecisionTitle(policy) {
