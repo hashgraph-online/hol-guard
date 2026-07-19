@@ -1219,7 +1219,10 @@ def _destructive_shell_tool_action_request(
             ),
             canonical_command=canonical_command,
         )
-    github_assessment = classify_github_shell_capabilities(detection_command_text, home_dir=home_dir)
+    github_assessment = classify_github_shell_capabilities(
+        raw_command_text or detection_command_text,
+        home_dir=home_dir,
+    )
     if github_assessment is not None and github_capability_requires_confirmation(github_assessment):
         return ToolActionRequestMatch(
             tool_name=tool_name,

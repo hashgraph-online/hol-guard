@@ -47,7 +47,7 @@ _CONTENT_SUBCOMMANDS: dict[str, frozenset[str]] = {
             "review",
         }
     ),
-    "repo": frozenset({"create", "fork", "rename", "set-default", "sync"}),
+    "repo": frozenset({"create", "fork", "rename", "sync"}),
 }
 _MAINTENANCE_SUBCOMMANDS: dict[str, frozenset[str]] = {
     "issue": frozenset({"lock", "pin", "unlock", "unpin"}),
@@ -76,6 +76,7 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
     """
 
     normalized = [str(arg) for arg in args]
+    original = tuple(normalized)
     if not normalized:
         return _assessment("unknown", "github.command.missing", "The GitHub CLI subcommand is missing.")
     normalized = _strip_global_options(normalized)
@@ -221,6 +222,12 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
                 "The command forcefully changes remote repository state.",
             )
         if subcommand in _MAINTENANCE_SUBCOMMANDS.get(top_level, frozenset()):
+            if _has_dynamic_value(original):
+                return _assessment(
+                    "unknown",
+                    "github.command.dynamic-maintenance-target",
+                    "The maintenance target cannot be resolved statically.",
+                )
             return _assessment(
                 "maintain_remote",
                 "github.command.bounded-maintenance",
@@ -250,6 +257,10 @@ def _has_option(args: Sequence[str], option: str) -> bool:
 
 def _has_any_option(args: Sequence[str], *options: str) -> bool:
     return any(_has_option(args, option) for option in options)
+
+
+def _has_dynamic_value(args: Sequence[str]) -> bool:
+    return any("$" in token or "`" in token or token.startswith("@") for token in args)
 
 
 def _strip_global_options(args: list[str]) -> list[str]:

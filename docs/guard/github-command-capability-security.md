@@ -18,11 +18,15 @@ allowlist: a command is prompt-free only when its complete remote capability is 
 | Force or delete | Forced ref changes and local or remote deletion | Require approval |
 | Secret or access | Secret changes, key changes, collaborators, permissions, protection, and visibility | Require approval |
 | Other remote mutation | Known state-changing operations without a narrower class | Require approval |
-| Unverified | Extensions, aliases, dynamic arguments, file/stdin request bodies, or unreviewed pipeline stages | Require approval |
+| Unverified | Extensions, aliases, dynamic mutation targets, externally resolved request inputs, or unreviewed pipeline stages | Require approval |
 
 For `gh api`, fields select a write-capable request unless `GET` is explicit. GraphQL is prompt-free only for one
 static query document. Mutation and subscription operations require approval; multiple operations, method overrides,
 external query files, and external variable files are treated as unverified.
+
+Dynamic identifiers do not change the effect of a proven read verb, so commands such as `gh pr view "$PR"` remain
+read-only. A dynamic target or operation-shaping option on maintenance and API requests is unverified and cannot be
+workflow-authorized.
 
 One command may retain multiple capabilities. For example, `gh pr merge --delete-branch` records both merge and
 deletion, and mixed GraphQL root fields retain every classified mutation. Guard applies the strongest resulting floor.

@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.runtime.github_capability_contract import (
     GitHubCommandCapability,
     github_assessment,
 )
+from codex_plugin_scanner.guard.runtime.github_capability_interaction import github_capability_action_class
 from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     classify_github_shell_capabilities,
@@ -103,6 +104,14 @@ def test_every_non_read_capability_has_a_review_floor(capability: GitHubCommandC
     assessment = github_assessment(capability, "test.reason", "test detail")
 
     assert assessment.action_floor == "review"
+
+
+@pytest.mark.parametrize("capability", ("read_local", "read_remote"))
+def test_read_capabilities_cannot_be_rendered_as_review_actions(capability: GitHubCommandCapability) -> None:
+    assessment = github_assessment(capability, "test.read", "test read")
+
+    with pytest.raises(ValueError, match="read-only"):
+        _ = github_capability_action_class(assessment)
 
 
 @pytest.mark.parametrize(

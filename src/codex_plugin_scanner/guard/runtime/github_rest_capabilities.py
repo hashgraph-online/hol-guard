@@ -40,6 +40,7 @@ class GitHubApiArguments:
     fields: tuple[tuple[str, str], ...]
     headers: tuple[str, ...]
     has_input: bool
+    has_dynamic_option_value: bool
 
 
 def classify_github_api(args: Sequence[str]) -> GitHubCommandAssessment:
@@ -58,6 +59,12 @@ def classify_github_api(args: Sequence[str]) -> GitHubCommandAssessment:
             "github.api.input-body",
             "A GitHub API body loaded from a file or standard input cannot be classified statically.",
         )
+    if parsed.has_dynamic_option_value:
+        return github_assessment(
+            "unknown",
+            "github.api.dynamic-option-value",
+            "A GitHub API option value cannot be resolved statically.",
+        )
     if any(_METHOD_OVERRIDE_HEADER.search(header) for header in parsed.headers):
         return github_assessment(
             "unknown",
@@ -67,7 +74,7 @@ def classify_github_api(args: Sequence[str]) -> GitHubCommandAssessment:
     method = parsed.method.upper() if parsed.method is not None else None
     if parsed.endpoint.lower() == "graphql":
         return _classify_graphql(parsed, method=method)
-    if any(_field_value_is_external(value) for _name, value in parsed.fields):
+    if any(_field_value_is_external(value, allow_graphql_variables=False) for _name, value in parsed.fields):
         return github_assessment(
             "unknown",
             "github.api.external-field-value",
@@ -97,7 +104,9 @@ def _mutation_capabilities(
     endpoint = parsed.endpoint.strip("/").lower()
     segments = tuple(segment for segment in endpoint.split("/") if segment)
     capabilities: set[GitHubCommandCapability] = set()
-    if method == "DELETE":
+    issue_lock_endpoint = _is_issue_lock_endpoint(segments)
+    maintenance_endpoint = issue_lock_endpoint and method in {"PUT", "DELETE"}
+    if method == "DELETE" and not maintenance_endpoint:
         capabilities.add("delete_remote")
     if _is_merge_endpoint(segments):
         capabilities.add("merge_remote")
@@ -111,9 +120,9 @@ def _mutation_capabilities(
         capabilities.add("access_remote")
     if _is_force_request(segments, parsed.fields):
         capabilities.add("force_remote")
-    if _is_content_endpoint(segments) and not _is_merge_endpoint(segments):
+    if _is_content_endpoint(segments) and not _is_merge_endpoint(segments) and not issue_lock_endpoint:
         capabilities.add("content_remote")
-    if _is_maintenance_endpoint(segments):
+    if maintenance_endpoint:
         capabilities.add("maintain_remote")
     if not capabilities:
         capabilities.add("mutate_remote")
@@ -167,8 +176,8 @@ def _is_content_endpoint(segments: tuple[str, ...]) -> bool:
     return bool({"comments", "discussions", "gists", "issues", "labels", "milestones", "pulls"}.intersection(segments))
 
 
-def _is_maintenance_endpoint(segments: tuple[str, ...]) -> bool:
-    return "threads" in segments and segments[-1:] in {("resolve",), ("unresolve",)}
+def _is_issue_lock_endpoint(segments: tuple[str, ...]) -> bool:
+    return len(segments) == 6 and segments[0] == "repos" and segments[3] == "issues" and segments[5] == "lock"
 
 
 def _mutation_reason(capabilities: tuple[GitHubCommandCapability, ...]) -> str:
@@ -183,6 +192,7 @@ def _parse_api_arguments(args: Sequence[str]) -> GitHubApiArguments | GitHubComm
     fields: list[tuple[str, str]] = []
     headers: list[str] = []
     has_input = False
+    has_dynamic_option_value = False
     index = 0
     while index < len(args):
         token = args[index]
@@ -216,6 +226,7 @@ def _parse_api_arguments(args: Sequence[str]) -> GitHubApiArguments | GitHubComm
                 return _api_parse_failure()
             if option_name in {"-X", "--method"}:
                 method = value
+                has_dynamic_option_value = has_dynamic_option_value or _value_is_dynamic(value)
             elif option_name in {"-f", "-F", "--field", "--raw-field"}:
                 name, field_separator, field_value = value.partition("=")
                 if not field_separator or not name:
@@ -223,8 +234,11 @@ def _parse_api_arguments(args: Sequence[str]) -> GitHubApiArguments | GitHubComm
                 fields.append((name, field_value))
             elif option_name in {"-H", "--header"}:
                 headers.append(value)
+                has_dynamic_option_value = has_dynamic_option_value or _value_is_dynamic(value)
             elif option_name == "--input":
                 has_input = True
+            elif _value_is_dynamic(value):
+                has_dynamic_option_value = True
             index += consumed
             continue
         if token.startswith("-") or endpoint is not None:
@@ -233,7 +247,14 @@ def _parse_api_arguments(args: Sequence[str]) -> GitHubApiArguments | GitHubComm
         index += 1
     if endpoint is None:
         return _api_parse_failure()
-    return GitHubApiArguments(endpoint, method, tuple(fields), tuple(headers), has_input)
+    return GitHubApiArguments(
+        endpoint,
+        method,
+        tuple(fields),
+        tuple(headers),
+        has_input,
+        has_dynamic_option_value,
+    )
 
 
 def _classify_graphql(parsed: GitHubApiArguments, *, method: str | None) -> GitHubCommandAssessment:
@@ -250,7 +271,7 @@ def _classify_graphql(parsed: GitHubApiArguments, *, method: str | None) -> GitH
             "github.graphql.query-count",
             "Exactly one static GraphQL query is required for classification.",
         )
-    if any(_field_value_is_external(value) for _name, value in parsed.fields):
+    if any(_field_value_is_external(value, allow_graphql_variables=name == "query") for name, value in parsed.fields):
         return github_assessment(
             "unknown",
             "github.graphql.external-value",
@@ -261,9 +282,18 @@ def _classify_graphql(parsed: GitHubApiArguments, *, method: str | None) -> GitH
     return classify_graphql_document(query_values[0])
 
 
-def _field_value_is_external(value: str) -> bool:
+def _field_value_is_external(value: str, *, allow_graphql_variables: bool) -> bool:
     stripped = value.strip()
-    return stripped.startswith("@") or any(marker in stripped for marker in ("$(", "`", "${", "$'", '$"'))
+    return stripped.startswith("@") or _value_is_dynamic(
+        stripped,
+        allow_bare_variables=not allow_graphql_variables,
+    )
+
+
+def _value_is_dynamic(value: str, *, allow_bare_variables: bool = True) -> bool:
+    if any(marker in value for marker in ("$(", "`", "${", "$'", '$"')):
+        return True
+    return allow_bare_variables and re.search(r"\$[A-Za-z_][A-Za-z0-9_]*", value) is not None
 
 
 def _api_parse_failure() -> GitHubCommandAssessment:
