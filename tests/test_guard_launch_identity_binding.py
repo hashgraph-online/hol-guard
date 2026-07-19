@@ -129,6 +129,16 @@ def test_embedded_wrapper_observation_is_deterministic(tmp_path: Path) -> None:
     assert first == second
 
 
+@pytest.mark.skipif(shutil.which("sudo") is None, reason="sudo wrapper is unavailable")
+@pytest.mark.parametrize("embedded", (False, True))
+def test_unreadable_wrapper_observation_is_stable_but_unproven(tmp_path: Path, embedded: bool) -> None:
+    command = f"{_ECHO} $(sudo {_ECHO} nested)" if embedded else f"sudo {_ECHO} baseline"
+    first = _observe(tmp_path, command)
+    second = _observe(tmp_path, command)
+    assert first == second
+    assert not first.can_issue_positive_proof
+
+
 def test_direct_construction_cannot_omit_mandatory_uncertainty_or_requirements(tmp_path: Path) -> None:
     observation = _observe(tmp_path, f"{_ECHO} baseline")
     with pytest.raises(ValueError, match="launch and effect uncertainty"):

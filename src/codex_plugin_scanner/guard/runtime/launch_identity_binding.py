@@ -15,7 +15,11 @@ from typing import Final, cast
 
 from ..models import GuardAction
 from ..package_execution_context import PackageExecutionContext, package_execution_context_from_evidence
-from .approval_context import build_runtime_launch_identity, runtime_launch_identity_is_reusable
+from .approval_context import (
+    build_runtime_executable_identity,
+    build_runtime_launch_identity,
+    runtime_launch_identity_is_reusable,
+)
 from .command_model import CanonicalCommand
 from .command_tokens import leading_environment
 from .effect_contract import ProofRequirement, UncertaintyKind, maximum_action_floor
@@ -251,32 +255,30 @@ def observe_launch_identity_binding(
         )
         normalization_wrappers = ()
     for index, wrapper in enumerate(normalization_wrappers):
-        wrapper_identity = build_runtime_launch_identity(
+        wrapper_identity = build_runtime_executable_identity(
             wrapper,
-            structured_command=True,
+            search_path=_launch_search_path(launch_env),
             cwd=cwd,
-            launch_env=launch_env,
         )
         executable_material.append(
             {
                 "segment_index": f"wrapper:{index}",
-                "identity_digest": _framed_digest("hol-guard.runtime-launch", wrapper_identity),
+                "identity_digest": _wrapper_identity_digest(wrapper_identity),
                 "reusable_observation": runtime_launch_identity_is_reusable(wrapper_identity),
             }
         )
     for segment_index, segment in enumerate(command.segments):
         segment_environment = _segment_launch_environment(segment.tokens, launch_env)
         for wrapper_index, wrapper in enumerate(segment.wrapper_chain):
-            wrapper_identity = build_runtime_launch_identity(
+            wrapper_identity = build_runtime_executable_identity(
                 wrapper,
-                structured_command=True,
+                search_path=_launch_search_path(segment_environment),
                 cwd=cwd,
-                launch_env=segment_environment,
             )
             executable_material.append(
                 {
                     "segment_index": f"segment:{segment_index}:wrapper:{wrapper_index}",
-                    "identity_digest": _framed_digest("hol-guard.runtime-launch", wrapper_identity),
+                    "identity_digest": _wrapper_identity_digest(wrapper_identity),
                     "reusable_observation": runtime_launch_identity_is_reusable(wrapper_identity),
                 }
             )
@@ -397,6 +399,17 @@ def _segment_launch_environment(
         if separator and name in assignment_names:
             environment[name] = value
     return environment
+
+
+def _launch_search_path(launch_env: Mapping[str, str] | None) -> str:
+    environment = os.environ if launch_env is None else launch_env
+    search_path = environment.get("PATH")
+    return search_path if isinstance(search_path, str) else os.defpath
+
+
+def _wrapper_identity_digest(identity: Mapping[str, object]) -> str:
+    stable_material = {key: value for key, value in identity.items() if key != "reuse_nonce"}
+    return _framed_digest("hol-guard.runtime-wrapper-executable", stable_material)
 
 
 def _redirection_target_material(command: CanonicalCommand, *, cwd: Path) -> list[dict[str, object]]:
