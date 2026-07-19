@@ -1,8 +1,19 @@
-import { i as isDisplayableHarness, j as jsxRuntimeExports, n as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, k as EmptyState, r as reactExports, e as harnessDisplayName, c as HiMiniChevronRight, m as HiMiniCheckCircle, L as HiMiniEye, M as HiMiniWrenchScrewdriver, N as HiMiniXCircle, O as HiMiniExclamationCircle, Q as HiMiniClipboardDocumentCheck, R as HiMiniClipboard } from "../guard-dashboard.js";
+import { i as isDisplayableHarness, p as protectionHealthFor, j as jsxRuntimeExports, n as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, k as EmptyState, r as reactExports, e as harnessDisplayName, c as HiMiniChevronRight, m as HiMiniCheckCircle, M as HiMiniEye, N as HiMiniWrenchScrewdriver, O as HiMiniXCircle, Q as HiMiniExclamationCircle, R as HiMiniClipboardDocumentCheck, T as HiMiniClipboard } from "../guard-dashboard.js";
 import { S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
 const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
-function resolveFleetHeroCopy(cloudState, activeInstallCount, urls) {
+function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, urls) {
   const hasApps = activeInstallCount > 0;
+  if (hasApps && protectionState !== "protected") {
+    return {
+      status: protectionState,
+      headline: protectionState === "partial" ? "Apps are partially protected" : "App protection is degraded",
+      subheadline: protectionState === "partial" ? "Core protection passes, but complete decision-stream evidence is not available." : "One or more required protection checks failed or remain unproven.",
+      primaryCtaLabel: "Review app health",
+      primaryCtaHref: urls.dashboard_url,
+      secondaryCtaLabel: cloudState === "local_only" ? "Connect this machine" : "Open Cloud Devices",
+      secondaryCtaHref: cloudState === "local_only" ? urls.connect_url : urls.fleet_url
+    };
+  }
   if (cloudState === "local_only") {
     return {
       status: hasApps ? "clear" : "setup_gap",
@@ -48,9 +59,10 @@ function collectHarnesses(snapshot) {
 function renderReceiptContext(receipt) {
   return `${harnessDisplayName(receipt.harness)} · ${receipt.policy_decision.replace(/-/g, " ")}`;
 }
-function resolveAppStatus(install, hasInventory, hasReceipts) {
+function resolveAppStatus(install, protectionState, hasInventory, hasReceipts) {
   if (install !== void 0) {
-    if (install.active) return "protected";
+    if (install.active && protectionState === "protected") return "protected";
+    if (install.active && protectionState === "partial") return "partial";
     return "needs_repair";
   }
   if (!hasInventory && !hasReceipts) return "not_found";
@@ -58,6 +70,7 @@ function resolveAppStatus(install, hasInventory, hasReceipts) {
 }
 function toInstallStatus(status) {
   if (status === "protected") return "active";
+  if (status === "partial") return "partial";
   if (status === "needs_repair") return "partial";
   if (status === "found_unprotected") return "observed";
   return "not_installed";
@@ -70,6 +83,8 @@ function StatusIcon({ status }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationCircle, { className: "h-4 w-4 text-brand-attention", "aria-hidden": "true" });
 }
 function StatusBadge({ status }) {
+  if (status === "partial") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-blue", children: "Partially protected" });
+  if (status === "needs_repair") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-attention", children: "Degraded" });
   const installStatus = toInstallStatus(status);
   const label = APP_STATUS_LABELS[installStatus];
   if (installStatus === "active") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-emerald-600", children: label });
@@ -134,10 +149,12 @@ function FleetWorkspace(props) {
     ].filter(isDisplayableHarness))
   ).sort((a, b) => a.localeCompare(b));
   const runtimeState = props.runtime.runtime_state;
+  const protectionHealth = protectionHealthFor(props.runtime);
   const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isDisplayableHarness));
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
     activeInstalls.length,
+    protectionHealth.state,
     {
       fleet_url: props.runtime.fleet_url,
       dashboard_url: props.runtime.dashboard_url,
@@ -161,7 +178,7 @@ function FleetWorkspace(props) {
         items: [
           { label: "Needs review", value: `${props.runtime.pending_count}`, tone: props.runtime.pending_count > 0 ? "blue" : "slate" },
           { label: "History", value: `${props.runtime.receipt_count}`, tone: "purple" },
-          { label: "Watched apps", value: `${activeInstalls.length > 0 ? activeInstalls.length : visibleHarnesses.length}`, tone: activeInstalls.length > 0 ? "green" : "slate" },
+          { label: "Watched apps", value: `${activeInstalls.length > 0 ? activeInstalls.length : visibleHarnesses.length}`, tone: protectionHealth.state === "protected" ? "green" : "slate" },
           { label: "Runtime", value: runtimeState ? "active" : "offline", tone: runtimeState ? "green" : "slate" }
         ]
       }
@@ -177,7 +194,8 @@ function FleetWorkspace(props) {
           const harnessInventory = inventory.filter((i) => i.harness === harness && i.present);
           const harnessPolicies = props.policies.filter((p) => p.harness === harness);
           const hasReceipts = receiptHarnesses.has(harness);
-          const status = resolveAppStatus(install, harnessInventory.length > 0, hasReceipts);
+          const appProtection = protectionHealthFor(props.runtime, harness);
+          const status = resolveAppStatus(install, appProtection.state, harnessInventory.length > 0, hasReceipts);
           return /* @__PURE__ */ jsxRuntimeExports.jsx(
             AppRow,
             {
@@ -243,7 +261,7 @@ function SetupGuide(props) {
     {
       id: "verify",
       label: "Verify in dashboard",
-      description: "Check this dashboard to see Guard protecting your app. You will see receipts appear in History.",
+      description: "Check this dashboard to review app health and see receipts appear in History.",
       done: props.hasReceipts && props.hasInventory
     }
   ];

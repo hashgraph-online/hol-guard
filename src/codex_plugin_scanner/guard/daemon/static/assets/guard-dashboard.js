@@ -1,12 +1,17 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
-  if (relList && relList.supports && relList.supports("modulepreload")) return;
-  for (const link of document.querySelectorAll('link[rel="modulepreload"]')) processPreload(link);
+  if (relList && relList.supports && relList.supports("modulepreload"))
+    return;
+  for (const link of document.querySelectorAll('link[rel="modulepreload"]'))
+    processPreload(link);
   new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      if (mutation.type !== "childList") continue;
-      for (const node of mutation.addedNodes) if (node.tagName === "LINK" && node.rel === "modulepreload") processPreload(node);
+      if (mutation.type !== "childList")
+        continue;
+      for (const node of mutation.addedNodes)
+        if (node.tagName === "LINK" && node.rel === "modulepreload")
+          processPreload(node);
     }
   }).observe(document, {
     childList: true,
@@ -14,15 +19,21 @@ const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-das
   });
   function getFetchOpts(link) {
     const fetchOpts = {};
-    if (link.integrity) fetchOpts.integrity = link.integrity;
-    if (link.referrerPolicy) fetchOpts.referrerPolicy = link.referrerPolicy;
-    if (link.crossOrigin === "use-credentials") fetchOpts.credentials = "include";
-    else if (link.crossOrigin === "anonymous") fetchOpts.credentials = "omit";
-    else fetchOpts.credentials = "same-origin";
+    if (link.integrity)
+      fetchOpts.integrity = link.integrity;
+    if (link.referrerPolicy)
+      fetchOpts.referrerPolicy = link.referrerPolicy;
+    if (link.crossOrigin === "use-credentials")
+      fetchOpts.credentials = "include";
+    else if (link.crossOrigin === "anonymous")
+      fetchOpts.credentials = "omit";
+    else
+      fetchOpts.credentials = "same-origin";
     return fetchOpts;
   }
   function processPreload(link) {
-    if (link.ep) return;
+    if (link.ep)
+      return;
     link.ep = true;
     const fetchOpts = getFetchOpts(link);
     fetch(link.href, fetchOpts);
@@ -12501,37 +12512,42 @@ const __vitePreload = function preload(baseModule, deps, importerUrl) {
       }))));
     };
     document.getElementsByTagName("link");
-    const cspNonceMeta = document.querySelector("meta[property=csp-nonce]");
-    const cspNonce = cspNonceMeta?.nonce || cspNonceMeta?.getAttribute("nonce");
+    const cspNonceMeta = document.querySelector("meta[property=csp-nonce]"), cspNonce = cspNonceMeta?.nonce || cspNonceMeta?.getAttribute("nonce");
     promise = allSettled(deps.map((dep) => {
       dep = assetsURL(dep);
-      if (dep in seen) return;
+      if (dep in seen)
+        return;
       seen[dep] = true;
-      const isCss = dep.endsWith(".css");
-      const cssSelector = isCss ? '[rel="stylesheet"]' : "";
-      if (document.querySelector(`link[href="${dep}"]${cssSelector}`)) return;
+      const isCss = dep.endsWith(".css"), cssSelector = isCss ? '[rel="stylesheet"]' : "";
+      if (document.querySelector(`link[href="${dep}"]${cssSelector}`))
+        return;
       const link = document.createElement("link");
       link.rel = isCss ? "stylesheet" : scriptRel;
-      if (!isCss) link.as = "script";
+      if (!isCss)
+        link.as = "script";
       link.crossOrigin = "";
       link.href = dep;
-      if (cspNonce) link.setAttribute("nonce", cspNonce);
+      if (cspNonce)
+        link.setAttribute("nonce", cspNonce);
       document.head.appendChild(link);
-      if (isCss) return new Promise((res, rej) => {
-        link.addEventListener("load", res);
-        link.addEventListener("error", () => rej(/* @__PURE__ */ new Error(`Unable to preload CSS for ${dep}`)));
-      });
+      if (isCss)
+        return new Promise((res, rej) => {
+          link.addEventListener("load", res);
+          link.addEventListener("error", () => rej(Error(`Unable to preload CSS for ${dep}`)));
+        });
     }));
   }
   function handlePreloadError(err$2) {
     const e$1 = new Event("vite:preloadError", { cancelable: true });
     e$1.payload = err$2;
     window.dispatchEvent(e$1);
-    if (!e$1.defaultPrevented) throw err$2;
+    if (!e$1.defaultPrevented)
+      throw err$2;
   }
   return promise.then((res) => {
     for (const item of res || []) {
-      if (item.status !== "rejected") continue;
+      if (item.status !== "rejected")
+        continue;
       handlePreloadError(item.reason);
     }
     return baseModule().catch(handlePreloadError);
@@ -14909,6 +14925,116 @@ function computePeriodComparison(receipts, days, now2) {
     totalDelta: currentTotal - previousTotal
   };
 }
+const PROTECTION_CHECK_IDS = [
+  "harness_hooks",
+  "daemon",
+  "policy_engine",
+  "rule_packs",
+  "decision_plane_compatibility",
+  "containment_compatibility",
+  "sandbox",
+  "decision_stream",
+  "tamper_checks"
+];
+const CORE_CHECK_IDS = PROTECTION_CHECK_IDS.filter((checkId) => checkId !== "decision_stream");
+const STABLE_ID$1 = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
+function isRecord$3(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function copyForState(state) {
+  if (state === "protected") {
+    return { label: "Protected", detail: "All required protection checks have current proof." };
+  }
+  if (state === "partial") {
+    return { label: "Partially protected", detail: "Core protection passes, but decision-stream evidence is incomplete." };
+  }
+  return { label: "Degraded", detail: "One or more required protection checks failed or remain unproven." };
+}
+function deriveState(checks) {
+  const byId = new Map(checks.map((check) => [check.check_id, check.status]));
+  if (checks.some((check) => check.status === "fail")) return "degraded";
+  if (!CORE_CHECK_IDS.every((checkId) => byId.get(checkId) === "pass")) return "degraded";
+  return byId.get("decision_stream") === "pass" ? "protected" : "partial";
+}
+function normalizeCheck(value) {
+  if (!isRecord$3(value)) return null;
+  const checkId = value.check_id;
+  const status = value.status;
+  const reasonCode = value.reason_code;
+  if (typeof checkId !== "string" || !PROTECTION_CHECK_IDS.some((candidate) => candidate === checkId)) return null;
+  if (status !== "pass" && status !== "unknown" && status !== "fail") return null;
+  if (typeof reasonCode !== "string" || reasonCode.length > 96 || !STABLE_ID$1.test(reasonCode)) return null;
+  return {
+    check_id: checkId,
+    status,
+    reason_code: reasonCode
+  };
+}
+function normalizeChecks(value) {
+  if (!Array.isArray(value) || value.length !== PROTECTION_CHECK_IDS.length) return null;
+  const checks = value.map(normalizeCheck);
+  if (checks.some((check) => check === null)) return null;
+  const complete = checks;
+  const ids = new Set(complete.map((check) => check.check_id));
+  return ids.size === PROTECTION_CHECK_IDS.length ? complete : null;
+}
+function healthFromChecks(checks) {
+  const state = deriveState(checks);
+  const copy = copyForState(state);
+  return {
+    state,
+    ...copy,
+    evidence_gap: checks.some((check) => check.status === "unknown"),
+    checks,
+    reason_codes: checks.map((check) => check.reason_code)
+  };
+}
+function fallbackChecks() {
+  return PROTECTION_CHECK_IDS.map((checkId) => ({
+    check_id: checkId,
+    status: "unknown",
+    reason_code: "proof_unavailable"
+  }));
+}
+function unavailableProtectionHealth() {
+  return {
+    schema_version: "guard.protection-health.v1",
+    ...healthFromChecks(fallbackChecks()),
+    apps: []
+  };
+}
+function normalizeApp(value) {
+  if (!isRecord$3(value)) return null;
+  const harness = value.harness;
+  if (typeof harness !== "string" || harness.length > 64 || !STABLE_ID$1.test(harness)) return null;
+  const checks = normalizeChecks(value.checks);
+  if (checks === null) return null;
+  return { harness, ...healthFromChecks(checks) };
+}
+function normalizeProtectionHealth(value) {
+  if (!isRecord$3(value) || value.schema_version !== "guard.protection-health.v1") {
+    return unavailableProtectionHealth();
+  }
+  const checks = normalizeChecks(value.checks);
+  if (checks === null || !Array.isArray(value.apps) || value.apps.length > 100) {
+    return unavailableProtectionHealth();
+  }
+  const apps = value.apps.map(normalizeApp);
+  if (apps.some((app) => app === null)) return unavailableProtectionHealth();
+  return {
+    schema_version: "guard.protection-health.v1",
+    ...healthFromChecks(checks),
+    apps
+  };
+}
+function protectionHealthFor(snapshot, harness = null) {
+  const health = snapshot.protection_health ?? unavailableProtectionHealth();
+  if (harness === null) return health;
+  const scoped = health.apps.find((app) => app.harness === harness);
+  if (scoped) return scoped;
+  const fallback = healthFromChecks(fallbackChecks());
+  return { harness: STABLE_ID$1.test(harness) && harness.length <= 64 ? harness : "unknown", ...fallback };
+}
 const now = "2026-04-11T12:00:00Z";
 const demoRequests = [
   {
@@ -15749,7 +15875,8 @@ function normalizeRuntimeSnapshot(snapshot) {
     queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count),
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
     managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
-    cloud_command_capability: normalizeCloudCommandCapability(snapshot.cloud_command_capability)
+    cloud_command_capability: normalizeCloudCommandCapability(snapshot.cloud_command_capability),
+    protection_health: normalizeProtectionHealth(snapshot.protection_health)
   };
 }
 function normalizeQueueCopy(raw) {
@@ -18180,11 +18307,16 @@ function actionButtonClass(variant) {
   return `${base} ${sizeDefault} bg-brand-blue text-white shadow-lg shadow-brand-blue/20 hover:bg-brand-blue/90 hover:shadow-brand-blue/30`;
 }
 function GuardHero(props) {
-  const bgClass = props.status === "needs_review" ? "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(245,158,11,0.08)_100%)]" : props.status === "setup_gap" ? "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.06)_100%)]" : "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(72,223,123,0.10)_100%)]";
-  const statusBadge = props.status === "needs_review" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Needs your choice" }) : props.status === "setup_gap" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Setup needed" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Protected" });
-  const HeroIcon = props.status === "needs_review" ? HiMiniExclamationTriangle : props.status === "setup_gap" ? HiMiniInformationCircle : HiMiniShieldCheck;
-  const iconColorClass = props.status === "needs_review" ? "text-brand-attention" : props.status === "setup_gap" ? "text-brand-blue" : "text-brand-green";
-  const iconBgClass = props.status === "needs_review" ? "bg-brand-attention/10" : props.status === "setup_gap" ? "bg-brand-blue/10" : "bg-brand-green/10";
+  let bgClass = "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(72,223,123,0.10)_100%)]";
+  if (props.status === "needs_review" || props.status === "degraded") {
+    bgClass = "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(245,158,11,0.08)_100%)]";
+  } else if (props.status !== "clear") {
+    bgClass = "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.06)_100%)]";
+  }
+  const statusBadge = props.status === "needs_review" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Needs your choice" }) : props.status === "degraded" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Degraded" }) : props.status === "partial" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "info", children: "Partially protected" }) : props.status === "neutral" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "info", children: "Configuration" }) : props.status === "setup_gap" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Setup needed" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Protected" });
+  const HeroIcon = props.status === "needs_review" ? HiMiniExclamationTriangle : props.status === "setup_gap" || props.status === "partial" || props.status === "degraded" || props.status === "neutral" ? HiMiniInformationCircle : HiMiniShieldCheck;
+  const iconColorClass = props.status === "needs_review" ? "text-brand-attention" : props.status === "setup_gap" || props.status === "partial" || props.status === "neutral" ? "text-brand-blue" : props.status === "degraded" ? "text-brand-attention" : "text-brand-green";
+  const iconBgClass = props.status === "needs_review" ? "bg-brand-attention/10" : props.status === "setup_gap" || props.status === "partial" || props.status === "neutral" ? "bg-brand-blue/10" : props.status === "degraded" ? "bg-brand-attention/10" : "bg-brand-green/10";
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "section",
     {
@@ -20437,7 +20569,7 @@ function resolveProofStatusCopy(proofStatus) {
   }
   return {
     label: "Local only",
-    detail: "Local protection is active. Cloud proof is optional.",
+    detail: "Local Guard is available. Protection health is reported separately; cloud proof is optional.",
     tone: "slate"
   };
 }
@@ -21145,7 +21277,7 @@ function insightsSharePublishErrorMessage(raw) {
     return "Guard insights sharing is not live on Guard Cloud yet. If you just updated, wait a few minutes and try again.";
   }
   if (lower.includes("guard cloud is unavailable")) {
-    return "Guard Cloud could not publish this share link right now. Local Guard keeps protecting this machine. Try again in a few minutes or reconnect with hol-guard connect.";
+    return "Guard Cloud could not publish this share link right now. Local Guard remains available. Try again in a few minutes or reconnect with hol-guard connect.";
   }
   if (lower.includes("guard:insights.share") || lower.includes("insufficient scope") || lower.includes("missing scope")) {
     return "Reconnect Guard Cloud to grant insights sharing permission, then try again.";
@@ -21267,7 +21399,7 @@ function EvidenceInsightsShareModal({
     return {
       state: "idle",
       title: "Connect Guard Cloud to publish insights",
-      detail: "Guard keeps protecting this machine locally. Connect Guard Cloud here so the daemon can publish a public share link with preview image support.",
+      detail: "Local Guard remains available. Connect Guard Cloud here so the daemon can publish a public share link with preview image support.",
       action_label: "Connect Guard Cloud",
       connect_url: runtime?.connect_url ?? "https://hol.org/guard/connect",
       authorize_url: null,
@@ -27438,22 +27570,37 @@ function ReviewCodexResumePanel({ resume, onRetry }) {
   ] });
 }
 function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume }) {
-  const appsCount = runtime?.managed_installs?.filter((i) => i.active).length ?? 0;
+  const protectionHealth = runtime ? protectionHealthFor(runtime) : unavailableProtectionHealth();
+  const protectedAppsCount = protectionHealth.apps.filter((app) => app.state === "protected").length;
+  const heroStatus = protectionHealth.state === "protected" ? "clear" : protectionHealth.state;
+  let ProtectionIcon = HiMiniShieldCheck;
+  let healthCardClass = "border-emerald-200/60 bg-emerald-50/30";
+  let healthIconClass = "bg-brand-green/10 text-brand-green";
+  if (protectionHealth.state === "partial") {
+    ProtectionIcon = HiMiniInformationCircle;
+    healthCardClass = "border-brand-blue/20 bg-brand-blue/[0.04]";
+    healthIconClass = "bg-brand-blue/10 text-brand-blue";
+  } else if (protectionHealth.state === "degraded") {
+    ProtectionIcon = HiMiniExclamationTriangle;
+    healthCardClass = "border-brand-attention/20 bg-brand-attention/[0.04]";
+    healthIconClass = "bg-brand-attention/10 text-brand-attention";
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       GuardHero,
       {
-        status: "clear",
+        status: heroStatus,
         headline: "Nothing to review",
-        subheadline: "Guard is watching your AI work. No actions need your decision right now."
+        subheadline: `No actions need your decision right now. ${protectionHealth.detail}`
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ProofStrip,
       {
         items: [
-          { label: "Status", value: "All clear", tone: "green" },
-          { label: "Apps protected", value: appsCount, tone: appsCount > 0 ? "green" : "slate" }
+          { label: "Queue", value: "All clear", tone: "green" },
+          { label: "Protection", value: protectionHealth.label, tone: protectionHealth.state === "protected" ? "green" : "slate" },
+          { label: "Apps protected", value: protectedAppsCount, tone: protectedAppsCount > 0 ? "green" : "slate" }
         ]
       }
     ),
@@ -27463,11 +27610,14 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: resolutionMessage })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-emerald-200/60 bg-emerald-50/30 p-4 sm:p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-green/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-5 w-5 text-brand-green", "aria-hidden": "true" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `rounded-xl border p-4 sm:p-5 ${healthCardClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${healthIconClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionIcon, { className: "h-5 w-5", "aria-hidden": "true" }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Protection active" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "Guard is running and will pause any risky actions from your AI apps. When something needs review, it will appear here." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: protectionHealth.label }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-muted-foreground", children: [
+            protectionHealth.detail,
+            " When something needs review, it will appear here."
+          ] })
         ] })
       ] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
@@ -28593,149 +28743,150 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  TabBar as $,
+  HiMiniCircleStack as $,
   ActionButton as A,
-  useFocusTrap as B,
-  approvalProofRequiresPassword as C,
+  HiMiniQuestionMarkCircle as B,
+  useFocusTrap as C,
   DeviceProofCard as D,
   EvidenceInsightsShareButton as E,
-  HiMiniExclamationTriangle as F,
+  approvalProofRequiresPassword as F,
   GuardStatMetric as G,
   HomeInsightsMetrics as H,
-  HiMiniBolt as I,
-  Badge as J,
-  HiMiniMinusCircle as K,
-  HiMiniEye as L,
-  HiMiniWrenchScrewdriver as M,
-  HiMiniXCircle as N,
-  HiMiniExclamationCircle as O,
+  HiMiniExclamationTriangle as I,
+  HiMiniBolt as J,
+  Badge as K,
+  HiMiniMinusCircle as L,
+  HiMiniEye as M,
+  HiMiniWrenchScrewdriver as N,
+  HiMiniXCircle as O,
   ProofStrip as P,
-  HiMiniClipboardDocumentCheck as Q,
-  HiMiniClipboard as R,
+  HiMiniExclamationCircle as Q,
+  HiMiniClipboardDocumentCheck as R,
   SectionLabel as S,
-  getDefaultExportFromCjs as T,
-  React as U,
-  HiMiniKey as V,
-  HiMiniLockClosed as W,
-  HiMiniBellAlert as X,
-  HiMiniAdjustmentsHorizontal as Y,
-  HiMiniCog6Tooth as Z,
-  HiMiniCircleStack as _,
+  HiMiniClipboard as T,
+  getDefaultExportFromCjs as U,
+  React as V,
+  HiMiniKey as W,
+  HiMiniLockClosed as X,
+  HiMiniBellAlert as Y,
+  HiMiniAdjustmentsHorizontal as Z,
+  HiMiniCog6Tooth as _,
   EvidenceActivityHeatmapMini as a,
-  runPackageSync as a$,
-  resolveProtectionLevelCopy as a0,
-  fetchSettings as a1,
-  fetchRuntimeSnapshot as a2,
-  updateSettings as a3,
-  clearPolicy as a4,
-  clearReviewQueue as a5,
-  revokeApprovalGateCooldown as a6,
-  disableApprovalGateTotp as a7,
-  importSettings as a8,
-  resetSettings as a9,
-  GuardHarnessActionError as aA,
-  HiMiniRocketLaunch as aB,
-  HiMiniArrowPath as aC,
-  HiMiniTrash as aD,
-  clearLabelForScope as aE,
-  formatHarnessCommand as aF,
-  isSupplyChainAuditIncomplete as aG,
-  isSupplyChainAuditEvidence as aH,
-  buildApprovalProofCredentials as aI,
-  isApprovalProofSubmitDisabled as aJ,
-  ApprovalProofFieldInputs as aK,
-  readString$1 as aL,
-  isRecord$2 as aM,
-  HiMiniClock as aN,
-  IconActionButton as aO,
-  HiMiniBeaker as aP,
-  ActivationSummary as aQ,
-  ActionResultPanel as aR,
-  HiMiniBugAnt as aS,
-  GuardModalLayer as aT,
-  ConnectFlowCard as aU,
-  ApprovalProofInline as aV,
-  HiMiniArrowTopRightOnSquare as aW,
-  HiMiniCloudArrowDown as aX,
-  fetchPackageFirewallStatus as aY,
-  runPackageAudit as aZ,
-  resolveSupplyChainAuditFailure as a_,
-  enrollApprovalGateTotp as aa,
-  verifyApprovalGateTotp as ab,
-  clearEvidence as ac,
-  exportDiagnostics as ad,
-  repairApprovalCenter as ae,
-  exportSettings as af,
-  setupDesktopNotifications as ag,
-  Tag as ah,
-  HiMiniMagnifyingGlass as ai,
-  approvalGateCooldownLabel as aj,
-  fetchApprovalPage as ak,
-  fetchPolicy as al,
-  HiMiniArrowLeft as am,
-  HiMiniHome as an,
-  DEFAULT_FILTER_STATE as ao,
-  filterEvidence as ap,
-  sortEvidence as aq,
-  computeMetrics as ar,
-  CommandActivityWorkspace as as,
-  EvidenceFilterBar as at,
-  EvidenceInsightStrip as au,
-  EvidenceActionList as av,
-  EvidenceActionDetail as aw,
-  policyIdentityKey as ax,
-  HiMiniChartBar as ay,
-  runHarnessAction as az,
+  resolveSupplyChainAuditFailure as a$,
+  TabBar as a0,
+  resolveProtectionLevelCopy as a1,
+  fetchSettings as a2,
+  fetchRuntimeSnapshot as a3,
+  updateSettings as a4,
+  clearPolicy as a5,
+  clearReviewQueue as a6,
+  revokeApprovalGateCooldown as a7,
+  disableApprovalGateTotp as a8,
+  importSettings as a9,
+  runHarnessAction as aA,
+  GuardHarnessActionError as aB,
+  HiMiniRocketLaunch as aC,
+  HiMiniArrowPath as aD,
+  HiMiniTrash as aE,
+  clearLabelForScope as aF,
+  formatHarnessCommand as aG,
+  isSupplyChainAuditIncomplete as aH,
+  isSupplyChainAuditEvidence as aI,
+  buildApprovalProofCredentials as aJ,
+  isApprovalProofSubmitDisabled as aK,
+  ApprovalProofFieldInputs as aL,
+  readString$1 as aM,
+  isRecord$2 as aN,
+  HiMiniClock as aO,
+  IconActionButton as aP,
+  HiMiniBeaker as aQ,
+  ActivationSummary as aR,
+  ActionResultPanel as aS,
+  HiMiniBugAnt as aT,
+  GuardModalLayer as aU,
+  ConnectFlowCard as aV,
+  ApprovalProofInline as aW,
+  HiMiniArrowTopRightOnSquare as aX,
+  HiMiniCloudArrowDown as aY,
+  fetchPackageFirewallStatus as aZ,
+  runPackageAudit as a_,
+  resetSettings as aa,
+  enrollApprovalGateTotp as ab,
+  verifyApprovalGateTotp as ac,
+  clearEvidence as ad,
+  exportDiagnostics as ae,
+  repairApprovalCenter as af,
+  exportSettings as ag,
+  setupDesktopNotifications as ah,
+  Tag as ai,
+  HiMiniMagnifyingGlass as aj,
+  approvalGateCooldownLabel as ak,
+  fetchApprovalPage as al,
+  fetchPolicy as am,
+  HiMiniArrowLeft as an,
+  HiMiniHome as ao,
+  DEFAULT_FILTER_STATE as ap,
+  filterEvidence as aq,
+  sortEvidence as ar,
+  computeMetrics as as,
+  CommandActivityWorkspace as at,
+  EvidenceFilterBar as au,
+  EvidenceInsightStrip as av,
+  EvidenceActionList as aw,
+  EvidenceActionDetail as ax,
+  policyIdentityKey as ay,
+  HiMiniChartBar as az,
   HiMiniCommandLine as b,
-  startPackageFirewallConnect as b0,
-  openPackageFirewallAuthorizeFallback as b1,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as b2,
-  runPackageFirewallAction as b3,
-  parseInterceptProofSnapshot as b4,
-  activatePackageFirewallRuntime as b5,
-  EntitlementNotice as b6,
-  fetchReceipts as b7,
-  WorkspacePageHeader as b8,
-  __vitePreload as b9,
-  Surface as bA,
-  HiMiniCheckBadge as bB,
-  fetchSupplyChainBundle as bC,
-  isSupplyChainScannerEvidence as bD,
-  HiMiniDocumentMagnifyingGlass as bE,
-  HiMiniShieldExclamation as bF,
-  HiMiniComputerDesktop as bG,
-  HiMiniChevronLeft as bH,
-  HiMiniFunnel as bI,
-  HiMiniArrowDown as bJ,
-  HiMiniArrowUp as bK,
-  runAuditRemediation as bL,
-  HiMiniSignal as bM,
-  scopeLabel as ba,
-  guardAwareHref as bb,
-  HiMiniDocumentText as bc,
-  HiMiniCloudArrowUp as bd,
-  HiMiniCheck as be,
-  HiMiniCodeBracket as bf,
-  HiMiniClipboardDocument as bg,
-  HiMiniUsers as bh,
-  HiMiniFolder as bi,
-  HiMiniInformationCircle as bj,
-  HiMiniIdentification as bk,
-  policyActionLabel as bl,
-  createCloudExceptionRequest as bm,
-  HiMiniArrowRight as bn,
-  HiMiniPuzzlePiece as bo,
-  HiMiniGlobeAlt as bp,
-  fetchCloudExceptions as bq,
-  fetchCloudExceptionRequests as br,
-  downloadBlob as bs,
-  PolicyStatField as bt,
-  PaginationControls as bu,
-  HiMiniNoSymbol as bv,
-  HiMiniCube as bw,
-  HiMiniArrowDownTray as bx,
-  HiMiniQueueList as by,
-  HiMiniPlay as bz,
+  runPackageSync as b0,
+  startPackageFirewallConnect as b1,
+  openPackageFirewallAuthorizeFallback as b2,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as b3,
+  runPackageFirewallAction as b4,
+  parseInterceptProofSnapshot as b5,
+  activatePackageFirewallRuntime as b6,
+  EntitlementNotice as b7,
+  fetchReceipts as b8,
+  WorkspacePageHeader as b9,
+  HiMiniPlay as bA,
+  Surface as bB,
+  HiMiniCheckBadge as bC,
+  fetchSupplyChainBundle as bD,
+  isSupplyChainScannerEvidence as bE,
+  HiMiniDocumentMagnifyingGlass as bF,
+  HiMiniShieldExclamation as bG,
+  HiMiniComputerDesktop as bH,
+  HiMiniChevronLeft as bI,
+  HiMiniFunnel as bJ,
+  HiMiniArrowDown as bK,
+  HiMiniArrowUp as bL,
+  runAuditRemediation as bM,
+  HiMiniSignal as bN,
+  __vitePreload as ba,
+  scopeLabel as bb,
+  guardAwareHref as bc,
+  HiMiniDocumentText as bd,
+  HiMiniCloudArrowUp as be,
+  HiMiniCheck as bf,
+  HiMiniCodeBracket as bg,
+  HiMiniClipboardDocument as bh,
+  HiMiniUsers as bi,
+  HiMiniFolder as bj,
+  HiMiniInformationCircle as bk,
+  HiMiniIdentification as bl,
+  policyActionLabel as bm,
+  createCloudExceptionRequest as bn,
+  HiMiniArrowRight as bo,
+  HiMiniPuzzlePiece as bp,
+  HiMiniGlobeAlt as bq,
+  fetchCloudExceptions as br,
+  fetchCloudExceptionRequests as bs,
+  downloadBlob as bt,
+  PolicyStatField as bu,
+  PaginationControls as bv,
+  HiMiniNoSymbol as bw,
+  HiMiniCube as bx,
+  HiMiniArrowDownTray as by,
+  HiMiniQueueList as bz,
   HiMiniChevronRight as c,
   createCommandActivityClient as d,
   harnessDisplayName as e,
@@ -28749,15 +28900,15 @@ export {
   HiMiniCheckCircle as m,
   GuardHero as n,
   formatNumber as o,
-  HiMiniShieldCheck as p,
-  formatRelativeTime as q,
+  protectionHealthFor as p,
+  HiMiniShieldCheck as q,
   reactExports as r,
-  HiMiniSparkles as s,
-  HiMiniXMark as t,
+  formatRelativeTime as s,
+  HiMiniSparkles as t,
   useReceiptAnalytics as u,
-  HiMiniChevronUp as v,
-  HiMiniChevronDown as w,
-  resolveCloudIntelCopy as x,
-  HiMiniCloud as y,
-  HiMiniQuestionMarkCircle as z
+  HiMiniXMark as v,
+  HiMiniChevronUp as w,
+  HiMiniChevronDown as x,
+  resolveCloudIntelCopy as y,
+  HiMiniCloud as z
 };

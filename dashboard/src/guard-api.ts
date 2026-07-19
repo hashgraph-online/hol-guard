@@ -8,6 +8,7 @@ import {
   CODEX_RESUME_STATUSES
 } from "./guard-types";
 import { computeTrendBuckets } from "./evidence/evidence-metrics";
+import { normalizeProtectionHealth } from "./protection-health";
 import type {
   GuardActionEnvelope,
   GuardActionType,
@@ -99,13 +100,14 @@ type ApprovalRequestListPayload = {
 
 type RuntimeSnapshotPayload = Omit<
   GuardRuntimeSnapshot,
-  "items" | "queue_summary" | "supply_chain" | "managed_installs" | "cloud_command_capability"
+  "items" | "queue_summary" | "supply_chain" | "managed_installs" | "cloud_command_capability" | "protection_health"
 > & {
   items?: RawGuardApprovalRequest[] | null;
   queue_summary?: unknown;
   supply_chain?: unknown;
   managed_installs?: unknown;
   cloud_command_capability?: unknown;
+  protection_health?: unknown;
 };
 
 type QueueResolutionPayload = Omit<
@@ -976,6 +978,7 @@ export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): Guar
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
     managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
     cloud_command_capability: normalizeCloudCommandCapability(snapshot.cloud_command_capability),
+    protection_health: normalizeProtectionHealth(snapshot.protection_health),
   };
 }
 

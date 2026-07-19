@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, ak as fetchApprovalPage, al as fetchPolicy, am as HiMiniArrowLeft, c as HiMiniChevronRight, e as harnessDisplayName, n as GuardHero, P as ProofStrip, an as HiMiniHome, I as HiMiniBolt, Y as HiMiniAdjustmentsHorizontal, A as ActionButton, S as SectionLabel, q as formatRelativeTime, F as HiMiniExclamationTriangle, ah as Tag, ao as DEFAULT_FILTER_STATE, ap as filterEvidence, aq as sortEvidence, ar as computeMetrics, as as CommandActivityWorkspace, J as Badge, k as EmptyState, at as EvidenceFilterBar, au as EvidenceInsightStrip, av as EvidenceActionList, aw as EvidenceActionDetail, B as useFocusTrap, ax as policyIdentityKey, y as HiMiniCloud, ay as HiMiniChartBar, m as HiMiniCheckCircle, N as HiMiniXCircle, az as runHarnessAction, aA as GuardHarnessActionError, aB as HiMiniRocketLaunch, p as HiMiniShieldCheck, aC as HiMiniArrowPath, aD as HiMiniTrash, aE as clearLabelForScope, aF as formatHarnessCommand } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, al as fetchApprovalPage, am as fetchPolicy, p as protectionHealthFor, an as HiMiniArrowLeft, c as HiMiniChevronRight, e as harnessDisplayName, n as GuardHero, P as ProofStrip, ao as HiMiniHome, J as HiMiniBolt, Z as HiMiniAdjustmentsHorizontal, A as ActionButton, S as SectionLabel, s as formatRelativeTime, I as HiMiniExclamationTriangle, ai as Tag, ap as DEFAULT_FILTER_STATE, aq as filterEvidence, ar as sortEvidence, as as computeMetrics, at as CommandActivityWorkspace, K as Badge, k as EmptyState, au as EvidenceFilterBar, av as EvidenceInsightStrip, aw as EvidenceActionList, ax as EvidenceActionDetail, C as useFocusTrap, ay as policyIdentityKey, z as HiMiniCloud, az as HiMiniChartBar, m as HiMiniCheckCircle, O as HiMiniXCircle, aA as runHarnessAction, aB as GuardHarnessActionError, aC as HiMiniRocketLaunch, q as HiMiniShieldCheck, aD as HiMiniArrowPath, aE as HiMiniTrash, aF as clearLabelForScope, aG as formatHarnessCommand } from "../guard-dashboard.js";
 function ActivityModeButton(props) {
   const active = props.mode === props.value;
   const handleClick = reactExports.useCallback(() => props.onChange(props.value), [props.onChange, props.value]);
@@ -72,19 +72,23 @@ function writeTabToUrl(tab) {
   }
   window.history.replaceState({}, "", url.toString());
 }
-function resolveHeroStatus(status) {
-  if (status === "active") return "clear";
+function resolveHeroStatus(status, protectionState) {
+  if (status === "active") return protectionState === "protected" ? "clear" : protectionState;
   if (status === "needs_setup") return "setup_gap";
   return "needs_review";
 }
-function resolveHeroHeadline(status, harness, isObserved) {
-  if (status === "active") return `${harnessDisplayName(harness)} is protected`;
+function resolveHeroHeadline(status, harness, isObserved, protectionState) {
+  if (status === "active" && protectionState === "protected") return `${harnessDisplayName(harness)} is protected`;
+  if (status === "active" && protectionState === "partial") return `${harnessDisplayName(harness)} is partially protected`;
+  if (status === "active") return `${harnessDisplayName(harness)} protection is degraded`;
   if (status === "needs_setup") return `${harnessDisplayName(harness)} needs setup`;
   if (isObserved) return `${harnessDisplayName(harness)} is observed`;
   return harnessDisplayName(harness);
 }
-function resolveHeroSubheadline(status, isObserved) {
-  if (status === "active") return "Guard is watching this app. Review its activity and settings below.";
+function resolveHeroSubheadline(status, isObserved, protectionState) {
+  if (status === "active" && protectionState === "protected") return "All required protection checks have current proof.";
+  if (status === "active" && protectionState === "partial") return "Core protection passes, but decision-stream evidence is incomplete.";
+  if (status === "active") return "One or more required protection checks failed or remain unproven.";
   if (status === "needs_setup") return "Finish setup so Guard can protect this app.";
   if (isObserved) return "Guard has seen activity but install is not active.";
   return "This app has not been seen yet.";
@@ -97,7 +101,7 @@ function resolveHeroCta(opts) {
       " pending"
     ] });
   }
-  if (opts.status === "needs_setup") {
+  if (opts.status === "needs_setup" || opts.status === "active" && opts.protectionState !== "protected") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: opts.onGoSettings, "data-primary": "true", children: "Open Settings" });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: opts.onGoActivity, "data-primary": "true", children: "View Activity" });
@@ -203,9 +207,11 @@ function AppDetailWorkspace(props) {
   const queueError = harnessQueue.kind === "error" ? harnessQueue.message : null;
   const policyError = harnessPolicy.kind === "error" ? harnessPolicy.message : null;
   const status = isActive ? "active" : install !== void 0 ? "needs_setup" : isObserved ? "observed" : "unknown";
-  const heroStatus = resolveHeroStatus(status);
-  const heroHeadline = resolveHeroHeadline(status, harness, isObserved);
-  const heroSub = resolveHeroSubheadline(status, isObserved);
+  const appProtection = protectionHealthFor(runtime, harness);
+  const protectionState = appProtection.state;
+  const heroStatus = resolveHeroStatus(status, protectionState);
+  const heroHeadline = resolveHeroHeadline(status, harness, isObserved, protectionState);
+  const heroSub = resolveHeroSubheadline(status, isObserved, protectionState);
   const handleTabChange = reactExports.useCallback((next) => {
     const currentIndex = tabOrder.indexOf(activeTab);
     const nextIndex = tabOrder.indexOf(next);
@@ -232,7 +238,13 @@ function AppDetailWorkspace(props) {
   }, [activeTab, handleTabChange]);
   const handleGoActivity = reactExports.useCallback(() => handleTabChange("activity"), [handleTabChange]);
   const handleGoSettings = reactExports.useCallback(() => handleTabChange("settings"), [handleTabChange]);
-  const heroCta = resolveHeroCta({ pendingCount: pendingItems.length, status, onGoActivity: handleGoActivity, onGoSettings: handleGoSettings });
+  const heroCta = resolveHeroCta({
+    pendingCount: pendingItems.length,
+    status,
+    protectionState,
+    onGoActivity: handleGoActivity,
+    onGoSettings: handleGoSettings
+  });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -267,7 +279,11 @@ function AppDetailWorkspace(props) {
           { label: "Pending", value: pendingItems.length, tone: pendingItems.length > 0 ? "blue" : "slate" },
           { label: "Total actions", value: totalActions, tone: totalActions > 0 ? "purple" : "slate" },
           { label: "Blocked", value: `${blockRate}%`, tone: blockRate > 0 ? "blue" : "slate" },
-          { label: "Status", value: isActive ? "active" : "inactive", tone: isActive ? "green" : "slate" }
+          {
+            label: "Protection",
+            value: isActive ? appProtection.label : "Not active",
+            tone: isActive && protectionState === "protected" ? "green" : "slate"
+          }
         ]
       }
     ),
@@ -1113,7 +1129,7 @@ function HarnessSetupPanel(props) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 grid gap-3 md:grid-cols-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Install state", value: active ? "Protected" : props.status === "observed" ? "Observed" : "Not connected", active }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Install state", value: active ? "Installed" : props.status === "observed" ? "Observed" : "Not connected", active }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Config source", value: props.install?.workspace ?? "Local machine" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Last changed", value: props.install ? formatRelativeTime(props.install.updated_at) : "Not yet" })
     ] }),

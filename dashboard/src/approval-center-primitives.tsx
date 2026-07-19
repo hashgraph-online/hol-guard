@@ -756,22 +756,28 @@ function TrustCard(props: { title: string; body: string }) {
 }
 
 export function GuardHero(props: {
-  status: "clear" | "needs_review" | "setup_gap";
+  status: "clear" | "needs_review" | "setup_gap" | "partial" | "degraded" | "neutral";
   headline: string;
   subheadline: string;
   cta?: ReactNode;
   secondaryCta?: ReactNode;
 }) {
-  const bgClass =
-    props.status === "needs_review"
-      ? "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(245,158,11,0.08)_100%)]"
-      : props.status === "setup_gap"
-      ? "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.06)_100%)]"
-      : "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(72,223,123,0.10)_100%)]";
+  let bgClass = "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(72,223,123,0.10)_100%)]";
+  if (props.status === "needs_review" || props.status === "degraded") {
+    bgClass = "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(245,158,11,0.08)_100%)]";
+  } else if (props.status !== "clear") {
+    bgClass = "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.06)_100%)]";
+  }
 
   const statusBadge =
     props.status === "needs_review" ? (
       <Badge tone="attention">Needs your choice</Badge>
+    ) : props.status === "degraded" ? (
+      <Badge tone="attention">Degraded</Badge>
+    ) : props.status === "partial" ? (
+      <Badge tone="info">Partially protected</Badge>
+    ) : props.status === "neutral" ? (
+      <Badge tone="info">Configuration</Badge>
     ) : props.status === "setup_gap" ? (
       <Badge tone="default">Setup needed</Badge>
     ) : (
@@ -781,22 +787,26 @@ export function GuardHero(props: {
   const HeroIcon =
     props.status === "needs_review"
       ? HiMiniExclamationTriangle
-      : props.status === "setup_gap"
+      : props.status === "setup_gap" || props.status === "partial" || props.status === "degraded" || props.status === "neutral"
       ? HiMiniInformationCircle
       : HiMiniShieldCheck;
 
   const iconColorClass =
     props.status === "needs_review"
       ? "text-brand-attention"
-      : props.status === "setup_gap"
+      : props.status === "setup_gap" || props.status === "partial" || props.status === "neutral"
       ? "text-brand-blue"
+      : props.status === "degraded"
+      ? "text-brand-attention"
       : "text-brand-green";
 
   const iconBgClass =
     props.status === "needs_review"
       ? "bg-brand-attention/10"
-      : props.status === "setup_gap"
+      : props.status === "setup_gap" || props.status === "partial" || props.status === "neutral"
       ? "bg-brand-blue/10"
+      : props.status === "degraded"
+      ? "bg-brand-attention/10"
       : "bg-brand-green/10";
 
   return (

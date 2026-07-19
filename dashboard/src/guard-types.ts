@@ -125,6 +125,8 @@ export type GuardActionEnvelope = {
 export type GuardHeadlineState =
   | "setup"
   | "protected"
+  | "partial"
+  | "degraded"
   | "blocked"
   | "local_only"
   | "connected";
@@ -247,6 +249,37 @@ export type GuardRuntimeState = {
   started_at: string;
   last_heartbeat_at: string;
   approval_center_url: string;
+};
+
+export type GuardProtectionState = "protected" | "partial" | "degraded";
+
+export type GuardProtectionCheckStatus = "pass" | "unknown" | "fail";
+
+export type GuardProtectionCheck = {
+  check_id: string;
+  status: GuardProtectionCheckStatus;
+  reason_code: string;
+};
+
+export type GuardProtectionAppHealth = {
+  harness: string;
+  state: GuardProtectionState;
+  label: string;
+  detail: string;
+  evidence_gap: boolean;
+  checks: GuardProtectionCheck[];
+  reason_codes: string[];
+};
+
+export type GuardProtectionHealth = {
+  schema_version: "guard.protection-health.v1";
+  state: GuardProtectionState;
+  label: string;
+  detail: string;
+  evidence_gap: boolean;
+  checks: GuardProtectionCheck[];
+  reason_codes: string[];
+  apps: GuardProtectionAppHealth[];
 };
 
 export type GuardCloudUserProfile = {
@@ -413,6 +446,7 @@ export type GuardRuntimeSnapshot = {
   generated_at: string;
   approval_center_url: string | null;
   runtime_state: GuardRuntimeState | null;
+  protection_health?: GuardProtectionHealth;
   device: GuardRuntimeDevice;
   latest_connect_state: GuardLatestConnectState | null;
   proof_status: GuardProofStatus;

@@ -506,7 +506,7 @@ assert(
   "T-QS-47: buildHomePrimaryState CTA is 'Set up protection' when no watched apps"
 );
 
-const protectedState = buildHomePrimaryState(0, 2);
+const protectedState = buildHomePrimaryState(0, 2, "protected");
 assert(
   protectedState.status === "protected",
   "T-QS-48: buildHomePrimaryState returns protected status when guarded with apps present"
@@ -514,6 +514,12 @@ assert(
 assert(
   protectedState.copy.includes("protecting"),
   "T-QS-49: buildHomePrimaryState copy mentions protecting when protected"
+);
+
+const unprovenState = buildHomePrimaryState(0, 2);
+assert(
+  unprovenState.status === "setup_needed" && unprovenState.copy.includes("degraded"),
+  "T-QS-49b: connected apps do not imply protection without health proof"
 );
 
 const singlePending = buildHomePrimaryState(1, 1);

@@ -931,7 +931,7 @@ def _default_package_firewall_connect_flow(
     else:
         title = "Connect HOL Guard Cloud to enable package firewall"
         detail = (
-            "Guard keeps this machine protected locally. Connect HOL Guard Cloud here so the daemon can verify "
+            "Guard continues running locally. Connect HOL Guard Cloud here so the daemon can verify "
             "package-firewall access before it changes package-manager routing."
         )
     return {
@@ -1087,7 +1087,7 @@ def _default_guard_cloud_connect_flow(*, store: GuardStore, repair_mode: bool) -
     else:
         title = "Connect Guard Cloud to publish insights"
         detail = (
-            "Guard keeps protecting this machine locally. Connect Guard Cloud here so the daemon can publish "
+            "Local Guard remains available. Connect Guard Cloud here so the daemon can publish "
             "a public share link with preview image support."
         )
     return {
