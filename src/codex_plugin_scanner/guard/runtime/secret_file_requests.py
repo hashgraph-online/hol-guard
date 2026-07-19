@@ -11,7 +11,9 @@ import json
 import os
 import re
 import shlex
+import shutil
 import stat
+import subprocess
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -310,6 +312,38 @@ _READ_ONLY_LOOKUP_COMMANDS = frozenset(
     {"cat", "fd", "find", "grep", "egrep", "fgrep", "head", "ls", "rg", "sed", "tail"}
 )
 _READ_ONLY_LOOKUP_FILTERS = frozenset({"grep", "egrep", "fgrep", "head", "sed", "tail"})
+_READ_ONLY_SEARCH_EXECUTION_FLAGS = {
+    "rg": frozenset({"--config-path", "--hostname-bin", "--pre", "--pre-glob"}),
+}
+_READ_ONLY_SEARCH_FILE_INPUT_FLAGS = frozenset({"-f", "--file", "--ignore-file"})
+_READ_ONLY_GIT_STATUS_FLAGS = frozenset(
+    {
+        "--ahead-behind",
+        "--branch",
+        "--ignored",
+        "--long",
+        "--no-ahead-behind",
+        "--no-renames",
+        "--porcelain",
+        "--renames",
+        "--short",
+        "--show-stash",
+        "--untracked-files",
+        "-b",
+        "-s",
+        "-u",
+        "-z",
+    }
+)
+_READ_ONLY_GIT_STATUS_VALUE_FLAGS = frozenset(
+    {
+        "--column",
+        "--find-renames",
+        "--ignored",
+        "--porcelain",
+        "--untracked-files",
+    }
+)
 _FIND_EXEC_PLACEHOLDER_TARGET = "guard-find-placeholder.py"
 _FIND_EXEC_ACTION_FLAGS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
 _FIND_EXEC_TERMINATOR_TOKENS = frozenset({";", r"\;", "+"})
@@ -1062,8 +1096,162 @@ def is_explicitly_benign_tool_action_request(
         if _looks_like_read_only_interpreter_command(stripped_command, parts, parsed_command_names):
             found_benign_candidate = True
             continue
+        if _looks_like_safe_read_only_lookup_command(
+            stripped_command,
+            parts,
+            home_dir=home_dir,
+        ):
+            found_benign_candidate = True
+            continue
+        if _looks_like_safe_git_status_command(stripped_command, parts, cwd=cwd):
+            found_benign_candidate = True
+            continue
         return False
     return found_benign_candidate
+
+
+def _looks_like_safe_git_status_command(
+    command_text: str,
+    parts: list[str],
+    *,
+    cwd: Path | None,
+) -> bool:
+    if any(marker in command_text for marker in ("$(", "`", "<(", ">(")):
+        return False
+    segments = _iter_shell_command_segments(parts)
+    if not segments:
+        return False
+    saw_status = False
+    try:
+        effective_cwd = (cwd or Path.cwd()).resolve()
+    except OSError:
+        return False
+    for segment in segments:
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index != 0:
+            return False
+        executable = segment[command_index]
+        if "/" in executable or "\\" in executable:
+            return False
+        args = segment[command_index + 1 :]
+        next_cwd = _safe_git_status_cd_target(command_name, args, cwd=effective_cwd)
+        if next_cwd is not None:
+            effective_cwd = next_cwd
+            continue
+        if command_name != "git" or not _git_status_args_are_read_only(args):
+            return False
+        if not _git_status_has_execution_free_config(effective_cwd):
+            return False
+        saw_status = True
+    return saw_status
+
+
+def _safe_git_status_cd_target(command_name: str, args: list[str], *, cwd: Path) -> Path | None:
+    if command_name != "cd":
+        return None
+    path_args = _shell_args_without_trailing_redirections(args)
+    if path_args != args or len(path_args) != 1 or path_args[0] in {"-", "--"}:
+        return None
+    path_text = path_args[0]
+    if _shell_token_has_command_substitution(path_text):
+        return None
+    try:
+        candidate = Path(path_text).expanduser()
+        if not candidate.is_absolute():
+            candidate = cwd / candidate
+        resolved = candidate.resolve()
+    except (OSError, RuntimeError):
+        return None
+    return resolved if resolved.is_dir() else None
+
+
+def _git_status_has_execution_free_config(cwd: Path | None) -> bool:
+    git_path = shutil.which("git")
+    if git_path is None:
+        return False
+    try:
+        resolved_git = Path(git_path).resolve()
+        execution_cwd = (cwd or Path.cwd()).resolve()
+    except OSError:
+        return False
+    if not _git_binary_path_is_trusted(resolved_git, cwd=execution_cwd):
+        return False
+    try:
+        result = subprocess.run(
+            [str(resolved_git), "config", "--null", "--get-all", "core.fsmonitor"],
+            cwd=execution_cwd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if result.returncode == 1 and not result.stdout:
+        return True
+    if result.returncode != 0:
+        return False
+    values = [value.strip().lower() for value in result.stdout.split("\0") if value.strip()]
+    return bool(values) and all(value in {"0", "false", "no", "off"} for value in values)
+
+
+def _git_binary_path_is_trusted(git_path: Path, *, cwd: Path) -> bool:
+    try:
+        candidate_untrusted_roots = (
+            cwd.resolve(),
+            Path.home().resolve(),
+            Path("/tmp").resolve(),
+            Path("/private/tmp").resolve(),
+        )
+    except (OSError, RuntimeError):
+        return False
+    untrusted_roots = tuple(root for root in candidate_untrusted_roots if root != root.parent)
+    for untrusted_root in untrusted_roots:
+        try:
+            _ = git_path.relative_to(untrusted_root)
+        except ValueError:
+            continue
+        return False
+    current_uid = getattr(os, "getuid", lambda: -1)()
+    current_groups = set(getattr(os, "getgroups", lambda: [])())
+    try:
+        for candidate in (git_path, *git_path.parents):
+            metadata = candidate.stat()
+            if metadata.st_mode & stat.S_IWOTH:
+                return False
+            if metadata.st_mode & stat.S_IWGRP and metadata.st_gid not in current_groups:
+                return False
+            if candidate == git_path and current_uid >= 0 and metadata.st_uid not in {0, current_uid}:
+                return False
+    except OSError:
+        return False
+    return True
+
+
+def _git_status_args_are_read_only(args: list[str]) -> bool:
+    if not args or args[0].lower() != "status":
+        return False
+    after_option_terminator = False
+    for token in args[1:]:
+        if after_option_terminator:
+            continue
+        if token == "--":
+            after_option_terminator = True
+            continue
+        normalized = token.lower()
+        if normalized in _READ_ONLY_GIT_STATUS_FLAGS:
+            continue
+        if "=" in normalized and normalized.split("=", 1)[0] in _READ_ONLY_GIT_STATUS_VALUE_FLAGS:
+            continue
+        if (
+            normalized.startswith("-")
+            and len(normalized) > 2
+            and not normalized.startswith("--")
+            and all(f"-{flag}" in _READ_ONLY_GIT_STATUS_FLAGS for flag in normalized[1:])
+        ):
+            continue
+        return False
+    return True
 
 
 def _docker_sensitive_tool_action_request(
@@ -4869,7 +5057,7 @@ def _read_only_lookup_primary_segment_is_safe(command: str, args: list[str], *, 
     if command == "ls":
         return _read_only_lookup_ls_args_are_safe(args, home_dir=home_dir)
     if command in {"grep", "egrep", "fgrep", "rg"}:
-        return _read_only_lookup_search_args_are_safe(args, home_dir=home_dir)
+        return _read_only_lookup_search_args_are_safe(command, args, home_dir=home_dir)
     if command == "fd":
         return _read_only_lookup_fd_args_are_safe(args, home_dir=home_dir)
     if command == "find":
@@ -5018,11 +5206,43 @@ def _read_only_lookup_ls_args_are_safe(args: list[str], *, home_dir: Path | None
     return _read_only_lookup_plain_targets_are_safe(args, allow_dirs=True, home_dir=home_dir)
 
 
-def _read_only_lookup_search_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
+def _read_only_lookup_search_args_are_safe(
+    command: str,
+    args: list[str],
+    *,
+    home_dir: Path | None = None,
+) -> bool:
+    execution_flags = _READ_ONLY_SEARCH_EXECUTION_FLAGS.get(command, frozenset())
+    if any(arg in execution_flags or any(arg.startswith(f"{flag}=") for flag in execution_flags) for arg in args):
+        return False
+    if _read_only_lookup_search_uses_file_input(args):
+        return False
+    if command == "rg" and os.environ.get("RIPGREP_CONFIG_PATH") and not _ripgrep_config_is_disabled(args):
+        return False
     targets = [arg for arg in args if arg and not arg.startswith("-")]
     return len(targets) < 2 or all(
         _read_only_lookup_target_is_safe(target, allow_dirs=True, home_dir=home_dir) for target in targets[1:]
     )
+
+
+def _read_only_lookup_search_uses_file_input(args: list[str]) -> bool:
+    for arg in args:
+        if arg in _READ_ONLY_SEARCH_FILE_INPUT_FLAGS:
+            return True
+        if arg.startswith(("--file=", "--ignore-file=")):
+            return True
+        if arg.startswith("-f") and not arg.startswith("--"):
+            return True
+    return False
+
+
+def _ripgrep_config_is_disabled(args: list[str]) -> bool:
+    for arg in args:
+        if arg == "--":
+            return False
+        if arg == "--no-config":
+            return True
+    return False
 
 
 def _read_only_lookup_fd_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
