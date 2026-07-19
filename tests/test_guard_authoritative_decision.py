@@ -204,9 +204,7 @@ def test_removed_artifact_uses_the_authoritative_action_instead_of_a_hard_coded_
 def test_history_counts_every_non_executable_install_action_but_not_warn(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = "package:npm:exact-actions"
-    for index, action in enumerate(
-        ("block", "review", "require-reapproval", "sandbox-required", "warn")
-    ):
+    for index, action in enumerate(("block", "review", "require-reapproval", "sandbox-required", "warn")):
         store.add_event(
             f"install_time_{action}",
             {
@@ -818,6 +816,65 @@ def test_runtime_detector_signals_require_their_exact_composed_authority(
     assert evaluation_authority_error(output) == AUTHORITATIVE_DECISION_INCONSISTENT
 
 
+def test_terminal_runtime_detector_signal_is_bound_without_synthetic_scanner_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact = _artifact(tmp_path)
+    monkeypatch.setattr(
+        consumer_service,
+        "score_verdict",
+        lambda *_args, **_kwargs: _scoring_verdict("allow"),
+    )
+    output = consumer_service.evaluate_detection(
+        _detection(artifact),
+        GuardStore(tmp_path / "guard-home"),
+        GuardConfig(
+            guard_home=tmp_path / "guard-home",
+            workspace=tmp_path / "workspace",
+            default_action="block",
+            changed_hash_action="block",
+        ),
+        default_action="block",
+        persist=False,
+    )
+    signal = _runtime_signal(
+        signal_id="runtime:terminal-bypass",
+        category="bypass",
+        severity="high",
+        confidence="strong",
+    )
+    composition = compose_action_from_signals((signal,), "allow")
+    assert composition.action == "block"
+
+    recorded = guard_runner._evaluation_with_recorded_detector_result(
+        output,
+        {
+            "blocked": True,
+            "blocked_by_detector": composition.reason,
+            "runtime_detector_signals_v2": [signal.to_dict()],
+            "runtime_detector_telemetry": [],
+            "runtime_detector_composition": {
+                "action": composition.action,
+                "reason": composition.reason,
+                "downgraded": composition.downgraded,
+                "upgraded": composition.upgraded,
+            },
+        },
+    )
+
+    item = recorded["artifacts"][0]
+    decision = authoritative_decision_from_artifact(item)
+    assert decision.action == "block"
+    assert signal in decision.signals
+    assert not any(
+        evidence.get("source") == "runtime_detector_registry"
+        for evidence in item["scanner_evidence"]
+        if isinstance(evidence, dict)
+    )
+    assert evaluation_authority_error(recorded) is None
+
+
 def test_run_authority_rejects_a_runtime_trace_that_disagrees_with_composition() -> None:
     signal = _runtime_signal(
         signal_id="runtime:persistence",
@@ -911,9 +968,7 @@ def test_outer_approval_reuse_action_cannot_contradict_launch_authority(
     )
     output["artifacts"][0]["approval_reuse"]["action"] = "block"
 
-    assert evaluation_authority_error(output, require_launch_permitted=True) == (
-        AUTHORITATIVE_DECISION_INCONSISTENT
-    )
+    assert evaluation_authority_error(output, require_launch_permitted=True) == (AUTHORITATIVE_DECISION_INCONSISTENT)
 
 
 def test_finalized_saved_allow_requires_an_exact_atomic_claim_proof(

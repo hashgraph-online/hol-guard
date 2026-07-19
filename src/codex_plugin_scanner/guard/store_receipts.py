@@ -192,6 +192,8 @@ class StoreReceiptsRuntimeMixin:
             record_receipt_insert(connection, canonical_receipt)
 
     def set_receipt_action_envelope(self, receipt_id: str, action_envelope: dict[str, object]) -> None:
+        from .receipts.manager import _redacted_envelope_dict
+
         with self._connect() as connection:
             row = connection.execute(
                 "select policy_decision from runtime_receipts where receipt_id = ?",
@@ -202,6 +204,11 @@ class StoreReceiptsRuntimeMixin:
             canonical_decision = canonical_receipt_decision(
                 row["policy_decision"],
                 action_envelope,
+                reject_contradiction=True,
+            )
+            redacted_decision = canonical_receipt_decision(
+                canonical_decision.policy_decision,
+                _redacted_envelope_dict(canonical_decision.action_envelope_json or {}),
                 reject_contradiction=True,
             )
             connection.execute(
@@ -215,7 +222,7 @@ class StoreReceiptsRuntimeMixin:
                 (
                     receipt_id,
                     json.dumps(canonical_decision.action_envelope_json, sort_keys=True),
-                    json.dumps(canonical_decision.action_envelope_json, sort_keys=True),
+                    json.dumps(redacted_decision.action_envelope_json, sort_keys=True),
                 ),
             )
 
