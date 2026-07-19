@@ -178,12 +178,12 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     assert "skip-existing" not in workflow_text
 
 
-def test_publish_jobs_use_channel_specific_protected_environments() -> None:
+def test_publish_jobs_use_registered_protected_environments() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     jobs = workflow["jobs"]
 
     assert jobs["publish-testpypi"]["environment"] == "testpypi"
-    assert jobs["publish-alpha-testpypi"]["environment"] == "testpypi-alpha"
+    assert jobs["publish-alpha-testpypi"]["environment"] == "testpypi"
     assert jobs["publish-alpha-pypi"]["environment"] == "pypi-alpha"
     assert jobs["publish-testpypi"]["permissions"] == {"id-token": "write"}
     assert jobs["publish-alpha-testpypi"]["permissions"] == {"contents": "read", "id-token": "write"}
