@@ -27,6 +27,8 @@ The normative JSON Schemas are:
 
 Unknown fields are rejected. Identifiers are workspace-scoped. Timestamps are UTC RFC 3339. Durations and payload sizes are bounded. Contracts contain identifiers, hashes, state, and reason codes—not usernames, home paths, command content, access tokens, private keys, or raw vendor payloads.
 
+JSON Schema consumers must enable Draft 2020-12 `format` assertion. The `date-time` format rejects impossible calendar dates; the additional timestamp pattern rejects offsets and non-canonical UTC forms.
+
 Every `signature` covers the UTF-8 RFC 8785 canonical JSON bytes of the complete object with the top-level `signature` member omitted. The `value` is canonical padded base64. Ed25519 signatures are 64 bytes. ECDSA P-256 SHA-256 signatures use the fixed-width 64-byte IEEE P1363 `r || s` encoding and require low-S form. Verifiers reject non-canonical encodings, unknown or revoked key identifiers, algorithm/key mismatches, and signatures over any other serialization.
 
 ## State and reason stability

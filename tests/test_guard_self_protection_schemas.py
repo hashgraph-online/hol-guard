@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TypeAlias
 
 import pytest
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
 
 from tests.guard_mdm_health_lease_support import snapshot
@@ -37,7 +37,7 @@ def _validator(name: str) -> Draft202012Validator:
     registry = Registry().with_resources(
         (str(schema["$id"]), Resource.from_contents(schema)) for schema in schemas.values()
     )
-    return Draft202012Validator(schemas[name], registry=registry)
+    return Draft202012Validator(schemas[name], registry=registry, format_checker=FormatChecker())
 
 
 @pytest.mark.parametrize("name", SCHEMA_NAMES)
@@ -57,6 +57,9 @@ def test_local_integrity_snapshot_rejects_unknown_fields_and_invalid_time() -> N
     assert any("Additional properties are not allowed" in message for message in messages)
 
     payload["generatedAt"] = "2026-07-18T22:00:00+05:30"
+    assert list(_validator("local-integrity-snapshot.v1").iter_errors(payload))
+
+    payload["generatedAt"] = "2026-02-31T22:00:00Z"
     assert list(_validator("local-integrity-snapshot.v1").iter_errors(payload))
 
 
