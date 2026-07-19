@@ -54,6 +54,9 @@ def test_local_integrity_snapshot_rejects_unknown_fields_and_invalid_time() -> N
     assert any("does not match" in message for message in messages)
     assert any("Additional properties are not allowed" in message for message in messages)
 
+    payload["generatedAt"] = "2026-07-18T22:00:00+05:30"
+    assert list(_validator("local-integrity-snapshot.v1").iter_errors(payload))
+
 
 def test_protection_lease_requires_bounded_attestation_not_commands() -> None:
     payload: dict[str, JsonValue] = {

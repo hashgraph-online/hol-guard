@@ -424,6 +424,7 @@ def _validate_snapshot_binding(snapshot: bytes, claims: HealthLeaseClaims) -> No
     reason_codes = raw.get("reasonCodes")
     if (
         generated.tzinfo is None
+        or not generated_at.endswith("Z")
         or len(generated_at.encode("utf-8")) > 64
         or raw.get("scope") != "machine"
         or not isinstance(raw.get("healthy"), bool)

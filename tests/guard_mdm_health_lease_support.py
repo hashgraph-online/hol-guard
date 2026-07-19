@@ -93,7 +93,7 @@ def snapshot(sequence: int = 0, previous_digest: str | None = None) -> LocalInte
         LocalIntegritySnapshot,
         {
             "schemaVersion": "local-integrity-snapshot.v1",
-            "generatedAt": "2026-07-18T14:00:00+00:00",
+            "generatedAt": "2026-07-18T14:00:00Z",
             "scope": "machine",
             "healthy": True,
             "assuranceLevel": "mdm-managed",
