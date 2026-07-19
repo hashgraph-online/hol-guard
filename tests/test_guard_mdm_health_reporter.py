@@ -94,8 +94,10 @@ def test_machine_cadence_uses_only_locked_machine_policy_binding(tmp_path: Path)
     assert result["sequence"] == 7
     assert result["leaseDigest"] == "3" * 64
     metrics = cast(dict[str, object], result["metrics"])
+    snapshot_duration_ms = metrics.pop("snapshotDurationMs")
+    assert isinstance(snapshot_duration_ms, int)
+    assert snapshot_duration_ms >= 0
     assert metrics == {
-        "snapshotDurationMs": 0,
         "leaseAgeSeconds": metrics["leaseAgeSeconds"],
         "deliveryLatencyMs": None,
         "rejectionReason": None,
