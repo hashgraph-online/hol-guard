@@ -96,7 +96,12 @@ from codex_plugin_scanner.guard.daemon.manager import (
 
 payload = json.loads(sys.stdin.read())
 guard_home = Path(payload["guard_home"]).expanduser().resolve()
-home_dir = Path(payload["home_dir"]).expanduser().resolve()
+home_dir_value = payload.get("home_dir")
+home_dir = (
+    Path(home_dir_value).expanduser().resolve()
+    if isinstance(home_dir_value, str) and home_dir_value.strip()
+    else Path.home().resolve()
+)
 state_path = guard_home / "daemon-state.json"
 if not state_path.is_file():
     print(json.dumps({"status": "not_running"}))

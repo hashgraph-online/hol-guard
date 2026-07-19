@@ -50,11 +50,15 @@ def test_refresh_script_adapts_to_new_manager_signature(
         )
         return "http://127.0.0.1:8123"
 
+    def process_home(_path_type: type[Path]) -> Path:
+        return home_dir
+
     monkeypatch.setattr(manager, "ensure_guard_daemon_after_update", require_new_parameters)
+    monkeypatch.setattr(Path, "home", classmethod(process_home))
     monkeypatch.setattr(
         sys,
         "stdin",
-        io.StringIO(json.dumps({"guard_home": str(guard_home), "home_dir": str(home_dir)})),
+        io.StringIO(json.dumps({"guard_home": str(guard_home)})),
     )
 
     refresh_script = cast(str, update_commands.__dict__["_DAEMON_REFRESH_SCRIPT"])
