@@ -77,6 +77,9 @@ def test_main_push_build_computes_a_registry_derived_stable_version() -> None:
     assert 'elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]' in compute_run
     assert 'CHANNEL="stable"' in compute_run
     assert "verify_release_registry.py" in compute_run
+    assert "list-versions --registry pypi" in compute_run
+    assert "list-versions --registry testpypi" in compute_run
+    assert "'$pypi + $testpypi | unique'" in compute_run
     assert "compute_main_release_version.py" in compute_run
     assert "if" not in stamp_step
     assert "sync_repo_version.py --check" in stamp_run
@@ -220,9 +223,12 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         steps = jobs[job_name]["steps"]
         inspect_step = next(step for step in steps if step.get("name") == "Inspect TestPyPI release state")
         publish_step = next(step for step in steps if str(step.get("uses", "")).startswith("pypa/"))
+        cleanup_step = next(step for step in steps if step.get("name") == "Remove generated upload attestations")
         verify_step = next(step for step in steps if step.get("name") == "Download and verify exact TestPyPI artifacts")
         assert "verify-release --registry testpypi" in inspect_step["run"]
         assert publish_step["if"] == "steps.testpypi.outputs.upload == 'true'"
+        assert cleanup_step["run"] == "rm -f dist/*.publish.attestation"
+        assert steps.index(publish_step) < steps.index(cleanup_step) < steps.index(verify_step)
         assert "--download-dir verified-testpypi" in verify_step["run"]
         assert 'uv tool run --from "$wheel"' in verify_step["run"]
         assert 'status" == "exact"' in verify_step["run"]
@@ -233,7 +239,12 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         step["run"] for step in jobs["publish-main-pypi"]["steps"] if step.get("name") == "Revalidate main publication"
     )
     assert "compute_main_release_version.py" in main_revalidation
+    assert "list-versions --registry pypi" in main_revalidation
+    assert "list-versions --registry testpypi" in main_revalidation
+    assert "'$pypi + $testpypi | unique'" in main_revalidation
+    assert '<<< "$PRIOR_RELEASE_VERSIONS"' in main_revalidation
     assert "--latest-existing" in main_revalidation
+    assert '<<< "$PRIOR_PYPI_VERSIONS"' in main_revalidation
     assert "refs/tags/v${LATEST_VERSION}" in main_revalidation
     assert 'git merge-base --is-ancestor "v${LATEST_VERSION}^{commit}" "$SOURCE_SHA"' in main_revalidation
 
@@ -255,9 +266,12 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         steps = jobs[job_name]["steps"]
         inspect_step = next(step for step in steps if step.get("name") == "Inspect PyPI release state")
         publish_step = next(step for step in steps if str(step.get("uses", "")).startswith("pypa/"))
+        cleanup_step = next(step for step in steps if step.get("name") == "Remove generated upload attestations")
         verify_step = next(step for step in steps if step.get("name") == "Download and verify exact PyPI artifacts")
         assert "verify-release --registry pypi" in inspect_step["run"]
         assert publish_step["if"] == "steps.pypi.outputs.upload == 'true'"
+        assert cleanup_step["run"] == "rm -f dist/*.publish.attestation"
+        assert steps.index(publish_step) < steps.index(cleanup_step) < steps.index(verify_step)
         assert "--download-dir verified-pypi" in verify_step["run"]
         assert 'status" == "exact"' in verify_step["run"]
         assert 'status" != "absent"' in verify_step["run"]
