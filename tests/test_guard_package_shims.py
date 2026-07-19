@@ -347,8 +347,8 @@ def _run_guard_protect_command(
     home_dir: str,
     workspace_dir: str,
     *,
-    policy_retry_blocked_event: Event | None = None,
-    policy_retry_release_event: Event | None = None,
+    delay_retry_policy_integrity_seconds: float = 0.0,
+    refresh_started_event: Event | None = None,
     result_queue: Queue | None = None,
 ) -> None:
     from contextlib import redirect_stderr, redirect_stdout
@@ -356,21 +356,12 @@ def _run_guard_protect_command(
     from codex_plugin_scanner.cli import main as guard_main
     from codex_plugin_scanner.guard.store import GuardStore
 
-    if policy_retry_blocked_event is not None and policy_retry_release_event is not None:
+    if delay_retry_policy_integrity_seconds > 0:
         secret_lookup_count = 0
         control_lookup_count = 0
-        retry_blocked = False
         original_secret_lookup = GuardStore._policy_integrity_secret_material
         original_control_lookup = GuardStore._load_policy_integrity_control_state
-
-        def block_retry_once() -> None:
-            nonlocal retry_blocked
-            if retry_blocked:
-                return
-            retry_blocked = True
-            policy_retry_blocked_event.set()
-            if not policy_retry_release_event.wait(timeout=20):
-                raise TimeoutError("policy integrity retry was not released")
+        original_refresh = GuardStore._refresh_policy_integrity_state
 
         def delayed_secret_lookup(self, *, create: bool):
             nonlocal secret_lookup_count
@@ -379,7 +370,7 @@ def _run_guard_protect_command(
             secret_lookup_count += 1
             if secret_lookup_count == 1:
                 return None, None
-            block_retry_once()
+            time.sleep(delay_retry_policy_integrity_seconds)
             return None, None
 
         def delayed_control_lookup(self, *, create: bool):
@@ -389,11 +380,32 @@ def _run_guard_protect_command(
             control_lookup_count += 1
             if control_lookup_count == 1:
                 return None
-            block_retry_once()
+            time.sleep(delay_retry_policy_integrity_seconds)
             return None
+
+        def refresh_with_signal(
+            self,
+            connection,
+            *,
+            now: str,
+            create_key: bool,
+            secret_material=None,
+            allow_cutover_resign: bool = True,
+        ):
+            if refresh_started_event is not None and not refresh_started_event.is_set():
+                refresh_started_event.set()
+            return original_refresh(
+                self,
+                connection,
+                now=now,
+                create_key=create_key,
+                secret_material=secret_material,
+                allow_cutover_resign=allow_cutover_resign,
+            )
 
         GuardStore._policy_integrity_secret_material = delayed_secret_lookup
         GuardStore._load_policy_integrity_control_state = delayed_control_lookup
+        GuardStore._refresh_policy_integrity_state = refresh_with_signal
 
     stdout = StringIO()
     stderr = StringIO()
@@ -478,25 +490,25 @@ def test_guard_store_init_does_not_hold_sqlite_writer_during_missing_policy_inte
     workspace_dir = tmp_path / "workspace"
     home_dir.mkdir(parents=True, exist_ok=True)
     workspace_dir.mkdir(parents=True, exist_ok=True)
-    retry_blocked_event = Event()
-    retry_release_event = Event()
+    refresh_started_event = Event()
     slow_results: Queue = Queue()
     slow_process = Process(
         target=_run_guard_protect_command,
         args=(str(home_dir), str(workspace_dir)),
         kwargs={
-            "policy_retry_blocked_event": retry_blocked_event,
-            "policy_retry_release_event": retry_release_event,
+            "delay_retry_policy_integrity_seconds": 4.0,
+            "refresh_started_event": refresh_started_event,
             "result_queue": slow_results,
         },
     )
     slow_process.start()
-    assert retry_blocked_event.wait(timeout=5)
+    assert refresh_started_event.wait(timeout=5)
 
+    fast_started = time.monotonic()
     fast_results: Queue = Queue()
     _run_guard_protect_command(str(home_dir), str(workspace_dir), result_queue=fast_results)
+    fast_elapsed = time.monotonic() - fast_started
     fast_result = fast_results.get(timeout=1)
-    retry_release_event.set()
 
     slow_process.join(timeout=20)
     assert slow_process.exitcode == 0
@@ -504,6 +516,7 @@ def test_guard_store_init_does_not_hold_sqlite_writer_during_missing_policy_inte
 
     assert fast_result["returncode"] == 2
     assert slow_result["returncode"] == 2
+    assert fast_elapsed < 3.0
 
 
 def _write_npm_ci_workspace(workspace_dir: Path, *, package_name: str, package_version: str) -> None:

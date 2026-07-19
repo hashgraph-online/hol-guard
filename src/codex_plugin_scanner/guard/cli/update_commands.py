@@ -38,7 +38,6 @@ from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
 from ..redaction import redact_sensitive_text
 from ..store import GuardStore
-from .dashboard_sync import sync_dashboard_assets as _sync_dashboard_assets
 from .install_commands import apply_managed_install
 from .update_artifact import (
     TrustedWheelArtifact,
@@ -632,16 +631,6 @@ def run_guard_update(
         payload["managed_installs"] = repaired_installs
         if len(repaired_installs) == 1:
             payload["managed_install"] = repaired_installs[0]
-    # Sync dashboard assets when the package changed, even if the install still trails PyPI.
-    if not dry_run and (payload.get("status") in {"updated", "current"} or payload.get("changed") is True):
-        dashboard_sync = _sync_dashboard_assets()
-        if dashboard_sync:
-            payload["dashboard_sync"] = dashboard_sync
-            sync_notes = dashboard_sync.get("notes")
-            if isinstance(sync_notes, list) and sync_notes:
-                existing = payload.get("notes")
-                existing_notes = existing if isinstance(existing, list) else []
-                payload["notes"] = [*existing_notes, *sync_notes]
     if context is not None:
         daemon_refresh, daemon_refresh_note = refresh_guard_daemon_after_update(
             context,
