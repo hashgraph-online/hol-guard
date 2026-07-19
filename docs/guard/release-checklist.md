@@ -17,6 +17,8 @@ Before each Guard harness release:
   workspace PATH collision, explicit custom registration, executable replacement, and sanitized-environment coverage.
 - Verify known read-only `gh` commands remain prompt-free and remote mutations still require approval when piped
   through output formatters; see [GitHub CLI Capability Boundary](github-command-capability-security.md).
+- Exercise device-key and observer-credential rotation/revocation using [the Protection Credential Rotation and Revocation Runbook](protection-credential-rotation-runbook.md), and attach the redacted acceptance record.
+- Walk the confirmed deletion, false-positive/expected-offline, authorized-removal, transfer, and retirement cases in [the Protection Incident Response Runbook](protection-incident-response-runbook.md).
 
 For GitHub Action pin updates, keep Dependabot updates as individual pull requests. Review the upstream changelog
 between the old and new commits, verify permission and runtime changes, retain the full commit SHA, and require the
