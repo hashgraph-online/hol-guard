@@ -82,6 +82,7 @@ _DAEMON_REFRESH_TIMEOUT_SECONDS = 35.0
 _DAEMON_REFRESH_SCRIPT = """
 from __future__ import annotations
 
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -95,6 +96,7 @@ from codex_plugin_scanner.guard.daemon.manager import (
 
 payload = json.loads(sys.stdin.read())
 guard_home = Path(payload["guard_home"]).expanduser().resolve()
+home_dir = Path(payload["home_dir"]).expanduser().resolve()
 state_path = guard_home / "daemon-state.json"
 if not state_path.is_file():
     print(json.dumps({"status": "not_running"}))
@@ -107,7 +109,13 @@ preferred_port = state.get("port") if isinstance(state.get("port"), int) else No
 retired = retire_all_guard_daemons_for_home(guard_home)
 clear_guard_daemon_state(guard_home)
 repair_approval_center_locator(guard_home)
-daemon_url = ensure_guard_daemon_after_update(guard_home, preferred_port=preferred_port)
+refresh_parameters = inspect.signature(ensure_guard_daemon_after_update).parameters
+refresh_kwargs = {"preferred_port": preferred_port}
+if "home_dir" in refresh_parameters:
+    refresh_kwargs["home_dir"] = home_dir
+if "allow_windows_job_breakaway" in refresh_parameters:
+    refresh_kwargs["allow_windows_job_breakaway"] = True
+daemon_url = ensure_guard_daemon_after_update(guard_home, **refresh_kwargs)
 print(json.dumps({"status": "restarted", "retired": retired, "daemon_url": daemon_url}))
 """.strip()
 
@@ -1268,7 +1276,7 @@ def refresh_guard_daemon_after_update(context: HarnessContext) -> tuple[dict[str
         refresh_env.pop("PYTHONPATH", None)
         result = subprocess.run(
             [sys.executable, *_trusted_python_flags(), "-c", _DAEMON_REFRESH_SCRIPT],
-            input=json.dumps({"guard_home": str(context.guard_home)}),
+            input=json.dumps({"guard_home": str(context.guard_home), "home_dir": str(context.home_dir)}),
             capture_output=True,
             check=False,
             cwd=str(_trusted_import_root()),

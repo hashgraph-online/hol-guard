@@ -34,7 +34,10 @@ def test_daemon_refresh_after_update_uses_fresh_interpreter(tmp_path: Path, monk
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         assert command[-2:] == ["-c", update_commands._DAEMON_REFRESH_SCRIPT]
-        assert json.loads(str(kwargs["input"])) == {"guard_home": str(context.guard_home)}
+        assert json.loads(str(kwargs["input"])) == {
+            "guard_home": str(context.guard_home),
+            "home_dir": str(context.home_dir),
+        }
         return subprocess.CompletedProcess(command, 0, '{"status":"restarted","retired":[123]}', "")
 
     monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
