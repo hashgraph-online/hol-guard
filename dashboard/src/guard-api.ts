@@ -520,6 +520,16 @@ async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promi
   return fetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
 }
 
+export async function fetchCommandActivityApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  if (
+    typeof input !== "string" ||
+    (!/^\/v1\/command-activity(?:[/?]|$)/.test(input) && !/^\/v1\/command-extensions(?:\?|$)/.test(input))
+  ) {
+    throw new Error("Invalid command activity API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
 function guardAuthHeaders(): HeadersInit {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
