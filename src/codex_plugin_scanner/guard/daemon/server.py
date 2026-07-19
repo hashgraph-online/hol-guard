@@ -1708,14 +1708,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not self._origin_is_allowed_for_request(parsed.path, path_parts):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
-        body = self._read_delete_body() if parsed.path == "/v1/command-activity" else None
-        if not self._header_token_is_valid(payload=body):
+        if not self._header_token_is_valid():
             self._write_json(
                 {"error": "unauthorized"},
                 status=401,
                 extra_headers=self._cors_headers_for_request(),
             )
             return
+        body = self._read_delete_body() if parsed.path == "/v1/command-activity" else None
         store = self.server.store  # type: ignore[attr-defined]
         if parsed.path == "/v1/command-activity":
             if body is None:

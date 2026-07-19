@@ -187,6 +187,8 @@ def _stable_distinct(
     *,
     allowed: frozenset[str],
 ) -> list[str]:
+    if not allowed:
+        return []
     ordered_allowed = tuple(sorted(allowed))
     placeholders = ", ".join("?" for _ in ordered_allowed)
     rows = cast(
