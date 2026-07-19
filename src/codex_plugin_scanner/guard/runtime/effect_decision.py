@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass
 from enum import Enum
@@ -88,6 +90,7 @@ class DecisionFactor:
     segment_ref: str | None = None
     operation_ref: str | None = None
     producer_ref: str | None = None
+    evidence_digest: str | None = None
     assessment: EffectAssessment | None = None
     proof: PositiveProof | None = None
 
@@ -108,6 +111,8 @@ class DecisionFactor:
             raise ValueError("operation_ref must be a canonical reference")
         if self.producer_ref is not None and _REFERENCE.fullmatch(self.producer_ref) is None:
             raise ValueError("producer_ref must be a canonical reference")
+        if self.evidence_digest is not None and _SHA256.fullmatch(self.evidence_digest) is None:
+            raise ValueError("evidence_digest must be a lowercase SHA-256 digest")
         if assessment is not None and not isinstance(assessment, EffectAssessment):
             raise ValueError("assessment must be an EffectAssessment")
         if self.source is DecisionFactorSource.EFFECT and self.assessment is None:
@@ -142,6 +147,7 @@ class DecisionFactor:
             self.segment_ref or "",
             self.operation_ref or "",
             self.producer_ref or "",
+            self.evidence_digest or "",
             self.source.value,
             self.reason_code,
             self.basis.action_floor,
@@ -264,6 +270,7 @@ def factors_from_extension_evidence(batch: ExtensionEvidenceBatch) -> tuple[Deci
                     f"{evidence.identity.extension_id}/{evidence.identity.extension_version}/"
                     f"{evidence.identity.rule_id}/{evidence.identity.rule_version}"
                 ),
+                evidence_digest=_extension_evidence_digest(evidence.semantic_key),
             )
         )
     return tuple(sorted(factors, key=lambda item: item.semantic_key))
@@ -318,6 +325,16 @@ def _proof_key(proof: PositiveProof | None) -> tuple[str, ...]:
         ",".join(sorted(item.value for item in proof.satisfied_requirements)),
         "enforced" if proof.enforced else "not-enforced",
     )
+
+
+def _extension_evidence_digest(semantic_key: object) -> str:
+    payload = json.dumps(
+        {"schema": "guard-extension-evidence-factor-v1", "semantic_key": semantic_key},
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
+    return hashlib.sha256(b"guard-extension-evidence-factor-v1\x00" + payload).hexdigest()
 
 
 def _require_factor_tuple(value: object) -> tuple[DecisionFactor, ...]:

@@ -245,3 +245,11 @@ def test_owned_safe_variant_never_suppresses_a_stronger_sibling() -> None:
     decision = evaluate_effect_decision(EffectDecisionRequest(factors))
     assert [factor.reason_code for factor in factors] == ["sibling.matched"]
     assert decision.action == "block"
+
+
+def test_extension_factor_identity_binds_the_complete_evidence_record() -> None:
+    first = _evidence("shared", "review")
+    second = replace(first, severity=EvidenceSeverity.CRITICAL)
+    factors = factors_from_extension_evidence(ExtensionEvidenceBatch((first, second)))
+    assert len({factor.evidence_digest for factor in factors}) == 2
+    assert evaluate_effect_decision(EffectDecisionRequest(factors)).action == "review"
