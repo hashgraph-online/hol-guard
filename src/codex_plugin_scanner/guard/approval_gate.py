@@ -72,6 +72,7 @@ ApprovalGatePurpose = Literal[
     "approval_decision",
     "policy_write",
     "policy_clear",
+    "evidence_clear",
     "queue_clear",
     "settings_write",
     "native_policy",
