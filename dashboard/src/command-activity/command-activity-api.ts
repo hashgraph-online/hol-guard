@@ -28,6 +28,10 @@ type ErrorPayload = { error?: unknown; message?: unknown };
 export type CommandActivityTransport = (input: RequestInfo, init?: RequestInit) => Promise<Response>;
 const MAX_ERROR_RESPONSE_BYTES = 16_384;
 const MAX_JSON_RESPONSE_BYTES = 2_097_152;
+const FIXED_RESPONSE_ERRORS = new Set([
+  "Command activity response too large",
+  "Command activity response unavailable",
+]);
 const API_ERROR_CODES = new Set([
   "activity_not_found",
   "approval_gate_grant_expired",
@@ -137,7 +141,8 @@ async function requestJson(path: string, init: RequestInit | undefined, transpor
   if (!response.ok) throw await responseError(response);
   try {
     return await readBoundedJson(response, MAX_JSON_RESPONSE_BYTES);
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && FIXED_RESPONSE_ERRORS.has(error.message)) throw error;
     throw new Error("Invalid command activity JSON payload");
   }
 }
@@ -164,7 +169,7 @@ export async function fetchCommandActivityAnalytics(
 }
 
 export async function fetchCommandExtensionsPage(
-  input: { limit?: number; cursor?: string | null },
+  input: { limit?: number; cursor?: string | null } = {},
   signal: AbortSignal | undefined,
   transport: CommandActivityTransport,
 ): Promise<CommandExtensionsPage> {
@@ -222,7 +227,7 @@ export interface ClearCommandActivityProof {
 }
 
 export async function clearCommandActivityEvidence(
-  proof: ClearCommandActivityProof,
+  proof: ClearCommandActivityProof = {},
   signal: AbortSignal | undefined,
   transport: CommandActivityTransport,
 ): Promise<CommandActivityDeletionResult> {

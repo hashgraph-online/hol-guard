@@ -1450,4 +1450,13 @@ try {
 assert(hostileCommandActivityError instanceof Error, "absolute command activity URLs are rejected");
 assert(hostileCommandActivityFetches === 0, "rejected URLs cannot receive the dashboard session token");
 
+hostileCommandActivityError = null;
+try {
+  await fetchCommandActivityApi("/v1/command-activity/../../settings");
+} catch (error) {
+  hostileCommandActivityError = error;
+}
+assert(hostileCommandActivityError instanceof Error, "command activity path traversal is rejected");
+assert(hostileCommandActivityFetches === 0, "path traversal cannot receive the dashboard session token");
+
 console.log("guard-api.test.ts: all tests passed");

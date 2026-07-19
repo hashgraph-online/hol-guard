@@ -521,10 +521,12 @@ async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promi
 }
 
 export async function fetchCommandActivityApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
-  if (
-    typeof input !== "string" ||
-    (!/^\/v1\/command-activity(?:[/?]|$)/.test(input) && !/^\/v1\/command-extensions(?:\?|$)/.test(input))
-  ) {
+  const approvedPath =
+    typeof input === "string" &&
+    /^\/v1\/(?:command-activity(?:\/(?:analytics|diagnostics|events|feedback))?|command-extensions)(?:\?[^#]*)?$/.test(
+      input,
+    );
+  if (!approvedPath) {
     throw new Error("Invalid command activity API path");
   }
   return fetchWithGuardAuth(input, init);

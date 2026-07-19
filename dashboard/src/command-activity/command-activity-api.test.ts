@@ -4,6 +4,7 @@ import {
   createCommandActivityClient,
   fetchCommandActivityAnalytics,
   fetchCommandActivityPage,
+  fetchCommandExtensionsPage,
   parseCommandActivitySseFrame,
   recordCommandActivityFeedback,
   streamCommandActivityInvalidations,
@@ -160,7 +161,7 @@ assert(deletion.deleted.activities === 1, "deletion results normalize");
 responder = () => Response.json({ error: "approval_gate_totp_required" }, { status: 403 });
 let deletionError: unknown;
 try {
-  await clearCommandActivityEvidence({}, undefined, transport);
+  await clearCommandActivityEvidence(undefined, undefined, transport);
 } catch (error) {
   deletionError = error;
 }
@@ -224,9 +225,36 @@ try {
   oversizedResponseError = error;
 }
 assert(
-  oversizedResponseError instanceof Error && oversizedResponseError.message === "Invalid command activity JSON payload",
+  oversizedResponseError instanceof Error && oversizedResponseError.message === "Command activity response too large",
   "success responses are byte-bounded before JSON normalization",
 );
+
+const streamSecret = "Command activity response SECRET_STREAM_DETAIL";
+responder = () =>
+  new Response(
+    new ReadableStream<Uint8Array>({
+      start(streamController) {
+        streamController.error(new Error(streamSecret));
+      },
+    }),
+    { status: 200 },
+  );
+let streamResponseError: unknown;
+try {
+  await fetchCommandActivityPage(DEFAULT_COMMAND_ACTIVITY_FILTERS, null, undefined, transport);
+} catch (error) {
+  streamResponseError = error;
+}
+assert(
+  streamResponseError instanceof Error && streamResponseError.message === "Invalid command activity JSON payload",
+  "arbitrary stream error detail is replaced with fixed copy",
+);
+assert(!streamResponseError.message.includes(streamSecret), "stream error detail cannot escape the client boundary");
+
+responder = () =>
+  Response.json({ schema_version: 2, source: "built-in", items: [], next_cursor: null });
+const defaultExtensions = await fetchCommandExtensionsPage(undefined, undefined, transport);
+assert(defaultExtensions.items.length === 0, "omitted extension filters use bounded defaults");
 
 const invalidationFrame = 'id: 9\ndata: {"event":"command_activity_invalidated","activity_id":"activity:01"}';
 const parsedInvalidation = parseCommandActivitySseFrame(invalidationFrame);
