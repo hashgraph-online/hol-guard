@@ -245,7 +245,7 @@ def run_observer_adapter_conformance(adapter_id: str, adapter: ObserverAdapter) 
     for case in observer_conformance_cases(adapter_id):
         result, output = _run_case(adapter, case)
         results.append(result)
-        outputs[case.case_id] = output
+        outputs[case.case_id] = copy.deepcopy(output)
     duplicate_a = outputs["duplicate-a"].get("assertion")
     duplicate_b = outputs["duplicate-b"].get("assertion")
     duplicate_valid = duplicate_a == duplicate_b and isinstance(duplicate_a, dict)

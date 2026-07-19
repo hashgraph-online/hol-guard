@@ -114,3 +114,25 @@ def test_adapter_cannot_mutate_fixture_to_bypass_fidelity_validation() -> None:
     result = next(result for result in report.results if result.case_id == "valid-current")
     assert not result.passed
     assert result.detail == "detection_fidelity_invalid"
+
+
+def test_duplicate_comparison_snapshots_shared_mutable_outputs() -> None:
+    shared_result: dict[str, JsonValue] = {}
+
+    def shared_mutable_adapter(fixture: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        result = conforming_adapter(fixture)
+        if fixture["caseId"] not in {"duplicate-a", "duplicate-b"}:
+            return result
+        if fixture["caseId"] == "duplicate-b":
+            assertion = dict(cast(dict[str, JsonValue], result["assertion"]))
+            assertion["assertionId"] = "assertion-mutated-on-second-call"
+            result["assertion"] = sign_observer_assertion(assertion)
+        shared_result.clear()
+        shared_result.update(result)
+        return shared_result
+
+    report = run_observer_adapter_conformance("shared-mutable-adapter", shared_mutable_adapter)
+
+    result = next(result for result in report.results if result.case_id == "duplicate-idempotency")
+    assert not result.passed
+    assert result.detail == "duplicate_output_changed"
