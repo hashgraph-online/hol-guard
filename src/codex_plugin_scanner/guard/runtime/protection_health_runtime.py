@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 from .protection_health import (
@@ -13,6 +14,8 @@ from .protection_health import (
 )
 
 _STABLE_HARNESS = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
+_DAEMON_HEARTBEAT_MAX_AGE = timedelta(seconds=30)
+_DAEMON_HEARTBEAT_FUTURE_TOLERANCE = timedelta(seconds=5)
 
 
 class CommandActivityHealth(Protocol):
@@ -66,6 +69,26 @@ def _rule_pack_signal() -> ProtectionSignal:
     return _signal(ProtectionCheckStatus.UNKNOWN, "rule_pack_runtime_proof_unavailable")
 
 
+def _daemon_signal(runtime_state: Mapping[str, object] | None, *, now: datetime) -> ProtectionSignal:
+    if runtime_state is None:
+        return _signal(ProtectionCheckStatus.FAIL, "daemon_runtime_unavailable")
+    heartbeat_value = runtime_state.get("last_heartbeat_at")
+    if not isinstance(heartbeat_value, str):
+        return _signal(ProtectionCheckStatus.UNKNOWN, "daemon_heartbeat_unavailable")
+    try:
+        heartbeat = datetime.fromisoformat(heartbeat_value.replace("Z", "+00:00"))
+    except ValueError:
+        return _signal(ProtectionCheckStatus.UNKNOWN, "daemon_heartbeat_invalid")
+    if heartbeat.tzinfo is None or now.tzinfo is None:
+        return _signal(ProtectionCheckStatus.UNKNOWN, "daemon_heartbeat_invalid")
+    age = now.astimezone(timezone.utc) - heartbeat.astimezone(timezone.utc)
+    if age < -_DAEMON_HEARTBEAT_FUTURE_TOLERANCE:
+        return _signal(ProtectionCheckStatus.UNKNOWN, "daemon_heartbeat_future")
+    if age > _DAEMON_HEARTBEAT_MAX_AGE:
+        return _signal(ProtectionCheckStatus.FAIL, "daemon_heartbeat_stale")
+    return _signal(ProtectionCheckStatus.PASS, "daemon_healthy")
+
+
 def _decision_stream_signal(store: ProtectionHealthStore) -> ProtectionSignal:
     try:
         health = store.get_command_activity_persistence_health()
@@ -96,16 +119,14 @@ def build_runtime_protection_health(
     runtime_state: Mapping[str, object] | None,
     managed_installs: Sequence[Mapping[str, object]],
     trust_status: Mapping[str, object],
+    now: datetime,
 ) -> dict[str, object]:
     """Build current health without treating configuration as runtime proof."""
 
     harness_signals = _hook_signals(managed_installs)
     signals = {
         "harness_hooks": _global_hook_signal(harness_signals),
-        "daemon": _signal(
-            ProtectionCheckStatus.PASS if runtime_state is not None else ProtectionCheckStatus.FAIL,
-            "daemon_healthy" if runtime_state is not None else "daemon_runtime_unavailable",
-        ),
+        "daemon": _daemon_signal(runtime_state, now=now),
         "policy_engine": _signal(ProtectionCheckStatus.UNKNOWN, "policy_engine_health_unavailable"),
         "rule_packs": _rule_pack_signal(),
         "decision_plane_compatibility": _signal(ProtectionCheckStatus.UNKNOWN, "decision_plane_proof_unavailable"),

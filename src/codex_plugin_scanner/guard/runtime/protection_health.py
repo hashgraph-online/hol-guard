@@ -95,7 +95,7 @@ def _copy_for(state: ProtectionState) -> tuple[str, str]:
         return "Protected", "All required protection checks have current proof."
     if state is ProtectionState.DEGRADED:
         return "Degraded", "One or more required protection checks failed or remain unproven."
-    return "Partially protected", "Guard cannot prove every required protection check."
+    return "Partially protected", "Core protection passes, but decision-stream evidence is incomplete."
 
 
 def evaluate_protection_health(

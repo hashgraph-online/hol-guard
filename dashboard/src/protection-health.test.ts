@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   normalizeProtectionHealth,
   PROTECTION_CHECK_IDS,
+  protectionHeadlineFor,
   protectionHealthFor,
 } from "./protection-health";
 import type { GuardProtectionCheck, GuardRuntimeSnapshot } from "./guard-types";
@@ -67,13 +68,49 @@ const oversizedApps = Array.from({ length: 101 }, (_, index) => ({
 }));
 assert.equal(normalizeProtectionHealth({ ...payload(checks()), apps: oversizedApps }).apps.length, 0);
 
+const duplicateApps = [
+  { harness: "codex", ...payload(checks()) },
+  { harness: "codex", ...payload(decisionFailure) },
+];
+const duplicateAppHealth = normalizeProtectionHealth({ ...payload(checks()), apps: duplicateApps });
+assert.equal(duplicateAppHealth.state, "degraded");
+assert.equal(duplicateAppHealth.apps.length, 0);
+
 const scoped = normalizeProtectionHealth({
   ...payload(checks()),
   apps: [{ harness: "codex", ...payload(checks()) }],
 });
-const snapshot = { protection_health: scoped } as GuardRuntimeSnapshot;
+const snapshot = { protection_health: scoped };
 assert.equal(protectionHealthFor(snapshot, "codex").state, "protected");
 assert.equal(protectionHealthFor(snapshot, "unknown").state, "degraded");
+
+const degradedHealth = normalizeProtectionHealth(payload(decisionFailure));
+const contradictorySnapshot: Pick<GuardRuntimeSnapshot, "protection_health"> = {
+  protection_health: {
+    ...degradedHealth,
+    state: "protected",
+    label: "Protected",
+  },
+};
+assert.equal(protectionHealthFor(contradictorySnapshot).state, "degraded");
+assert.equal(protectionHealthFor(contradictorySnapshot).label, "Degraded");
+
+assert.deepEqual(
+  protectionHeadlineFor({ health: degradedHealth, runtimeActive: true, pendingCount: 0 }),
+  {
+    headline_state: "degraded",
+    headline_label: "Degraded",
+    headline_detail: "One or more required protection checks failed or remain unproven.",
+  },
+);
+assert.equal(
+  protectionHeadlineFor({ health: protectedHealth, runtimeActive: true, pendingCount: 1 }).headline_state,
+  "blocked",
+);
+assert.equal(
+  protectionHeadlineFor({ health: protectedHealth, runtimeActive: false, pendingCount: 0 }).headline_state,
+  "setup",
+);
 
 const appDetailSource = readFileSync(new URL("./apps/app-detail-workspace.tsx", import.meta.url), "utf8");
 const fleetSource = readFileSync(new URL("./fleet-workspace.tsx", import.meta.url), "utf8");

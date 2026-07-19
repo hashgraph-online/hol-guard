@@ -4,6 +4,7 @@ import type {
   GuardProtectionCheckStatus,
   GuardProtectionHealth,
   GuardProtectionState,
+  GuardHeadlineState,
   GuardRuntimeSnapshot,
 } from "./guard-types";
 
@@ -114,6 +115,8 @@ export function normalizeProtectionHealth(value: unknown): GuardProtectionHealth
   }
   const apps = value.apps.map(normalizeApp);
   if (apps.some((app) => app === null)) return unavailableProtectionHealth();
+  const appIds = new Set((apps as GuardProtectionAppHealth[]).map((app) => app.harness));
+  if (appIds.size !== apps.length) return unavailableProtectionHealth();
   return {
     schema_version: "guard.protection-health.v1",
     ...healthFromChecks(checks),
@@ -121,13 +124,48 @@ export function normalizeProtectionHealth(value: unknown): GuardProtectionHealth
   };
 }
 
-export function protectionHealthFor(snapshot: GuardRuntimeSnapshot): GuardProtectionHealth;
-export function protectionHealthFor(snapshot: GuardRuntimeSnapshot, harness: string): GuardProtectionAppHealth;
+export function protectionHeadlineFor(input: {
+  health: GuardProtectionHealth;
+  runtimeActive: boolean;
+  pendingCount: number;
+}): {
+  headline_state: GuardHeadlineState;
+  headline_label: string;
+  headline_detail: string;
+} {
+  if (!input.runtimeActive) {
+    return {
+      headline_state: "setup",
+      headline_label: "Setup required",
+      headline_detail: "The local Guard runtime is offline. Start the daemon or rerun hol-guard bootstrap.",
+    };
+  }
+  if (input.pendingCount > 0) {
+    return {
+      headline_state: "blocked",
+      headline_label: "Blocked",
+      headline_detail: "A blocked launch is waiting for review in the current request queue.",
+    };
+  }
+  return {
+    headline_state: input.health.state,
+    headline_label: input.health.label,
+    headline_detail: input.health.detail,
+  };
+}
+
 export function protectionHealthFor(
-  snapshot: GuardRuntimeSnapshot,
+  snapshot: Pick<GuardRuntimeSnapshot, "protection_health">,
+): GuardProtectionHealth;
+export function protectionHealthFor(
+  snapshot: Pick<GuardRuntimeSnapshot, "protection_health">,
+  harness: string,
+): GuardProtectionAppHealth;
+export function protectionHealthFor(
+  snapshot: Pick<GuardRuntimeSnapshot, "protection_health">,
   harness: string | null = null,
 ): GuardProtectionHealth | GuardProtectionAppHealth {
-  const health = snapshot.protection_health ?? unavailableProtectionHealth();
+  const health = normalizeProtectionHealth(snapshot.protection_health);
   if (harness === null) return health;
   const scoped = health.apps.find((app) => app.harness === harness);
   if (scoped) return scoped;

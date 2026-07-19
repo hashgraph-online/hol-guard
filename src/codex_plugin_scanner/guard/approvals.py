@@ -1172,6 +1172,7 @@ def build_runtime_snapshot(
         runtime_state=runtime_state,
         managed_installs=managed_installs,
         trust_status=trust_status,
+        now=datetime.fromisoformat(snapshot_now.replace("Z", "+00:00")),
     )
     headline_state = _resolve_runtime_headline_state(
         pending_count=pending_count,

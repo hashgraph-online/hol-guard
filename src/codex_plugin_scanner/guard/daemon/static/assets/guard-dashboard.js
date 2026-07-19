@@ -15021,14 +15021,37 @@ function normalizeProtectionHealth(value) {
   }
   const apps = value.apps.map(normalizeApp);
   if (apps.some((app) => app === null)) return unavailableProtectionHealth();
+  const appIds = new Set(apps.map((app) => app.harness));
+  if (appIds.size !== apps.length) return unavailableProtectionHealth();
   return {
     schema_version: "guard.protection-health.v1",
     ...healthFromChecks(checks),
     apps
   };
 }
+function protectionHeadlineFor(input) {
+  if (!input.runtimeActive) {
+    return {
+      headline_state: "setup",
+      headline_label: "Setup required",
+      headline_detail: "The local Guard runtime is offline. Start the daemon or rerun hol-guard bootstrap."
+    };
+  }
+  if (input.pendingCount > 0) {
+    return {
+      headline_state: "blocked",
+      headline_label: "Blocked",
+      headline_detail: "A blocked launch is waiting for review in the current request queue."
+    };
+  }
+  return {
+    headline_state: input.health.state,
+    headline_label: input.health.label,
+    headline_detail: input.health.detail
+  };
+}
 function protectionHealthFor(snapshot, harness = null) {
-  const health = snapshot.protection_health ?? unavailableProtectionHealth();
+  const health = normalizeProtectionHealth(snapshot.protection_health);
   if (harness === null) return health;
   const scoped = health.apps.find((app) => app.harness === harness);
   if (scoped) return scoped;
@@ -15210,6 +15233,8 @@ const GUARD_DAEMON_PORT_RANGE = 1e3;
 const GUARD_DAEMON_DISCOVERY_PROBE_COUNT = 25;
 const GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE = 5;
 const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
+const RUNTIME_HEARTBEAT_MAX_AGE_MS = 3e4;
+const RUNTIME_HEARTBEAT_FUTURE_TOLERANCE_MS = 5e3;
 let guardTokenOverride = null;
 let guardTokenLocationKey = null;
 async function readJson(input, init) {
@@ -15869,15 +15894,73 @@ function normalizeCloudCommandCapability(raw) {
   };
 }
 function normalizeRuntimeSnapshot(snapshot) {
+  const protectionHealth = normalizeProtectionHealth(snapshot.protection_health);
+  const runtimeState = normalizeRuntimeState(snapshot.runtime_state);
+  const headline = protectionHeadlineFor({
+    health: protectionHealth,
+    runtimeActive: runtimeState !== null,
+    pendingCount: snapshot.pending_count
+  });
   return {
     ...snapshot,
+    ...headline,
+    runtime_state: runtimeState,
     items: normalizeApprovalRequests(snapshot.items),
     queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count),
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
     managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
     cloud_command_capability: normalizeCloudCommandCapability(snapshot.cloud_command_capability),
-    protection_health: normalizeProtectionHealth(snapshot.protection_health)
+    protection_health: protectionHealth
   };
+}
+function normalizeRuntimeState(raw) {
+  if (!isRecord$1(raw)) {
+    return null;
+  }
+  const sessionId = raw["session_id"];
+  const daemonHost = raw["daemon_host"];
+  const daemonPort = raw["daemon_port"];
+  const startedAt = raw["started_at"];
+  const lastHeartbeatAt = raw["last_heartbeat_at"];
+  const approvalCenterUrl = raw["approval_center_url"];
+  if (typeof sessionId !== "string" || sessionId.length === 0 || typeof daemonHost !== "string" || !isLoopbackRuntimeHost(daemonHost) || typeof daemonPort !== "number" || !Number.isInteger(daemonPort) || daemonPort <= 0 || daemonPort > 65535 || typeof startedAt !== "string" || parseAwareTimestamp(startedAt) === null || typeof lastHeartbeatAt !== "string" || !isFreshAwareTimestamp(lastHeartbeatAt) || typeof approvalCenterUrl !== "string" || !isMatchingRuntimeUrl(approvalCenterUrl, daemonHost, daemonPort)) {
+    return null;
+  }
+  return {
+    session_id: sessionId,
+    daemon_host: daemonHost,
+    daemon_port: daemonPort,
+    started_at: startedAt,
+    last_heartbeat_at: lastHeartbeatAt,
+    approval_center_url: approvalCenterUrl
+  };
+}
+function parseAwareTimestamp(value) {
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/u.test(value)) {
+    return null;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+function isFreshAwareTimestamp(value) {
+  const timestamp = parseAwareTimestamp(value);
+  if (timestamp === null) {
+    return false;
+  }
+  const now2 = Date.now();
+  return timestamp >= now2 - RUNTIME_HEARTBEAT_MAX_AGE_MS && timestamp <= now2 + RUNTIME_HEARTBEAT_FUTURE_TOLERANCE_MS;
+}
+function isLoopbackRuntimeHost(value) {
+  return value === "127.0.0.1" || value === "localhost" || value === "::1";
+}
+function isMatchingRuntimeUrl(value, daemonHost, daemonPort) {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.startsWith("[") ? url.hostname.slice(1, -1) : url.hostname;
+    return url.protocol === "http:" && hostname === daemonHost && Number(url.port) === daemonPort && url.username.length === 0 && url.password.length === 0 && url.pathname === "/" && url.search.length === 0 && url.hash.length === 0;
+  } catch {
+    return false;
+  }
 }
 function normalizeQueueCopy(raw) {
   if (!isRecord$1(raw)) {
@@ -18313,10 +18396,36 @@ function GuardHero(props) {
   } else if (props.status !== "clear") {
     bgClass = "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.06)_100%)]";
   }
-  const statusBadge = props.status === "needs_review" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Needs your choice" }) : props.status === "degraded" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Degraded" }) : props.status === "partial" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "info", children: "Partially protected" }) : props.status === "neutral" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "info", children: "Configuration" }) : props.status === "setup_gap" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Setup needed" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Protected" });
-  const HeroIcon = props.status === "needs_review" ? HiMiniExclamationTriangle : props.status === "setup_gap" || props.status === "partial" || props.status === "degraded" || props.status === "neutral" ? HiMiniInformationCircle : HiMiniShieldCheck;
-  const iconColorClass = props.status === "needs_review" ? "text-brand-attention" : props.status === "setup_gap" || props.status === "partial" || props.status === "neutral" ? "text-brand-blue" : props.status === "degraded" ? "text-brand-attention" : "text-brand-green";
-  const iconBgClass = props.status === "needs_review" ? "bg-brand-attention/10" : props.status === "setup_gap" || props.status === "partial" || props.status === "neutral" ? "bg-brand-blue/10" : props.status === "degraded" ? "bg-brand-attention/10" : "bg-brand-green/10";
+  let statusBadge = /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Protected" });
+  let HeroIcon = HiMiniShieldCheck;
+  let iconColorClass = "text-brand-green";
+  let iconBgClass = "bg-brand-green/10";
+  if (props.status === "needs_review") {
+    statusBadge = /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Needs your choice" });
+    HeroIcon = HiMiniExclamationTriangle;
+    iconColorClass = "text-brand-attention";
+    iconBgClass = "bg-brand-attention/10";
+  } else if (props.status === "degraded") {
+    statusBadge = /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Degraded" });
+    HeroIcon = HiMiniInformationCircle;
+    iconColorClass = "text-brand-attention";
+    iconBgClass = "bg-brand-attention/10";
+  } else if (props.status === "partial") {
+    statusBadge = /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "info", children: "Partially protected" });
+    HeroIcon = HiMiniInformationCircle;
+    iconColorClass = "text-brand-blue";
+    iconBgClass = "bg-brand-blue/10";
+  } else if (props.status === "neutral") {
+    statusBadge = /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "info", children: "Configuration" });
+    HeroIcon = HiMiniInformationCircle;
+    iconColorClass = "text-brand-blue";
+    iconBgClass = "bg-brand-blue/10";
+  } else if (props.status === "setup_gap") {
+    statusBadge = /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Setup needed" });
+    HeroIcon = HiMiniInformationCircle;
+    iconColorClass = "text-brand-blue";
+    iconBgClass = "bg-brand-blue/10";
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "section",
     {
@@ -26303,6 +26412,23 @@ function useQueueBulkApprove(props) {
     }
   };
 }
+const PROTECTION_APPEARANCE = {
+  protected: {
+    Icon: HiMiniShieldCheck,
+    cardClass: "border-emerald-200/60 bg-emerald-50/30",
+    iconClass: "bg-brand-green/10 text-brand-green"
+  },
+  partial: {
+    Icon: HiMiniInformationCircle,
+    cardClass: "border-brand-blue/20 bg-brand-blue/[0.04]",
+    iconClass: "bg-brand-blue/10 text-brand-blue"
+  },
+  degraded: {
+    Icon: HiMiniExclamationTriangle,
+    cardClass: "border-brand-attention/20 bg-brand-attention/[0.04]",
+    iconClass: "bg-brand-attention/10 text-brand-attention"
+  }
+};
 const scopeChoices = [
   {
     value: "artifact",
@@ -27573,18 +27699,11 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
   const protectionHealth = runtime ? protectionHealthFor(runtime) : unavailableProtectionHealth();
   const protectedAppsCount = protectionHealth.apps.filter((app) => app.state === "protected").length;
   const heroStatus = protectionHealth.state === "protected" ? "clear" : protectionHealth.state;
-  let ProtectionIcon = HiMiniShieldCheck;
-  let healthCardClass = "border-emerald-200/60 bg-emerald-50/30";
-  let healthIconClass = "bg-brand-green/10 text-brand-green";
-  if (protectionHealth.state === "partial") {
-    ProtectionIcon = HiMiniInformationCircle;
-    healthCardClass = "border-brand-blue/20 bg-brand-blue/[0.04]";
-    healthIconClass = "bg-brand-blue/10 text-brand-blue";
-  } else if (protectionHealth.state === "degraded") {
-    ProtectionIcon = HiMiniExclamationTriangle;
-    healthCardClass = "border-brand-attention/20 bg-brand-attention/[0.04]";
-    healthIconClass = "bg-brand-attention/10 text-brand-attention";
-  }
+  const {
+    Icon: ProtectionIcon,
+    cardClass: healthCardClass,
+    iconClass: healthIconClass
+  } = PROTECTION_APPEARANCE[protectionHealth.state];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       GuardHero,

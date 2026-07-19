@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import cast
 
 from codex_plugin_scanner.guard.runtime.protection_health import (
@@ -14,6 +15,8 @@ from codex_plugin_scanner.guard.runtime.protection_health import (
 from codex_plugin_scanner.guard.runtime.protection_health_runtime import (
     build_runtime_protection_health,
 )
+
+_NOW = datetime(2026, 7, 19, 15, 0, tzinfo=timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -45,9 +48,10 @@ def _payload(
 ) -> dict[str, object]:
     return build_runtime_protection_health(
         store=_Store(count=activity_count, dropped=dropped, errors=errors),
-        runtime_state={"alive": True} if runtime_state is None else runtime_state,
+        runtime_state={"last_heartbeat_at": _NOW.isoformat()} if runtime_state is None else runtime_state,
         managed_installs=installs or [],
         trust_status=trust or {},
+        now=_NOW,
     )
 
 
@@ -120,6 +124,20 @@ def test_duplicate_harness_rows_preserve_the_most_restrictive_signal() -> None:
         }
 
 
+def test_stale_or_invalid_runtime_rows_never_prove_daemon_health() -> None:
+    stale = _payload(runtime_state={"last_heartbeat_at": (_NOW - timedelta(seconds=31)).isoformat()})
+    invalid = _payload(runtime_state={"last_heartbeat_at": "not-a-time"})
+    for payload, expected_status, expected_reason in (
+        (stale, "fail", "daemon_heartbeat_stale"),
+        (invalid, "unknown", "daemon_heartbeat_invalid"),
+    ):
+        checks = cast(list[dict[str, str]], payload["checks"])
+        daemon = next(check for check in checks if check["check_id"] == "daemon")
+        assert daemon["status"] == expected_status
+        assert daemon["reason_code"] == expected_reason
+        assert payload["state"] == "degraded"
+
+
 def test_partial_is_reserved_for_evidence_gap_after_core_proof() -> None:
     passing = {
         check_id: ProtectionSignal(ProtectionCheckStatus.PASS, f"{check_id}_verified")
@@ -132,6 +150,10 @@ def test_partial_is_reserved_for_evidence_gap_after_core_proof() -> None:
         "decision_stream": ProtectionSignal(ProtectionCheckStatus.UNKNOWN, "decision_stream_gap"),
     }
     assert evaluate_protection_health(evidence_gap)["state"] == "partial"
+    assert (
+        evaluate_protection_health(evidence_gap)["detail"]
+        == "Core protection passes, but decision-stream evidence is incomplete."
+    )
     for core_check in set(PROTECTION_CHECK_IDS).difference({"decision_stream"}):
         core_gap = {
             **passing,

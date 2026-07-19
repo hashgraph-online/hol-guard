@@ -70,6 +70,7 @@ import type {
   GuardArtifactDiff,
   GuardCodexResumeResult,
   GuardPolicyDecision,
+  GuardProtectionState,
   GuardReceipt,
   GuardRuntimeSnapshot,
   DecisionScope,
@@ -109,6 +110,28 @@ export type ReviewViewModel = {
   receipt: GuardReceipt | null;
   policy: GuardPolicyDecision[];
 };
+
+const PROTECTION_APPEARANCE = {
+  protected: {
+    Icon: HiMiniShieldCheck,
+    cardClass: "border-emerald-200/60 bg-emerald-50/30",
+    iconClass: "bg-brand-green/10 text-brand-green",
+  },
+  partial: {
+    Icon: HiMiniInformationCircle,
+    cardClass: "border-brand-blue/20 bg-brand-blue/[0.04]",
+    iconClass: "bg-brand-blue/10 text-brand-blue",
+  },
+  degraded: {
+    Icon: HiMiniExclamationTriangle,
+    cardClass: "border-brand-attention/20 bg-brand-attention/[0.04]",
+    iconClass: "bg-brand-attention/10 text-brand-attention",
+  },
+} satisfies Record<GuardProtectionState, {
+  Icon: typeof HiMiniShieldCheck;
+  cardClass: string;
+  iconClass: string;
+}>;
 
 type ReviewWorkspaceProps = {
   requests: GuardApprovalRequest[];
@@ -1674,18 +1697,11 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
   const protectionHealth = runtime ? protectionHealthFor(runtime) : unavailableProtectionHealth();
   const protectedAppsCount = protectionHealth.apps.filter((app) => app.state === "protected").length;
   const heroStatus = protectionHealth.state === "protected" ? "clear" : protectionHealth.state;
-  let ProtectionIcon = HiMiniShieldCheck;
-  let healthCardClass = "border-emerald-200/60 bg-emerald-50/30";
-  let healthIconClass = "bg-brand-green/10 text-brand-green";
-  if (protectionHealth.state === "partial") {
-    ProtectionIcon = HiMiniInformationCircle;
-    healthCardClass = "border-brand-blue/20 bg-brand-blue/[0.04]";
-    healthIconClass = "bg-brand-blue/10 text-brand-blue";
-  } else if (protectionHealth.state === "degraded") {
-    ProtectionIcon = HiMiniExclamationTriangle;
-    healthCardClass = "border-brand-attention/20 bg-brand-attention/[0.04]";
-    healthIconClass = "bg-brand-attention/10 text-brand-attention";
-  }
+  const {
+    Icon: ProtectionIcon,
+    cardClass: healthCardClass,
+    iconClass: healthIconClass,
+  } = PROTECTION_APPEARANCE[protectionHealth.state];
 
   return (
     <div className="space-y-6">

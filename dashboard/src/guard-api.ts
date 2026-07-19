@@ -8,7 +8,7 @@ import {
   CODEX_RESUME_STATUSES
 } from "./guard-types";
 import { computeTrendBuckets } from "./evidence/evidence-metrics";
-import { normalizeProtectionHealth } from "./protection-health";
+import { normalizeProtectionHealth, protectionHeadlineFor } from "./protection-health";
 import type {
   GuardActionEnvelope,
   GuardActionType,
@@ -48,6 +48,7 @@ import type {
   GuardReceiptArtifactStat,
   GuardReceiptDailyActivity,
   GuardReceiptHarnessStat,
+  GuardRuntimeState,
   GuardRuntimeSnapshot,
   GuardCloudConnectStatusResponse,
   SupplyChainBundle,
@@ -82,6 +83,8 @@ const GUARD_DAEMON_PORT_RANGE = 1000;
 const GUARD_DAEMON_DISCOVERY_PROBE_COUNT = 25;
 const GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE = 5;
 const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
+const RUNTIME_HEARTBEAT_MAX_AGE_MS = 30_000;
+const RUNTIME_HEARTBEAT_FUTURE_TOLERANCE_MS = 5_000;
 let guardTokenOverride: string | null = null;
 let guardTokenLocationKey: string | null = null;
 
@@ -100,7 +103,13 @@ type ApprovalRequestListPayload = {
 
 type RuntimeSnapshotPayload = Omit<
   GuardRuntimeSnapshot,
-  "items" | "queue_summary" | "supply_chain" | "managed_installs" | "cloud_command_capability" | "protection_health"
+  | "items"
+  | "queue_summary"
+  | "supply_chain"
+  | "managed_installs"
+  | "cloud_command_capability"
+  | "protection_health"
+  | "runtime_state"
 > & {
   items?: RawGuardApprovalRequest[] | null;
   queue_summary?: unknown;
@@ -108,6 +117,7 @@ type RuntimeSnapshotPayload = Omit<
   managed_installs?: unknown;
   cloud_command_capability?: unknown;
   protection_health?: unknown;
+  runtime_state?: unknown;
 };
 
 type QueueResolutionPayload = Omit<
@@ -971,15 +981,105 @@ function normalizeCloudCommandCapability(raw: unknown): GuardRuntimeSnapshot["cl
 }
 
 export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): GuardRuntimeSnapshot {
+  const protectionHealth = normalizeProtectionHealth(snapshot.protection_health);
+  const runtimeState = normalizeRuntimeState(snapshot.runtime_state);
+  const headline = protectionHeadlineFor({
+    health: protectionHealth,
+    runtimeActive: runtimeState !== null,
+    pendingCount: snapshot.pending_count,
+  });
   return {
     ...snapshot,
+    ...headline,
+    runtime_state: runtimeState,
     items: normalizeApprovalRequests(snapshot.items),
     queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count),
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
     managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
     cloud_command_capability: normalizeCloudCommandCapability(snapshot.cloud_command_capability),
-    protection_health: normalizeProtectionHealth(snapshot.protection_health),
+    protection_health: protectionHealth,
   };
+}
+
+function normalizeRuntimeState(raw: unknown): GuardRuntimeState | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const sessionId = raw["session_id"];
+  const daemonHost = raw["daemon_host"];
+  const daemonPort = raw["daemon_port"];
+  const startedAt = raw["started_at"];
+  const lastHeartbeatAt = raw["last_heartbeat_at"];
+  const approvalCenterUrl = raw["approval_center_url"];
+  if (
+    typeof sessionId !== "string" ||
+    sessionId.length === 0 ||
+    typeof daemonHost !== "string" ||
+    !isLoopbackRuntimeHost(daemonHost) ||
+    typeof daemonPort !== "number" ||
+    !Number.isInteger(daemonPort) ||
+    daemonPort <= 0 ||
+    daemonPort > 65_535 ||
+    typeof startedAt !== "string" ||
+    parseAwareTimestamp(startedAt) === null ||
+    typeof lastHeartbeatAt !== "string" ||
+    !isFreshAwareTimestamp(lastHeartbeatAt) ||
+    typeof approvalCenterUrl !== "string" ||
+    !isMatchingRuntimeUrl(approvalCenterUrl, daemonHost, daemonPort)
+  ) {
+    return null;
+  }
+  return {
+    session_id: sessionId,
+    daemon_host: daemonHost,
+    daemon_port: daemonPort,
+    started_at: startedAt,
+    last_heartbeat_at: lastHeartbeatAt,
+    approval_center_url: approvalCenterUrl,
+  };
+}
+
+function parseAwareTimestamp(value: string): number | null {
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/u.test(value)) {
+    return null;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function isFreshAwareTimestamp(value: string): boolean {
+  const timestamp = parseAwareTimestamp(value);
+  if (timestamp === null) {
+    return false;
+  }
+  const now = Date.now();
+  return (
+    timestamp >= now - RUNTIME_HEARTBEAT_MAX_AGE_MS &&
+    timestamp <= now + RUNTIME_HEARTBEAT_FUTURE_TOLERANCE_MS
+  );
+}
+
+function isLoopbackRuntimeHost(value: string): boolean {
+  return value === "127.0.0.1" || value === "localhost" || value === "::1";
+}
+
+function isMatchingRuntimeUrl(value: string, daemonHost: string, daemonPort: number): boolean {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.startsWith("[") ? url.hostname.slice(1, -1) : url.hostname;
+    return (
+      url.protocol === "http:" &&
+      hostname === daemonHost &&
+      Number(url.port) === daemonPort &&
+      url.username.length === 0 &&
+      url.password.length === 0 &&
+      url.pathname === "/" &&
+      url.search.length === 0 &&
+      url.hash.length === 0
+    );
+  } catch {
+    return false;
+  }
 }
 
 function normalizeQueueCopy(raw: unknown): GuardQueueResolutionCopy | null {
