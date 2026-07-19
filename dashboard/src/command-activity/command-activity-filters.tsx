@@ -133,6 +133,7 @@ export function CommandActivityFiltersPanel(props: {
         </SelectField>
         <SelectField label="Execution proof" value={props.filters.execution_status ?? ""} onChange={handleExecution}>
           <option value="">All execution states</option>
+          <option value="attempted">Attempt recorded</option>
           <option value="prevented">Prevented</option>
           <option value="allowed_unconfirmed">Allowed, unconfirmed</option>
           <option value="confirmed_success">Confirmed success</option>

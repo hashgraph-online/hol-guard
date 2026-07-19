@@ -41,7 +41,7 @@ function Trend({ analytics }: { analytics: CommandActivityAnalytics }) {
             <div key={point.day} className="group relative flex min-w-0 flex-1 items-end self-stretch">
               <div
                 className="w-full rounded-t-sm bg-brand-blue/70 motion-safe:transition-[height]"
-                style={{ height: `${Math.max(4, Math.round((point.count / maximum) * 100))}%` }}
+                style={{ height: `${point.count === 0 ? 0 : Math.max(4, Math.round((point.count / maximum) * 100))}%` }}
               />
             </div>
           ))}

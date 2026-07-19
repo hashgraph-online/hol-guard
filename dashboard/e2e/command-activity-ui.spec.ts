@@ -89,7 +89,7 @@ async function mountCommandFixture(page: Page): Promise<{
           dimension_value: url.searchParams.get("dimension_value"),
         },
         commands_checked: 1,
-        trend: [{ day: "2026-07-19", count: 1 }],
+        trend: [{ day: "2026-07-18", count: 0 }, { day: "2026-07-19", count: 1 }],
         dimensions,
         dimension_breakdowns_scope: "global",
         feedback: [],
@@ -126,6 +126,12 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
   await page.goto(`/evidence?view=commands&${DAEMON}`);
   await expect(page.getByRole("heading", { name: "Commands" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Allowed; execution not confirmed" })).toBeVisible();
+  const trend = page.getByRole("img", { name: /2026-07-18: 0; 2026-07-19: 1$/ });
+  await expect(trend).toBeVisible();
+  await expect.poll(() => trend.evaluate((element) => {
+    const zeroDay = element.children.item(element.children.length - 2)?.firstElementChild as HTMLElement | null;
+    return zeroDay?.style.height ?? null;
+  })).toBe("0%");
   const detailsButton = page.getByRole("button", { name: "Details" });
   await detailsButton.click();
   await expect(page.getByRole("complementary", { name: "Command activity detail" })).toBeFocused();
@@ -140,18 +146,20 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
 
 test("Commands deep links keep active filters visible outside aggregate options", async ({ page }) => {
   const fixture = await mountCommandFixture(page);
-  await page.goto(`/evidence?view=commands&command_harness=cursor&command_extension=command.custom&command_rule=command.custom.read&${DAEMON}`);
+  await page.goto(`/evidence?view=commands&command_harness=cursor&command_extension=command.custom&command_rule=command.custom.read&command_status=attempted&${DAEMON}`);
   await expect.poll(() => new URL(page.url()).searchParams.get("command_harness")).toBe("cursor");
   await expect.poll(() => new URL(page.url()).searchParams.get("command_extension")).toBe("command.custom");
   await expect.poll(() => new URL(page.url()).searchParams.get("command_rule")).toBe("command.custom.read");
   await expect(page.getByRole("combobox", { name: "App", exact: true })).toHaveValue("cursor");
   await expect(page.getByRole("combobox", { name: "Extension", exact: true })).toHaveValue("command.custom");
   await expect(page.getByRole("combobox", { name: "Rule", exact: true })).toHaveValue("command.custom.read");
+  await expect(page.getByRole("combobox", { name: "Execution proof" })).toHaveValue("attempted");
   await expect.poll(() => fixture.activityQueries.some((query) => {
     const params = new URLSearchParams(query);
     return params.get("harness") === "cursor"
       && params.get("extension_id") === "command.custom"
-      && params.get("rule_id") === "command.custom.read";
+      && params.get("rule_id") === "command.custom.read"
+      && params.get("execution_status") === "attempted";
   })).toBe(true);
 });
 

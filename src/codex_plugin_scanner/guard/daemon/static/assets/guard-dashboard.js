@@ -23122,6 +23122,7 @@ function CommandActivityFiltersPanel(props) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Execution proof", value: props.filters.execution_status ?? "", onChange: handleExecution, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All execution states" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "attempted", children: "Attempt recorded" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "prevented", children: "Prevented" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "allowed_unconfirmed", children: "Allowed, unconfirmed" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "confirmed_success", children: "Confirmed success" }),
@@ -23349,7 +23350,7 @@ function Trend({ analytics }) {
       "div",
       {
         className: "w-full rounded-t-sm bg-brand-blue/70 motion-safe:transition-[height]",
-        style: { height: `${Math.max(4, Math.round(point.count / maximum * 100))}%` }
+        style: { height: `${point.count === 0 ? 0 : Math.max(4, Math.round(point.count / maximum * 100))}%` }
       }
     ) }, point.day)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-slate-500", children: "No trend points are available for this window." })
   ] });

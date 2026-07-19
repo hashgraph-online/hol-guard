@@ -29,12 +29,14 @@ assert(workspace.includes("commandExecutionEvidenceCopy(props.harness ?? null"),
 assert(workspace.includes("Showing the last loaded command activity page"), "refresh failures retain prior valid page data");
 assert(workspace.includes('activity.page.kind === "empty"'), "empty command pages render an explicit state");
 assert(filters.includes("preserveActiveOption"), "deep-linked stable filters remain represented outside aggregate options");
+assert(filters.includes('<option value="attempted">Attempt recorded</option>'), "all valid execution states remain selectable");
 const summary = readSource("command-activity/command-activity-summary.tsx");
 assert(
   summary.includes("Summary and trend totals do not include every active filter below."),
   "unsupported filter intersections use generic truthful scope copy",
 );
 assert(summary.includes("Command checks by day: ${accessibleSummary}"), "trend values are included in the chart accessible name");
+assert(summary.includes("point.count === 0 ? 0"), "zero-count trend days do not render a visible bar");
 assert(detail.includes('label="Containment evidence"'), "detail separates containment evidence");
 assert(detail.includes('label="Workflow capability"'), "detail separates workflow capability evidence");
 assert(detail.includes("FEEDBACK_LABELS.should_not_have_interrupted"), "detail exposes bounded interruption feedback");
