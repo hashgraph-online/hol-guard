@@ -33,9 +33,7 @@ _SAFE_TRANSPORT_REASON_CODES = frozenset(
         "health_lease_delivery_response_oversized",
     }
 )
-_SAFE_HTTP_REASON = re.compile(
-    r"health_(?:key_registration|lease_challenge|lease_delivery)_http_[1-5][0-9]{2}"
-)
+_SAFE_HTTP_REASON = re.compile(r"health_(?:key_registration|lease_challenge|lease_delivery)_http_[1-5][0-9]{2}")
 _SAFE_STRUCTURED_HTTP_REASON = re.compile(r"(health_lease_delivery_http_[1-5][0-9]{2}):(.+)")
 
 
