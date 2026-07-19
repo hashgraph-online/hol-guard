@@ -50,10 +50,27 @@ def peak_rss_mib() -> float:
         )
         return int(completed.stdout.strip()) / (1024 * 1024)
 
+    if sys.platform.startswith("linux"):
+        try:
+            return linux_peak_rss_mib_from_status(Path("/proc/self/status").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+
     import resource
 
     rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return rss / (1024 * 1024 if sys.platform == "darwin" else 1024)
+
+
+def linux_peak_rss_mib_from_status(status: str) -> float:
+    for line in status.splitlines():
+        if not line.startswith("VmHWM:"):
+            continue
+        fields = line.split()
+        if len(fields) == 3 and fields[0] == "VmHWM:" and fields[2] == "kB":
+            return int(fields[1]) / 1024
+        break
+    raise ValueError("missing Linux VmHWM")
 
 
 def _install_evaluator_packages() -> None:

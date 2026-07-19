@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_command_activity_api_schema import ensure_command_activity_api_schema
 from .store_command_activity_health_schema import ensure_command_activity_health_schema
 from .store_command_activity_maintenance_schema import ensure_command_activity_maintenance_schema
 from .store_command_activity_schema import ensure_command_activity_schema
@@ -621,6 +622,7 @@ class StoreConnectionSchemaMixin:
             ensure_command_activity_schema(connection, applied_at=_now())
             ensure_command_activity_health_schema(connection, applied_at=_now())
             ensure_command_activity_maintenance_schema(connection, applied_at=_now())
+            ensure_command_activity_api_schema(connection, applied_at=_now())
             ensure_evidence_schema(connection)
             if not self._schema_version_applied(connection, version=4):
                 self._record_schema_version(connection, version=4)
