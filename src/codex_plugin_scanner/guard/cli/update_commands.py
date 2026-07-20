@@ -2042,7 +2042,7 @@ def _repair_codex_install(
         hook_state = codex_native_hook_state(repair_context)
     except (OSError, RuntimeError) as error:
         return None, f"Could not inspect Codex protection during update: {error}"
-    if bool(hook_state["protection_active"]):
+    if bool(hook_state["protection_active"]) and hook_state.get("integrity_status") == "valid":
         return None, None
     try:
         payload = apply_managed_install(
@@ -2056,6 +2056,13 @@ def _repair_codex_install(
         )
     except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
         return None, f"Could not repair Codex protection during update: {error}"
+    try:
+        repaired_state = codex_native_hook_state(repair_context)
+    except (OSError, RuntimeError) as error:
+        return None, f"Could not verify repaired Codex protection during update: {error}"
+    if not bool(repaired_state.get("protection_active")) or repaired_state.get("integrity_status") != "valid":
+        reason = str(repaired_state.get("integrity_reason") or "codex_hook_integrity_readback_failed")
+        return None, f"Could not verify repaired Codex protection during update: {reason}"
     managed_install = payload.get("managed_install")
     return (managed_install if isinstance(managed_install, dict) else None), None
 

@@ -23,6 +23,20 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
+      - name: Secure the CI virtualenv interpreter
+        shell: bash
+        run: |
+          interpreter="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
+          target="$(realpath "$interpreter")"
+          mode="$(stat -c '%a' "$target")"
+          if (( (8#$mode & 2) != 0 )); then
+            replacement="${interpreter}.guard-ci"
+            cp --dereference "$target" "$replacement"
+            chmod 0755 "$replacement"
+            mv "$replacement" "$target"
+          fi
+          secured_mode="$(stat -c '%a' "$(realpath "$interpreter")")"
+          (( (8#$secured_mode & 2) == 0 ))
       - run: uv run --no-sync python -m ruff check src/
       - run: uv run --no-sync python -m ruff format --check src/
       - if: matrix.python-version == '3.12'
