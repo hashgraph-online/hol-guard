@@ -132,7 +132,7 @@
       "baseline_floor": "review",
       "variant_floor": "review",
       "owner": "CDX-062",
-      "observed_floors": ["allow", "allow"]
+      "observed_floors": ["review", "review"]
     },
     {
       "pair_id": "p-capability-replay",

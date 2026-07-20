@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import shutil
 import signal
 import stat
 import subprocess
@@ -20,6 +19,7 @@ from .containment_contract import (
     ContainmentFailure,
     ContainmentRequest,
 )
+from .containment_outputs import ContainmentCapturedOutput, OutputBoundaryError, capture_declared_outputs
 
 _OUTPUT_LIMIT: Final = 64 * 1024
 _MAX_EXECUTABLE_BYTES: Final = 256 * 1024 * 1024
@@ -34,6 +34,7 @@ class ContainmentExecutionResult:
     stderr: str
     timed_out: bool
     attestation: ContainmentAttestation
+    outputs: tuple[ContainmentCapturedOutput, ...] = ()
 
     @property
     def enforced(self) -> bool:
@@ -117,6 +118,24 @@ def execute_contained(
                 timeout_seconds=float(timeout_seconds),
                 temp_root=root,
             )
+            outputs = (
+                capture_declared_outputs(request, root / "workspace")
+                if exit_code == 0 and request.declared_outputs
+                else ()
+            )
+    except OutputBoundaryError as exc:
+        return ContainmentExecutionResult(
+            exit_code=None,
+            stdout="",
+            stderr=_bounded_text(str(exc)),
+            timed_out=False,
+            attestation=_failed_attestation(
+                request,
+                backend.kind,
+                backend.digest,
+                ContainmentFailure.OUTPUT_BOUNDARY_VIOLATION,
+            ),
+        )
     except (OSError, ValueError) as exc:
         return ContainmentExecutionResult(
             exit_code=None,
@@ -131,6 +150,7 @@ def execute_contained(
         stderr=stderr,
         timed_out=timed_out,
         attestation=_success_attestation(request, backend),
+        outputs=outputs,
     )
 
 
@@ -167,25 +187,51 @@ def _pin_executable(
         raise ValueError("executable identity changed before contained execution")
     if backend is ContainmentBackend.MACOS_SANDBOX:
         metadata = os.stat(source, follow_symlinks=False)
-        immutable_prefix = source.startswith(("/System/", "/usr/", "/bin/", "/sbin/"))
-        if not immutable_prefix or metadata.st_uid != 0 or metadata.st_mode & 0o022:
+        immutable_system_executable = (
+            source.startswith(("/System/", "/usr/", "/bin/", "/sbin/"))
+            and metadata.st_uid == 0
+            and not metadata.st_mode & 0o022
+        )
+        if immutable_system_executable:
+            return source
+        if not _is_external_ruff_format_request(request):
             raise ValueError("macOS containment requires an immutable system executable")
-        return source
     destination = temp_root / "guard-exec"
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(source, flags)
+    copied_digest = hashlib.sha256()
+    copied_bytes = 0
     try:
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > _MAX_EXECUTABLE_BYTES:
             raise ValueError("executable must remain a bounded regular file")
-        with destination.open("xb") as target, os.fdopen(os.dup(descriptor), "rb") as source_file:
-            shutil.copyfileobj(source_file, target, length=1024 * 1024)
+        with destination.open("xb") as target:
+            while chunk := os.read(descriptor, 1024 * 1024):
+                copied_bytes += len(chunk)
+                if copied_bytes > _MAX_EXECUTABLE_BYTES:
+                    raise ValueError("executable must remain a bounded regular file")
+                copied_digest.update(chunk)
+                _ = target.write(chunk)
     finally:
         os.close(descriptor)
     destination.chmod(0o500)
-    if file_sha256(str(destination)) != request.executable_digest:
+    if (
+        copied_digest.hexdigest() != request.executable_digest
+        or file_sha256(str(destination)) != request.executable_digest
+    ):
         raise ValueError("pinned executable copy failed identity verification")
     return str(destination)
+
+
+def _is_external_ruff_format_request(request: ContainmentRequest) -> bool:
+    return (
+        request.operation_id == "format-write"
+        and Path(request.argv[0]).name == "ruff"
+        and len(request.argv) == 4
+        and request.argv[1] == "format"
+        and request.argv[2] == "--no-cache"
+        and request.declared_outputs == (request.argv[3],)
+    )
 
 
 def _snapshot_inputs(request: ContainmentRequest, temp_root: Path) -> Path:
@@ -211,6 +257,14 @@ def _snapshot_inputs(request: ContainmentRequest, temp_root: Path) -> Path:
     for write_path in request.policy.allowed_write_paths:
         relative = Path(write_path).relative_to(request.policy.workspace)
         (snapshot / relative).mkdir(mode=0o700, parents=True, exist_ok=True)
+    for output_path in request.declared_outputs:
+        output = snapshot.joinpath(*output_path.split("/"))
+        output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if output.exists():
+            metadata = output.stat(follow_symlinks=False)
+            if output.is_symlink() or not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                raise ValueError("declared containment output must be a singly linked regular file")
+            output.chmod(0o600)
     return snapshot_cwd
 
 
@@ -406,4 +460,8 @@ def _read_bounded(path: Path) -> str:
         return stream.read(_OUTPUT_LIMIT).decode("utf-8", errors="replace")
 
 
-__all__ = ("ContainmentExecutionResult", "execute_contained", "file_sha256")
+__all__ = (
+    "ContainmentExecutionResult",
+    "execute_contained",
+    "file_sha256",
+)

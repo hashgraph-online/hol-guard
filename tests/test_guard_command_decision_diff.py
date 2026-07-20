@@ -50,19 +50,25 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
         "src/codex_plugin_scanner/guard/runtime/extension_evidence.py",
         "src/codex_plugin_scanner/guard/runtime/command_contained_routine_candidates.py",
         "src/codex_plugin_scanner/guard/runtime/command_verified_read_candidates.py",
+        "src/codex_plugin_scanner/guard/runtime/command_workspace_write_candidates.py",
+        "src/codex_plugin_scanner/guard/runtime/containment_outputs.py",
         "src/codex_plugin_scanner/guard/runtime/local_package_script_evidence.py",
         "src/codex_plugin_scanner/guard/runtime/verified_github_reads.py",
         "src/codex_plugin_scanner/guard/runtime/verified_read_execution.py",
         "src/codex_plugin_scanner/guard/runtime/verified_read_common.py",
         "src/codex_plugin_scanner/guard/cli/commands_verified_read.py",
+        "src/codex_plugin_scanner/guard/cli/commands_contained_write.py",
         "src/codex_plugin_scanner/guard/cli/commands_parser_local.py",
         "src/codex_plugin_scanner/guard/cli/commands_router.py",
         "src/codex_plugin_scanner/guard/cli/commands_parser.py",
         "src/codex_plugin_scanner/guard/cli/commands_support.py",
         "src/codex_plugin_scanner/guard/contained_package_script_execution.py",
+        "src/codex_plugin_scanner/guard/contained_workspace_write_execution.py",
         "src/codex_plugin_scanner/guard/package_shim_gate.py",
         "src/codex_plugin_scanner/guard/shims.py",
         "tests/test_guard_contained_package_script_execution.py",
+        "tests/test_guard_contained_workspace_write_contract.py",
+        "tests/test_guard_contained_workspace_write_execution.py",
         "tests/test_guard_package_shims.py",
     }
     assert {source_binding_id(path) for path in critical_paths} <= sources.keys()
@@ -94,14 +100,14 @@ def test_report_reconciles_every_case_without_lowering_or_widening_gaps() -> Non
         str(group["key"]): int(str(group["count"]))
         for group in cast(list[dict[str, object]], legacy["transition_groups"])
     }
-    assert groups == {"allow|review": 30581, "review|review": 20419}
+    assert groups == {"allow|review": 26314, "block|block": 4167, "review|review": 20519}
 
     reconciliation = cast(dict[str, object], report["oracle_reconciliation"])
     assert reconciliation["known_gap_equality"] is True
     assert reconciliation["reconciled_count"] == 51000
     assert reconciliation["unreconciled_count"] == 0
     assert all(
-        not str(key).startswith(("CDX-060|", "CDX-061|"))
+        not str(key).startswith(("CDX-060|", "CDX-061|", "CDX-062|"))
         for key in cast(dict[str, object], reconciliation["legacy_known_gaps"])
     )
     category_groups = cast(list[dict[str, object]], reconciliation["category_groups"])

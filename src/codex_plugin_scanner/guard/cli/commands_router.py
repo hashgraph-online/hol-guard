@@ -46,6 +46,7 @@ _COMMON_HANDLERS = {
     "hermes-mcp-proxy": "_run_guard_hermes_mcp_proxy_command",
     "uninstall": "_run_guard_uninstall_command",
     "package-shims": "_run_guard_package_shims_command",
+    "contained-write": "_run_guard_contained_write_command",
     "run": "_run_guard_run_command",
     "diff": "_run_guard_diff_command",
     "test-eval": "_run_guard_test_eval_command",
