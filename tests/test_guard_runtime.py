@@ -16566,7 +16566,7 @@ def test_guard_runtime_tool_action_policy_uses_network_egress_when_stricter(tmp_
         "global",
     ],
 )
-def test_guard_runtime_honors_saved_allows_for_same_risky_tool_action(
+def test_guard_runtime_narrows_legacy_broad_allow_for_same_risky_tool_action(
     tmp_path: Path,
     scope: str,
 ) -> None:
@@ -16612,7 +16612,7 @@ def test_guard_runtime_honors_saved_allows_for_same_risky_tool_action(
     )
     store.add_approval_request(request, "2026-06-12T00:00:00+00:00")
 
-    apply_approval_resolution(
+    resolution = apply_approval_resolution(
         store=store,
         request_id=request.request_id,
         action="allow",
@@ -16621,6 +16621,10 @@ def test_guard_runtime_honors_saved_allows_for_same_risky_tool_action(
         reason=f"saved for {scope}",
         now="2026-06-12T00:01:00+00:00",
     )
+
+    assert resolution["requested_scope"] == scope
+    assert resolution["applied_scope"] == "artifact"
+    assert resolution["scope_warning"] == "legacy_scope_narrowed_to_artifact"
 
     runtime_artifact = GuardArtifact(
         artifact_id=request.artifact_id,
@@ -16642,7 +16646,7 @@ def test_guard_runtime_honors_saved_allows_for_same_risky_tool_action(
             artifact_hash="hash-retry",
             workspace=str(workspace),
         )
-        == "allow"
+        is None
     )
 
 
@@ -16699,7 +16703,7 @@ def test_guard_runtime_rejects_saved_allows_for_different_risky_tool_action(
     )
     store.add_approval_request(request, "2026-06-12T00:00:00+00:00")
 
-    apply_approval_resolution(
+    resolution = apply_approval_resolution(
         store=store,
         request_id=request.request_id,
         action="allow",
@@ -16708,6 +16712,10 @@ def test_guard_runtime_rejects_saved_allows_for_different_risky_tool_action(
         reason=f"saved for {scope}",
         now="2026-06-12T00:01:00+00:00",
     )
+
+    assert resolution["requested_scope"] == scope
+    assert resolution["applied_scope"] == "artifact"
+    assert resolution["scope_warning"] == "legacy_scope_narrowed_to_artifact"
 
     later_artifact = GuardArtifact(
         artifact_id="opencode:project:tool-action:credential-upload",
