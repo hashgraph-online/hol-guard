@@ -187,7 +187,7 @@ def test_decoded_layer_preview_redacts_tokens() -> None:
 
 def test_timeout_preserves_signals_from_materialized_layers(monkeypatch: pytest.MonkeyPatch) -> None:
     ticks = iter((0.0, 0.0, 1.0))
-    monkeypatch.setattr(safe_decode_module.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(safe_decode_module.time, "monotonic", lambda: next(ticks, 1.0))
     result = decode_layers(_b64("eval('decoded before timeout')"), max_time_ms=1)
     assert result.timed_out and result.eval_signals
 
