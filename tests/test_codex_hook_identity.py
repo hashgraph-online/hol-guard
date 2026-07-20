@@ -146,6 +146,25 @@ def test_event_name_is_part_of_canonical_identity(tmp_path: Path) -> None:
     )
 
 
+def test_migration_identity_uses_the_written_hook_activation_state() -> None:
+    payload: dict[str, object] = {"hooks": {"PreToolUse": [_group()]}}
+
+    disabled = codex_adapter._migration_group_identities(
+        payload,
+        source_scope="global",
+        source_hooks_enabled=False,
+    )
+    enabled = codex_adapter._migration_group_identities(
+        payload,
+        source_scope="global",
+        source_hooks_enabled=True,
+    )
+
+    assert len(disabled) == 1
+    assert len(enabled) == 1
+    assert disabled != enabled
+
+
 def test_detect_inventories_every_toml_event_and_deduplicates_mixed_sources(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     config_path = home_dir / ".codex" / "config.toml"

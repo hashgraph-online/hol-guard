@@ -588,7 +588,7 @@ def _canonical_hook_semantics(
     hooks = payload.get("hooks")
     if not isinstance(hooks, Mapping):
         return {}
-    source_hooks_enabled = _payload_has_hooks_feature_enabled(dict(payload))
+    source_hooks_enabled = _payload_has_hooks_feature_enabled(payload)
     semantics: dict[str, tuple[str, ...]] = {}
     for event_name, groups in hooks.items():
         if not isinstance(event_name, str) or not isinstance(groups, list):
@@ -628,6 +628,7 @@ def _migration_group_identities(
     payload: Mapping[str, object],
     *,
     source_scope: str,
+    source_hooks_enabled: bool,
 ) -> set[str]:
     hooks = payload.get("hooks")
     if not isinstance(hooks, Mapping):
@@ -635,7 +636,7 @@ def _migration_group_identities(
     return {
         canonical_codex_hook_group_identity(
             source_scope=source_scope,
-            source_hooks_enabled=True,
+            source_hooks_enabled=source_hooks_enabled,
             event_name=event_name,
             group=group,
         )
@@ -775,9 +776,9 @@ def _codex_hook_artifacts(
     return tuple(artifacts)
 
 
-def _payload_has_hooks_feature_enabled(config_payload: dict[str, object]) -> bool:
+def _payload_has_hooks_feature_enabled(config_payload: Mapping[str, object]) -> bool:
     features = config_payload.get("features")
-    if not isinstance(features, dict):
+    if not isinstance(features, Mapping):
         return False
     return features.get("hooks") is True or features.get("codex_hooks") is True
 
@@ -1539,11 +1540,20 @@ class CodexHarnessAdapter(HarnessAdapter):
                 context=context,
                 owned_bindings=owned_bindings if config_path == hook_config_path else (),
             )
-            expected = _migration_group_identities(expected_payload, source_scope=source_scope)
+            written_payload = _strict_toml_object(config_path, label="migrated Codex config file")
+            source_hooks_enabled = _payload_has_hooks_feature_enabled(written_payload)
+            expected = _migration_group_identities(
+                expected_payload,
+                source_scope=source_scope,
+                source_hooks_enabled=source_hooks_enabled,
+            )
             if not expected:
                 continue
-            written_payload = _strict_toml_object(config_path, label="migrated Codex config file")
-            actual = _migration_group_identities(written_payload, source_scope=source_scope)
+            actual = _migration_group_identities(
+                written_payload,
+                source_scope=source_scope,
+                source_hooks_enabled=source_hooks_enabled,
+            )
             if not expected.issubset(actual):
                 raise RuntimeError(
                     f"{_CODEX_HOOK_MIGRATION_READBACK_MISMATCH}: {config_path} does not contain every canonical "
