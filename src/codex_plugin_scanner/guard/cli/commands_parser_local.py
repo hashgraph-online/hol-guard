@@ -175,6 +175,30 @@ def _configure_guard_local_parsers(
     protect_parser.add_argument("--package-shim-ui", action="store_true", help=argparse.SUPPRESS)
     protect_parser.add_argument("protect_command", nargs=argparse.REMAINDER)
 
+    verified_read_parser = guard_subparsers.add_parser(
+        "verified-read",
+        help="Run a bounded workspace or public GitHub read entirely inside Guard",
+    )
+    verified_read_subparsers = verified_read_parser.add_subparsers(
+        dest="verified_read_command",
+        required=True,
+        metavar="{local,github-pr}",
+    )
+    local_read_parser = verified_read_subparsers.add_parser("local", help="Run a bounded local read")
+    local_read_parser.add_argument("--json", action="store_true")
+    local_read_parser.add_argument("read_argv", nargs=argparse.REMAINDER)
+    github_read_parser = verified_read_subparsers.add_parser("github-pr", help="Read one public pull request")
+    github_read_parser.add_argument("owner")
+    github_read_parser.add_argument("repository")
+    github_read_parser.add_argument("number", type=int)
+    github_read_parser.add_argument(
+        "--field",
+        action="append",
+        choices=("mergeable", "number", "state"),
+        default=None,
+    )
+    github_read_parser.add_argument("--json", action="store_true")
+
     command_parser = guard_subparsers.add_parser(
         "command",
         help="Inspect commands and built-in command safety extensions without executing anything",

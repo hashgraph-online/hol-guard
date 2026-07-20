@@ -61,16 +61,22 @@ from tests.guard_command_decision_diff_runner import (
 )
 
 REPORT_SCHEMA_VERSION: Final = "guard.command-decision-diff.v1"
-BASE_RELEASE_SHA: Final = "96ec0db6102de5a694b00809312e60686923a15a"
+BASE_RELEASE_SHA: Final = "21a81a6d5ca55e262bac837eb7a2ac8d530c6d28"
 REPORT_PATH: Final = REPO_ROOT / "tests" / "fixtures" / "guard-command-corpus" / "decision-diff-report.json"
 _EVIDENCE_SOURCE_PATHS: Final = (
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "action_lattice.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "models.py",
+    REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_parser.py",
+    REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_parser_local.py",
+    REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_router.py",
+    REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_support.py",
+    REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_verified_read.py",
     *(REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "runtime").glob("*.py"),
     *REPO_ROOT.joinpath("tests").glob("guard_command_corpus*.py"),
     *REPO_ROOT.joinpath("tests").glob("guard_command_decision_diff*.py"),
     REPO_ROOT / "tests" / "test_guard_command_corpus.py",
     REPO_ROOT / "tests" / "test_guard_command_decision_diff.py",
+    REPO_ROOT / "tests" / "test_guard_verified_reads.py",
 )
 
 

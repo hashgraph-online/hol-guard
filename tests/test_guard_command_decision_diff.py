@@ -48,6 +48,15 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
         "src/codex_plugin_scanner/guard/runtime/command_model.py",
         "src/codex_plugin_scanner/guard/runtime/effect_contract.py",
         "src/codex_plugin_scanner/guard/runtime/extension_evidence.py",
+        "src/codex_plugin_scanner/guard/runtime/command_verified_read_candidates.py",
+        "src/codex_plugin_scanner/guard/runtime/verified_github_reads.py",
+        "src/codex_plugin_scanner/guard/runtime/verified_read_execution.py",
+        "src/codex_plugin_scanner/guard/runtime/verified_read_common.py",
+        "src/codex_plugin_scanner/guard/cli/commands_verified_read.py",
+        "src/codex_plugin_scanner/guard/cli/commands_parser_local.py",
+        "src/codex_plugin_scanner/guard/cli/commands_router.py",
+        "src/codex_plugin_scanner/guard/cli/commands_parser.py",
+        "src/codex_plugin_scanner/guard/cli/commands_support.py",
     }
     assert {source_binding_id(path) for path in critical_paths} <= sources.keys()
 
@@ -78,12 +87,15 @@ def test_report_reconciles_every_case_without_lowering_or_widening_gaps() -> Non
         str(group["key"]): int(str(group["count"]))
         for group in cast(list[dict[str, object]], legacy["transition_groups"])
     }
-    assert groups == {"allow|review": 31206, "review|review": 19794}
+    assert groups == {"allow|review": 30856, "review|review": 20144}
 
     reconciliation = cast(dict[str, object], report["oracle_reconciliation"])
     assert reconciliation["known_gap_equality"] is True
     assert reconciliation["reconciled_count"] == 51000
     assert reconciliation["unreconciled_count"] == 0
+    assert all(
+        not str(key).startswith("CDX-060|") for key in cast(dict[str, object], reconciliation["legacy_known_gaps"])
+    )
     category_groups = cast(list[dict[str, object]], reconciliation["category_groups"])
     assert sum(int(str(group["count"])) for group in category_groups) == 51000
     assert all(
