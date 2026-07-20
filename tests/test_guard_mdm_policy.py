@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 from pathlib import Path
 from types import SimpleNamespace
@@ -216,7 +217,91 @@ def test_existing_v1_managed_policy_without_policy_bundle_keyring_is_unchanged(
     assert state.status == "active"
     assert state.policy is not None
     assert state.policy.policy_bundle_keyring is None
+    assert state.policy.update.index_url is None
+    assert state.policy.to_public_dict()["update"]["indexConfigured"] is False
     assert "policyBundleKeyring" not in state.policy.to_public_dict()
+
+
+def test_managed_update_index_url_is_internal_and_part_of_policy_identity() -> None:
+    first_payload = _policy(
+        update={
+            "owner": "mdm",
+            "indexUrl": "https://packages.example/tenant-a/simple",
+        }
+    )
+    second_payload = _policy(
+        update={
+            "owner": "mdm",
+            "indexUrl": "https://packages.example/tenant-b/simple",
+        }
+    )
+
+    first = policy_module.parse_managed_policy(first_payload)
+    second = policy_module.parse_managed_policy(second_payload)
+
+    assert first.update.index_url == "https://packages.example/tenant-a/simple"
+    assert first.update.to_dict()["indexConfigured"] is True
+    assert "packages.example" not in json.dumps(first.to_public_dict())
+    assert "tenant-a" not in json.dumps(first.to_public_dict())
+    assert first.content_hash != second.content_hash
+
+
+@pytest.mark.parametrize(
+    "index_url",
+    (
+        "https://packages.example/simple",
+        "HTTPS://packages.example:8443/tenant/simple",
+        "https://[2001:db8::1]:443/simple",
+    ),
+)
+def test_managed_update_index_url_schema_accepts_runtime_valid_urls(index_url: str) -> None:
+    payload = _policy(update={"owner": "user", "indexUrl": index_url})
+
+    _managed_policy_schema_validator().validate(payload)
+    policy = policy_module.parse_managed_policy(payload)
+
+    assert policy.update.index_url == index_url
+
+
+def test_managed_policy_exposes_disabled_public_registry_without_index() -> None:
+    policy = policy_module.parse_managed_policy(_policy(network={"allowPublicRegistries": False}))
+
+    assert policy.network.allow_public_registries is False
+    assert policy.update.index_url is None
+    public = policy.to_public_dict()
+    assert public["network"]["allowPublicRegistries"] is False
+    assert public["update"]["indexConfigured"] is False
+
+
+@pytest.mark.parametrize(
+    "index_url",
+    (
+        "",
+        "http://packages.example/simple",
+        "http://localhost:8080/simple",
+        "ftp://packages.example/simple",
+        "/relative/simple",
+        "https:///simple",
+        "https://user:secret@packages.example/simple",
+        "https://user%40example:secret@packages.example/simple",
+        "https://packages.example/simple?token=secret",
+        "https://packages.example/simple#tenant",
+        " https://packages.example/simple",
+        "https://packages.example/simple path",
+        "https://packages.example:not-a-port/simple",
+        "https://packages.example:65536/simple",
+    ),
+)
+def test_managed_update_index_url_requires_credential_free_absolute_https(
+    index_url: str,
+) -> None:
+    payload = _policy(update={"owner": "mdm", "indexUrl": index_url})
+
+    with pytest.raises(ValidationError):
+        _managed_policy_schema_validator().validate(payload)
+
+    with pytest.raises(ValueError, match=r"update\.indexUrl"):
+        policy_module.parse_managed_policy(payload)
 
 
 def test_rejects_unknown_keys_and_proxy_credentials(tmp_path: Path) -> None:
@@ -412,6 +497,10 @@ def test_native_machine_policy_source_rejects_insecure_provenance(
     assert not policy_module._machine_policy_source_is_trusted(policy_path, "Linux")
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="simulates Linux /etc provenance with a drive-less POSIX absolute path",
+)
 def test_native_machine_policy_source_accepts_root_owned_nonwritable_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

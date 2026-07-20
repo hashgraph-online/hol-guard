@@ -1,9 +1,9 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: [main, release/2.1]
   pull_request:
-    branches: [main]
+    branches: [main, release/2.1]
 
 permissions:
   contents: read
@@ -88,3 +88,32 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
       - run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py --tb=short
+
+  windows-updater:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
+      - name: Run trusted updater and daemon regressions
+        run: >-
+          uv run --no-sync pytest
+          tests/test_guard_update_artifact.py
+          tests/test_guard_update_subprocess.py
+          tests/test_guard_update_isolation.py
+          tests/test_guard_phase03_local_install.py
+          tests/test_guard_phase03_remainder.py
+          tests/test_dashboard_update.py
+          tests/test_guard_daemon_manager.py
+          tests/test_guard_mdm_policy.py
+          --tb=short
