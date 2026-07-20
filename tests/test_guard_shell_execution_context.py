@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import sys
 from pathlib import Path
 
 import pytest
@@ -441,16 +442,17 @@ def test_heredoc_does_not_make_an_earlier_project_use_the_last_effective_cwd(tmp
 def test_literal_pushd_and_ruff_remain_prompt_free_in_the_effective_project(tmp_path: Path) -> None:
     project = tmp_path / "services" / "auth"
     project.mkdir(parents=True)
+    command = f"pushd services/auth && {shlex.quote(sys.executable)} -m ruff check ."
 
     safe_request = extract_sensitive_tool_action_request(
         "Bash",
-        {"command": "pushd services/auth && python -m ruff check ."},
+        {"command": command},
         cwd=tmp_path,
     )
     _write(project / "ruff.py", "raise SystemExit('shadowed ruff')\n")
     unsafe_request = extract_sensitive_tool_action_request(
         "Bash",
-        {"command": "pushd services/auth && python -m ruff check ."},
+        {"command": command},
         cwd=tmp_path,
     )
 

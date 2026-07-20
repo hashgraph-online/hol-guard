@@ -36,6 +36,7 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "sensitive local file write": ("destructive_shell", "local_secret_read"),
     "destructive shell command": ("destructive_shell",),
     "pytest repository-code execution": ("execution",),
+    "untrusted python interpreter": ("execution",),
     "guard approval self-authorization command": ("policy_bypass",),
     "github pr body shell substitution": ("execution",),
     "github remote mutation command": ("destructive_shell", "network_egress"),
