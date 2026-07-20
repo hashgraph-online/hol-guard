@@ -15,6 +15,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..protect import _collect_package_specs
+from ._shell_execution_context_support import ShellPathIdentity
 from .command_model import CanonicalCommand
 from .homebrew_intent import parse_brew_intent
 from .mcp_protection import _command_name, _package_token
@@ -38,12 +39,19 @@ from .package_intent_common import (
 )
 from .package_manager_command import strip_package_manager_global_options
 from .secret_file_requests import _SHELL_TOOL_NAMES, _candidate_command_texts, _normalize_tool_name
+from .shell_execution_context import (
+    ShellExecutionContext,
+    ShellExecutionSegment,
+    model_shell_execution_context,
+    validate_shell_execution_segment,
+)
 
 _CONTROL_TOKENS = {"&&", "||", ";", "|", "|&", "&"}
 _CONTROL_CONTEXT_LABELS = {
     "&&": "and",
     "||": "or",
     ";": "sequence",
+    "\n": "sequence",
     "|": "pipe",
     "|&": "pipe-stderr",
     "&": "background",
@@ -94,9 +102,11 @@ class _CommandSegment:
     redacted_tokens: tuple[str, ...]
     effective_path: str | None
     path_source: str
-    effective_cwd: Path
+    effective_cwd: Path | None
     cwd_source: str
     context_hash: str
+    context_complete: bool
+    context_reason_code: str | None
 
 
 def parse_package_intent(
@@ -147,6 +157,7 @@ def parse_package_intent(
         handler = handlers.get(command_name)
         if handler is None:
             continue
+        segment_workspace = segment.effective_cwd if segment.context_complete else None
         if command_name in _LOCAL_EXECUTION_COMMANDS:
             intent = _parse_exec_intent(
                 segment.tokens,
@@ -156,10 +167,24 @@ def parse_package_intent(
                 effective_cwd=segment.effective_cwd,
                 cwd_source=segment.cwd_source,
                 execution_context_hash=segment.context_hash,
+                execution_context_complete=segment.context_complete,
             )
         else:
-            intent = handler(segment.tokens, workspace=workspace)
+            intent = handler(segment.tokens, workspace=segment_workspace)
         if intent is not None:
+            if segment.context_complete and segment_workspace is not None:
+                intent = _rebase_intent_paths(intent, from_directory=segment_workspace, workspace=workspace)
+            elif segment.context_reason_code is not None:
+                intent = replace(intent, notes=(*intent.notes, segment.context_reason_code))
+            if segment.cwd_source.startswith(("shell_", "env_chdir")) or segment.context_reason_code is not None:
+                intent = replace(
+                    intent,
+                    execution_context_hashes=(segment.context_hash,),
+                    execution_context_cwds=((str(segment.effective_cwd),) if segment.effective_cwd is not None else ()),
+                    execution_context_reason_codes=(
+                        (segment.context_reason_code,) if segment.context_reason_code is not None else ()
+                    ),
+                )
             intents.append(replace(intent, redacted_command=redacted_command(segment.redacted_tokens)))
     return _combine_package_intents(tuple(intents))
 
@@ -279,6 +304,7 @@ def _parse_exec_intent(
     effective_cwd: Path | None = None,
     cwd_source: str = "not_applicable",
     execution_context_hash: str = "not_applicable",
+    execution_context_complete: bool = True,
 ) -> PackageIntent | None:
     package_token = _exec_package_spec(tokens)
     if package_token is None:
@@ -288,12 +314,13 @@ def _parse_exec_intent(
     target = python_target(package_token) if ecosystem == "pypi" else js_target(package_token)
     manifest_candidates = ("package.json",) if command in _LOCAL_EXECUTION_COMMANDS else ()
     lockfile_candidates = _JS_LOCKFILE_NAMES if command in _LOCAL_EXECUTION_COMMANDS else ()
+    intent_workspace = effective_cwd if command in _LOCAL_EXECUTION_COMMANDS else workspace
     intent = _build_intent(
         command,
         "execute",
         tokens,
         (target,),
-        workspace=workspace,
+        workspace=intent_workspace if execution_context_complete else None,
         manifest_candidates=manifest_candidates,
         lockfile_candidates=lockfile_candidates,
     )
@@ -305,7 +332,7 @@ def _parse_exec_intent(
         workspace=workspace,
         effective_path=effective_path,
         path_source=path_source,
-        effective_cwd=effective_cwd or workspace or Path.cwd(),
+        effective_cwd=effective_cwd if execution_context_complete else None,
         cwd_source=cwd_source,
         execution_context_hash=execution_context_hash,
         manifest_paths=intent.manifest_paths,
@@ -369,13 +396,17 @@ def _lockfiles_record_typescript(lockfiles: tuple[PackageExecutionFileEvidence, 
 
 
 def _is_read_only_typescript_argument(token: str) -> bool:
-    if token in _TSC_READ_ONLY_FLAGS or token == "2>":
+    if token in _TSC_READ_ONLY_FLAGS or token == "2>" or _is_safe_fd_duplication_redirect(token):
         return True
     if re.match(r"^\d*(?:>>?|<<?)", token):
         return False
     if token.startswith("-"):
         return False
     return token.endswith((".cts", ".mts", ".ts", ".tsx"))
+
+
+def _is_safe_fd_duplication_redirect(token: str) -> bool:
+    return re.fullmatch(r"[012]?[<>]&(?:[012]|-)", token) is not None
 
 
 def _local_execution_disables_install(tokens: tuple[str, ...]) -> bool:
@@ -453,7 +484,7 @@ def _local_package_execution_evidence(
     workspace: Path | None,
     effective_path: str | None,
     path_source: str,
-    effective_cwd: Path,
+    effective_cwd: Path | None,
     cwd_source: str,
     execution_context_hash: str,
     manifest_paths: tuple[str, ...],
@@ -461,6 +492,21 @@ def _local_package_execution_evidence(
 ) -> LocalPackageExecutionEvidence:
     package_spec = _exec_package_spec(tokens)
     package_name = js_target(package_spec).package_name if package_spec is not None else None
+    if effective_cwd is None:
+        return LocalPackageExecutionEvidence(
+            manager_name=command,
+            path_source=path_source,
+            effective_cwd="<unresolved>",
+            cwd_source=cwd_source,
+            manager_is_guard_shim=False,
+            local_only_requested=_local_execution_disables_install(tokens),
+            context_hash=execution_context_hash,
+            package_name=package_name,
+            executable_name=None,
+            declared_version=None,
+            manager=None,
+            local_executable=None,
+        )
     executable_name = _local_executable_name(
         tokens,
         package_name=package_name,
@@ -610,11 +656,11 @@ def _local_context_file_evidence(
     candidates: list[tuple[Path, str]] = []
     seen: set[Path] = set()
     for relative_path in declared_paths:
-        candidate = workspace / relative_path
+        candidate = effective_cwd / relative_path
         normalized = candidate.absolute()
         if normalized not in seen:
             seen.add(normalized)
-            candidates.append((candidate, relative_path))
+            candidates.append((candidate, _execution_display_path(workspace, candidate)))
     for root in _node_resolution_roots(workspace, effective_cwd):
         for name in candidate_names:
             candidate = root / name
@@ -1060,6 +1106,39 @@ def _build_intent(
     )
 
 
+def _rebase_intent_paths(
+    intent: PackageIntent,
+    *,
+    from_directory: Path,
+    workspace: Path | None,
+) -> PackageIntent:
+    if workspace is None:
+        return intent
+    workspace_root = workspace.expanduser().resolve()
+
+    def rebase(paths: tuple[str, ...]) -> tuple[str, ...]:
+        result: list[str] = []
+        for path_text in paths:
+            candidate = Path(path_text)
+            if not candidate.is_absolute():
+                candidate = from_directory / candidate
+            try:
+                # Preserve a declared path that was removed or has not been
+                # created yet, while still resolving every existing ancestor
+                # so symlink and lexical workspace escapes remain excluded.
+                normalized = candidate.resolve(strict=False).relative_to(workspace_root).as_posix()
+            except (OSError, RuntimeError, ValueError):
+                continue
+            result.append(normalized)
+        return tuple(dict.fromkeys(result))
+
+    return replace(
+        intent,
+        manifest_paths=rebase(intent.manifest_paths),
+        lockfile_paths=rebase(intent.lockfile_paths),
+    )
+
+
 def _collect_specs(tokens: tuple[str, ...], *, skip_value_options: set[str]) -> tuple[str, ...]:
     specs: list[str] = []
     index = 0
@@ -1113,26 +1192,35 @@ def _normalized_command_segments(
     *,
     workspace: Path | None = None,
 ) -> tuple[_CommandSegment, ...]:
-    try:
-        tokens = _split_shell_tokens(command_text)
-    except ValueError:
-        return ()
+    execution_context = model_shell_execution_context(
+        command_text,
+        cwd=workspace,
+        workspace_root=workspace,
+    )
+    control_shape = tuple(
+        _CONTROL_CONTEXT_LABELS[context_segment.control_operator] for context_segment in execution_context.segments
+    )
     segments: list[_CommandSegment] = []
-    effective_shell_cwd = (workspace or Path.cwd()).expanduser().resolve()
-    shell_cwd_source = "workspace" if workspace is not None else "process"
-    raw_segments = _raw_command_segments_with_operators(tokens)
-    control_shape = tuple(_CONTROL_CONTEXT_LABELS[operator] for _segment, operator in raw_segments)
-    for segment_index, (raw_segment, following_operator) in enumerate(raw_segments):
+    for context_segment in execution_context.segments:
+        raw_segment = list(context_segment.tokens)
         normalized_tokens = _normalize_segment(raw_segment)
         if not normalized_tokens:
             continue
         redacted_tokens = _redacted_segment(raw_segment)
-        effective_path, path_source, effective_cwd, cwd_source = _effective_execution_context(
-            raw_segment,
-            workspace=workspace,
-            initial_cwd=effective_shell_cwd,
-            initial_cwd_source=shell_cwd_source,
-        )
+        modeled_cwd, validation_reason = validate_shell_execution_segment(execution_context, context_segment)
+        if modeled_cwd is None:
+            effective_path = None
+            path_source = "cwd_unresolved"
+            effective_cwd = None
+            cwd_source = validation_reason or context_segment.reason_code or "cwd_unresolved"
+        else:
+            effective_path, path_source, effective_cwd, cwd_source = _effective_execution_context(
+                raw_segment,
+                workspace=workspace,
+                initial_cwd=modeled_cwd,
+                initial_cwd_source=context_segment.cwd_source,
+            )
+        context_complete = validation_reason is None and context_segment.complete
         segments.append(
             _CommandSegment(
                 tuple(normalized_tokens),
@@ -1142,22 +1230,22 @@ def _normalized_command_segments(
                 effective_cwd,
                 cwd_source,
                 _execution_context_hash(
-                    control_shape,
-                    segment_index,
+                    execution_context,
+                    context_segment,
+                    control_shape=control_shape,
+                    effective_cwd=effective_cwd,
+                    cwd_source=cwd_source,
+                    path_source=path_source,
                     opaque_context_binding=_opaque_unresolved_context_binding(
                         raw_segment,
                         path_source=path_source,
                         cwd_source=cwd_source,
                     ),
                 ),
+                context_complete,
+                validation_reason or context_segment.reason_code,
             )
         )
-        if following_operator in {"&&", ";"}:
-            effective_shell_cwd, shell_cwd_source = _cwd_after_shell_cd(
-                raw_segment,
-                current_cwd=effective_shell_cwd,
-                current_source=shell_cwd_source,
-            )
     return tuple(segments)
 
 
@@ -1180,26 +1268,57 @@ def _opaque_unresolved_context_binding(
     return hmac.new(_EXECUTION_CONTEXT_HMAC_KEY, sensitive_context, hashlib.sha256).hexdigest()
 
 
+def _shell_path_identity_payload(identity: ShellPathIdentity | None) -> dict[str, int] | None:
+    if identity is None:
+        return None
+    return {
+        "change_time_ns": identity.change_time_ns,
+        "device": identity.device,
+        "inode": identity.inode,
+        "mode": identity.mode,
+    }
+
+
 def _execution_context_hash(
-    control_shape: tuple[str, ...],
-    segment_index: int,
+    context: ShellExecutionContext,
+    segment: ShellExecutionSegment,
     *,
-    opaque_context_binding: str | None = None,
+    control_shape: tuple[str, ...],
+    effective_cwd: Path | None,
+    cwd_source: str,
+    path_source: str,
+    opaque_context_binding: str | None,
 ) -> str:
-    """Fingerprint only non-secret compound-command structure.
+    """Bind modeled filesystem context without hashing secret-bearing raw argv.
 
     Exact package targets, redacted command shape, resolved executables, and
     workspace evidence are bound elsewhere in the artifact. Unresolved context
-    receives a process-ephemeral HMAC so distinct uncertain commands cannot
-    share approval identity, while stored hashes cannot be brute-forced as an
-    offline oracle for credentials embedded in arguments or source URLs.
+    receives a process-ephemeral HMAC so stored hashes cannot become an offline
+    oracle for credentials embedded in arguments or source URLs.
     """
 
     payload = json.dumps(
         {
             "schema": "local-package-execution-context-v2",
             "control_shape": control_shape,
-            "segment_index": segment_index,
+            "segment_index": segment.segment_index,
+            "control_before": segment.control_before,
+            "control_after": segment.control_after,
+            "workspace_root": str(context.workspace_root) if context.workspace_root is not None else None,
+            "workspace_identity": _shell_path_identity_payload(context.workspace_identity),
+            "effective_cwd": str(effective_cwd) if effective_cwd is not None else None,
+            "cwd_identity": _shell_path_identity_payload(segment.cwd_identity),
+            "cwd_path_proofs": [
+                {
+                    "lexical_path": str(proof.lexical_path),
+                    "resolved_path": str(proof.resolved_path),
+                    "identity": _shell_path_identity_payload(proof.identity),
+                }
+                for proof in segment.cwd_path_proofs
+            ],
+            "directory_stack": [str(path) for path in segment.directory_stack],
+            "cwd_source": cwd_source,
+            "path_source": path_source,
             "opaque_context_binding": opaque_context_binding,
         },
         sort_keys=True,
@@ -1227,38 +1346,6 @@ def _raw_command_segments_with_operators(
     if segment:
         segments.append((segment, None))
     return tuple(segments)
-
-
-def _cwd_after_shell_cd(
-    raw_segment: list[str],
-    *,
-    current_cwd: Path,
-    current_source: str,
-) -> tuple[Path, str]:
-    segment = _normalize_segment(raw_segment)
-    if not segment or _command_name(segment[0]) != "cd":
-        return current_cwd, current_source
-    arguments = list(segment[1:])
-    while arguments and arguments[0] in {"-L", "-P"}:
-        arguments.pop(0)
-    if arguments and arguments[0] == "--":
-        arguments.pop(0)
-    if len(arguments) > 1:
-        return current_cwd, "shell_cd_unresolved"
-    value = arguments[0] if arguments else str(Path.home())
-    expanded = os.path.expandvars(value)
-    if not expanded or "$" in expanded or "\x00" in expanded:
-        return current_cwd, "shell_cd_unresolved"
-    candidate = Path(expanded).expanduser()
-    if not candidate.is_absolute():
-        candidate = current_cwd / candidate
-    try:
-        resolved = candidate.resolve(strict=True)
-    except (OSError, RuntimeError):
-        return current_cwd, "shell_cd_failed"
-    if not resolved.is_dir():
-        return current_cwd, "shell_cd_failed"
-    return resolved, "shell_cd"
 
 
 def _normalize_segment(raw_segment: list[str]) -> list[str]:
@@ -1522,6 +1609,11 @@ def _combine_package_intents(intents: tuple[PackageIntent, ...]) -> PackageInten
         flags=_unique_joined_strings(intent.flags for intent in intents),
         notes=_unique_joined_strings((*[intent.notes for intent in intents], ("multiple-package-segments",))),
         local_executions=tuple(evidence for intent in intents for evidence in intent.local_executions),
+        execution_context_hashes=_unique_joined_strings(intent.execution_context_hashes for intent in intents),
+        execution_context_cwds=_unique_joined_strings(intent.execution_context_cwds for intent in intents),
+        execution_context_reason_codes=_unique_joined_strings(
+            intent.execution_context_reason_codes for intent in intents
+        ),
     )
 
 

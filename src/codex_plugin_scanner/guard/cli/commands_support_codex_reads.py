@@ -25,17 +25,20 @@ if TYPE_CHECKING:
         _codex_fd_exec_is_bounded_read_only,
         _codex_fd_targets,
         _codex_fd_targets_are_source_like,
-        _codex_resolve_source_like_path,
         _codex_search_target_is_external_source_like,
         _codex_search_target_is_source_like,
         _codex_search_targets,
         _codex_search_targets_are_source_like,
         _git_grep_uses_external_execution,
-        _path_contains_symlink,
         _shell_wrapper_script_index,
     )
 
 
+from ..runtime.shell_execution_context import (
+    ShellExecutionContext,
+    model_shell_execution_context,
+    validate_shell_execution_segment,
+)
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -138,16 +141,17 @@ def _codex_command_is_read_only_source_inspection(
             return False
         # External targets are allowed only for one direct plain grep command.
         return _codex_command_is_read_only_source_search(command, cwd=cwd, home_dir=home_dir)
+    execution_context = model_shell_execution_context(command, cwd=cwd, workspace_root=cwd)
+    if execution_context.directory_change_present:
+        return _codex_contextual_source_inspection_is_read_only(
+            execution_context,
+            home_dir=home_dir,
+        )
     chained_segments = _split_codex_safe_read_only_chain(command)
     if chained_segments is not None:
-        current_cwd = cwd
         saw_source_inspection = False
         for segment in chained_segments:
-            cd_cwd = _codex_safe_source_cd_cwd(segment, cwd=current_cwd, home_dir=home_dir)
-            if cd_cwd is not None:
-                current_cwd = cd_cwd
-                continue
-            if not _codex_command_is_read_only_source_inspection(segment, cwd=current_cwd, home_dir=home_dir):
+            if not _codex_command_is_read_only_source_inspection(segment, cwd=cwd, home_dir=home_dir):
                 return False
             saw_source_inspection = True
         return saw_source_inspection
@@ -169,25 +173,44 @@ def _codex_command_is_read_only_source_inspection(
     return all(_codex_command_is_bounded_read_only_filter(segment) for segment in filter_segments)
 
 
-def _codex_safe_source_cd_cwd(command_text: str, *, cwd: Path | None, home_dir: Path | None) -> Path | None:
-    try:
-        parts = shlex.split(command_text)
-    except ValueError:
-        return None
-    if len(parts) != 2 or parts[0] != "cd":
-        return None
-    base_dir = (cwd or Path.cwd()).resolve()
-    target = _codex_resolve_source_like_path(parts[1], cwd=cwd, home_dir=home_dir)
-    if target is None or not target.exists() or not target.is_dir():
-        return None
-    target = target.resolve()
-    try:
-        target.relative_to(base_dir)
-    except ValueError:
-        return None
-    if _path_contains_symlink(target, base_dir=base_dir):
-        return None
-    return target
+def _codex_contextual_source_inspection_is_read_only(
+    context: ShellExecutionContext,
+    *,
+    home_dir: Path | None,
+) -> bool:
+    if not context.complete:
+        return False
+    saw_source_inspection = False
+    pipeline_open = False
+    for segment in context.segments:
+        controls = (*segment.control_before, *segment.control_after)
+        if any(operator in {"||", "&"} for operator in controls):
+            return False
+        if segment.directory_operation is not None:
+            pipeline_open = False
+            continue
+        segment_cwd, reason = validate_shell_execution_segment(context, segment)
+        if segment_cwd is None or reason is not None:
+            return False
+        if pipeline_open:
+            if not _codex_command_is_bounded_read_only_filter(segment.command_text):
+                return False
+        elif not (
+            _codex_command_is_read_only_source_search(
+                segment.command_text,
+                cwd=segment_cwd,
+                home_dir=home_dir,
+            )
+            or _codex_command_is_read_only_source_view(
+                segment.command_text,
+                cwd=segment_cwd,
+                home_dir=home_dir,
+            )
+        ):
+            return False
+        saw_source_inspection = True
+        pipeline_open = segment.control_operator in {"|", "|&"}
+    return saw_source_inspection and not pipeline_open
 
 
 def _split_codex_safe_read_only_chain(command: str) -> list[str] | None:
@@ -576,7 +599,6 @@ __all__ = [
     "_codex_command_uses_untrusted_search_binary",
     "_codex_head_tail_args_are_bounded_filter",
     "_codex_head_tail_targets_are_source_like",
-    "_codex_safe_source_cd_cwd",
     "_codex_sed_args_are_bounded_filter",
     "_codex_sed_targets_are_read_only_source_like",
     "_codex_source_inspection_target_tokens",

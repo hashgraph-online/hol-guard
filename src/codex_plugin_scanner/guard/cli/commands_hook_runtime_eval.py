@@ -54,6 +54,7 @@ from ..runtime.approval_reuse import (
     ApprovalReuseValidationFailure,
     evaluate_approval_reuse,
 )
+from ..runtime.signals import GuardRiskSignalV3
 from ..shims import package_shim_status
 from ._commands_shared import *
 from .commands_hook_runtime_state import RuntimeArtifactHookState
@@ -183,6 +184,33 @@ def _runtime_external_archive_has_digest_binding_sink(
     except (OSError, RuntimeError):
         return False
     return resolved_executable == shim_path
+
+
+def _runtime_cisco_scanner_evidence(
+    action_envelope: GuardActionEnvelope,
+    *,
+    runtime_workspace: Path | None,
+    raw_shell_cwds: object,
+) -> tuple[GuardRiskSignalV3, ...]:
+    """Scan every distinct proven shell cwd that may resolve a relative target."""
+
+    workspaces: list[Path | None] = []
+    if isinstance(raw_shell_cwds, list):
+        for value in raw_shell_cwds:
+            if not isinstance(value, str) or not value.strip():
+                continue
+            candidate = Path(value).expanduser().resolve(strict=False)
+            if candidate not in workspaces:
+                workspaces.append(candidate)
+    if not workspaces:
+        workspaces.append(runtime_workspace)
+
+    evidence: list[GuardRiskSignalV3] = []
+    for workspace in workspaces:
+        for signal in scan_action_for_cisco_evidence(action_envelope, workspace=workspace):
+            if signal not in evidence:
+                evidence.append(signal)
+    return tuple(evidence)
 
 
 def _evaluate_runtime_artifact_hook(
@@ -343,9 +371,22 @@ def _evaluate_runtime_artifact_hook(
         current_action_inputs.append(payload_action_normalization.action)
     policy_action = most_restrictive_guard_action(*current_action_inputs)
     changed_capabilities = [runtime_artifact.artifact_type]
+    artifact_metadata = runtime_artifact.metadata if isinstance(runtime_artifact.metadata, dict) else {}
+    raw_shell_cwds = artifact_metadata.get("shell_execution_effective_cwds")
+    shell_context_incomplete = (
+        bool(
+            artifact_metadata.get("shell_execution_context_hash")
+            or artifact_metadata.get("shell_execution_context_hashes")
+        )
+        and artifact_metadata.get("shell_execution_context_complete") is False
+    )
     scanner_evidence = (
-        scan_action_for_cisco_evidence(action_envelope, workspace=runtime_workspace)
-        if action_envelope is not None
+        _runtime_cisco_scanner_evidence(
+            action_envelope,
+            runtime_workspace=runtime_workspace,
+            raw_shell_cwds=raw_shell_cwds,
+        )
+        if action_envelope is not None and not shell_context_incomplete
         else ()
     )
     scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]

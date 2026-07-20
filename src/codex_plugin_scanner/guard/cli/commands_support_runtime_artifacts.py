@@ -29,11 +29,28 @@ if TYPE_CHECKING:
     )
     from .commands_support_hook_payload import _coalesce_string
     from .commands_support_runtime_policy import _runtime_data_flow_summary
-    from .commands_support_runtime_resolution import _canonical_harness_name, _runtime_policy_path
+
+    # These helpers are injected by commands_support's shared registry at
+    # runtime. Local signatures retain type safety without introducing a
+    # type-only import cycle with commands_support_runtime_resolution.
+    def _canonical_harness_name(value: str) -> str: ...
+
+    def _runtime_policy_path(
+        harness: str,
+        home_dir: Path,
+        workspace: Path | None,
+        *,
+        payload: dict[str, object] | None = None,
+    ) -> Path: ...
 
 
 from ..runtime.kubernetes_commands import kubernetes_secret_read_source
 from ..runtime.shell_command_wrappers import normalize_transparent_shell_command
+from ..runtime.shell_execution_context import (
+    model_shell_execution_context,
+    shell_execution_context_metadata,
+    validate_shell_execution_segment,
+)
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .commands_support_codex_commands import (
@@ -443,12 +460,16 @@ def _codex_post_tool_output_artifact(
         return None
     merged_output_capture = _codex_command_captures_combined_shell_output(command_text)
     focused_pytest = _codex_command_is_focused_pytest_verification(command_text)
+    execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
     fingerprint = hashlib.sha256(
         json.dumps(
             {
                 "tool_name": tool_name,
                 "command_text": command_text,
                 "output_class": "credential-looking output",
+                "shell_execution_context_hash": (
+                    execution_context.context_hash if execution_context.directory_change_present else None
+                ),
             },
             sort_keys=True,
         ).encode("utf-8")
@@ -507,6 +528,8 @@ def _codex_post_tool_output_artifact(
             merged_output_capture=merged_output_capture,
         ),
     }
+    if execution_context.directory_change_present:
+        metadata.update(shell_execution_context_metadata(execution_context))
     if merged_output_capture:
         metadata["output_capture_mode"] = "merged-stderr"
     if local_secret_source is not None:
@@ -543,6 +566,19 @@ def _codex_text_contains_sensitive_path_token(text: str, *, cwd: Path | None) ->
 
 
 def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None) -> bool:
+    execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
+    if execution_context.directory_change_present:
+        if not execution_context.complete:
+            return True
+        for segment in execution_context.segments:
+            if segment.directory_operation is not None:
+                continue
+            segment_cwd, reason = validate_shell_execution_segment(execution_context, segment)
+            if segment_cwd is None or reason is not None:
+                return True
+            if _codex_command_may_read_local_content(segment.command_text, cwd=segment_cwd):
+                return True
+        return False
     if _codex_command_references_sensitive_local_source(command_text, cwd=cwd):
         return True
     if _codex_command_reads_environment_pipeline(command_text):
