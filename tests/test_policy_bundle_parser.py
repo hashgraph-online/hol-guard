@@ -263,6 +263,44 @@ def test_hgc072_invalid_schema_rejected() -> None:
     assert reason == "missing_required_field"
 
 
+def test_hgc072_rejects_policy_bundle_over_collection_limit() -> None:
+    bundle = _sample_policy_bundle()
+    bundle["acknowledgements"] = [{}] * 2_049
+
+    validated_bundle, reason = validated_policy_bundle_payload(bundle)
+
+    assert validated_bundle is None
+    assert reason == "limit_collection"
+
+
+def test_hgc072_rejects_policy_bundle_over_depth_limit() -> None:
+    bundle = _sample_policy_bundle()
+    nested: dict[str, object] = {}
+    cursor = nested
+    for index in range(41):
+        child: dict[str, object] = {}
+        cursor[f"level{index}"] = child
+        cursor = child
+    bundle["extension"] = nested
+
+    validated_bundle, reason = validated_policy_bundle_payload(bundle)
+
+    assert validated_bundle is None
+    assert reason == "limit_depth"
+
+
+def test_hgc072_rejects_policy_bundle_over_byte_limit() -> None:
+    bundle = _sample_policy_bundle()
+    defaults = bundle["policyDefaults"]
+    assert isinstance(defaults, dict)
+    defaults["extension"] = ["a" * 700_000, "b" * 700_000, "c" * 700_000]
+
+    validated_bundle, reason = validated_policy_bundle_payload(bundle)
+
+    assert validated_bundle is None
+    assert reason == "limit_bytes"
+
+
 def test_hgc073_tampered_hash_rejected() -> None:
     bundle = _sample_policy_bundle(bundle_hash="sha256:tampered")
 

@@ -541,6 +541,9 @@ def test_update_rejects_nonzero_pipx_result_even_when_version_changed(
         "which",
         lambda name: "/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None,
     )
+    tray_restarts: list[GuardStore | None] = []
+    monkeypatch.setattr(update_commands, "_stop_tray_for_update", lambda _store: True)
+    monkeypatch.setattr(update_commands, "_restart_tray_after_update", tray_restarts.append)
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         assert command == ["pipx", "install", "--force", "hol-guard==2.0.628"]
@@ -561,6 +564,7 @@ def test_update_rejects_nonzero_pipx_result_even_when_version_changed(
     assert payload["resulting_version"] == "2.0.628"
     assert payload["reason_code"] == "update_installer_failed"
     assert "dashboard_sync" not in payload
+    assert tray_restarts == [None]
 
 
 def test_update_repairs_missing_pip_local_source_install(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -1431,6 +1435,9 @@ def test_update_fails_closed_when_required_same_context_daemon_refresh_fails(
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
     monkeypatch.setattr(update_commands, "_refresh_package_shims_after_update", lambda **_: (None, None))
+    tray_restarts: list[GuardStore | None] = []
+    monkeypatch.setattr(update_commands, "_stop_tray_for_update", lambda _store: True)
+    monkeypatch.setattr(update_commands, "_restart_tray_after_update", tray_restarts.append)
     monkeypatch.setattr(
         update_commands,
         "refresh_guard_daemon_after_update",
@@ -1448,6 +1455,7 @@ def test_update_fails_closed_when_required_same_context_daemon_refresh_fails(
     assert payload["status"] == "failed"
     assert payload["reason_code"] == "update_daemon_refresh_failed"
     assert "trusted refresh failed" in payload["notes"]
+    assert tray_restarts == [None]
 
 
 def test_required_daemon_refresh_failure_never_deletes_unreceipted_local_wheel_staging(

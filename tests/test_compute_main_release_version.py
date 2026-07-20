@@ -33,9 +33,8 @@ def test_rejects_noncanonical_repository_versions(base: str) -> None:
         compute_main_release_version(base, [])
 
 
-def test_rejects_noncanonical_registry_versions() -> None:
-    with pytest.raises(ValueError, match="Registry version"):
-        compute_main_release_version("2.0.1", ["2.0.01"])
+def test_ignores_invalid_or_noncanonical_registry_versions() -> None:
+    assert compute_main_release_version("2.0.1", ["2.0.01", "invalid", "2.0.0+local"]) == "2.0.1"
 
 
 def test_reports_latest_stable_version_for_source_monotonicity() -> None:
