@@ -374,8 +374,10 @@ def test_codex_doctor_marks_partial_native_hook_install_as_broken(tmp_path: Path
     payload = get_adapter("codex").diagnostics(context)
 
     assert payload["setup_status"] == "broken"
-    assert payload["native_hook_state"]["managed_pre_tool_hook_installed"] is True
+    assert payload["native_hook_state"]["managed_pre_tool_hook_installed"] is False
     assert payload["native_hook_state"]["managed_hook_installed"] is False
+    assert payload["native_hook_state"]["integrity_status"] == "missing"
+    assert payload["native_hook_state"]["foreign_hook_entries_present"] is True
     assert any("managed Codex hooks are missing" in warning for warning in payload["warnings"])
 
 
