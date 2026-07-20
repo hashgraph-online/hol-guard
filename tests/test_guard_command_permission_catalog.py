@@ -97,10 +97,10 @@ def test_github_permission_catalog_is_exhaustive_and_admin_merge_is_distinct() -
     assert admin.rule_ids == ("command.github.admin-merge",)
     assert admin.action_classes == ("GitHub administrator pull-request merge command",)
     assert registry.permission_for_action_class("  github ADMINISTRATOR pull-request MERGE command  ") is admin
-    assert admin.baseline_floor == "review"
+    assert admin.baseline_floor == "require-reapproval"
     assert ordinary.permission_id == "command.github.permission.merge-remote"
     assert ordinary.rule_ids == ("command.github.merge",)
-    assert ordinary.baseline_floor == "review"
+    assert ordinary.baseline_floor == "require-reapproval"
 
 
 @pytest.mark.parametrize("lookup", ["rule", "action", "capability"])
@@ -128,7 +128,7 @@ def test_permission_catalog_serialization_and_digest_are_deterministic() -> None
     reversed_registry = CommandSafetyExtensionRegistry(tuple(reversed(registry.extensions)))
 
     assert reversed_registry.catalog_digest == registry.catalog_digest
-    assert registry.catalog_digest == "267298f4a2080c85da94d02a8736cead679f819861852b54b0c6bddf74750369"
+    assert registry.catalog_digest == "315bc8455fd477ec58e21891ecc6c651bde7e192dadc24a06a8671f018ec3049"
     assert [permission.permission_id for permission in registry.permissions] == sorted(
         permission.permission_id for permission in registry.permissions
     )

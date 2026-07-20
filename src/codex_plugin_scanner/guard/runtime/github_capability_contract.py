@@ -67,7 +67,7 @@ _CAPABILITY_ORDER: Final[tuple[GitHubCommandCapability, ...]] = (
     "unknown",
 )
 _CAPABILITY_RANK: Final = MappingProxyType({capability: rank for rank, capability in enumerate(_CAPABILITY_ORDER)})
-_CAPABILITY_FLOOR: Final = MappingProxyType(
+_CAPABILITY_FLOOR: Final[MappingProxyType[GitHubCommandCapability, GuardAction]] = MappingProxyType(
     {
         "read_local": "allow",
         "read_remote": "allow",
