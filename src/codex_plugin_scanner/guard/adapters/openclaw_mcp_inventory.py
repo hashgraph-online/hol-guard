@@ -100,9 +100,12 @@ def effective_mcp_inventory(payload: dict[str, object]) -> OpenClawMcpInventory:
             definition.config_identity_sha256 != effective.config_identity_sha256 for definition in active[1:]
         )
         if len(active) > 1:
+            warning_reason = "shadowed_mcp_server_definition"
+            if conflict:
+                warning_reason = "conflicting_mcp_server_definitions"
             warnings.append(
                 {
-                    "reason": "conflicting_mcp_server_definitions" if conflict else "shadowed_mcp_server_definition",
+                    "reason": warning_reason,
                     "server_name": name,
                     "effective_source": effective.source_scope,
                     "shadowed_sources": [definition.source_scope for definition in active[1:]],
@@ -132,11 +135,13 @@ def _server_identity(*, name: str, config: dict[str, object], source_scope: str 
     url = _optional_string(config.get("url"))
     transport = _optional_string(config.get("transport"))
     if transport is None:
-        transport = "http" if url is not None else "stdio"
+        transport = "stdio"
+        if url is not None:
+            transport = "http"
     args = config.get("args")
-    normalized_args = (
-        [str(item) for item in args if isinstance(item, (str, int, float, bool))] if isinstance(args, list) else []
-    )
+    normalized_args: list[str] = []
+    if isinstance(args, list):
+        normalized_args = [str(item) for item in args if isinstance(item, (str, int, float, bool))]
     env = config.get("env")
     headers = config.get("headers")
     identity = {
