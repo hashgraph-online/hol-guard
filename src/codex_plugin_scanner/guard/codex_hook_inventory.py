@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -335,7 +336,7 @@ def _activation_fields_are_valid(entry: Mapping[str, object]) -> bool:
 def _timeout(value: object) -> int | float | None:
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
-    if value < 0 or value != value or value in {float("inf"), float("-inf")}:
+    if value < 0 or not math.isfinite(value):
         return None
     return value
 
@@ -348,7 +349,7 @@ def _environment_keys(handler: Mapping[str, object]) -> tuple[tuple[str, ...], b
         isinstance(key, str) and isinstance(value, str) for key, value in raw_environment.items()
     ):
         return (), False
-    return tuple(sorted(str(key) for key in raw_environment)), True
+    return tuple(sorted(raw_environment)), True
 
 
 def _ownership(
