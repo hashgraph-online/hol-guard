@@ -26,7 +26,7 @@ import {
 import { approvalProofRequiresPassword } from "./approval-proof-inline";
 import { ConsolidatedEvidenceAlert } from "./consolidated-evidence-alert";
 import { plainEnglishRequestTitle } from "./evidence/plain-english";
-import type { DecisionScope, GuardApprovalGatePublicConfig } from "./guard-types";
+import type { DecisionScope, GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
 import { requiresApprovalPasswordPrompt } from "./approval-gate-utils";
 import { buildEvidenceItems, buildTopAlertItems } from "./review-evidence";
 import {
@@ -38,6 +38,12 @@ import { buildWhatWouldHappen, pastDecisionVerb, PrimaryActionCard } from "./rev
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact"]);
+
+function resolvedActionCopy(item: GuardApprovalRequest | null, action: "allow" | "block"): string {
+  if (item !== null) return buildRetryAfterApprovalCopy(item, action);
+  if (action === "allow") return "Approved: action can proceed";
+  return "Blocked: action stopped";
+}
 
 export function ReviewDecisionCard(props: {
   detail: ReviewViewModel | null;
@@ -303,7 +309,7 @@ export function ReviewDecisionCard(props: {
             aria-hidden="true"
           />
           <p className={`text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`}>
-            {item ? buildRetryAfterApprovalCopy(item, resolved) : (resolved === "allow" ? "Approved: action can proceed" : "Blocked: action stopped")}
+            {resolvedActionCopy(item, resolved)}
           </p>
         </div>
       )}

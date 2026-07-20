@@ -37,6 +37,13 @@ function riskLevelFromScore(score: number): RiskLevel {
   if (score <= 4) return "medium";
   return "low";
 }
+
+function riskIndicatorClass(level: RiskLevel): string {
+  if (level === "high") return "bg-red-400";
+  if (level === "medium") return "bg-amber-400";
+  return "bg-emerald-400";
+}
+
 export function QueueItemRow({ item, active, readState, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }: {
   item: GuardApprovalRequest;
   active: boolean;
@@ -145,11 +152,7 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
             aria-label={`Risk: ${riskLevel}`}
             className="group/icon relative flex h-2 w-2 shrink-0 items-center justify-center"
           >
-            <span
-              className={`h-2 w-2 rounded-full ${
-                riskLevel === "high" ? "bg-red-400" : riskLevel === "medium" ? "bg-amber-400" : "bg-emerald-400"
-              }`}
-            />
+            <span className={`h-2 w-2 rounded-full ${riskIndicatorClass(riskLevel)}`} />
             <span className="pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100">
               {`Risk: ${riskLevel}`}
             </span>

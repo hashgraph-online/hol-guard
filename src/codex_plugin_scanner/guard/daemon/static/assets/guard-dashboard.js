@@ -26852,6 +26852,11 @@ function pastDecisionVerb(decision) {
   return "reviewed";
 }
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact"]);
+function resolvedActionCopy(item, action) {
+  if (item !== null) return buildRetryAfterApprovalCopy(item, action);
+  if (action === "allow") return "Approved: action can proceed";
+  return "Blocked: action stopped";
+}
 function ReviewDecisionCard(props) {
   const detail = props.detail;
   const item = detail?.item ?? null;
@@ -27088,7 +27093,7 @@ function ReviewDecisionCard(props) {
               "aria-hidden": "true"
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`, children: item ? buildRetryAfterApprovalCopy(item, resolved) : resolved === "allow" ? "Approved: action can proceed" : "Blocked: action stopped" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`, children: resolvedActionCopy(item, resolved) })
         ]
       }
     ),
@@ -27243,6 +27248,11 @@ function riskLevelFromScore(score) {
   if (score <= 4) return "medium";
   return "low";
 }
+function riskIndicatorClass(level) {
+  if (level === "high") return "bg-red-400";
+  if (level === "medium") return "bg-amber-400";
+  return "bg-emerald-400";
+}
 function QueueItemRow({ item, active, readState, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }) {
   const risk = riskScore(item);
   const riskLevel = riskLevelFromScore(risk);
@@ -27339,12 +27349,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                   "aria-label": `Risk: ${riskLevel}`,
                   className: "group/icon relative flex h-2 w-2 shrink-0 items-center justify-center",
                   children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(
-                      "span",
-                      {
-                        className: `h-2 w-2 rounded-full ${riskLevel === "high" ? "bg-red-400" : riskLevel === "medium" ? "bg-amber-400" : "bg-emerald-400"}`
-                      }
-                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `h-2 w-2 rounded-full ${riskIndicatorClass(riskLevel)}` }),
                     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100", children: `Risk: ${riskLevel}` })
                   ]
                 }
