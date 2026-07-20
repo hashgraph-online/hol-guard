@@ -5,13 +5,12 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
-import re
 import shlex
 import sys
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from urllib.parse import urlencode
 
 from ...version import __version__
@@ -21,7 +20,7 @@ from ..aibom_detection import (
     extend_detection_with_workspace_aibom,
 )
 from ..codex_config import dump_toml, read_toml_payload, write_toml_payload
-from ..codex_hook_file_integrity import split_hook_command, validate_regular_file
+from ..codex_hook_file_integrity import validate_regular_file
 from ..codex_hook_integrity import (
     atomic_write_text,
     hook_manifest_path,
@@ -32,8 +31,10 @@ from ..codex_hook_integrity import (
     snapshot_regular_file,
     write_hook_manifest,
 )
-from ..codex_hook_manifest import (
-    MANAGED_CODEX_HOOK_EVENTS as _MANAGED_HOOK_EVENTS,
+from ..codex_hook_inventory import (
+    CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE,
+    CodexHookInventory,
+    enumerate_codex_hooks,
 )
 from ..codex_hook_manifest import (
     CodexHookManifestSpec,
@@ -53,6 +54,11 @@ from ..codex_hook_registration import (
 from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
 )
+from ..codex_hook_sources import (
+    require_hook_inventory_sources_unchanged as _require_hook_inventory_sources_unchanged,
+)
+from ..codex_hook_sources import strict_json_object as _strict_json_object
+from ..codex_hook_sources import strict_toml_object as _strict_toml_object
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
@@ -203,16 +209,6 @@ _SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
 _SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
 _AUTHORITATIVE_ENFORCEMENT_BOUNDARY = "codex-native-hooks"
 _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON = "codex_authoritative_hook_unavailable"
-_DAEMON_BRIDGE_PATH_SUFFIX = (
-    "codex_plugin_scanner",
-    "guard",
-    "adapters",
-    "codex_daemon_hook_bridge.py",
-)
-_GUARD_INSTALL_PATH_SEGMENTS = (
-    ("uv", "tools", "hol-guard"),
-    ("pipx", "venvs", "hol-guard"),
-)
 
 
 def _json_object(path: Path) -> dict[str, object]:
@@ -223,20 +219,6 @@ def _json_object(path: Path) -> dict[str, object]:
     except (OSError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
-
-
-def _strict_json_object(path: Path, *, label: str) -> dict[str, object]:
-    if path.exists() and not path.is_file():
-        raise RuntimeError(f"Guard refused to overwrite non-file {label} at {path}")
-    if not path.is_file():
-        return {}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"Guard refused to overwrite unreadable {label} at {path}") from exc
-    if not isinstance(payload, dict):
-        raise RuntimeError(f"Guard refused to overwrite non-object {label} at {path}")
-    return payload
 
 
 def _local_hook_command_parts_for_home_mode(
@@ -488,295 +470,6 @@ def _current_install_legacy_bindings(context: HarnessContext, hooks: dict[str, o
     )
 
 
-def _tokens_are_managed_hook_command(tokens: list[str]) -> bool:
-    if tokens and Path(tokens[0]).name == "hol-guard-codex-hook.sh":
-        return True
-    if len(tokens) < 2:
-        return False
-    executable = Path(tokens[0]).name.lower()
-    if not executable.startswith("python"):
-        return False
-    if _is_daemon_bridge_hook_command(tokens):
-        return True
-    if len(tokens) < 3:
-        return False
-    if _argv_is_direct_codex_hook(tokens):
-        return True
-    return bool(_argv_is_inline_codex_hook(tokens))
-
-
-def _is_managed_hook_command(command: object) -> bool:
-    tokens = split_hook_command(command)
-    if tokens is None:
-        return False
-    return _tokens_are_managed_hook_command(tokens)
-
-
-def _python_script_and_args(tokens: list[str]) -> tuple[str, list[str]] | None:
-    """Return (script_path, remaining_args) after a python executable and its flags."""
-    if not tokens or not Path(tokens[0]).name.lower().startswith("python"):
-        return None
-    index = 1
-    while index < len(tokens):
-        token = tokens[index]
-        if token in {"-c", "-m"}:
-            return None
-        if token.startswith("-"):
-            # Flags that consume a following argument (e.g. -W error, -X faulthandler).
-            if token in {"-W", "-X", "-Q"} and index + 1 < len(tokens):
-                index += 2
-                continue
-            index += 1
-            continue
-        return token, tokens[index + 1 :]
-    return None
-
-
-def _is_daemon_bridge_hook_command(tokens: list[str]) -> bool:
-    script_and_args = _python_script_and_args(tokens)
-    if script_and_args is None:
-        return False
-    script_path, remaining = script_and_args
-    managed_bridge_path = Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()
-    try:
-        if Path(script_path).resolve() == managed_bridge_path:
-            return True
-    except OSError:
-        pass
-    bridge_path = Path(script_path)
-    return (
-        len(remaining) >= 1
-        and bridge_path.parts[-len(_DAEMON_BRIDGE_PATH_SUFFIX) :] == _DAEMON_BRIDGE_PATH_SUFFIX
-        and _bridge_config_targets_codex(remaining[0])
-    )
-
-
-def _tokens_are_unambiguously_managed_hook_command(tokens: list[str]) -> bool:
-    """Return True for hook commands that only Guard installs.
-
-    Direct ``python -m codex_plugin_scanner.cli guard hook`` entries are ambiguous:
-    a user can hand-author the same command. Bridge paths and the shell wrapper are
-    unique to Guard installs and can be reclaimed without a statusMessage marker.
-    """
-    if tokens and Path(tokens[0]).name == "hol-guard-codex-hook.sh":
-        return True
-    if len(tokens) < 2:
-        return False
-    executable = Path(tokens[0]).name.lower()
-    if not executable.startswith("python"):
-        return False
-    return _is_daemon_bridge_hook_command(tokens)
-
-
-def _is_unambiguously_managed_hook_command(command: object) -> bool:
-    tokens = split_hook_command(command)
-    if tokens is None:
-        return False
-    return _tokens_are_unambiguously_managed_hook_command(tokens)
-
-
-def _bridge_config_targets_codex(config_text: str) -> bool:
-    try:
-        config_value: object = json.loads(config_text)
-    except json.JSONDecodeError:
-        return False
-    if not isinstance(config_value, dict):
-        return False
-    config = {key: value for key, value in config_value.items() if isinstance(key, str)}
-    fallback_value = config.get("fallback_command")
-    if not isinstance(fallback_value, list) or not all(isinstance(token, str) for token in fallback_value):
-        return False
-    fallback_command = [token for token in fallback_value if isinstance(token, str)]
-    return _argv_is_direct_codex_hook(fallback_command)
-
-
-def _argv_is_direct_codex_hook(tokens: list[str]) -> bool:
-    if not tokens or not Path(tokens[0]).name.lower().startswith("python"):
-        return False
-    for index, token in enumerate(tokens[1:], start=1):
-        if token == "-c":
-            return False
-        if token != "-m":
-            continue
-        if index + 3 >= len(tokens):
-            return False
-        return (
-            tokens[index + 1] == "codex_plugin_scanner.cli"
-            and tokens[index + 2] == "guard"
-            and tokens[index + 3] == "hook"
-            and _argv_targets_codex(tokens[index + 4 :])
-        )
-    return False
-
-
-def _argv_is_inline_codex_hook(tokens: list[str]) -> bool:
-    if not tokens or not Path(tokens[0]).name.lower().startswith("python"):
-        return False
-    for index, token in enumerate(tokens[1:], start=1):
-        if token == "-m":
-            return False
-        if token != "-c":
-            continue
-        if index + 1 >= len(tokens):
-            return False
-        code = tokens[index + 1]
-        has_guard_call = (
-            re.search(r"['\"]guard['\"]", code) is not None
-            and re.search(r"['\"]hook['\"]", code) is not None
-            and re.search(r"['\"]--harness['\"]", code) is not None
-            and re.search(r"['\"]codex['\"]", code) is not None
-        )
-        return "codex_plugin_scanner.cli" in code and "main([" in code and has_guard_call
-    return False
-
-
-def _python_executable_is_guard_install(executable: str) -> bool:
-    """True when the interpreter path is a Guard pipx/uv install, not a substring lookalike."""
-    parts = tuple(part.lower() for part in Path(executable).parts)
-    return any(
-        any(parts[index : index + len(segment)] == segment for index in range(len(parts) - len(segment) + 1))
-        for segment in _GUARD_INSTALL_PATH_SEGMENTS
-    )
-
-
-def _argv_targets_codex(argv: list[str]) -> bool:
-    for index, token in enumerate(argv):
-        if token == "--harness" and index + 1 < len(argv) and argv[index + 1] == "codex":
-            return True
-        if token.startswith("--harness=") and token.split("=", 1)[1] == "codex":
-            return True
-    return False
-
-
-def _is_managed_hook_group(group: object) -> bool:
-    if not isinstance(group, dict):
-        return False
-    hooks = group.get("hooks")
-    if not isinstance(hooks, list):
-        return False
-    return any(_is_managed_hook_entry(entry) for entry in hooks)
-
-
-def _hook_command_matches_current_boundary(command: object, context: HarnessContext) -> bool:
-    tokens = split_hook_command(command)
-    if tokens is None or len(tokens) != 3:
-        return False
-    try:
-        if Path(tokens[0]).resolve() != Path(sys.executable).resolve():
-            return False
-        if Path(tokens[1]).resolve() != Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve():
-            return False
-    except OSError:
-        return False
-    home_is_current = not context.home_override_explicit and context.home_dir.resolve() == Path.home().resolve()
-    expected_tokens = _hook_command_parts_for_home_mode(
-        context,
-        home_is_current=home_is_current,
-        python_executable=tokens[0],
-    )
-    return tuple(tokens) == expected_tokens
-
-
-def _is_current_managed_hook_group(
-    group: object,
-    expected: Mapping[str, object],
-    context: HarnessContext,
-) -> bool:
-    """Require an intact Guard-owned group used by the launch security boundary."""
-
-    if not isinstance(group, dict):
-        return False
-    group_payload = cast(dict[str, object], group)
-    actual_hooks = group_payload.get("hooks")
-    expected_hooks = expected.get("hooks")
-    if not isinstance(actual_hooks, list):
-        return False
-    if not isinstance(expected_hooks, list):
-        return False
-    actual_hook_entries = cast(list[object], actual_hooks)
-    expected_hook_entries = cast(list[object], expected_hooks)
-    if len(actual_hook_entries) != 1 or len(expected_hook_entries) != 1:
-        return False
-    actual_entry_value = actual_hook_entries[0]
-    expected_entry_value = expected_hook_entries[0]
-    if not isinstance(actual_entry_value, dict) or not isinstance(expected_entry_value, dict):
-        return False
-    actual_entry = cast(dict[str, object], actual_entry_value)
-    expected_entry = cast(dict[str, object], expected_entry_value)
-    if not _hook_command_matches_current_boundary(actual_entry.get("command"), context):
-        return False
-    comparison_entry = dict(expected_entry)
-    comparison_entry["command"] = actual_entry.get("command")
-    comparison = {**expected, "hooks": [comparison_entry]}
-    return group_payload == comparison
-
-
-def _is_managed_hook_entry(entry: object) -> bool:
-    if not isinstance(entry, dict):
-        return False
-    if entry.get("type") != "command":
-        return False
-    tokens = split_hook_command(entry.get("command"))
-    if tokens is None or not _tokens_are_managed_hook_command(tokens):
-        return False
-    # Bridge/wrapper commands are uniquely Guard-owned.
-    if _tokens_are_unambiguously_managed_hook_command(tokens):
-        return True
-    status_message = entry.get("statusMessage")
-    if isinstance(status_message, str) and status_message in _LEGACY_MANAGED_HOOK_STATUS_MESSAGES:
-        return True
-    # Intentional: direct Guard CLI hooks under pipx/uv hol-guard installs are reclaimed even
-    # without statusMessage. Stale PostToolUse installs often drop the marker while keeping the
-    # same python -m codex_plugin_scanner.cli path; leaving them breaks Codex JSON parsing.
-    # Hand-authored hooks that intentionally use that same Guard interpreter are treated as
-    # managed so repair can replace them with the daemon bridge.
-    return _python_executable_is_guard_install(tokens[0])
-
-
-def _remove_managed_hook_entries(group: object) -> object | None:
-    if not isinstance(group, dict):
-        return group
-    hooks = group.get("hooks")
-    if not isinstance(hooks, list):
-        return group
-    remaining_hooks = [entry for entry in hooks if not _is_managed_hook_entry(entry)]
-    if len(remaining_hooks) == len(hooks):
-        return group
-    if not remaining_hooks:
-        return None
-    updated_group = dict(group)
-    updated_group["hooks"] = remaining_hooks
-    return updated_group
-
-
-def _remove_hook_groups(groups: object) -> list[object]:
-    if not isinstance(groups, list):
-        return []
-    remaining: list[object] = []
-    for group in groups:
-        cleaned_group = _remove_managed_hook_entries(group)
-        if cleaned_group is not None:
-            remaining.append(cleaned_group)
-    return remaining
-
-
-def _remove_managed_hook_events(hooks: dict[str, object]) -> tuple[dict[str, object], bool]:
-    updated_hooks = dict(hooks)
-    changed = False
-    for event_name in ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse"):
-        original_groups = deepcopy(updated_hooks.get(event_name))
-        remaining = _remove_hook_groups(original_groups)
-        managed_removed = isinstance(original_groups, list) and remaining != original_groups
-        if not managed_removed:
-            continue
-        changed = True
-        if remaining:
-            updated_hooks[event_name] = remaining
-        else:
-            updated_hooks.pop(event_name, None)
-    return updated_hooks, changed
-
-
 def _append_unique_hook_groups(existing_groups: object, incoming_groups: object) -> list[object]:
     merged = list(existing_groups) if isinstance(existing_groups, list) else []
     if not isinstance(incoming_groups, list):
@@ -814,22 +507,41 @@ def _migrate_hooks_json_into_config(
     return changed
 
 
-def _hooks_payload_has_unmanaged_entries(
-    hooks_payload: dict[str, object],
+def _codex_hook_inventory(
+    payload: dict[str, object],
     *,
+    source_path: Path,
+    source_scope: str,
+    source_format: str,
+    source_hooks_enabled: bool,
     context: HarnessContext,
-    owned_bindings: Sequence[Mapping[str, object]] = (),
-) -> bool:
-    hooks = hooks_payload.get("hooks")
-    if not isinstance(hooks, dict):
-        return False
-    cleaned_hooks, _ = _remove_manifest_bound_hook_events(hooks, owned_bindings)
-    legacy_bindings = _current_install_legacy_bindings(context, cleaned_hooks)
-    cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, legacy_bindings)
-    return any(
-        isinstance(cleaned_hooks.get(event_name), list) and bool(cleaned_hooks.get(event_name))
-        for event_name in ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse")
+    authenticated_bindings: Sequence[Mapping[str, object]] = (),
+) -> CodexHookInventory:
+    hooks = payload.get("hooks")
+    legacy_bindings = _current_install_legacy_bindings(context, hooks if isinstance(hooks, dict) else {})
+    return enumerate_codex_hooks(
+        payload,
+        source_path=source_path,
+        source_scope=source_scope,
+        source_format="json" if source_format == "json" else "toml",
+        source_hooks_enabled=source_hooks_enabled,
+        authenticated_bindings=authenticated_bindings,
+        legacy_bindings=legacy_bindings,
     )
+
+
+def _require_complete_preactivation_inventory(inventory: CodexHookInventory) -> None:
+    if inventory.issues:
+        issue = inventory.issues[0]
+        raise RuntimeError(f"{issue.reason_code}: {issue.coordinate} in {issue.source_path}. {issue.message}")
+    unmanaged = inventory.unmanaged_active_executables
+    if inventory.records and not inventory.records[0].source_hooks_enabled and unmanaged:
+        coordinates = ", ".join(record.coordinate for record in unmanaged)
+        raise RuntimeError(
+            f"{CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE}: Guard refused to enable existing Codex hook entries "
+            f"without explicit approval; unmanaged executable hooks are present at {coordinates} in "
+            f"{inventory.source_path}. Review or remove those hooks before running install."
+        )
 
 
 def _payload_has_hooks_feature_enabled(config_payload: dict[str, object]) -> bool:
@@ -892,9 +604,7 @@ def _remove_managed_shell_guard_blocks(content: bytes) -> bytes:
 def _hooks_have_registered_entries(hooks: object) -> bool:
     if not isinstance(hooks, dict):
         return False
-    return any(
-        isinstance(hooks.get(event_name), list) and bool(hooks[event_name]) for event_name in _MANAGED_HOOK_EVENTS
-    )
+    return any(isinstance(groups, list) and bool(groups) for groups in hooks.values())
 
 
 def _verify_live_hook_manifest(
@@ -938,13 +648,8 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
         "config_present": config_path.is_file(),
         "hooks_path": str(hooks_path),
         "hooks_present": hooks_path.is_file(),
-        "toml_hooks_present": isinstance(toml_hooks, dict)
-        and any(
-            bool(toml_hooks.get(event_name))
-            for event_name in ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse")
-        ),
-        "json_hooks_present": isinstance(json_hooks, dict)
-        and any(bool(json_hooks.get(event_name)) for event_name in _MANAGED_HOOK_EVENTS),
+        "toml_hooks_present": _hooks_have_registered_entries(toml_hooks),
+        "json_hooks_present": _hooks_have_registered_entries(json_hooks),
         "hooks_enabled": hooks_feature_enabled,
         "codex_hooks_enabled": hooks_feature_enabled,
         "legacy_codex_hooks_enabled": legacy_codex_hooks_enabled,
@@ -1199,29 +904,48 @@ class CodexHarnessAdapter(HarnessAdapter):
         previous_manifest = load_hook_manifest_baseline(_hook_manifest_spec(context))
         owned_bindings = _manifest_bindings(previous_manifest)
         hook_payloads = self._load_hook_payloads(context)
+        config_payloads = {
+            config_path: _strict_toml_object(config_path, label="Codex config file")
+            for config_path, _hooks_path in self._config_hook_pairs(context)
+        }
+        inventory_hook_payloads = deepcopy(hook_payloads)
+        inventory_config_payloads = deepcopy(config_payloads)
         original_text = target_config_path.read_text(encoding="utf-8") if target_config_path.is_file() else None
-        payload = read_toml_payload(target_config_path)
-        hook_payload = payload if hook_config_path == target_config_path else read_toml_payload(hook_config_path)
+        payload = config_payloads[target_config_path]
+        hook_payload = payload if hook_config_path == target_config_path else config_payloads[hook_config_path]
         for config_path, hooks_path in self._config_hook_pairs(context):
             json_hook_payload = hook_payloads.get(hooks_path, {})
-            if not json_hook_payload:
-                continue
             if config_path == target_config_path:
                 hook_config_payload = payload
             elif config_path == hook_config_path:
                 hook_config_payload = hook_payload
             else:
-                hook_config_payload = read_toml_payload(config_path)
-            config_owned_bindings = owned_bindings if config_path == hook_config_path else ()
-            if not _payload_has_hooks_feature_enabled(hook_config_payload) and _hooks_payload_has_unmanaged_entries(
-                json_hook_payload,
+                hook_config_payload = config_payloads[config_path]
+            hooks_feature_enabled = _payload_has_hooks_feature_enabled(hook_config_payload)
+            source_scope = self._scope_for(context, config_path)
+            config_inventory = _codex_hook_inventory(
+                hook_config_payload,
+                source_path=config_path,
+                source_scope=source_scope,
+                source_format="toml",
+                source_hooks_enabled=hooks_feature_enabled,
                 context=context,
-                owned_bindings=config_owned_bindings,
-            ):
-                raise RuntimeError(
-                    "Guard refused to enable existing Codex hook entries without explicit approval. "
-                    f"Review or remove unmanaged hooks in {hooks_path} before running install."
-                )
+                authenticated_bindings=owned_bindings if config_path == hook_config_path else (),
+            )
+            json_inventory = _codex_hook_inventory(
+                json_hook_payload,
+                source_path=hooks_path,
+                source_scope=source_scope,
+                source_format="json",
+                source_hooks_enabled=hooks_feature_enabled,
+                context=context,
+            )
+            _require_complete_preactivation_inventory(config_inventory)
+            _require_complete_preactivation_inventory(json_inventory)
+        _require_hook_inventory_sources_unchanged(
+            config_payloads=inventory_config_payloads,
+            hook_payloads=inventory_hook_payloads,
+        )
         target_hooks_path = self._hooks_path(context)
         target_hook_payload = hook_payloads.get(target_hooks_path, {})
         target_hooks_migrated = _migrate_hooks_json_into_config(
@@ -1277,6 +1001,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         self._migrate_alternate_hook_configs(
             context,
             payloads=hook_payloads,
+            config_payloads=config_payloads,
             skip_config_path=hook_config_path,
             owned_bindings=(),
         )
@@ -1434,6 +1159,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         context: HarnessContext,
         *,
         payloads: dict[Path, dict[str, object]],
+        config_payloads: dict[Path, dict[str, object]],
         skip_config_path: Path,
         owned_bindings: Sequence[Mapping[str, object]] = (),
     ) -> None:
@@ -1443,7 +1169,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             hooks_payload = payloads.get(hooks_path, {})
             if not hooks_payload:
                 continue
-            config_payload = read_toml_payload(config_path)
+            config_payload = config_payloads[config_path]
             if (
                 _migrate_hooks_json_into_config(
                     config_payload,

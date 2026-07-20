@@ -204,7 +204,6 @@ def test_codex_launch_rejects_hook_bound_to_opposite_home_mode(
         python_executable=sys.executable,
     )
     entry["command"] = shlex.join(opposite_home_command)
-    assert codex_adapter._hook_command_matches_current_boundary(entry["command"], context) is False
     config_path.write_text(dump_toml(payload), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):

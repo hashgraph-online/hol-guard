@@ -737,120 +737,6 @@ def test_guard_codex_launch_uses_remote_control_for_dashboard_continuation(tmp_p
     assert environment["CODEX_HOME"] == str(home_dir / ".codex")
 
 
-def test_guard_codex_does_not_claim_untrusted_bridge_lookalike() -> None:
-    command = "python /untrusted/codex_daemon_hook_bridge.py '{}'"
-
-    assert codex_adapter._is_managed_hook_command(command) is False
-
-
-def test_guard_codex_preserves_user_owned_direct_hook_without_status_message() -> None:
-    command = shlex.join(
-        [
-            sys.executable,
-            "-m",
-            "codex_plugin_scanner.cli",
-            "guard",
-            "hook",
-            "--harness",
-            "codex",
-        ]
-    )
-    entry = {"type": "command", "command": command}
-
-    assert codex_adapter._is_managed_hook_command(command) is True
-    assert codex_adapter._is_unambiguously_managed_hook_command(command) is False
-    assert codex_adapter._is_managed_hook_entry(entry) is False
-
-
-def test_guard_codex_claims_stale_pipx_direct_hook_without_status_message() -> None:
-    command = shlex.join(
-        [
-            "/home/user/.local/pipx/venvs/hol-guard/bin/python",
-            "-m",
-            "codex_plugin_scanner.cli",
-            "guard",
-            "hook",
-            "--harness",
-            "codex",
-        ]
-    )
-    entry = {"type": "command", "command": command}
-
-    assert codex_adapter._is_managed_hook_entry(entry) is True
-
-
-def test_guard_codex_does_not_claim_guard_install_path_lookalike() -> None:
-    lookalike_python = "/home/user/.local/uv/tools/hol-guard-extra/bin/python"
-    command = shlex.join(
-        [
-            lookalike_python,
-            "-m",
-            "codex_plugin_scanner.cli",
-            "guard",
-            "hook",
-            "--harness",
-            "codex",
-        ]
-    )
-    entry = {"type": "command", "command": command}
-
-    assert codex_adapter._python_executable_is_guard_install(lookalike_python) is False
-    assert codex_adapter._is_managed_hook_entry(entry) is False
-
-
-def test_guard_codex_detects_direct_hook_with_python_runtime_flags() -> None:
-    command_tokens = [
-        "python3",
-        "-P",
-        "-m",
-        "codex_plugin_scanner.cli",
-        "guard",
-        "hook",
-        "--harness",
-        "codex",
-    ]
-    command = shlex.join(command_tokens)
-    entry = {
-        "type": "command",
-        "command": command,
-        "statusMessage": "HOL Guard checking tool result",
-    }
-
-    assert codex_adapter._argv_is_direct_codex_hook(command_tokens) is True
-    assert codex_adapter._is_managed_hook_command(command) is True
-    assert codex_adapter._is_managed_hook_entry(entry) is True
-
-
-def test_guard_codex_detects_bridge_hook_with_python_runtime_flags(tmp_path: Path) -> None:
-    bridge_path = (
-        tmp_path / "site-packages" / "codex_plugin_scanner" / "guard" / "adapters" / "codex_daemon_hook_bridge.py"
-    )
-    bridge_path.parent.mkdir(parents=True, exist_ok=True)
-    bridge_path.write_text("# bridge\n", encoding="utf-8")
-    config = json.dumps(
-        {
-            "fallback_command": [
-                sys.executable,
-                "-m",
-                "codex_plugin_scanner.cli",
-                "guard",
-                "hook",
-                "--harness",
-                "codex",
-            ]
-        },
-        separators=(",", ":"),
-    )
-    command_tokens = ["python3", "-I", str(bridge_path), config]
-    command = shlex.join(command_tokens)
-    entry = {"type": "command", "command": command}
-
-    assert codex_adapter._is_daemon_bridge_hook_command(command_tokens) is True
-    assert codex_adapter._is_managed_hook_command(command) is True
-    assert codex_adapter._is_unambiguously_managed_hook_command(command) is True
-    assert codex_adapter._is_managed_hook_entry(entry) is True
-
-
 def test_guard_install_and_repair_codex_preserve_ambiguous_legacy_post_tool_hooks(
     tmp_path,
     capsys,
@@ -1568,6 +1454,50 @@ def test_guard_install_codex_refuses_unmanaged_existing_hook_entries(tmp_path, c
     assert (workspace_dir / ".codex" / "hooks.json").read_text(encoding="utf-8") == original_hooks
 
 
+def test_guard_install_codex_refuses_unmanaged_future_event_before_enabling_hooks(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    original_config = 'approval_policy = "never"\n'
+    original_hooks = (
+        json.dumps(
+            {
+                "hooks": {
+                    "FutureAgentEvent": [
+                        {
+                            "matcher": "agent",
+                            "hooks": [{"type": "command", "command": "python3 harmless-marker.py"}],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    _write_text(workspace_dir / ".codex" / "config.toml", original_config)
+    _write_text(workspace_dir / ".codex" / "hooks.json", original_hooks)
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 1
+    assert "codex_hook_inventory_unmanaged_executable" in captured.err
+    assert "FutureAgentEvent/group[0]/handler[0]" in captured.err
+    assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == original_config
+    assert (workspace_dir / ".codex" / "hooks.json").read_text(encoding="utf-8") == original_hooks
+
+
 def test_guard_install_codex_allows_unmanaged_hooks_when_hooks_already_enabled(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -1626,7 +1556,10 @@ hooks = true
 def test_guard_install_codex_migrates_global_and_workspace_hooks_to_toml(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _write_text(home_dir / ".codex" / "config.toml", 'model = "gpt-5.3-codex"\n')
+    _write_text(
+        home_dir / ".codex" / "config.toml",
+        'model = "gpt-5.3-codex"\n\n[features]\nhooks = true\n',
+    )
     _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
     context = HarnessContext(home_dir=home_dir, guard_home=home_dir, workspace_dir=workspace_dir)
     legacy_group = codex_adapter._managed_hook_groups(context)["PreToolUse"]
