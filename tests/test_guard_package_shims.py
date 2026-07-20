@@ -1368,6 +1368,23 @@ def test_package_shim_uses_manager_specific_local_only_flag(
     assert expected_local_only_flag in shim_source
 
 
+def test_package_shim_tries_contained_node_runner_before_guard_review(tmp_path: Path) -> None:
+    context = HarnessContext(
+        home_dir=Path.home(),
+        guard_home=tmp_path / ".hol-guard",
+        workspace_dir=tmp_path / "workspace",
+    )
+
+    shim_source = guard_shims_module._build_package_manager_python_shim(context, "npx")
+
+    typescript_index = shim_source.index("try_execute_contained_typescript")
+    node_index = shim_source.index("try_execute_contained_node_command")
+    guard_index = shim_source.index("guard_process = subprocess.run")
+    assert typescript_index < node_index < guard_index
+    assert "if contained_result is None:" in shim_source
+    assert "except Exception:\n        contained_result = None" in shim_source
+
+
 def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
