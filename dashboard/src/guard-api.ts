@@ -3219,6 +3219,222 @@ export async function loadFeedPage(): Promise<FeedPageData> {
   return { snapshot };
 }
 
+// ── MCP policy creation requests (VPC045–047/056) ──────────────────────────
+// Dashboard surface for staged MCP policy creation. Loads sanitized detail
+// from GET /v1/mcp-policy/requests/<id> and resolves via
+// POST /v1/mcp-policy/requests/<id>/decision. The daemon never returns the
+// canonical policy YAML, plan JSON, or approval credentials; we only ever
+// render the sanitized summary the daemon provides.
+
+export type McpPolicyWritePlan = {
+  additions: readonly string[];
+  replacements: readonly string[];
+  removals: readonly string[];
+};
+
+export type McpPolicySemanticDiff = {
+  additionCount: number;
+  replacementCount: number;
+  removalCount: number;
+};
+
+export type McpPolicyApplyResult = {
+  inserted: number;
+  replaced: number;
+};
+
+export type McpPolicyRequestStatus =
+  | "pending"
+  | "applied"
+  | "declined"
+  | "expired"
+  | "failed";
+
+export type McpPolicyRequest = {
+  requestId: string;
+  status: McpPolicyRequestStatus;
+  documentId: string;
+  candidateDigest: string;
+  expectedCurrentDigest: string | null;
+  expectedPolicyGeneration: number | null;
+  mode: "merge" | "replace";
+  createdAt: string;
+  expiresAt: string;
+  resolvedAt: string | null;
+  failureCode: string | null;
+  isTerminal: boolean;
+  isExpired: boolean;
+  result: McpPolicyApplyResult;
+  writePlan: McpPolicyWritePlan;
+  semanticDiff: McpPolicySemanticDiff;
+  activeEnforcementWarning: boolean;
+};
+
+export type McpPolicyDecisionResult = {
+  resolved: boolean;
+  requestId: string;
+  status: McpPolicyRequestStatus;
+  resolvedAt: string | null;
+  failureCode?: string | null;
+  message?: string;
+};
+
+const MCP_POLICY_TERMINAL_STATUSES: Record<McpPolicyRequestStatus, true> = {
+  applied: true,
+  declined: true,
+  expired: true,
+  failed: true,
+  pending: false,
+};
+
+function normalizeMcpPolicyStatus(value: unknown): McpPolicyRequestStatus {
+  if (typeof value === "string" && value in MCP_POLICY_TERMINAL_STATUSES) {
+    return value as McpPolicyRequestStatus;
+  }
+  return "pending";
+}
+
+function normalizeMcpPolicyApplyResult(value: unknown): McpPolicyApplyResult {
+  const record = isRecord(value) ? value : {};
+  const inserted = record["inserted"];
+  const replaced = record["replaced"];
+  return {
+    inserted:
+      typeof inserted === "number" && Number.isFinite(inserted) ? inserted : 0,
+    replaced:
+      typeof replaced === "number" && Number.isFinite(replaced) ? replaced : 0,
+  };
+}
+
+function asStringList(value: unknown): readonly string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function normalizeMcpPolicyWritePlan(value: unknown): McpPolicyWritePlan {
+  const record = isRecord(value) ? value : {};
+  return {
+    additions: asStringList(record["additions"]),
+    replacements: asStringList(record["replacements"]),
+    removals: asStringList(record["removals"]),
+  };
+}
+
+function normalizeMcpPolicySemanticDiff(value: unknown): McpPolicySemanticDiff {
+  const record = isRecord(value) ? value : {};
+  const additionCount = record["additionCount"];
+  const replacementCount = record["replacementCount"];
+  const removalCount = record["removalCount"];
+  return {
+    additionCount:
+      typeof additionCount === "number" && Number.isFinite(additionCount) ? additionCount : 0,
+    replacementCount:
+      typeof replacementCount === "number" && Number.isFinite(replacementCount)
+        ? replacementCount
+        : 0,
+    removalCount:
+      typeof removalCount === "number" && Number.isFinite(removalCount) ? removalCount : 0,
+  };
+}
+
+// Defensively normalize an opaque daemon payload into the dashboard view
+// model. Never trusts unknown keys; only the explicitly-sanitized fields
+// surface. The canonical YAML / plan JSON never arrive here.
+function normalizeMcpPolicyRequest(raw: unknown): McpPolicyRequest {
+  const record = isRecord(raw) ? raw : {};
+  const expectedPolicyGeneration = record["expectedPolicyGeneration"];
+  return {
+    requestId: typeof record["requestId"] === "string" ? record["requestId"] : "",
+    status: normalizeMcpPolicyStatus(record["status"]),
+    documentId: typeof record["documentId"] === "string" ? record["documentId"] : "",
+    candidateDigest: typeof record["candidateDigest"] === "string" ? record["candidateDigest"] : "",
+    expectedCurrentDigest:
+      typeof record["expectedCurrentDigest"] === "string" ? record["expectedCurrentDigest"] : null,
+    expectedPolicyGeneration:
+      typeof expectedPolicyGeneration === "number" && Number.isFinite(expectedPolicyGeneration)
+        ? expectedPolicyGeneration
+        : null,
+    mode: record["mode"] === "replace" ? "replace" : "merge",
+    createdAt: typeof record["createdAt"] === "string" ? record["createdAt"] : "",
+    expiresAt: typeof record["expiresAt"] === "string" ? record["expiresAt"] : "",
+    resolvedAt: typeof record["resolvedAt"] === "string" ? record["resolvedAt"] : null,
+    failureCode: typeof record["failureCode"] === "string" ? record["failureCode"] : null,
+    isTerminal: record["isTerminal"] === true,
+    isExpired: record["isExpired"] === true,
+    result: normalizeMcpPolicyApplyResult(record["result"]),
+    writePlan: normalizeMcpPolicyWritePlan(record["writePlan"]),
+    semanticDiff: normalizeMcpPolicySemanticDiff(record["semanticDiff"]),
+    activeEnforcementWarning: record["activeEnforcementWarning"] === true,
+  };
+}
+
+/**
+ * GET /v1/mcp-policy/requests/<id>
+ *
+ * Loads the sanitized MCP policy request detail. The daemon never returns
+ * the canonical policy YAML or the full plan JSON — only the summary this
+ * surface renders. Returns null when the request does not exist (404) so
+ * callers can distinguish "not an MCP request" from a real fetch failure.
+ */
+export async function fetchMcpPolicyRequest(requestId: string): Promise<McpPolicyRequest | null> {
+  const response = await fetchGuardApi(`/v1/mcp-policy/requests/${encodeURIComponent(requestId)}`, {
+    method: "GET",
+  });
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
+  }
+  const payload = (await response.json().catch(() => null)) as unknown;
+  return normalizeMcpPolicyRequest(payload);
+}
+
+/**
+ * POST /v1/mcp-policy/requests/<id>/decision
+ *
+ * Resolves an MCP policy creation request with `action: "approve" | "decline"`.
+ * Authenticated via the existing dashboard session header (withGuardAuth) and
+ * idempotent: re-submitting on a terminal request returns the current
+ * resolved state with `resolved: true` rather than an error.
+ */
+export async function resolveMcpPolicyRequest(input: {
+  requestId: string;
+  action: "approve" | "decline";
+  approval_password?: string;
+  approval_totp_code?: string;
+}): Promise<McpPolicyDecisionResult> {
+  const response = await fetchGuardApi(
+    `/v1/mcp-policy/requests/${encodeURIComponent(input.requestId)}/decision`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: input.action,
+        ...(input.approval_password ? { approval_password: input.approval_password } : {}),
+        ...(input.approval_totp_code ? { approval_totp_code: input.approval_totp_code } : {}),
+      }),
+    },
+  );
+  const payloadBody = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null,
+    );
+  }
+  const record = isRecord(payloadBody) ? payloadBody : {};
+  return {
+    resolved: record["resolved"] === true,
+    requestId: typeof record["requestId"] === "string" ? record["requestId"] : "",
+    status: normalizeMcpPolicyStatus(record["status"]),
+    resolvedAt: typeof record["resolvedAt"] === "string" ? record["resolvedAt"] : null,
+    failureCode: typeof record["failureCode"] === "string" ? record["failureCode"] : null,
+    message: typeof record["message"] === "string" ? record["message"] : undefined,
+  };
+}
+
 export {
   derivePackageWorkbenchFromReceipts,
   filterPackageWorkbenchFindings,

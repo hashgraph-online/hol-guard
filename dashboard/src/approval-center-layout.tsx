@@ -1,11 +1,15 @@
+import { lazy, Suspense, useCallback, useState } from "react";
 import type { ReactNode } from "react";
-import { useCallback, useState } from "react";
 import { ShellFooter } from "./shell-footer";
 import { ShellHeader, ShellSidebar } from "./approval-center-primitives";
 import type { AppView } from "./approval-center-primitives";
 import { ReceiptsWorkspace } from "./receipts-workspace";
 import { ReviewWorkspace } from "./review-workspace";
 import { QueueConnectionError } from "./queue-connection-error";
+
+const McpPolicyRequestPanel = lazy(() =>
+  import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel })),
+);
 import type { BulkGateCredentials } from "./approval-gate-utils";
 import type {
   GuardApprovalGatePublicConfig,
@@ -36,7 +40,8 @@ type DetailState =
       diff: GuardArtifactDiff | null;
       receipt: GuardReceipt | null;
       policy: GuardPolicyDecision[];
-    };
+    }
+  | { kind: "mcp-policy"; requestId: string };
 
 type ReceiptsState =
   | { kind: "loading" }
@@ -108,6 +113,24 @@ function renderInboxContent(props: LayoutProps): ReactNode {
         onRetry={props.onRetry}
         onRepair={props.onRepair}
       />
+    );
+  }
+  if (props.detail.kind === "mcp-policy") {
+    return (
+      <Suspense
+        fallback={
+          <div className="space-y-4" aria-busy="true" aria-live="polite">
+            <div className="guard-skeleton h-8 w-72" />
+            <div className="guard-skeleton h-24 w-full" />
+            <div className="guard-skeleton h-40 w-full" />
+          </div>
+        }
+      >
+        <McpPolicyRequestPanel
+          requestId={props.detail.requestId}
+          approvalGate={props.approvalGate ?? null}
+        />
+      </Suspense>
     );
   }
   return (
