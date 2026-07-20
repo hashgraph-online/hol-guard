@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -40,7 +41,7 @@ def _group(
 
 
 def _record_identity(
-    group: dict[str, object],
+    group: Mapping[str, object],
     *,
     event: str = "PreToolUse",
     source_format: str = "json",
@@ -218,7 +219,7 @@ def test_migration_deduplicates_only_canonical_equivalents_and_surfaces_conflict
         "features": {"hooks": True},
         "hooks": {"PreToolUse": [_group("python3 hook.py", timeout=12)]},
     }
-    equivalent = {"hooks": {"PreToolUse": [_group("python3   hook.py", timeout=12.0)]}}
+    equivalent: dict[str, object] = {"hooks": {"PreToolUse": [_group("python3   hook.py", timeout=12.0)]}}
 
     changed = codex_adapter._migrate_hooks_json_into_config(
         config_payload,
@@ -228,9 +229,13 @@ def test_migration_deduplicates_only_canonical_equivalents_and_surfaces_conflict
     )
 
     assert changed is False
-    assert len(config_payload["hooks"]["PreToolUse"]) == 1  # type: ignore[index]
+    config_hooks = config_payload["hooks"]
+    assert isinstance(config_hooks, dict)
+    pre_tool_use = config_hooks["PreToolUse"]
+    assert isinstance(pre_tool_use, list)
+    assert len(pre_tool_use) == 1
 
-    conflicting = {"hooks": {"PreToolUse": [_group("python3 hook.py", timeout=13)]}}
+    conflicting: dict[str, object] = {"hooks": {"PreToolUse": [_group("python3 hook.py", timeout=13)]}}
     with pytest.raises(RuntimeError, match="codex_hook_migration_conflict"):
         codex_adapter._migrate_hooks_json_into_config(
             config_payload,
