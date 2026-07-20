@@ -120,6 +120,9 @@ def test_recursive_package_lock_deadline_raises_instead_of_returning_partial_ent
         ),
         ("package-lock.json", '{"lockfileVersion":99,"packages":{}}', "unsupported_version"),
         ("package-lock.json", '{"lockfileVersion":3,"packages":[]}', "unsupported_shape"),
+        ("bun.lock", '{"lockfileVersion":99,"packages":{}}', "unsupported_version"),
+        ("bun.lock", '{"lockfileVersion":1,"packages":[]}', "unsupported_shape"),
+        ("bun.lock", '{"lockfileVersion":1,"packages":{"demo":[]}}', "parse_error"),
         ("Cargo.lock", "version = [\n", "syntax_error"),
         ("poetry.lock", "[[package]\nname = 'demo'\n", "syntax_error"),
         ("pnpm-lock.yaml", "packages:\n  truncated-entry\n", "syntax_error"),
@@ -171,6 +174,43 @@ def test_lockfile_parse_result_rejects_dependency_count_over_bound(monkeypatch: 
     assert result.complete is False
     assert result.entries == ()
     assert result.error_reason == "entry_limit_exceeded"
+
+
+def test_lockfile_parse_result_fail_closes_on_unexpected_dependency_parser_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_parser_failure(*args: object, **kwargs: object) -> dict[str, str]:
+        del args, kwargs
+        raise RuntimeError("unexpected parser failure")
+
+    monkeypatch.setattr(evaluator_module, "_dependency_map_for_path", unexpected_parser_failure)
+
+    result = evaluator_module._parse_lockfile_text_result("Cargo.lock", "")
+
+    assert result.complete is False
+    assert result.entries == ()
+    assert result.error_reason == "parse_error"
+
+
+def test_bun_jsonc_lockfile_is_parsed_completely() -> None:
+    lockfile_text = """{
+      // Bun's text lockfile supports JSONC.
+      "lockfileVersion": 1,
+      "packages": {
+        "left-pad": ["left-pad@1.3.0", "", {}, "sha512-demo",],
+        "@scope/demo": ["@scope/demo@2.4.1", "", {},],
+        "local": ["local@workspace:packages/local"],
+      },
+    }
+    """
+
+    result = evaluator_module._parse_lockfile_text_result("bun.lock", lockfile_text)
+
+    assert result.complete is True
+    assert {(entry.package_name, entry.version) for entry in result.entries} == {
+        ("@scope/demo", "2.4.1"),
+        ("left-pad", "1.3.0"),
+    }
 
 
 @pytest.mark.parametrize(
@@ -241,3 +281,57 @@ def test_incomplete_lockfile_blocks_in_strict_mode(tmp_path: Path) -> None:
     assert result.decision == "block"
     assert result.policy_action == "block"
     assert result.packages[0]["lockfileParseError"] == "unsupported_version"
+
+
+def test_late_incomplete_lockfile_result_is_not_deduplicated_against_direct_package(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    lockfile_text = json.dumps(
+        {
+            "lockfileVersion": 3,
+            "packages": {
+                "": {"dependencies": {"react": "18.0.0"}},
+                "node_modules/react": {"version": "18.0.0"},
+            },
+        }
+    )
+    _write_text(workspace_dir / "package-lock.json", lockfile_text)
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(packages=[_package(name="react", version="18.0.0", default_action="allow")]),
+        "2026-05-19T00:00:00Z",
+    )
+    real_parser = evaluator_module._parse_lockfile_text_result
+    parse_calls = 0
+
+    def changing_parser(path: str, text: str):
+        nonlocal parse_calls
+        parse_calls += 1
+        if parse_calls == 3:
+            return lockfile_parse_module.incomplete_lockfile_result(
+                path,
+                text.encode("utf-8"),
+                error_reason="parse_error",
+                budget_ms=200,
+            )
+        return real_parser(path, text)
+
+    monkeypatch.setattr(evaluator_module, "_parse_lockfile_text_result", changing_parser)
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_from_command("npm install react@18.0.0", workspace=workspace_dir),
+        store=store,
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert parse_calls >= 3
+    assert result.decision == "ask"
+    assert any(package.get("lockfileParseComplete") is False for package in result.packages)
+    assert any(reason["code"] == "lockfile_parse_incomplete" for reason in result.reasons)

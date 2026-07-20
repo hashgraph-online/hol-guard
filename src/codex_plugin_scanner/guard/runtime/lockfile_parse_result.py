@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from ..stable_digest import stable_digest_hex
+from .jsonc import loads_jsonc
 from .package_manifest_diff import _DeadlineExceededError
 
 if TYPE_CHECKING or sys.version_info >= (3, 11):
@@ -24,8 +25,21 @@ LOCKFILE_MAX_NODES = 250_000
 LOCKFILE_MAX_DEPTH = 128
 
 _JSON_LOCKFILES = {"package-lock.json", "composer.lock", "pipfile.lock"}
-_TOML_LOCKFILES = {"bun.lock", "cargo.lock", "poetry.lock", "uv.lock"}
+_JSONC_LOCKFILES = {"bun.lock"}
+_TOML_LOCKFILES = {"cargo.lock", "poetry.lock", "uv.lock"}
 _TEXT_LOCKFILES = {"gemfile.lock", "pnpm-lock.yaml", "yarn.lock"}
+_LOCKFILE_FORMAT_MAP = {
+    "package-lock.json": "npm-package-lock",
+    "pnpm-lock.yaml": "pnpm-lock",
+    "yarn.lock": "yarn-lock",
+    "bun.lock": "bun-lock",
+    "cargo.lock": "cargo-lock",
+    "composer.lock": "composer-lock",
+    "gemfile.lock": "bundler-lock",
+    "poetry.lock": "poetry-lock",
+    "uv.lock": "uv-lock",
+    "pipfile.lock": "pipenv-lock",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,7 +123,7 @@ def parse_lockfile_text(
         if len(source) > LOCKFILE_MAX_BYTES:
             raise _LockfileValidationError("byte_limit_exceeded")
         lower_name = path.rsplit("/", 1)[-1].lower()
-        if lower_name not in _JSON_LOCKFILES | _TOML_LOCKFILES | _TEXT_LOCKFILES:
+        if lower_name not in _JSON_LOCKFILES | _JSONC_LOCKFILES | _TOML_LOCKFILES | _TEXT_LOCKFILES:
             raise _LockfileValidationError("unsupported_format")
         _validate_lockfile_structure(lower_name, text, deadline=deadline)
         if lower_name == "package-lock.json":
@@ -147,6 +161,9 @@ def parse_lockfile_text(
         error_reason = "resource_limit_exceeded"
     except (TypeError, UnicodeError, ValueError):
         error_reason = "parse_error"
+    except Exception:
+        # Dependency parsers are pluggable; any unexpected parser failure must fail closed.
+        error_reason = "parse_error"
     return incomplete_lockfile_result(
         path,
         source,
@@ -158,27 +175,7 @@ def parse_lockfile_text(
 
 def _lockfile_format(path: str) -> str:
     name = path.rsplit("/", 1)[-1].lower()
-    if name == "package-lock.json":
-        return "npm-package-lock"
-    if name == "pnpm-lock.yaml":
-        return "pnpm-lock"
-    if name == "yarn.lock":
-        return "yarn-lock"
-    if name == "bun.lock":
-        return "bun-lock"
-    if name == "cargo.lock":
-        return "cargo-lock"
-    if name == "composer.lock":
-        return "composer-lock"
-    if name == "gemfile.lock":
-        return "bundler-lock"
-    if name == "poetry.lock":
-        return "poetry-lock"
-    if name == "uv.lock":
-        return "uv-lock"
-    if name == "pipfile.lock":
-        return "pipenv-lock"
-    return "unknown"
+    return _LOCKFILE_FORMAT_MAP.get(name, "unknown")
 
 
 def _ensure_within_deadline(deadline: float) -> None:
@@ -198,6 +195,17 @@ def _validate_lockfile_structure(name: str, text: str, *, deadline: float) -> No
             _validate_optional_lists(payload, ("packages", "packages-dev"))
         else:
             _validate_optional_mappings(payload, ("default", "develop"))
+        return
+    if name in _JSONC_LOCKFILES:
+        payload = loads_jsonc(
+            text or "{}",
+            object_pairs_hook=_unique_object,
+            deadline_check=lambda: _ensure_within_deadline(deadline),
+        )
+        _validate_object_bounds(payload, deadline=deadline)
+        if not isinstance(payload, dict):
+            raise _LockfileValidationError("unsupported_shape")
+        _validate_bun_lock(payload)
         return
     if name in _TOML_LOCKFILES:
         payload = tomllib.loads(text or "")
@@ -231,10 +239,11 @@ def _validate_object_bounds(payload: object, *, deadline: float) -> None:
             raise _LockfileValidationError("node_limit_exceeded")
         if depth > LOCKFILE_MAX_DEPTH:
             raise _LockfileValidationError("depth_limit_exceeded")
+        next_depth = depth + 1
         if isinstance(value, dict):
-            stack.extend((item, depth + 1) for item in value.values())
+            stack.extend([(item, next_depth) for item in value.values()])
         elif isinstance(value, list):
-            stack.extend((item, depth + 1) for item in value)
+            stack.extend([(item, next_depth) for item in value])
 
 
 def _validate_package_lock(payload: dict[str, object]) -> None:
@@ -242,6 +251,13 @@ def _validate_package_lock(payload: dict[str, object]) -> None:
     if version is not None and (isinstance(version, bool) or version not in {1, 2, 3}):
         raise _LockfileValidationError("unsupported_version")
     _validate_optional_mappings(payload, ("packages", "dependencies"))
+
+
+def _validate_bun_lock(payload: dict[str, object]) -> None:
+    version = payload.get("lockfileVersion")
+    if version is not None and (isinstance(version, bool) or version not in {0, 1, 2}):
+        raise _LockfileValidationError("unsupported_version")
+    _validate_optional_mappings(payload, ("workspaces", "packages"))
 
 
 def _validate_optional_mappings(payload: dict[str, object], keys: tuple[str, ...]) -> None:
@@ -265,8 +281,8 @@ def _validate_text_lockfile(name: str, text: str, *, deadline: float) -> None:
         stripped = raw_line.strip()
         if not stripped or stripped.startswith("#"):
             continue
-        bracket_depth += sum(raw_line.count(char) for char in "[{")
-        bracket_depth -= sum(raw_line.count(char) for char in "]}")
+        bracket_depth += raw_line.count("[") + raw_line.count("{")
+        bracket_depth -= raw_line.count("]") + raw_line.count("}")
         if bracket_depth < 0:
             raise _LockfileValidationError("syntax_error")
         if name == "pnpm-lock.yaml" and ":" not in stripped and not stripped.startswith("-"):

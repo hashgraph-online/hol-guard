@@ -1563,7 +1563,7 @@ def _evaluate_with_bundle(
             workspace_dir=workspace_dir,
             now_timestamp=now_timestamp,
         )
-        if _result_package_identity(package) not in direct_identities
+        if _is_incomplete_lockfile_package(package) or _result_package_identity(package) not in direct_identities
     )
     if not packages:
         return None
@@ -3440,7 +3440,7 @@ def _lockfile_dependency_versions(
             versions.update(_yarn_lock_target_versions(lockfile_text, targets))
             continue
         if lockfile_path.name == "bun.lock":
-            versions.update(_bun_lock_target_versions(lockfile_text, targets))
+            versions.update(_bun_lock_target_versions(parse_result, targets))
             continue
         if lockfile_path.name == "Cargo.lock":
             versions.update(_cargo_lock_target_versions(lockfile_text, targets))
@@ -3801,25 +3801,14 @@ def _expected_yarn_selectors(target: dict[str, object]) -> tuple[str, ...]:
 
 
 def _bun_lock_target_versions(
-    text: str,
+    parse_result: LockfileParseResult,
     targets: tuple[dict[str, object], ...],
 ) -> dict[tuple[str, str | None], str]:
-    try:
-        payload = tomllib.loads(text or "")
-    except tomllib.TOMLDecodeError:
-        return {}
-    packages = payload.get("package")
-    if not isinstance(packages, list):
-        return {}
     versions_by_name: dict[str, list[str]] = {}
-    for entry in packages:
-        if not isinstance(entry, dict):
-            continue
-        name = _optional_string(entry.get("name"))
-        version = _optional_string(entry.get("version"))
-        if name is None or version is None:
-            continue
-        versions_by_name.setdefault(name, []).append(version)
+    for entry in parse_result.entries:
+        candidate_versions = versions_by_name.setdefault(entry.package_name, [])
+        if entry.version not in candidate_versions:
+            candidate_versions.append(entry.version)
     versions: dict[tuple[str, str | None], str] = {}
     for target in targets:
         target_key = _lockfile_target_key(target)
@@ -4651,6 +4640,12 @@ def _result_package_identity(package: dict[str, object]) -> tuple[str, str, str,
         json.dumps(package, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     )
     return ("opaque", ecosystem or "", namespace or "", name, version or "", opaque_sha256)
+
+
+def _is_incomplete_lockfile_package(package: dict[str, object]) -> bool:
+    if package.get("lockfileParseComplete") is False:
+        return True
+    return any(reason.get("code") == "lockfile_parse_incomplete" for reason in _dict_items(package.get("reasons")))
 
 
 def _with_additional_reason(
