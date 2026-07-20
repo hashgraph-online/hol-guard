@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from itertools import islice
 from typing import cast
 
 from .command_extensions import CommandSafetyExtensionRegistry
@@ -24,6 +25,11 @@ from .extension_control_contract import (
 
 _FAILURE_REASON = "control.resolver-failure"
 _TRUSTED_LOCKDOWN_SURFACES = frozenset({ControlSurface.TRUSTED_LOCAL_RECOVERY, ControlSurface.TRUSTED_LOCAL_PROOF})
+_MAX_LAYERS = len(ControlLayerKind)
+_MAX_CONTROLS_PER_LAYER = 512
+_MAX_RESOLUTION_IDS = 1024
+_MAX_OBSERVATIONS = 2048
+_MAX_INPUT_TEXT_LENGTH = 256
 
 
 def compose_control_layers(layers: Iterable[ExtensionControlLayer]) -> ComposedExtensionControls:
@@ -62,10 +68,24 @@ def resolve_extension_controls(
     observations: tuple[str, ...] = (),
 ) -> ControlResolution:
     """Resolve controls for classified catalog identities without suppressing observations."""
-    layer_values = tuple(layers)
+    layer_values = tuple(islice(layers, _MAX_LAYERS + 1))
     composed = compose_control_layers(layer_values)
     failures = set(composed.failures)
-    if not isinstance(cast(object, surface), ControlSurface):
+    if (
+        len(layer_values) > _MAX_LAYERS
+        or any(len(layer.controls) > _MAX_CONTROLS_PER_LAYER for layer in layer_values)
+        or len(extension_ids) > _MAX_RESOLUTION_IDS
+        or len(permission_ids) > _MAX_RESOLUTION_IDS
+        or len(observations) > _MAX_OBSERVATIONS
+        or any(
+            len(value) > _MAX_INPUT_TEXT_LENGTH
+            for values in (extension_ids, permission_ids, observations)
+            for value in values
+        )
+    ):
+        failures.add(ControlResolverFailure(ResolverFailureCode.INPUT_LIMIT_EXCEEDED))
+        return _resolution(composed, failures, observations[:_MAX_OBSERVATIONS], reason=None)
+    if type(surface) is not ControlSurface:
         failures.add(ControlResolverFailure(ResolverFailureCode.INVALID_CONTROL_SURFACE))
     if not isinstance(cast(object, registry), CommandSafetyExtensionRegistry):
         failures.add(ControlResolverFailure(ResolverFailureCode.CATALOG_UNAVAILABLE))
@@ -107,8 +127,11 @@ def _validate_layer_targets(
 ) -> None:
     for control in layer.controls:
         if control.target.kind is ControlTargetKind.EXTENSION:
-            if registry.get(control.target.target_id) is None:
+            extension = registry.get(control.target.target_id)
+            if extension is None:
                 failures.add(ControlResolverFailure(ResolverFailureCode.UNKNOWN_EXTENSION_TARGET, layer.kind))
+            elif extension.extension_id != control.target.target_id:
+                failures.add(ControlResolverFailure(ResolverFailureCode.NON_CANONICAL_TARGET, layer.kind))
         elif registry.permission(control.target.target_id) is None:
             failures.add(ControlResolverFailure(ResolverFailureCode.UNKNOWN_PERMISSION_TARGET, layer.kind))
 

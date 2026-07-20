@@ -45,6 +45,8 @@ class ResolverFailureCode(str, Enum):
     INVALID_CONTROL_SURFACE = "invalid-control-surface"
     INVALID_OBSERVATION_BINDING = "invalid-observation-binding"
     CATALOG_UNAVAILABLE = "catalog-unavailable"
+    INPUT_LIMIT_EXCEEDED = "input-limit-exceeded"
+    NON_CANONICAL_TARGET = "non-canonical-target"
 
 
 @dataclass(frozen=True, slots=True, order=True)

@@ -274,3 +274,57 @@ def test_duplicate_layers_targets_and_invalid_surface_fail_closed() -> None:
     )
     assert invalid.blocked is True
     assert invalid.failures[0].code is ResolverFailureCode.INVALID_CONTROL_SURFACE
+
+
+def test_resolver_rejects_alias_targets_instead_of_missing_disabled_control() -> None:
+    canonical = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[0]
+    alias = "command.legacy-control-alias"
+    aliased = replace(canonical, aliases=(*canonical.aliases, alias))
+    registry = CommandSafetyExtensionRegistry(
+        tuple(
+            aliased if item.extension_id == canonical.extension_id else item
+            for item in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+        )
+    )
+    layer = _layer(
+        ControlLayerKind.LOCAL_ADMIN,
+        _control(ControlTargetKind.EXTENSION, alias, ControlState.DISABLED),
+        digest=registry.catalog_digest,
+    )
+
+    resolution = resolve_extension_controls(
+        (layer,),
+        registry=registry,
+        extension_ids=(canonical.extension_id,),
+        permission_ids=(),
+        observations=("classified",),
+        surface=ControlSurface.COMMAND_EVALUATION,
+    )
+
+    assert resolution.blocked is True
+    assert resolution.failures[0].code is ResolverFailureCode.NON_CANONICAL_TARGET
+    assert evaluate_effect_decision(EffectDecisionRequest(resolution.factors)).action == "block"
+
+
+def test_resolver_input_limits_fail_closed_at_boundary() -> None:
+    extension_id, _ = _catalog_subjects()
+    accepted = resolve_extension_controls(
+        (),
+        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        extension_ids=(extension_id,),
+        permission_ids=(),
+        observations=tuple("observed" for _ in range(2048)),
+        surface=ControlSurface.COMMAND_EVALUATION,
+    )
+    rejected = resolve_extension_controls(
+        (),
+        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        extension_ids=(extension_id,),
+        permission_ids=(),
+        observations=tuple("observed" for _ in range(2049)),
+        surface=ControlSurface.COMMAND_EVALUATION,
+    )
+
+    assert accepted.blocked is False
+    assert rejected.blocked is True
+    assert rejected.failures[0].code is ResolverFailureCode.INPUT_LIMIT_EXCEEDED

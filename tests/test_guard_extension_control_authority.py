@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -10,6 +11,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     AuthorityPhase,
     ExtensionControlAuthorityError,
+    ExtensionControlAuthorityView,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
@@ -74,11 +76,17 @@ def _disabled_layer() -> ExtensionControlLayer:
     )
 
 
-def _commit(store: GuardStore, *, revision: int = 0, key: str = "change-1") -> None:
+def _commit(
+    store: GuardStore,
+    *,
+    revision: int = 0,
+    key: str = "change-1",
+    actor_id: str = "local-admin",
+) -> None:
     store.commit_extension_control_layers(
         (_disabled_layer(),),
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        actor_id="local-admin",
+        actor_id=actor_id,
         expected_revision=revision,
         idempotency_key=key,
         nonce=f"nonce-{key}",
@@ -102,6 +110,19 @@ def test_bootstrap_occurs_only_when_database_and_anchor_are_both_absent(tmp_path
     assert missing_database.health is AuthorityHealth.TAMPERED
     assert missing_database.layers_for(ControlSurface.COMMAND_EVALUATION)[0].global_lockdown is True
 
+    second_secrets = MemorySecretStore()
+    second_store = _store(tmp_path / "both-missing", second_secrets)
+    second_store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    anchor_ref = next(secret_id for secret_id in second_secrets.values if secret_id.endswith(":anchor"))
+    del second_secrets.values[anchor_ref]
+    with second_store._connect() as connection:
+        connection.execute("delete from extension_control_authority_snapshot")
+    missing_both_with_existing_key = second_store.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    )
+    assert missing_both_with_existing_key.health is AuthorityHealth.TAMPERED
+    assert anchor_ref not in second_secrets.values
+
 
 def test_authenticated_snapshot_transition_and_anchor_detect_sqlite_tamper(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
@@ -117,6 +138,30 @@ def test_authenticated_snapshot_transition_and_anchor_detect_sqlite_tamper(tmp_p
     view = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     assert view.health is AuthorityHealth.TAMPERED
     assert view.layers == ()
+
+
+def test_authenticated_historical_transition_fields_detect_tamper(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    _commit(store)
+    store.commit_extension_control_layers(
+        (),
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        actor_id="local-admin",
+        expected_revision=1,
+        idempotency_key="change-2",
+        nonce="nonce-change-2",
+    )
+    with store._connect() as connection:
+        connection.execute(
+            "update extension_control_authority_transition set layers_json = ? where revision = 1",
+            ("[]",),
+        )
+
+    view = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+
+    assert view.health is AuthorityHealth.TAMPERED
 
 
 def test_database_rollback_against_monotonic_anchor_fails_closed(tmp_path: Path) -> None:
@@ -201,6 +246,30 @@ def test_failed_anchor_write_leaves_recoverable_prepared_transition(tmp_path: Pa
     assert recovered.revision == 0
 
 
+def test_idempotent_retry_after_prepared_transition_commits_once(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    secrets.fail_anchor_set_number = secrets.anchor_set_count + 1
+    with pytest.raises(ExtensionControlAuthorityError, match="anchor"):
+        _commit(store)
+
+    retried = store.commit_extension_control_layers(
+        (_disabled_layer(),),
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        actor_id="local-admin",
+        expected_revision=0,
+        idempotency_key="change-1",
+        nonce="nonce-change-1",
+    )
+
+    assert retried.health is AuthorityHealth.PROTECTED
+    assert retried.revision == 1
+    with store._connect() as connection:
+        count = connection.execute("select count(*) from extension_control_authority_transition").fetchone()[0]
+    assert count == 1
+
+
 def test_recovery_finalizes_database_commit_when_final_anchor_write_failed(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
@@ -257,3 +326,66 @@ def test_extension_control_schema_rejects_future_or_gapped_versions(tmp_path: Pa
         connection.execute("update extension_control_schema_migration set version = 99 where singleton = 1")
     with pytest.raises(ExtensionControlAuthorityError, match="schema"):
         store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+
+
+def test_non_protected_authority_requires_exact_trusted_surface_enum() -> None:
+    digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    view = ExtensionControlAuthorityView(AuthorityHealth.TAMPERED, 0, digest, ())
+
+    raw = view.layers_for(cast(ControlSurface, "trusted-local-proof"))
+    trusted = view.layers_for(ControlSurface.TRUSTED_LOCAL_PROOF)
+
+    assert len(raw) == 1
+    assert raw[0].kind is ControlLayerKind.LOCAL_ADMIN
+    assert raw[0].global_lockdown is True
+    assert trusted == ()
+
+
+def test_transition_private_values_and_authority_secrets_never_enter_sqlite(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    _commit(store, actor_id="private-actor")
+
+    with store._connect() as connection:
+        rows = [
+            *connection.execute("select * from extension_control_authority_snapshot").fetchall(),
+            *connection.execute("select * from extension_control_authority_transition").fetchall(),
+        ]
+    database_dump = repr([tuple(row) for row in rows])
+
+    for private_value in ("private-actor", "change-1", "nonce-change-1", *secrets.values.values()):
+        assert private_value not in database_dump
+
+
+def test_idempotency_key_cannot_replay_different_transition(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    _commit(store)
+
+    with pytest.raises(ExtensionControlAuthorityError, match="idempotency key request mismatch"):
+        store.commit_extension_control_layers(
+            (),
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            actor_id="different-actor",
+            expected_revision=0,
+            idempotency_key="change-1",
+            nonce="different-nonce",
+        )
+
+
+def test_oversized_persisted_layers_fail_closed_without_deserialization(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    oversized = "x" * (256 * 1024 + 1)
+    with store._connect() as connection:
+        connection.execute(
+            "update extension_control_authority_snapshot set layers_json = ? where singleton = 1",
+            (oversized,),
+        )
+
+    view = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+
+    assert view.health is AuthorityHealth.TAMPERED

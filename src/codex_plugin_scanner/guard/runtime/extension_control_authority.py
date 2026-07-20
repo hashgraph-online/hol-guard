@@ -55,7 +55,10 @@ class ExtensionControlAuthorityView:
     def layers_for(self, surface: ControlSurface) -> tuple[ExtensionControlLayer, ...]:
         if self.health is AuthorityHealth.PROTECTED:
             return self.layers
-        if surface in {ControlSurface.TRUSTED_LOCAL_RECOVERY, ControlSurface.TRUSTED_LOCAL_PROOF}:
+        if type(surface) is ControlSurface and surface in {
+            ControlSurface.TRUSTED_LOCAL_RECOVERY,
+            ControlSurface.TRUSTED_LOCAL_PROOF,
+        }:
             return ()
         return (
             ExtensionControlLayer(

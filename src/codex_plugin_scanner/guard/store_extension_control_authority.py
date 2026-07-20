@@ -5,14 +5,7 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import secrets
-import sqlite3
-from collections.abc import Generator
-from contextlib import contextmanager
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import cast
 
 from .runtime.extension_control_authority import (
     SNAPSHOT_PURPOSE,
@@ -22,26 +15,24 @@ from .runtime.extension_control_authority import (
     AuthorityPhase,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
-    anchor_from_json,
-    anchor_to_json,
     authenticated_record,
     layers_from_json,
     layers_to_json,
     verify_authenticated_record,
 )
-from .runtime.extension_control_contract import (
-    ControlLayerKind,
-    ExtensionControlLayer,
-)
-from .runtime.extension_control_resolver import compose_control_layers
-from .store_base import SecretStore, SystemKeyringSecretStore
+from .runtime.extension_control_contract import ExtensionControlLayer
+from .store_base import SecretStore
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
+from .store_extension_control_authority_support import (
+    _now,
+    _private_hash,
+    _row_int,
+    _row_str,
+)
+from .store_extension_control_authority_transitions import _ExtensionControlAuthorityTransitionMixin
 
-_KEY_REF_SUFFIX = ":authentication-key"
-_ANCHOR_REF_SUFFIX = ":anchor"
 
-
-class StoreExtensionControlAuthorityMixin:
+class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMixin):
     """GuardStore mixin for the local extension-control authority."""
 
     _extension_control_authority_secret_store: SecretStore | None = None
@@ -76,21 +67,40 @@ class StoreExtensionControlAuthorityMixin:
             idempotency_key=idempotency_key,
             nonce=nonce,
         )
+        layers_json = layers_to_json(layers)
+        self._validate_serialized_layers(layers_json)
         with self._extension_control_authority_lock():
             current = self._read_extension_control_authority_locked(catalog_digest, bootstrap=True)
-            if current.health is not AuthorityHealth.PROTECTED:
-                raise ExtensionControlAuthorityError("extension control authority unavailable")
             key = self._authority_key(required=True)
             assert key is not None
-            idempotency_hash = _private_hash(idempotency_key)
-            nonce_hash = _private_hash(nonce)
+            actor_hash = _private_hash(actor_id, key=key, purpose="actor")
+            idempotency_hash = _private_hash(idempotency_key, key=key, purpose="idempotency")
+            nonce_hash = _private_hash(nonce, key=key, purpose="nonce")
             with self._connect() as connection:
                 replay = connection.execute(
-                    "select revision from extension_control_authority_transition where idempotency_key_hash = ?",
+                    "select * from extension_control_authority_transition where idempotency_key_hash = ?",
                     (idempotency_hash,),
                 ).fetchone()
                 if replay is not None:
-                    return current
+                    resumed = self._resume_idempotent_transition(
+                        connection,
+                        replay,
+                        current=current,
+                        catalog_digest=catalog_digest,
+                        layers_json=layers_json,
+                        actor_hash=actor_hash,
+                        idempotency_hash=idempotency_hash,
+                        nonce_hash=nonce_hash,
+                        expected_revision=expected_revision,
+                        key=key,
+                    )
+                    if resumed is not None:
+                        return resumed
+                    connection.commit()
+                    current = self._read_extension_control_authority_locked(catalog_digest, bootstrap=False)
+            if current.health is not AuthorityHealth.PROTECTED:
+                raise ExtensionControlAuthorityError("extension control authority unavailable")
+            with self._connect() as connection:
                 if current.revision != expected_revision:
                     raise ExtensionControlAuthorityError("extension control authority revision conflict")
                 if (
@@ -110,7 +120,6 @@ class StoreExtensionControlAuthorityMixin:
 
             revision = current.revision + 1
             created_at = _now()
-            layers_json = layers_to_json(layers)
             snapshot_json, snapshot_digest, snapshot_mac = authenticated_record(
                 {
                     "revision": revision,
@@ -129,7 +138,7 @@ class StoreExtensionControlAuthorityMixin:
                     "previous_digest": previous_digest,
                     "snapshot_digest": snapshot_digest,
                     "catalog_digest": catalog_digest,
-                    "actor_id_hash": _private_hash(actor_id),
+                    "actor_id_hash": actor_hash,
                     "idempotency_key_hash": idempotency_hash,
                     "nonce_hash": nonce_hash,
                     "created_at": created_at,
@@ -152,7 +161,7 @@ class StoreExtensionControlAuthorityMixin:
                         revision,
                         current.revision,
                         AuthorityPhase.PREPARED.value,
-                        _private_hash(actor_id),
+                        actor_hash,
                         idempotency_hash,
                         nonce_hash,
                         catalog_digest,
@@ -224,35 +233,52 @@ class StoreExtensionControlAuthorityMixin:
                 ).fetchone()
                 if snapshot is None or anchor is None:
                     return self._tampered_view(catalog_digest)
-                current_revision = int(snapshot["revision"])
-                current_digest = str(snapshot["snapshot_digest"])
+                current_revision = _row_int(snapshot, "revision")
+                current_digest = _row_str(snapshot, "snapshot_digest")
                 pending = connection.execute(
-                    "select * from extension_control_authority_transition where revision = ?",
-                    (current_revision + 1,),
+                    """
+                    select * from extension_control_authority_transition
+                    where (revision = ? and phase != ?) or revision = ?
+                    order by revision
+                    limit 1
+                    """,
+                    (
+                        current_revision,
+                        AuthorityPhase.COMMITTED.value,
+                        current_revision + 1,
+                    ),
                 ).fetchone()
-                if anchor.revision == current_revision and anchor.snapshot_digest == current_digest:
-                    if pending is not None and str(pending["phase"]) == AuthorityPhase.PREPARED.value:
-                        connection.execute(
-                            "delete from extension_control_authority_transition where revision = ?",
-                            (current_revision + 1,),
-                        )
-                    if anchor.phase is not AuthorityPhase.COMMITTED:
-                        self._write_and_verify_anchor(
-                            AuthorityAnchor(current_revision, current_digest, AuthorityPhase.COMMITTED),
-                            key=key,
-                        )
-                    return self._read_extension_control_authority_locked(catalog_digest, bootstrap=False)
-                if (
-                    pending is not None
-                    and anchor.phase is AuthorityPhase.ANCHORED
-                    and anchor.revision == current_revision + 1
-                    and anchor.snapshot_digest == str(pending["snapshot_digest"])
-                ):
-                    self._commit_pending_transition(connection, pending)
-                    self._write_and_verify_anchor(
-                        AuthorityAnchor(anchor.revision, anchor.snapshot_digest, AuthorityPhase.COMMITTED),
+                if pending is not None:
+                    resumed = self._resume_idempotent_transition(
+                        connection,
+                        pending,
+                        current=ExtensionControlAuthorityView(
+                            AuthorityHealth.RECOVERY_REQUIRED,
+                            current_revision,
+                            catalog_digest,
+                            (),
+                        ),
+                        catalog_digest=_row_str(pending, "catalog_digest"),
+                        layers_json=_row_str(pending, "layers_json"),
+                        actor_hash=_row_str(pending, "actor_id_hash"),
+                        idempotency_hash=_row_str(pending, "idempotency_key_hash"),
+                        nonce_hash=_row_str(pending, "nonce_hash"),
+                        expected_revision=_row_int(pending, "previous_revision"),
                         key=key,
                     )
+                    if resumed is not None:
+                        return resumed
+                    connection.commit()
+                if anchor.revision == current_revision and anchor.snapshot_digest == current_digest:
+                    if anchor.phase is not AuthorityPhase.COMMITTED:
+                        self._write_and_verify_anchor(
+                            AuthorityAnchor(
+                                current_revision,
+                                current_digest,
+                                AuthorityPhase.COMMITTED,
+                            ),
+                            key=key,
+                        )
                     return self._read_extension_control_authority_locked(catalog_digest, bootstrap=False)
             return self._tampered_view(catalog_digest)
 
@@ -273,8 +299,8 @@ class StoreExtensionControlAuthorityMixin:
             anchor = self._read_anchor(key=key) if key is not None else None
         except Exception:
             return self._degraded_view(catalog_digest)
-        if row is None and anchor is None and bootstrap:
-            return self._bootstrap_extension_control_authority(catalog_digest, key=key)
+        if row is None and anchor is None and key is None and bootstrap:
+            return self._bootstrap_extension_control_authority(catalog_digest, key=None)
         if row is None or key is None or anchor is None:
             return self._tampered_view(catalog_digest)
         try:
@@ -297,6 +323,7 @@ class StoreExtensionControlAuthorityMixin:
             }
             if any(payload.get(name) != value for name, value in expected.items()):
                 raise ExtensionControlAuthorityError("extension control snapshot field mismatch")
+            self._validate_serialized_layers(str(row["layers_json"]))
             layers = layers_from_json(str(row["layers_json"]))
             self._validate_layers(layers, catalog_digest)
             if anchor.revision != revision or anchor.snapshot_digest != str(row["snapshot_digest"]):
@@ -309,9 +336,20 @@ class StoreExtensionControlAuthorityMixin:
                 ):
                     raise ExtensionControlAuthorityError("extension control authority rollback detected")
                 return ExtensionControlAuthorityView(AuthorityHealth.RECOVERY_REQUIRED, revision, catalog_digest, ())
+            if self._pending_transition(revision + 1) is not None:
+                return ExtensionControlAuthorityView(
+                    AuthorityHealth.RECOVERY_REQUIRED,
+                    revision,
+                    catalog_digest,
+                    (),
+                )
             if anchor.phase is not AuthorityPhase.COMMITTED:
                 return ExtensionControlAuthorityView(AuthorityHealth.RECOVERY_REQUIRED, revision, catalog_digest, ())
-            self._validate_transition_chain(revision, key=key)
+            self._validate_transition_chain(
+                revision,
+                current_snapshot_digest=_row_str(row, "snapshot_digest"),
+                key=key,
+            )
             return ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, revision, catalog_digest, layers)
         except ExtensionControlAuthorityError:
             return self._tampered_view(catalog_digest)
@@ -352,186 +390,3 @@ class StoreExtensionControlAuthorityMixin:
             )
         self._write_and_verify_anchor(AuthorityAnchor(0, digest, AuthorityPhase.COMMITTED), key=key)
         return ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 0, catalog_digest, ())
-
-    def _validate_transition_chain(self, revision: int, *, key: bytes) -> None:
-        with self._connect() as connection:
-            rows = connection.execute(
-                "select * from extension_control_authority_transition order by revision"
-            ).fetchall()
-        committed = [row for row in rows if str(row["phase"]) == AuthorityPhase.COMMITTED.value]
-        if [int(row["revision"]) for row in committed] != list(range(1, revision + 1)):
-            raise ExtensionControlAuthorityError("extension control transition gap")
-        for row in committed:
-            payload = verify_authenticated_record(
-                str(row["transition_json"]),
-                expected_digest=str(row["transition_digest"]),
-                expected_mac=str(row["transition_mac"]),
-                key=key,
-                purpose=TRANSITION_PURPOSE,
-            )
-            expected = {
-                "revision": int(row["revision"]),
-                "previous_revision": int(row["previous_revision"]),
-                "snapshot_digest": str(row["snapshot_digest"]),
-                "catalog_digest": str(row["catalog_digest"]),
-                "actor_id_hash": str(row["actor_id_hash"]),
-                "idempotency_key_hash": str(row["idempotency_key_hash"]),
-                "nonce_hash": str(row["nonce_hash"]),
-                "created_at": str(row["created_at"]),
-                "phase": AuthorityPhase.PREPARED.value,
-            }
-            if any(payload.get(name) != value for name, value in expected.items()):
-                raise ExtensionControlAuthorityError("extension control transition field mismatch")
-
-    def _commit_pending_transition(self, connection: sqlite3.Connection, row: sqlite3.Row) -> None:
-        _ = connection.execute(
-            """
-            update extension_control_authority_snapshot
-            set revision = ?, catalog_digest = ?, layers_json = ?, previous_digest = snapshot_digest,
-                snapshot_json = ?, snapshot_digest = ?, snapshot_mac = ?, committed_at = ?
-            where singleton = 1 and revision = ?
-            """,
-            (
-                _row_int(row, "revision"),
-                _row_str(row, "catalog_digest"),
-                _row_str(row, "layers_json"),
-                _row_str(row, "snapshot_json"),
-                _row_str(row, "snapshot_digest"),
-                _row_str(row, "snapshot_mac"),
-                _row_str(row, "created_at"),
-                _row_int(row, "previous_revision"),
-            ),
-        )
-        _ = connection.execute(
-            "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
-            (AuthorityPhase.COMMITTED.value, _now(), _row_int(row, "revision")),
-        )
-
-    def _pending_transition(self, revision: int) -> sqlite3.Row | None:
-        with self._connect() as connection:
-            return connection.execute(
-                "select * from extension_control_authority_transition where revision = ?",
-                (revision,),
-            ).fetchone()
-
-    def _authority_key(self, *, required: bool) -> bytes | None:
-        try:
-            value = self._secret_store().get_secret(self._key_ref())
-        except Exception as exc:
-            if required:
-                raise ExtensionControlAuthorityError("extension control credential store unavailable") from exc
-            raise
-        if value is None:
-            if required:
-                raise ExtensionControlAuthorityError("extension control authentication key missing")
-            return None
-        try:
-            key = base64.urlsafe_b64decode(value.encode("ascii"))
-        except (ValueError, UnicodeEncodeError) as exc:
-            raise ExtensionControlAuthorityError("invalid extension control authentication key") from exc
-        if len(key) != 32:
-            raise ExtensionControlAuthorityError("invalid extension control authentication key")
-        return key
-
-    def _read_anchor(self, *, key: bytes) -> AuthorityAnchor | None:
-        value = self._secret_store().get_secret(self._anchor_ref())
-        return None if value is None else anchor_from_json(value, key=key)
-
-    def _write_and_verify_anchor(self, anchor: AuthorityAnchor, *, key: bytes) -> None:
-        encoded = anchor_to_json(anchor, key=key)
-        self._secret_store().set_secret(self._anchor_ref(), encoded)
-        observed = self._secret_store().get_secret(self._anchor_ref())
-        if observed != encoded:
-            raise ExtensionControlAuthorityError("extension control anchor read-back mismatch")
-
-    def _secret_store(self) -> SecretStore:
-        current = self._extension_control_authority_secret_store
-        if current is None:
-            current = SystemKeyringSecretStore(service_name="hol-guard.extension-control-authority")
-            self._extension_control_authority_secret_store = current
-        if isinstance(current, SystemKeyringSecretStore) and not current._is_available():
-            raise RuntimeError("extension control credential store unavailable")
-        return current
-
-    def _authority_ref_prefix(self) -> str:
-        home = str(cast(Path, self.guard_home).resolve())
-        return "extension-control:" + hashlib.sha256(home.encode("utf-8")).hexdigest()[:20]
-
-    def _key_ref(self) -> str:
-        return self._authority_ref_prefix() + _KEY_REF_SUFFIX
-
-    def _anchor_ref(self) -> str:
-        return self._authority_ref_prefix() + _ANCHOR_REF_SUFFIX
-
-    @contextmanager
-    def _extension_control_authority_lock(self) -> Generator[None, None, None]:
-        with self._hold_advisory_file_lock(
-            path=cast(Path, self.guard_home) / "extension-control-authority.lock",
-            timeout_seconds=30.0,
-            poll_seconds=0.05,
-            timeout_message="Timed out waiting for the extension control authority lock.",
-        ):
-            yield
-
-    @staticmethod
-    def _validate_layers(layers: tuple[ExtensionControlLayer, ...], catalog_digest: str) -> None:
-        if any(layer.catalog_digest != catalog_digest for layer in layers):
-            raise ExtensionControlAuthorityError("extension control catalog digest mismatch")
-        composed = compose_control_layers(layers)
-        if composed.failures:
-            raise ExtensionControlAuthorityError("invalid extension control layers")
-        if len({layer.kind for layer in layers}) != len(layers):
-            raise ExtensionControlAuthorityError("duplicate extension control layer")
-        if any(layer.kind not in {ControlLayerKind.LOCAL_ADMIN, ControlLayerKind.SIGNED_CLOUD} for layer in layers):
-            raise ExtensionControlAuthorityError("invalid extension control layer kind")
-
-    @classmethod
-    def _validate_commit_input(
-        cls,
-        layers: tuple[ExtensionControlLayer, ...],
-        *,
-        catalog_digest: str,
-        actor_id: str,
-        expected_revision: int,
-        idempotency_key: str,
-        nonce: str,
-    ) -> None:
-        cls._validate_layers(layers, catalog_digest)
-        if type(expected_revision) is not int or expected_revision < 0:
-            raise ExtensionControlAuthorityError("invalid expected authority revision")
-        if not actor_id.strip() or not idempotency_key.strip() or not nonce.strip():
-            raise ExtensionControlAuthorityError("invalid extension control transition identity")
-
-    def _degraded_view(self, catalog_digest: str) -> ExtensionControlAuthorityView:
-        health = (
-            AuthorityHealth.DEGRADED_ACKNOWLEDGED
-            if self._extension_control_degraded_acknowledged
-            else AuthorityHealth.DEGRADED_UNACKNOWLEDGED
-        )
-        return ExtensionControlAuthorityView(health, 0, catalog_digest, ())
-
-    @staticmethod
-    def _tampered_view(catalog_digest: str) -> ExtensionControlAuthorityView:
-        return ExtensionControlAuthorityView(AuthorityHealth.TAMPERED, 0, catalog_digest, ())
-
-
-def _row_str(row: sqlite3.Row, name: str) -> str:
-    value = cast(object, row[name])
-    if not isinstance(value, str):
-        raise ExtensionControlAuthorityError("invalid extension control authority row")
-    return value
-
-
-def _row_int(row: sqlite3.Row, name: str) -> int:
-    value = cast(object, row[name])
-    if type(value) is not int:
-        raise ExtensionControlAuthorityError("invalid extension control authority row")
-    return value
-
-
-def _private_hash(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
