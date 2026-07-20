@@ -144,6 +144,7 @@ def _write_authenticated_daemon_files(guard_home: Path, port: int) -> None:
     _DaemonHandler.captured_challenge_guard_token = None
     _DaemonHandler.captured_guard_token = None
     _DaemonHandler.captured_hook_body = None
+    _DaemonHandler.response_body = b"{}"
     _DaemonHandler.challenge_mode = "valid"
     _DaemonHandler.challenge_count = 0
 
@@ -604,7 +605,8 @@ def test_bridge_script_cold_start_stays_below_hook_budget(tmp_path: Path) -> Non
     port = daemon.server_address[1]
     _write_authenticated_daemon_files(guard_home, port)
     config = _bridge_config(guard_home, port)
-    command = [sys.executable, str(Path(bridge.__file__).resolve()), json.dumps(config)]
+    config["manifest_path"] = str(guard_home / "managed" / "codex" / "hooks-fixture.manifest.json")
+    command = [sys.executable, "-I", str(Path(bridge.__file__).resolve()), json.dumps(config)]
     payload = json.dumps({"hook_event_name": "PreToolUse"})
 
     try:

@@ -29,7 +29,7 @@ from .local_authority_integrity import (
     verify_local_authority_payload,
 )
 
-HOOK_MANIFEST_SCHEMA_VERSION = 1
+HOOK_MANIFEST_SCHEMA_VERSION = 2
 HOOK_MANIFEST_MAC_ALGORITHM = LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM
 _HOOK_SECRET_SCHEMA_VERSION = 1
 _HOOK_KEY_BYTES = 32
@@ -142,7 +142,15 @@ def load_authenticated_hook_manifest(
     guard_home: Path,
     config_path: Path,
 ) -> dict[str, object]:
-    path = hook_manifest_path(guard_home, config_path)
+    return load_authenticated_hook_manifest_path(guard_home, hook_manifest_path(guard_home, config_path))
+
+
+def load_authenticated_hook_manifest_path(
+    guard_home: Path,
+    path: Path,
+) -> dict[str, object]:
+    """Authenticate an explicit private manifest path without creating state."""
+
     if not path.exists() and not path.is_symlink():
         raise CodexHookIntegrityError(
             "codex_hook_manifest_missing",
@@ -416,6 +424,7 @@ __all__ = [
     "hook_manifest_path",
     "hook_secret_path",
     "load_authenticated_hook_manifest",
+    "load_authenticated_hook_manifest_path",
     "load_or_create_hook_secret",
     "remove_hook_manifest",
     "remove_hook_secret_if_unused",
