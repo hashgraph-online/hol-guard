@@ -181,6 +181,13 @@ from ..store_evidence import (
     list_evidence,
 )
 from .command_queue_worker import CommandQueueWorker, start_command_queue_worker, stop_command_queue_worker
+from .dashboard_reconnect import (
+    DASHBOARD_RECONNECT_PROTOCOL_VERSION,
+    consume_dashboard_reconnect_challenge,
+    dashboard_reconnect_challenge_identity,
+    issue_dashboard_reconnect_challenge,
+    prepare_dashboard_reconnect_authorization,
+)
 from .dashboard_update import merge_dashboard_update_progress, schedule_guard_dashboard_update
 from .discovery import (
     DAEMON_DISCOVERY_CHALLENGE_TTL_SECONDS,
@@ -288,6 +295,8 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     approval_attention: ApprovalAttentionCoordinator
     daemon_discovery_challenges: dict[str, dict[str, object]]
     daemon_discovery_challenges_lock: threading.Lock
+    dashboard_reconnect_lock: threading.Lock
+    dashboard_reconnect_consumed_challenges: dict[str, int]
 
     def __init__(
         self,
@@ -323,6 +332,8 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.package_firewall_session_nonces_lock = threading.Lock()
         self.daemon_discovery_challenges = {}
         self.daemon_discovery_challenges_lock = threading.Lock()
+        self.dashboard_reconnect_lock = threading.Lock()
+        self.dashboard_reconnect_consumed_challenges = {}
         from .hook_worker import HookWorker
 
         self.hook_worker = HookWorker(store=store)
@@ -1727,6 +1738,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/daemon/identity-challenge":
             self._handle_daemon_identity_challenge(payload)
             return
+        if parsed.path == "/v1/update/reconnect/challenge":
+            self._handle_dashboard_reconnect_challenge(payload)
+            return
+        if parsed.path == "/v1/update/reconnect/verify":
+            self._handle_dashboard_reconnect_verify(payload)
+            return
         if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid(payload=payload):
             if (
                 len(path_parts) == 4
@@ -1839,6 +1856,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/cloud/connect":
             self._handle_guard_cloud_connect_start()
+            return
+        if parsed.path == "/v1/update/reconnect/prepare":
+            self._handle_dashboard_reconnect_prepare()
             return
         if parsed.path == "/v1/update":
             force_pypi_reinstall = bool(payload.get("force_pypi_reinstall"))
@@ -4474,6 +4494,159 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _query_has_guard_token(self, query: str) -> bool:
         return any(key == "token" for key, _value in parse_qsl(query, keep_blank_values=True))
 
+    def _handle_dashboard_reconnect_prepare(self) -> None:
+        daemon_server = self._daemon_server()
+        try:
+            with daemon_server.dashboard_reconnect_lock:
+                authorization = prepare_dashboard_reconnect_authorization(daemon_server.store.guard_home)
+        except (OSError, RuntimeError):
+            self._write_json(
+                {
+                    "error": "dashboard_reconnect_unavailable",
+                    "reason_code": "dashboard_reconnect_identity_unavailable",
+                },
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+        self._write_json(authorization, extra_headers={"Cache-Control": "no-store"})
+
+    def _handle_dashboard_reconnect_challenge(self, payload: dict[str, object]) -> None:
+        if payload.get("protocol_version") != DASHBOARD_RECONNECT_PROTOCOL_VERSION:
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_protocol_mismatch")
+            return
+        candidate_origin = self._strict_loopback_origin(payload.get("candidate_origin"))
+        daemon_origin = self._dashboard_reconnect_daemon_origin()
+        if candidate_origin is None or daemon_origin is None or candidate_origin != daemon_origin:
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_origin_mismatch")
+            return
+        state = self._current_authenticated_daemon_state()
+        state_id = self._optional_string(state.get("state_id")) if state is not None else None
+        if state_id is None:
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_state_unavailable")
+            return
+        daemon_server = self._daemon_server()
+        with daemon_server.dashboard_reconnect_lock:
+            challenge, reason_code = issue_dashboard_reconnect_challenge(
+                daemon_server.store.guard_home,
+                reconnect_id=payload.get("reconnect_id"),
+                client_nonce=payload.get("client_nonce"),
+                candidate_origin=candidate_origin,
+                state_id=state_id,
+            )
+        if challenge is None:
+            self._write_dashboard_reconnect_candidate_failure(reason_code)
+            return
+        self._write_json(challenge, extra_headers={"Cache-Control": "no-store"})
+
+    def _handle_dashboard_reconnect_verify(self, payload: dict[str, object]) -> None:
+        if payload.get("protocol_version") != DASHBOARD_RECONNECT_PROTOCOL_VERSION:
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_protocol_mismatch")
+            return
+        raw_challenge = payload.get("challenge")
+        if not isinstance(raw_challenge, dict) or not _is_string_object_dict(raw_challenge):
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_malformed_proof")
+            return
+        candidate_origin = self._strict_loopback_origin(raw_challenge.get("candidate_origin"))
+        daemon_origin = self._dashboard_reconnect_daemon_origin()
+        state = self._current_authenticated_daemon_state()
+        state_id = self._optional_string(state.get("state_id")) if state is not None else None
+        if candidate_origin is None or daemon_origin is None or candidate_origin != daemon_origin or state_id is None:
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_proof_context_mismatch")
+            return
+        daemon_server = self._daemon_server()
+        challenge_identity = dashboard_reconnect_challenge_identity(raw_challenge)
+        if challenge_identity is None:
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_malformed_proof")
+            return
+        now_ms = int(time.time() * 1000)
+        with daemon_server.dashboard_reconnect_lock:
+            expired_challenges = [
+                identity
+                for identity, expires_at_ms in daemon_server.dashboard_reconnect_consumed_challenges.items()
+                if expires_at_ms < now_ms
+            ]
+            for identity in expired_challenges:
+                daemon_server.dashboard_reconnect_consumed_challenges.pop(identity, None)
+            if challenge_identity in daemon_server.dashboard_reconnect_consumed_challenges:
+                self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_proof_replayed")
+                return
+            verified, reason_code = consume_dashboard_reconnect_challenge(
+                daemon_server.store.guard_home,
+                challenge=raw_challenge,
+                proof=payload.get("proof"),
+                expected_candidate_origin=daemon_origin,
+                expected_state_id=state_id,
+            )
+            if verified:
+                expires_at_ms = raw_challenge.get("expires_at_ms")
+                daemon_server.dashboard_reconnect_consumed_challenges[challenge_identity] = (
+                    expires_at_ms if isinstance(expires_at_ms, int) else now_ms
+                )
+                while len(daemon_server.dashboard_reconnect_consumed_challenges) > 256:
+                    oldest = next(iter(daemon_server.dashboard_reconnect_consumed_challenges))
+                    daemon_server.dashboard_reconnect_consumed_challenges.pop(oldest, None)
+        if not verified:
+            self._write_dashboard_reconnect_candidate_failure(reason_code)
+            return
+        self._write_json(
+            {"verified": True, "reason_code": reason_code},
+            extra_headers={"Cache-Control": "no-store"},
+        )
+
+    def _write_dashboard_reconnect_candidate_failure(self, reason_code: str) -> None:
+        self._write_json(
+            {"error": "daemon_candidate_unavailable", "reason_code": reason_code},
+            status=404,
+            extra_headers={"Cache-Control": "no-store"},
+        )
+
+    def _current_authenticated_daemon_state(self) -> dict[str, object] | None:
+        daemon_server = self._daemon_server()
+        state = load_authenticated_daemon_state(daemon_server.store.guard_home)
+        if state is None:
+            return None
+        expected_guard_home = str(daemon_server.store.guard_home.resolve())
+        if (
+            state.get("guard_home") != expected_guard_home
+            or state.get("host") != daemon_server.daemon_host()
+            or state.get("port") != daemon_server.daemon_port()
+            or state.get("pid") != os.getpid()
+            or state.get("state_id") != daemon_server.runtime_session_id
+        ):
+            return None
+        return state
+
+    def _dashboard_reconnect_daemon_origin(self) -> str | None:
+        daemon_server = self._daemon_server()
+        host = daemon_server.daemon_host()
+        if host == "127.0.0.1":
+            return f"http://127.0.0.1:{daemon_server.daemon_port()}"
+        if host == "::1":
+            return f"http://[::1]:{daemon_server.daemon_port()}"
+        return None
+
+    @classmethod
+    def _strict_loopback_origin(cls, value: object) -> str | None:
+        if not isinstance(value, str):
+            return None
+        normalized = cls._normalize_origin(value)
+        if normalized is None:
+            return None
+        parsed = urlparse(normalized)
+        if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "::1"}:
+            return None
+        try:
+            port = parsed.port
+        except ValueError:
+            return None
+        if port is None or not 1 <= port <= 65535:
+            return None
+        canonical_host = "[::1]" if parsed.hostname == "::1" else "127.0.0.1"
+        canonical = f"http://{canonical_host}:{port}"
+        raw_origin = value.strip()
+        return canonical if normalized == canonical and raw_origin in {canonical, f"{canonical}/"} else None
+
     def _handle_daemon_identity_challenge(self, payload: dict[str, object]) -> None:
         nonce = self._optional_string(payload.get("nonce"))
         hook_event = self._optional_string(payload.get("hook_event"))
@@ -4813,6 +4986,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/daemon/repair",
             "/v1/notifications/setup",
             "/v1/update/status",
+            "/v1/update/reconnect/prepare",
         }:
             return True
         # Hosted dashboard access is blocked for these routes, but local
@@ -4832,7 +5006,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
                 return True
         if self.command == "POST":
-            if path == "/v1/update":
+            if path in {"/v1/update", "/v1/update/reconnect/prepare"}:
                 return True
             if (
                 len(path_parts) == 4
@@ -5091,6 +5265,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/settings/reset",
             "/v1/read-state",
             "/v1/update",
+            "/v1/update/reconnect/challenge",
+            "/v1/update/reconnect/prepare",
+            "/v1/update/reconnect/verify",
             "/v1/update/status",
         }:
             return True
@@ -5475,6 +5652,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/cloud/connect",
             "/v1/notifications/setup",
             "/v1/update",
+            "/v1/update/reconnect/prepare",
         }:
             return True
         if len(path_parts) >= 3 and path_parts[:2] == ["v1", "hooks"]:
