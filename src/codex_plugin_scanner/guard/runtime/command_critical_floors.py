@@ -80,6 +80,7 @@ _WINDOWS_EXECUTABLES = frozenset(
         "xargs",
     }
 )
+_MAX_LAUNCHER_CHILDREN = 256
 
 
 def command_critical_floor_factors(
@@ -88,7 +89,13 @@ def command_critical_floor_factors(
 ) -> tuple[DecisionFactor, ...]:
     """Return monotonic floors derived only from the canonical parsed command."""
 
-    return _command_critical_floor_factors(command, authorization=authorization, depth=0)
+    factors = _command_critical_floor_factors(
+        command,
+        authorization=authorization,
+        depth=0,
+        remaining_launcher_children=[_MAX_LAUNCHER_CHILDREN],
+    )
+    return tuple({factor.semantic_key: factor for factor in factors}.values())
 
 
 def _command_critical_floor_factors(
@@ -96,6 +103,7 @@ def _command_critical_floor_factors(
     *,
     authorization: GitHubWorkflowAuthorization | None,
     depth: int,
+    remaining_launcher_children: list[int],
 ) -> tuple[DecisionFactor, ...]:
 
     factors: list[DecisionFactor] = []
@@ -138,7 +146,18 @@ def _command_critical_floor_factors(
         launcher_children = launcher_child_commands(executable, arguments)
         if depth < 3:
             for child in launcher_children:
-                factors.extend(_command_critical_floor_factors(child, authorization=None, depth=depth + 1))
+                if remaining_launcher_children[0] == 0:
+                    factors.append(_factor(command, index, "block", "critical.launcher-expansion-limit"))
+                    break
+                remaining_launcher_children[0] -= 1
+                factors.extend(
+                    _command_critical_floor_factors(
+                        child,
+                        authorization=None,
+                        depth=depth + 1,
+                        remaining_launcher_children=remaining_launcher_children,
+                    )
+                )
         elif launcher_children:
             factors.append(_factor(command, index, "block", "critical.launcher-depth-limit"))
     return tuple(factors)

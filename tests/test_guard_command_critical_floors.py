@@ -70,6 +70,8 @@ from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_comma
         ),
         ("timeout 5 env -vS '/bin/bash -c' 'rm -rf workspace/target'", "block"),
         ("timeout 5 env -iS'/bin/bash -c' 'rm -rf workspace/target'", "block"),
+        ("timeout 5 env -S'bash -c \"rm -rf /\"'", "block"),
+        ("timeout 5 env --split-string='bash -c \"rm -rf /\"'", "block"),
         ("timeout 5 bash --noprofile -c 'rm -rf workspace/target'", "block"),
         ("timeout 5 bash -O extglob -c 'rm -rf workspace/target'", "block"),
         ("sh <<'EOF'\nrm -rf workspace/target\nEOF", "block"),
@@ -110,6 +112,11 @@ from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_comma
         ("parallel --tagstring='{#}' hol-guard uninstall --all", "block"),
         ("parallel --load 75% hol-guard uninstall --all", "block"),
         ("parallel --load=75% hol-guard uninstall --all", "block"),
+        ("parallel --tagstring tag rm -rf / ::: x", "block"),
+        ("parallel --header : rm -rf / ::: x", "block"),
+        ("parallel --colsep value rm -rf / ::: x", "block"),
+        ("parallel --load 100% rm -rf / ::: x", "block"),
+        ("parallel --unknown parallel rm -rf / ::: x", "block"),
         ("find workspace -exec hol-guard uninstall --all {} ';'", "block"),
         (
             "find workspace -exec echo {} ';' -exec hol-guard uninstall --all {} ';'",
@@ -153,6 +160,12 @@ def test_security_critical_commands_retain_exact_floors(command: str, expected: 
     assert evaluation.decision_plane.action == expected
 
 
+def test_launcher_ambiguity_fanout_fails_closed() -> None:
+    options = " ".join(f"--unknown value-{index}" for index in range(300))
+    evaluation = evaluate_command(f"parallel {options} printf safe", cwd=Path("workspace"), home_dir=Path("home"))
+    assert evaluation.decision_plane.action == "block"
+
+
 @pytest.mark.parametrize(
     "command",
     (
@@ -178,6 +191,8 @@ def test_security_critical_commands_retain_exact_floors(command: str, expected: 
         "timeout 5 env --chdir= -S '/bin/bash -c' 'rm -rf workspace/target'",
         "timeout 5 env --unset-name TOKEN -S '/bin/bash -c' 'rm -rf workspace/target'",
         "timeout 5 env -C -S '/bin/bash -c' 'rm -rf workspace/target'",
+        "timeout 5 env -Something 'bash -c' 'rm -rf /'",
+        "timeout 5 env --split-strings='bash -c \"rm -rf /\"'",
         "gh api graphql -f query='mutation{updateIssue(input:{title:\"do not delete\"}){issue{id}}}'",
         "gh api graphql -f query='mutation($removeLabel:String!){updateIssue(input:{title:$removeLabel}){issue{id}}}'",
         "aws --profile route53 sts get-caller-identity --output delete-hosted-zone",

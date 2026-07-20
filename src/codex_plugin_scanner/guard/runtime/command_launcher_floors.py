@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shlex
+from typing import Final
 
 from .command_model import CanonicalCommand, parse_shell_command
 
@@ -50,6 +51,7 @@ _PARALLEL_VALUE_OPTIONS = frozenset(
     }
 )
 _FIND_MARKERS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+_MAX_OPTION_PARSE_STATES: Final = 256
 
 
 def launcher_child_commands(executable: str, arguments: tuple[str, ...]) -> tuple[CanonicalCommand, ...]:
@@ -57,35 +59,44 @@ def launcher_child_commands(executable: str, arguments: tuple[str, ...]) -> tupl
 
     children: tuple[tuple[str, ...], ...] = ()
     if executable == "xargs":
-        child = _single_child(arguments, _XARGS_VALUE_OPTIONS)
-        children = (child,) if child else ()
+        children = _possible_children(arguments, _XARGS_VALUE_OPTIONS)
     elif executable == "parallel":
-        child = _single_child(arguments, _PARALLEL_VALUE_OPTIONS)
-        children = (child,) if child else ()
+        children = _possible_children(arguments, _PARALLEL_VALUE_OPTIONS)
     elif executable == "find":
         children = _find_children(arguments)
     return tuple(parse_shell_command(shlex.join(child)) for child in children if child)
 
 
-def _single_child(arguments: tuple[str, ...], value_options: frozenset[str]) -> tuple[str, ...] | None:
-    index = 0
-    while index < len(arguments):
+def _possible_children(arguments: tuple[str, ...], value_options: frozenset[str]) -> tuple[tuple[str, ...], ...]:
+    pending = [0]
+    visited: set[int] = set()
+    children: set[tuple[str, ...]] = set()
+    while pending:
+        index = pending.pop()
+        if index in visited or index >= len(arguments):
+            continue
+        if len(visited) >= _MAX_OPTION_PARSE_STATES:
+            return tuple(arguments[cursor:] for cursor, item in enumerate(arguments) if not item.startswith("-"))
+        visited.add(index)
         argument = arguments[index]
         if argument == "--":
-            index += 1
-            break
+            if arguments[index + 1 :]:
+                children.add(arguments[index + 1 :])
+            continue
         option, separator, _value = argument.partition("=")
         attached = _attached_short_option(argument, value_options)
         if attached is not None:
             option, separator = attached, "attached"
         if option in value_options:
-            index += 1 if separator else 2
+            pending.append(index + (1 if separator else 2))
             continue
         if argument.startswith("-"):
-            index += 1
+            pending.append(index + 1)
+            if not separator:
+                pending.append(index + 2)
             continue
-        break
-    return arguments[index:] or None
+        children.add(arguments[index:])
+    return tuple(sorted(children))
 
 
 def _attached_short_option(argument: str, value_options: frozenset[str]) -> str | None:

@@ -80,6 +80,33 @@ def _record_in_process(guard_home: str) -> bool:
     return store.record_command_activity(evidence, shadow=shadow)
 
 
+def _legacy_shadow_database(path: Path, *, proposal_version: str = "proposal.multi.v1") -> sqlite3.Connection:
+    connection = sqlite3.connect(path)
+    connection.row_factory = sqlite3.Row
+    connection.execute("create table schema_migrations (version integer primary key, applied_at text not null)")
+    connection.execute("create table command_activity (activity_id text primary key, occurred_at text not null) strict")
+    for statement in shadow_schema._LEGACY_SCHEMA_STATEMENTS:
+        connection.execute(statement)
+    occurred_at = _OCCURRED_AT.isoformat()
+    connection.execute("insert into command_activity values (?, ?)", ("activity:legacy", occurred_at))
+    connection.execute(
+        """
+        insert into command_activity_shadow_evaluations values (
+          ?, ?, 'allow', 'allow', 'silent-verified', 'allow', 'silent-verified',
+          'unchanged', ?, '1.0.0', 1, 10000, 'guard.command-shadow.v1'
+        )
+        """,
+        ("activity:legacy", occurred_at, proposal_version),
+    )
+    connection.execute("insert into command_activity_shadow_cohorts values (?, 0, 'baseline')", ("activity:legacy",))
+    connection.execute(
+        "insert into schema_migrations values (?, ?)",
+        (shadow_schema.COMMAND_SHADOW_LEGACY_MIGRATION_VERSION, occurred_at),
+    )
+    connection.commit()
+    return connection
+
+
 def test_migration_creates_validated_normalized_schema(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
 
@@ -95,6 +122,114 @@ def test_migration_creates_validated_normalized_schema(tmp_path: Path) -> None:
     assert version == (shadow_schema.COMMAND_SHADOW_MIGRATION_VERSION,)
 
 
+def test_migration_upgrades_exact_legacy_schema_and_preserves_rows(tmp_path: Path) -> None:
+    with _legacy_shadow_database(tmp_path / "legacy.db") as connection:
+        shadow_schema.ensure_command_shadow_schema(connection, applied_at=_OCCURRED_AT.isoformat())
+
+        shadow_schema._validate_schema(connection)
+        versions = connection.execute(
+            "select version from schema_migrations where version in (?, ?) order by version",
+            (
+                shadow_schema.COMMAND_SHADOW_LEGACY_MIGRATION_VERSION,
+                shadow_schema.COMMAND_SHADOW_MIGRATION_VERSION,
+            ),
+        ).fetchall()
+        evaluation = connection.execute(
+            "select activity_id, proposal_version from command_activity_shadow_evaluations"
+        ).fetchone()
+        cohort = connection.execute(
+            "select activity_id, ordinal, cohort from command_activity_shadow_cohorts"
+        ).fetchone()
+        temporary_tables = connection.execute(
+            "select count(*) from sqlite_master where name in (?, ?)",
+            ("command_activity_shadow_evaluations_v15", "command_activity_shadow_cohorts_v15"),
+        ).fetchone()
+
+    assert [tuple(row) for row in versions] == [
+        (shadow_schema.COMMAND_SHADOW_LEGACY_MIGRATION_VERSION,),
+        (shadow_schema.COMMAND_SHADOW_MIGRATION_VERSION,),
+    ]
+    assert tuple(evaluation) == ("activity:legacy", "proposal.multi.v1")
+    assert tuple(cohort) == ("activity:legacy", 0, "baseline")
+    assert tuple(temporary_tables) == (0,)
+
+
+def test_migration_rolls_back_exact_legacy_schema_when_a_row_is_invalid(tmp_path: Path) -> None:
+    with _legacy_shadow_database(tmp_path / "legacy-invalid.db", proposal_version="INVALID!") as connection:
+        expected_legacy = shadow_schema._expected_schema(shadow_schema._LEGACY_SCHEMA_STATEMENTS)
+        current = shadow_schema._expected_schema(shadow_schema._SCHEMA_STATEMENTS)
+
+        with pytest.raises(sqlite3.IntegrityError):
+            shadow_schema.ensure_command_shadow_schema(connection, applied_at=_OCCURRED_AT.isoformat())
+
+        actual = shadow_schema._read_schema(connection, frozenset(expected_legacy) | frozenset(current))
+        versions = connection.execute("select version from schema_migrations order by version").fetchall()
+        row = connection.execute(
+            "select activity_id, proposal_version from command_activity_shadow_evaluations"
+        ).fetchone()
+
+    assert actual == expected_legacy
+    assert [tuple(version) for version in versions] == [(shadow_schema.COMMAND_SHADOW_LEGACY_MIGRATION_VERSION,)]
+    assert tuple(row) == ("activity:legacy", "INVALID!")
+
+
+def test_migration_rejects_unknown_near_legacy_schema_without_changes(tmp_path: Path) -> None:
+    with _legacy_shadow_database(tmp_path / "legacy-unknown.db") as connection:
+        connection.execute("drop trigger trg_command_activity_shadow_require_activity")
+        connection.execute(
+            """create trigger trg_command_activity_shadow_require_activity
+            before insert on command_activity_shadow_evaluations begin select 1; end"""
+        )
+        names = frozenset(shadow_schema._expected_schema(shadow_schema._LEGACY_SCHEMA_STATEMENTS)) | frozenset(
+            shadow_schema._expected_schema(shadow_schema._SCHEMA_STATEMENTS)
+        )
+        before = shadow_schema._read_schema(connection, names)
+
+        with pytest.raises(RuntimeError, match="incompatible command shadow schema objects"):
+            shadow_schema.ensure_command_shadow_schema(connection, applied_at=_OCCURRED_AT.isoformat())
+
+        after = shadow_schema._read_schema(connection, names)
+        versions = connection.execute("select version from schema_migrations order by version").fetchall()
+
+    assert after == before
+    assert [tuple(version) for version in versions] == [(shadow_schema.COMMAND_SHADOW_LEGACY_MIGRATION_VERSION,)]
+
+
+def _assert_extra_owned_object_is_rejected(connection: sqlite3.Connection, statement: str, name: str) -> None:
+    connection.execute(statement)
+    names = frozenset(shadow_schema._expected_schema(shadow_schema._LEGACY_SCHEMA_STATEMENTS)) | frozenset(
+        shadow_schema._expected_schema(shadow_schema._SCHEMA_STATEMENTS)
+    )
+    before = shadow_schema._read_schema(connection, names)
+    assert name in before
+
+    with pytest.raises(RuntimeError, match="incompatible command shadow schema objects"):
+        shadow_schema.ensure_command_shadow_schema(connection, applied_at=_OCCURRED_AT.isoformat())
+
+    assert shadow_schema._read_schema(connection, names) == before
+    versions = connection.execute("select version from schema_migrations order by version").fetchall()
+    assert [tuple(version) for version in versions] == [(shadow_schema.COMMAND_SHADOW_LEGACY_MIGRATION_VERSION,)]
+
+
+def test_migration_rejects_extra_trigger_on_owned_table_without_changes(tmp_path: Path) -> None:
+    with _legacy_shadow_database(tmp_path / "legacy-extra-trigger.db") as connection:
+        _assert_extra_owned_object_is_rejected(
+            connection,
+            """create trigger trg_command_activity_shadow_extra
+            before insert on command_activity_shadow_evaluations begin select 1; end""",
+            "trg_command_activity_shadow_extra",
+        )
+
+
+def test_migration_rejects_extra_index_on_owned_table_without_changes(tmp_path: Path) -> None:
+    with _legacy_shadow_database(tmp_path / "legacy-extra-index.db") as connection:
+        _assert_extra_owned_object_is_rejected(
+            connection,
+            "create index idx_command_activity_shadow_extra on command_activity_shadow_cohorts (ordinal)",
+            "idx_command_activity_shadow_extra",
+        )
+
+
 def test_migration_rolls_back_objects_and_version_on_validation_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -106,7 +241,7 @@ def test_migration_rolls_back_objects_and_version_on_validation_failure(
         connection.execute("create table command_activity (activity_id text primary key) strict")
         statements = shadow_schema._SCHEMA_STATEMENTS
         monkeypatch.setattr(shadow_schema, "_SCHEMA_STATEMENTS", (*statements, "create table"))
-        with pytest.raises(sqlite3.OperationalError):
+        with pytest.raises(RuntimeError, match="unrecognized command shadow schema statement"):
             shadow_schema.ensure_command_shadow_schema(connection, applied_at=_OCCURRED_AT.isoformat())
         tables = {str(row[0]) for row in connection.execute("select name from sqlite_master").fetchall()}
         version = connection.execute(

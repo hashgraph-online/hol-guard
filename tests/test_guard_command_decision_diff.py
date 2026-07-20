@@ -157,5 +157,7 @@ def test_fresh_process_report_is_environment_independent_and_bounded() -> None:
     assert [item["report_framed_sha256"] for item in metrics] == [expected_digest, expected_digest]
     assert all(
         float(str(item["elapsed_seconds"])) < int(str(manifest["evaluation_budget_seconds"])) for item in metrics
+    ), metrics
+    assert all(float(str(item["rss_mib"])) < int(str(manifest["evaluation_rss_budget_mib"])) for item in metrics), (
+        metrics
     )
-    assert all(float(str(item["rss_mib"])) < int(str(manifest["evaluation_rss_budget_mib"])) for item in metrics)
