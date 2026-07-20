@@ -13216,7 +13216,7 @@ def test_guard_run_interactive_allow_once_redetects_before_resume(tmp_path, monk
                     artifact_type="tool_action_request",
                     source_scope="project",
                     config_path=str(workspace_dir / ".codex" / "config.toml"),
-                    command=sys.executable,
+                    command="codex",
                     args=("-c", "print('before')"),
                 ),
             ),
@@ -13234,7 +13234,7 @@ def test_guard_run_interactive_allow_once_redetects_before_resume(tmp_path, monk
                     artifact_type="tool_action_request",
                     source_scope="project",
                     config_path=str(workspace_dir / ".codex" / "config.toml"),
-                    command=sys.executable,
+                    command="codex",
                     args=("-c", "print('after')"),
                 ),
             ),
@@ -13281,13 +13281,13 @@ def test_guard_run_interactive_allow_once_redetects_before_resume(tmp_path, monk
 
     assert result["blocked"] is True
     assert result["launched"] is False
-    assert result["artifacts"][0]["policy_action"] == "sandbox-required"
+    assert result["artifacts"][0]["policy_action"] == "require-reapproval"
     assert result["artifacts"][0]["trusted_request_override"]["applied"] is False
     assert call_count["detect"] >= 2
     assert launch_calls == []
     receipts = store.list_receipts(limit=10)
     assert len(receipts) == 1
-    assert receipts[0]["policy_decision"] == "sandbox-required"
+    assert receipts[0]["policy_decision"] == "require-reapproval"
     assert receipts[0]["user_override"] is None
 
 
