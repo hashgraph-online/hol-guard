@@ -87,7 +87,25 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
-      - run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py --tb=short
+      - name: Run cross-platform Guard regressions
+        run: >-
+          uv run --no-sync pytest
+          tests/test_cli.py
+          tests/test_verification.py
+          tests/test_action_runner.py
+          tests/test_guard_skill_directory_identity.py
+          tests/test_guard_skill_directory_identity_discovery.py
+          tests/test_guard_skill_directory_identity_downstream.py
+          tests/test_guard_skill_directory_identity_links.py
+          tests/test_guard_consumer_skill_directory_identity.py
+          tests/test_guard_runner_skill_directory_identity.py
+          tests/test_gemini_adapter.py
+          tests/test_gemini_skill_directory_identity.py
+          tests/test_antigravity_adapter.py
+          tests/test_guard_aibom_detection.py
+          tests/test_guard_aibom_content_upload_batches.py
+          tests/test_guard_aibom_skill_directory_identity.py
+          --tb=short
 
   windows-updater:
     runs-on: windows-latest

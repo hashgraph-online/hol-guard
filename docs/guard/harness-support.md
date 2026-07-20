@@ -104,6 +104,12 @@ Current Guard support in this repo:
   - blocks by returning exit code `2` and ZCode-native stdout JSON `hookSpecificOutput.permissionDecision: "deny"` with approval-center copy in stderr
   - fails open if a hook crashes or times out, so ZCode keeps working when Guard is unreachable
 
+Gemini, Antigravity, and shared Codex/AIBOM skill discovery bind approval and
+inventory identity to the complete accepted skill directory rather than only
+`SKILL.md`. See [Skill directory identity](./skill-directory-identity.md) for
+the canonical stream, symlink rules, resource ceilings, and incomplete-state
+behavior.
+
 Approval tiers:
 
 1. native harness approval when the harness already has strong permission controls
