@@ -568,7 +568,7 @@ def test_merged_all_global_installs_omit_workspace_context() -> None:
     assert artifact.metadata["lockfile_paths"] == []
 
 
-def test_evaluate_package_request_artifact_does_not_convert_npm_source_specs_to_latest(
+def test_evaluate_package_request_artifact_reviews_npm_git_sources_before_cloud(
     tmp_path: Path,
 ) -> None:
     _EvaluateHandler.captured_headers = {}
@@ -594,7 +594,7 @@ def test_evaluate_package_request_artifact_does_not_convert_npm_source_specs_to_
         workspace_dir.mkdir()
         artifact = _artifact_for_targets("git+https://github.com/org/pkg.git")
 
-        evaluate_package_request_artifact(
+        result = evaluate_package_request_artifact(
             artifact=artifact,
             store=store,
             workspace_dir=workspace_dir,
@@ -604,11 +604,10 @@ def test_evaluate_package_request_artifact_does_not_convert_npm_source_specs_to_
         server.shutdown()
         thread.join(timeout=5)
 
-    package_payload = _EvaluateHandler.captured_requests[0]["packages"][0]
-    assert package_payload["name"] == "pkg"
-    assert package_payload["sourceUrl"] == "git+https://github.com/org/pkg.git"
-    assert "range" not in package_payload
-    assert "version" not in package_payload
+    assert _EvaluateHandler.captured_requests == []
+    assert result.decision == "ask"
+    assert result.packages[0]["reasons"][0]["code"] == "git_dependency_source"
+    assert result.packages[0]["sourceIdentity"] == "git:github.com/org/pkg#missing"
 
 
 def test_evaluate_package_request_artifact_posts_open_range_for_unversioned_pypi_request(

@@ -12,6 +12,7 @@ from typing import Literal
 
 from ..models import GuardArtifact
 from .mcp_protection import _split_package_token
+from .npm_source_spec import NpmSourceSpec, parse_npm_source_spec
 from .workspace_path_guard import existing_paths_within_workspace
 
 IntentKind = Literal["install", "execute", "sync"]
@@ -19,12 +20,7 @@ EvidenceStatus = Literal["available", "missing", "not_regular", "unreadable", "u
 _EXTRAS_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)\[(?P<extras>[A-Za-z0-9_,.-]+)\]$")
 _EGG_FRAGMENT_RE = re.compile(r"(?:^|[#&])egg=([^&#]+)")
 _PYTHON_VERSION_RE = re.compile(r"(?P<name>[^<>=!~\s]+)(?P<op>===|==|~=|!=|<=|>=|<|>|=)?(?P<version>.*)")
-_JS_SOURCE_PREFIXES = ("http:", "https:", "git+", "github:", "gitlab:", "bitbucket:", "file:")
 _HTTP_SOURCE_IN_TOKEN_RE = re.compile(r"https?:", re.IGNORECASE)
-_NAMED_JS_SOURCE_SEPARATOR_RE = re.compile(
-    r"@(?=(?:https?|git\+|github|gitlab|bitbucket|file):)",
-    re.IGNORECASE,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +30,11 @@ class PackageIntentTarget:
     raw_spec: str = field(repr=False)
     requested_specifier: str | None
     source_url: str | None = field(default=None, repr=False)
+    source_kind: str | None = None
+    source_repository: str | None = None
+    source_revision_kind: str | None = None
+    source_identity: str | None = None
+    source_invalid_reason: str | None = None
     alias: str | None = None
     dependency_group: str | None = None
     extras: tuple[str, ...] = ()
@@ -52,6 +53,15 @@ class PackageIntentTarget:
         """Return exact request values for ephemeral in-process enforcement."""
 
         return asdict(self)
+
+    def to_fingerprint_dict(self) -> dict[str, object]:
+        """Return approval identity fields with canonical Git source spelling."""
+
+        payload = self.to_dict()
+        if self.source_kind == "git" and self.source_identity is not None:
+            for exact_field in ("raw_spec", "raw_spec_hash", "source_url", "source_url_hash"):
+                payload.pop(exact_field, None)
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,8 +156,8 @@ def build_package_request_artifact(
                 "harness": harness,
                 "package_manager": intent.package_manager,
                 "intent_kind": intent.intent_kind,
-                "redacted_command": intent.redacted_command,
-                "targets": [target.to_dict() for target in intent.targets],
+                "redacted_command": _fingerprint_command_shape(intent),
+                "targets": [target.to_fingerprint_dict() for target in intent.targets],
                 "manifest_paths": list(manifest_paths),
                 "lockfile_paths": list(lockfile_paths),
                 "local_executions": [evidence.to_dict() for evidence in intent.local_executions],
@@ -280,6 +290,20 @@ def package_runtime_reason(intent: PackageIntent) -> str:
     )
 
 
+def _fingerprint_command_shape(intent: PackageIntent) -> str:
+    if not any(target.source_kind == "git" for target in intent.targets):
+        return intent.redacted_command
+    tokens = list(intent.command_tokens)
+    for target in intent.targets:
+        if target.source_kind != "git":
+            continue
+        for source_spelling in (target.raw_spec, target.source_url):
+            if not source_spelling:
+                continue
+            tokens = [token.replace(source_spelling, "<canonical-git-source>") for token in tokens]
+    return shlex.join(tokens)
+
+
 def _local_execution_runtime_metadata(intent: PackageIntent) -> dict[str, object]:
     if not intent.local_executions:
         return {}
@@ -378,34 +402,44 @@ def js_target(spec: str) -> PackageIntentTarget:
     normalized_spec = spec
     if "@npm:" in spec and not spec.startswith("@npm:"):
         alias, _, normalized_spec = spec.partition("@npm:")
-    # A complete URL can itself contain '@' in userinfo or its path.  Treat it
-    # as a source before looking for the package@source separator so an
-    # attacker cannot demote it into a schemeless/git-style request.
-    if normalized_spec.lower().startswith(_JS_SOURCE_PREFIXES):
-        return PackageIntentTarget(
-            "npm",
-            _source_url_package_name(normalized_spec),
-            spec,
-            None,
-            source_url=normalized_spec,
-            alias=alias,
-        )
+    parsed_source = parse_npm_source_spec(normalized_spec)
+    if parsed_source is not None and _is_unnamed_js_source_spec(normalized_spec):
+        return _js_source_target(spec, normalized_spec, parsed_source, alias=alias)
     named_source_package, source_url = _split_js_named_source_spec(normalized_spec)
     if source_url is not None:
-        return PackageIntentTarget("npm", named_source_package, spec, None, source_url=source_url, alias=alias)
-    if _looks_like_js_source_spec(normalized_spec):
-        return PackageIntentTarget(
-            "npm",
-            _source_url_package_name(normalized_spec),
-            spec,
-            None,
-            source_url=normalized_spec,
-            alias=alias,
-        )
+        parsed_source = parse_npm_source_spec(source_url)
+        assert parsed_source is not None
+        return _js_source_target(spec, source_url, parsed_source, package_name=named_source_package, alias=alias)
+    if parsed_source is not None:
+        return _js_source_target(spec, normalized_spec, parsed_source, alias=alias)
     package_name, requested_specifier = _split_package_token(normalized_spec)
-    if _looks_like_js_source_spec(requested_specifier):
-        return PackageIntentTarget("npm", package_name, spec, None, source_url=requested_specifier, alias=alias)
+    parsed_source = parse_npm_source_spec(requested_specifier)
+    if requested_specifier is not None and parsed_source is not None:
+        return _js_source_target(spec, requested_specifier, parsed_source, package_name=package_name, alias=alias)
     return PackageIntentTarget("npm", package_name, spec, requested_specifier, alias=alias)
+
+
+def _js_source_target(
+    raw_spec: str,
+    source_url: str,
+    source: NpmSourceSpec,
+    *,
+    package_name: str | None = None,
+    alias: str | None,
+) -> PackageIntentTarget:
+    return PackageIntentTarget(
+        "npm",
+        package_name or _source_url_package_name(source_url),
+        raw_spec,
+        None,
+        source_url=source_url,
+        source_kind=source.source_kind,
+        source_repository=source.canonical_repository,
+        source_revision_kind=source.revision_kind,
+        source_identity=source.identity,
+        source_invalid_reason=source.reason,
+        alias=alias,
+    )
 
 
 def python_target(
@@ -525,31 +559,29 @@ def _sanitize_url(value: str) -> str:
 
 
 def _split_js_named_source_spec(spec: str) -> tuple[str | None, str | None]:
-    separator = _NAMED_JS_SOURCE_SEPARATOR_RE.search(spec)
-    if separator is None:
-        return None, None
-    package_name = spec[: separator.start()]
-    source_candidate = spec[separator.end() :]
-    normalized_package_name = package_name.strip()
-    normalized_source = source_candidate.strip()
-    if not normalized_package_name or not _looks_like_js_source_spec(normalized_source):
-        return None, None
-    return normalized_package_name, normalized_source
+    for index, character in enumerate(spec):
+        if character != "@" or index == 0:
+            continue
+        package_name = spec[:index].strip()
+        source_candidate = spec[index + 1 :].strip()
+        if package_name and parse_npm_source_spec(source_candidate) is not None:
+            return package_name, source_candidate
+    return None, None
 
 
-def _looks_like_js_source_spec(value: str | None) -> bool:
-    if not value:
-        return False
-    normalized = value.strip()
-    if normalized.lower().startswith(_JS_SOURCE_PREFIXES) or "://" in normalized:
-        return True
-    if normalized.startswith("@") or normalized.startswith(("./", "../", "/")) or ":" in normalized:
-        return False
-    parts = normalized.split("/")
-    return len(parts) == 2 and all(part.strip() for part in parts)
+def _is_unnamed_js_source_spec(value: str) -> bool:
+    lowered = value.lower()
+    return (
+        re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", value) is not None
+        or lowered.startswith(("git@", "git+", "github:", "gitlab:", "bitbucket:", "file:"))
+        or "@" not in value
+    )
 
 
 def _source_url_package_name(source_url: str) -> str | None:
+    parsed_source = parse_npm_source_spec(source_url)
+    if parsed_source is not None and parsed_source.canonical_repository is not None:
+        return parsed_source.canonical_repository.rsplit("/", 1)[-1] or None
     normalized = source_url.strip()
     candidate = (
         normalized.partition(":")[2]

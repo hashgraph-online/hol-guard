@@ -46,6 +46,7 @@ from .npm_policy_range import (
     policy_selector_matches_target,
     target_for_resolved_npm_policy_match,
 )
+from .npm_source_spec import NpmSourceSpec, parse_npm_source_spec
 from .offline_archive_inspection import inspect_archive_offline
 from .package_intent_common import split_python_extras
 from .package_manifest_diff import (
@@ -435,6 +436,56 @@ def evaluate_package_request_artifact(
             for download in external_archive_draft.external_archive_downloads:
                 download.cleanup()
             raise
+    source_review_targets = tuple(target for target in targets if _target_requires_npm_source_review(target))
+    if source_review_targets:
+        if len(source_review_targets) != len(targets):
+            mixed_source_package = _heuristic_package_result(
+                target=source_review_targets[0],
+                decision="block",
+                code="npm_source_mixed_request_unsupported",
+                message=(
+                    "npm source dependencies must be installed separately so Guard can preserve registry "
+                    "advisory evaluation and source approval identity."
+                ),
+                severity="high",
+            )
+            source_review_draft = _EvaluationDraft(
+                decision="block",
+                enforcement="free_local",
+                entitlement_state="free",
+                cache_status="miss",
+                packages=(mixed_source_package,),
+                reasons=tuple(_dict_items(mixed_source_package.get("reasons"))),
+                matched_rule_id=None,
+                exception_id=None,
+                refresh_required=False,
+                record_monitor_evidence=False,
+                bundle_version=None,
+                policy_version="local:none",
+            )
+        else:
+            source_review_draft = _heuristic_result(
+                artifact=artifact,
+                store=store,
+                targets=targets,
+                workspace_dir=workspace_dir,
+                external_archive_network_authorized=False,
+                retain_external_archive_blob=False,
+            )
+        if source_review_draft is None:
+            raise AssertionError("npm source review target did not produce a local decision")
+        source_review_result = _finalize_evaluation(
+            source_review_draft,
+            package_intent_hash=package_intent_hash,
+            workspace_fingerprint=None,
+        )
+        _persist_evidence(
+            store=store,
+            artifact=artifact,
+            evaluation=source_review_result,
+            now=now_value,
+        )
+        return source_review_result
     workspace_id = store.get_cloud_workspace_id()
     bundle_payload = store.get_cached_supply_chain_bundle(workspace_id) if workspace_id is not None else None
     bundle_response: SupplyChainBundleResponse | None = None
@@ -1720,6 +1771,18 @@ def _heuristic_result(
                     package_result = _with_package_reason(package_result, first_reason)
             packages.append(package_result)
             continue
+        source_invalid_reason = _optional_string(target.get("source_invalid_reason"))
+        if source_invalid_reason is not None:
+            packages.append(
+                _heuristic_package_result(
+                    target=target,
+                    decision="block",
+                    code=source_invalid_reason,
+                    message="Package source syntax is ambiguous or invalid and cannot be authenticated.",
+                    severity="high",
+                )
+            )
+            continue
         if target.get("manifest_unsynced") is True:
             packages.append(
                 _heuristic_package_result(
@@ -1775,11 +1838,13 @@ def _heuristic_result(
                 severity="high",
             )
         if package_result is None and source_url is not None and _is_git_source_url(source_url):
+            repository = _optional_string(target.get("source_repository")) or "Git repository"
+            revision_kind = _optional_string(target.get("source_revision_kind")) or "missing"
             package_result = _heuristic_package_result(
                 target=target,
                 decision="ask",
                 code="git_dependency_source",
-                message="Git package source requires review before install.",
+                message=f"Git package source {repository} ({revision_kind}) requires review before install.",
                 severity="high",
             )
         if package_result is None:
@@ -1899,10 +1964,11 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
         source_url = _optional_string(item.get("source_url"))
         if source_url is None:
             source_url = _source_url_from_specifier(requested)
-        if source_url is None:
+        if source_url is None and "source_kind" not in item:
             source_url = _source_url_from_raw_spec(raw_spec)
         if source_url is not None:
             requested = None
+        source_spec = _npm_source_spec(source_url, ecosystem=ecosystem)
         if requested is None and source_url is None:
             requested = _default_registry_range(ecosystem)
         exact_version = (
@@ -1919,6 +1985,12 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
                 "version": exact_version,
                 "range": requested if exact_version is None else None,
                 "source_url": source_url,
+                "source_kind": source_spec.source_kind if source_spec is not None else None,
+                "source_repository": source_spec.canonical_repository if source_spec is not None else None,
+                "source_revision_kind": source_spec.revision_kind if source_spec is not None else None,
+                "source_identity": source_spec.identity if source_spec is not None else None,
+                "source_redacted": source_spec.redacted if source_spec is not None else None,
+                "source_invalid_reason": source_spec.reason if source_spec is not None else None,
                 "alias": _optional_string(item.get("alias")),
                 "dependency_group": _optional_string(item.get("dependency_group")),
                 "extras": _string_tuple(item.get("extras")),
@@ -1945,6 +2017,11 @@ def _private_package_targets_match_public(
         "dependency_group",
         "extras",
         "editable",
+        "source_kind",
+        "source_repository",
+        "source_revision_kind",
+        "source_identity",
+        "source_invalid_reason",
     )
     for private_target, public_target in zip(private_targets, public_targets, strict=True):
         if not isinstance(private_target, dict) or not isinstance(public_target, dict):
@@ -2149,7 +2226,12 @@ def _build_request_payload(
                 "ecosystem": str(target["ecosystem"]),
                 "name": str(target["name"]),
                 "namespace": target["namespace"],
-                **({"sourceUrl": str(target["source_url"])} if target.get("source_url") else {}),
+                **(
+                    {"sourceUrl": str(target.get("source_redacted") or target["source_url"])}
+                    if target.get("source_url")
+                    else {}
+                ),
+                **({"sourceIdentity": str(target["source_identity"])} if target.get("source_identity") else {}),
                 **({"version": str(target["version"])} if target.get("version") else {}),
                 **({"range": str(target["range"])} if target.get("range") else {}),
             }
@@ -2488,6 +2570,9 @@ def _bundle_package_result(
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
         "redactedCommand": _optional_string(target.get("redacted_command")),
         "alias": _optional_string(target.get("alias")),
+        "sourceIdentity": _optional_string(target.get("source_identity")),
+        "sourceRepository": _optional_string(target.get("source_repository")),
+        "sourceRevisionKind": _optional_string(target.get("source_revision_kind")),
         "relatedAdvisoryIds": list(package.related_advisory_ids),
         "reasons": (
             {
@@ -2830,7 +2915,8 @@ def _local_package_manifest_path(target: dict[str, object], workspace_dir: Path 
     source_url = _optional_string(target.get("source_url"))
     if source_url is not None and source_url.startswith("file:"):
         raw_spec = source_url.partition("file:")[2]
-    if raw_spec is None or raw_spec.startswith(("http://", "https://", "git+", "github:", "gitlab:", "bitbucket:")):
+    source_spec = _npm_source_spec(raw_spec, ecosystem="npm")
+    if raw_spec is None or (source_spec is not None and source_spec.source_kind != "local"):
         return None
     if raw_spec.startswith("file:"):
         raw_spec = raw_spec.partition("file:")[2]
@@ -3061,6 +3147,9 @@ def _heuristic_package_result(
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
         "redactedCommand": _optional_string(target.get("redacted_command")),
         "alias": _optional_string(target.get("alias")),
+        "sourceIdentity": _optional_string(target.get("source_identity")),
+        "sourceRepository": _optional_string(target.get("source_repository")),
+        "sourceRevisionKind": _optional_string(target.get("source_revision_kind")),
         "reasons": (
             {
                 "code": code,
@@ -3148,23 +3237,8 @@ def _go_mod_replace_map(text: str) -> dict[str, str]:
 
 
 def _is_git_source_url(source_url: str) -> bool:
-    normalized = source_url.lower()
-    if normalized.startswith(("git+", "github:", "gitlab:", "bitbucket:")):
-        return True
-    parsed = urllib.parse.urlsplit(source_url)
-    if (
-        parsed.scheme.lower() in {"http", "https"}
-        and parsed.hostname is not None
-        and parsed.hostname.lower() in {"github.com", "gitlab.com", "bitbucket.org"}
-    ):
-        path_parts = [part for part in parsed.path.split("/") if part]
-        return len(path_parts) >= 2
-    return (
-        "/" in source_url
-        and not normalized.startswith(("http://", "https://"))
-        and ":" not in source_url
-        and not source_url.startswith(("@", "./", "../", "/"))
-    )
+    source = parse_npm_source_spec(source_url)
+    return source is not None and source.is_git
 
 
 def _is_external_https_tarball_source(source_url: str) -> bool:
@@ -3174,9 +3248,19 @@ def _is_external_https_tarball_source(source_url: str) -> bool:
 def _target_is_external_https_archive(target: dict[str, object]) -> bool:
     ecosystem = (_optional_string(target.get("ecosystem")) or "").lower()
     source_url = _optional_string(target.get("source_url"))
+    source_spec = _npm_source_spec(source_url, ecosystem=ecosystem)
     return bool(
-        ecosystem in {"npm", "pypi"} and source_url is not None and _is_external_https_tarball_source(source_url)
+        ecosystem in {"npm", "pypi"}
+        and source_url is not None
+        and (source_spec is None or not source_spec.is_git)
+        and _is_external_https_tarball_source(source_url)
     )
+
+
+def _target_requires_npm_source_review(target: dict[str, object]) -> bool:
+    return (_optional_string(target.get("ecosystem")) or "").lower() == "npm" and _optional_string(
+        target.get("source_kind")
+    ) in {"git", "invalid", "local", "url"}
 
 
 def _external_tarball_dependency_result(
@@ -4145,6 +4229,8 @@ def _recommended_fix_allow_package_result(
 def _source_url_from_specifier(specifier: str | None) -> str | None:
     if specifier is None:
         return None
+    if parse_npm_source_spec(specifier) is not None:
+        return specifier
     if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", specifier) is not None or specifier.lower().startswith(
         ("http:", "https:", "git+", "github:", "gitlab:", "bitbucket:", "file:")
     ):
@@ -4153,14 +4239,17 @@ def _source_url_from_specifier(specifier: str | None) -> str | None:
 
 
 def _source_url_from_raw_spec(raw_spec: str) -> str | None:
-    if _source_url_from_specifier(raw_spec) is not None:
-        return raw_spec
     separator = _NAMED_SOURCE_SEPARATOR_RE.search(raw_spec)
     candidate = raw_spec[separator.end() :] if separator is not None else raw_spec
     if "://" in candidate or candidate.lower().startswith(
         ("http:", "https:", "git+", "github:", "gitlab:", "bitbucket:", "file:")
     ):
         return candidate
+    if _source_url_from_specifier(raw_spec) is not None:
+        return raw_spec
+    for index, character in enumerate(raw_spec):
+        if character == "@" and index > 0 and parse_npm_source_spec(raw_spec[index + 1 :]) is not None:
+            return raw_spec[index + 1 :]
     return None
 
 
@@ -4401,13 +4490,17 @@ def _exact_version(value: str | None) -> str | None:
     normalized = _optional_string(value)
     if normalized is None:
         return None
-    if "://" in normalized or normalized.startswith(("git+", "github:", "gitlab:", "bitbucket:", "file:")):
+    if parse_npm_source_spec(normalized) is not None:
         return None
     if normalized.startswith(("^", "~", "<", ">", "!", "*")):
         return None
     if any(token in normalized for token in ("||", " - ", ",")):
         return None
     return normalized
+
+
+def _npm_source_spec(value: str | None, *, ecosystem: str) -> NpmSourceSpec | None:
+    return parse_npm_source_spec(value) if ecosystem.lower() == "npm" else None
 
 
 def _default_registry_range(ecosystem: str) -> str | None:
