@@ -49,14 +49,17 @@ class ShellPathIdentity:
     inode: int
     mode: int
     change_time_ns: int
+    creation_time_ns: int
 
     @classmethod
     def from_stat(cls, value: os.stat_result) -> ShellPathIdentity:
+        birth_time = getattr(value, "st_birthtime", None)
         return cls(
             device=value.st_dev,
             inode=value.st_ino,
             mode=stat.S_IFMT(value.st_mode),
             change_time_ns=value.st_ctime_ns,
+            creation_time_ns=int(birth_time * 1_000_000_000) if isinstance(birth_time, int | float) else 0,
         )
 
 

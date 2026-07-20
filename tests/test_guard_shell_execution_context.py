@@ -581,7 +581,7 @@ def test_cisco_preflight_scans_every_distinct_effective_project(
     project_b = tmp_path / "project-b"
     project_a.mkdir()
     project_b.mkdir()
-    calls: list[Path | None] = []
+    calls: list[tuple[Path | None, tuple[Path, ...]]] = []
     signal = GuardRiskSignalV3(
         signal_id="cisco:test",
         source="cisco_skill",
@@ -629,19 +629,28 @@ def test_cisco_preflight_scans_every_distinct_effective_project(
         _action: GuardActionEnvelope,
         *,
         workspace: Path | str | None,
+        approved_scan_roots: tuple[Path, ...],
     ) -> tuple[GuardRiskSignalV3, ...]:
-        calls.append(Path(workspace) if workspace is not None else None)
+        calls.append(
+            (
+                Path(workspace) if workspace is not None else None,
+                approved_scan_roots,
+            )
+        )
         return (signal,)
 
     monkeypatch.setattr(runtime_eval_module, "scan_action_for_cisco_evidence", fake_scan)
 
     evidence = runtime_eval_module._runtime_cisco_scanner_evidence(
         action,
-        runtime_workspace=tmp_path,
+        runtime_workspace=project_a,
         raw_shell_cwds=[str(project_a), str(project_b), str(project_a), ""],
     )
 
-    assert calls == [project_a.resolve(), project_b.resolve()]
+    assert calls == [
+        (project_a.resolve(), (project_a.resolve(), project_b.resolve())),
+        (project_b.resolve(), (project_a.resolve(), project_b.resolve())),
+    ]
     assert evidence == (signal,)
 
 

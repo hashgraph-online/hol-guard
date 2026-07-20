@@ -1273,6 +1273,7 @@ def _shell_path_identity_payload(identity: ShellPathIdentity | None) -> dict[str
         return None
     return {
         "change_time_ns": identity.change_time_ns,
+        "creation_time_ns": identity.creation_time_ns,
         "device": identity.device,
         "inode": identity.inode,
         "mode": identity.mode,
