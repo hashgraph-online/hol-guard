@@ -154,7 +154,7 @@ def _validate_schema(connection: sqlite3.Connection) -> None:
     rows = cast(
         list[sqlite3.Row],
         connection.execute(
-            f"select name, sql from sqlite_schema where name in ({placeholders})",
+            f"select name, sql from sqlite_master where name in ({placeholders})",
             tuple(expected),
         ).fetchall(),
     )

@@ -84,7 +84,7 @@ def test_migration_creates_validated_normalized_schema(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
 
     with sqlite3.connect(store.path) as connection:
-        tables = {str(row[0]) for row in connection.execute("select name from sqlite_schema").fetchall()}
+        tables = {str(row[0]) for row in connection.execute("select name from sqlite_master").fetchall()}
         version = connection.execute(
             "select version from schema_migrations where version = ?",
             (shadow_schema.COMMAND_SHADOW_MIGRATION_VERSION,),
@@ -108,7 +108,7 @@ def test_migration_rolls_back_objects_and_version_on_validation_failure(
         monkeypatch.setattr(shadow_schema, "_SCHEMA_STATEMENTS", (*statements, "create table"))
         with pytest.raises(sqlite3.OperationalError):
             shadow_schema.ensure_command_shadow_schema(connection, applied_at=_OCCURRED_AT.isoformat())
-        tables = {str(row[0]) for row in connection.execute("select name from sqlite_schema").fetchall()}
+        tables = {str(row[0]) for row in connection.execute("select name from sqlite_master").fetchall()}
         version = connection.execute(
             "select version from schema_migrations where version = ?",
             (shadow_schema.COMMAND_SHADOW_MIGRATION_VERSION,),
