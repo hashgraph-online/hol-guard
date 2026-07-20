@@ -264,6 +264,23 @@ def test_git_diff_default_revision_and_staged_forms_resolve_all_tracked_files(gi
         assert git_repository / ".env" in resolution.resolved_paths
 
 
+def test_git_diff_revision_names_may_contain_slashes(git_repository: Path) -> None:
+    assert guard_commands_module._git_diff_pathspecs(["origin/main"], cwd=git_repository) == ()
+    assert guard_commands_module._git_diff_pathspecs(["feature/pathspec-fix"], cwd=git_repository) == ()
+    assert guard_commands_module._git_diff_pathspecs(["src/app.py"], cwd=git_repository) is None
+
+
+def test_git_pathspec_environment_preserves_windows_loader_variable_case_insensitively(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SYSTEMROOT", raising=False)
+    monkeypatch.setenv("SystemRoot", r"C:\Windows")
+
+    environment = git_pathspecs_module._git_pathspec_environment()
+
+    assert environment["SystemRoot"] == r"C:\Windows"
+
+
 @pytest.mark.parametrize(
     "command",
     (

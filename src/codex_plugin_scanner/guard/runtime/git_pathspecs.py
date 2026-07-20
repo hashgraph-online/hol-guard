@@ -94,7 +94,7 @@ def _git_pathspec_environment() -> dict[str, str]:
     preserved = {
         name: value
         for name, value in os.environ.items()
-        if name in {"LANG", "LC_ALL", "LC_CTYPE", "SYSTEMROOT", "TMP", "TEMP", "TMPDIR"}
+        if name.upper() in {"LANG", "LC_ALL", "LC_CTYPE", "SYSTEMROOT", "TMP", "TEMP", "TMPDIR"}
     }
     preserved.update(
         {
