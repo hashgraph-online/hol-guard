@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import opencode_install_snapshot
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter, OpenCodeInstallConfigError
 from codex_plugin_scanner.guard.adapters.opencode_artifacts import (
@@ -696,6 +697,189 @@ class TestOpenCodeResiliency:
         assert set(first["mcp"]) == set(second["mcp"])
         assert list(first["mcp"]).count("chrome-devtools") == 1
         assert list(first["mcp"]).count("hol-guard::chrome-devtools") == 1
+
+    def test_second_install_preserves_effective_runtime_proxy(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
+        _write_mcp_config(
+            config,
+            {
+                "chrome-devtools": {
+                    "type": "local",
+                    "command": ["npx", "-y", "chrome-devtools-mcp@latest"],
+                    "environment": {"LAB_TOKEN": "kept"},
+                    "enabled": True,
+                }
+            },
+        )
+        adapter = OpenCodeHarnessAdapter()
+
+        adapter.install(ctx)
+        first_overlay = json.loads(runtime_config_path(ctx).read_text(encoding="utf-8"))
+        adapter.install(ctx)
+        second_overlay = json.loads(runtime_config_path(ctx).read_text(encoding="utf-8"))
+
+        assert second_overlay == first_overlay
+        proxy = second_overlay["mcp"]["chrome-devtools"]
+        assert proxy["enabled"] is True
+        proxy_command = proxy["command"]
+        assert "--command" in proxy_command
+        assert proxy_command[proxy_command.index("--command") + 1] == "npx"
+        assert "--arg=-y" in proxy_command
+        assert "--arg=chrome-devtools-mcp@latest" in proxy_command
+        assert proxy["environment"]["LAB_TOKEN"] == "kept"
+
+    def test_reinstall_preserves_genuinely_disabled_and_remote_servers(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
+        _write_mcp_config(
+            config,
+            {
+                "disabled-lab": {
+                    "type": "local",
+                    "command": ["node", "disabled.js"],
+                    "enabled": False,
+                },
+                "remote-lab": {
+                    "type": "remote",
+                    "url": "https://example.test/mcp",
+                    "enabled": True,
+                },
+            },
+        )
+        adapter = OpenCodeHarnessAdapter()
+
+        adapter.install(ctx)
+        adapter.install(ctx)
+
+        persisted = json.loads(config.read_text(encoding="utf-8"))
+        overlay = json.loads(runtime_config_path(ctx).read_text(encoding="utf-8"))
+        assert persisted["mcp"]["disabled-lab"]["enabled"] is False
+        assert persisted["mcp"]["hol-guard::disabled-lab"]["enabled"] is False
+        assert persisted["mcp"]["remote-lab"]["url"] == "https://example.test/mcp"
+        assert overlay["mcp"]["disabled-lab"]["enabled"] is False
+        assert "remote-lab" not in overlay["mcp"]
+        assert "disabled-lab_*" not in overlay["permission"]
+
+    def test_install_preserves_fake_companion_as_skipped_user_artifact(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
+        _write_mcp_config(
+            config,
+            {
+                "hol-guard::evil": {
+                    "type": "local",
+                    "command": ["bash", "-c", "malicious"],
+                }
+            },
+        )
+
+        result = OpenCodeHarnessAdapter().install(ctx)
+
+        persisted = json.loads(config.read_text(encoding="utf-8"))
+        overlay = json.loads(runtime_config_path(ctx).read_text(encoding="utf-8"))
+        assert persisted["mcp"]["hol-guard::evil"]["command"] == ["bash", "-c", "malicious"]
+        assert "hol-guard::hol-guard::evil" not in persisted["mcp"]
+        assert "hol-guard::evil" not in overlay.get("mcp", {})
+        assert "hol-guard::evil" in result["skipped_servers"]
+
+    def test_snapshot_rejects_companion_copied_from_another_config_path(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        source_config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
+        copied_config = ctx.home_dir / ".config" / "opencode" / "opencode.jsonc"
+        _write_mcp_config(
+            source_config,
+            {"safe": {"type": "local", "command": ["node", "safe.js"], "enabled": True}},
+        )
+        OpenCodeHarnessAdapter().install(ctx)
+        installed = json.loads(source_config.read_text(encoding="utf-8"))
+        copied_companion = installed["mcp"]["hol-guard::safe"]
+        _write_mcp_config(copied_config, {"hol-guard::safe": copied_companion})
+
+        snapshot = opencode_install_snapshot.load_opencode_install_snapshot(ctx, command_available=False)
+        copied = next(config for config in snapshot.configs if config.path == copied_config)
+        copied_servers = copied.payload["mcp"]
+
+        assert isinstance(copied_servers, dict)
+        assert "safe" not in copied_servers
+        assert copied_servers["hol-guard::safe"]["command"] == ["node", "safe.js"]
+
+    def test_workspace_server_shadows_global_in_runtime_overlay(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path, workspace=True)
+        assert ctx.workspace_dir is not None
+        global_config = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        project_config = ctx.workspace_dir / "opencode.json"
+        _write_mcp_config(
+            global_config,
+            {"shared-lab": {"type": "local", "command": ["node", "global.js"]}},
+        )
+        _write_mcp_config(
+            project_config,
+            {"shared-lab": {"type": "local", "command": ["node", "project.js"]}},
+        )
+
+        OpenCodeHarnessAdapter().install(ctx)
+
+        overlay = json.loads(runtime_config_path(ctx).read_text(encoding="utf-8"))
+        proxy_command = overlay["mcp"]["shared-lab"]["command"]
+        assert proxy_command.count("--command") == 1
+        assert proxy_command[proxy_command.index("--command") + 1] == "node"
+        assert "--arg=project.js" in proxy_command
+        assert "--arg=global.js" not in proxy_command
+
+    def test_invalid_workspace_config_aborts_before_global_writes(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path, workspace=True)
+        assert ctx.workspace_dir is not None
+        global_config = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        original = '{"mcp":{"safe":{"type":"local","command":["node","safe.js"]}}}'
+        global_config.parent.mkdir(parents=True, exist_ok=True)
+        global_config.write_text(original, encoding="utf-8")
+        (ctx.workspace_dir / "opencode.json").write_text("{broken", encoding="utf-8")
+
+        with pytest.raises(OpenCodeInstallConfigError, match="invalid OpenCode config"):
+            OpenCodeHarnessAdapter().install(ctx)
+
+        assert global_config.read_text(encoding="utf-8") == original
+        assert not OpenCodeHarnessAdapter._backup_path(ctx).exists()
+        assert not OpenCodeHarnessAdapter._state_path(ctx, global_config).exists()
+        assert not runtime_config_path(ctx).exists()
+
+    def test_semantic_readback_failure_restores_config_state_and_overlay(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        ctx = _ctx(tmp_path)
+        config = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        _write_mcp_config(
+            config,
+            {"lab": {"type": "local", "command": ["node", "lab.js"], "enabled": True}},
+        )
+        adapter = OpenCodeHarnessAdapter()
+        result = adapter.install(ctx)
+        overlay_path = Path(result["runtime_config_path"])
+        state_path = Path(result["state_path"])
+        before = {
+            config: config.read_bytes(),
+            state_path: state_path.read_bytes(),
+            overlay_path: overlay_path.read_bytes(),
+        }
+        original_atomic_write = opencode_install_snapshot._atomic_write_bytes
+        corrupted_once = False
+
+        def corrupt_overlay_once(path: Path, payload: bytes) -> None:
+            nonlocal corrupted_once
+            original_atomic_write(path, payload)
+            if path == overlay_path and not corrupted_once:
+                corrupted_once = True
+                original_atomic_write(path, b"{}\n")
+
+        monkeypatch.setattr(opencode_install_snapshot, "_atomic_write_bytes", corrupt_overlay_once)
+
+        with pytest.raises(OpenCodeInstallConfigError, match="readback did not match"):
+            adapter.install(ctx)
+
+        assert {path: path.read_bytes() for path in before} == before
 
     def test_detect_treats_fake_hol_guard_companion_as_mcp_artifact(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)

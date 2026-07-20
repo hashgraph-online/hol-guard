@@ -79,6 +79,7 @@ def append_config_artifacts(
     scope: str,
     config_path: Path,
     payload: dict[str, object],
+    skip_verified_mcp_companions: bool = True,
 ) -> None:
     _append_mcp_artifacts(
         artifacts=artifacts,
@@ -86,6 +87,7 @@ def append_config_artifacts(
         scope=scope,
         config_path=config_path,
         payload=payload,
+        skip_verified_companions=skip_verified_mcp_companions,
     )
     _append_plugin_artifacts(
         artifacts=artifacts,
@@ -248,6 +250,7 @@ def _append_mcp_artifacts(
     scope: str,
     config_path: Path,
     payload: dict[str, object],
+    skip_verified_companions: bool,
 ) -> None:
     mcp_config = payload.get("mcp")
     if not isinstance(mcp_config, dict):
@@ -256,7 +259,7 @@ def _append_mcp_artifacts(
         if not isinstance(name, str) or not isinstance(server_config, dict):
             continue
         command, args = _command_parts(server_config)
-        if is_verified_guard_mcp_companion(name, command, args):
+        if skip_verified_companions and is_verified_guard_mcp_companion(name, command, args):
             continue
         transport = server_config.get("type") if isinstance(server_config.get("type"), str) else None
         url = server_config.get("url") if isinstance(server_config.get("url"), str) else None
