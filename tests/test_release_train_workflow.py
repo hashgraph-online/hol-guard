@@ -155,6 +155,11 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     assert '"$GITHUB_ACTOR_ID" != "6068672"' in compute_run
     assert '"$GITHUB_ACTOR_ID" != "301892678"' in compute_run
     assert compute_run.index('"$GITHUB_RUN_ATTEMPT" != "1"') < compute_run.index("VALIDATOR_ARGS=(")
+    alpha_registry_block = compute_run[
+        compute_run.index("EXISTING_VERSION_FILE=$(mktemp)") : compute_run.index("VALIDATOR_ARGS=(")
+    ]
+    assert "list-versions --registry pypi" in alpha_registry_block
+    assert "list-versions --registry testpypi" in alpha_registry_block
     for job_name in ("publish-alpha-testpypi", "publish-alpha-pypi", "release-alpha"):
         assert "build" in workflow["jobs"][job_name]["needs"]
         assert workflow["jobs"][job_name]["permissions"]["id-token"] == "write"
@@ -246,10 +251,10 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         if step.get("name") == "Revalidate main source before TestPyPI"
     )
     for main_source_revalidation in (main_testpypi_revalidation, main_revalidation):
-        assert 'git ls-remote --exit-code origin refs/heads/main' in main_source_revalidation
+        assert "git ls-remote --exit-code origin refs/heads/main" in main_source_revalidation
         assert '[[ "$remote_main_sha" != "$SOURCE_SHA" ]]' in main_source_revalidation
         assert "Main publication source is no longer the branch head" in main_source_revalidation
-        assert "git merge-base --is-ancestor \"$SOURCE_SHA\" refs/remotes/origin/main" not in main_source_revalidation
+        assert 'git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main' not in main_source_revalidation
     assert "compute_main_release_version.py" in main_revalidation
     assert main_revalidation.count("uv run --with packaging==25.0") == 5
     assert "uv run --no-sync" not in main_revalidation
@@ -345,6 +350,7 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
     assert 'gh attestation verify "$remote_file"' in main_release_run
     assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in main_release_run
     assert "--verify-tag" in main_release_run
+
 
 def test_release_31_dispatch_remains_alpha_only_while_main_is_stable() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
