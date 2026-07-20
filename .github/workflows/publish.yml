@@ -468,7 +468,7 @@ jobs:
       (needs.alpha-cross-platform.result == 'success' || needs.alpha-cross-platform.result == 'skipped')
     needs: [build, alpha-cross-platform, publish-alpha-testpypi]
     runs-on: ubuntu-latest
-    environment: pypi-alpha
+    environment: pypi
     permissions:
       contents: read
       id-token: write
