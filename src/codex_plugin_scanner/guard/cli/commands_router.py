@@ -18,6 +18,7 @@ from .commands_parser_helpers import *
 _EARLY_HANDLERS = {
     "mdm": "_run_guard_mdm_command",
     "command": "_run_guard_command_inspection_command",
+    "pytest-contained": "_run_guard_pytest_contained_command",
     "scan": "_run_guard_scan_command",
     "preflight": "_run_guard_preflight_command",
     "mcp": "_run_guard_mcp_command",

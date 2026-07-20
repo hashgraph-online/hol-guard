@@ -15711,7 +15711,14 @@ def test_guard_hook_codex_user_prompt_submit_applies_destructive_prompt_policy(
     assert "HOL Guard" in payload["reason"]
 
 
-def test_guard_runtime_allows_simple_pytest_module_invocation(tmp_path):
+def _assert_pytest_requires_restricted_profile(match):
+    assert match is not None
+    assert match.action_class == "pytest repository-code execution"
+    assert match.guard_default_action == "sandbox-required"
+    assert match.reason_code == "pytest_restricted_profile_required"
+
+
+def test_guard_runtime_requires_restricted_profile_for_simple_pytest_module_invocation(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
         {
@@ -15724,7 +15731,39 @@ def test_guard_runtime_allows_simple_pytest_module_invocation(tmp_path):
         cwd=tmp_path,
     )
 
-    assert match is None
+    _assert_pytest_requires_restricted_profile(match)
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "python -c \"import os; os.system('pytest -q')\"",
+        "python -c \"import os as ops; ops.popen('python -m pytest -q')\"",
+        "python -c \"from os import system as launch; launch('pytest -q')\"",
+        "python -c \"import subprocess; subprocess.run(['pytest', '-q'])\"",
+        "python -c \"import subprocess as sp; sp.call(('python3', '-m', 'pytest', '-q'))\"",
+        "python -c \"import subprocess as sp; sp.check_call(args=['pytest', '-q'])\"",
+        "python -c \"import subprocess as sp; sp.check_output(['py.test', '-q'])\"",
+        "python -c \"from subprocess import Popen as launch; launch(('pytest', '-q'))\"",
+        "python -c \"from subprocess import run as launch; launch('pytest -q')\"",
+    ),
+)
+def test_guard_runtime_requires_restricted_profile_for_inline_process_pytest(command, tmp_path):
+    assert secret_file_requests_module._shell_command_targets_pytest(command)
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+
+    assert match is not None
+    assert match.guard_default_action == "sandbox-required"
+    assert match.reason_code == "pytest_restricted_profile_required"
+
+
+def test_guard_runtime_does_not_target_harmless_inline_process_command():
+    command = "python -c \"import subprocess as sp; sp.run(['echo', 'harmless'])\""
+
+    assert not secret_file_requests_module._shell_command_targets_pytest(
+        command,
+    )
 
 
 def test_guard_runtime_allows_apply_patch_to_non_sensitive_source_file(tmp_path):
@@ -15794,7 +15833,7 @@ def test_guard_runtime_ignores_patch_syntax_for_other_write_tools(tmp_path):
     assert match is None
 
 
-def test_guard_runtime_allows_cd_prefixed_pytest_module_invocation(tmp_path):
+def test_guard_runtime_requires_restricted_profile_for_cd_prefixed_pytest_module_invocation(tmp_path):
     (tmp_path / "tests").mkdir()
     match = extract_sensitive_tool_action_request(
         "Bash",
@@ -15808,7 +15847,7 @@ def test_guard_runtime_allows_cd_prefixed_pytest_module_invocation(tmp_path):
         cwd=tmp_path,
     )
 
-    assert match is None
+    _assert_pytest_requires_restricted_profile(match)
 
 
 def test_guard_runtime_allows_ruff_check_and_fix_module_invocations(tmp_path):
@@ -15969,14 +16008,14 @@ def test_guard_runtime_blocks_local_pytest_entry_point_metadata(tmp_path):
     assert match.action_class == "destructive shell command"
 
 
-def test_guard_runtime_allows_simple_pytest_binary_invocation(tmp_path):
+def test_guard_runtime_requires_restricted_profile_for_simple_pytest_binary_invocation(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
         {"command": "pytest tests/test_guard_harness_smoke.py -q"},
         cwd=tmp_path,
     )
 
-    assert match is None
+    _assert_pytest_requires_restricted_profile(match)
 
 
 def test_guard_runtime_blocks_pytest_binary_addopts(tmp_path):
@@ -16147,7 +16186,7 @@ def test_guard_runtime_blocks_pytest_config_addopts(tmp_path):
     assert binary_match.action_class == "destructive shell command"
 
 
-def test_guard_runtime_allows_pytest_config_without_addopts(tmp_path):
+def test_guard_runtime_requires_restricted_profile_for_pytest_config_without_addopts(tmp_path):
     _write_text(tmp_path / "pyproject.toml", "[tool.pytest.ini_options]\ntestpaths = ['tests']\n")
 
     match = extract_sensitive_tool_action_request(
@@ -16156,7 +16195,7 @@ def test_guard_runtime_allows_pytest_config_without_addopts(tmp_path):
         cwd=tmp_path,
     )
 
-    assert match is None
+    _assert_pytest_requires_restricted_profile(match)
 
 
 def test_guard_runtime_blocks_selected_test_root_pytest_config_addopts(tmp_path):
@@ -16271,7 +16310,7 @@ def test_guard_runtime_blocks_pytest_config_addopts_log_file(tmp_path):
     assert binary_match.action_class == "destructive shell command"
 
 
-def test_guard_runtime_allows_pytest_config_addopts_log_formatting(tmp_path):
+def test_guard_runtime_requires_restricted_profile_for_pytest_config_addopts_log_formatting(tmp_path):
     _write_text(
         tmp_path / "pytest.ini",
         "[pytest]\naddopts = --log-file-level INFO --log-file-format %(message)s --log-file-date-format %H:%M:%S\n",
@@ -16283,7 +16322,7 @@ def test_guard_runtime_allows_pytest_config_addopts_log_formatting(tmp_path):
         cwd=tmp_path,
     )
 
-    assert match is None
+    _assert_pytest_requires_restricted_profile(match)
 
 
 def test_guard_runtime_checks_absolute_selected_test_root_pytest_config_addopts(tmp_path):
@@ -16313,7 +16352,7 @@ def test_guard_runtime_checks_selected_test_path_ancestor_pytest_config_addopts(
     assert match.action_class == "destructive shell command"
 
 
-def test_guard_runtime_allows_prior_cd_before_pytest(tmp_path):
+def test_guard_runtime_requires_restricted_profile_after_prior_cd(tmp_path):
     (tmp_path / "sub").mkdir()
     match = extract_sensitive_tool_action_request(
         "Bash",
@@ -16321,10 +16360,10 @@ def test_guard_runtime_allows_prior_cd_before_pytest(tmp_path):
         cwd=tmp_path,
     )
 
-    assert match is None
+    _assert_pytest_requires_restricted_profile(match)
 
 
-def test_guard_runtime_allows_prior_pushd_before_pytest(tmp_path):
+def test_guard_runtime_requires_restricted_profile_after_prior_pushd(tmp_path):
     (tmp_path / "sub").mkdir()
     match = extract_sensitive_tool_action_request(
         "Bash",
@@ -16332,7 +16371,7 @@ def test_guard_runtime_allows_prior_pushd_before_pytest(tmp_path):
         cwd=tmp_path,
     )
 
-    assert match is None
+    _assert_pytest_requires_restricted_profile(match)
 
 
 def test_guard_runtime_blocks_prior_exported_pytest_environment(tmp_path):
@@ -16437,7 +16476,7 @@ def test_guard_runtime_blocks_path_overridden_pytest_binary(tmp_path):
     assert match.action_class == "destructive shell command"
 
 
-def test_guard_hook_codex_does_not_block_simple_pytest_command(tmp_path, capsys, monkeypatch):
+def test_guard_hook_codex_requires_sandbox_for_simple_pytest_command(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -16464,13 +16503,15 @@ def test_guard_hook_codex_does_not_block_simple_pytest_command(tmp_path, capsys,
         as_json=True,
     )
 
-    assert rc == 0
+    assert rc == 1
     assert output["recorded"] is True
-    assert output["policy_action"] == "warn"
-    assert "approval_requests" not in output
+    assert output["policy_action"] == "sandbox-required"
+    assert output["terminal"] is True
+    assert output["terminal_action"] == "sandbox-required"
+    assert output["approval_requests"] == []
 
 
-def test_guard_runtime_allows_literal_exit_code_echo_after_safe_pytest(tmp_path):
+def test_guard_runtime_requires_restricted_profile_for_pytest_exit_code_echo(tmp_path):
     (tmp_path / "sub").mkdir()
     match = extract_sensitive_tool_action_request(
         "Bash",
@@ -16484,10 +16525,10 @@ def test_guard_runtime_allows_literal_exit_code_echo_after_safe_pytest(tmp_path)
         cwd=tmp_path,
     )
 
-    assert match is None
+    _assert_pytest_requires_restricted_profile(match)
 
 
-def test_guard_hook_codex_does_not_block_safe_pytest_exit_code_echo(tmp_path, capsys, monkeypatch):
+def test_guard_hook_codex_requires_sandbox_for_pytest_exit_code_echo(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -16515,10 +16556,12 @@ def test_guard_hook_codex_does_not_block_safe_pytest_exit_code_echo(tmp_path, ca
         as_json=True,
     )
 
-    assert rc == 0
+    assert rc == 1
     assert output["recorded"] is True
-    assert output["policy_action"] == "warn"
-    assert "approval_requests" not in output
+    assert output["policy_action"] == "sandbox-required"
+    assert output["terminal"] is True
+    assert output["terminal_action"] == "sandbox-required"
+    assert output["approval_requests"] == []
 
 
 @pytest.mark.parametrize(

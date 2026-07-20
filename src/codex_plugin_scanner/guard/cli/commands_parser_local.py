@@ -13,6 +13,12 @@ from .commands_parser_helpers import *
 def _configure_guard_local_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    pytest_contained_parser = guard_subparsers.add_parser("pytest-contained", help=argparse.SUPPRESS)
+    pytest_contained_parser.add_argument("--workspace", required=True)
+    pytest_contained_parser.add_argument("--cwd")
+    pytest_contained_parser.add_argument("--timeout-seconds", type=int, default=30 * 60)
+    pytest_contained_parser.add_argument("pytest_command", nargs=argparse.REMAINDER)
+
     start_parser = guard_subparsers.add_parser("start", help="Show the first Guard steps for a local harness")
     _add_guard_common_args(start_parser)
     start_parser.add_argument("--json", action="store_true")
