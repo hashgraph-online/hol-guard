@@ -447,6 +447,7 @@ def test_package_project_scope_requires_future_bound_v2_proof(tmp_path: Path) ->
     request = {
         "artifact_id": "guard-cli:project:package-request:context-test",
         "artifact_type": "package_request",
+        "policy_action": "review",
         "workspace": str(workspace),
         "scanner_evidence": [portable.to_evidence()],
     }

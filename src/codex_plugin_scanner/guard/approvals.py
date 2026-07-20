@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 import uuid
@@ -68,7 +69,7 @@ GUARD_INBOX_URL = f"{GUARD_DASHBOARD_URL}/inbox"
 GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/protect"
 GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
 _APPROVAL_ONCE_POLICY_TTL = timedelta(minutes=15)
-_APPROVAL_RESOLUTION_LOCK = threading.RLock()
+_APPROVAL_RESOLUTION_LOCKS = tuple(threading.RLock() for _ in range(64))
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
 _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES = frozenset(
@@ -88,7 +89,12 @@ class ApprovalRequestNotFoundError(ValueError):
 def _serialize_approval_resolution(function: Callable[_P, _R]) -> Callable[_P, _R]:
     @wraps(function)
     def serialized(*args: _P.args, **kwargs: _P.kwargs) -> _R:
-        with _APPROVAL_RESOLUTION_LOCK:
+        request_id = kwargs.get("request_id")
+        if not isinstance(request_id, str):
+            raise TypeError("request_id must be provided as a string keyword argument")
+        digest = hashlib.sha256(request_id.encode("utf-8")).digest()
+        lock = _APPROVAL_RESOLUTION_LOCKS[int.from_bytes(digest[:2], "big") % len(_APPROVAL_RESOLUTION_LOCKS)]
+        with lock:
             return function(*args, **kwargs)
 
     return serialized

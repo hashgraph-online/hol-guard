@@ -54,8 +54,11 @@ from ..approval_gate import (
     validate_settings_update as validate_approval_gate_settings,
 )
 from ..approval_scope_support import (
+    APPROVAL_SCOPE_CONTRACT_VERSION,
+    APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX,
     IneligibleApprovalScopeError,
     StaleApprovalScopeContractError,
+    request_scope_contract,
     request_scope_contract_payload,
     resolve_request_scope_selection,
 )
@@ -139,6 +142,7 @@ from ..receipts.manager import build_receipt
 from ..review_contracts import (
     GuardReviewContractError,
     guard_review_oauth_metadata,
+    normalize_remote_approval_decision,
     validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
 )
@@ -2037,14 +2041,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         scope_contract_version = (
             scope_contract_version_value.strip() if isinstance(scope_contract_version_value, str) else None
         )
-        if scope_contract_version is not None:
-            version_prefix = "guard.approval-scopes.v"
-            if (
-                not scope_contract_version.startswith(version_prefix)
-                or not scope_contract_version.removeprefix(version_prefix).isdigit()
-            ):
-                self._write_json({"resolved": False, "error": "invalid_scope_contract_version"}, status=400)
-                return
+        if scope_contract_version is not None and (
+            not scope_contract_version.startswith(APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX)
+            or not scope_contract_version.removeprefix(APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX).isdigit()
+        ):
+            self._write_json({"resolved": False, "error": "invalid_scope_contract_version"}, status=400)
+            return
         scope_contract_digest_value = payload.get("scope_contract_digest")
         if scope_contract_digest_value is not None and (
             not isinstance(scope_contract_digest_value, str) or not scope_contract_digest_value.strip()
@@ -2656,11 +2658,27 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "remote_once_request_not_pending"}, status=409)
             return
         request_policy_action = self._optional_string(request_row.get("policy_action"))
-        request_recommended_scope = self._optional_string(request_row.get("recommended_scope"))
+        resolution_action = normalize_remote_approval_decision(envelope.get("decision"))
+        if resolution_action is None:
+            self._write_json({"error": "invalid_remote_approval_decision"}, status=400)
+            return
+        contract = request_scope_contract(request_row)
+        request_recommended_scope = self._optional_string(envelope.get("scope"))
         if (
             request_policy_action not in {"block", "pause", "review", "require-reapproval"}
             or request_recommended_scope not in DECISION_SCOPE_VALUES
         ):
+            self._write_json({"error": "remote_once_not_permitted"}, status=409)
+            return
+        try:
+            scope_selection = resolve_request_scope_selection(
+                request_row,
+                action=resolution_action,
+                requested_scope=request_recommended_scope,
+                contract_version=APPROVAL_SCOPE_CONTRACT_VERSION,
+                contract_digest=contract.digest,
+            )
+        except IneligibleApprovalScopeError:
             self._write_json({"error": "remote_once_not_permitted"}, status=409)
             return
         try:
@@ -2699,12 +2717,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         ):
             self._write_json({"error": "remote_once_replayed"}, status=409)
             return
-        resolution_action = "block" if self._optional_string(envelope.get("decision")) == "block" else "allow"
         try:
             result = self.server.store.resolve_request_with_signed_remote_result(  # type: ignore[attr-defined]
                 request_id,
                 resolution_action=resolution_action,
-                resolution_scope=request_recommended_scope or "artifact",
+                resolution_scope=scope_selection.applied_scope,
                 reason="Guard Cloud signed remote approval",
                 resolved_at=_now(),
             )
@@ -2727,7 +2744,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "receipt_id": receipt_id,
                 "request_id": request_id,
                 "review_command": self._optional_string(resolved_request.get("review_command")),
-                "scope": request_recommended_scope or "artifact",
+                "scope": scope_selection.applied_scope,
             },
             resolved_at,
         )

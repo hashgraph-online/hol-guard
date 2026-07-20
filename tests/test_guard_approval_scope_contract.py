@@ -100,7 +100,7 @@ def _mapping(value: object) -> Mapping[str, object]:
     [
         ("require-reapproval", ("artifact",)),
         ("review", ("artifact",)),
-        ("sandbox-required", ("artifact",)),
+        ("sandbox-required", ()),
         ("block", ()),
     ],
 )
@@ -117,6 +117,24 @@ def test_guard_control_cannot_be_browser_allowed() -> None:
 
     assert contract.allow_scopes == ()
     assert "current_action_not_overridable" in contract.restrictions
+
+
+@pytest.mark.parametrize("policy_action", ["block", "sandbox-required"])
+def test_terminal_policy_action_cannot_be_browser_allowed(tmp_path: Path, policy_action: GuardAction) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    row = _store_request(store, _request("terminal", policy_action=policy_action))
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, response = _post(daemon, "/v1/requests/terminal/approve", _v2_selection(row, "artifact"))
+    finally:
+        daemon.stop()
+
+    assert status == 422
+    assert response["error"] == "ineligible_request_scope"
+    stored = store.get_approval_request("terminal")
+    assert stored is not None
+    assert stored["status"] == "pending"
 
 
 def test_artifact_family_text_cannot_spoof_canonical_broad_deny() -> None:
@@ -262,7 +280,11 @@ def test_malformed_resolution_contract_returns_400(tmp_path: Path, payload: dict
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("scope_contract_version", "guard.approval-scopes.v1"), ("scope_contract_digest", "0" * 64)],
+    [
+        ("scope_contract_version", "guard.approval-scopes.v1"),
+        ("scope_contract_version", "guard.approval-scopes.v3"),
+        ("scope_contract_digest", "0" * 64),
+    ],
 )
 def test_stale_contract_returns_409_with_fresh_contract(
     tmp_path: Path,

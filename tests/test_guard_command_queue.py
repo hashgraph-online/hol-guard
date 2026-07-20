@@ -2795,8 +2795,8 @@ def test_executor_releases_remote_once_receipt_on_invalid_signed_decision(tmp_pa
     )
 
     assert result["failureCode"] == "invalid_remote_approval_decision"
-    assert store.claimed_receipts == ["cloud-receipt-1"]
-    assert store.released_receipts == ["cloud-receipt-1"]
+    assert store.claimed_receipts == []
+    assert store.released_receipts == []
 
 
 def test_executor_syncs_policy_without_local_request_id(tmp_path: Path) -> None:
@@ -3081,8 +3081,7 @@ def test_executor_rejects_remote_approval_for_removed_one_time_scope(tmp_path: P
     assert store.resolved == []
 
 
-def test_executor_resolves_block_policy_action_with_workspace_allow(tmp_path: Path) -> None:
-    """Prove policy_action='block' can be remotely allowed with the requested scope."""
+def test_executor_rejects_block_policy_action_with_workspace_allow(tmp_path: Path) -> None:
 
     class WorkspaceAllowStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
@@ -3142,16 +3141,9 @@ def test_executor_resolves_block_policy_action_with_workspace_allow(tmp_path: Pa
         now=lambda: "2026-06-13T00:00:00+00:00",
     )
 
-    assert result["generatedAt"] == "2026-06-13T00:00:00+00:00"
-    assert result["data"]["status"] == "completed"
-    assert store.resolved == [
-        {
-            "request_id": "request-workspace-allow",
-            "resolution_action": "allow",
-            "resolution_scope": "workspace",
-        }
-    ]
-    assert len(store.claimed_receipts) == 1
+    assert result["failureCode"] == "remote_approval_not_permitted"
+    assert store.resolved == []
+    assert store.claimed_receipts == []
 
 
 def test_executor_resolves_harness_scope_with_block(tmp_path: Path) -> None:
@@ -3162,9 +3154,11 @@ def test_executor_resolves_harness_scope_with_block(tmp_path: Path) -> None:
             super().__init__(guard_home)
             self.request_row = _approval_request_row(
                 "request-harness-block",
+                artifact_id="cursor:project:tool-action:request-harness-block",
                 policy_action="require-reapproval",
                 recommended_scope="harness",
             )
+            self.request_row["artifact_type"] = "tool_action_request"
             self.resolved: list[dict[str, object]] = []
             self.claimed_receipts: list[dict[str, str]] = []
 
@@ -3585,6 +3579,6 @@ def test_executor_rejects_remote_approval_envelope_scope_mismatch(tmp_path: Path
         store=store,  # type: ignore[arg-type]
         now=lambda: "2026-06-13T00:00:00+00:00",
     )
-    assert result["failureCode"] == "remote_approval_scope_mismatch"
+    assert result["failureCode"] == "remote_approval_not_permitted"
     assert store.claimed_receipts == []
     assert store.resolved == []

@@ -14,6 +14,12 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
+from .approval_scope_support import (
+    APPROVAL_SCOPE_CONTRACT_VERSION,
+    IneligibleApprovalScopeError,
+    request_scope_contract,
+    resolve_request_scope_selection,
+)
 from .models import DECISION_SCOPE_VALUES
 from .policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
@@ -301,7 +307,7 @@ def build_local_review_request_claim(
     artifact_id = _non_empty_string(request_row.get("artifact_id"))
     harness_id = _non_empty_string(request_row.get("harness"))
     policy_action = _non_empty_string(request_row.get("policy_action"))
-    recommended_scope = _non_empty_string(request_row.get("recommended_scope"))
+    recommended_scope = _request_recommended_scope(request_row)
     created_at = _non_empty_string(request_row.get("created_at"))
     last_seen_at = _non_empty_string(request_row.get("last_seen_at")) or created_at
     required_fields = (
@@ -363,6 +369,18 @@ def payload_hash_for_remote_approval_envelope(envelope: dict[str, object]) -> st
     return _sha256_hex(_canonical_signed_payload(envelope))
 
 
+def normalize_remote_approval_decision(value: object) -> str | None:
+    normalized = _non_empty_string(value)
+    if normalized is None:
+        return None
+    folded = normalized.replace("_", "-")
+    if folded in {"allow", "allow-once"} or normalized == "allowOnce":
+        return "allow"
+    if folded in {"block", "deny", "denied", "blocked"}:
+        return "block"
+    return None
+
+
 def validated_remote_approval_envelope(
     envelope: dict[str, object],
     *,
@@ -373,6 +391,8 @@ def validated_remote_approval_envelope(
         raise GuardReviewContractError("unsupported_remote_approval_contract")
     if envelope.get("scope") not in _REMOTE_APPROVAL_ALLOWED_SCOPES:
         raise GuardReviewContractError("invalid_remote_approval_scope")
+    if normalize_remote_approval_decision(envelope.get("decision")) is None:
+        raise GuardReviewContractError("invalid_remote_approval_decision")
     issued_at = _parse_iso_timestamp(envelope.get("issuedAt"), field_name="issued_at")
     expires_at = _parse_iso_timestamp(envelope.get("expiresAt"), field_name="expires_at")
     if expires_at <= issued_at:
@@ -426,9 +446,36 @@ def validate_remote_approval_request_binding(
     if _non_empty_string(envelope.get("sourceClaimHash")) != _non_empty_string(expected_claim.get("claimHash")):
         raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
     envelope_scope = _non_empty_string(envelope.get("scope"))
-    request_scope = _non_empty_string(request_row.get("recommended_scope"))
-    if envelope_scope != request_scope:
+    action = normalize_remote_approval_decision(envelope.get("decision"))
+    if action is None:
+        raise GuardReviewContractError("invalid_remote_approval_decision")
+    contract = request_scope_contract(request_row)
+    if envelope_scope is None:
         raise GuardReviewContractError("remote_approval_scope_mismatch")
+    try:
+        resolve_request_scope_selection(
+            request_row,
+            action=action,
+            requested_scope=envelope_scope,
+            contract_version=APPROVAL_SCOPE_CONTRACT_VERSION,
+            contract_digest=contract.digest,
+        )
+    except (IneligibleApprovalScopeError, ValueError) as error:
+        raise GuardReviewContractError("remote_approval_scope_mismatch") from error
+
+
+def _request_recommended_scope(request_row: dict[str, object], *, decision: str | None = None) -> str | None:
+    recommendations = request_row.get("recommended_scope_by_action")
+    if isinstance(recommendations, dict):
+        action = "block" if decision == "block" else "allow"
+        selected = _non_empty_string(recommendations.get(action))
+        if selected is not None:
+            return selected
+        if decision is None:
+            fallback = _non_empty_string(recommendations.get("block"))
+            if fallback is not None:
+                return fallback
+    return _non_empty_string(request_row.get("recommended_scope"))
 
 
 def payload_hash_for_decision_memory_bundle(bundle: dict[str, object]) -> str:

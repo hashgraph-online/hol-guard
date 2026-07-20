@@ -28,7 +28,8 @@ _SCOPED_APPROVAL_FAMILIES = frozenset(
     }
 )
 
-APPROVAL_SCOPE_CONTRACT_VERSION: Final = "guard.approval-scopes.v2"
+APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX: Final = "guard.approval-scopes.v"
+APPROVAL_SCOPE_CONTRACT_VERSION: Final = f"{APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX}2"
 ResolutionAction = Literal["allow", "block"]
 
 
@@ -48,7 +49,7 @@ class IneligibleApprovalScopeError(ValueError):
         message: str,
         contract: ApprovalScopeContract,
         *,
-        action: str,
+        action: ResolutionAction,
         requested_scope: str,
     ) -> None:
         super().__init__(message)
@@ -153,7 +154,11 @@ def resolve_request_scope_selection(
     contract_version: str | None,
     contract_digest: str | None,
 ) -> ApprovalScopeSelection:
-    if action not in {"allow", "block"}:
+    if action == "allow":
+        resolution_action: ResolutionAction = "allow"
+    elif action == "block":
+        resolution_action = "block"
+    else:
         raise ValueError("unsupported_resolution_action")
     if requested_scope not in DECISION_SCOPE_VALUES:
         raise ValueError(f"Unsupported approval scope: {requested_scope}")
@@ -165,21 +170,21 @@ def resolve_request_scope_selection(
         contract_version != APPROVAL_SCOPE_CONTRACT_VERSION or contract_digest != contract.digest
     ):
         raise StaleApprovalScopeContractError(contract)
-    eligible = contract.allow_scopes if action == "allow" else contract.block_scopes
+    eligible = contract.allow_scopes if resolution_action == "allow" else contract.block_scopes
     if typed_scope in eligible:
         return ApprovalScopeSelection(typed_scope, typed_scope)
     if contract_version is not None or action == "block":
         raise IneligibleApprovalScopeError(
             "ineligible_request_scope",
             contract,
-            action=action,
+            action=resolution_action,
             requested_scope=requested_scope,
         )
     if "artifact" not in eligible:
         raise IneligibleApprovalScopeError(
             "request_action_not_overridable",
             contract,
-            action=action,
+            action=resolution_action,
             requested_scope=requested_scope,
         )
     return ApprovalScopeSelection(
@@ -367,7 +372,7 @@ def _json_boundary_value(value: object) -> object:
 
 
 def _allow_is_non_overridable(request: Mapping[str, object]) -> bool:
-    if _string_or_none(request.get("policy_action")) == "block":
+    if _string_or_none(request.get("policy_action")) not in {"require-reapproval", "review"}:
         return True
     envelope = request.get("action_envelope_json")
     if not isinstance(envelope, Mapping):
