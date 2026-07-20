@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import socket
 import sys
 import tempfile
@@ -68,7 +69,7 @@ def test_uncontained_pytest_is_repository_execution_requiring_sandbox(tmp_path: 
 def test_pytest_text_in_nonexecuted_inline_literal_is_not_classified(tmp_path: Path) -> None:
     match = extract_sensitive_tool_action_request(
         "Bash",
-        {"command": "python -c 'print(\"pytest.main()\")'"},
+        {"command": f"{shlex.quote(sys.executable)} -c 'print(\"pytest.main()\")'"},
         cwd=tmp_path,
     )
 

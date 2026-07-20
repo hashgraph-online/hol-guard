@@ -522,6 +522,7 @@ def _runtime_hook_approval_context_token(
         content={
             "artifact_content_hash": content_hash,
             "command_security_identity": metadata.get("command_security_identity"),
+            "interpreter_executable_identities": metadata.get("interpreter_executable_identities"),
             "shell_execution_context_hash": metadata.get("shell_execution_context_hash"),
             "shell_execution_context_hashes": metadata.get("shell_execution_context_hashes"),
             "shell_execution_context_reason_code": metadata.get("shell_execution_context_reason_code"),

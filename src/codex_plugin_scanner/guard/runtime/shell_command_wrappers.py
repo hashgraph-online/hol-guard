@@ -329,12 +329,18 @@ def _command_name(
     command_path = Path(token)
     if not command_path.is_absolute():
         return ""
-    if not _trusted_absolute_command_path(command_path, cwd=cwd, home_dir=home_dir):
+    if not is_trusted_absolute_command_path(command_path, cwd=cwd, home_dir=home_dir):
         return ""
     return command_path.name.lower()
 
 
-def _trusted_absolute_command_path(command_path: Path, *, cwd: Path | None, home_dir: Path | None) -> bool:
+def is_trusted_absolute_command_path(command_path: Path, *, cwd: Path | None, home_dir: Path | None) -> bool:
+    """Return whether a resolved launch path is outside user-controlled roots.
+
+    This is shared by transparent-wrapper and interpreter classification so
+    basename normalization never silently changes the trust decision.
+    """
+
     try:
         if _path_is_under(command_path, cwd) or not _stable_non_writable_path(command_path):
             return False
@@ -413,4 +419,8 @@ def _join_shell_tokens(tokens: list[str]) -> str:
     return " ".join(rendered).strip()
 
 
-__all__ = ["ShellCommandNormalization", "normalize_transparent_shell_command"]
+__all__ = [
+    "ShellCommandNormalization",
+    "is_trusted_absolute_command_path",
+    "normalize_transparent_shell_command",
+]

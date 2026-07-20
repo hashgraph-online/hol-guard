@@ -6881,7 +6881,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_python_heredo
         "toolName": "bash",
         "toolArgs": {
             "command": (
-                f"cd {shlex.quote(str(fixture_dir))} && python - <<'PY'\n"
+                f"cd {shlex.quote(str(fixture_dir))} && {shlex.quote(sys.executable)} - <<'PY'\n"
                 "from pathlib import Path\n"
                 "text = Path('bounty_submissions.txt').read_text()\n"
                 "print('bytes', len(text))\n"

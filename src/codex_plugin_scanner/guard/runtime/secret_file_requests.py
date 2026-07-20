@@ -10,13 +10,16 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shlex
 import stat
+import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..models import GuardArtifact
 from .actions import GuardActionEnvelope, apply_patch_target_paths
+from .approval_context import build_runtime_executable_identity
 from .command_evaluation import evaluate_command
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .command_model import CanonicalCommand, parse_shell_command
@@ -53,7 +56,7 @@ from .self_approval import (
     SELF_APPROVAL_REASON,
     is_guard_approval_mutation_command,
 )
-from .shell_command_wrappers import normalize_transparent_shell_command
+from .shell_command_wrappers import is_trusted_absolute_command_path, normalize_transparent_shell_command
 from .shell_execution_context import (
     ShellExecutionContext,
     model_shell_execution_context,
@@ -226,6 +229,12 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
     "sk-",
 )
 _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest", "ruff"})
+_TRUSTED_INTERPRETER_INSTALL_ROOTS = (
+    Path("/home/linuxbrew/.linuxbrew"),
+    Path("/opt/homebrew"),
+    Path("/opt/hostedtoolcache/Python"),
+    Path("/usr/local"),
+)
 _SAFE_PYTHON_MODULE_SHADOW_PATHS = {
     "pytest": (
         "pytest.py",
@@ -454,7 +463,7 @@ _SHELL_NEWLINE_SEPARATOR = ";"
 _HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
 _SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN = r"(?:cd\b[^\n;&|<>$`]*)"
 _SINGLE_INTERPRETER_HEREDOC_PATTERN = re.compile(
-    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>[^\s;&|<>$`]*(?:perl|python(?:\d+(?:\.\d+)*)?|ruby))\b(?P<args>[^\n;&|]*)<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
+    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>[^\s;&|<>$`]*(?:perl|pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?|ruby))\b(?P<args>[^\n;&|]*)<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
     re.IGNORECASE | re.DOTALL,
 )
 _SINGLE_NODE_HEREDOC_PATTERN = re.compile(
@@ -714,6 +723,7 @@ class ToolActionRequestMatch:
     pytest_config_identity_sha256: str | None = None
     pytest_config_sources: tuple[str, ...] = ()
     pytest_config_reason_codes: tuple[str, ...] = ()
+    interpreter_executable_identities: tuple[dict[str, object], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -1157,6 +1167,13 @@ def is_explicitly_benign_tool_action_request(
         return False
     found_benign_candidate = False
     for command_text in _candidate_command_texts(arguments):
+        interpreter_evidence = _python_interpreter_executable_identities(
+            command_text,
+            cwd=cwd,
+            home_dir=home_dir,
+        )
+        if any(evidence.get("trust") not in {"trusted_guard", "trusted_system"} for evidence in interpreter_evidence):
+            return False
         if normalized_tool_name in _SHELL_TOOL_NAMES:
             command_text = normalize_transparent_shell_command(
                 command_text, cwd=cwd, home_dir=home_dir
@@ -1254,6 +1271,16 @@ def _destructive_shell_tool_action_request(
         else PytestConfigAssessment((), True, False, (), None)
     )
     pytest_config_sources = tuple(result.source_path for result in pytest_config_assessment.results)
+    interpreter_executable_identities = _python_interpreter_executable_identities(
+        raw_command_text or detection_command_text,
+        cwd=cwd,
+        home_dir=home_dir,
+        execution_context=(
+            raw_execution_context
+            if raw_command_text is not None and raw_command_text != detection_command_text
+            else execution_context
+        ),
+    )
     if is_guard_approval_mutation_command(detection_command_text):
         return ToolActionRequestMatch(
             tool_name=tool_name,
@@ -1274,6 +1301,7 @@ def _destructive_shell_tool_action_request(
                 "payloads in-process without executing them during evaluation."
             ),
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     if _contains_shell_credential_exfiltration(detection_command_text, cwd=cwd, home_dir=home_dir):
         return ToolActionRequestMatch(
@@ -1286,6 +1314,7 @@ def _destructive_shell_tool_action_request(
                 "sensitive because they can exfiltrate local secrets before the user confirms the action."
             ),
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     if _contains_shell_network_file_upload(detection_command_text, cwd=cwd, home_dir=home_dir):
         return ToolActionRequestMatch(
@@ -1298,6 +1327,7 @@ def _destructive_shell_tool_action_request(
                 "contents to a network endpoint before the user confirms the action."
             ),
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     if _gh_pr_create_body_has_shell_command_substitution(detection_command_text) or (
         raw_command_text is not None
@@ -1315,6 +1345,7 @@ def _destructive_shell_tool_action_request(
                 "`--body-file` for PR descriptions."
             ),
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     for _extension, rule, _evidence in BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command):
         if not rule.action_classes or rule.action_classes[0] != "GitHub Actions administrative command":
@@ -1326,6 +1357,7 @@ def _destructive_shell_tool_action_request(
             action_class=rule.action_classes[0],
             reason=rule.description,
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     execution_context_reason = _shell_execution_context_validation_reason(execution_context)
     if execution_context.directory_change_present and execution_context_reason is not None:
@@ -1349,6 +1381,7 @@ def _destructive_shell_tool_action_request(
             pytest_config_identity_sha256=pytest_config_assessment.identity_sha256,
             pytest_config_sources=pytest_config_sources,
             pytest_config_reason_codes=pytest_config_assessment.reason_codes,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     detection_command_is_destructive = _looks_destructive_shell_command(
         detection_command_text,
@@ -1401,6 +1434,7 @@ def _destructive_shell_tool_action_request(
             pytest_config_identity_sha256=pytest_config_assessment.identity_sha256,
             pytest_config_sources=pytest_config_sources,
             pytest_config_reason_codes=pytest_config_assessment.reason_codes,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     if pytest_execution_requested:
         return ToolActionRequestMatch(
@@ -1421,6 +1455,7 @@ def _destructive_shell_tool_action_request(
             pytest_config_identity_sha256=pytest_config_assessment.identity_sha256,
             pytest_config_sources=pytest_config_sources,
             pytest_config_reason_codes=pytest_config_assessment.reason_codes,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     github_assessment = _github_shell_capability_assessment(
         detection_command_text,
@@ -1445,6 +1480,7 @@ def _destructive_shell_tool_action_request(
                 )
             ),
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     for _extension, rule, _evidence in BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command):
         if not rule.action_classes:
@@ -1456,6 +1492,30 @@ def _destructive_shell_tool_action_request(
             action_class=rule.action_classes[0],
             reason=rule.description,
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
+        )
+    untrusted_interpreters = tuple(
+        evidence
+        for evidence in interpreter_executable_identities
+        if evidence.get("trust") not in {"trusted_guard", "trusted_system"}
+    )
+    if untrusted_interpreters:
+        trust_reasons = ", ".join(
+            sorted({str(evidence.get("trust") or "unknown") for evidence in untrusted_interpreters})
+        )
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="untrusted Python interpreter",
+            reason=(
+                "Guard requires review because the Python command resolves through an interpreter path that is "
+                f"not an attested Guard or system runtime ({trust_reasons}). The decision is bound to the raw "
+                "interpreter token, launch path, symlink chain, executable mode, file identity, and content hash."
+            ),
+            canonical_command=canonical_command,
+            reason_code="interpreter_identity_untrusted",
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     return None
 
@@ -4058,6 +4118,7 @@ def build_tool_action_request_artifact(
         "command_text": request.command_text,
         "action_class": request.action_class,
         "shell_execution_context_hash": request.shell_execution_context_hash,
+        "interpreter_executable_identities": request.interpreter_executable_identities,
     }
     if request.restricted_profile_version is not None:
         fingerprint_payload["restricted_profile_version"] = request.restricted_profile_version
@@ -4110,6 +4171,9 @@ def build_tool_action_request_artifact(
             "risk_classes": list(evaluation.risk_classes),
             "command_parse_confidence": evaluation.command.confidence,
             "command_uncertainty_reason": evaluation.command.uncertainty_reason,
+            "interpreter_executable_identities": [
+                dict(identity) for identity in request.interpreter_executable_identities
+            ],
             **execution_context_metadata,
             **(
                 {"guard_default_action": request.guard_default_action}
@@ -4171,6 +4235,7 @@ def _request_with_wrapper_context(
         pytest_config_identity_sha256=request.pytest_config_identity_sha256,
         pytest_config_sources=request.pytest_config_sources,
         pytest_config_reason_codes=request.pytest_config_reason_codes,
+        interpreter_executable_identities=request.interpreter_executable_identities,
     )
 
 
@@ -8112,7 +8177,409 @@ def _is_unmodeled_inline_interpreter_command(command_name: str) -> bool:
 
 
 def _is_python_interpreter_command(command_name: str) -> bool:
-    return re.fullmatch(r"python(?:\d+(?:\.\d+)*)?", command_name) is not None
+    normalized_name = _normalized_shell_command_name(command_name)
+    return re.fullmatch(r"pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?", normalized_name) is not None
+
+
+@dataclass(frozen=True, slots=True)
+class _ShellLaunchCandidate:
+    tokens: tuple[str, ...]
+    command_index: int
+    effective_cwd: Path
+    environment: dict[str, str]
+    resolution_reason: str | None = None
+
+
+def _python_interpreter_executable_identities(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    environment: dict[str, str] | None = None,
+    workspace_root: Path | None = None,
+    execution_context: ShellExecutionContext | None = None,
+    depth: int = 0,
+) -> tuple[dict[str, object], ...]:
+    """Resolve exact Python tokens without executing candidate interpreters."""
+
+    initial_cwd = _normalized_interpreter_cwd(cwd)
+    root = _normalized_interpreter_cwd(workspace_root or cwd)
+    inherited_environment = dict(os.environ if environment is None else environment)
+    if depth > 8:
+        return _ambiguous_python_evidence_from_tokens(
+            _split_shell_parts(command_text),
+            cwd=initial_cwd,
+            environment=inherited_environment,
+            workspace_root=root,
+            home_dir=home_dir,
+            reason="nested_shell_depth_exceeded",
+        )
+
+    execution_context = execution_context or model_shell_execution_context(
+        command_text,
+        cwd=initial_cwd,
+        workspace_root=root,
+    )
+    evidence: list[dict[str, object]] = []
+    for context_segment in execution_context.segments:
+        if context_segment.directory_operation is not None:
+            continue
+        segment_cwd, context_reason = validate_shell_execution_segment(execution_context, context_segment)
+        if segment_cwd is None or context_reason is not None:
+            evidence.extend(
+                _ambiguous_python_evidence_from_tokens(
+                    list(context_segment.tokens),
+                    cwd=initial_cwd,
+                    environment=inherited_environment,
+                    workspace_root=root,
+                    home_dir=home_dir,
+                    reason=context_reason or "interpreter_cwd_unresolved",
+                )
+            )
+            continue
+        candidate = _shell_launch_candidate(
+            list(context_segment.tokens),
+            cwd=segment_cwd,
+            environment=inherited_environment,
+        )
+        if candidate is None:
+            evidence.extend(
+                _ambiguous_python_evidence_from_tokens(
+                    list(context_segment.tokens),
+                    cwd=segment_cwd,
+                    environment=inherited_environment,
+                    workspace_root=root,
+                    home_dir=home_dir,
+                    reason="interpreter_wrapper_unresolved",
+                )
+            )
+            continue
+        raw_token = _shell_command_token_without_attached_redirection(candidate.tokens[candidate.command_index]).strip()
+        if _is_python_interpreter_command(raw_token):
+            evidence.append(
+                _python_interpreter_executable_identity(
+                    raw_token,
+                    cwd=candidate.effective_cwd,
+                    environment=candidate.environment,
+                    workspace_root=root,
+                    home_dir=home_dir,
+                    resolution_reason=candidate.resolution_reason,
+                )
+            )
+        command_name = _normalized_shell_command_name(raw_token)
+        if command_name in _SHELL_COMMAND_STRING_INTERPRETERS:
+            payload = _shell_interpreter_command_payload(
+                list(candidate.tokens),
+                candidate.command_index,
+            )
+            if payload is not None:
+                evidence.extend(
+                    _python_interpreter_executable_identities(
+                        payload.script_text,
+                        cwd=candidate.effective_cwd,
+                        home_dir=home_dir,
+                        environment=candidate.environment,
+                        workspace_root=root,
+                        depth=depth + 1,
+                    )
+                )
+    for payload in _shell_command_substitution_payloads(command_text):
+        evidence.extend(
+            _python_interpreter_executable_identities(
+                payload,
+                cwd=initial_cwd,
+                home_dir=home_dir,
+                environment=inherited_environment,
+                workspace_root=root,
+                depth=depth + 1,
+            )
+        )
+    unique: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for item in evidence:
+        stable_item = _without_interpreter_reuse_nonces(item)
+        key = json.dumps(stable_item, sort_keys=True, separators=(",", ":"), default=str)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return tuple(unique)
+
+
+def _normalized_interpreter_cwd(cwd: Path | None) -> Path:
+    candidate = cwd or Path.cwd()
+    try:
+        return candidate.expanduser().resolve(strict=False)
+    except (OSError, RuntimeError):
+        return candidate.expanduser().absolute()
+
+
+def _shell_launch_candidate(
+    tokens: list[str],
+    *,
+    cwd: Path,
+    environment: dict[str, str],
+    depth: int = 0,
+    resolution_reason: str | None = None,
+) -> _ShellLaunchCandidate | None:
+    if depth > 8:
+        return None
+    working = list(tokens)
+    effective_environment = dict(environment)
+    effective_cwd = cwd
+    index = 0
+    while index < len(working):
+        redirected = _leading_shell_redirection_tokens_consumed(working, index)
+        if redirected:
+            index += redirected
+            continue
+        token = _shell_command_token_without_attached_redirection(working[index]).strip()
+        if _SHELL_ASSIGNMENT_PATTERN.match(token):
+            name, _, value = token.partition("=")
+            if name.endswith("+"):
+                name = name[:-1]
+                value = f"{effective_environment.get(name, '')}{value}"
+            effective_environment[name] = value
+            index += 1
+            continue
+        command_name = _normalized_shell_command_name(token)
+        if command_name == "env":
+            parsed = parse_env_wrapper(
+                working[index + 1 :],
+                inherited_environment=effective_environment,
+                cwd=effective_cwd,
+            )
+            if not parsed.complete or not parsed.executable_argv:
+                return None
+            parsed_environment = parsed.environment_dict()
+            if parsed_environment is None or parsed.effective_cwd is None:
+                return None
+            path_value = parsed_environment.get("PATH")
+            env_reason = resolution_reason
+            if path_value is not None and ("$" in path_value or "`" in path_value):
+                env_reason = "path_expression_unresolved"
+            return _shell_launch_candidate(
+                list(parsed.executable_argv),
+                cwd=parsed.effective_cwd,
+                environment=parsed_environment,
+                depth=depth + 1,
+                resolution_reason=env_reason,
+            )
+        if command_name not in _SHELL_COMMAND_WRAPPERS:
+            path_value = effective_environment.get("PATH")
+            final_reason = resolution_reason
+            if path_value is not None and ("$" in path_value or "`" in path_value):
+                final_reason = "path_expression_unresolved"
+            return _ShellLaunchCandidate(
+                tokens=tuple(working),
+                command_index=index,
+                effective_cwd=effective_cwd,
+                environment=effective_environment,
+                resolution_reason=final_reason,
+            )
+        if command_name == "sudo":
+            index, effective_cwd, sudo_reason = _consume_sudo_wrapper_for_interpreter(
+                working,
+                index + 1,
+                cwd=effective_cwd,
+            )
+            resolution_reason = resolution_reason or sudo_reason
+            continue
+        index += 1
+        while index < len(working) and working[index].startswith("-"):
+            wrapper_token = working[index]
+            if command_name == "command" and "p" in wrapper_token.lstrip("-"):
+                effective_environment["PATH"] = os.defpath
+            index += _wrapper_option_tokens_consumed(command_name, wrapper_token)
+    return None
+
+
+def _consume_sudo_wrapper_for_interpreter(
+    tokens: list[str],
+    index: int,
+    *,
+    cwd: Path,
+) -> tuple[int, Path, str | None]:
+    chdir_value: str | None = None
+    reason: str | None = "sudo_path_resolution_unproven"
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            return index + 1, cwd, reason
+        if not token.startswith("-"):
+            break
+        if token in {"-R", "--chroot"} or token.startswith(("-R", "--chroot=")):
+            reason = "sudo_chroot_unresolved"
+        if token in {"-D", "--chdir"}:
+            if index + 1 >= len(tokens):
+                return len(tokens), cwd, "sudo_chdir_missing"
+            chdir_value = tokens[index + 1]
+        elif token.startswith("--chdir="):
+            chdir_value = token.split("=", 1)[1]
+        elif token.startswith("-D") and token != "-D":
+            chdir_value = token[2:]
+        index += _wrapper_option_tokens_consumed("sudo", token)
+    if chdir_value is not None:
+        if not chdir_value or any(marker in chdir_value for marker in ("$", "`", "\x00")):
+            return index, cwd, "sudo_chdir_unresolved"
+        candidate = Path(chdir_value).expanduser()
+        if not candidate.is_absolute():
+            candidate = cwd / candidate
+        try:
+            resolved_cwd = candidate.resolve(strict=True)
+        except (OSError, RuntimeError):
+            return index, cwd, "sudo_chdir_unresolved"
+        if not resolved_cwd.is_dir():
+            return index, cwd, "sudo_chdir_unresolved"
+        cwd = resolved_cwd
+    return index, cwd, reason
+
+
+def _ambiguous_python_evidence_from_tokens(
+    tokens: list[str],
+    *,
+    cwd: Path,
+    environment: dict[str, str],
+    workspace_root: Path,
+    home_dir: Path | None,
+    reason: str,
+) -> tuple[dict[str, object], ...]:
+    evidence: list[dict[str, object]] = []
+    for token in tokens:
+        raw_token = _shell_command_token_without_attached_redirection(token).strip()
+        if not _is_python_interpreter_command(raw_token):
+            continue
+        evidence.append(
+            _python_interpreter_executable_identity(
+                raw_token,
+                cwd=cwd,
+                environment=environment,
+                workspace_root=workspace_root,
+                home_dir=home_dir,
+                resolution_reason=reason,
+            )
+        )
+    return tuple(evidence)
+
+
+def _python_interpreter_executable_identity(
+    raw_token: str,
+    *,
+    cwd: Path,
+    environment: dict[str, str],
+    workspace_root: Path,
+    home_dir: Path | None,
+    resolution_reason: str | None,
+) -> dict[str, object]:
+    search_path = environment.get("PATH")
+    identity = build_runtime_executable_identity(raw_token, search_path=search_path, cwd=cwd)
+    if resolution_reason is not None and not _interpreter_token_has_path(raw_token):
+        identity = {**identity, "resolution_reason": resolution_reason, "reuse_nonce": secrets.token_hex(16)}
+    trust = _python_interpreter_trust(
+        raw_token,
+        identity=identity,
+        workspace_root=workspace_root,
+        home_dir=home_dir,
+        resolution_reason=resolution_reason,
+    )
+    return {
+        "effective_cwd": str(cwd),
+        "executable": identity,
+        "normalized_name": _normalized_shell_command_name(raw_token),
+        "raw_token": raw_token,
+        "search_path_sha256": hashlib.sha256((search_path or "").encode("utf-8")).hexdigest(),
+        "trust": trust,
+    }
+
+
+def _python_interpreter_trust(
+    raw_token: str,
+    *,
+    identity: dict[str, object],
+    workspace_root: Path,
+    home_dir: Path | None,
+    resolution_reason: str | None,
+) -> str:
+    status = str(identity.get("status") or "unknown")
+    if resolution_reason is not None and not _interpreter_token_has_path(raw_token):
+        return "ambiguous"
+    if status in {"unresolved", "unreadable", "path_unreadable"}:
+        return "missing"
+    if status == "not_executable":
+        return "non_executable"
+    if status != "verified":
+        return "ambiguous" if status in {"foreign_platform_path", "invalid_path", "path_changed"} else "unknown"
+    raw_launch_path = identity.get("launch_path")
+    canonical_path = identity.get("path")
+    if not isinstance(raw_launch_path, str) or not isinstance(canonical_path, str):
+        return "unknown"
+    launch_path = Path(raw_launch_path)
+    canonical = Path(canonical_path)
+    if _interpreter_path_is_within(launch_path, workspace_root):
+        return "workspace_local"
+    try:
+        guard_launch = Path(sys.executable).expanduser().absolute()
+        guard_canonical = guard_launch.resolve(strict=True)
+    except (OSError, RuntimeError):
+        guard_launch = Path(sys.executable).expanduser().absolute()
+        guard_canonical = guard_launch
+    if canonical == guard_canonical and launch_path in {guard_launch, guard_canonical}:
+        return "trusted_guard"
+    if home_dir is not None and _interpreter_path_is_within(launch_path, home_dir):
+        return "user_controlled"
+    if os.name == "nt":
+        return "user_controlled"
+    if any(
+        _interpreter_path_is_within(launch_path, trusted_root) for trusted_root in _TRUSTED_INTERPRETER_INSTALL_ROOTS
+    ) and _interpreter_identity_path_chain_is_stable(identity):
+        return "trusted_system"
+    try:
+        if is_trusted_absolute_command_path(launch_path, cwd=workspace_root, home_dir=home_dir):
+            return "trusted_system"
+    except (OSError, RuntimeError):
+        pass
+    return "user_controlled"
+
+
+def _interpreter_identity_path_chain_is_stable(identity: dict[str, object]) -> bool:
+    path_chain = identity.get("path_chain")
+    if not isinstance(path_chain, list) or not path_chain:
+        return False
+    for item in path_chain:
+        if not isinstance(item, dict):
+            return False
+        mode = item.get("mode")
+        if not isinstance(mode, int) or mode & 0o022:
+            return False
+    return True
+
+
+def _interpreter_token_has_path(raw_token: str) -> bool:
+    normalized = raw_token.strip()
+    return (
+        "/" in normalized
+        or "\\" in normalized
+        or bool(re.match(r"^[A-Za-z]:", normalized))
+        or normalized.startswith("//")
+    )
+
+
+def _interpreter_path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.absolute().relative_to(root.absolute())
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return True
+
+
+def _without_interpreter_reuse_nonces(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            str(key): _without_interpreter_reuse_nonces(item) for key, item in value.items() if key != "reuse_nonce"
+        }
+    if isinstance(value, (list, tuple)):
+        return [_without_interpreter_reuse_nonces(item) for item in value]
+    return value
 
 
 def _is_pytest_python_interpreter_command(command_name: str) -> bool:
@@ -8177,7 +8644,7 @@ def _single_interpreter_heredoc_interpreter(command_text: str) -> str | None:
     match = _SINGLE_INTERPRETER_HEREDOC_PATTERN.fullmatch(command_text.strip())
     if match is None:
         return None
-    interpreter = _normalized_shell_command_name(match.group("interpreter").strip())
+    interpreter = match.group("interpreter").strip()
     return interpreter or None
 
 

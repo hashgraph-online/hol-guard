@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import shlex
+import sys
 from pathlib import Path
 from typing import cast
 
@@ -18,7 +20,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 
 _IGNORED_BENIGN_HINT_REASON = "untrusted_hook_payload_hint_ignored_guard_verified_benign"
 _BENIGN_COMMAND = (
-    "cd /tmp/hol-guard-fixtures/hashgraph-online && python - <<'PY'\n"
+    f"cd /tmp && {shlex.quote(sys.executable)} - <<'PY'\n"
     "from pathlib import Path\n"
     "text = Path('bounty_submissions.txt').read_text()\n"
     "print('bytes', len(text))\n"
