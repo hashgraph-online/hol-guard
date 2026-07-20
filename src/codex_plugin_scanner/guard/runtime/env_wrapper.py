@@ -27,6 +27,7 @@ class EnvOptionEffects:
     chdir: str | None
     search_path: str | None
     verbose: bool
+    null_output: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +86,7 @@ def parse_env_wrapper(
     chdir_operand: str | None = None
     search_path: str | None = None
     verbose = False
+    null_output = False
     split_expansions: list[EnvSplitExpansion] = []
     options = True
     index = 0
@@ -98,6 +100,7 @@ def parse_env_wrapper(
             chdir=chdir_operand,
             search_path=search_path,
             verbose=verbose,
+            null_output=null_output,
         )
         delta = EnvEnvironmentDelta(
             clear=ignore_environment,
@@ -144,6 +147,13 @@ def parse_env_wrapper(
             return fail("nul_token")
         assignment = _env_assignment(token)
         if not options:
+            if token == "--":
+                index += 1
+                return result(
+                    complete=True,
+                    error=None,
+                    command_index=index if index < len(working) else None,
+                )
             if assignment is not None:
                 assignments.append(assignment)
                 if environment is not None:
@@ -177,6 +187,10 @@ def parse_env_wrapper(
                 continue
             if option_name == "--debug" and not separator:
                 verbose = True
+                index += 1
+                continue
+            if option_name == "--null" and not separator:
+                null_output = True
                 index += 1
                 continue
             if option_name not in {"--unset", "--chdir", "--split-string"}:
@@ -217,6 +231,10 @@ def parse_env_wrapper(
         replace_with_split: tuple[int, EnvSplitExpansion] | None = None
         while short_index < len(token):
             flag = token[short_index]
+            if flag == "0":
+                null_output = True
+                short_index += 1
+                continue
             if flag == "i":
                 apply_clear()
                 short_index += 1

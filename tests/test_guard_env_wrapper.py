@@ -92,6 +92,24 @@ def test_repeated_unset_and_empty_path_apply_in_order() -> None:
     assert parsed.executable_argv == ("cmd",)
 
 
+def test_post_assignment_option_terminator_is_not_the_executable() -> None:
+    parsed = parse_env_wrapper(["NAME=value", "--", "cmd", "arg"])
+
+    assert parsed.complete is True
+    assert parsed.environment_delta.assignments == (("NAME", "value"),)
+    assert parsed.command_index == 2
+    assert parsed.executable_argv == ("cmd", "arg")
+
+
+@pytest.mark.parametrize("null_option", ("-0", "--null"))
+def test_null_output_options_preserve_wrapped_command(null_option: str) -> None:
+    parsed = parse_env_wrapper([null_option, "cmd", "arg"])
+
+    assert parsed.complete is True
+    assert parsed.option_effects.null_output is True
+    assert parsed.executable_argv == ("cmd", "arg")
+
+
 def test_split_string_expands_in_place_with_suffix_and_nested_options() -> None:
     parsed = parse_env_wrapper(["-iS", "'NAME=value' command 'two words'", "tail"])
 
