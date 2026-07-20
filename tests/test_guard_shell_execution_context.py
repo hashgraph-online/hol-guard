@@ -395,8 +395,13 @@ def test_python_safety_checks_use_project_b_not_the_launch_project(tmp_path: Pat
         cwd=project_a,
     )
 
-    assert safe_request is None
+    assert safe_request is not None
+    assert safe_request.guard_default_action == "sandbox-required"
+    assert safe_request.reason_code == "pytest_restricted_profile_required"
+    assert safe_request.shell_execution_effective_cwds == (str(project_b.resolve()),)
     assert unsafe_request is not None
+    assert unsafe_request.guard_default_action == "sandbox-required"
+    assert unsafe_request.reason_code == "pytest_restricted_profile_required"
     assert unsafe_request.shell_execution_effective_cwds == (str(project_b.resolve()),)
 
 
