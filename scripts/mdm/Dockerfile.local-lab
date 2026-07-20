@@ -1,0 +1,13 @@
+FROM ghcr.io/astral-sh/uv:0.9.26-python3.12-bookworm-slim
+
+WORKDIR /hol-guard
+
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+COPY scripts/mdm ./scripts/mdm
+
+RUN uv sync --extra dev --frozen
+
+ENV PATH="/hol-guard/.venv/bin:${PATH}"
+
+ENTRYPOINT ["python", "scripts/mdm/run-local-lab.py", "--json"]

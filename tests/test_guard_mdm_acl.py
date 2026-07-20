@@ -192,13 +192,14 @@ def test_macos_acl_verification_detects_final_same_type_swap(tmp_path: Path, mon
 
     def swap_before_final(path: Path) -> os.stat_result:
         nonlocal target_calls
+        metadata = real_lstat(path)
         if path == target:
             target_calls += 1
             if target_calls == 4:
-                target.unlink()
-                target.write_text("replacement")
-                target.chmod(0o644)
-        return real_lstat(path)
+                values = list(metadata)
+                values[1] += 1
+                return os.stat_result(values)
+        return metadata
 
     monkeypatch.setattr(Path, "lstat", swap_before_final)
     monkeypatch.setattr(acl, "_macos_acl_is_mutable", lambda _path: False)
