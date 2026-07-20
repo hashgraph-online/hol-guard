@@ -4,24 +4,12 @@ from __future__ import annotations
 
 from typing import Final
 
-from .github_capability_contract import GitHubCommandAssessment, GitHubCommandCapability
+from .github_capability_contract import GitHubCommandAssessment, github_capability_contract
 
-GITHUB_MAINTENANCE_ACTION_CLASS: Final = "GitHub bounded maintenance command"
-
-_ACTION_CLASSES: Final[dict[GitHubCommandCapability, str]] = {
-    "maintain_remote": GITHUB_MAINTENANCE_ACTION_CLASS,
-    "content_remote": "GitHub content mutation command",
-    "merge_remote": "GitHub merge command",
-    "publish_remote": "GitHub release publication command",
-    "workflow_remote": "GitHub workflow mutation command",
-    "force_remote": "GitHub force mutation command",
-    "delete_remote": "GitHub delete command",
-    "secret_remote": "GitHub secret mutation command",
-    "access_remote": "GitHub access mutation command",
-    "mutate_remote": "GitHub remote mutation command",
-    "write_local": "GitHub local configuration write",
-    "unknown": "Unverified GitHub command capability",
-}
+_maintenance_action_class = github_capability_contract("maintain_remote").action_class
+if _maintenance_action_class is None:
+    raise RuntimeError("GitHub maintenance capability is missing an action class")
+GITHUB_MAINTENANCE_ACTION_CLASS: Final = _maintenance_action_class
 
 
 def github_capability_requires_confirmation(assessment: GitHubCommandAssessment) -> bool:
@@ -31,4 +19,8 @@ def github_capability_requires_confirmation(assessment: GitHubCommandAssessment)
 def github_capability_action_class(assessment: GitHubCommandAssessment) -> str:
     if not github_capability_requires_confirmation(assessment):
         raise ValueError("read-only GitHub capabilities do not have review action classes")
-    return _ACTION_CLASSES[assessment.capability]
+    capability = "admin_merge_remote" if "admin_merge_remote" in assessment.capabilities else assessment.capability
+    action_class = github_capability_contract(capability).action_class
+    if action_class is None:
+        raise ValueError("reviewed GitHub capability is missing an action class")
+    return action_class

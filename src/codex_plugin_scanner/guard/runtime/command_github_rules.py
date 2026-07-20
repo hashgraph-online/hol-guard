@@ -2,69 +2,38 @@
 
 from __future__ import annotations
 
-from typing import Final
+from typing import Final, cast
 
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import CommandSafetyRule
+from .github_capability_contract import github_capability_contracts, github_permission_specs
 
-_REMOTE_MUTATION_RISKS: Final = ("destructive_shell", "network_egress")
-_LOCAL_WRITE_RISKS: Final = ("destructive_shell",)
+_GITHUB_CONTRACTS: Final = tuple(contract for contract in github_capability_contracts() if contract.rule_id is not None)
 GITHUB_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
-    "github bounded maintenance command": _REMOTE_MUTATION_RISKS,
-    "github content mutation command": _REMOTE_MUTATION_RISKS,
-    "github merge command": _REMOTE_MUTATION_RISKS,
-    "github release publication command": _REMOTE_MUTATION_RISKS,
-    "github workflow mutation command": _REMOTE_MUTATION_RISKS,
-    "github force mutation command": _REMOTE_MUTATION_RISKS,
-    "github delete command": _REMOTE_MUTATION_RISKS,
-    "github secret mutation command": _REMOTE_MUTATION_RISKS,
-    "github access mutation command": _REMOTE_MUTATION_RISKS,
-    "github remote mutation command": _REMOTE_MUTATION_RISKS,
-    "github local configuration write": _LOCAL_WRITE_RISKS,
-    "unverified github command capability": _REMOTE_MUTATION_RISKS,
+    cast(str, contract.action_class).lower(): contract.risk_classes for contract in _GITHUB_CONTRACTS
 }
-
-_RULE_DEFINITIONS: Final = (
-    ("maintenance", "Bounded GitHub maintenance", "GitHub bounded maintenance command"),
-    ("content", "GitHub content mutation", "GitHub content mutation command"),
-    ("merge", "GitHub pull-request merge", "GitHub merge command"),
-    ("publish", "GitHub release publication", "GitHub release publication command"),
-    ("workflow", "GitHub workflow mutation", "GitHub workflow mutation command"),
-    ("force", "Forced GitHub mutation", "GitHub force mutation command"),
-    ("delete", "GitHub deletion", "GitHub delete command"),
-    ("secret", "GitHub secret mutation", "GitHub secret mutation command"),
-    ("access", "GitHub access mutation", "GitHub access mutation command"),
-    ("mutation", "GitHub remote mutation", "GitHub remote mutation command"),
-    ("local-write", "GitHub local configuration write", "GitHub local configuration write"),
-    ("unknown", "Unverified GitHub command capability", "Unverified GitHub command capability"),
-)
-
-GITHUB_COMMAND_RULES: Final = tuple(
+GITHUB_COMMAND_RULES: Final[tuple[CommandSafetyRule, ...]] = tuple(
     CommandSafetyRule(
-        rule_id=f"command.github.{suffix}",
-        title=title,
-        description=(
-            "Identifies GitHub CLI operations that change local repository configuration."
-            if suffix == "local-write"
-            else f"Identifies {title.lower()} operations that change or may change GitHub-hosted state."
-        ),
-        severity="high",
-        risk_classes=GITHUB_ACTION_RISK_CLASSES[action_class.lower()],
-        action_classes=(action_class,),
-        safer_alternatives=("Inspect the exact repository, resource, and operation before confirming it.",),
+        rule_id=cast(str, contract.rule_id),
+        title=contract.title,
+        description=contract.description,
+        severity=contract.risk_tier,
+        risk_classes=contract.risk_classes,
+        action_classes=(cast(str, contract.action_class),),
+        safer_alternatives=contract.safer_alternatives,
         compatibility_fallback=True,
     )
-    for suffix, title, action_class in _RULE_DEFINITIONS
+    for contract in _GITHUB_CONTRACTS
 )
-
-GITHUB_COMMAND_EXTENSION_SPECS: Final = (
+GITHUB_COMMAND_EXTENSION_SPECS: Final[tuple[CommandExtensionSpec, ...]] = (
     CommandExtensionSpec(
         extension_id="command.github",
         name="GitHub capability protection",
         description="Reviews distinct GitHub maintenance, content, merge, publication, workflow, and control effects.",
-        action_classes=tuple(action_class for _suffix, _title, action_class in _RULE_DEFINITIONS),
-        risk_classes=_REMOTE_MUTATION_RISKS,
+        action_classes=tuple(cast(str, contract.action_class) for contract in _GITHUB_CONTRACTS),
+        risk_classes=("destructive_shell", "network_egress"),
         safer_alternatives=("Inspect the exact repository, resource, and operation before confirming it.",),
         reference_urls=("https://cli.github.com/manual/",),
+        permissions=github_permission_specs("1.0.0"),
     ),
 )

@@ -99,7 +99,7 @@ def test_command_extension_registry_is_deterministic_and_complete() -> None:
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("destructive shell command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("GitHub merge command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("GitHub merge command") is not None
-    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 83
+    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 84
 
 
 @pytest.mark.parametrize(
@@ -401,6 +401,22 @@ def test_command_cli_emits_stable_json_without_creating_guard_state(
     assert payload["extensions"][0]["extension_id"] == "command.git"
     assert payload["rules"][0]["rule_id"] == "command.git.force-clean"
     assert [item["step"] for item in payload["trace"]][-1] == "risk-signal-derivation"
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_command_extensions_cli_remains_stateless(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    exit_code = main(["guard", "command", "extensions", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["count"] == len(BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions)
     assert list(tmp_path.iterdir()) == []
 
 

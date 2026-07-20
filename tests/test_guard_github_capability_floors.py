@@ -115,6 +115,13 @@ def test_read_capabilities_cannot_be_rendered_as_review_actions(capability: GitH
         _ = github_capability_action_class(assessment)
 
 
+def test_admin_merge_action_class_is_preserved_with_branch_deletion() -> None:
+    assessment = classify_github_cli(("pr", "merge", "123", "--admin", "--delete-branch"))
+
+    assert assessment.capabilities == ("admin_merge_remote", "delete_remote")
+    assert github_capability_action_class(assessment) == "GitHub administrator pull-request merge command"
+
+
 @pytest.mark.parametrize(
     ("command", "capabilities"),
     (
