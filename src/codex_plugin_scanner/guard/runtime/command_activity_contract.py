@@ -334,10 +334,14 @@ def _validate_activity_state(activity: CommandActivity) -> None:
         raise ValueError("pre and confirmed activity requires complete bounded decision facts")
     if activity.match_count == 0 and activity.controlling_rule_id is not None:
         raise ValueError("an activity without matches cannot name a controlling rule")
-    if activity.execution_status is not CommandExecutionStatus.UNPAIRED_POST and (
-        (activity.match_count == 0) != (activity.decision_reason_code is ActivityDecisionReason.NO_MATCH)
-    ):
-        raise ValueError("no-match reason must correspond exactly to an activity without matches")
+    if activity.execution_status is not CommandExecutionStatus.UNPAIRED_POST:
+        if activity.decision_reason_code is ActivityDecisionReason.NO_MATCH and activity.match_count != 0:
+            raise ValueError("no-match reason cannot carry activity matches")
+        if activity.match_count == 0 and activity.decision_reason_code not in {
+            ActivityDecisionReason.NO_MATCH,
+            ActivityDecisionReason.CAPABILITY,
+        }:
+            raise ValueError("an activity without matches requires a no-match or capability reason")
     if activity.receipt_link_status is ReceiptLinkStatus.LINKED and activity.receipt_id is None:
         raise ValueError("linked receipt status requires receipt_id")
     if activity.receipt_link_status is ReceiptLinkStatus.NOT_APPLICABLE and activity.receipt_id is not None:

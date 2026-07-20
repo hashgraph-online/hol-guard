@@ -18,6 +18,8 @@ from typing_extensions import override
 
 from scripts.installed_canary_proof import (
     InstalledCanaryError,
+    _generated_console_scripts,  # pyright: ignore[reportPrivateUsage]
+    _pep610_wheel_origin,  # pyright: ignore[reportPrivateUsage]
     load_subject,
     main,
     verify_download,
@@ -25,10 +27,92 @@ from scripts.installed_canary_proof import (
     verify_wheel_payloads,
     write_subject,
 )
+from scripts.run_installed_canary import (
+    _no_post_execution_proof_smoke,  # pyright: ignore[reportPrivateUsage]
+    _validate_corpus_bindings,  # pyright: ignore[reportPrivateUsage]
+)
 
 VERSION = "2.0.1117.dev123"
 SOURCE_SHA = "a" * 40
 WHEEL_NAME = f"hol_guard-{VERSION}-py3-none-any.whl"
+
+
+def test_current_corpus_manifest_is_verified_by_its_canonical_bindings() -> None:
+    root = Path(__file__).resolve().parents[1]
+
+    bindings = _validate_corpus_bindings(root)
+
+    assert (
+        bindings["manifest_sha256"]
+        == hashlib.sha256((root / "tests/fixtures/guard-command-corpus/seed-manifest.json").read_bytes()).hexdigest()
+    )
+    assert bindings["source_files_verified"] == 1 + len(tuple((root / "tests").glob("guard_command_corpus_oracle*.py")))
+
+
+def test_harness_without_post_execution_proof_remains_unconfirmed() -> None:
+    assert _no_post_execution_proof_smoke() == {
+        "harness": "opencode",
+        "post_execution_surface": False,
+        "execution_status": "allowed_unconfirmed",
+        "proof_level": "pre_hook",
+        "policy_action": "warn",
+        "decision_reason_code": "no_match",
+    }
+
+
+class _ConsoleScriptDistribution(importlib.metadata.Distribution):
+    @override
+    def read_text(self, filename: str) -> str | None:
+        return None
+
+    @override
+    def locate_file(self, path: str | os.PathLike[str]) -> Path:
+        return Path(path)
+
+    @property
+    @override
+    def entry_points(self) -> importlib.metadata.EntryPoints:
+        return importlib.metadata.EntryPoints(
+            [importlib.metadata.EntryPoint(name="hol-guard", value="package:main", group="console_scripts")]
+        )
+
+
+def test_generated_console_scripts_follow_the_interpreter_layout(tmp_path: Path) -> None:
+    distribution = _ConsoleScriptDistribution()
+    posix_root = tmp_path / "posix/lib/python3.12/site-packages"
+    windows_root = tmp_path / "windows/Lib/site-packages"
+
+    assert _generated_console_scripts(
+        distribution,
+        posix_root,
+        scripts_root=tmp_path / "posix/bin",
+        suffix="",
+    ) == {"../../../bin/hol-guard"}
+    assert _generated_console_scripts(
+        distribution,
+        windows_root,
+        scripts_root=tmp_path / "windows/Scripts",
+        suffix=".exe",
+    ) == {"../../Scripts/hol-guard.exe"}
+
+
+def test_pep610_origin_requires_exact_archive_hash_metadata() -> None:
+    digest = "b" * 64
+    wheel = {"filename": WHEEL_NAME, "sha256": digest}
+    url = f"file:///fixture/{WHEEL_NAME}"
+    expected = {"hash": f"sha256={digest}", "hashes": {"sha256": digest}}
+
+    assert _pep610_wheel_origin({"url": url, "archive_info": expected}, wheel).path.endswith(WHEEL_NAME)
+    for archive_info in (
+        {},
+        {"hash": f"sha256={'c' * 64}"},
+        {"hashes": {"sha256": digest, "sha512": "d" * 128}},
+        {**expected, "unexpected": True},
+    ):
+        with pytest.raises(InstalledCanaryError, match="PEP 610"):
+            _ = _pep610_wheel_origin({"url": url, "archive_info": archive_info}, wheel)
+    with pytest.raises(InstalledCanaryError, match="origin"):
+        _ = _pep610_wheel_origin({"url": f"{url}#sha256={digest}", "archive_info": expected}, wheel)
 
 
 def _subject(tmp_path: Path) -> tuple[Path, dict[str, object]]:

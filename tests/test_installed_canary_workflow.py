@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import cast
 
@@ -93,6 +94,7 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "Install only the verified wheel" in names
     assert "Prove the harness rejects missing evidence" in names
     assert "Run installed 51k corpus and dashboard smoke" in names
+    assert "Run canonical command extension analytics Dockerlab" in names
     assert "Upload installed canary evidence" in names
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "verify-release --registry testpypi" in workflow_text
@@ -103,25 +105,88 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "PYTHONPATH=" in workflow_text
     assert '-X "pycache_prefix=$RUNNER_TEMP/hol-guard-evidence-cache"' in workflow_text
     assert "pnpm" not in workflow_text
+    assert "runner.os == 'Linux'" in workflow_text
+    assert 'cmp "$VERIFIED_WHEEL" "dist/$WHEEL_NAME"' in workflow_text
+    assert "bunx playwright install --with-deps chromium" in workflow_text
+    assert "cd ../tests/dockerlabs/command-extension-analytics" in workflow_text
+    assert "bun run guard:test:command-extension-analytics" in workflow_text
+    assert "installed-canary/command-extension-analytics.json" in workflow_text
+    assert ".artifacts/command-extension-analytics/*.png" in workflow_text
+    canonical_runner_text = (ROOT / "tests/dockerlabs/command-extension-analytics/runner.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "Bun.env.HOL_GUARD_LAB_EXPECTED_VERSION" in canonical_runner_text
     verifier_text = (ROOT / "scripts/installed_canary_proof.py").read_text(encoding="utf-8")
     assert 'f"{PROJECT} @ {wheel.resolve().as_uri()}#sha256={digest}"' in verifier_text
     assert 'read_text("direct_url.json")' in verifier_text
+    assert 'direct_url_mapping["archive_info"]' in verifier_text
     assert ".dist-info/RECORD" in verifier_text
     runner_text = (ROOT / "scripts/run_installed_canary.py").read_text(encoding="utf-8")
     assert 'shutil.which("bun")' in runner_text
     assert '"build",' in runner_text
     assert 'manifest["canonical_digests"]' in runner_text
+    assert '"no_post_execution_proof": _no_post_execution_proof_smoke()' in runner_text
+    assert '"$CANARY_PYTHON" -m pip install --no-compile' in workflow_text
+    assert "uv pip install" not in workflow_text
 
 
-def test_slice_manifest_uses_only_repo_relative_deliverables() -> None:
+def test_slice_manifest_binds_the_two_pull_request_batch_and_repo_relative_ownership() -> None:
     manifest = _mapping(cast(object, json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))))
 
-    assert manifest["schema_version"] == "hol-guard.release-slice-manifest.v1"
+    assert manifest["schema_version"] == "hol-guard.release-slice-manifest.v2"
+    assert manifest["target_branch"] == "release/2.2"
+    pull_requests = [_mapping(item) for item in _sequence(manifest["pull_requests"])]
+    assert [item["number"] for item in pull_requests] == [1761, 1763]
+    assert pull_requests[0]["depends_on"] == []
+    assert pull_requests[1]["depends_on"] == [1761]
+    assert pull_requests[1]["final_base_requirement"] == "the release/2.2 commit produced by pull request 1761"
+
     slices = [_mapping(item) for item in _sequence(manifest["slices"])]
-    assert [item["id"] for item in slices] == ["CDX-070", "CDX-072", "CDX-074"]
+    assert [item["id"] for item in slices] == [f"CDX-{number:03d}" for number in range(63, 75)]
+    assert "at most 10 exact repeated uses" in _text(slices[0]["acceptance"])
+    ownership: set[Path] = set()
+    ownership_counts = {1761: 0, 1763: 0}
+    tracked_paths = set(
+        subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.split("\0")
+    )
     for item in slices:
-        for path_value in _sequence(item["deliverables"]):
+        assert item["pull_request"] in {1761, 1763}
+        for path_value in (*_sequence(item["deliverables"]), *_sequence(item["evidence_paths"])):
             path = Path(_text(path_value))
             assert not path.is_absolute()
             assert ".." not in path.parts
-            assert (ROOT / path).exists()
+            assert (ROOT / path).is_file(), f"manifest path does not exist: {path}"
+            assert path.as_posix() in tracked_paths, f"manifest path is not tracked: {path}"
+        for path_value in _sequence(item["deliverables"]):
+            path = Path(_text(path_value))
+            assert path not in ownership
+            ownership.add(path)
+            ownership_counts[cast(int, item["pull_request"])] += 1
+    assert ownership_counts == {1761: 38, 1763: 20}
+
+    gates = _mapping(manifest["gates"])
+    review = _mapping(gates["review"])
+    assert review == {
+        "required_independent_exact_diff_verdict": "SHIP",
+        "required_unresolved_non_outdated_thread_count": 0,
+        "required_quiet_window_seconds": 310,
+    }
+    verification = [_text(value) for value in _sequence(manifest["verification"])]
+    assert all("pnpm" not in command for command in verification)
+    canonical_lab_verification = (
+        "cd tests/dockerlabs/command-extension-analytics && bun run guard:test:command-extension-analytics"
+    )
+    assert canonical_lab_verification in verification
+    assert all("tests/dockerlabs/command-extension-analytics.test.mjs" not in command for command in verification)
+    assert all(
+        "tests/dockerlabs/command-extension-analytics.test.mjs" not in _text(path)
+        for item in slices
+        for path in (*_sequence(item["deliverables"]), *_sequence(item["evidence_paths"]))
+    )
+    assert "git diff --check" in verification

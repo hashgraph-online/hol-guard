@@ -447,13 +447,13 @@ jobs:
         shell: bash
         run: |
           WHEEL_REQUIREMENT=$(python -c 'import json; print(json.load(open("verified-download.json", encoding="utf-8"))["requirement"])')
-          uv venv "$RUNNER_TEMP/hol-guard-canary-venv" --python 3.12
+          python -m venv "$RUNNER_TEMP/hol-guard-canary-venv"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             CANARY_PYTHON="$RUNNER_TEMP/hol-guard-canary-venv/Scripts/python.exe"
           else
             CANARY_PYTHON="$RUNNER_TEMP/hol-guard-canary-venv/bin/python"
           fi
-          uv pip install --python "$CANARY_PYTHON" --index https://pypi.org/simple "$WHEEL_REQUIREMENT"
+          "$CANARY_PYTHON" -m pip install --no-compile --index-url https://pypi.org/simple "$WHEEL_REQUIREMENT"
           echo "CANARY_PYTHON=$CANARY_PYTHON" >> "$GITHUB_ENV"
       - name: Prove the harness rejects missing evidence
         shell: bash
@@ -485,11 +485,31 @@ jobs:
             --source-sha "$SOURCE_SHA" \
             --repo-root "$GITHUB_WORKSPACE" \
             --output installed-canary/evidence.json
+      - name: Run canonical command extension analytics Dockerlab
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          VERIFIED_WHEEL=$(python -c 'import json; print(json.load(open("verified-download.json", encoding="utf-8"))["wheel"])')
+          WHEEL_NAME=$(basename "$VERIFIED_WHEEL")
+          cmp "$VERIFIED_WHEEL" "dist/$WHEEL_NAME"
+          cd dashboard
+          bun install --frozen-lockfile --ignore-scripts
+          bunx playwright install --with-deps chromium
+          cd ../tests/dockerlabs/command-extension-analytics
+          HOL_GUARD_LAB_EXPECTED_VERSION="$VERSION" \
+            HOL_GUARD_WHEEL="$GITHUB_WORKSPACE/dist/$WHEEL_NAME" \
+            bun run guard:test:command-extension-analytics \
+              > "$GITHUB_WORKSPACE/installed-canary/command-extension-analytics.json"
       - name: Upload installed canary evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: installed-canary-evidence-${{ runner.os }}
-          path: installed-canary/evidence.json
+          path: |
+            installed-canary/evidence.json
+            installed-canary/command-extension-analytics.json
+            .artifacts/command-extension-analytics/*.png
           if-no-files-found: error
 
   publish-alpha-testpypi:

@@ -1,44 +1,268 @@
 {
-  "schema_version": "hol-guard.release-slice-manifest.v1",
+  "schema_version": "hol-guard.release-slice-manifest.v2",
   "release_train": "2.2",
+  "target_branch": "release/2.2",
+  "publication_policy": {
+    "allowed": "unique pull-request TestPyPI canaries",
+    "forbidden": [
+      "alpha tags",
+      "alpha releases",
+      "stable tags",
+      "stable releases",
+      "promotion to main"
+    ]
+  },
+  "pull_requests": [
+    {
+      "number": 1761,
+      "role": "command-authorization-security",
+      "tasks": ["CDX-063", "CDX-064", "CDX-065", "CDX-066", "CDX-067"],
+      "base_branch": "release/2.2",
+      "initial_base_sha": "97aa1dd142d7e65d6ba2a0a52e7dc78b06a4547e",
+      "depends_on": []
+    },
+    {
+      "number": 1763,
+      "role": "installed-command-evidence",
+      "tasks": ["CDX-068", "CDX-069", "CDX-070", "CDX-071", "CDX-072", "CDX-073", "CDX-074"],
+      "base_branch": "release/2.2",
+      "initial_base_sha": "97aa1dd142d7e65d6ba2a0a52e7dc78b06a4547e",
+      "depends_on": [1761],
+      "final_base_requirement": "the release/2.2 commit produced by pull request 1761",
+      "post_rebase_requirement": "regenerate and verify every corpus, oracle, fixture, source, and decision-report binding"
+    }
+  ],
   "slices": [
     {
-      "id": "CDX-070",
+      "id": "CDX-063",
+      "pull_request": 1761,
       "deliverables": [
-        "scripts/installed_canary_proof.py",
+        "src/codex_plugin_scanner/guard/approval_scope_support.py",
+        "src/codex_plugin_scanner/guard/approvals.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_github_workflow.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_eval.py",
+        "src/codex_plugin_scanner/guard/runtime/github_capability_contract.py",
+        "src/codex_plugin_scanner/guard/runtime/github_capability_interaction.py",
+        "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py",
+        "src/codex_plugin_scanner/guard/runtime/github_workflow_authorization.py",
+        "src/codex_plugin_scanner/guard/runtime/github_workflow_context.py",
+        "src/codex_plugin_scanner/guard/runtime/github_workflow_operations.py",
+        "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
+        "tests/test_guard_approval_scope_contract.py",
+        "tests/test_guard_github_workflow_authorization.py",
+        "tests/test_guard_github_workflow_context_binding.py",
+        "tests/test_guard_github_workflow_privacy.py",
+        "tests/test_guard_github_workflow_runtime.py"
+      ],
+      "acceptance": "a bounded capability permits at most 10 exact repeated uses while binding the operation, repository, resource, actor, request, and execution context",
+      "evidence_paths": [
+        "tests/test_guard_github_workflow_authorization.py",
+        "tests/test_guard_github_workflow_context_binding.py",
+        "tests/test_guard_github_workflow_privacy.py"
+      ]
+    },
+    {
+      "id": "CDX-064",
+      "pull_request": 1761,
+      "deliverables": [
+        "src/codex_plugin_scanner/guard/runtime/command_critical_floors.py",
+        "src/codex_plugin_scanner/guard/runtime/command_evaluation.py",
+        "tests/test_guard_command_critical_floors.py",
+        "tests/test_guard_github_capability_floors.py"
+      ],
+      "acceptance": "merge, release, history, delete, secret, access, workflow, content, and dynamic mutations retain review or block floors",
+      "evidence_paths": [
+        "tests/test_guard_command_critical_floors.py",
+        "tests/test_guard_github_capability_floors.py"
+      ]
+    },
+    {
+      "id": "CDX-065",
+      "pull_request": 1761,
+      "deliverables": [
+        "src/codex_plugin_scanner/guard/runtime/command_launcher_floors.py",
+        "tests/test_guard_runtime.py"
+      ],
+      "acceptance": "package, source, launcher, executable, and provenance drift retain their security floors",
+      "evidence_paths": [
+        "tests/test_guard_command_critical_floors.py",
+        "tests/test_guard_runtime.py"
+      ]
+    },
+    {
+      "id": "CDX-066",
+      "pull_request": 1761,
+      "deliverables": [
+        "tests/fixtures/guard-command-corpus/decision-diff-report.json",
+        "tests/fixtures/guard-command-corpus/known-gaps.json",
+        "tests/fixtures/guard-command-corpus/seed-manifest.json",
+        "tests/guard_command_corpus.py",
+        "tests/guard_command_corpus_oracle_loader.py",
+        "tests/guard_command_corpus_runner.py",
+        "tests/guard_command_decision_diff.py",
+        "tests/guard_command_decision_diff_runner.py",
+        "tests/test_guard_command_corpus.py",
+        "tests/test_guard_command_decision_diff.py"
+      ],
+      "acceptance": "credential, Guard-control, privilege, and catastrophic operations retain exact block or reapproval floors across all 51000 cases",
+      "evidence_paths": [
+        "tests/fixtures/guard-command-corpus/decision-diff-report.json",
+        "tests/fixtures/guard-command-corpus/known-gaps.json",
+        "tests/fixtures/guard-command-corpus/seed-manifest.json"
+      ]
+    },
+    {
+      "id": "CDX-067",
+      "pull_request": 1761,
+      "deliverables": [
+        "scripts/dockerlabs/installed-guard-package-proof.mjs",
+        "scripts/dockerlabs/installed-guard-package.Dockerfile",
+        "scripts/dockerlabs/installed_guard_package_origin.py",
+        "tests/dockerlabs/installed-guard-package-proof.test.mjs",
+        "tests/test_installed_guard_package_origin.py"
+      ],
+      "acceptance": "an exact wheel runs outside the checkout with package-origin, entry-point, RECORD, and payload-byte proof",
+      "evidence_paths": [
+        "scripts/dockerlabs/installed_guard_package_origin.py",
+        "tests/test_installed_guard_package_origin.py"
+      ]
+    },
+    {
+      "id": "CDX-068",
+      "pull_request": 1763,
+      "deliverables": [
+        "tests/dockerlabs/command-extension-analytics/Dockerfile",
+        "tests/dockerlabs/command-extension-analytics/Dockerfile.dockerignore",
+        "tests/dockerlabs/command-extension-analytics/installed_server.py",
+        "tests/dockerlabs/command-extension-analytics/lab-process.ts",
+        "tests/dockerlabs/command-extension-analytics/package.json",
+        "tests/dockerlabs/command-extension-analytics/runner.test.ts",
+        "tests/dockerlabs/command-extension-analytics/runner.ts"
+      ],
+      "acceptance": "the Bun Dockerlab exercises prompt-free, contained, workflow, review, block, persistence, and privacy paths through an installed wheel",
+      "evidence_paths": [
+        ".github/workflows/publish.yml",
+        "tests/dockerlabs/command-extension-analytics/runner.test.ts"
+      ]
+    },
+    {
+      "id": "CDX-069",
+      "pull_request": 1763,
+      "deliverables": [
+        ".gitignore",
+        "dashboard/bun.lock",
+        "dashboard/e2e/installed-command-activity.spec.ts",
+        "dashboard/package.json",
+        "dashboard/playwright.installed.config.ts"
+      ],
+      "acceptance": "authenticated API totals, filters, details, health, feedback, execution-proof copy, and rendered dashboard values reconcile",
+      "evidence_paths": [
+        "dashboard/e2e/installed-command-activity.spec.ts",
+        "dashboard/playwright.installed.config.ts"
+      ]
+    },
+    {
+      "id": "CDX-070",
+      "pull_request": 1763,
+      "deliverables": [
         "scripts/run_installed_canary.py"
       ],
-      "evidence": [
-        "TestPyPI wheel bytes equal the build artifact",
-        "installed version and source commit equal the pull request subject",
-        "module origin and installed RECORD are immutable and outside the checkout"
+      "acceptance": "Linux, macOS, and Windows run the installed 51000-case corpus and a no-post-execution-proof harness remains allowed-unconfirmed",
+      "evidence_paths": [
+        "scripts/run_installed_canary.py",
+        "tests/test_installed_canary_proof.py"
+      ]
+    },
+    {
+      "id": "CDX-071",
+      "pull_request": 1763,
+      "deliverables": [
+        "tests/dockerlabs/command-extension-analytics/docker-compose.yml",
+        "tests/dockerlabs/command-extension-analytics/teardown.ts"
+      ],
+      "acceptance": "every Dockerlab run removes its containers, volumes, networks, and orphans and reports a zero-resource inventory",
+      "evidence_paths": [
+        "tests/dockerlabs/command-extension-analytics/runner.test.ts",
+        "tests/dockerlabs/command-extension-analytics/teardown.ts"
       ]
     },
     {
       "id": "CDX-072",
+      "pull_request": 1763,
       "deliverables": [
-        ".github/workflows/publish.yml"
+        "release-metadata/release-22-installed-evidence.json"
       ],
-      "evidence": [
-        "same-repository pull requests run installed canaries on Linux, macOS, and Windows",
-        "the installed harness rejects a run with no proof subject"
+      "acceptance": "both pull requests have explicit release bases, dependency order, non-overlapping file ownership, and scoped verification gates",
+      "evidence_paths": [
+        "release-metadata/release-22-installed-evidence.json",
+        "tests/test_installed_canary_workflow.py"
+      ]
+    },
+    {
+      "id": "CDX-073",
+      "pull_request": 1763,
+      "deliverables": [],
+      "acceptance": "each exact head passes required workflows, independent review, zero unresolved non-outdated threads, and a 310-second quiet window",
+      "evidence_paths": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/codeql.yml",
+        ".github/workflows/security-gates.yml"
       ]
     },
     {
       "id": "CDX-074",
+      "pull_request": 1763,
       "deliverables": [
+        ".github/workflows/publish.yml",
+        "scripts/installed_canary_proof.py",
         "tests/test_installed_canary_proof.py",
         "tests/test_installed_canary_workflow.py"
       ],
-      "evidence": [
-        "the installed evaluator runs the frozen 51000-case corpus",
-        "the wheel contains a usable dashboard shell and referenced assets",
-        "workflow contracts bind publication, installation, execution, and evidence upload"
+      "acceptance": "the unique TestPyPI canary is bound to the exact pull-request SHA and build wheel bytes, then proves immutable installed origin, corpus, and dashboard smoke",
+      "evidence_paths": [
+        ".github/workflows/publish.yml",
+        "scripts/installed_canary_proof.py",
+        "tests/test_installed_canary_workflow.py"
       ]
     }
   ],
+  "gates": {
+    "pull_request_1761": {
+      "required_workflows": ["CI", "Security Gates", "CodeQL Analysis", "Publish to PyPI"],
+      "corpus_case_count": 51000,
+      "known_gap_count": 0,
+      "lowered_decision_count": 0,
+      "disposition_change_count": 0,
+      "exact_testpypi_canary": true,
+      "installed_origin_proof": true
+    },
+    "pull_request_1763": {
+      "required_workflows": ["CI", "Security Gates", "CodeQL Analysis", "Publish to PyPI"],
+      "required_operating_systems": ["Linux", "macOS", "Windows"],
+      "corpus_case_count": 51000,
+      "exact_testpypi_build_byte_equality": true,
+      "installed_record_and_payload_proof": true,
+      "authenticated_dashboard_reconciliation": true,
+      "no_post_execution_proof_harness": "allowed_unconfirmed",
+      "docker_resource_count_after_teardown": 0
+    },
+    "review": {
+      "required_independent_exact_diff_verdict": "SHIP",
+      "required_unresolved_non_outdated_thread_count": 0,
+      "required_quiet_window_seconds": 310
+    }
+  },
   "verification": [
-    "uv run --no-sync pytest tests/test_installed_canary_proof.py tests/test_installed_canary_workflow.py -q",
-    "uv run --no-sync ruff check scripts/installed_canary_proof.py scripts/run_installed_canary.py tests/test_installed_canary_proof.py tests/test_installed_canary_workflow.py"
+    "uv run --no-sync pytest -q tests/test_guard_github_workflow_authorization.py tests/test_guard_github_workflow_context_binding.py tests/test_guard_github_workflow_privacy.py tests/test_guard_github_workflow_runtime.py tests/test_guard_command_critical_floors.py tests/test_guard_command_corpus.py tests/test_guard_command_decision_diff.py --tb=short",
+    "bun test tests/dockerlabs/installed-guard-package-proof.test.mjs",
+    "uv run --no-sync pytest -q tests/test_installed_guard_package_origin.py --tb=short",
+    "cd tests/dockerlabs/command-extension-analytics && bun run guard:test:command-extension-analytics",
+    "uv run --no-sync pytest -q tests/test_installed_canary_proof.py tests/test_installed_canary_workflow.py --tb=short",
+    "uv run --no-sync ruff check scripts/installed_canary_proof.py scripts/run_installed_canary.py tests/test_installed_canary_proof.py tests/test_installed_canary_workflow.py",
+    "uv run --no-sync ruff format --check scripts/installed_canary_proof.py scripts/run_installed_canary.py tests/test_installed_canary_proof.py tests/test_installed_canary_workflow.py",
+    "uv run --no-sync basedpyright scripts/installed_canary_proof.py scripts/run_installed_canary.py tests/test_installed_canary_proof.py tests/test_installed_canary_workflow.py",
+    "actionlint .github/workflows/publish.yml",
+    "git diff --check"
   ]
 }

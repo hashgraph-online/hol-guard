@@ -11,6 +11,7 @@ import json
 import os
 import re
 import sys
+import sysconfig
 import urllib.parse
 import urllib.request
 import zipfile
@@ -164,6 +165,23 @@ def _record_path(distribution: importlib.metadata.Distribution) -> Path:
     return record_path
 
 
+def _generated_console_scripts(
+    distribution: importlib.metadata.Distribution,
+    installation_root: Path,
+    *,
+    scripts_root: Path | None = None,
+    suffix: str | None = None,
+) -> set[str]:
+    resolved_scripts_root = (scripts_root or Path(sysconfig.get_path("scripts"))).resolve()
+    relative_scripts_root = os.path.relpath(resolved_scripts_root, installation_root).replace(os.sep, "/")
+    executable_suffix = (".exe" if os.name == "nt" else "") if suffix is None else suffix
+    return {
+        f"{relative_scripts_root}/{entry.name}{executable_suffix}"
+        for entry in distribution.entry_points
+        if entry.group == "console_scripts"
+    }
+
+
 def verify_installed_record(distribution: importlib.metadata.Distribution) -> tuple[str, int]:
     record_path = _record_path(distribution)
     verified = 0
@@ -191,6 +209,35 @@ def _wheel_origin(parsed_origin: urllib.parse.SplitResult, expected_digest: str)
     if not wheel.is_file() or wheel.is_symlink() or sha256_file(wheel) != expected_digest:
         raise InstalledCanaryError("Installed wheel origin no longer matches the verified artifact")
     return wheel
+
+
+def _pep610_wheel_origin(direct_url: object, wheel_binding: Mapping[str, str]) -> urllib.parse.SplitResult:
+    if not isinstance(direct_url, dict):
+        raise InstalledCanaryError("Installed wheel has invalid PEP 610 origin metadata")
+    direct_url_mapping = cast(dict[object, object], direct_url)
+    if set(direct_url_mapping) != {"url", "archive_info"}:
+        raise InstalledCanaryError("Installed wheel has invalid PEP 610 origin metadata")
+    origin = direct_url_mapping["url"]
+    archive_info_value = direct_url_mapping["archive_info"]
+    if not isinstance(origin, str) or not isinstance(archive_info_value, dict):
+        raise InstalledCanaryError("Installed wheel has invalid PEP 610 origin metadata")
+    archive_info = cast(dict[object, object], archive_info_value)
+    if not archive_info or not set(archive_info) <= {"hash", "hashes"}:
+        raise InstalledCanaryError("Installed wheel has invalid PEP 610 archive hashes")
+    expected = wheel_binding["sha256"]
+    if "hash" in archive_info and archive_info["hash"] != f"sha256={expected}":
+        raise InstalledCanaryError("Installed wheel PEP 610 archive hash does not match the verified artifact")
+    if "hashes" in archive_info and archive_info["hashes"] != {"sha256": expected}:
+        raise InstalledCanaryError("Installed wheel PEP 610 archive hashes do not match the verified artifact")
+    parsed_origin = urllib.parse.urlsplit(origin)
+    if (
+        parsed_origin.scheme != "file"
+        or urllib.parse.unquote(parsed_origin.path).rsplit("/", 1)[-1] != wheel_binding["filename"]
+        or parsed_origin.query
+        or parsed_origin.fragment
+    ):
+        raise InstalledCanaryError("Installed wheel origin is not bound to the verified artifact")
+    return parsed_origin
 
 
 def verify_wheel_payloads(distribution: importlib.metadata.Distribution, wheel: Path) -> int:
@@ -236,11 +283,7 @@ def verify_wheel_payloads(distribution: importlib.metadata.Distribution, wheel: 
     record_path = _record_path(distribution)
     with record_path.open(encoding="utf-8", newline="") as handle:
         installed_record_names = {row[0] for row in csv.reader(handle)}
-    scripts_dir, suffix = ("Scripts", ".exe") if os.name == "nt" else ("bin", "")
-    entry_points = distribution.entry_points
-    generated_scripts = {
-        f"../../../{scripts_dir}/{entry.name}{suffix}" for entry in entry_points if entry.group == "console_scripts"
-    }
+    generated_scripts = _generated_console_scripts(distribution, installation_root)
     if not installed_record_names <= wheel_names | generated_metadata | generated_scripts:
         raise InstalledCanaryError("Installed RECORD contains payloads not produced by the verified wheel installer")
     if verified < 1:
@@ -270,16 +313,7 @@ def verify_install(subject: Mapping[str, object], repo_root: Path) -> dict[str, 
         raise InstalledCanaryError("Installed wheel has no immutable direct origin")
     direct_url = cast(object, json.loads(direct_url_text))
     wheel_binding = cast(dict[str, str], subject["wheel"])
-    origin = cast(dict[str, object], direct_url).get("url") if isinstance(direct_url, dict) else None
-    parsed_origin = urllib.parse.urlsplit(origin) if isinstance(origin, str) else None
-    if (
-        parsed_origin is None
-        or parsed_origin.scheme != "file"
-        or urllib.parse.unquote(parsed_origin.path).rsplit("/", 1)[-1] != wheel_binding["filename"]
-        or parsed_origin.query
-        or parsed_origin.fragment != f"sha256={wheel_binding['sha256']}"
-    ):
-        raise InstalledCanaryError("Installed wheel origin is not bound to the verified artifact digest")
+    parsed_origin = _pep610_wheel_origin(direct_url, wheel_binding)
     wheel_origin = _wheel_origin(parsed_origin, wheel_binding["sha256"])
     wheel_entries = verify_wheel_payloads(distribution, wheel_origin)
     record_sha256, record_entries = verify_installed_record(distribution)

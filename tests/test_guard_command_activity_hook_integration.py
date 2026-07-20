@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.cli.commands_support_command_activity import (
 )
 from codex_plugin_scanner.guard.runtime.command_activity_contract import (
     COMMAND_ACTIVITY_HARNESSES,
+    ActivityDecisionReason,
     CommandExecutionStatus,
 )
 from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
@@ -329,6 +330,51 @@ def test_non_hook_command_event_does_not_create_pre_evidence(tmp_path: Path) -> 
         prompted=False,
     )
     assert store.count_command_activities() == 0
+
+
+def test_unmatched_pre_and_post_record_one_no_match_activity(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = _store(guard_home)
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {"command": "git diff --stat"},
+        "tool_call_id": "codex_read_abcdef1234567890",
+    }
+
+    assert record_pre_hook_command_activity_best_effort(
+        store=store,
+        guard_home=guard_home,
+        harness="codex",
+        event="PreToolUse",
+        payload=payload,
+        policy_action="allow",
+        receipt_id=None,
+        prompted=False,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    assert record_post_hook_command_activity_best_effort(
+        store=store,
+        guard_home=guard_home,
+        harness="codex",
+        event="PostToolUse",
+        payload=payload,
+        succeeded=True,
+    )
+
+    correlation = derive_proven_request_correlation(
+        harness="codex",
+        event="PreToolUse",
+        payload=payload,
+        key=load_or_create_installation_correlation_key(guard_home),
+    )
+    assert correlation is not None
+    activity = store.get_command_activity_by_request_correlation(correlation)
+    assert activity is not None
+    assert activity.execution_status is CommandExecutionStatus.CONFIRMED_SUCCESS
+    assert activity.decision_reason_code is ActivityDecisionReason.NO_MATCH
+    assert activity.match_count == 0
 
 
 def test_cursor_before_and_trusted_after_events_pair_by_generation_id(tmp_path: Path) -> None:

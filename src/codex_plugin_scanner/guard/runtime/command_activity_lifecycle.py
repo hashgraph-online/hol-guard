@@ -41,6 +41,7 @@ class CommandActivityDecisionFacts:
     prompted: bool
     approval_reuse_status: ActivityApprovalReuseStatus
     receipt_id: str | None
+    workflow_authorization_claimed: bool = False
 
     def __post_init__(self) -> None:
         if not is_guard_action(self.policy_action):
@@ -51,6 +52,12 @@ class CommandActivityDecisionFacts:
             raise ValueError("prompted must be a boolean")
         if not isinstance(cast(object, self.approval_reuse_status), ActivityApprovalReuseStatus):
             raise ValueError("approval_reuse_status must be an ActivityApprovalReuseStatus")
+        if type(self.workflow_authorization_claimed) is not bool:
+            raise ValueError("workflow_authorization_claimed must be a boolean")
+        if self.decision_reason_code is ActivityDecisionReason.CAPABILITY and (
+            not self.workflow_authorization_claimed or self.policy_action != "allow"
+        ):
+            raise ValueError("capability reason requires a claimed workflow authorization and final allow")
 
 
 _RULE_MODE_FLOOR: Final[dict[CommandRuleMode, GuardAction]] = {
@@ -240,5 +247,10 @@ def _validate_reason_matches(
     reason: ActivityDecisionReason,
     matches: tuple[CommandActivityMatch, ...],
 ) -> None:
-    if (not matches) != (reason is ActivityDecisionReason.NO_MATCH):
-        raise ValueError("no-match decision reason must correspond exactly to no rule matches")
+    if reason is ActivityDecisionReason.NO_MATCH and matches:
+        raise ValueError("no-match decision reason cannot carry rule matches")
+    if not matches and reason not in {
+        ActivityDecisionReason.NO_MATCH,
+        ActivityDecisionReason.CAPABILITY,
+    }:
+        raise ValueError("only no-match or capability decisions may omit rule matches")

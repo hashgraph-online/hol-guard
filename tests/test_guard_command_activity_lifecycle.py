@@ -139,6 +139,43 @@ def test_no_match_reason_is_exact_and_does_not_invent_rule_evidence() -> None:
         )
 
 
+def test_claimed_workflow_capability_may_authorize_without_extension_matches() -> None:
+    evidence = build_pre_hook_evidence(
+        evaluate_command("printf routine"),
+        CommandActivityDecisionFacts(
+            policy_action="allow",
+            decision_reason_code=ActivityDecisionReason.CAPABILITY,
+            prompted=False,
+            approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
+            receipt_id="receipt:capability",
+            workflow_authorization_claimed=True,
+        ),
+        activity_id="activity:capability",
+        occurred_at=NOW,
+        harness="codex",
+    )
+
+    assert evidence.matches == ()
+    assert evidence.activity.match_count == 0
+    assert evidence.activity.decision_reason_code is ActivityDecisionReason.CAPABILITY
+
+
+@pytest.mark.parametrize("action,claimed", [("review", True), ("allow", False)])
+def test_capability_reason_requires_final_allow_and_a_claimed_authorization(
+    action: GuardAction,
+    claimed: bool,
+) -> None:
+    with pytest.raises(ValueError, match="claimed workflow authorization and final allow"):
+        _ = CommandActivityDecisionFacts(
+            policy_action=action,
+            decision_reason_code=ActivityDecisionReason.CAPABILITY,
+            prompted=action == "review",
+            approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
+            receipt_id="receipt:invalid-capability",
+            workflow_authorization_claimed=claimed,
+        )
+
+
 def test_parser_uncertainty_is_bounded_without_storing_parser_input() -> None:
     exact = evaluate_command("rm -rf ./generated-output")
     uncertain_command = replace(

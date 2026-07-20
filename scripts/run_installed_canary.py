@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -21,7 +22,7 @@ from scripts.installed_canary_proof import InstalledCanaryError, load_subject, v
 if TYPE_CHECKING:
     from tests.guard_command_corpus_oracle_types import OracleRecord
 
-_FROZEN_MANIFEST_SHA256 = "cb5cb82f3016d93db9120d93b868413082bcb9f5a9f0faf595f56916a1a5d1e4"
+_FROZEN_MANIFEST_SHA256 = "82cea2d8968474c6ee50d59c5947f68bf67992f82f5c715a3662ac94e1095c72"
 
 
 def _sha256(path: Path) -> str:
@@ -83,7 +84,11 @@ def _validate_corpus_bindings(repo_root: Path) -> dict[str, object]:
         or _sha256(KNOWN_GAPS_PATH) != manifest["known_gaps_sha256"]
     ):
         raise InstalledCanaryError("Installed canary corpus does not match its frozen source and oracle bindings")
-    return {"canonical_digests": actual_digests, "source_files_verified": 1 + len(source_hashes)}
+    return {
+        "canonical_digests": actual_digests,
+        "manifest_sha256": _sha256(MANIFEST_PATH),
+        "source_files_verified": 1 + len(source_hashes),
+    }
 
 
 def _known_gap_baseline(repo_root: Path) -> dict[str, list[object]]:
@@ -137,6 +142,91 @@ def _run_corpus(repo_root: Path) -> dict[str, object]:
         "known_gap_groups": len(actual),
         "bindings": bindings,
     }
+
+
+def _no_post_execution_proof_smoke() -> dict[str, object]:
+    from codex_plugin_scanner.guard.adapters.contracts import contract_for
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    harness = "opencode"
+    contract = contract_for(harness)
+    if contract is None or "tool_result" in contract.event_surfaces:
+        raise InstalledCanaryError("Installed no-post-proof harness contract is invalid")
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        guard_home = root / "guard-home"
+        workspace = root / "workspace"
+        workspace.mkdir()
+        initialized = subprocess.run(
+            ["git", "init", "--quiet", str(workspace)],
+            capture_output=True,
+            check=False,
+            encoding="utf-8",
+            timeout=10,
+        )
+        if initialized.returncode != 0:
+            raise InstalledCanaryError("Installed no-post-proof workspace initialization failed")
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "event": "PreToolUse",
+            "tool_name": "bash",
+            "tool_input": {"command": "git diff --stat"},
+            "cwd": str(workspace),
+            "source_scope": "project",
+        }
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "codex_plugin_scanner.cli",
+                "guard",
+                "hook",
+                "--guard-home",
+                str(guard_home),
+                "--home",
+                str(guard_home),
+                "--workspace",
+                str(workspace),
+                "--harness",
+                harness,
+                "--json",
+            ],
+            input=json.dumps(payload),
+            capture_output=True,
+            check=False,
+            cwd=workspace,
+            encoding="utf-8",
+            timeout=30,
+        )
+        if completed.returncode != 0:
+            raise InstalledCanaryError(
+                f"Installed no-post-proof hook returned {completed.returncode}, expected prompt-free continuation"
+            )
+        store = GuardStore(guard_home, prime_policy_integrity=False)
+        with sqlite3.connect(store.path) as connection:
+            row = cast(
+                tuple[object, ...] | None,
+                connection.execute(
+                    """
+                    select harness, hook_phase, execution_status, proof_level,
+                           policy_action, decision_reason_code, match_count
+                    from command_activity
+                    """
+                ).fetchone(),
+            )
+        expected = (harness, "pre", "allowed_unconfirmed", "pre_hook", "warn", "no_match", 0)
+        if row is None or tuple(row) != expected:
+            raise InstalledCanaryError(
+                f"Installed no-post-proof hook persisted unexpected activity evidence: {tuple(row) if row else None!r}"
+            )
+        return {
+            "harness": harness,
+            "post_execution_surface": False,
+            "execution_status": str(row[2]),
+            "proof_level": str(row[3]),
+            "policy_action": str(row[4]),
+            "decision_reason_code": str(row[5]),
+        }
 
 
 def _dashboard_smoke() -> dict[str, object]:
@@ -211,6 +301,7 @@ def main() -> int:
             "schema_version": "hol-guard.installed-canary-evidence.v1",
             "installed": verify_install(subject, repo_root),
             "corpus": _run_corpus(repo_root),
+            "no_post_execution_proof": _no_post_execution_proof_smoke(),
             "dashboard": _dashboard_smoke(),
         }
         output_path.parent.mkdir(parents=True, exist_ok=True)

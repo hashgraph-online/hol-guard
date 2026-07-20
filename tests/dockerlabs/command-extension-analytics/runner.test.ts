@@ -78,11 +78,38 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(dockerfile).not.toContain("COPY src");
     expect(dockerignore).toContain("!dist/*.whl");
     expect(dockerignore).toContain("installed_server.py");
+    expect(dockerignore).toContain("github-cli-fixture.sh");
     expect(compose).not.toContain("../../src");
-    for (const harness of ["codex", "claude-code", "cursor"]) expect(server).toContain(`harness=\"${harness}\"`);
-    for (const reason of ["CONTAINMENT", "CAPABILITY"]) expect(server).toContain(`ActivityDecisionReason.${reason}`);
+    expect(compose).toContain("internal: true");
+    for (const harness of ["codex", "claude-code", "cursor"]) {
+      expect(server).toContain(`_run_installed_hook(\"${harness}\"`);
+    }
+    expect(server).toContain("subprocess.run(");
+    expect(server).toContain('"git status --short"');
+    expect(server).toContain('"git diff --stat"');
+    expect(server).toContain('"git push --delete origin stale-lab-branch"');
+    expect(server).toContain('"shutdown -h now # {SENTINEL}"');
+    expect(server).toContain('executable = "/usr/bin/cp"');
+    expect(server).not.toContain("record_pre_hook_command_activity_best_effort");
+    expect(server).not.toContain("record_command_activity(");
+    expect(server).not.toContain("ActivityDecisionReason.CAPABILITY");
+    expect(server).toContain("HOL_GUARD_LAB_PENDING");
+    expect(server).toContain("request_scope_contract(");
+    expect(server).toContain("codex_lab_workflow_drift_0002");
+    expect(server).toContain("codex_lab_workflow_retry_0003");
+    expect(server).not.toContain("apply_approval_resolution(");
+    expect(server).toContain('\"activity_proof\": \"drift-rejected-restored-one-shot-reuse\"');
     expect(server).toContain("site-packages");
     expect(runner).toContain("finally");
     expect(runner).toContain("teardownLab(project");
+    expect(runner).toContain('"/v1/command-activity/diagnostics"');
+    expect(runner).toContain("/v1/command-activity/events?cursor=0");
+    expect(runner).toContain('"X-Guard-Dashboard-Session": session');
+    expect(runner).toContain("scope_contract_digest: pending.scope_contract_digest");
+    expect(runner).toContain("approveWorkflowAuthorization(origin, pending)");
+    expect(runner).toContain('["event", "activity_id"]');
+    for (const category of ["prompt-free", "contained", "workflow", "review", "block"]) {
+      expect(runner).toContain(`\"${category}\"`);
+    }
   });
 });
