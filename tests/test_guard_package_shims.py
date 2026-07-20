@@ -765,6 +765,12 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
     ("manager", "argv", "expected"),
     [
         ("bun", ("add", "minimist@1.2.9"), True),
+        ("bun", ("run", "build"), True),
+        ("bun", ("run", "build", "--watch"), True),
+        ("bun", ("run", "dev"), True),
+        ("bun", ("pm", "ls", "--all"), True),
+        ("bun", ("script.ts",), True),
+        ("bun", ("--version",), False),
         ("brew", ("install", "jq"), True),
         ("brew", ("install", "--cask", "firefox"), True),
         ("brew", ("tap", "user/repository"), True),
@@ -784,7 +790,7 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
         ("yarn", ("--cwd", ".", "add", "minimist@1.2.9"), True),
     ],
 )
-def test_package_shim_command_requires_guard_only_for_supply_chain_actions(
+def test_package_shim_command_requires_guard_for_supply_chain_or_bun_execution(
     tmp_path: Path,
     manager: str,
     argv: tuple[str, ...],
@@ -1368,7 +1374,7 @@ def test_package_shim_uses_manager_specific_local_only_flag(
     assert expected_local_only_flag in shim_source
 
 
-def test_package_shim_tries_contained_node_runner_before_guard_review(tmp_path: Path) -> None:
+def test_package_shim_tries_owned_containment_before_guard_review(tmp_path: Path) -> None:
     context = HarnessContext(
         home_dir=Path.home(),
         guard_home=tmp_path / ".hol-guard",
@@ -1377,10 +1383,11 @@ def test_package_shim_tries_contained_node_runner_before_guard_review(tmp_path: 
 
     shim_source = guard_shims_module._build_package_manager_python_shim(context, "npx")
 
+    package_script_index = shim_source.index("try_execute_contained_package_script")
     typescript_index = shim_source.index("try_execute_contained_typescript")
     node_index = shim_source.index("try_execute_contained_node_command")
     guard_index = shim_source.index("guard_process = subprocess.run")
-    assert typescript_index < node_index < guard_index
+    assert package_script_index < typescript_index < node_index < guard_index
     assert "if contained_result is None:" in shim_source
     assert "except Exception:\n        contained_result = None" in shim_source
 

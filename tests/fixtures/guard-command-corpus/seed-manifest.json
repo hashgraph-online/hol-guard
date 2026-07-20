@@ -15,7 +15,7 @@
     "guard_command_corpus_oracle_loader.py": "22e766e8fe437c675ac38256433b2a47dfe122ad06c5d3d60f88eaccdefeec48"
   },
   "pairs_sha256": "f3997c3bf90c031d6935eb30f0834afe5e01f2908dfeea55d1d66b18e81014be",
-  "known_gaps_sha256": "5176ad770851122c4af4861b16756862a6c496888be6154402b394cdb9958bc2",
+  "known_gaps_sha256": "bd83a1a97c2293b059caecebcd52103d16ac5e9758714362fa7872c94d88bacf",
   "reproducible_command": "uv run --no-sync pytest -q tests/test_guard_command_corpus.py",
   "evaluation_budget_seconds": 30,
   "evaluation_rss_budget_mib": 512,
