@@ -15,7 +15,6 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
-from xml.etree import ElementTree as ET
 
 if TYPE_CHECKING:
     import tomllib
@@ -33,6 +32,14 @@ from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from .js_semver import highest_js_version_for_selector, version_matches_js_selector
+from .lockfile_evaluation_support import (
+    collect_lockfile_parse_results,
+    incomplete_lockfile_fallback_target,
+    incomplete_lockfile_metadata,
+    package_has_incomplete_lockfile,
+    parse_lockfile_with_budget,
+)
+from .lockfile_parse_result import LOCKFILE_PARSER_VERSION, LockfileParseResult, parse_lockfile_text
 from .manifest_dependency_targets import evaluation_targets as _manifest_evaluation_targets
 from .npm_policy_range import (
     bind_resolved_npm_policy_result,
@@ -305,6 +312,17 @@ def evaluate_package_request_artifact(
         for target in external_archive_targets
         if (source_url := _optional_string(target.get("source_url"))) is not None
     )
+    incomplete_lockfile = _first_incomplete_lockfile_result(workspace_dir, artifact)
+    if incomplete_lockfile is not None:
+        return _finalize_incomplete_lockfile_evaluation(
+            artifact=artifact,
+            store=store,
+            target=targets[0] if targets else incomplete_lockfile_fallback_target(incomplete_lockfile),
+            workspace_dir=workspace_dir,
+            parse_result=incomplete_lockfile,
+            package_intent_hash=package_intent_hash,
+            now=now_value,
+        )
     if external_archive_targets:
         # External archives use a deliberately local two-phase evaluation.  In
         # particular, neither cloud evaluation nor archive DNS may run before
@@ -1547,7 +1565,7 @@ def _evaluate_with_bundle(
             workspace_dir=workspace_dir,
             now_timestamp=now_timestamp,
         )
-        if _result_package_identity(package) not in direct_identities
+        if package_has_incomplete_lockfile(package) or _result_package_identity(package) not in direct_identities
     )
     if not packages:
         return None
@@ -1986,6 +2004,106 @@ def _bundle_meta(bundle_payload: dict[str, object]) -> dict[str, str]:
     }
 
 
+def _lockfile_parse_results(
+    workspace_dir: Path | None,
+    artifact: GuardArtifact,
+) -> tuple[LockfileParseResult, ...]:
+    return collect_lockfile_parse_results(
+        workspace_dir,
+        artifact.metadata.get("lockfile_paths"),
+        budget_ms=_LOCKFILE_PARSE_BUDGET_SECONDS * 1000,
+        parse_text_result=_parse_lockfile_text_result,
+    )
+
+
+def _parse_lockfile_text_result(path: str, text: str) -> LockfileParseResult:
+    return parse_lockfile_with_budget(
+        path,
+        text,
+        budget_seconds=_LOCKFILE_PARSE_BUDGET_SECONDS,
+        dependency_parser=_dependency_map_for_path,
+        package_lock_parser=_package_lock_entries,
+    )
+
+
+def _first_incomplete_lockfile_result(
+    workspace_dir: Path | None,
+    artifact: GuardArtifact,
+) -> LockfileParseResult | None:
+    return next((result for result in _lockfile_parse_results(workspace_dir, artifact) if not result.complete), None)
+
+
+def _finalize_incomplete_lockfile_evaluation(
+    *,
+    artifact: GuardArtifact,
+    store: GuardStore,
+    target: dict[str, object],
+    workspace_dir: Path | None,
+    parse_result: LockfileParseResult,
+    package_intent_hash: str,
+    now: str,
+) -> PackageRequestEvaluation:
+    config = load_guard_config(store.guard_home, workspace=workspace_dir)
+    decision = "block" if config.security_level in {"strict", "paranoid"} else "ask"
+    package = _incomplete_lockfile_package_result(
+        target=target,
+        parse_result=parse_result,
+        decision=decision,
+    )
+    draft = _EvaluationDraft(
+        decision=decision,
+        enforcement="free_local",
+        entitlement_state="free",
+        cache_status="miss",
+        packages=(package,),
+        reasons=tuple(_dict_items(package.get("reasons"))),
+        matched_rule_id=None,
+        exception_id=None,
+        refresh_required=False,
+        record_monitor_evidence=False,
+        bundle_version=None,
+        policy_version="local:none",
+    )
+    fingerprint = _stable_hash(
+        {
+            "lockfile_hash": parse_result.source_hash,
+            "lockfile_parser_version": parse_result.parser_version,
+        }
+    )
+    evaluation = _finalize_evaluation(
+        draft,
+        package_intent_hash=package_intent_hash,
+        workspace_fingerprint=fingerprint,
+    )
+    _persist_evidence(store=store, artifact=artifact, evaluation=evaluation, now=now)
+    return evaluation
+
+
+def _incomplete_lockfile_package_result(
+    *,
+    target: dict[str, object],
+    parse_result: LockfileParseResult,
+    decision: str = "ask",
+) -> dict[str, object]:
+    error_reason = parse_result.error_reason or "parse_error"
+    package = _heuristic_package_result(
+        target=target,
+        decision=decision,
+        code="lockfile_parse_incomplete",
+        message=(
+            f"Guard could not completely parse the existing {parse_result.format} lockfile "
+            f"({error_reason}), so this package request is paused. Repair the lockfile, then retry."
+        ),
+        severity="high",
+    )
+    metadata = incomplete_lockfile_metadata(parse_result)
+    package.update(metadata)
+    first_reason = _first_dict_item(package.get("reasons"))
+    if first_reason is not None:
+        package["reasons"] = ({**first_reason, **metadata},)
+    return package
+
+
 def _workspace_fingerprint(
     workspace_id: str,
     *,
@@ -2001,6 +2119,7 @@ def _workspace_fingerprint(
             "workspace_name": workspace_dir.name if workspace_dir is not None else None,
             "manifest_hashes": manifest_hashes,
             "lockfile_hashes": lockfile_hashes,
+            "lockfile_parser_version": LOCKFILE_PARSER_VERSION,
             "bundle_policy_hash": bundle_meta["policy_hash"] if bundle_meta is not None else None,
         }
     )
@@ -2053,18 +2172,29 @@ def _lockfile_context(workspace_dir: Path | None, artifact: GuardArtifact) -> di
     lockfile_path = resolve_path_within_workspace(workspace_dir, str(lockfile_paths[0]))
     if lockfile_path is None or not lockfile_path.exists():
         return None
+    if lockfile_path.name.lower() == "bun.lockb":
+        return None
     lockfile_text = read_text_within_workspace(workspace_dir, str(lockfile_paths[0]))
     if lockfile_text is None:
         return None
-    dependencies = _safe_dependency_map_for_path(
-        str(lockfile_path.name), lockfile_text, deadline=time.monotonic() + _LOCKFILE_PARSE_BUDGET_SECONDS
-    )
+    parse_result = _parse_lockfile_text_result(lockfile_path.name, lockfile_text)
+    if not parse_result.complete:
+        return {
+            "dependencyCount": 0,
+            "fileName": lockfile_path.name,
+            "lockfileHash": parse_result.source_hash,
+            "lockfileParserVersion": parse_result.parser_version,
+            "parseComplete": False,
+            "parseError": parse_result.error_reason,
+        }
     manifest_hashes = _hash_paths(workspace_dir, artifact.metadata.get("manifest_paths"))
     return {
-        "dependencyCount": len(dependencies),
+        "dependencyCount": len(parse_result.entries),
         "fileName": lockfile_path.name,
-        "lockfileHash": stable_digest_hex(lockfile_text.encode("utf-8")),
+        "lockfileHash": parse_result.source_hash,
+        "lockfileParserVersion": parse_result.parser_version,
         "manifestHash": manifest_hashes[0] if manifest_hashes else None,
+        "parseComplete": True,
         "repository": workspace_dir.name,
     }
 
@@ -2096,6 +2226,8 @@ def _transitive_lockfile_results(
         lockfile_path = resolve_path_within_workspace(workspace_dir, str(relative_path))
         if lockfile_path is None or not lockfile_path.exists():
             continue
+        if lockfile_path.name.lower() == "bun.lockb":
+            continue
         lockfile_ecosystem = _lockfile_ecosystem(lockfile_path.name)
         direct_target_names = (
             direct_target_names_by_ecosystem.get(lockfile_ecosystem, all_direct_target_names)
@@ -2106,49 +2238,34 @@ def _transitive_lockfile_results(
         if lockfile_text is None:
             continue
         dependency_entries: list[tuple[str, str, str, bool]] = []
-        parse_deadline = time.monotonic() + _LOCKFILE_PARSE_BUDGET_SECONDS
-        try:
-            if lockfile_path.name == "package-lock.json":
-                dependency_entries = [
-                    (
-                        dependency_path,
-                        package_name,
-                        version,
-                        dependency_path in direct_target_names,
-                    )
-                    for dependency_path, package_name, version, _direct in _package_lock_entries(
-                        lockfile_text, deadline=parse_deadline
-                    )
-                ]
-            else:
-                dependency_map = _safe_dependency_map_for_path(
-                    str(lockfile_path.name),
-                    lockfile_text,
-                    deadline=parse_deadline,
+        parse_result = _parse_lockfile_text_result(lockfile_path.name, lockfile_text)
+        if not parse_result.complete:
+            results.append(
+                _incomplete_lockfile_package_result(
+                    target=(direct_targets[0] if direct_targets else incomplete_lockfile_fallback_target(parse_result)),
+                    parse_result=parse_result,
                 )
-                for dependency_path, version in dependency_map.items():
-                    normalized_dependency_path = dependency_path.strip("/")
-                    if not normalized_dependency_path:
-                        continue
-                    package_name = _dependency_package_name(normalized_dependency_path)
-                    if package_name is None:
-                        continue
-                    dependency_entries.append(
-                        (
-                            dependency_path,
-                            package_name,
-                            version,
-                            normalized_dependency_path in direct_target_names,
-                        )
-                    )
-        except _DeadlineExceededError:
-            timeout_warning = _transitive_lockfile_timeout_warning(
-                targets=direct_targets,
-                lockfile_name=lockfile_path.name,
             )
-            if timeout_warning is not None:
-                results.append(timeout_warning)
             continue
+        for entry in parse_result.entries:
+            normalized_dependency_path = entry.dependency_path.strip("/")
+            if not normalized_dependency_path:
+                continue
+            package_name = (
+                entry.package_name
+                if lockfile_path.name == "package-lock.json"
+                else _dependency_package_name(normalized_dependency_path)
+            )
+            if package_name is None:
+                continue
+            dependency_entries.append(
+                (
+                    entry.dependency_path,
+                    package_name,
+                    entry.version,
+                    normalized_dependency_path in direct_target_names,
+                )
+            )
         for dependency_path, package_name, version, direct in dependency_entries:
             if direct:
                 continue
@@ -2317,25 +2434,6 @@ def _bundle_package_from_index(
     except PackageIdentityError:
         return None
     return index.get(identity)
-
-
-def _transitive_lockfile_timeout_warning(
-    *,
-    targets: tuple[dict[str, object], ...],
-    lockfile_name: str,
-) -> dict[str, object] | None:
-    if not targets:
-        return None
-    return _heuristic_package_result(
-        target=targets[0],
-        decision="warn",
-        code="transitive_lockfile_timeout",
-        message=(
-            f"Guard only partially scanned {lockfile_name} before the resolver deadline; "
-            "transitive dependency results may be incomplete."
-        ),
-        severity="unknown",
-    )
 
 
 def _parse_evaluation_timestamp(now_value: str) -> float | None:
@@ -3270,11 +3368,16 @@ def _lockfile_dependency_versions(
         lockfile_path = resolve_path_within_workspace(workspace_dir, str(relative_path))
         if lockfile_path is None or not lockfile_path.exists():
             continue
+        if lockfile_path.name.lower() == "bun.lockb":
+            continue
         lockfile_text = read_text_within_workspace(workspace_dir, str(relative_path))
         if lockfile_text is None:
             continue
+        parse_result = _parse_lockfile_text_result(lockfile_path.name, lockfile_text)
+        if not parse_result.complete:
+            continue
         if lockfile_path.name == "package-lock.json":
-            versions.update(_package_lock_target_versions(lockfile_text, targets))
+            versions.update(_package_lock_target_versions_from_entries(parse_result, targets))
             continue
         if lockfile_path.name == "pnpm-lock.yaml":
             versions.update(_pnpm_lock_target_versions(lockfile_text, targets))
@@ -3283,7 +3386,7 @@ def _lockfile_dependency_versions(
             versions.update(_yarn_lock_target_versions(lockfile_text, targets))
             continue
         if lockfile_path.name == "bun.lock":
-            versions.update(_bun_lock_target_versions(lockfile_text, targets))
+            versions.update(_bun_lock_target_versions(parse_result, targets))
             continue
         if lockfile_path.name == "Cargo.lock":
             versions.update(_cargo_lock_target_versions(lockfile_text, targets))
@@ -3398,20 +3501,26 @@ def _package_lock_target_versions(
     text: str,
     targets: tuple[dict[str, object], ...],
 ) -> dict[tuple[str, str | None], str]:
-    try:
-        entries = _package_lock_entries(text, deadline=time.monotonic() + _LOCKFILE_PARSE_BUDGET_SECONDS)
-    except _DeadlineExceededError:
+    parse_result = _parse_lockfile_text_result("package-lock.json", text)
+    if not parse_result.complete:
         return {}
+    return _package_lock_target_versions_from_entries(parse_result, targets)
+
+
+def _package_lock_target_versions_from_entries(
+    parse_result: LockfileParseResult,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
     versions: dict[tuple[str, str | None], str] = {}
     for target in targets:
         target_key = _lockfile_target_key(target)
         candidate_paths = set(_package_lock_candidate_names(target))
         normalized_name = str(target["normalized_name"])
-        for dependency_path, package_name, version, direct in entries:
-            if not direct:
+        for entry in parse_result.entries:
+            if not entry.direct:
                 continue
-            if dependency_path in candidate_paths or package_name == normalized_name:
-                versions[target_key] = version
+            if entry.dependency_path in candidate_paths or entry.package_name == normalized_name:
+                versions[target_key] = entry.version
                 break
     return versions
 
@@ -3423,7 +3532,7 @@ def _package_lock_entries(text: str, *, deadline: float | None = None) -> list[t
     if isinstance(packages, dict):
         for package_path, value in packages.items():
             if deadline is not None and time.monotonic() > deadline:
-                break
+                raise _DeadlineExceededError("deadline_exceeded")
             if not isinstance(package_path, str) or not package_path.startswith("node_modules/"):
                 continue
             version = value.get("version") if isinstance(value, dict) else None
@@ -3455,7 +3564,7 @@ def _walk_package_lock_entries(
 ) -> None:
     for package_name, value in payload.items():
         if deadline is not None and time.monotonic() > deadline:
-            return
+            raise _DeadlineExceededError("deadline_exceeded")
         if not isinstance(package_name, str) or not isinstance(value, dict):
             continue
         version = value.get("version")
@@ -3491,32 +3600,32 @@ def _cargo_lock_target_versions(
     text: str,
     targets: tuple[dict[str, object], ...],
 ) -> dict[tuple[str, str | None], str]:
-    direct_versions, _error = _safe_dependency_map_result_for_path("Cargo.lock", text, deadline=time.monotonic() + 0.2)
-    return _target_versions_from_direct_map(targets, direct_versions)
+    parse_result = _safe_dependency_map_result_for_path("Cargo.lock", text, deadline=time.monotonic() + 0.2)
+    return _target_versions_from_direct_map(targets, parse_result.dependency_map())
 
 
 def _composer_lock_target_versions(
     text: str,
     targets: tuple[dict[str, object], ...],
 ) -> dict[tuple[str, str | None], str]:
-    direct_versions, _error = _safe_dependency_map_result_for_path(
+    parse_result = _safe_dependency_map_result_for_path(
         "composer.lock",
         text,
         deadline=time.monotonic() + 0.2,
     )
-    return _target_versions_from_direct_map(targets, direct_versions)
+    return _target_versions_from_direct_map(targets, parse_result.dependency_map())
 
 
 def _gemfile_lock_target_versions(
     text: str,
     targets: tuple[dict[str, object], ...],
 ) -> dict[tuple[str, str | None], str]:
-    direct_versions, _error = _safe_dependency_map_result_for_path(
+    parse_result = _safe_dependency_map_result_for_path(
         "Gemfile.lock",
         text,
         deadline=time.monotonic() + 0.2,
     )
-    return _target_versions_from_direct_map(targets, direct_versions)
+    return _target_versions_from_direct_map(targets, parse_result.dependency_map())
 
 
 def _pnpm_lock_target_versions(
@@ -3638,25 +3747,14 @@ def _expected_yarn_selectors(target: dict[str, object]) -> tuple[str, ...]:
 
 
 def _bun_lock_target_versions(
-    text: str,
+    parse_result: LockfileParseResult,
     targets: tuple[dict[str, object], ...],
 ) -> dict[tuple[str, str | None], str]:
-    try:
-        payload = tomllib.loads(text or "")
-    except tomllib.TOMLDecodeError:
-        return {}
-    packages = payload.get("package")
-    if not isinstance(packages, list):
-        return {}
     versions_by_name: dict[str, list[str]] = {}
-    for entry in packages:
-        if not isinstance(entry, dict):
-            continue
-        name = _optional_string(entry.get("name"))
-        version = _optional_string(entry.get("version"))
-        if name is None or version is None:
-            continue
-        versions_by_name.setdefault(name, []).append(version)
+    for entry in parse_result.entries:
+        candidate_versions = versions_by_name.setdefault(entry.package_name, [])
+        if entry.version not in candidate_versions:
+            candidate_versions.append(entry.version)
     versions: dict[tuple[str, str | None], str] = {}
     for target in targets:
         target_key = _lockfile_target_key(target)
@@ -4067,8 +4165,7 @@ def _source_url_from_raw_spec(raw_spec: str) -> str | None:
 
 
 def _safe_dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[str, str]:
-    dependency_map, _error = _safe_dependency_map_result_for_path(path, text, deadline=deadline)
-    return dependency_map
+    return _safe_dependency_map_result_for_path(path, text, deadline=deadline).dependency_map()
 
 
 def _safe_dependency_map_result_for_path(
@@ -4076,17 +4173,16 @@ def _safe_dependency_map_result_for_path(
     text: str,
     *,
     deadline: float,
-) -> tuple[dict[str, str], str | None]:
-    try:
-        return _dependency_map_for_path(path, text, deadline=deadline), None
-    except (
-        _DeadlineExceededError,
-        ET.ParseError,
-        UnicodeDecodeError,
-        ValueError,
-        json.JSONDecodeError,
-    ):
-        return {}, "parse_error"
+) -> LockfileParseResult:
+    budget_ms = max(0.0, (deadline - time.monotonic()) * 1000)
+    return parse_lockfile_text(
+        path,
+        text,
+        deadline=deadline,
+        budget_ms=budget_ms,
+        dependency_parser=_dependency_map_for_path,
+        package_lock_parser=_package_lock_entries,
+    )
 
 
 def _lockfile_parse_warning_result(
@@ -4105,28 +4201,24 @@ def _lockfile_parse_warning_result(
         lockfile_path = resolve_path_within_workspace(workspace_dir, str(relative_path))
         if lockfile_path is None or not lockfile_path.exists():
             continue
+        if lockfile_path.name.lower() == "bun.lockb":
+            continue
         lockfile_ecosystem = _lockfile_ecosystem(lockfile_path.name)
         if lockfile_ecosystem is not None and lockfile_ecosystem != target_ecosystem:
             continue
         lockfile_text = read_text_within_workspace(workspace_dir, str(relative_path))
         if lockfile_text is None:
             continue
-        _dependency_map, error = _safe_dependency_map_result_for_path(
+        parse_result = _safe_dependency_map_result_for_path(
             lockfile_path.name,
             lockfile_text,
             deadline=time.monotonic() + 0.2,
         )
-        if error is None:
+        if parse_result.complete:
             continue
-        return _heuristic_package_result(
+        return _incomplete_lockfile_package_result(
             target=target,
-            decision="ask",
-            code="lockfile_parse_error",
-            message=(
-                "Guard could not parse the existing lockfile, so this range-based package request needs review. "
-                "Repair the lockfile, then retry."
-            ),
-            severity="high",
+            parse_result=parse_result,
         )
     return None
 

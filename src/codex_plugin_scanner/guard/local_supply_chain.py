@@ -49,6 +49,7 @@ from .runtime.approval_reuse import (
     ApprovalReuseValidationFailure,
     evaluate_approval_reuse,
 )
+from .runtime.lockfile_parse_result import LOCKFILE_PARSER_VERSION
 from .runtime.package_execution_policy import is_execution_permitted
 from .runtime.package_intent_common import (
     PackageIntent,
@@ -2752,6 +2753,7 @@ def _package_request_artifact_hash(
         },
         content={
             **content_material,
+            "lockfile_parser_version": LOCKFILE_PARSER_VERSION,
             "manifests_and_lockfiles": component_digests.get("manifests_and_lockfiles"),
             "workspace_configuration": component_digests.get("workspace_configuration"),
         },

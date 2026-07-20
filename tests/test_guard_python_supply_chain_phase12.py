@@ -365,12 +365,6 @@ source = { registry = "https://pypi.org/simple" }
         bundle_response_fixture(packages=[npm_package, pypi_package]),
         "2026-05-19T00:00:00Z",
     )
-    monkeypatch.setattr(
-        supply_chain_package_eval_module,
-        "_safe_dependency_map_for_path",
-        lambda _path, _text, *, deadline: {"requests": "2.31.0"},
-    )
-
     bundle_response = load_supply_chain_bundle_response(bundle_response_fixture(packages=[npm_package, pypi_package]))
     artifact = artifact_from_command_fixture("uv add fastapi>=0.110,<0.116", workspace=workspace_dir)
     results = supply_chain_package_eval_module._transitive_lockfile_results(
@@ -405,6 +399,11 @@ version = 1
 name = "fastapi"
 version = "0.115.0"
 source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "requests"
+version = "2.31.0"
+source = { registry = "https://pypi.org/simple" }
 """.strip()
         + "\n",
     )
@@ -424,12 +423,6 @@ source = { registry = "https://pypi.org/simple" }
         ),
         "2026-05-19T00:00:00Z",
     )
-    monkeypatch.setattr(
-        supply_chain_package_eval_module,
-        "_safe_dependency_map_for_path",
-        lambda _path, _text, *, deadline: {"requests": "2.31.0"},
-    )
-
     artifact = artifact_from_command_fixture("uv add fastapi>=0.110,<0.116", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 

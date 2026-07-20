@@ -1940,7 +1940,10 @@ def test_transitive_lockfile_resolution_uses_bounded_deadline(tmp_path: Path, mo
     assert captured["deadline"] == pytest.approx(100.2)
 
 
-def test_transitive_lockfile_timeout_surfaces_warn_result(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_transitive_lockfile_timeout_pauses_without_using_partial_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
     response = _bundle_response(
@@ -1981,9 +1984,13 @@ def test_transitive_lockfile_timeout_surfaces_warn_result(tmp_path: Path, monkey
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "warn"
-    assert any(reason["code"] == "transitive_lockfile_timeout" for reason in result.reasons)
-    assert "package-lock.json" in result.user_copy.harness_message
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert any(reason["code"] == "lockfile_parse_incomplete" for reason in result.reasons)
+    assert result.packages[0]["lockfileParseError"] == "deadline_exceeded"
+    assert result.packages[0]["lockfileParseComplete"] is False
+    assert result.packages[0]["lockfileParserVersion"] == "complete-v1"
+    assert "npm-package-lock" in result.user_copy.harness_message
 
 
 def test_package_from_cloud_result_preserves_direct_and_dependency_path_schema() -> None:
@@ -2157,7 +2164,7 @@ def test_evaluate_package_request_artifact_handles_invalid_lockfile_bytes_withou
     assert result.policy_action == "require-reapproval"
 
 
-def test_evaluate_package_request_artifact_handles_unreadable_workspace_paths_without_crashing(
+def test_evaluate_package_request_artifact_pauses_for_unreadable_lockfile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
@@ -2201,8 +2208,10 @@ def test_evaluate_package_request_artifact_handles_unreadable_workspace_paths_wi
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "monitor"
-    assert result.policy_action == "allow"
+    assert result.decision == "ask"
+    assert any(reason["code"] == "lockfile_parse_incomplete" for reason in result.reasons)
+    assert result.packages[0]["lockfileParseError"] == "read_error"
+    assert result.policy_action == "require-reapproval"
 
 
 def test_evaluate_package_request_artifact_handles_unreadable_transitive_lockfile_without_crashing(
