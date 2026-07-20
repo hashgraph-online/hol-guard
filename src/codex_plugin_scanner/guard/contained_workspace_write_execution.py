@@ -282,7 +282,7 @@ def _invocation(
     if operation == "format-write":
         if source_path != target_path or not source_path.endswith(".py"):
             raise ValueError("format-write requires one in-place Python target")
-        return _resolve_executable("ruff", environment), ("format", source_path), source_path, target_path
+        return _resolve_executable("ruff", environment), ("format", "--no-cache", source_path), source_path, target_path
     if operation == "copy-generated":
         return _resolve_executable("cp", environment), (source_path, target_path), source_path, target_path
 

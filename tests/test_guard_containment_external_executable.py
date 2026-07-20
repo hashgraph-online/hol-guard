@@ -39,7 +39,7 @@ def _request(
     executable: Path,
     *,
     operation_id: str = "format-write",
-    arguments: tuple[str, ...] = ("format", "module.py"),
+    arguments: tuple[str, ...] = ("format", "--no-cache", "module.py"),
 ) -> ContainmentRequest:
     source = workspace / "module.py"
     _ = source.write_text("value=1\n", encoding="utf-8")
@@ -84,8 +84,9 @@ def test_user_owned_external_executable_is_copied_and_digest_pinned(tmp_path: Pa
 @pytest.mark.parametrize(
     ("executable_name", "operation_id", "arguments"),
     (
-        ("formatter", "format-write", ("format", "module.py")),
-        ("ruff", "copy-generated", ("format", "module.py")),
+        ("formatter", "format-write", ("format", "--no-cache", "module.py")),
+        ("ruff", "copy-generated", ("format", "--no-cache", "module.py")),
+        ("ruff", "format-write", ("format", "module.py")),
         ("ruff", "format-write", ("--version",)),
     ),
 )

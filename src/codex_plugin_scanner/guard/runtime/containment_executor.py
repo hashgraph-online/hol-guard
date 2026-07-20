@@ -227,9 +227,10 @@ def _is_external_ruff_format_request(request: ContainmentRequest) -> bool:
     return (
         request.operation_id == "format-write"
         and Path(request.argv[0]).name == "ruff"
-        and len(request.argv) == 3
+        and len(request.argv) == 4
         and request.argv[1] == "format"
-        and request.declared_outputs == (request.argv[2],)
+        and request.argv[2] == "--no-cache"
+        and request.declared_outputs == (request.argv[3],)
     )
 
 
