@@ -38,19 +38,11 @@ _install_evaluator_packages()
 
 from codex_plugin_scanner.guard.action_lattice import guard_action_severity
 from codex_plugin_scanner.guard.models import GuardAction
-from codex_plugin_scanner.guard.runtime.command_critical_floors import command_critical_floor_factors
-from codex_plugin_scanner.guard.runtime.command_decision_adapter import (
-    command_uncertainties,
-    decision_factors,
-    extension_evidence_batch,
-    extension_uncertainties,
-)
 from codex_plugin_scanner.guard.runtime.command_evaluation import (
     CommandDecisionFloor,
     CompositeCommandEvaluation,
     evaluate_command,
 )
-from codex_plugin_scanner.guard.runtime.command_workspace_write_candidates import workspace_write_candidate_factors
 from codex_plugin_scanner.guard.runtime.effect_decision import (
     EffectDecision,
     EffectDecisionRequest,
@@ -62,7 +54,7 @@ from tests.guard_command_corpus_oracle_types import OracleRecord
 from tests.guard_command_corpus_runner import peak_rss_mib
 
 EVALUATION_SHARD_COUNT: Final = 4
-MAX_CONCURRENT_WORKERS: Final = 4
+MAX_CONCURRENT_WORKERS: Final = 2
 SYNTHETIC_CWD: Final = REPO_ROOT / "workspace"
 SYNTHETIC_HOME: Final = REPO_ROOT / "home"
 
@@ -157,26 +149,10 @@ def _canonical_legacy_action(action: CommandDecisionFloor) -> GuardAction:
 
 
 def _baseline_proposal(evaluation: CompositeCommandEvaluation) -> EffectDecision:
-    command = evaluation.command
-    observations = evaluation.extension_observations
-    evidence = extension_evidence_batch(command, observations)
-    uncertainties = tuple(
-        sorted(
-            {
-                *command_uncertainties(command, sensitive=bool(evaluation.matches)),
-                *extension_uncertainties(observations),
-            },
-            key=lambda item: item.value,
-        )
-    )
     return evaluate_effect_decision(
         EffectDecisionRequest(
-            factors=(
-                *decision_factors(evidence, compatibility_action_class=None, compatibility_rule=None),
-                *workspace_write_candidate_factors(command),
-                *command_critical_floor_factors(command),
-            ),
-            uncertainties=uncertainties,
+            factors=evaluation.baseline_factors,
+            uncertainties=evaluation.baseline_uncertainties,
         )
     )
 

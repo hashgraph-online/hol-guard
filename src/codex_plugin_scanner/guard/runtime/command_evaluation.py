@@ -25,7 +25,13 @@ from .command_model import CanonicalCommand, parse_shell_command
 from .command_rules import CommandRuleMatch, CommandRuleMode, CommandSafetyRule
 from .command_verified_read_candidates import verified_read_candidate_factor
 from .command_workspace_write_candidates import workspace_write_candidate_factors
-from .effect_decision import EffectDecision, EffectDecisionRequest, evaluate_effect_decision
+from .effect_contract import UncertaintyKind
+from .effect_decision import (
+    DecisionFactor,
+    EffectDecision,
+    EffectDecisionRequest,
+    evaluate_effect_decision,
+)
 from .github_workflow_authorization import (
     GitHubWorkflowAuthorization,
     github_workflow_authorization_evidence,
@@ -69,6 +75,8 @@ class CompositeCommandEvaluation:
     minimum_action: CommandDecisionFloor
     extension_observations: tuple[CommandExtensionObservation[CommandSafetyExtension], ...]
     decision_plane: EffectDecision
+    baseline_factors: tuple[DecisionFactor, ...]
+    baseline_uncertainties: tuple[UncertaintyKind, ...]
 
     @property
     def risk_classes(self) -> tuple[str, ...]:
@@ -154,7 +162,8 @@ def evaluate_command(
         minimum_action = _stronger_floor(minimum_action, "review")
     if command.confidence != "exact" and (compatibility_action_class is not None or owned_matches):
         minimum_action = _stronger_floor(minimum_action, "review")
-    if extension_uncertainties(observations):
+    observation_uncertainties = extension_uncertainties(observations)
+    if observation_uncertainties:
         minimum_action = "block"
     evidence_batch = extension_evidence_batch(command, observations)
     contained_routine_candidate = contained_routine_candidate_factor(command)
@@ -164,7 +173,12 @@ def evaluate_command(
         workflow_authorization,
         command_identity=command.security_identity,
     )
-    critical_floor_factors = command_critical_floor_factors(command, workflow_authorization)
+    baseline_critical_floor_factors = command_critical_floor_factors(command)
+    critical_floor_factors = (
+        baseline_critical_floor_factors
+        if workflow_authorization is None
+        else command_critical_floor_factors(command, workflow_authorization)
+    )
     authorized_action_class = authorization_evidence[1] if authorization_evidence is not None else None
     if contained_routine_candidate is not None:
         minimum_action = _stronger_floor(minimum_action, "review")
@@ -173,35 +187,62 @@ def evaluate_command(
     for candidate in workspace_write_candidates:
         candidate_floor: CommandDecisionFloor = "block" if candidate.basis.action_floor == "block" else "review"
         minimum_action = _stronger_floor(minimum_action, candidate_floor)
+    baseline_decision_factors = decision_factors(
+        evidence_batch,
+        compatibility_action_class=None,
+        compatibility_rule=None,
+    )
+    decision_compatibility_action_class = (
+        None
+        if authorized_action_class is not None and compatibility_action_class == authorized_action_class
+        else compatibility_action_class
+    )
+    current_decision_factors = (
+        baseline_decision_factors
+        if decision_compatibility_action_class is None
+        else decision_factors(
+            evidence_batch,
+            compatibility_action_class=decision_compatibility_action_class,
+            compatibility_rule=compatibility_rule,
+        )
+    )
+    baseline_factors = (
+        *baseline_decision_factors,
+        *workspace_write_candidates,
+        *baseline_critical_floor_factors,
+    )
+    baseline_uncertainties = tuple(
+        sorted(
+            {
+                *command_uncertainties(command, sensitive=bool(owned_matches)),
+                *observation_uncertainties,
+            },
+            key=lambda item: item.value,
+        )
+    )
+    decision_uncertainties = (
+        baseline_uncertainties
+        if compatibility_action_class is None
+        else tuple(
+            sorted(
+                {
+                    *command_uncertainties(command, sensitive=True),
+                    *observation_uncertainties,
+                },
+                key=lambda item: item.value,
+            )
+        )
+    )
     decision_plane = evaluate_effect_decision(
         EffectDecisionRequest(
             factors=(
-                *decision_factors(
-                    evidence_batch,
-                    compatibility_action_class=(
-                        None
-                        if authorized_action_class is not None and compatibility_action_class == authorized_action_class
-                        else compatibility_action_class
-                    ),
-                    compatibility_rule=compatibility_rule,
-                ),
+                *current_decision_factors,
                 *((contained_routine_candidate,) if contained_routine_candidate is not None else ()),
                 *((verified_read_candidate,) if verified_read_candidate is not None else ()),
                 *workspace_write_candidates,
                 *critical_floor_factors,
             ),
-            uncertainties=tuple(
-                sorted(
-                    {
-                        *command_uncertainties(
-                            command,
-                            sensitive=compatibility_action_class is not None or bool(owned_matches),
-                        ),
-                        *extension_uncertainties(observations),
-                    },
-                    key=lambda item: item.value,
-                )
-            ),
+            uncertainties=decision_uncertainties,
         )
     )
     return CompositeCommandEvaluation(
@@ -213,6 +254,8 @@ def evaluate_command(
         minimum_action=minimum_action,
         extension_observations=observations,
         decision_plane=decision_plane,
+        baseline_factors=baseline_factors,
+        baseline_uncertainties=baseline_uncertainties,
     )
 
 
