@@ -417,6 +417,33 @@ _PYTEST_COMMAND_RUNNER_SUBCOMMANDS = {
     "rye": frozenset({"run"}),
     "uv": frozenset({"run"}),
 }
+_PYTEST_RUNNER_OPTIONS_WITH_VALUES = {
+    "conda": frozenset({"--cwd", "--name", "--prefix"}),
+    "hatch": frozenset({"--env", "--project"}),
+    "mise": frozenset({"--cwd", "--env", "--jobs"}),
+    "pdm": frozenset({"--config", "--project", "--site-packages"}),
+    "pipenv": frozenset({"--categories", "--extra-pip-args", "--python"}),
+    "pipx": frozenset({"--index-url", "--pip-args", "--suffix", "--with"}),
+    "pixi": frozenset({"--environment", "--manifest-path"}),
+    "poetry": frozenset({"--directory", "--project"}),
+    "rye": frozenset({"--pyproject"}),
+    "uv": frozenset(
+        {
+            "--cache-dir",
+            "--config-file",
+            "--directory",
+            "--env-file",
+            "--index",
+            "--index-url",
+            "--project",
+            "--python",
+            "--with",
+            "--with-editable",
+            "--with-requirements",
+        }
+    ),
+}
+_PYTEST_RUNNER_POSITIONAL_PREFIX_COUNTS = {"direnv": 1}
 _PYTEST_EXECUTOR_COMMANDS = frozenset({"parallel", "watch", "xargs"})
 _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS = frozenset({"cat", "curl", "echo", "printf", "sed", "tr", "wget"})
 _SHELL_NETWORK_SINK_COMMANDS = frozenset({"curl", "wget", "nc", "ncat", "netcat", "scp", "rsync", "ssh"})
@@ -7189,7 +7216,8 @@ def _segment_targets_pytest(
     runner_subcommands = _PYTEST_COMMAND_RUNNER_SUBCOMMANDS.get(command_name)
     if runner_subcommands is not None:
         return any(
-            token in runner_subcommands and _argument_sequence_targets_pytest(command_args[index + 1 :])
+            token in runner_subcommands
+            and _pytest_args_from_runner_argument_sequence(command_name, command_args[index + 1 :]) is not None
             for index, token in enumerate(command_args)
         )
     if command_name in _PYTEST_EXECUTOR_COMMANDS:
@@ -7214,18 +7242,63 @@ def _argument_sequence_targets_pytest(args: list[str]) -> bool:
 
 
 def _pytest_args_from_argument_sequence(args: list[str]) -> list[str] | None:
-    for index, token in enumerate(args):
-        command_token = token.rsplit(":", 1)[-1]
-        command_name = _normalized_shell_command_name(command_token)
-        if command_name in _PYTEST_COMMAND_NAMES:
-            return args[index + 1 :]
-        if not _is_pytest_python_interpreter_command(command_name):
+    return _pytest_args_from_argument_sequence_ignoring(args, ignored_indices=frozenset())
+
+
+def _pytest_args_from_runner_argument_sequence(command_name: str, args: list[str]) -> list[str] | None:
+    value_options = _PYTEST_RUNNER_OPTIONS_WITH_VALUES.get(command_name, frozenset())
+    ignored_indices: set[int] = set()
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--":
+            break
+        if token in value_options:
+            if index + 1 >= len(args):
+                return None
+            ignored_indices.add(index + 1)
+            index += 2
             continue
-        python_args = _pytest_args_from_python(args[index + 1 :])
-        if python_args is not None:
-            return python_args
-        if _python_inline_script_runs_pytest(args[index + 1 :]):
-            return []
+        index += 1
+    positional_prefix_count = _PYTEST_RUNNER_POSITIONAL_PREFIX_COUNTS.get(command_name, 0)
+    for index, token in enumerate(args):
+        if index in ignored_indices or token == "--" or token.startswith("-"):
+            continue
+        if _SHELL_ASSIGNMENT_PATTERN.match(token):
+            continue
+        if positional_prefix_count:
+            positional_prefix_count -= 1
+            continue
+        return _pytest_args_from_command_position(args, index)
+    return None
+
+
+def _pytest_args_from_argument_sequence_ignoring(
+    args: list[str],
+    *,
+    ignored_indices: frozenset[int],
+) -> list[str] | None:
+    for index in range(len(args)):
+        if index in ignored_indices:
+            continue
+        pytest_args = _pytest_args_from_command_position(args, index)
+        if pytest_args is not None:
+            return pytest_args
+    return None
+
+
+def _pytest_args_from_command_position(args: list[str], index: int) -> list[str] | None:
+    command_token = args[index].rsplit(":", 1)[-1]
+    command_name = _normalized_shell_command_name(command_token)
+    if command_name in _PYTEST_COMMAND_NAMES:
+        return args[index + 1 :]
+    if not _is_pytest_python_interpreter_command(command_name):
+        return None
+    python_args = _pytest_args_from_python(args[index + 1 :])
+    if python_args is not None:
+        return python_args
+    if _python_inline_script_runs_pytest(args[index + 1 :]):
+        return []
     return None
 
 
@@ -7993,7 +8066,7 @@ def _pytest_args_from_segment(segment: list[str], command_index: int) -> list[st
     if runner_subcommands is not None:
         for index, token in enumerate(command_args):
             if token in runner_subcommands:
-                return _pytest_args_from_argument_sequence(command_args[index + 1 :])
+                return _pytest_args_from_runner_argument_sequence(command_name, command_args[index + 1 :])
         return None
     if command_name == "find":
         for index, token in enumerate(command_args):

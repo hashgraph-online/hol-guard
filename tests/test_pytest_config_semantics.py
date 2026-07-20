@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.runtime.pytest_config import (
     parse_pytest_config,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
+    _pytest_args_from_segment,
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
 )
@@ -247,6 +248,33 @@ def test_pytest_runner_preserves_explicit_config_arguments(tmp_path: Path, comma
     assert match.action_class == "pytest repository-code execution"
     assert match.pytest_config_sources == ("selected.ini",)
     assert match.pytest_config_identity_sha256 == direct_match.pytest_config_identity_sha256
+
+
+def test_pytest_runner_skips_option_values_before_wrapped_command(tmp_path: Path) -> None:
+    _write(tmp_path / "tests" / "pytest.ini", "[pytest]\npythonpath = helper_path\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "uv run --with pytest pytest tests -q"},
+        cwd=tmp_path,
+    )
+    direct_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest tests -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert direct_match is not None
+    assert match.pytest_config_sources == ("tests/pytest.ini",)
+    assert match.pytest_config_identity_sha256 == direct_match.pytest_config_identity_sha256
+
+
+def test_pytest_runner_does_not_treat_dependency_or_payload_argument_as_executable() -> None:
+    assert _pytest_args_from_segment(
+        ["uv", "run", "--with", "pytest", "echo", "pytest", "tests"],
+        0,
+    ) is None
 
 
 def test_non_applicable_pyproject_does_not_hide_later_tox_config(tmp_path: Path) -> None:
