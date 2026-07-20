@@ -15,10 +15,27 @@ import pytest
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import (
+    SignedWorkflowCapability,
+    SignedWorkflowCapabilityReceipt,
     WorkflowCapabilityBinding,
     WorkflowCapabilityError,
     sign_workflow_capability,
     verify_workflow_capability,
+    verify_workflow_capability_receipt,
+    verify_workflow_capability_signature,
+)
+from codex_plugin_scanner.guard.workflow_capability_authority_state import (
+    SignedAuthorityState,
+    SignedRevocation,
+    decode_signed_authority_state,
+    decode_signed_revocation,
+    verify_authority_state,
+    verify_revocation,
+)
+from codex_plugin_scanner.guard.workflow_capability_transitions import (
+    SignedAuthorityTransition,
+    decode_signed_authority_transition,
+    verify_authority_transition,
 )
 from tests.test_guard_workflow_capabilities import (
     _KEY,
@@ -52,6 +69,109 @@ def test_expected_binding_requires_exact_contract_type() -> None:
             now=_now(),
             expected_binding=cast(WorkflowCapabilityBinding, object()),
         )
+
+
+def test_uninitialized_signed_claim_fails_closed() -> None:
+    signed = object.__new__(SignedWorkflowCapability)
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_capability"):
+        verify_workflow_capability_signature(signed, key=_KEY, key_id=_KEY_ID)
+
+
+def test_uninitialized_signed_receipt_fails_closed() -> None:
+    signed = object.__new__(SignedWorkflowCapabilityReceipt)
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_receipt"):
+        verify_workflow_capability_receipt(signed, key=_KEY, key_id=_KEY_ID)
+
+
+def test_uninitialized_signed_authority_state_fails_closed() -> None:
+    signed = object.__new__(SignedAuthorityState)
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_authority_state"):
+        verify_authority_state(signed, key=_KEY, key_id=_KEY_ID)
+
+
+def test_uninitialized_signed_revocation_fails_closed() -> None:
+    signed = object.__new__(SignedRevocation)
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_revocation"):
+        verify_revocation(signed, key=_KEY, key_id=_KEY_ID)
+
+
+def test_uninitialized_signed_authority_transition_fails_closed() -> None:
+    signed = object.__new__(SignedAuthorityTransition)
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_authority_transition"):
+        verify_authority_transition(signed, key=_KEY, key_id=_KEY_ID)
+
+
+def _cyclic_value() -> list[object]:
+    value: list[object] = []
+    value.append(value)
+    return value
+
+
+@pytest.mark.parametrize("invalid_value", [object(), _cyclic_value()])
+def test_malformed_present_claim_value_fails_closed(invalid_value: object) -> None:
+    signed = sign_workflow_capability(_claim(capability_id="wc-malformed-claim-value"), key=_KEY, key_id=_KEY_ID)
+    object.__setattr__(signed.claim, "capability_id", invalid_value)
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_capability"):
+        verify_workflow_capability_signature(signed, key=_KEY, key_id=_KEY_ID)
+
+
+@pytest.mark.parametrize("invalid_value", [object(), _cyclic_value()])
+def test_malformed_present_receipt_value_fails_closed(tmp_path, invalid_value: object) -> None:
+    store = _store(tmp_path)
+    claim = _claim(capability_id="wc-malformed-receipt-value")
+    _issue(store, claim)
+    signed = _claim_capability(store, claim, invocation_id="invocation-malformed-receipt-value")
+    object.__setattr__(signed.receipt, "capability_id", invalid_value)
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_receipt"):
+        verify_workflow_capability_receipt(signed, key=_KEY, key_id=_KEY_ID)
+
+
+@pytest.mark.parametrize("invalid_value", [object(), _cyclic_value()])
+def test_malformed_present_authority_state_value_fails_closed(tmp_path, invalid_value: object) -> None:
+    store = _store(tmp_path)
+    claim = _claim(capability_id="wc-malformed-state-value")
+    _issue(store, claim)
+    with sqlite3.connect(store.path) as connection:
+        encoded = connection.execute(
+            "select signed_state_json from guard_workflow_capability_authority_state where capability_id = ?",
+            (claim.capability_id,),
+        ).fetchone()[0]
+    signed = decode_signed_authority_state(encoded)
+    object.__setattr__(signed.state, "capability_id", invalid_value)
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_authority_state"):
+        verify_authority_state(signed, key=_KEY, key_id=_KEY_ID)
+
+
+@pytest.mark.parametrize("invalid_value", [object(), _cyclic_value()])
+def test_malformed_present_revocation_value_fails_closed(tmp_path, invalid_value: object) -> None:
+    store = _store(tmp_path)
+    claim = _claim(capability_id="wc-malformed-revocation-value")
+    _issue(store, claim)
+    assert store.revoke_workflow_capability(claim.capability_id, reason_code="operator.revoked")
+    with sqlite3.connect(store.path) as connection:
+        encoded = connection.execute(
+            "select signed_revocation_json from guard_workflow_capability_revocations where capability_id = ?",
+            (claim.capability_id,),
+        ).fetchone()[0]
+    signed = decode_signed_revocation(encoded)
+    object.__setattr__(signed.revocation, "capability_id", invalid_value)
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_revocation"):
+        verify_revocation(signed, key=_KEY, key_id=_KEY_ID)
+
+
+@pytest.mark.parametrize("invalid_value", [object(), _cyclic_value()])
+def test_malformed_present_transition_value_fails_closed(tmp_path, invalid_value: object) -> None:
+    store = _store(tmp_path)
+    claim = _claim(capability_id="wc-malformed-transition-value")
+    _issue(store, claim)
+    with sqlite3.connect(store.path) as connection:
+        encoded = connection.execute(
+            "select signed_transition_json from guard_workflow_capability_authority_transitions where sequence = 1"
+        ).fetchone()[0]
+    signed = decode_signed_authority_transition(encoded)
+    object.__setattr__(signed.transition, "capability_id", invalid_value)
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_authority_transition"):
+        verify_authority_transition(signed, key=_KEY, key_id=_KEY_ID)
 
 
 @pytest.mark.parametrize(

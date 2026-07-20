@@ -111,6 +111,15 @@ def sign_authority_transition(
 
 
 def verify_authority_transition(signed: SignedAuthorityTransition, *, key: bytes, key_id: str) -> None:
+    try:
+        _verify_authority_transition_fields(signed, key=key, key_id=key_id)
+    except WorkflowCapabilityError:
+        raise
+    except Exception as error:
+        raise WorkflowCapabilityError("invalid_signed_authority_transition") from error
+
+
+def _verify_authority_transition_fields(signed: SignedAuthorityTransition, *, key: bytes, key_id: str) -> None:
     if (
         type(signed) is not SignedAuthorityTransition
         or type(signed.transition) is not WorkflowCapabilityAuthorityTransition

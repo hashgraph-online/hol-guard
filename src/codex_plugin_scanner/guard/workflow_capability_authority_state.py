@@ -106,6 +106,15 @@ def sign_authority_state(state: WorkflowCapabilityAuthorityState, *, key: bytes,
 
 
 def verify_authority_state(signed: SignedAuthorityState, *, key: bytes, key_id: str) -> None:
+    try:
+        _verify_authority_state_fields(signed, key=key, key_id=key_id)
+    except WorkflowCapabilityError:
+        raise
+    except Exception as error:
+        raise WorkflowCapabilityError("invalid_signed_authority_state") from error
+
+
+def _verify_authority_state_fields(signed: SignedAuthorityState, *, key: bytes, key_id: str) -> None:
     if type(signed) is not SignedAuthorityState or type(signed.state) is not WorkflowCapabilityAuthorityState:
         raise WorkflowCapabilityError("invalid_signed_authority_state")
     expected = sign_authority_state(signed.state, key=key, key_id=key_id)
@@ -118,6 +127,15 @@ def sign_revocation(revocation: WorkflowCapabilityRevocation, *, key: bytes, key
 
 
 def verify_revocation(signed: SignedRevocation, *, key: bytes, key_id: str) -> None:
+    try:
+        _verify_revocation_fields(signed, key=key, key_id=key_id)
+    except WorkflowCapabilityError:
+        raise
+    except Exception as error:
+        raise WorkflowCapabilityError("invalid_signed_revocation") from error
+
+
+def _verify_revocation_fields(signed: SignedRevocation, *, key: bytes, key_id: str) -> None:
     if type(signed) is not SignedRevocation or type(signed.revocation) is not WorkflowCapabilityRevocation:
         raise WorkflowCapabilityError("invalid_signed_revocation")
     expected = sign_revocation(signed.revocation, key=key, key_id=key_id)

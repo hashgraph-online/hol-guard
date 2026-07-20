@@ -184,6 +184,25 @@ def test_receipt_schema_tamper_fails_closed(tmp_path) -> None:
         verify_workflow_capability_receipt(signed, key=_KEY, key_id=_KEY_ID)
 
 
+def test_malformed_receipt_verifier_input_fails_closed() -> None:
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_receipt"):
+        verify_workflow_capability_receipt(
+            cast(SignedWorkflowCapabilityReceipt, object()),
+            key=_KEY,
+            key_id=_KEY_ID,
+        )
+
+
+def test_malformed_nested_receipt_verifier_input_fails_closed(tmp_path) -> None:
+    store = _store(tmp_path)
+    claim = _claim(capability_id="wc-malformed-nested-receipt")
+    _issue(store, claim)
+    signed = _claim_capability(store, claim, invocation_id="invocation-malformed-nested-receipt")
+    object.__setattr__(signed, "receipt", object())
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_receipt"):
+        verify_workflow_capability_receipt(signed, key=_KEY, key_id=_KEY_ID)
+
+
 def test_claim_and_revoke_race_is_serializable(tmp_path) -> None:
     store = _store(tmp_path)
     claim = _claim(capability_id="wc-claim-revoke-race")

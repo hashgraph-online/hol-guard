@@ -340,6 +340,15 @@ def verify_workflow_capability(
 
 
 def verify_workflow_capability_signature(signed: SignedWorkflowCapability, *, key: bytes, key_id: str) -> None:
+    try:
+        _verify_workflow_capability_signature_fields(signed, key=key, key_id=key_id)
+    except WorkflowCapabilityError:
+        raise
+    except Exception as error:
+        raise WorkflowCapabilityError("invalid_signed_capability") from error
+
+
+def _verify_workflow_capability_signature_fields(signed: SignedWorkflowCapability, *, key: bytes, key_id: str) -> None:
     _validate_key(key)
     if type(signed) is not SignedWorkflowCapability or type(signed.claim) is not WorkflowCapabilityClaim:
         raise WorkflowCapabilityError("invalid_signed_capability")
@@ -381,7 +390,20 @@ def sign_workflow_capability_receipt(
 
 
 def verify_workflow_capability_receipt(signed: SignedWorkflowCapabilityReceipt, *, key: bytes, key_id: str) -> None:
+    try:
+        _verify_workflow_capability_receipt_fields(signed, key=key, key_id=key_id)
+    except WorkflowCapabilityError:
+        raise
+    except Exception as error:
+        raise WorkflowCapabilityError("invalid_signed_receipt") from error
+
+
+def _verify_workflow_capability_receipt_fields(
+    signed: SignedWorkflowCapabilityReceipt, *, key: bytes, key_id: str
+) -> None:
     _validate_key(key)
+    if type(signed) is not SignedWorkflowCapabilityReceipt or type(signed.receipt) is not WorkflowCapabilityReceipt:
+        raise WorkflowCapabilityError("invalid_signed_receipt")
     if signed.envelope_schema != WORKFLOW_CAPABILITY_RECEIPT_ENVELOPE_SCHEMA:
         raise WorkflowCapabilityError("unsupported_receipt_envelope")
     if signed.receipt.schema_version != WORKFLOW_CAPABILITY_RECEIPT_SCHEMA:
