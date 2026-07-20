@@ -19,6 +19,7 @@ from ..review_contracts import (
     guard_review_oauth_metadata,
 )
 from ..store import GuardStore
+from ..synced_policy import validated_synced_policy_bundle
 
 LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = 125
 LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = 25
@@ -344,9 +345,9 @@ def _local_request_snapshot_next_cursor(
 
 
 def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
-    payload = store.get_sync_payload("cloud_receipt_redaction_level")
-    if isinstance(payload, dict):
-        level = payload.get("level")
+    policy_bundle = validated_synced_policy_bundle(store)
+    if policy_bundle is not None:
+        level = policy_bundle.get("receiptRedactionLevel")
         if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS:
             return level
     try:

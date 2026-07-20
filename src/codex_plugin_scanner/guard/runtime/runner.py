@@ -39,37 +39,41 @@ from ..cli.oauth_client import (
 )
 from ..cloud_exceptions import (
     build_cloud_exceptions_from_policy_bundle,
-    build_cloud_exceptions_from_stored_items,
-    build_cloud_exceptions_from_sync_payload,
     cloud_exception_to_dict,
     dedupe_cloud_exceptions,
-    stored_receipt_sync_cloud_exceptions,
 )
 from ..config import VALID_RECEIPT_REDACTION_LEVELS, GuardConfig, load_guard_config
 from ..edge_events import build_runtime_session_event
 from ..mdm.network import managed_urlopen
-from ..memory_pattern_fingerprint import build_exact_command_memory_artifact_id
 from ..models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_defaults import extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
     reconcile_connect_state_with_oauth_entitlement,
 )
+from ..policy_bundle_decisions import build_policy_bundle_decisions as _materialize_policy_bundle_decisions
 from ..policy_bundle_parser import (
-    POLICY_BUNDLE_BROWSER_SCOPE_KEYS,
-    POLICY_BUNDLE_DEFAULT_ENVIRONMENTS,
-    POLICY_BUNDLE_RULE_ACTIONS,
     POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
     computed_policy_bundle_hash,
     non_empty_string,
+    policy_bundle_acceptance_checkpoint,
+    policy_bundle_is_enforceable,
+    policy_bundle_is_version_downgrade,
+    policy_bundle_rejection_message,
+)
+from ..policy_bundle_parser import (
+    policy_bundle_daemon_version_supported as _daemon_version_supported,
 )
 from ..policy_bundle_trusted_keys import (
+    MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
+    PolicyBundleVerificationKey,
     policy_bundle_keyring_payload,
     validate_synced_policy_bundle,
 )
 from ..redaction import redact_sensitive_text
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
+from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
 from ..types import PromptRequest, RemediationAction
 from .actions import GuardActionEnvelope, redacted_workspace_label
 from .approval_context import (
@@ -2183,248 +2187,83 @@ def _policy_bundle_acknowledgement_payload(
     }
 
 
-def _version_tuple(value: str) -> tuple[int, ...] | None:
-    tokens = [token for token in re.split(r"[^0-9]+", value) if token]
-    if not tokens:
-        return None
-    return tuple(int(token) for token in tokens)
-
-
-def _daemon_version_supported(policy_bundle: dict[str, object]) -> bool:
-    min_daemon_version = non_empty_string(policy_bundle.get("minDaemonVersion"))
-    if min_daemon_version is None:
-        return True
-    current = _version_tuple(__version__)
-    minimum = _version_tuple(min_daemon_version)
-    if current is None or minimum is None:
-        return True
-    return current >= minimum
-
-
 def _policy_bundle_is_version_downgrade(
     existing_bundle: dict[str, object] | None,
     next_bundle: dict[str, object],
 ) -> bool:
-    if not isinstance(existing_bundle, dict) or not existing_bundle:
-        return False
-    existing_issued_at = non_empty_string(existing_bundle.get("issuedAt"))
-    next_issued_at = non_empty_string(next_bundle.get("issuedAt"))
-    if existing_issued_at is None or next_issued_at is None:
-        return False
-    try:
-        return datetime.fromisoformat(next_issued_at) < datetime.fromisoformat(existing_issued_at)
-    except (TypeError, ValueError):
-        return False
+    return policy_bundle_is_version_downgrade(existing_bundle, next_bundle)
 
 
-def _policy_bundle_rule_matcher_families(rule: dict[str, object]) -> list[str]:
-    explicit = rule.get("matcherFamilies")
-    if isinstance(explicit, list):
-        values = [
-            family for family in explicit if isinstance(family, str) and family in POLICY_BUNDLE_RULE_MATCHER_FAMILIES
-        ]
-        return list(dict.fromkeys(values))
-
-    derived: list[str] = []
-    scope = rule.get("scope")
-    if isinstance(scope, dict):
-        if isinstance(scope.get("ecosystems"), list) and scope["ecosystems"]:
-            derived.append("package-request")
-        if non_empty_string(scope.get("mcp")) is not None or non_empty_string(scope.get("tool")) is not None:
-            derived.append("mcp")
-        if non_empty_string(scope.get("command")) is not None:
-            derived.append("tool-action")
-        if non_empty_string(scope.get("path")) is not None or non_empty_string(scope.get("secretType")) is not None:
-            derived.append("file-read")
-    artifact_type = non_empty_string(rule.get("artifactType"))
-    if artifact_type == "package_request":
-        derived.append("package-request")
-    if artifact_type == "tool_action_request":
-        derived.append("tool-action")
-    if artifact_type == "file_read_request":
-        derived.append("file-read")
-    if artifact_type == "prompt_request":
-        derived.append("prompt")
-    return list(dict.fromkeys(family for family in derived if family in POLICY_BUNDLE_RULE_MATCHER_FAMILIES))
+def _policy_bundle_utc_datetime(value: str) -> datetime:
+    normalized = value[:-1] + "+00:00" if value.endswith(("Z", "z")) else value
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
-def _policy_bundle_rule_saved_decision_families(rule: dict[str, object]) -> list[str]:
-    """Return rule families that can be represented without broadening scope.
-
-    Package-request bundle rules with no package-related scope cannot be
-    represented as local family decisions without becoming "all package
-    installs." Scoped package bundle rules retain the existing runtime
-    family-row behavior.
-    """
-    families = _policy_bundle_rule_matcher_families(rule)
-    if _policy_bundle_rule_exact_command(rule) is not None:
-        families = [family for family in families if family != "tool-action"]
-    if "package-request" not in families:
-        return families
-    if _policy_bundle_rule_has_package_scope(rule):
-        return families
-    return [family for family in families if family != "package-request"]
+def _policy_bundle_numeric_version(value: str) -> tuple[int, ...] | None:
+    tokens = tuple(int(token) for token in re.findall(r"\d+", value))
+    return tokens or None
 
 
-def _policy_bundle_rule_has_package_scope(rule: dict[str, object]) -> bool:
-    artifact_type = non_empty_string(rule.get("artifactType"))
-    if artifact_type == "package_request":
-        return True
-    scope = rule.get("scope")
-    if not isinstance(scope, dict):
-        return False
-    package_scope_keys = (
-        "ecosystems",
-        "packages",
-        "packageNames",
-        "packageManagers",
-        "registries",
-        "sourceUrls",
-    )
-    for key in package_scope_keys:
-        value = scope.get(key)
-        if isinstance(value, list) and value:
-            return True
-        if non_empty_string(value) is not None:
-            return True
-    return False
+def _policy_bundle_acceptance_checkpoint(policy_bundle: Mapping[str, object]) -> dict[str, object]:
+    return policy_bundle_acceptance_checkpoint(dict(policy_bundle))
 
 
-def _policy_bundle_rule_matches_local_scope(
-    rule: dict[str, object],
-    *,
-    device_id: str,
-    device_name: str,
-) -> bool:
-    scope = rule.get("scope")
-    if not isinstance(scope, dict):
-        return False
-    devices = scope.get("devices")
-    if isinstance(devices, list) and devices and device_id not in devices and device_name not in devices:
-        return False
-    environments = scope.get("environments")
-    if not isinstance(environments, list) or not environments:
-        return True
-    return any(isinstance(item, str) and item in POLICY_BUNDLE_DEFAULT_ENVIRONMENTS for item in environments)
-
-
-def _policy_bundle_rule_locations(rule: dict[str, object]) -> list[str]:
-    scope = rule.get("scope")
-    if not isinstance(scope, dict):
-        return []
-    locations = scope.get("locations")
-    if not isinstance(locations, list):
-        return []
-    return [item.strip() for item in locations if isinstance(item, str) and item.strip()]
-
-
-def _policy_bundle_non_empty_exact_command(value: object) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value
-    return None
-
-
-def _policy_bundle_rule_exact_command(rule: dict[str, object]) -> str | None:
-    matcher = rule.get("matcher")
-    if isinstance(matcher, dict):
-        command = _policy_bundle_non_empty_exact_command(matcher.get("command"))
-        if command is not None:
-            return command
-    scope = rule.get("scope")
-    if isinstance(scope, dict):
-        return _policy_bundle_non_empty_exact_command(scope.get("command"))
-    return None
-
-
-def _policy_bundle_rule_exact_artifact_ids(rule: dict[str, object]) -> list[str]:
-    exact_command_artifact_id = build_exact_command_memory_artifact_id(_policy_bundle_rule_exact_command(rule))
-    if exact_command_artifact_id is not None:
-        return [exact_command_artifact_id]
-
-    artifact_ids: list[str] = []
-    matcher = rule.get("matcher")
-    if isinstance(matcher, dict):
-        for key in ("artifactId", "artifact_id"):
-            value = non_empty_string(matcher.get(key))
-            if value is not None:
-                artifact_ids.append(value)
-    for key in ("artifactId", "artifact_id"):
-        value = non_empty_string(rule.get(key))
-        if value is not None:
-            artifact_ids.append(value)
-    return list(dict.fromkeys(artifact_ids))
-
-
-def _policy_bundle_rule_expires_at(
-    rule: dict[str, object],
-    policy_bundle: dict[str, object],
-) -> str | None:
-    return non_empty_string(rule.get("expiresAt")) or non_empty_string(policy_bundle.get("expiresAt"))
-
-
-def _policy_bundle_rule_source_metadata(rule: dict[str, object]) -> dict[str, object]:
-    metadata: dict[str, object] = {}
-    for key in ("sourceDecisionId", "sourceSuggestionId", "ruleId"):
-        value = non_empty_string(rule.get(key))
-        if value is not None:
-            metadata[key] = value
-    for key in ("sourceReceiptIds", "auditEventIds"):
-        value = rule.get(key)
-        if isinstance(value, list):
-            items = [item for item in (non_empty_string(entry) for entry in value) if item is not None]
-            if items:
-                metadata[key] = items
-    return metadata
-
-
-def _policy_bundle_rule_reason(rule: dict[str, object], rule_id: str) -> str:
-    reason = non_empty_string(rule.get("reason")) or f"Matched Guard Cloud rule {rule_id}."
-    source_metadata = _policy_bundle_rule_source_metadata(rule)
-    diagnostic_ids = [
-        f"{key}={value}" for key, value in source_metadata.items() if isinstance(value, str) and key != "ruleId"
+def _policy_bundle_downgrade_reference(
+    store: GuardStore,
+    existing_bundle: dict[str, object] | None,
+) -> dict[str, object] | None:
+    checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
+    workspace_id = store.get_cloud_workspace_id()
+    candidates = [
+        item
+        for item in (
+            checkpoint,
+            existing_bundle,
+            store.get_sync_payload("policy_bundle_last_good"),
+        )
+        if isinstance(item, dict) and non_empty_string(item.get("issuedAt")) is not None
+        if (workspace_id is None or non_empty_string(item.get("workspaceId")) in {None, workspace_id})
     ]
-    if diagnostic_ids:
-        return f"{reason} ({'; '.join(diagnostic_ids)})"
-    return reason
+    if not candidates:
+        return None
+
+    def _sort_key(item: dict[str, object]) -> tuple[datetime, tuple[int, ...], str, bool]:
+        issued_at = non_empty_string(item.get("issuedAt"))
+        assert issued_at is not None
+        try:
+            timestamp = _policy_bundle_utc_datetime(issued_at)
+        except ValueError:
+            timestamp = datetime.max.replace(tzinfo=timezone.utc)
+        version = non_empty_string(item.get("bundleVersion")) or ""
+        return (
+            timestamp,
+            _policy_bundle_numeric_version(version) or (),
+            version,
+            non_empty_string(item.get("payloadHash")) is not None,
+        )
+
+    return max(candidates, key=_sort_key)
 
 
-def _policy_bundle_rule_harnesses(rule: dict[str, object]) -> list[str]:
-    scope = rule.get("scope")
-    if not isinstance(scope, dict):
-        return ["*"]
-    values: list[str] = []
-    for key in ("harnesses", "agents"):
-        current = scope.get(key)
-        if isinstance(current, list):
-            values.extend(item for item in current if isinstance(item, str) and item.strip())
-    normalized = [value.strip().lower() for value in values]
-    if not normalized:
-        return ["*"]
-    return ["*" if value == "custom" else value for value in dict.fromkeys(normalized)]
+def _validate_cached_policy_bundle(
+    store: GuardStore,
+    policy_bundle: object,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Revalidate cached policy authority before any rule is made effective."""
+
+    return cached_policy_bundle_validation(store, policy_bundle)
 
 
-def _policy_bundle_rule_has_browser_scope(rule: dict[str, object]) -> bool:
-    """Check if a rule has any non-empty browser-specific scope constraints.
-
-    Browser scope keys (browserIntent, origin, pathPrefix, browserProfile,
-    sensitiveSurface) cannot be safely represented as harness-scoped family
-    decisions because the runtime resolution would match all browser tool calls
-    in that family, ignoring the narrow constraints the rule author specified.
-
-    The Guard Cloud bundle compiler may emit these fields at the top level of
-    the rule or nested under ``scope``. Empty lists are treated as no
-    constraint (matching how other scope keys behave).
-    """
-    for source in (rule, rule.get("scope")):
-        if not isinstance(source, dict):
-            continue
-        for key in POLICY_BUNDLE_BROWSER_SCOPE_KEYS:
-            value = source.get(key)
-            if isinstance(value, list) and value:
-                return True
-            if isinstance(value, str) and value.strip():
-                return True
-    return False
+def _policy_bundle_rejection_payload(reason: str | None) -> dict[str, object]:
+    resolved_reason = reason or "invalid_policy_bundle"
+    payload: dict[str, object] = {"reason": resolved_reason}
+    remediation = policy_bundle_rejection_message(resolved_reason)
+    if remediation is not None:
+        payload["message"] = remediation
+    return payload
 
 
 def _build_policy_bundle_decisions(
@@ -2433,88 +2272,11 @@ def _build_policy_bundle_decisions(
     device_id: str,
     device_name: str,
 ) -> list[PolicyDecision]:
-    decisions: list[PolicyDecision] = []
-    rules = policy_bundle.get("rules")
-    if not isinstance(rules, list):
-        return decisions
-    for item in rules:
-        if not isinstance(item, dict):
-            continue
-        if not _policy_bundle_rule_matches_local_scope(item, device_id=device_id, device_name=device_name):
-            continue
-        action = item.get("action")
-        if action == "ignore" or action not in POLICY_BUNDLE_RULE_ACTIONS:
-            continue
-        if _policy_bundle_rule_has_browser_scope(item):
-            continue
-        rule_id = non_empty_string(item.get("ruleId")) or "bundle-rule"
-        reason = _policy_bundle_rule_reason(item, rule_id)
-        locations = _policy_bundle_rule_locations(item)
-        expires_at = _policy_bundle_rule_expires_at(item, policy_bundle)
-        for harness in _policy_bundle_rule_harnesses(item):
-            for artifact_id in _policy_bundle_rule_exact_artifact_ids(item):
-                if locations:
-                    for location in locations:
-                        decisions.append(
-                            PolicyDecision(
-                                harness=harness,
-                                scope="workspace",
-                                action=action,
-                                artifact_id=artifact_id,
-                                workspace=location,
-                                reason=reason,
-                                owner=rule_id,
-                                source="policy-bundle",
-                                expires_at=expires_at,
-                            )
-                        )
-                else:
-                    decisions.append(
-                        PolicyDecision(
-                            harness=harness,
-                            scope="artifact",
-                            action=action,
-                            artifact_id=artifact_id,
-                            reason=reason,
-                            owner=rule_id,
-                            source="policy-bundle",
-                            expires_at=expires_at,
-                        )
-                    )
-        matcher_families = _policy_bundle_rule_saved_decision_families(item)
-        if not matcher_families:
-            continue
-        for harness in _policy_bundle_rule_harnesses(item):
-            for family in matcher_families:
-                if locations:
-                    for location in locations:
-                        decisions.append(
-                            PolicyDecision(
-                                harness=harness,
-                                scope="workspace",
-                                action=action,
-                                artifact_id=f"family:{family}",
-                                workspace=location,
-                                reason=reason,
-                                owner=rule_id,
-                                source="policy-bundle",
-                                expires_at=expires_at,
-                            )
-                        )
-                else:
-                    decisions.append(
-                        PolicyDecision(
-                            harness=harness,
-                            scope="harness",
-                            action=action,
-                            artifact_id=f"family:{family}",
-                            reason=reason,
-                            owner=rule_id,
-                            source="policy-bundle",
-                            expires_at=expires_at,
-                        )
-                    )
-    return decisions
+    return _materialize_policy_bundle_decisions(
+        policy_bundle,
+        device_id=device_id,
+        device_name=device_name,
+    )
 
 
 def _parse_policy_simulation_timestamp(value: object) -> datetime | None:
@@ -2642,13 +2404,11 @@ def sync_receipts(
     payload: dict[str, object] = {}
     receipts_stored_total = 0
     advisories_payload: list[dict[str, object]] = []
-    exceptions_payload: list[dict[str, object]] = []
-    exceptions_sync_payload_provided = False
-    policy_payload: dict[str, object] | None = None
     policy_bundle_payload: dict[str, object] | None = None
     policy_bundle_sync_payload: dict[str, object] | None = None
+    policy_bundle_field_provided = False
+    policy_bundle_field_malformed = False
     alert_preferences_payload: dict[str, object] | None = None
-    team_policy_pack_payload: dict[str, object] | None = None
     remote_decisions: set[PolicyDecision] = set()
     device_id, device_name = _guard_device_metadata(store)
     sync_context = _receipt_sync_context(
@@ -2762,24 +2522,18 @@ def sync_receipts(
         advisories = payload.get("advisories")
         if isinstance(advisories, list):
             advisories_payload.extend(item for item in advisories if isinstance(item, dict))
-        policy = payload.get("policy")
-        if isinstance(policy, dict) and (policy or policy_payload is None):
-            policy_payload = policy
-        policy_bundle = payload.get("policyBundle")
-        if isinstance(policy_bundle, dict) and (policy_bundle or policy_bundle_payload is None):
-            policy_bundle_payload = policy_bundle
-            policy_bundle_sync_payload = payload
+        if "policyBundle" in payload:
+            policy_bundle_field_provided = True
+            policy_bundle = payload.get("policyBundle")
+            if isinstance(policy_bundle, dict):
+                if policy_bundle or policy_bundle_payload is None:
+                    policy_bundle_payload = policy_bundle
+                    policy_bundle_sync_payload = payload
+            else:
+                policy_bundle_field_malformed = True
         alert_preferences = payload.get("alertPreferences")
         if isinstance(alert_preferences, dict) and (alert_preferences or alert_preferences_payload is None):
             alert_preferences_payload = alert_preferences
-        team_policy_pack = payload.get("teamPolicyPack")
-        if isinstance(team_policy_pack, dict) and (team_policy_pack or team_policy_pack_payload is None):
-            team_policy_pack_payload = team_policy_pack
-        exceptions = payload.get("exceptions")
-        if isinstance(exceptions, list):
-            exceptions_sync_payload_provided = True
-            exceptions_payload.extend(item for item in exceptions if isinstance(item, dict))
-        remote_decisions.update(_build_remote_policy_decisions(payload))
     now = _sync_timestamp(payload)
     aibom_context: dict[str, object] = {}
     if home_dir is not None:
@@ -2804,160 +2558,218 @@ def sync_receipts(
         synced_at=now,
     )
     deduped_advisories = _dedupe_sync_payload_items(advisories_payload)
-    deduped_exceptions = _dedupe_sync_payload_items(exceptions_payload)
-    sync_exceptions_for_persist = deduped_exceptions if exceptions_sync_payload_provided else None
+    # Top-level ``policy``, ``teamPolicyPack``, and ``exceptions`` fields are
+    # legacy unsigned siblings. They may be present on an authenticated HTTPS
+    # response, but they are not covered by the pinned policy-bundle signature
+    # and therefore cannot be persisted or materialized as local authority.
+    # Only decisions and exceptions inside a validated signed bundle are used.
+    deduped_exceptions: list[dict[str, object]] = []
     advisories_stored = 0
     if deduped_advisories:
         advisories_stored = store.cache_advisories(deduped_advisories, now)
-    if policy_payload is not None:
-        store.set_sync_payload("policy", policy_payload, now)
-    else:
-        store.set_sync_payload("policy", {}, now)
     validated_policy_bundle: dict[str, object] | None = None
-    if policy_bundle_payload is not None:
-        validated_policy_bundle, policy_bundle_rejection_reason, trusted_policy_bundle_keys = (
-            validate_synced_policy_bundle(
-                policy_bundle_payload,
-                stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
-                sync_payload=policy_bundle_sync_payload,
-                supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
+    effective_policy_bundle: dict[str, object] | None = None
+    activation_last_error: dict[str, object] = {}
+    trusted_policy_bundle_keys: tuple[PolicyBundleVerificationKey, ...] = ()
+    update_last_good = False
+    existing_policy_bundle_payload = store.get_sync_payload("policy_bundle")
+    existing_policy_bundle, existing_policy_bundle_error = _validate_cached_policy_bundle(
+        store,
+        existing_policy_bundle_payload,
+    )
+    if policy_bundle_field_provided:
+        policy_bundle_rejection_reason: str | None
+        if policy_bundle_field_malformed or policy_bundle_payload is None:
+            policy_bundle_rejection_reason = "invalid_policy_bundle"
+        else:
+            validated_policy_bundle, policy_bundle_rejection_reason, trusted_policy_bundle_keys = (
+                validate_synced_policy_bundle(
+                    policy_bundle_payload,
+                    stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
+                    sync_payload=policy_bundle_sync_payload,
+                    supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
+                    managed_keyring_provenance=store.get_sync_payload(
+                        MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY
+                    ),
+                    expected_workspace_id=store.get_cloud_workspace_id(),
+                )
             )
-        )
-        existing_policy_bundle_payload = store.get_sync_payload("policy_bundle")
-        existing_policy_bundle = (
-            existing_policy_bundle_payload if isinstance(existing_policy_bundle_payload, dict) else None
-        )
         if validated_policy_bundle is not None and not _daemon_version_supported(validated_policy_bundle):
             validated_policy_bundle = None
             policy_bundle_rejection_reason = "unsupported_daemon_version"
+        if validated_policy_bundle is not None and not policy_bundle_is_enforceable(validated_policy_bundle):
+            validated_policy_bundle = None
+            policy_bundle_rejection_reason = "inactive_rollout_state"
         if validated_policy_bundle is not None and _policy_bundle_is_version_downgrade(
-            existing_policy_bundle, validated_policy_bundle
+            _policy_bundle_downgrade_reference(store, existing_policy_bundle),
+            validated_policy_bundle,
         ):
             validated_policy_bundle = None
             policy_bundle_rejection_reason = "bundle_version_downgrade"
-        bundle_workspace_id = non_empty_string(
-            validated_policy_bundle.get("workspaceId") if isinstance(validated_policy_bundle, dict) else None
-        )
-        cloud_workspace_id = store.get_cloud_workspace_id()
-        if (
-            validated_policy_bundle is not None
-            and bundle_workspace_id is not None
-            and cloud_workspace_id is not None
-            and bundle_workspace_id != cloud_workspace_id
-        ):
-            validated_policy_bundle = None
-            policy_bundle_rejection_reason = "wrong_workspace"
         if validated_policy_bundle is not None:
-            store.set_sync_payload("policy_bundle", validated_policy_bundle, now)
-            store.set_sync_payload("policy_bundle_last_good", validated_policy_bundle, now)
-            store.set_sync_payload(
-                "policy_bundle_keyring",
-                policy_bundle_keyring_payload(
-                    trusted_policy_bundle_keys,
-                    workspace_id=store.get_cloud_workspace_id(),
-                ),
-                now,
-            )
-            store.set_sync_payload("policy_bundle_last_error", {}, now)
-            # Extract cloud-configured receipt redaction level from policy bundle
-            cloud_redaction_level = non_empty_string(
-                validated_policy_bundle.get("receiptRedactionLevel")
-                if isinstance(validated_policy_bundle, dict)
-                else None
-            )
-            if cloud_redaction_level and cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
-                _persist_cloud_receipt_redaction_level(
-                    store,
-                    level=cloud_redaction_level,
-                    synced_at=now,
-                )
-            remote_decisions.update(
-                _build_policy_bundle_decisions(
-                    validated_policy_bundle,
-                    device_id=device_id,
-                    device_name=device_name,
-                )
-            )
+            effective_policy_bundle = validated_policy_bundle
+            update_last_good = True
         else:
+            # A response that claims signed-bundle authority cannot route the
+            # same policy through unsigned sibling fields after verification
+            # fails. Keep only a still-valid signed current/LKG bundle.
+            remote_decisions.clear()
             last_good_bundle_payload = store.get_sync_payload("policy_bundle_last_good")
-            preserved_bundle_payload = (
-                last_good_bundle_payload
-                if isinstance(last_good_bundle_payload, dict) and last_good_bundle_payload
-                else existing_policy_bundle
+            last_good_bundle, _last_good_error = _validate_cached_policy_bundle(
+                store,
+                last_good_bundle_payload,
             )
-            if isinstance(preserved_bundle_payload, dict) and preserved_bundle_payload:
-                remote_decisions.update(
-                    _build_policy_bundle_decisions(
-                        preserved_bundle_payload,
-                        device_id=device_id,
-                        device_name=device_name,
-                    )
-                )
-            store.set_sync_payload(
-                "policy_bundle_last_error",
-                {"reason": policy_bundle_rejection_reason or "invalid_policy_bundle"},
-                now,
-            )
+            # A valid current bundle may be newer than last-good when a prior
+            # sync stopped after persisting current but before advancing the
+            # checkpoint. Prefer current so a rejected refresh cannot roll
+            # policy authority back to an older signed bundle.
+            effective_policy_bundle = existing_policy_bundle or last_good_bundle
+            activation_last_error = _policy_bundle_rejection_payload(policy_bundle_rejection_reason)
             store.add_event(
                 "policy_bundle/rejected",
-                {"reason": policy_bundle_rejection_reason or "invalid_policy_bundle"},
+                activation_last_error,
                 now,
             )
     else:
-        existing_bundle_payload = store.get_sync_payload("policy_bundle")
-        if isinstance(existing_bundle_payload, dict) and existing_bundle_payload:
-            remote_decisions.update(
-                _build_policy_bundle_decisions(
-                    existing_bundle_payload,
-                    device_id=device_id,
-                    device_name=device_name,
-                )
+        effective_policy_bundle = existing_policy_bundle
+        if effective_policy_bundle is None:
+            last_good_bundle_payload = store.get_sync_payload("policy_bundle_last_good")
+            effective_policy_bundle, last_good_error = _validate_cached_policy_bundle(
+                store,
+                last_good_bundle_payload,
             )
-    if not isinstance(store.get_sync_payload("policy_bundle_last_error"), dict):
-        store.set_sync_payload("policy_bundle_last_error", {}, now)
+            if (
+                effective_policy_bundle is None
+                and isinstance(existing_policy_bundle_payload, dict)
+                and existing_policy_bundle_payload
+            ):
+                rejection_reason = existing_policy_bundle_error or last_good_error or "invalid_policy_bundle"
+                activation_last_error = _policy_bundle_rejection_payload(rejection_reason)
+                store.add_event("policy_bundle/rejected", activation_last_error, now)
+        if not activation_last_error:
+            stored_last_error = store.get_sync_payload("policy_bundle_last_error")
+            if isinstance(stored_last_error, dict):
+                activation_last_error = stored_last_error
     if alert_preferences_payload is not None:
         store.set_sync_payload("alert_preferences", alert_preferences_payload, now)
     else:
         store.set_sync_payload("alert_preferences", {}, now)
-    if team_policy_pack_payload is not None:
-        store.set_sync_payload("team_policy_pack", team_policy_pack_payload, now)
-    else:
-        store.set_sync_payload("team_policy_pack", {}, now)
-    active_policy_bundle_payload = store.get_sync_payload("policy_bundle")
-    active_policy_bundle = active_policy_bundle_payload if isinstance(active_policy_bundle_payload, dict) else None
-    cloud_exception_items = _persist_cloud_exceptions(
-        store,
-        device_id=device_id,
-        sync_exceptions=sync_exceptions_for_persist,
-        policy_bundle=active_policy_bundle,
-        now=now,
-    )
-    remote_policies_stored = len(remote_decisions)
+    cloud_exception_items: list[dict[str, object]] = []
+    remote_policies_stored = 0
     remote_policy_sync_blocked = False
-    try:
-        store.replace_remote_policies(list(remote_decisions), now, remote_write_authorized=True)
+    if effective_policy_bundle is not None:
+        activation_bundle, activation_reason, activation_keys = validate_synced_policy_bundle(
+            effective_policy_bundle,
+            stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
+            supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
+            managed_keyring_provenance=store.get_sync_payload(MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY),
+            expected_workspace_id=store.get_cloud_workspace_id(),
+        )
+        if activation_bundle is not None and not policy_bundle_is_enforceable(activation_bundle):
+            activation_bundle = None
+            activation_reason = "inactive_rollout_state"
+        acceptance_checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
+        if (
+            activation_bundle is not None
+            and isinstance(acceptance_checkpoint, dict)
+            and _policy_bundle_is_version_downgrade(
+                acceptance_checkpoint,
+                activation_bundle,
+            )
+        ):
+            activation_bundle = None
+            activation_reason = "bundle_version_downgrade"
+        if activation_bundle is None:
+            activation_last_error = _policy_bundle_rejection_payload(activation_reason)
+            store.add_event("policy_bundle/rejected", activation_last_error, now)
+            effective_policy_bundle = None
+        else:
+            # Use exactly the payload and anchor set from the final live trust
+            # check for materialization and atomic activation. A key rotation
+            # or revocation between initial selection and this check therefore
+            # cannot leave the previously selected current/LKG bundle active.
+            effective_policy_bundle = activation_bundle
+            trusted_policy_bundle_keys = activation_keys
+    if effective_policy_bundle is None:
+        store.clear_policy_bundle_authority(
+            now,
+            policy_bundle_last_error=activation_last_error,
+        )
+        _reset_cloud_receipt_redaction_authority(store, synced_at=now)
+    else:
+        remote_decisions.update(
+            _build_policy_bundle_decisions(
+                effective_policy_bundle,
+                device_id=device_id,
+                device_name=device_name,
+            )
+        )
+        policy_bundle_ack = _policy_bundle_acknowledgement_payload(
+            device_id=device_id,
+            device_name=device_name,
+            policy_bundle=effective_policy_bundle,
+            synced_at=now,
+        )
+        cloud_exception_items = _policy_bundle_cloud_exception_items(
+            store,
+            device_id=device_id,
+            sync_exceptions=[],
+            policy_bundle=effective_policy_bundle,
+            policy_bundle_ack=policy_bundle_ack,
+        )
+        checkpoint = _policy_bundle_downgrade_reference(store, effective_policy_bundle)
         if validated_policy_bundle is not None:
-            store.set_sync_payload(
-                "policy_bundle_ack",
-                _policy_bundle_acknowledgement_payload(
-                    device_id=device_id,
-                    device_name=device_name,
-                    policy_bundle=validated_policy_bundle,
-                    synced_at=now,
+            checkpoint = _policy_bundle_acceptance_checkpoint(validated_policy_bundle)
+        try:
+            activated = store.apply_policy_bundle_authority(
+                list(remote_decisions),
+                now,
+                policy_bundle=effective_policy_bundle,
+                policy_bundle_keyring=policy_bundle_keyring_payload(
+                    trusted_policy_bundle_keys,
+                    workspace_id=store.get_cloud_workspace_id(),
                 ),
+                cloud_exceptions=cloud_exception_items,
+                policy_bundle_ack=policy_bundle_ack,
+                policy_bundle_checkpoint=(
+                    _policy_bundle_acceptance_checkpoint(checkpoint)
+                    if isinstance(checkpoint, dict)
+                    else _policy_bundle_acceptance_checkpoint(effective_policy_bundle)
+                ),
+                update_last_good=update_last_good,
+                policy_bundle_last_error=activation_last_error,
+                remote_write_authorized=True,
+            )
+            if not activated:
+                cloud_exception_items = []
+                activation_last_error = _policy_bundle_rejection_payload("bundle_version_downgrade")
+                store.add_event(
+                    "policy_bundle/rejected",
+                    activation_last_error,
+                    now,
+                )
+            else:
+                remote_policies_stored = len(remote_decisions)
+                cloud_redaction_level = non_empty_string(effective_policy_bundle.get("receiptRedactionLevel"))
+                if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
+                    _persist_cloud_receipt_redaction_level(
+                        store,
+                        level=cloud_redaction_level,
+                        synced_at=now,
+                    )
+                else:
+                    _reset_cloud_receipt_redaction_authority(store, synced_at=now)
+        except ApprovalGateError as error:
+            cloud_exception_items = []
+            remote_policy_sync_blocked = True
+            store.add_event(
+                "approval_gate/remote_policy_sync_blocked",
+                {
+                    "error": error.code,
+                    "remote_policies_count": len(remote_decisions),
+                },
                 now,
             )
-    except ApprovalGateError as error:
-        remote_policies_stored = 0
-        remote_policy_sync_blocked = True
-        store.add_event(
-            "approval_gate/remote_policy_sync_blocked",
-            {
-                "error": error.code,
-                "remote_policies_count": len(remote_decisions),
-            },
-            now,
-        )
     _record_synced_alert_events(
         store=store,
         advisories=deduped_advisories,
@@ -3763,30 +3575,38 @@ def _persist_cloud_exceptions(
     policy_bundle: dict[str, object] | None = None,
     now: str,
 ) -> list[dict[str, object]]:
+    serialized = _policy_bundle_cloud_exception_items(
+        store,
+        device_id=device_id,
+        sync_exceptions=sync_exceptions,
+        policy_bundle=policy_bundle,
+    )
+    store.set_cloud_exceptions(serialized, now)
+    return serialized
+
+
+def _policy_bundle_cloud_exception_items(
+    store: GuardStore,
+    *,
+    device_id: str | None = None,
+    sync_exceptions: list[dict[str, object]] | None = None,
+    policy_bundle: dict[str, object] | None = None,
+    policy_bundle_ack: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
+    """Build bundle-derived exceptions without mutating activation state."""
+
     resolved_device_id = device_id
     if resolved_device_id is None:
         resolved_device_id, _device_name = _guard_device_metadata(store)
-    bundle_ack_payload = store.get_sync_payload("policy_bundle_ack")
-    bundle_ack = bundle_ack_payload if isinstance(bundle_ack_payload, dict) else None
-    bundle_hash = non_empty_string(policy_bundle.get("bundleHash")) if isinstance(policy_bundle, dict) else None
-    ack_status = non_empty_string(bundle_ack.get("status")) if bundle_ack else None
+    bundle_ack = policy_bundle_ack
+    if bundle_ack is None:
+        bundle_ack_payload = store.get_sync_payload("policy_bundle_ack")
+        bundle_ack = bundle_ack_payload if isinstance(bundle_ack_payload, dict) else None
     items = []
-    if sync_exceptions is not None:
-        items.extend(
-            build_cloud_exceptions_from_sync_payload(
-                sync_exceptions,
-                bundle_hash=bundle_hash,
-                ack_status=ack_status,
-            )
-        )
-    else:
-        existing_payload = store.get_sync_payload("cloud_exceptions")
-        if isinstance(existing_payload, list):
-            stored_items = [item for item in existing_payload if isinstance(item, dict)]
-            if isinstance(policy_bundle, dict):
-                items.extend(stored_receipt_sync_cloud_exceptions(stored_items))
-            else:
-                items.extend(build_cloud_exceptions_from_stored_items(stored_items))
+    # ``sync_exceptions`` is retained as an explicit compatibility boundary so
+    # callers can demonstrate that legacy unsigned siblings were considered
+    # and rejected. It must never contribute enforcement authority.
+    del sync_exceptions
     if isinstance(policy_bundle, dict):
         items.extend(
             build_cloud_exceptions_from_policy_bundle(
@@ -3796,74 +3616,7 @@ def _persist_cloud_exceptions(
             )
         )
     serialized = [cloud_exception_to_dict(item) for item in dedupe_cloud_exceptions(items)]
-    store.set_cloud_exceptions(serialized, now)
     return serialized
-
-
-def _build_remote_policy_decisions(payload: dict[str, object]) -> list[PolicyDecision]:
-    decisions: list[PolicyDecision] = []
-    exceptions = payload.get("exceptions")
-    if isinstance(exceptions, list):
-        for item in exceptions:
-            if not isinstance(item, dict):
-                continue
-            scope = item.get("scope")
-            if scope not in {"artifact", "publisher", "harness", "global", "workspace"}:
-                continue
-            workspace = _remote_workspace(item)
-            if scope == "workspace" and workspace is None:
-                continue
-            harness = _remote_harness(item.get("harness"), allow_wildcard=scope != "harness")
-            if harness is None:
-                continue
-            decisions.append(
-                PolicyDecision(
-                    harness=harness,
-                    scope=scope,
-                    action="allow",
-                    artifact_id=_optional_string(item.get("artifactId")),
-                    workspace=workspace,
-                    publisher=_optional_string(item.get("publisher")),
-                    reason=_optional_string(item.get("reason")),
-                    owner=_optional_string(item.get("owner")),
-                    source="cloud-sync",
-                    expires_at=_normalized_timestamp_string(item.get("expiresAt")),
-                )
-            )
-    team_policy_pack = payload.get("teamPolicyPack")
-    if isinstance(team_policy_pack, dict):
-        policy_name = _optional_string(team_policy_pack.get("name")) or "team policy"
-        blocked_artifacts = team_policy_pack.get("blockedArtifacts")
-        if isinstance(blocked_artifacts, list):
-            for artifact_id in blocked_artifacts:
-                if not isinstance(artifact_id, str) or not artifact_id.strip():
-                    continue
-                decisions.append(
-                    PolicyDecision(
-                        harness="*",
-                        scope="artifact",
-                        action="block",
-                        artifact_id=artifact_id,
-                        reason=f"Blocked by {policy_name}.",
-                        source="team-policy",
-                    )
-                )
-        allowed_publishers = team_policy_pack.get("allowedPublishers")
-        if isinstance(allowed_publishers, list):
-            for publisher in allowed_publishers:
-                if not isinstance(publisher, str) or not publisher.strip():
-                    continue
-                decisions.append(
-                    PolicyDecision(
-                        harness="*",
-                        scope="publisher",
-                        action="allow",
-                        publisher=publisher,
-                        reason=f"Allowed by {policy_name}.",
-                        source="team-policy",
-                    )
-                )
-    return decisions
 
 
 def _base64url_encode(data: bytes) -> str:
@@ -5434,6 +5187,36 @@ def _receipt_sync_cursor_rowids_from_batch(
     return [item.get("receipt_rowid") for item in receipt_batch if item.get("receipt_id") in cursor_receipt_ids]
 
 
+def _validated_policy_bundle_acknowledgement(
+    store: GuardStore,
+    *,
+    device_id: str,
+    device_name: str,
+) -> dict[str, object] | None:
+    policy_bundle = validated_synced_policy_bundle(store)
+    acknowledgement = store.get_sync_payload("policy_bundle_ack")
+    if policy_bundle is None or not isinstance(acknowledgement, dict):
+        return None
+
+    bundle_hash = non_empty_string(policy_bundle.get("bundleHash"))
+    bundle_version = non_empty_string(policy_bundle.get("bundleVersion"))
+    if bundle_hash is None or bundle_version is None:
+        return None
+    if acknowledgement.get("bundleHash") != bundle_hash:
+        return None
+    if acknowledgement.get("bundleVersion") != bundle_version:
+        return None
+    if acknowledgement.get("deviceId") != device_id:
+        return None
+    if acknowledgement.get("deviceName") != device_name:
+        return None
+    if acknowledgement.get("status") != "synced":
+        return None
+    if _normalized_timestamp_string(acknowledgement.get("appliedAt")) is None:
+        return None
+    return acknowledgement
+
+
 def _receipt_sync_context(
     store: GuardStore,
     *,
@@ -5455,7 +5238,11 @@ def _receipt_sync_context(
         _optional_string(runtime_summary.get("runtime_harness")) if isinstance(runtime_summary, dict) else None
     )
     sync_health = "healthy" if runtime_synced_at is not None else "degraded"
-    policy_bundle_ack = store.get_sync_payload("policy_bundle_ack")
+    policy_bundle_ack = _validated_policy_bundle_acknowledgement(
+        store,
+        device_id=resolved_device_id,
+        device_name=resolved_device_name,
+    )
     context: dict[str, object] = {
         "deviceId": resolved_device_id,
         "deviceName": resolved_device_name,
@@ -5463,7 +5250,7 @@ def _receipt_sync_context(
         "localGuardOnlineAt": local_guard_online_at,
         "syncHealth": sync_health,
     }
-    if isinstance(policy_bundle_ack, dict) and policy_bundle_ack:
+    if policy_bundle_ack is not None:
         context["policyBundleAcknowledgement"] = policy_bundle_ack
     if runtime_synced_at is not None:
         context["lastRuntimeSyncAt"] = runtime_synced_at
@@ -5545,6 +5332,18 @@ def _persist_cloud_receipt_redaction_level(store: GuardStore, *, level: str, syn
         )
 
 
+def _reset_cloud_receipt_redaction_authority(store: GuardStore, *, synced_at: str) -> None:
+    """Reset relaxation bookkeeping when no signed override is effective."""
+
+    store.set_sync_payload(
+        "cloud_receipt_redaction_level",
+        {"level": _local_receipt_redaction_level(store), "updated_at": synced_at},
+        synced_at,
+    )
+    store.delete_sync_payload(_RELAXED_RECEIPT_REDACTION_RESYNC_MARKER)
+    store.delete_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER)
+
+
 def _ensure_relaxed_receipt_redaction_resync(
     store: GuardStore,
     *,
@@ -5576,12 +5375,15 @@ def _ensure_relaxed_receipt_redaction_resync(
 def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
     """Resolve the receipt redaction level for cloud sync.
 
-    Priority: cloud-configured level (from policy bundle downlink) >
-    local GuardConfig.receipt_redaction_level > 'full' (safest).
+    A cloud relaxation is authoritative only while its signed policy bundle
+    remains valid. The separately persisted level is cursor bookkeeping, not
+    an authority source, because it can outlive or be detached from a bundle.
     """
-    level = _stored_cloud_receipt_redaction_level(store)
-    if level is not None:
-        return level
+    policy_bundle = validated_synced_policy_bundle(store)
+    if policy_bundle is not None:
+        level = policy_bundle.get("receiptRedactionLevel")
+        if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS:
+            return level
     return _local_receipt_redaction_level(store)
 
 

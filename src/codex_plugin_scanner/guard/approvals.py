@@ -55,6 +55,7 @@ from .store import (
     browser_mcp_exact_match_context,
     runtime_tool_action_exact_match_context,
 )
+from .synced_policy import synced_policy_bundle_validation
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
@@ -1425,16 +1426,14 @@ def _build_runtime_cloud_context(
     connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
     sync_url = cloud_profile["sync_url"] if cloud_profile is not None else None
     sync_summary = store.get_sync_payload("sync_summary") or {}
-    remote_policy = store.get_sync_payload("policy") or {}
-    team_policy_pack = store.get_sync_payload("team_policy_pack") or {}
     alert_preferences = store.get_sync_payload("alert_preferences") or {}
-    policy_bundle = _sync_payload_dict(store, "policy_bundle")
+    policy_bundle, cached_policy_bundle_error = synced_policy_bundle_validation(store)
+    policy_bundle = policy_bundle or {}
+    policy_defaults = policy_bundle.get("policyDefaults")
+    remote_policy = policy_defaults if isinstance(policy_defaults, dict) else {}
     policy_bundle_last_error = _sync_payload_dict(store, "policy_bundle_last_error")
-    acknowledgement = policy_bundle.get("acknowledgement")
-    cloud_policy_last_ack_at = (
-        _optional_string(acknowledgement.get("acknowledgedAt")) if isinstance(acknowledgement, dict) else None
-    )
-    remote_payload_active = any((sync_summary, remote_policy, team_policy_pack, alert_preferences))
+    cloud_policy_last_ack_at = _cloud_policy_last_ack_at(store, policy_bundle)
+    remote_payload_active = any((sync_summary, remote_policy, alert_preferences))
     cloud_state = resolve_guard_cloud_state(
         sync_configured=cloud_profile is not None,
         sync_completed=bool(sync_summary),
@@ -1502,15 +1501,39 @@ def _build_runtime_cloud_context(
         "cloud_policy_bundle_hash": _optional_string(policy_bundle.get("bundleHash")),
         "cloud_policy_bundle_version": _optional_string(policy_bundle.get("bundleVersion")),
         "cloud_policy_rollout_state": _optional_string(policy_bundle.get("rolloutState")),
-        "cloud_policy_sync_error": _optional_string(policy_bundle_last_error.get("reason")),
+        "cloud_policy_sync_error": cached_policy_bundle_error
+        or _optional_string(policy_bundle_last_error.get("reason")),
         "cloud_policy_last_ack_at": cloud_policy_last_ack_at,
-        "team_policy_active": bool(team_policy_pack),
+        "team_policy_active": False,
     }
 
 
 def _sync_payload_dict(store: GuardStore, key: str) -> dict[str, object]:
     payload = store.get_sync_payload(key) or {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _cloud_policy_last_ack_at(store: GuardStore, policy_bundle: dict[str, object]) -> str | None:
+    acknowledgement = _sync_payload_dict(store, "policy_bundle_ack")
+    bundle_hash = _optional_string(policy_bundle.get("bundleHash"))
+    bundle_version = _optional_string(policy_bundle.get("bundleVersion"))
+    if bundle_hash is None or bundle_version is None:
+        return None
+    try:
+        device_id = str(store.get_device_metadata()["installation_id"])
+    except (KeyError, OSError, RuntimeError, TypeError, ValueError):
+        return None
+    applied_at = _optional_string(acknowledgement.get("appliedAt"))
+    if (
+        acknowledgement.get("bundleHash") != bundle_hash
+        or acknowledgement.get("bundleVersion") != bundle_version
+        or acknowledgement.get("deviceId") != device_id
+        or acknowledgement.get("status") != "synced"
+        or applied_at is None
+        or _parse_timestamp(applied_at) is None
+    ):
+        return None
+    return applied_at
 
 
 def _build_runtime_device_context(store: GuardStore) -> dict[str, object]:

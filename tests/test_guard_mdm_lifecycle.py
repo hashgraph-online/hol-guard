@@ -8,7 +8,36 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from codex_plugin_scanner.guard.mdm import lifecycle
-from codex_plugin_scanner.guard.mdm.contracts import MDM_STATUS_SCHEMA_VERSION, MachinePaths
+from codex_plugin_scanner.guard.mdm.contracts import (
+    MDM_POLICY_SCHEMA_VERSION,
+    MDM_STATUS_SCHEMA_VERSION,
+    MachinePaths,
+    ManagedPolicyState,
+)
+from codex_plugin_scanner.guard.mdm.policy import parse_managed_policy
+from codex_plugin_scanner.guard.store import GuardStore
+from tests.policy_bundle_signing_helpers import (
+    policy_bundle_test_keyring,
+    policy_bundle_test_verification_key,
+)
+
+
+def _managed_policy_state(
+    *,
+    keyring: dict[str, object] | None,
+) -> ManagedPolicyState:
+    payload: dict[str, object] = {
+        "schemaVersion": MDM_POLICY_SCHEMA_VERSION,
+        "settings": {"mode": "enforce"},
+        "lockedSettings": ["mode"],
+    }
+    if keyring is not None:
+        payload["policyBundleKeyring"] = keyring
+    return ManagedPolicyState(
+        "active",
+        "managed-policy-fixture",
+        policy=parse_managed_policy(payload),
+    )
 
 
 def test_user_status_does_not_conflate_machine_installation(tmp_path: Path) -> None:
@@ -45,6 +74,192 @@ def test_activation_is_idempotent_and_writes_user_only_marker(tmp_path: Path, mo
     assert marker.stat().st_mode & 0o077 == 0
 
 
+def test_activation_provisions_managed_policy_keyring_before_install(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    keyring = policy_bundle_test_keyring(workspace_id="workspace-managed")
+    policy_state = _managed_policy_state(keyring=keyring)
+    monkeypatch.setattr(lifecycle, "load_managed_policy", lambda: policy_state)
+    observed_keyrings: list[tuple[object, object]] = []
+
+    def fake_install(
+        _command: str,
+        _harness: object,
+        _all_harnesses: object,
+        _context: object,
+        store: GuardStore,
+        *_args: object,
+        **_kwargs: object,
+    ) -> dict[str, object]:
+        observed_keyrings.append(
+            (
+                store.get_sync_payload("policy_bundle_keyring"),
+                store.get_sync_payload("managed_policy_bundle_keyring_mirror"),
+            )
+        )
+        return {"managed_installs": []}
+
+    monkeypatch.setattr(lifecycle, "apply_managed_install", fake_install)
+
+    lifecycle.activate_user(tmp_path, "developer")
+
+    assert observed_keyrings == [
+        (
+            {
+                "contractVersion": "guard-policy-keyring.v1",
+                "purpose": "policy_bundle",
+                "workspaceId": "workspace-managed",
+                "keys": [],
+            },
+            keyring,
+        )
+    ]
+    store = GuardStore(tmp_path / ".hol-guard")
+    marker = store.get_sync_payload("managed_policy_bundle_keyring_provenance")
+    assert isinstance(marker, dict)
+    assert policy_state.policy is not None
+    assert marker["contractVersion"] == "guard-managed-policy-keyring-provenance.v1"
+    assert marker["managedPolicyContentHash"] == policy_state.policy.content_hash
+    assert marker["workspaceId"] == "workspace-managed"
+
+
+def test_repair_is_idempotent_for_unchanged_managed_policy_keyring(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    keyring = policy_bundle_test_keyring(workspace_id="workspace-managed")
+    policy_state = _managed_policy_state(keyring=keyring)
+    monkeypatch.setattr(lifecycle, "load_managed_policy", lambda: policy_state)
+    monkeypatch.setattr(
+        lifecycle,
+        "apply_managed_install",
+        lambda *_args, **_kwargs: {"managed_installs": []},
+    )
+    writes: list[str] = []
+    original_set_sync_payload = GuardStore.set_sync_payload
+
+    def tracked_set_sync_payload(
+        self: GuardStore,
+        state_key: str,
+        payload: dict[str, object] | list[object],
+        now: str,
+    ) -> None:
+        writes.append(state_key)
+        original_set_sync_payload(self, state_key, payload, now)
+
+    monkeypatch.setattr(GuardStore, "set_sync_payload", tracked_set_sync_payload)
+    lifecycle.activate_user(tmp_path, "developer")
+    writes.clear()
+
+    lifecycle.repair_user(tmp_path, "developer")
+
+    assert writes == []
+
+
+def test_repair_replaces_managed_policy_keyring_on_rotation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    initial_keyring = policy_bundle_test_keyring(workspace_id="workspace-managed")
+    rotated_key = policy_bundle_test_verification_key(
+        key_id="guard-policy-bundle-rotated",
+        workspace_id="workspace-managed",
+    )
+    rotated_keyring = policy_bundle_test_keyring(
+        workspace_id="workspace-managed",
+        key=rotated_key,
+    )
+    current_policy = [_managed_policy_state(keyring=initial_keyring)]
+    monkeypatch.setattr(lifecycle, "load_managed_policy", lambda: current_policy[0])
+    monkeypatch.setattr(
+        lifecycle,
+        "apply_managed_install",
+        lambda *_args, **_kwargs: {"managed_installs": []},
+    )
+    lifecycle.activate_user(tmp_path, "developer")
+    current_policy[0] = _managed_policy_state(keyring=rotated_keyring)
+
+    lifecycle.repair_user(tmp_path, "developer")
+
+    store = GuardStore(tmp_path / ".hol-guard")
+    assert store.get_sync_payload("managed_policy_bundle_keyring_mirror") == rotated_keyring
+    local_keyring = store.get_sync_payload("policy_bundle_keyring")
+    assert isinstance(local_keyring, dict)
+    assert local_keyring["keys"] == []
+    marker = store.get_sync_payload("managed_policy_bundle_keyring_provenance")
+    assert isinstance(marker, dict)
+    assert current_policy[0].policy is not None
+    assert marker["managedPolicyContentHash"] == current_policy[0].policy.content_hash
+
+
+def test_repair_removes_managed_mirror_and_legacy_shared_anchor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    managed_keyring = policy_bundle_test_keyring(workspace_id="workspace-managed")
+    current_policy = [_managed_policy_state(keyring=managed_keyring)]
+    monkeypatch.setattr(lifecycle, "load_managed_policy", lambda: current_policy[0])
+    monkeypatch.setattr(
+        lifecycle,
+        "apply_managed_install",
+        lambda *_args, **_kwargs: {"managed_installs": []},
+    )
+    lifecycle.activate_user(tmp_path, "developer")
+    current_policy[0] = _managed_policy_state(keyring=None)
+
+    lifecycle.repair_user(tmp_path, "developer")
+
+    store = GuardStore(tmp_path / ".hol-guard")
+    assert store.get_sync_payload("policy_bundle_keyring") is None
+    assert store.get_sync_payload("managed_policy_bundle_keyring_mirror") is None
+    assert store.get_sync_payload("managed_policy_bundle_keyring_provenance") is None
+
+    current_policy[0] = _managed_policy_state(keyring=managed_keyring)
+    lifecycle.repair_user(tmp_path, "developer")
+    unrelated_key = policy_bundle_test_verification_key(
+        key_id="unrelated-local-anchor",
+        workspace_id="workspace-managed",
+    )
+    unrelated_keyring = policy_bundle_test_keyring(
+        workspace_id="workspace-managed",
+        key=unrelated_key,
+    )
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        unrelated_keyring,
+        "2026-07-18T00:00:00Z",
+    )
+    current_policy[0] = _managed_policy_state(keyring=None)
+
+    lifecycle.repair_user(tmp_path, "developer")
+
+    assert store.get_sync_payload("policy_bundle_keyring") is None
+    assert store.get_sync_payload("managed_policy_bundle_keyring_mirror") is None
+    assert store.get_sync_payload("managed_policy_bundle_keyring_provenance") is None
+
+
+def test_activation_rejects_managed_keyring_for_different_connected_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy_state = _managed_policy_state(keyring=policy_bundle_test_keyring(workspace_id="workspace-managed"))
+    monkeypatch.setattr(lifecycle, "load_managed_policy", lambda: policy_state)
+    guard_home = tmp_path / ".hol-guard"
+    store = GuardStore(guard_home)
+    store.set_sync_payload(
+        "oauth_local_credentials",
+        {"workspace_id": "workspace-other"},
+        "2026-07-18T00:00:00Z",
+    )
+
+    with pytest.raises(ValueError, match="managed_policy_bundle_keyring_workspace_mismatch"):
+        lifecycle.activate_user(tmp_path, "developer")
+
+    assert store.get_sync_payload("policy_bundle_keyring") is None
+    assert store.get_sync_payload("managed_policy_bundle_keyring_provenance") is None
+
+
 def test_partial_activation_rolls_back_new_harnesses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeStore:
         active = False
@@ -54,6 +269,12 @@ def test_partial_activation_rolls_back_new_harnesses(tmp_path: Path, monkeypatch
 
         def list_managed_installs(self) -> list[dict[str, object]]:
             return [{"harness": "codex", "active": True}] if self.active else []
+
+        def get_sync_payload(self, _state_key: str) -> None:
+            return None
+
+        def reconcile_managed_policy_bundle_keyring_state(self, **_kwargs: object) -> bool:
+            return False
 
     commands: list[str] = []
 
@@ -91,6 +312,43 @@ def test_deactivation_restores_integrations_and_removes_marker(tmp_path: Path, m
     assert commands == ["uninstall"]
     assert payload["operation"] == "deactivate"
     assert not (guard_home / "mdm-activation.json").exists()
+
+
+def test_deactivation_removes_matching_managed_policy_keyring_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy_state = _managed_policy_state(keyring=policy_bundle_test_keyring(workspace_id="workspace-managed"))
+    monkeypatch.setattr(lifecycle, "load_managed_policy", lambda: policy_state)
+    monkeypatch.setattr(
+        lifecycle,
+        "apply_managed_install",
+        lambda *_args, **_kwargs: {"managed_installs": []},
+    )
+    lifecycle.activate_user(tmp_path, "developer")
+    store = GuardStore(tmp_path / ".hol-guard")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(
+            workspace_id="workspace-managed",
+            key=policy_bundle_test_verification_key(
+                key_id="substituted-user-key",
+                workspace_id="workspace-managed",
+            ),
+        ),
+        "2026-07-18T00:00:00Z",
+    )
+    # The provenance row is user-writable bookkeeping, not authority. An
+    # authorized managed teardown must still clear the shared anchor slot when
+    # that row was removed or corrupted before deactivation.
+    store.delete_sync_payload("managed_policy_bundle_keyring_provenance")
+    assert store.get_sync_payload("managed_policy_bundle_keyring_provenance") is None
+
+    lifecycle.deactivate_user(tmp_path, authorization_fingerprint="consumed-token")
+
+    assert store.get_sync_payload("policy_bundle_keyring") is None
+    assert store.get_sync_payload("managed_policy_bundle_keyring_mirror") is None
+    assert store.get_sync_payload("managed_policy_bundle_keyring_provenance") is None
 
 
 def test_deactivation_requires_machine_authorization(tmp_path: Path) -> None:
