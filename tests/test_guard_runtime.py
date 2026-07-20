@@ -13200,6 +13200,7 @@ def test_guard_run_interactive_allow_once_redetects_before_resume(tmp_path, monk
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True)
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
     artifact_id = "codex:project:interactive-redetect"
     detections = [
         HarnessDetection(
