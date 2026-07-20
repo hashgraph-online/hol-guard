@@ -27,6 +27,12 @@ def _ctx(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
 
 
+def _mcp_artifact(detection, name: str):
+    return next(
+        artifact for artifact in detection.artifacts if artifact.artifact_type == "mcp_server" and artifact.name == name
+    )
+
+
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
@@ -101,12 +107,12 @@ def test_detects_openclaw_config_channels_mcp_and_skills(tmp_path: Path) -> None
     assert str(config_path) in detection.config_paths
     assert "openclaw:config:global" in artifacts
     assert "openclaw:channel:telegram" in artifacts
-    assert "openclaw:mcp:docs" in artifacts
-    assert "openclaw:mcp:local" in artifacts
+    docs_mcp = _mcp_artifact(detection, "docs")
+    local_mcp = _mcp_artifact(detection, "local")
     assert any(artifact.name == "deploy-helper" for artifact in artifacts.values())
     assert artifacts["openclaw:config:global"].metadata["workspace_path"] == str(workspace_path)
-    assert artifacts["openclaw:mcp:docs"].transport == "http"
-    assert artifacts["openclaw:mcp:local"].to_dict()["metadata"]["env"]["API_TOKEN"] == "*****"
+    assert docs_mcp.transport == "http"
+    assert local_mcp.to_dict()["metadata"]["env"]["API_TOKEN"] == "*****"
 
 
 def test_detects_workspace_skills_without_explicit_openclaw_workspace_config(tmp_path: Path) -> None:
@@ -214,7 +220,7 @@ def test_openclaw_flags_open_dm_policy_and_remote_mcp(tmp_path: Path) -> None:
 
     detection = OpenClawHarnessAdapter().detect(context)
     channel = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:channel:telegram")
-    mcp = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:mcp:remote")
+    mcp = _mcp_artifact(detection, "remote")
 
     channel_signals = artifact_risk_signals(channel)
     mcp_signals = artifact_risk_signals(mcp)
@@ -251,9 +257,117 @@ def test_openclaw_checks_fallback_mcp_maps_after_disabled_servers(tmp_path: Path
     )
 
     detection = OpenClawHarnessAdapter().detect(context)
-    mcp = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:mcp:remote")
+    mcp = _mcp_artifact(detection, "remote")
 
     assert any("remote server" in signal for signal in artifact_risk_signals(mcp))
+
+
+def test_openclaw_inventories_unique_servers_from_every_supported_map(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    _write(
+        context.home_dir / ".openclaw" / "openclaw.json",
+        json.dumps(
+            {
+                "mcp": {
+                    "servers": {"canonical": {"command": "canonical-server"}},
+                    "mcpServers": {"nested_compat": {"command": "nested-server"}},
+                },
+                "mcpServers": {"top_compat": {"url": "https://top.example/mcp"}},
+            }
+        ),
+    )
+
+    detection = OpenClawHarnessAdapter().detect(context)
+    gateway = next(artifact for artifact in detection.artifacts if artifact.artifact_type == "gateway_config")
+
+    assert gateway.metadata["mcp_server_names"] == ["canonical", "nested_compat", "top_compat"]
+    assert gateway.metadata["mcp_server_sources"] == {
+        "canonical": "mcp.servers",
+        "nested_compat": "mcp.mcpServers",
+        "top_compat": "mcpServers",
+    }
+    assert _mcp_artifact(detection, "canonical").metadata["source_scope"] == "mcp.servers"
+    assert _mcp_artifact(detection, "nested_compat").metadata["source_scope"] == "mcp.mcpServers"
+    assert _mcp_artifact(detection, "top_compat").metadata["source_scope"] == "mcpServers"
+
+
+def test_openclaw_duplicate_active_names_use_canonical_precedence_and_retain_conflicts(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    _write(
+        context.home_dir / ".openclaw" / "openclaw.json",
+        json.dumps(
+            {
+                "mcp": {
+                    "servers": {"shared": {"command": "canonical-server", "args": ["--safe"]}},
+                    "mcpServers": {"shared": {"command": "shadow-server", "args": ["--other"]}},
+                },
+                "mcpServers": {"shared": {"enabled": False, "command": "disabled-server"}},
+            }
+        ),
+    )
+
+    detection = OpenClawHarnessAdapter().detect(context)
+    shared = _mcp_artifact(detection, "shared")
+    gateway = next(artifact for artifact in detection.artifacts if artifact.artifact_type == "gateway_config")
+
+    assert shared.command == "canonical-server"
+    assert shared.args == ("--safe",)
+    assert shared.metadata["source_key"] == "mcp.servers.shared"
+    assert shared.metadata["definition_count"] == 3
+    assert shared.metadata["active_definition_count"] == 2
+    assert shared.metadata["conflicting_active_definitions"] is True
+    assert [item["source_scope"] for item in shared.metadata["shadowed_definitions"]] == [
+        "mcp.mcpServers",
+        "mcpServers",
+    ]
+    assert [item["enabled"] for item in shared.metadata["shadowed_definitions"]] == [True, False]
+    assert any(
+        warning["reason"] == "conflicting_mcp_server_definitions"
+        for warning in gateway.metadata["mcp_inventory_warnings"]
+    )
+
+
+def test_openclaw_disabled_higher_precedence_definition_does_not_hide_active_fallback(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    _write(
+        context.home_dir / ".openclaw" / "openclaw.json",
+        json.dumps(
+            {
+                "mcp": {
+                    "servers": {"shared": {"enabled": False, "command": "disabled-canonical"}},
+                    "mcpServers": {"shared": {"command": "active-fallback"}},
+                }
+            }
+        ),
+    )
+
+    shared = _mcp_artifact(OpenClawHarnessAdapter().detect(context), "shared")
+
+    assert shared.command == "active-fallback"
+    assert shared.metadata["source_scope"] == "mcp.mcpServers"
+    assert shared.metadata["definition_count"] == 2
+    assert shared.metadata["active_definition_count"] == 1
+    assert shared.metadata["shadowed_definitions"][0]["enabled"] is False
+
+
+def test_openclaw_identical_duplicate_definitions_are_visible_without_false_conflict(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    definition = {"command": "same-server", "args": ["--stdio"], "env": {"TOKEN": "secret-one"}}
+    _write(
+        context.home_dir / ".openclaw" / "openclaw.json",
+        json.dumps({"mcp": {"servers": {"shared": definition}}, "mcpServers": {"shared": definition}}),
+    )
+
+    detection = OpenClawHarnessAdapter().detect(context)
+    shared = _mcp_artifact(detection, "shared")
+    gateway = next(artifact for artifact in detection.artifacts if artifact.artifact_type == "gateway_config")
+
+    assert shared.metadata["conflicting_active_definitions"] is False
+    assert shared.metadata["shadowed_definitions"][0]["same_config_as_effective"] is True
+    assert any(
+        warning["reason"] == "shadowed_mcp_server_definition" for warning in gateway.metadata["mcp_inventory_warnings"]
+    )
+    assert "secret-one" not in json.dumps(shared.to_dict(), sort_keys=True)
 
 
 def test_openclaw_flags_legacy_dm_policy_fields(tmp_path: Path) -> None:
@@ -320,7 +434,7 @@ def test_openclaw_accepts_json5_unquoted_keys_and_single_quotes(tmp_path: Path) 
 
     detection = OpenClawHarnessAdapter().detect(context)
     channel = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:channel:telegram")
-    mcp = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:mcp:remote")
+    mcp = _mcp_artifact(detection, "remote")
 
     assert any("network traffic" in signal for signal in artifact_risk_signals(channel))
     assert any("remote server" in signal for signal in artifact_risk_signals(mcp))
@@ -353,7 +467,7 @@ def test_openclaw_resolves_config_includes_before_building_artifacts(tmp_path: P
     artifact_ids = {artifact.artifact_id for artifact in detection.artifacts}
 
     assert "openclaw:channel:telegram" in artifact_ids
-    assert "openclaw:mcp:remote" in artifact_ids
+    assert any(artifact_id.startswith("openclaw:mcp:remote:") for artifact_id in artifact_ids)
 
 
 def test_openclaw_extra_skill_dirs_skip_blank_and_anchor_relative_paths(tmp_path: Path) -> None:
