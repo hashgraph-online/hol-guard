@@ -316,13 +316,14 @@ def _canonical_resolution(package: str, version: str, resolved: object) -> bool:
     if not isinstance(resolved, str):
         return False
     parsed = urlsplit(resolved)
+    tarball_name = package.rsplit("/", maxsplit=1)[-1]
     return (
         parsed.scheme == "https"
         and parsed.hostname == "registry.npmjs.org"
         and parsed.port is None
         and parsed.username is None
         and parsed.password is None
-        and parsed.path == f"/{package}/-/{package}-{version}.tgz"
+        and parsed.path == f"/{package}/-/{tarball_name}-{version}.tgz"
         and not parsed.query
         and not parsed.fragment
     )
@@ -371,7 +372,11 @@ def _version_spec_matches(specifier: str | None, version: str | None) -> bool:
     floor = tuple(int(value) for value in spec.groups())
     observed = tuple(int(value) for value in actual.groups())
     if specifier.startswith("^"):
-        return observed >= floor and observed[0] == floor[0] if floor[0] else observed == floor
+        if floor[0] > 0:
+            return observed >= floor and observed[0] == floor[0]
+        if floor[1] > 0:
+            return observed >= floor and observed[:2] == floor[:2]
+        return observed == floor
     if specifier.startswith("~"):
         return observed >= floor and observed[:2] == floor[:2]
     return observed == floor

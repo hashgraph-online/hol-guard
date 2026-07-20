@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.contained_package_script_execution import (
     try_execute_contained_package_script,
 )
 from codex_plugin_scanner.guard.package_shim_gate import package_shim_command_requires_guard
+from codex_plugin_scanner.guard.runtime import local_package_script_evidence as evidence_module
 from codex_plugin_scanner.guard.runtime.command_contained_routine_candidates import (
     contained_routine_candidate_operation,
 )
@@ -290,6 +291,19 @@ def test_ambiguous_lock_sources_fail_closed(tmp_path: Path, name: str) -> None:
     assert evidence is not None
     assert evidence.status == "incomplete"
     assert "lock_source_ambiguous" in evidence.reasons
+
+
+@pytest.mark.parametrize(
+    ("specifier", "version", "expected"),
+    (("^1.2.3", "1.9.0", True), ("^0.12.0", "0.12.3", True), ("^0.0.3", "0.0.4", False)),
+)
+def test_caret_version_matching_follows_semver(specifier: str, version: str, expected: bool) -> None:
+    assert evidence_module._version_spec_matches(specifier, version) is expected  # pyright: ignore[reportPrivateUsage]
+
+
+def test_scoped_registry_tarball_omits_scope_from_filename() -> None:
+    resolved = "https://registry.npmjs.org/@scope/tool/-/tool-1.2.3.tgz"
+    assert evidence_module._canonical_resolution("@scope/tool", "1.2.3", resolved)  # pyright: ignore[reportPrivateUsage]
 
 
 @pytest.mark.parametrize("relative", (".env", "src/linked.ts"))
