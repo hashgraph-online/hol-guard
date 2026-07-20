@@ -78,7 +78,7 @@ class CommandShadowControl:
     ) -> tuple[CommandShadowCohort, ...]:
         if not self.enabled or self.kill_switch or self.sample_basis_points == 0:
             return ()
-        selected = proposal_cohorts & self.release_cohorts - self.disabled_cohorts
+        selected = proposal_cohorts & (self.release_cohorts - self.disabled_cohorts)
         return tuple(
             cohort
             for cohort in sorted(selected, key=lambda item: item.value)

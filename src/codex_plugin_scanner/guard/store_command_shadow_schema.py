@@ -187,9 +187,11 @@ def _validate_schema(connection: sqlite3.Connection) -> None:
         columns = cast(list[sqlite3.Row], connection.execute(f"pragma table_info({table})").fetchall())
         if tuple(str(row["name"]) for row in columns) != names:
             raise RuntimeError("incompatible command shadow schema columns")
-        primary_key = tuple(
-            str(row["name"]) for row in sorted(columns, key=lambda item: int(item["pk"])) if int(row["pk"]) > 0
+        primary_key_columns = sorted(
+            (column for column in columns if int(column["pk"]) > 0),
+            key=lambda column: int(column["pk"]),
         )
+        primary_key = tuple(str(column["name"]) for column in primary_key_columns)
         if primary_key != expected_primary_keys[table]:
             raise RuntimeError("incompatible command shadow primary key")
 
