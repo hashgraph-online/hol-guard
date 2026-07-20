@@ -1,5 +1,4 @@
-# pyright: reportPrivateUsage=false, reportUnknownArgumentType=false
-# pyright: reportUnknownLambdaType=false, reportUnusedCallResult=false
+# pyright: reportPrivateUsage=false, reportUnknownArgumentType=false, reportUnknownLambdaType=false, reportUnusedCallResult=false
 
 from __future__ import annotations
 
@@ -54,19 +53,17 @@ from codex_plugin_scanner.guard.workflow_capabilities import (
 _ISSUED = datetime(2026, 7, 20, 12, tzinfo=timezone.utc)
 _COMMAND = f"{Path(sys.executable).resolve()} issue lock 17 --repo example/repo"
 _GRAPHQL_COMMAND = (
-    f"{Path(sys.executable).resolve()} api graphql -f "
-    "query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}' "
-    "-f threadId=THREAD_1"
+    f"{Path(sys.executable).resolve()} api graphql -f query="
+    "'mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}' -f threadId=THREAD_1"
 )
 
 
 @pytest.fixture(autouse=True)
 def fixed_authority(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        GuardStore,
-        "_policy_integrity_secret_material",
-        lambda _store, *, create: (b"r" * 32, "guard-policy-integrity-key:github-runtime-test"),
-    )
+    def authority(_store: object, **_kwargs: object) -> tuple[bytes, str]:
+        return b"r" * 32, "guard-policy-integrity-key:github-runtime-test"
+
+    monkeypatch.setattr(GuardStore, "_policy_integrity_secret_material", authority)
     monkeypatch.setattr(WORKFLOW_CAPABILITY_STORE_CLOCK, "now", lambda: format_utc_timestamp(_ISSUED))
 
 
@@ -262,11 +259,32 @@ def test_spoofed_ids_and_binding_drift_fail_closed(tmp_path: Path) -> None:
     request = _seed_resolved_request(store, descriptor)
     assert issue_resolved_github_workflow_capability(store, request, resolved_at=format_utc_timestamp(_ISSUED))
     assert claim_resolved_github_workflow_authorization(store, "payload-spoof", descriptor) is None
-    drifted = replace(
-        descriptor,
-        binding_context=replace(descriptor.binding_context, workspace_sha256=_digest("other-workspace")),
+    assert not any(
+        claim_resolved_github_workflow_authorization(
+            store,
+            "request-github-1",
+            replace(
+                descriptor,
+                binding_context=replace(descriptor.binding_context, **{field: _digest(f"other-{field}")}),
+            ),
+        )
+        is not None
+        for field in (
+            "workspace_sha256",
+            "executable_sha256",
+            "cwd_sha256",
+            "environment_sha256",
+            "configuration_sha256",
+            "manifest_sha256",
+            "lockfile_sha256",
+            "sandbox_sha256",
+        )
     )
-    assert claim_resolved_github_workflow_authorization(store, "request-github-1", drifted) is None
+    assert all(
+        claim_resolved_github_workflow_authorization(store, "request-github-1", descriptor) is not None
+        for _ in range(10)
+    )
+    assert claim_resolved_github_workflow_authorization(store, "request-github-1", descriptor) is None
 
 
 def test_claimed_saved_allow_cannot_bypass_failed_workflow_capability(

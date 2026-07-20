@@ -8,7 +8,8 @@ import re
 import sqlite3
 from typing import Final, cast
 
-COMMAND_SHADOW_MIGRATION_VERSION: Final = 15
+COMMAND_SHADOW_LEGACY_MIGRATION_VERSION: Final = 15
+COMMAND_SHADOW_MIGRATION_VERSION: Final = 17
 
 _ACTIONS: Final = "'allow', 'warn', 'review', 'require-reapproval', 'sandbox-required', 'block'"
 _DISPOSITIONS: Final = (
@@ -116,19 +117,87 @@ _SCHEMA_STATEMENTS: Final = (
     end""",
 )
 
+_LEGACY_SCHEMA_STATEMENTS: Final = (
+    f"""create table command_activity_shadow_evaluations (
+      activity_id text primary key references command_activity(activity_id) on delete cascade,
+      occurred_at text not null,
+      authoritative_action text not null check (authoritative_action in ({_ACTIONS})),
+      current_action text not null check (current_action in ({_ACTIONS})),
+      current_disposition text not null check (current_disposition in ({_DISPOSITIONS})),
+      proposed_action text not null check (proposed_action in ({_ACTIONS})),
+      proposed_disposition text not null check (proposed_disposition in ({_DISPOSITIONS})),
+      comparison text not null check (comparison in ('lowered', 'unchanged', 'strengthened')),
+      proposal_version text not null,
+      evaluator_schema_version text not null,
+      control_generation integer not null check (control_generation = 1),
+      sample_basis_points integer not null check (sample_basis_points between 1 and 10000),
+      schema_version text not null
+    ) strict""",
+    f"""create table command_activity_shadow_cohorts (
+      activity_id text not null references command_activity_shadow_evaluations(activity_id) on delete cascade,
+      ordinal integer not null check (ordinal >= 0),
+      cohort text not null check (cohort in ({_COHORTS})),
+      primary key (activity_id, ordinal),
+      unique (activity_id, cohort)
+    ) strict""",
+    """create index idx_command_activity_shadow_comparison
+    on command_activity_shadow_evaluations (comparison, occurred_at desc, activity_id desc)""",
+    """create index idx_command_activity_shadow_cohort
+    on command_activity_shadow_cohorts (cohort, activity_id)""",
+    """create trigger trg_command_activity_shadow_evaluations_immutable
+    before update on command_activity_shadow_evaluations
+    begin select raise(abort, 'command_activity_shadow_evaluations_immutable'); end""",
+    """create trigger trg_command_activity_shadow_cohorts_immutable
+    before update on command_activity_shadow_cohorts
+    begin select raise(abort, 'command_activity_shadow_cohorts_immutable'); end""",
+    """create trigger trg_command_activity_shadow_require_activity
+    before insert on command_activity_shadow_evaluations
+    begin
+      select case when not exists (
+        select 1 from command_activity where activity_id = new.activity_id
+      ) then raise(abort, 'command_activity_shadow_activity_missing') end;
+    end""",
+    """create trigger trg_command_activity_shadow_require_evaluation
+    before insert on command_activity_shadow_cohorts
+    begin
+      select case when not exists (
+        select 1 from command_activity_shadow_evaluations where activity_id = new.activity_id
+      ) then raise(abort, 'command_activity_shadow_evaluation_missing') end;
+    end""",
+    """create trigger trg_command_activity_shadow_delete_cohorts
+    after delete on command_activity_shadow_evaluations
+    begin
+      delete from command_activity_shadow_cohorts where activity_id = old.activity_id;
+    end""",
+    """create trigger trg_command_activity_shadow_delete_evaluation
+    after delete on command_activity
+    begin
+      delete from command_activity_shadow_evaluations where activity_id = old.activity_id;
+    end""",
+)
+
 
 def ensure_command_shadow_schema(connection: sqlite3.Connection, *, applied_at: str) -> None:
-    """Apply migration 15 atomically and validate every owned object."""
+    """Apply the current schema atomically, upgrading the exact legacy v15 shape."""
 
-    connection.execute("savepoint command_shadow_schema_v15")
+    connection.execute("savepoint command_shadow_schema_v17")
     try:
-        for statement in _SCHEMA_STATEMENTS:
-            connection.execute(statement)
+        current = _expected_schema(_SCHEMA_STATEMENTS)
+        legacy = _expected_schema(_LEGACY_SCHEMA_STATEMENTS)
+        actual = _read_schema(connection, frozenset(current) | frozenset(legacy))
+        if actual == legacy:
+            _upgrade_legacy_schema(connection)
+        elif actual and actual != current:
+            raise RuntimeError("incompatible command shadow schema objects")
+        elif not actual:
+            for statement in _SCHEMA_STATEMENTS:
+                connection.execute(statement)
         _validate_schema(connection)
-        connection.execute(
-            "insert or ignore into schema_migrations (version, applied_at) values (?, ?)",
-            (COMMAND_SHADOW_MIGRATION_VERSION, applied_at),
-        )
+        for version in (COMMAND_SHADOW_LEGACY_MIGRATION_VERSION, COMMAND_SHADOW_MIGRATION_VERSION):
+            connection.execute(
+                "insert or ignore into schema_migrations (version, applied_at) values (?, ?)",
+                (version, applied_at),
+            )
         row = connection.execute(
             "select applied_at from schema_migrations where version = ?",
             (COMMAND_SHADOW_MIGRATION_VERSION,),
@@ -136,29 +205,36 @@ def ensure_command_shadow_schema(connection: sqlite3.Connection, *, applied_at: 
         if row is None or not str(row[0]):
             raise RuntimeError("command_shadow_migration_not_recorded")
     except BaseException:
-        connection.execute("rollback to command_shadow_schema_v15")
-        connection.execute("release command_shadow_schema_v15")
+        connection.execute("rollback to command_shadow_schema_v17")
+        connection.execute("release command_shadow_schema_v17")
         raise
-    connection.execute("release command_shadow_schema_v15")
+    connection.execute("release command_shadow_schema_v17")
+
+
+def _upgrade_legacy_schema(connection: sqlite3.Connection) -> None:
+    for object_type, name in _schema_object_identities(_LEGACY_SCHEMA_STATEMENTS):
+        if object_type != "table":
+            connection.execute(f"drop {object_type} {name}")
+    connection.execute("alter table command_activity_shadow_cohorts rename to command_activity_shadow_cohorts_v15")
+    connection.execute(
+        "alter table command_activity_shadow_evaluations rename to command_activity_shadow_evaluations_v15"
+    )
+    for statement in _SCHEMA_STATEMENTS:
+        connection.execute(statement)
+    connection.execute(
+        "insert into command_activity_shadow_evaluations select * from command_activity_shadow_evaluations_v15"
+    )
+    connection.execute(
+        """insert into command_activity_shadow_cohorts
+        select * from command_activity_shadow_cohorts_v15 order by activity_id, ordinal"""
+    )
+    connection.execute("drop table command_activity_shadow_cohorts_v15")
+    connection.execute("drop table command_activity_shadow_evaluations_v15")
 
 
 def _validate_schema(connection: sqlite3.Connection) -> None:
-    expected: dict[str, str] = {}
-    for statement in _SCHEMA_STATEMENTS:
-        canonical = _canonical_sql(statement)
-        match = re.match(r"create (?:table|index|trigger) if not exists ([a-z0-9_]+)", canonical)
-        if match is None:
-            raise RuntimeError("unrecognized command shadow schema statement")
-        expected[match.group(1)] = canonical.replace(" if not exists", "", 1)
-    placeholders = ", ".join("?" for _ in expected)
-    rows = cast(
-        list[sqlite3.Row],
-        connection.execute(
-            f"select name, sql from sqlite_master where name in ({placeholders})",
-            tuple(expected),
-        ).fetchall(),
-    )
-    actual = {str(row["name"]): _canonical_sql(str(row["sql"])) for row in rows}
+    expected = _expected_schema(_SCHEMA_STATEMENTS)
+    actual = _read_schema(connection, frozenset(expected))
     if actual != expected:
         raise RuntimeError("incompatible command shadow schema objects")
     expected_columns = {
@@ -196,11 +272,45 @@ def _validate_schema(connection: sqlite3.Connection) -> None:
             raise RuntimeError("incompatible command shadow primary key")
 
 
+def _expected_schema(statements: tuple[str, ...]) -> dict[str, str]:
+    expected: dict[str, str] = {}
+    for statement in statements:
+        canonical = _canonical_sql(statement)
+        match = re.match(r"create (table|index|trigger)(?: if not exists)? ([a-z0-9_]+)", canonical)
+        if match is None:
+            raise RuntimeError("unrecognized command shadow schema statement")
+        expected[match.group(2)] = canonical.replace(" if not exists", "", 1)
+    return expected
+
+
+def _schema_object_identities(statements: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
+    identities: list[tuple[str, str]] = []
+    for statement in statements:
+        match = re.match(r"create (table|index|trigger)(?: if not exists)? ([a-z0-9_]+)", _canonical_sql(statement))
+        if match is None:
+            raise RuntimeError("unrecognized command shadow schema statement")
+        identities.append((match.group(1), match.group(2)))
+    return tuple(identities)
+
+
+def _read_schema(connection: sqlite3.Connection, names: frozenset[str]) -> dict[str, str]:
+    placeholders = ", ".join("?" for _ in names)
+    rows = cast(
+        list[sqlite3.Row],
+        connection.execute(
+            f"select name, sql from sqlite_master where name in ({placeholders})",
+            tuple(sorted(names)),
+        ).fetchall(),
+    )
+    return {str(row["name"]): _canonical_sql(str(row["sql"])) for row in rows}
+
+
 def _canonical_sql(value: str) -> str:
     return " ".join(value.strip().lower().split())
 
 
 __all__ = (
+    "COMMAND_SHADOW_LEGACY_MIGRATION_VERSION",
     "COMMAND_SHADOW_MIGRATION_VERSION",
     "ensure_command_shadow_schema",
 )
