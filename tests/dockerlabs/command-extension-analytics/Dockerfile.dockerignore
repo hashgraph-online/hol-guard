@@ -1,0 +1,7 @@
+**
+!dist/
+!dist/*.whl
+!tests/
+!tests/dockerlabs/
+!tests/dockerlabs/command-extension-analytics/
+!tests/dockerlabs/command-extension-analytics/installed_server.py

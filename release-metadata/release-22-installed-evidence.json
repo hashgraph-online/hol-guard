@@ -1,0 +1,44 @@
+{
+  "schema_version": "hol-guard.release-slice-manifest.v1",
+  "release_train": "2.2",
+  "slices": [
+    {
+      "id": "CDX-070",
+      "deliverables": [
+        "scripts/installed_canary_proof.py",
+        "scripts/run_installed_canary.py"
+      ],
+      "evidence": [
+        "TestPyPI wheel bytes equal the build artifact",
+        "installed version and source commit equal the pull request subject",
+        "module origin and installed RECORD are immutable and outside the checkout"
+      ]
+    },
+    {
+      "id": "CDX-072",
+      "deliverables": [
+        ".github/workflows/publish.yml"
+      ],
+      "evidence": [
+        "same-repository pull requests run installed canaries on Linux, macOS, and Windows",
+        "the installed harness rejects a run with no proof subject"
+      ]
+    },
+    {
+      "id": "CDX-074",
+      "deliverables": [
+        "tests/test_installed_canary_proof.py",
+        "tests/test_installed_canary_workflow.py"
+      ],
+      "evidence": [
+        "the installed evaluator runs the frozen 51000-case corpus",
+        "the wheel contains a usable dashboard shell and referenced assets",
+        "workflow contracts bind publication, installation, execution, and evidence upload"
+      ]
+    }
+  ],
+  "verification": [
+    "uv run --no-sync pytest tests/test_installed_canary_proof.py tests/test_installed_canary_workflow.py -q",
+    "uv run --no-sync ruff check scripts/installed_canary_proof.py scripts/run_installed_canary.py tests/test_installed_canary_proof.py tests/test_installed_canary_workflow.py"
+  ]
+}
