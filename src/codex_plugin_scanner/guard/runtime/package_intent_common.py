@@ -60,7 +60,7 @@ class PackageIntentTarget:
         payload = self.to_dict()
         if self.source_kind == "git" and self.source_identity is not None:
             for exact_field in ("raw_spec", "raw_spec_hash", "source_url", "source_url_hash"):
-                payload.pop(exact_field, None)
+                _ = payload.pop(exact_field, None)
         return payload
 
 
@@ -293,7 +293,7 @@ def package_runtime_reason(intent: PackageIntent) -> str:
 def _fingerprint_command_shape(intent: PackageIntent) -> str:
     if not any(target.source_kind == "git" for target in intent.targets):
         return intent.redacted_command
-    tokens = list(intent.command_tokens)
+    tokens: list[str] = list(intent.command_tokens)
     for target in intent.targets:
         if target.source_kind != "git":
             continue

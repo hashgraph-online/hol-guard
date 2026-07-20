@@ -73,9 +73,9 @@ def test_git_revision_state_is_classified_conservatively(fragment: str | None, e
             "refs/heads/main",
         ),
         (
-            "https://gitlab.com/Group/Subgroup/Repo/-/archive/release/repo-release.tar.gz",
+            "https://gitlab.com/Group/Subgroup/Repo/-/archive/release/v2.1/repo-release-v2.1.tar.gz",
             "git:gitlab.com/group/subgroup/repo",
-            "release",
+            "release/v2.1",
         ),
         (
             "https://bitbucket.org/Owner/Repo/get/main.zip",
@@ -126,6 +126,7 @@ def test_custom_git_hosts_support_root_level_repositories() -> None:
         ("ssh://deploy@github.com/owner/repo.git#main", "npm_source_ambiguous_userinfo"),
         ("deploy@github.com:owner/repo.git#main", "npm_source_ambiguous_userinfo"),
         ("https://github.com/owner%2Frepo/project.git", "npm_source_path_invalid"),
+        ("https://github.com/owner/repo.git#refs%2Fheads%2Fmain", "npm_source_revision_invalid"),
         ("git+https://github.com:bad/owner/repo.git", "npm_source_malformed_port"),
         ("git+https://github.com:70000/owner/repo.git", "npm_source_malformed_port"),
         ("git+file:///tmp/owner/repo.git", "npm_source_protocol_unsupported"),
@@ -175,6 +176,14 @@ def test_registry_aliases_do_not_become_ambiguous_scp_sources() -> None:
     assert target.requested_specifier == "1.2.8"
     assert target.source_kind is None
     assert target.source_invalid_reason is None
+
+
+def test_deeply_nested_npm_aliases_fail_without_recursion() -> None:
+    parsed = parse_npm_source_spec(f"{'npm:' * 1_000}github:owner/repo")
+
+    assert parsed is not None
+    assert not parsed.valid
+    assert parsed.reason == "npm_source_alias_depth_exceeded"
 
 
 def test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit() -> None:

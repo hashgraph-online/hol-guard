@@ -47,9 +47,15 @@ def parse_npm_source_spec(value: str | None) -> NpmSourceSpec | None:
     if value is None or not (source := value.strip()):
         return None
     lowered = source.lower()
-    if lowered.startswith("npm:"):
-        nested = parse_npm_source_spec(source[4:])
-        return nested
+    alias_depth = 0
+    while lowered.startswith("npm:"):
+        alias_depth += 1
+        if alias_depth > 32:
+            return _invalid(source, "npm_source_alias_depth_exceeded")
+        source = source[4:].strip()
+        if not source:
+            return _invalid(value, "npm_source_alias_invalid")
+        lowered = source.lower()
     if lowered.startswith("file:"):
         parsed_file = urllib.parse.urlsplit(source)
         if parsed_file.netloc or parsed_file.query or parsed_file.fragment:
@@ -96,8 +102,12 @@ def _url_source(source: str) -> NpmSourceSpec:
         return _invalid(source, "npm_source_host_invalid")
     rendered_host = _host_with_port(host, scheme, port)
     git_hosted = host in set(_HOSTED.values())
-    if scheme in _GIT_SCHEMES or git_hosted:
+    if scheme in _GIT_SCHEMES:
         return _git_from_host_path(rendered_host, parsed.path, parsed.fragment)
+    if git_hosted:
+        git_source = _git_from_host_path(rendered_host, parsed.path, parsed.fragment)
+        if git_source.valid or git_source.reason != "npm_source_path_invalid":
+            return git_source
     normalized_path = _canonical_path(parsed.path, minimum_parts=1)
     if normalized_path is None:
         return _invalid(source, "npm_source_path_invalid")
@@ -184,7 +194,10 @@ def _repository_path(host: str, raw_path: str) -> tuple[str | None, str | None]:
     elif host == "gitlab.com" and "-" in parts:
         marker_index = parts.index("-")
         if marker_index + 1 < len(parts) and parts[marker_index + 1].lower() == "archive":
-            revision = parts[marker_index + 2] if marker_index + 2 < len(parts) else None
+            revision_parts = parts[marker_index + 2 :]
+            if revision_parts and _looks_like_archive_filename(revision_parts[-1]):
+                revision_parts = revision_parts[:-1]
+            revision = "/".join(revision_parts) or None
             parts = parts[:marker_index]
     elif host == "bitbucket.org" and len(parts) > 2:
         if parts[2].lower() != "get":
@@ -208,6 +221,11 @@ def _strip_archive_suffix(value: str) -> str:
         if lowered.endswith(suffix):
             return value[: -len(suffix)]
     return value
+
+
+def _looks_like_archive_filename(value: str) -> bool:
+    lowered = value.lower()
+    return lowered.endswith((".tar.gz", ".tgz", ".tar", ".zip"))
 
 
 def _canonical_path(raw_path: str, *, minimum_parts: int) -> str | None:

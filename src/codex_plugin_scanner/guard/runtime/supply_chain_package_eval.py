@@ -1717,6 +1717,18 @@ def _heuristic_result(
                 )
             )
             continue
+        source_invalid_reason = _optional_string(target.get("source_invalid_reason"))
+        if source_invalid_reason is not None:
+            packages.append(
+                _heuristic_package_result(
+                    target=target,
+                    decision="block",
+                    code=source_invalid_reason,
+                    message="Package source syntax is ambiguous or invalid and cannot be authenticated.",
+                    severity="high",
+                )
+            )
+            continue
         if source_url is not None and _target_is_external_https_archive(target):
             try:
                 package_result, external_archive_download = _external_tarball_dependency_result(
@@ -1770,18 +1782,6 @@ def _heuristic_result(
                 if first_reason is not None:
                     package_result = _with_package_reason(package_result, first_reason)
             packages.append(package_result)
-            continue
-        source_invalid_reason = _optional_string(target.get("source_invalid_reason"))
-        if source_invalid_reason is not None:
-            packages.append(
-                _heuristic_package_result(
-                    target=target,
-                    decision="block",
-                    code=source_invalid_reason,
-                    message="Package source syntax is ambiguous or invalid and cannot be authenticated.",
-                    severity="high",
-                )
-            )
             continue
         if target.get("manifest_unsynced") is True:
             packages.append(

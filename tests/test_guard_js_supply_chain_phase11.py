@@ -379,7 +379,7 @@ def test_invalid_npm_source_blocks_before_cloud_and_redacts_credentials(
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
     assert result.decision == "block"
-    assert result.packages[0]["reasons"][0]["code"] == "external_archive_destination_rejected"
+    assert result.packages[0]["reasons"][0]["code"] == "npm_source_ambiguous_userinfo"
     assert "VERY_SECRET" not in json.dumps(artifact.metadata)
     assert "VERY_SECRET" not in json.dumps(result.to_cache_dict())
 
