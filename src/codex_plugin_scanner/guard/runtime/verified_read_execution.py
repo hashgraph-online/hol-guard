@@ -112,8 +112,9 @@ def _current_workspace_context() -> _WorkspaceContext:
             git_identity = _repository_git_identity(candidate)
         except (OSError, UnicodeError, ValueError):
             continue
-        repository = candidate
-        break
+        else:
+            repository = candidate
+            break
     if repository is None or git_identity is None:
         raise ValueError("verified reads require a regular Git checkout")
     repository_stat = repository.stat(follow_symlinks=False)
