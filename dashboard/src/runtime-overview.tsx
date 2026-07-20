@@ -1,8 +1,9 @@
 import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag, ProofStrip } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
-import type { GuardCloudCommandCapability, GuardCloudSyncHealth, GuardInventoryItem, GuardProofStatus, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
+import type { GuardCloudCommandCapability, GuardCloudSyncHealth, GuardInventoryItem, GuardProofStatus, GuardProtectionState, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
 import { protectionHealthFor } from "./protection-health";
 import { guardActionPresentation } from "./guard-action";
+import type { GuardActionPresentation } from "./guard-action";
 
 const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw", "kimi", "grok"] as const;
 
@@ -12,6 +13,27 @@ type RuntimeOverviewProps = {
   snapshot: GuardRuntimeSnapshot;
   inventory?: GuardInventoryItem[];
 };
+
+type RuntimeProofTone = "blue" | "green" | "purple" | "slate" | "attention";
+
+function protectionProofTone(state: GuardProtectionState): RuntimeProofTone {
+  if (state === "protected") return "green";
+  if (state === "partial") return "blue";
+  return "slate";
+}
+
+function protectionTagTone(state: GuardProtectionState): RuntimeProofTone {
+  if (state === "protected") return "green";
+  if (state === "partial") return "blue";
+  return "attention";
+}
+
+function recentDecisionTone(action: GuardActionPresentation | null): RuntimeProofTone {
+  if (action === null) return "slate";
+  if (action.disposition === "allowed") return "green";
+  if (action.disposition === "blocked") return "attention";
+  return "blue";
+}
 
 function headlineTone(state: GuardRuntimeSnapshot["headline_state"]): "info" | "success" | "attention" {
   if (state === "blocked" || state === "degraded") {
@@ -484,18 +506,12 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
 
         <ProofStrip
           items={[
-            { label: "Protection health", value: protectionHealth.label, tone: protectionHealth.state === "protected" ? "green" : protectionHealth.state === "partial" ? "blue" : "slate" },
+            { label: "Protection health", value: protectionHealth.label, tone: protectionProofTone(protectionHealth.state) },
             { label: "Protection level", value: securityLevel ?? "balanced", tone: securityLevel === "strict" ? "purple" : "blue" },
             {
               label: "Recent decision",
               value: latestAction?.label ?? "None",
-              tone: latestAction?.disposition === "allowed"
-                ? "green"
-                : latestAction?.disposition === "blocked"
-                ? "attention"
-                : latestAction
-                ? "blue"
-                : "slate",
+              tone: recentDecisionTone(latestAction),
             },
             { label: "Cloud state", value: snapshot.cloud_state === "local_only" ? "Local only" : "Syncing", tone: snapshot.cloud_state === "local_only" ? "slate" : "green" },
           ]}
@@ -504,7 +520,7 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
         <div className="rounded-xl border border-border bg-white px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Protection health</p>
-            <Tag tone={protectionHealth.state === "protected" ? "green" : protectionHealth.state === "partial" ? "blue" : "attention"}>
+            <Tag tone={protectionTagTone(protectionHealth.state)}>
               {protectionHealth.label}
             </Tag>
           </div>

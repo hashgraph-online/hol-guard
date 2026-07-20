@@ -658,6 +658,23 @@ export function buildDailyStory(
   return null;
 }
 
+function harnessPriorityScore(
+  install: GuardManagedInstall | undefined,
+  observed: boolean,
+  pendingCount: number,
+): number {
+  let score = 0;
+  if (install?.active) {
+    score = 3;
+  } else if (install !== undefined) {
+    score = 2;
+  } else if (observed) {
+    score = 1;
+  }
+  if (pendingCount > 0) score += 4;
+  return score;
+}
+
 export function computeStreak(receipts: GuardReceipt[]): number {
   if (receipts.length === 0) return 0;
   const sortedByTime = [...receipts].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
@@ -711,8 +728,8 @@ function AppsAtAGlance(props: {
       const bInstall = props.managedInstalls.find((i) => i.harness === b);
       const aPending = pendingByHarness.get(a) ?? 0;
       const bPending = pendingByHarness.get(b) ?? 0;
-      const aScore = (aInstall?.active ? 3 : aInstall !== undefined ? 2 : props.observedHarnesses.includes(a) ? 1 : 0) + (aPending > 0 ? 4 : 0);
-      const bScore = (bInstall?.active ? 3 : bInstall !== undefined ? 2 : props.observedHarnesses.includes(b) ? 1 : 0) + (bPending > 0 ? 4 : 0);
+      const aScore = harnessPriorityScore(aInstall, props.observedHarnesses.includes(a), aPending);
+      const bScore = harnessPriorityScore(bInstall, props.observedHarnesses.includes(b), bPending);
       return bScore - aScore;
     });
   }, [props.managedInstalls, props.observedHarnesses, pendingByHarness]);
