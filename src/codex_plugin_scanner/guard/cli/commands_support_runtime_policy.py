@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from .commands_support_prompts import _prompt_request_classes, _prompt_requires_hard_block
 
 
+from ..action_lattice import coerce_guard_action, most_restrictive_guard_action, normalize_guard_action
+from ..models import GuardAction
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
@@ -338,7 +340,7 @@ def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None
         raw_command_text=raw_command_text if isinstance(raw_command_text, str) else None,
         wrapper_chain=normalized_wrapper_chain,
     )
-def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact, harness: str) -> str:
+def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact, harness: str) -> GuardAction:
     if _prompt_requires_hard_block(artifact):
         return "block"
     canonical_harness = _canonical_harness_name(harness)
@@ -352,19 +354,19 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
             or resolve_risk_action(config, risk_class, harness=canonical_harness)
             for risk_class in risk_classes
         ]
-        resolved_actions = [action for action in risk_actions if action in VALID_GUARD_ACTIONS]
+        resolved_actions = [action for action in risk_actions if coerce_guard_action(action) is not None]
         if resolved_actions:
-            return max(resolved_actions, key=guard_action_severity)
+            return most_restrictive_guard_action(*resolved_actions)
     guard_default_action = _runtime_artifact_guard_default_action(artifact)
     risk_actions = [resolve_risk_action(config, risk_class, harness=canonical_harness) for risk_class in risk_classes]
-    resolved_actions = [action for action in risk_actions if action in VALID_GUARD_ACTIONS]
+    resolved_actions = [action for action in risk_actions if coerce_guard_action(action) is not None]
     if resolved_actions:
-        resolved = max(resolved_actions, key=guard_action_severity)
-        if guard_default_action is not None and guard_action_severity(guard_default_action) > guard_action_severity(
-            resolved
-        ):
-            return guard_default_action
-        return resolved
+        resolved = most_restrictive_guard_action(*resolved_actions)
+        return (
+            most_restrictive_guard_action(resolved, guard_default_action)
+            if guard_default_action is not None
+            else resolved
+        )
     if guard_default_action is not None:
         return guard_default_action
     return SAFE_CHANGED_HASH_ACTION
@@ -378,11 +380,9 @@ def _resolve_configured_risk_action(config: GuardConfig, risk_class: str, *, har
         return config.risk_actions[risk_class]
     return None
 
-def _runtime_artifact_guard_default_action(artifact: GuardArtifact) -> str | None:
+def _runtime_artifact_guard_default_action(artifact: GuardArtifact) -> GuardAction | None:
     value = artifact.metadata.get("guard_default_action")
-    if value in VALID_GUARD_ACTIONS:
-        return str(value)
-    return None
+    return normalize_guard_action(value, unknown_action="require-reapproval") if value is not None else None
 
 def _runtime_action_data_flow_signals(
     action_envelope: GuardActionEnvelope | None,

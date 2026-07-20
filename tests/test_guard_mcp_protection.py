@@ -298,6 +298,36 @@ def test_evaluate_tool_call_honors_gentle_mcp_risk_action(tmp_path) -> None:
     assert decision.source == "policy"
 
 
+def test_evaluate_tool_call_unknown_stored_action_requires_review(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="read_metadata",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(store, "resolve_policy", lambda *_args, **_kwargs: "future-action")
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace"),
+        artifact=artifact,
+        artifact_hash="tool-hash",
+        arguments={"key": "public-metadata"},
+    )
+
+    assert decision.action == "require-reapproval"
+    assert decision.source == "policy-invalid"
+    assert "unknown policy action" in decision.summary
+    assert decision.normalization_reason_code == "guard_action_unknown"
+    assert decision.original_action == "future-action"
+
+
 def test_mcp_server_identity_reads_pnpm_package_selector_flag() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",

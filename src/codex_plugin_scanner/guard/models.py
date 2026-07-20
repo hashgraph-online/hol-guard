@@ -6,16 +6,16 @@ from dataclasses import asdict, dataclass, field
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-GuardAction = Literal["allow", "warn", "review", "block", "sandbox-required", "require-reapproval"]
+GuardAction = Literal["allow", "warn", "review", "require-reapproval", "sandbox-required", "block"]
 GuardMode = Literal["observe", "prompt", "enforce"]
 DecisionScope = Literal["global", "harness", "workspace", "artifact", "publisher"]
 GUARD_ACTION_VALUES: tuple[GuardAction, ...] = (
     "allow",
     "warn",
     "review",
-    "block",
-    "sandbox-required",
     "require-reapproval",
+    "sandbox-required",
+    "block",
 )
 DECISION_SCOPE_VALUES: tuple[DecisionScope, ...] = ("global", "harness", "workspace", "artifact", "publisher")
 
