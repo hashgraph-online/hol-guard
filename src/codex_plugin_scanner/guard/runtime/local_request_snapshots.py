@@ -22,6 +22,7 @@ from ..review_contracts import (
 from ..store import GuardStore
 from ..synced_policy import validated_synced_policy_bundle
 from .decisions import AUTHORITATIVE_DECISION_INCONSISTENT
+from .env_wrapper import parse_env_wrapper
 
 LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = 125
 LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = 25
@@ -710,49 +711,14 @@ def _env_split_string_token_indexes(
     start: int,
     end: int,
 ) -> list[int]:
-    split_string_indexes: list[int] = []
-    value_options = frozenset({"-C", "-S", "-u", "--chdir", "--split-string", "--unset"})
-    index = start
-    while index < end:
-        value = tokens[index].value
-        if value == "--":
-            return split_string_indexes
-        clustered_split_string = _env_clustered_split_string_payload(value)
-        if clustered_split_string is not None:
-            if not clustered_split_string and index + 1 < end and _source_search_pattern_spans(tokens[index + 1].value):
-                split_string_indexes.append(index + 1)
-            index += 2 if not clustered_split_string else 1
-            continue
-        if value in value_options:
-            if (
-                value in {"-S", "--split-string"}
-                and index + 1 < end
-                and _source_search_pattern_spans(tokens[index + 1].value)
-            ):
-                split_string_indexes.append(index + 1)
-            index += 2
-            continue
-        if value.startswith("--split-string="):
-            split_string = value.removeprefix("--split-string=")
-            if _source_search_pattern_spans(split_string):
-                split_string_indexes.append(index)
-            index += 1
-            continue
-        if value.startswith(("--chdir=", "--unset=")):
-            index += 1
-            continue
-        if value.startswith("-") or _is_shell_environment_assignment(value):
-            index += 1
-            continue
-        return split_string_indexes
-    return split_string_indexes
-
-
-def _env_clustered_split_string_payload(value: str) -> str | None:
-    if not value.startswith("-") or value.startswith("--") or len(value) <= 2:
-        return None
-    split_index = value.find("S", 1)
-    return None if split_index == -1 else value[split_index + 1 :]
+    parsed = parse_env_wrapper([token.value for token in tokens[start:end]])
+    return list(
+        dict.fromkeys(
+            start + expansion.source_index
+            for expansion in parsed.split_expansions
+            if _source_search_pattern_spans(expansion.payload)
+        )
+    )
 
 
 def _source_search_command_index(
@@ -829,10 +795,6 @@ def _skip_nice_prefix_options(
         value = tokens[index].value
         if value == "--":
             return index + 1
-        clustered_split_string = _env_clustered_split_string_payload(value)
-        if clustered_split_string is not None:
-            index += 2 if not clustered_split_string else 1
-            continue
         if value in value_options:
             index += 2
             continue
@@ -905,23 +867,10 @@ def _skip_env_prefix_options(
     start: int,
     end: int,
 ) -> int:
-    value_options = frozenset({"-C", "-S", "-u", "--chdir", "--split-string", "--unset"})
-    index = start
-    while index < end:
-        value = tokens[index].value
-        if value == "--":
-            return index + 1
-        if value in value_options:
-            index += 2
-            continue
-        if value.startswith(("--chdir=", "--split-string=", "--unset=")):
-            index += 1
-            continue
-        if value.startswith("-") or _is_shell_environment_assignment(value):
-            index += 1
-            continue
-        return index
-    return index
+    parsed = parse_env_wrapper([token.value for token in tokens[start:end]])
+    if not parsed.complete or parsed.command_index is None or parsed.split_expansions:
+        return end
+    return start + parsed.command_index
 
 
 def _skip_sudo_prefix_options(

@@ -7,6 +7,7 @@ import shlex
 from pathlib import Path
 
 from .data_flow import extract_command_segments, extract_command_substitutions, extract_input_redirects
+from .env_wrapper import parse_env_wrapper
 from .kubernetes_command_support import (
     WRITE_ONLY_COMMANDS,
     interpreter_reads_sensitive_env,
@@ -28,7 +29,6 @@ _ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _OUTPUT_REDIRECT_TOKENS = frozenset({">", "1>", "2>", ">>", "1>>", "2>>"})
 _WRAPPER_COMMANDS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
 _WRAPPER_OPTIONS_WITH_VALUES = {
-    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
     "nice": frozenset({"-n", "--adjustment"}),
     "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
     "sudo": frozenset(
@@ -193,8 +193,17 @@ def _unwrap_command_start(tokens: tuple[str, ...]) -> int:
         command_name = Path(token).name.lower()
         if command_name not in _WRAPPER_COMMANDS:
             return index
-        if command_name == "env" and not _env_looks_like_wrapper(tokens[index + 1 :]):
-            return index
+        if command_name == "env":
+            parsed = parse_env_wrapper(tokens[index + 1 :])
+            if parsed.complete and (
+                parsed.command_index is None
+                or (parsed.executable_argv and parsed.executable_argv[0] in {"&&", "||", ";", "|", "|&", "&"})
+            ):
+                return index
+            if not parsed.complete or parsed.split_expansions:
+                return len(tokens)
+            index += parsed.command_index + 1
+            continue
         index += 1
         while index < len(tokens):
             current = tokens[index]
@@ -402,25 +411,6 @@ def _remote_copy_source_reads_secret_volume(tokens: tuple[str, ...]) -> bool:
 
 def _secret_volume_source_arguments(tokens: tuple[str, ...]) -> tuple[str, ...]:
     return matching_source_arguments(tokens, is_secret_volume_path)
-
-
-def _env_looks_like_wrapper(tokens: tuple[str, ...]) -> bool:
-    index = 0
-    saw_wrapper_syntax = False
-    while index < len(tokens):
-        token = tokens[index]
-        if token == "--":
-            return saw_wrapper_syntax and index + 1 < len(tokens)
-        if _ASSIGNMENT_PATTERN.match(token):
-            saw_wrapper_syntax = True
-            index += 1
-            continue
-        if token.startswith("-"):
-            saw_wrapper_syntax = True
-            index += _option_tokens_consumed("env", token)
-            continue
-        return saw_wrapper_syntax
-    return False
 
 
 def _remote_cp_operands(tokens: tuple[str, ...]) -> tuple[str, ...]:

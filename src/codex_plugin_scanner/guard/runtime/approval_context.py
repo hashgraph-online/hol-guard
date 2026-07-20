@@ -25,6 +25,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, TypeGuard, cast
 
+from .env_wrapper import parse_env_wrapper
+
 APPROVAL_CONTEXT_TOKEN_PREFIX = "guard-approval-context:v1:"
 
 ApprovalContextValidationFailure = Literal[
@@ -949,15 +951,10 @@ def _nested_shebang_interpreter_identity(
 
 
 def _env_shebang_command(args: tuple[str, ...]) -> tuple[str, tuple[str, ...]] | None:
-    if not args:
+    parsed = parse_env_wrapper(args)
+    if not parsed.complete or not parsed.executable_argv:
         return None
-    if args[0] in {"-S", "--split-string"}:
-        if len(args) < 2:
-            return None
-        return args[1], args[2:]
-    if args[0].startswith("-") or "=" in args[0]:
-        return None
-    return args[0], args[1:]
+    return parsed.executable_argv[0], parsed.executable_argv[1:]
 
 
 def _identity_shebang_status(identity: Mapping[str, object]) -> Literal["native", "script", "unverified"]:
