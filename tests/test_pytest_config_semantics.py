@@ -179,6 +179,22 @@ def test_selected_test_root_config_precedes_invocation_directory_config(tmp_path
     assert match.pytest_config_sources == ("sub/pytest.ini",)
 
 
+def test_multiple_test_roots_search_from_their_common_ancestor(tmp_path: Path) -> None:
+    _write(tmp_path / "tests" / "pytest.ini", "[pytest]\naddopts = -p evil\n")
+    _write(tmp_path / "tests" / "a" / "pytest.ini", "[pytest]\naddopts = -q\n")
+    (tmp_path / "tests" / "b").mkdir(parents=True)
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest tests/a tests/b -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+    assert match.pytest_config_sources == ("tests/pytest.ini",)
+
+
 def test_non_applicable_pyproject_does_not_hide_later_tox_config(tmp_path: Path) -> None:
     _write(tmp_path / "pyproject.toml", '[build-system]\nrequires = ["fixture"]\n')
     _write(tmp_path / "tox.ini", "[pytest]\naddopts = -p evil\n")

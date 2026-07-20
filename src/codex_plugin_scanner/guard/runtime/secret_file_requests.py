@@ -7992,20 +7992,23 @@ def _pytest_args_from_segment(segment: list[str], command_index: int) -> list[st
 
 def _pytest_config_search_dirs(module_args: list[str], *, cwd: Path) -> tuple[str, ...] | None:
     positional_args = _pytest_positional_args(module_args)
-    config_dirs: list[str] = []
     if not positional_args:
         return ("",)
+    selected_paths: list[str] = []
     for module_arg in positional_args:
         selected_path = _pytest_selected_relative_path(module_arg, cwd=cwd)
         if selected_path is None:
             return None
         if selected_path == "":
             continue
-        selected_root = Path(selected_path)
-        for candidate in _pytest_config_ancestor_dirs(selected_root):
-            if candidate not in config_dirs:
-                config_dirs.append(candidate)
-    return tuple(config_dirs)
+        selected_paths.append(selected_path)
+    if not selected_paths:
+        return ("",)
+    try:
+        selected_root = Path(os.path.commonpath(selected_paths))
+    except ValueError:
+        return None
+    return _pytest_config_ancestor_dirs(selected_root)
 
 
 def _pytest_selected_relative_path(module_arg: str, *, cwd: Path) -> str | None:
