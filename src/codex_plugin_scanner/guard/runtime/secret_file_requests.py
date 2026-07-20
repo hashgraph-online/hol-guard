@@ -6734,7 +6734,21 @@ def _shell_command_targets_pytest(command_text: str, *, depth: int = 0) -> bool:
 
 
 def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
-    return _shell_command_scripts(parts)
+    scripts: list[str] = []
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            continue
+        if command_name not in _SHELL_COMMAND_STRING_INTERPRETERS and not _is_script_interpreter_command(command_name):
+            continue
+        index = command_index + 1
+        while index < len(segment):
+            flag_payload = _interpreter_flag_payload(segment, index)
+            if flag_payload is not None:
+                scripts.append(flag_payload.script_text)
+                break
+            index += 1
+    return tuple(scripts)
 
 
 def _looks_like_benign_interpreter_wait(command_text: str, parts: list[str], command_names: list[str]) -> bool:
