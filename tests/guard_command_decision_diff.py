@@ -85,6 +85,7 @@ _EVIDENCE_SOURCE_PATHS: Final = (
     REPO_ROOT / "tests" / "test_guard_contained_workspace_write_cli.py",
     REPO_ROOT / "tests" / "test_guard_contained_workspace_write_contract.py",
     REPO_ROOT / "tests" / "test_guard_contained_workspace_write_execution.py",
+    REPO_ROOT / "tests" / "test_guard_containment_external_executable.py",
     REPO_ROOT / "tests" / "test_guard_package_shims.py",
     REPO_ROOT / "tests" / "test_guard_verified_reads.py",
 )
