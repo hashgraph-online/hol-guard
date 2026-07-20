@@ -8,6 +8,7 @@ import io
 import json
 import os
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -1518,6 +1519,321 @@ def test_windows_suspended_spawn_failure_terminates_and_reaps_child(
     assert fake_process.stderr.closed is True
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-group regression")
+def test_terminate_process_group_signals_before_reaping(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+
+    class FakeProcess:
+        pid = 6101
+        returncode: int | None = None
+
+        def wait(self, *, timeout: float) -> int:
+            events.append(f"wait:{timeout}")
+            self.returncode = -9
+            return self.returncode
+
+        def kill(self) -> None:
+            raise AssertionError("group escalation should reap the direct child")
+
+    fake_process = FakeProcess()
+    monkeypatch.setattr(
+        update_subprocess_module.os,
+        "killpg",
+        lambda pid, process_signal: events.append(f"killpg:{pid}:{process_signal}"),
+    )
+    monkeypatch.setattr(
+        update_subprocess_module.time,
+        "sleep",
+        lambda duration: events.append(f"sleep:{duration}"),
+    )
+
+    returncode, cleanup_errors = update_subprocess_module._terminate_process_group(
+        cast(subprocess.Popen[bytes], cast(object, fake_process)),
+    )
+
+    assert returncode == -9
+    assert cleanup_errors == ()
+    assert events == [
+        f"killpg:6101:{signal.SIGTERM}",
+        f"sleep:{update_subprocess_module._PROCESS_TERMINATE_GRACE_SECONDS}",
+        f"killpg:6101:{signal.SIGKILL}",
+        f"wait:{update_subprocess_module._PROCESS_TERMINATE_GRACE_SECONDS}",
+    ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX child observation regression")
+def test_unix_exit_observer_uses_waitid_without_polling() -> None:
+    observed: list[tuple[int, int, int]] = []
+
+    class FakeProcess:
+        pid = 6104
+
+        def poll(self) -> int | None:
+            raise AssertionError("waitid observation must not reap through Popen.poll")
+
+    def fake_waitid(id_type: int, pid: int, options: int) -> object:
+        observed.append((id_type, pid, options))
+        return object()
+
+    observer = update_subprocess_module._UnixProcessExitObserver(
+        process=cast(subprocess.Popen[bytes], cast(object, FakeProcess())),
+        waitid=fake_waitid,
+    )
+
+    assert observer.exited() is True
+    assert observer.exited() is True
+    assert observed == [(os.P_PID, 6104, os.WEXITED | os.WNOHANG | os.WNOWAIT)]
+
+
+def test_unix_exit_observer_registers_kqueue_process_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[object] = []
+
+    class FakeProcess:
+        pid = 6105
+
+    class FakeKqueue:
+        def control(
+            self,
+            changelist: list[object] | None,
+            max_events: int,
+            timeout: float | None = None,
+        ) -> list[object]:
+            events.append((changelist, max_events, timeout))
+            return []
+
+        def close(self) -> None:
+            events.append("close")
+
+    fake_event = object()
+    monkeypatch.setattr(update_subprocess_module, "os", SimpleNamespace(name="posix"))
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "select",
+        SimpleNamespace(
+            KQ_FILTER_PROC=-5,
+            KQ_EV_ADD=1,
+            KQ_EV_ENABLE=4,
+            KQ_NOTE_EXIT=0x80000000,
+            kqueue=FakeKqueue,
+            kevent=lambda *_args, **_kwargs: fake_event,
+        ),
+    )
+
+    observer = update_subprocess_module._create_unix_process_exit_observer(
+        cast(subprocess.Popen[bytes], cast(object, FakeProcess()))
+    )
+
+    assert observer.kqueue is not None
+    assert events == [([fake_event], 0, 0.0)]
+    assert observer.close() is None
+    assert events[-1] == "close"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX observer setup regression")
+def test_unix_observer_setup_failure_terminates_and_reaps_child(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+
+    class FakeStream:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FakeProcess:
+        pid = 6106
+        returncode: int | None = None
+
+        def __init__(self) -> None:
+            self.stdin = FakeStream()
+            self.stdout = FakeStream()
+            self.stderr = FakeStream()
+
+        def wait(self, *, timeout: float) -> int:
+            events.append(f"wait:{timeout}")
+            self.returncode = -9
+            return self.returncode
+
+        def kill(self) -> None:
+            raise AssertionError("process-group escalation should terminate the child")
+
+    fake_process = FakeProcess()
+
+    class FailingKqueue:
+        def control(
+            self,
+            changelist: list[object] | None,
+            max_events: int,
+            timeout: float | None = None,
+        ) -> list[object]:
+            _ = changelist, max_events, timeout
+            raise OSError("observer setup failed")
+
+        def close(self) -> None:
+            events.append("kqueue-close")
+
+    monkeypatch.setattr(update_subprocess_module.subprocess, "Popen", lambda *_args, **_kwargs: fake_process)
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "select",
+        SimpleNamespace(
+            KQ_FILTER_PROC=-5,
+            KQ_EV_ADD=1,
+            KQ_EV_ENABLE=4,
+            KQ_NOTE_EXIT=0x80000000,
+            kqueue=FailingKqueue,
+            kevent=lambda *_args, **_kwargs: object(),
+        ),
+    )
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "os",
+        SimpleNamespace(
+            name="posix",
+            killpg=lambda pid, process_signal: events.append(f"killpg:{pid}:{process_signal}"),
+        ),
+    )
+    monkeypatch.setattr(update_subprocess_module.time, "sleep", lambda _duration: None)
+
+    with pytest.raises(OSError, match="observer setup failed"):
+        update_subprocess_module._spawn_bounded_process(
+            [str(tmp_path / "python")],
+            input_enabled=False,
+            cwd=tmp_path,
+            environment={},
+        )
+
+    assert events == [
+        "kqueue-close",
+        f"killpg:6106:{signal.SIGTERM}",
+        f"killpg:6106:{signal.SIGKILL}",
+        f"wait:{update_subprocess_module._PROCESS_TERMINATE_GRACE_SECONDS}",
+    ]
+    assert fake_process.returncode == -9
+    assert fake_process.stdin.closed is True
+    assert fake_process.stdout.closed is True
+    assert fake_process.stderr.closed is True
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX observer setup regression")
+def test_unix_observer_setup_close_failure_is_not_suppressed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeProcess:
+        pid = 6107
+
+    class FailingKqueue:
+        def control(
+            self,
+            changelist: list[object] | None,
+            max_events: int,
+            timeout: float | None = None,
+        ) -> list[object]:
+            _ = changelist, max_events, timeout
+            raise OSError("observer setup failed")
+
+        def close(self) -> None:
+            raise OSError("observer close failed")
+
+    monkeypatch.setattr(update_subprocess_module, "os", SimpleNamespace(name="posix"))
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "select",
+        SimpleNamespace(
+            KQ_FILTER_PROC=-5,
+            KQ_EV_ADD=1,
+            KQ_EV_ENABLE=4,
+            KQ_NOTE_EXIT=0x80000000,
+            kqueue=FailingKqueue,
+            kevent=lambda *_args, **_kwargs: object(),
+        ),
+    )
+
+    with pytest.raises(OSError, match="failed to close Unix process exit observer") as error:
+        update_subprocess_module._create_unix_process_exit_observer(
+            cast(subprocess.Popen[bytes], cast(object, FakeProcess()))
+        )
+
+    assert "observer close failed" in str(error.value)
+    assert isinstance(error.value.__cause__, OSError)
+    assert str(error.value.__cause__) == "observer setup failed"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-group regression")
+def test_terminate_process_group_refuses_numeric_signal_after_direct_reap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeProcess:
+        pid = 6102
+        returncode = 0
+
+        def wait(self, *, timeout: float) -> int:
+            assert timeout > 0
+            return self.returncode
+
+        def kill(self) -> None:
+            raise AssertionError("an already-reaped process must not be killed")
+
+    monkeypatch.setattr(
+        update_subprocess_module.os,
+        "killpg",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("numeric PGID must not be signaled")),
+    )
+
+    returncode, cleanup_errors = update_subprocess_module._terminate_process_group(
+        cast(subprocess.Popen[bytes], cast(object, FakeProcess())),
+    )
+
+    assert returncode == 0
+    assert len(cleanup_errors) == 1
+    assert str(cleanup_errors[0]) == "process tree identity unavailable after direct process reap"
+
+
+def test_windows_job_cleanup_remains_handle_bound_after_direct_reap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+
+    class FakeProcess:
+        pid = 6103
+        returncode = 0
+
+        def wait(self, *, timeout: float) -> int:
+            events.append(f"wait:{timeout}")
+            return self.returncode
+
+        def kill(self) -> None:
+            raise AssertionError("a reaped direct process must not be killed")
+
+    class FakeJob:
+        def terminate(self) -> None:
+            events.append("job-terminate")
+
+        def close(self) -> None:
+            events.append("job-close")
+
+    monkeypatch.setattr(update_subprocess_module, "os", SimpleNamespace(name="nt"))
+
+    returncode, cleanup_errors = update_subprocess_module._terminate_process_group(
+        cast(subprocess.Popen[bytes], cast(object, FakeProcess())),
+        windows_job=cast(update_subprocess_module._WindowsProcessJob, cast(object, FakeJob())),
+    )
+
+    assert returncode == 0
+    assert cleanup_errors == ()
+    assert events == [
+        "job-terminate",
+        f"wait:{update_subprocess_module._PROCESS_TERMINATE_GRACE_SECONDS}",
+        "job-close",
+    ]
+
+
 def test_windows_timeout_surfaces_job_close_failure_after_direct_child_is_reaped(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1728,6 +2044,31 @@ def test_windows_job_output_overflow_terminates_delayed_descendant(
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows Job Object process-tree regression")
 def test_windows_job_reaps_descendant_pipe_after_direct_parent_exit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _build_pip_context(tmp_path, monkeypatch)
+    descendant_marker = tmp_path / "pipe-descendant-escaped"
+    spawned_marker = tmp_path / "pipe-descendant-spawned"
+
+    result = context.run(
+        context.python_command(
+            _windows_descendant_parent_script("parent_exit"),
+            "0.75",
+            str(descendant_marker),
+            str(spawned_marker),
+        ),
+        timeout_seconds=5.0,
+    )
+
+    assert result.returncode == 0
+    assert spawned_marker.read_text(encoding="utf-8") == "spawned"
+    time.sleep(1.0)
+    assert descendant_marker.exists() is False
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-group regression")
+def test_posix_process_group_reaps_descendant_pipe_after_direct_parent_exit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
