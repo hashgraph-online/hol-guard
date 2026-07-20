@@ -119,6 +119,7 @@ jobs:
           tests/test_guard_aibom_detection.py
           tests/test_guard_aibom_content_upload_batches.py
           tests/test_guard_aibom_skill_directory_identity.py
+          tests/test_codex_hook_fallback_isolation.py
           --tb=short
 
   windows-updater:

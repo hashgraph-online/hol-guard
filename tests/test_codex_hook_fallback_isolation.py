@@ -263,7 +263,6 @@ def test_isolated_process_preserves_exact_input_and_bounds_combined_output(tmp_p
     assert len(overflow_result.stdout.encode("utf-8")) <= 1024
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX process-group lifetime assertion")
 def test_isolated_process_timeout_kills_descendants(tmp_path: Path) -> None:
     cwd = tmp_path / "neutral"
     cwd.mkdir(mode=0o700)
@@ -284,7 +283,6 @@ def test_isolated_process_timeout_kills_descendants(tmp_path: Path) -> None:
     assert not marker.exists()
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX descendant-held pipe assertion")
 def test_isolated_process_closes_descendant_held_pipes_after_parent_exit(tmp_path: Path) -> None:
     cwd = tmp_path / "neutral"
     cwd.mkdir(mode=0o700)

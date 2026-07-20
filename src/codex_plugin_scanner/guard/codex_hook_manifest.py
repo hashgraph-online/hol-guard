@@ -65,11 +65,13 @@ def build_authenticated_hook_manifest(spec: CodexHookManifestSpec) -> dict[str, 
     bridge_runtime = packaged_by_role.get("bridge_runtime")
     launch_runtime = packaged_by_role.get("launch_runtime")
     runtime_trust = packaged_by_role.get("runtime_trust")
+    windows_job = packaged_by_role.get("windows_job")
     if (
         not isinstance(bridge, dict)
         or not isinstance(bridge_runtime, dict)
         or not isinstance(launch_runtime, dict)
         or not isinstance(runtime_trust, dict)
+        or not isinstance(windows_job, dict)
         or len(packaged_by_role) != len(spec.packaged_file_paths)
     ):
         raise CodexHookIntegrityError(
@@ -103,6 +105,7 @@ def build_authenticated_hook_manifest(spec: CodexHookManifestSpec) -> dict[str, 
             "bridge_runtime": bridge_runtime,
             "launch_runtime": launch_runtime,
             "runtime_trust": runtime_trust,
+            "windows_job": windows_job,
             "wrapper": None,
         },
     }
@@ -375,6 +378,7 @@ def _verify_launch_identities(
         or transport.get("bridge_runtime") != packaged_by_role.get("bridge_runtime")
         or transport.get("launch_runtime") != packaged_by_role.get("launch_runtime")
         or transport.get("runtime_trust") != packaged_by_role.get("runtime_trust")
+        or transport.get("windows_job") != packaged_by_role.get("windows_job")
     ):
         _raise_manifest_failure(
             "codex_hook_manifest_transport_invalid",

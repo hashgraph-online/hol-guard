@@ -34,6 +34,7 @@ _REQUIRED_PACKAGE_ROLES = frozenset(
         "fallback_entrypoint",
         "launch_runtime",
         "runtime_trust",
+        "windows_job",
     }
 )
 
@@ -162,6 +163,7 @@ def _verify_transport(
     bridge_runtime_path = Path(__file__).with_name("codex_hook_bridge_runtime.py").resolve()
     launch_runtime_path = Path(__file__).with_name("codex_hook_launch_runtime.py").resolve()
     runtime_trust_path = Path(__file__).resolve()
+    windows_job_path = Path(__file__).with_name("codex_hook_windows_job.py").resolve()
     if packaged_by_role["bridge"].get("path") != str(bridge_path):
         raise ValueError("managed Codex hook bridge path is invalid")
     if packaged_by_role["bridge_runtime"].get("path") != str(bridge_runtime_path):
@@ -170,12 +172,15 @@ def _verify_transport(
         raise ValueError("managed Codex hook launch runtime path is invalid")
     if packaged_by_role["runtime_trust"].get("path") != str(runtime_trust_path):
         raise ValueError("managed Codex hook runtime trust path is invalid")
+    if packaged_by_role["windows_job"].get("path") != str(windows_job_path):
+        raise ValueError("managed Codex hook Windows job path is invalid")
     transport = _mapping(manifest.get("transport"), label="transport")
     if (
         transport.get("bridge") != packaged_by_role["bridge"]
         or transport.get("bridge_runtime") != packaged_by_role["bridge_runtime"]
         or transport.get("launch_runtime") != packaged_by_role["launch_runtime"]
         or transport.get("runtime_trust") != packaged_by_role["runtime_trust"]
+        or transport.get("windows_job") != packaged_by_role["windows_job"]
         or transport.get("wrapper") is not None
     ):
         raise ValueError("managed Codex hook transport identity is invalid")

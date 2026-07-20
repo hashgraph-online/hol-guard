@@ -442,6 +442,7 @@ def _hook_packaged_file_paths() -> tuple[tuple[str, Path], ...]:
         ("daemon_manager", daemon_root / "manager.py"),
         ("launch_runtime", guard_root / "codex_hook_launch_runtime.py"),
         ("runtime_trust", guard_root / "codex_hook_runtime_trust.py"),
+        ("windows_job", guard_root / "codex_hook_windows_job.py"),
     )
 
 

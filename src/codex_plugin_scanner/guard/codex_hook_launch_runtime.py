@@ -13,6 +13,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
+from .codex_hook_windows_job import (
+    WindowsHookJob,
+    close_windows_hook_job,
+    spawn_windows_hook_process,
+)
+
 _HOOK_SUBPROCESS_OUTPUT_LIMIT = 1_000_000
 _HOOK_ENVIRONMENT_KEYS = frozenset(
     {
@@ -120,16 +126,13 @@ def run_isolated_hook_process(
 ) -> BoundedHookProcessResult:
     """Run one child with bounded input lifetime and combined output bytes."""
 
+    windows_job: WindowsHookJob | None = None
     try:
         if os.name == "nt":
-            process = subprocess.Popen(
+            process, windows_job = spawn_windows_hook_process(
                 list(command),
                 cwd=cwd,
-                env=dict(environment),
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+                environment=dict(environment),
             )
         else:
             process = subprocess.Popen(
@@ -185,52 +188,61 @@ def run_isolated_hook_process(
     timed_out = False
     while process.poll() is None:
         if output_limit_exceeded.is_set():
-            _kill_hook_process(process)
+            _kill_hook_process(process, windows_job)
             break
         if time.monotonic() >= deadline:
             timed_out = True
-            _kill_hook_process(process)
+            _kill_hook_process(process, windows_job)
             break
         time.sleep(0.01)
     try:
         returncode = process.wait(timeout=1)
     except subprocess.TimeoutExpired:
-        _kill_hook_process(process)
+        _kill_hook_process(process, windows_job)
         returncode = process.wait()
+    job_cleanup_failed = False
+    if windows_job is not None:
+        try:
+            close_windows_hook_job(windows_job)
+        except OSError:
+            job_cleanup_failed = True
+            _kill_hook_process(process, windows_job)
     writer.join(timeout=1)
     for thread in readers:
         thread.join(timeout=0.05)
     if any(thread.is_alive() for thread in readers):
-        _kill_hook_process_group(process)
+        _kill_hook_process(process, windows_job)
         for thread in readers:
             thread.join(timeout=1)
     with output_lock:
         stdout_decoded = stdout_bytes.decode("utf-8", errors="replace")
     return BoundedHookProcessResult(
-        returncode=returncode,
+        returncode=None if job_cleanup_failed else returncode,
         stdout=stdout_decoded,
         output_limit_exceeded=output_limit_exceeded.is_set(),
         timed_out=timed_out,
     )
 
 
-def _kill_hook_process(process: subprocess.Popen[bytes]) -> None:
+def _kill_hook_process(process: subprocess.Popen[bytes], windows_job: WindowsHookJob | None) -> None:
+    if windows_job is not None:
+        try:
+            windows_job.terminate()
+            return
+        except OSError:
+            pass
+    if os.name != "nt":
+        _kill_hook_process_group(process)
+        return
     if process.poll() is not None:
         return
     try:
-        if os.name != "nt":
-            _kill_hook_process_group(process)
-        else:
-            process.kill()
+        process.kill()
     except (OSError, ProcessLookupError):
         process.kill()
 
 
 def _kill_hook_process_group(process: subprocess.Popen[bytes]) -> None:
-    if os.name == "nt":
-        if process.poll() is None:
-            process.kill()
-        return
     try:
         os.killpg(process.pid, signal.SIGKILL)
     except (OSError, ProcessLookupError):
