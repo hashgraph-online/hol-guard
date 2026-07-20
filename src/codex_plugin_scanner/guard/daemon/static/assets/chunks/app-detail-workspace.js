@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, al as fetchApprovalPage, am as fetchPolicy, p as protectionHealthFor, an as HiMiniArrowLeft, c as HiMiniChevronRight, e as harnessDisplayName, n as GuardHero, P as ProofStrip, ao as HiMiniHome, J as HiMiniBolt, Z as HiMiniAdjustmentsHorizontal, A as ActionButton, S as SectionLabel, s as formatRelativeTime, I as HiMiniExclamationTriangle, ai as Tag, ap as DEFAULT_FILTER_STATE, aq as filterEvidence, ar as sortEvidence, as as computeMetrics, at as CommandActivityWorkspace, K as Badge, k as EmptyState, au as EvidenceFilterBar, av as EvidenceInsightStrip, aw as EvidenceActionList, ax as EvidenceActionDetail, C as useFocusTrap, ay as policyIdentityKey, z as HiMiniCloud, az as HiMiniChartBar, m as HiMiniCheckCircle, O as HiMiniXCircle, aA as runHarnessAction, aB as GuardHarnessActionError, aC as HiMiniRocketLaunch, q as HiMiniShieldCheck, aD as HiMiniArrowPath, aE as HiMiniTrash, aF as clearLabelForScope, aG as formatHarnessCommand } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, an as fetchApprovalPage, ao as fetchPolicy, s as guardActionDisposition, p as protectionHealthFor, ap as HiMiniArrowLeft, c as HiMiniChevronRight, e as harnessDisplayName, n as GuardHero, P as ProofStrip, aq as HiMiniHome, L as HiMiniBolt, $ as HiMiniAdjustmentsHorizontal, A as ActionButton, S as SectionLabel, t as formatRelativeTime, K as HiMiniExclamationTriangle, ar as guardActionPresentation, M as Badge, as as DEFAULT_FILTER_STATE, at as filterEvidence, au as sortEvidence, av as computeMetrics, aw as CommandActivityWorkspace, k as EmptyState, ax as EvidenceFilterBar, ay as EvidenceInsightStrip, az as EvidenceActionList, aA as EvidenceActionDetail, I as useFocusTrap, aB as policyIdentityKey, C as HiMiniCloud, aC as HiMiniChartBar, ak as Tag, m as HiMiniCheckCircle, R as HiMiniXCircle, aD as runHarnessAction, aE as GuardHarnessActionError, aF as HiMiniRocketLaunch, q as HiMiniShieldCheck, aG as HiMiniArrowPath, aH as HiMiniTrash, aI as clearLabelForScope, aJ as formatHarnessCommand } from "../guard-dashboard.js";
 function ActivityModeButton(props) {
   const active = props.mode === props.value;
   const handleClick = reactExports.useCallback(() => props.onChange(props.value), [props.onChange, props.value]);
@@ -199,8 +199,9 @@ function AppDetailWorkspace(props) {
     [harnessQueue, props.requests, harness]
   );
   const totalActions = harnessReceipts.length;
-  const blockedCount = harnessReceipts.filter((r) => r.policy_decision === "block").length;
-  const allowedCount = harnessReceipts.filter((r) => r.policy_decision === "allow").length;
+  const blockedCount = harnessReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
+  const allowedCount = harnessReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+  const reviewedCount = harnessReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
   const blockRate = totalActions > 0 ? Math.round(blockedCount / totalActions * 100) : 0;
   const lastActivity = harnessReceipts[0]?.timestamp ?? null;
   const isLoading = harnessQueue.kind === "loading" || harnessPolicy.kind === "loading";
@@ -331,6 +332,7 @@ function AppDetailWorkspace(props) {
                 totalActions,
                 allowedCount,
                 blockedCount,
+                reviewedCount,
                 blockRate,
                 lastActivity,
                 harnessReceipts,
@@ -424,9 +426,10 @@ function AppOverviewTab(props) {
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(AppStatusBadge, { status: props.status })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Total actions", value: props.totalActions }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Allowed", value: props.allowedCount, tone: "green" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Review", value: props.reviewedCount, tone: props.reviewedCount > 0 ? "blue" : "slate" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Blocked", value: props.blockedCount, tone: props.blockedCount > 0 ? "attention" : "slate" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Block rate", value: `${props.blockRate}%`, tone: props.blockRate > 10 ? "attention" : "slate" })
         ] }),
@@ -478,24 +481,27 @@ function AppOverviewTab(props) {
       props.harnessReceipts.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent events" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "What Guard decided recently." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: props.harnessReceipts.slice(0, 5).map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "div",
-          {
-            className: "flex items-start justify-between gap-3 rounded-xl border border-slate-200/70 bg-white px-4 py-3",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: receipt.policy_decision === "allow" ? "Allowed" : "Blocked" }),
-                  " ",
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-xs", children: receipt.artifact_name ?? receipt.artifact_id })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: props.harnessReceipts.slice(0, 5).map((receipt) => {
+          const presentation = guardActionPresentation(receipt.policy_decision);
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "div",
+            {
+              className: "flex items-start justify-between gap-3 rounded-xl border border-slate-200/70 bg-white px-4 py-3",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: presentation.label }),
+                    " ",
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-xs", children: receipt.artifact_name ?? receipt.artifact_id })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: formatRelativeTime(receipt.timestamp) })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: formatRelativeTime(receipt.timestamp) })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: receipt.policy_decision === "allow" ? "green" : "attention", children: receipt.policy_decision })
-            ]
-          },
-          receipt.receipt_id
-        )) })
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: presentation.tone, children: presentation.label })
+              ]
+            },
+            receipt.receipt_id
+          );
+        }) })
       ] }) : showFirstRunGuide ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What happens next" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: firstRunSteps(props.harness).map((step) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3 rounded-xl border border-white/70 bg-white/80 p-3", children: [
@@ -1298,20 +1304,21 @@ function ActivitySparkline({ receipts }) {
       });
       result.push({
         date: d.toLocaleDateString("en-US", { weekday: "short" }),
-        allowed: dayReceipts.filter((r) => r.policy_decision === "allow").length,
-        blocked: dayReceipts.filter((r) => r.policy_decision === "block").length
+        allowed: dayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length,
+        reviewed: dayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length,
+        blocked: dayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length
       });
     }
     return result;
   }, [receipts]);
-  const maxVal = Math.max(...data.map((d) => d.allowed + d.blocked), 1);
+  const maxVal = Math.max(...data.map((d) => d.allowed + d.reviewed + d.blocked), 1);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last 7 days" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChartBar, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 flex items-end gap-2", children: data.map((day) => {
-      const total = day.allowed + day.blocked;
+      const total = day.allowed + day.reviewed + day.blocked;
       const height = total > 0 ? Math.max(20, total / maxVal * 100) : 4;
       return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-1 flex-col items-center gap-1", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex w-full gap-0.5", style: { height: `${height}px` }, children: [
@@ -1321,6 +1328,14 @@ function ActivitySparkline({ receipts }) {
               className: "flex-1 rounded-t bg-brand-green/60",
               style: { height: `${day.allowed > 0 ? day.allowed / total * 100 : 0}%` },
               title: `${day.allowed} allowed`
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "div",
+            {
+              className: "flex-1 rounded-t bg-brand-blue/50",
+              style: { height: `${day.reviewed > 0 ? day.reviewed / total * 100 : 0}%` },
+              title: `${day.reviewed} awaiting review`
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -1337,6 +1352,10 @@ function ActivitySparkline({ receipts }) {
     }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex items-center gap-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1.5 text-[10px] text-muted-foreground", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2 w-2 rounded-sm bg-brand-blue/50" }),
+        "Review"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1.5 text-[10px] text-muted-foreground", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2 w-2 rounded-sm bg-brand-green/60" }),
         "Allowed"
       ] }),
@@ -1349,9 +1368,10 @@ function ActivitySparkline({ receipts }) {
 }
 function RiskSnapshot({ receipts }) {
   const analysis = reactExports.useMemo(() => {
-    const blockedCount = receipts.filter((r) => r.policy_decision === "block").length;
-    const allowedCount = receipts.filter((r) => r.policy_decision === "allow").length;
-    return { blocked: blockedCount, allowed: allowedCount, total: receipts.length };
+    const blockedCount = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
+    const allowedCount = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+    const reviewedCount = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
+    return { blocked: blockedCount, allowed: allowedCount, reviewed: reviewedCount, total: receipts.length };
   }, [receipts]);
   if (analysis.total === 0) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4", children: [
@@ -1361,6 +1381,11 @@ function RiskSnapshot({ receipts }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: analysis.allowed }),
         " ",
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-muted-foreground", children: "allowed" })
+      ] }),
+      analysis.reviewed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-blue", children: analysis.reviewed }),
+        " ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-muted-foreground", children: "awaiting review" })
       ] }),
       analysis.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-attention", children: analysis.blocked }),

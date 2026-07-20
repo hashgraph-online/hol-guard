@@ -53,6 +53,7 @@ from ..approval_gate import (
 from ..approval_gate import (
     validate_settings_update as validate_approval_gate_settings,
 )
+from ..approval_resolution import approval_resolution_block_reason
 from ..approval_scope_support import (
     APPROVAL_SCOPE_CONTRACT_VERSION,
     APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX,
@@ -2686,8 +2687,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         contract = request_scope_contract(request_row)
         request_recommended_scope = self._optional_string(envelope.get("scope"))
+        resolution_block_reason = approval_resolution_block_reason(request_row)
         if (
-            request_policy_action not in {"block", "pause", "review", "require-reapproval"}
+            resolution_block_reason is not None
+            or request_policy_action not in {"review", "require-reapproval"}
             or request_recommended_scope not in DECISION_SCOPE_VALUES
         ):
             self._write_json({"error": "remote_once_not_permitted"}, status=409)

@@ -8,12 +8,15 @@ import json
 import re
 import sqlite3
 
+from .approval_resolution import approval_resolution_block_reason
 from .approval_scope_support import request_scope_contract_payload, supported_request_scopes
+from .decision_boundaries import canonical_approval_surfaces
 from .models import GuardApprovalRequest
 from .runtime.action_identity import normalize_command_identity
 
 MAX_APPROVAL_PAGE_LIMIT = 200
 APPROVAL_QUEUE_BACKFILL_BATCH_SIZE = 500
+_APPROVAL_RESOLUTION_BATCH_SIZE = 500
 _QUEUE_IDENTITY_VERSION = "v1"
 _VOLATILE_PAYLOAD_KEY_TOKENS = frozenset(
     {
@@ -204,6 +207,12 @@ def add_approval_request(
     *,
     oauth_source: str = "default",
 ) -> str:
+    canonical_decision = canonical_approval_surfaces(
+        request.policy_action,
+        request.decision_v2_json,
+        request.action_envelope_json,
+        reject_contradiction=True,
+    )
     _begin_immediate(connection)
     normalized_oauth_source = oauth_source.strip().lower() or "default"
     identity_key = _normalized_identity_key(request.launch_target)
@@ -291,7 +300,7 @@ def add_approval_request(
                 request.artifact_type,
                 request.artifact_hash,
                 request.publisher,
-                request.policy_action,
+                canonical_decision.policy_action,
                 request.recommended_scope,
                 json.dumps(list(request.changed_fields)),
                 request.source_scope,
@@ -311,8 +320,12 @@ def add_approval_request(
                 request.why_now,
                 request.launch_summary,
                 request.risk_headline,
-                json.dumps(request.action_envelope_json) if request.action_envelope_json is not None else None,
-                json.dumps(request.decision_v2_json) if request.decision_v2_json is not None else None,
+                (
+                    json.dumps(canonical_decision.action_envelope_json)
+                    if canonical_decision.action_envelope_json is not None
+                    else None
+                ),
+                json.dumps(canonical_decision.decision_v2_json),
                 (
                     _rewrite_review_command(request.fallback_cli_command, request_id)
                     if request.fallback_cli_command
@@ -353,7 +366,7 @@ def add_approval_request(
             request.artifact_type,
             request.artifact_hash,
             request.publisher,
-            request.policy_action,
+            canonical_decision.policy_action,
             request.recommended_scope,
             json.dumps(list(request.changed_fields)),
             request.source_scope,
@@ -375,8 +388,12 @@ def add_approval_request(
             request.why_now,
             request.launch_summary,
             request.risk_headline,
-            json.dumps(request.action_envelope_json) if request.action_envelope_json is not None else None,
-            json.dumps(request.decision_v2_json) if request.decision_v2_json is not None else None,
+            (
+                json.dumps(canonical_decision.action_envelope_json)
+                if canonical_decision.action_envelope_json is not None
+                else None
+            ),
+            json.dumps(canonical_decision.decision_v2_json),
             request.fallback_cli_command,
             json.dumps(list(request.scanner_evidence), sort_keys=True),
             request.review_command,
@@ -582,6 +599,14 @@ def count_approval_requests(
 
 
 def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
+    parsed_decision_v2 = _optional_json_object(row["decision_v2_json"])
+    parsed_action_envelope = _optional_json_object(row["action_envelope_json"])
+    canonical_decision = canonical_approval_surfaces(
+        row["policy_action"],
+        parsed_decision_v2 if parsed_decision_v2 is not None else row["decision_v2_json"],
+        parsed_action_envelope if parsed_action_envelope is not None else row["action_envelope_json"],
+        reject_contradiction=False,
+    )
     payload: dict[str, object] = {
         "request_id": str(row["request_id"]),
         "harness": str(row["harness"]),
@@ -590,7 +615,7 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "artifact_type": str(row["artifact_type"]),
         "artifact_hash": str(row["artifact_hash"]),
         "publisher": row["publisher"],
-        "policy_action": str(row["policy_action"]),
+        "policy_action": canonical_decision.policy_action,
         "recommended_scope": str(row["recommended_scope"]),
         "changed_fields": _safe_json_list(row["changed_fields_json"]),
         "source_scope": str(row["source_scope"]),
@@ -614,8 +639,8 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "why_now": row["why_now"],
         "launch_summary": row["launch_summary"],
         "risk_headline": row["risk_headline"],
-        "action_envelope_json": _optional_json_object(row["action_envelope_json"]),
-        "decision_v2_json": _optional_json_object(row["decision_v2_json"]),
+        "action_envelope_json": canonical_decision.action_envelope_json,
+        "decision_v2_json": canonical_decision.decision_v2_json,
         "fallback_cli_command": row["fallback_cli_command"],
         "raw_command_text": row["raw_command_text"],
         "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
@@ -629,6 +654,8 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "resolved_at": row["resolved_at"],
     }
     payload.update(request_scope_contract_payload(payload))
+    if canonical_decision.contract_error is not None:
+        payload["decision_contract_error"] = canonical_decision.contract_error
     payload["allowed_scopes"] = list(supported_request_scopes(payload))
     recommendations = payload["recommended_scope_by_action"]
     if isinstance(recommendations, dict):
@@ -755,13 +782,21 @@ def _approval_summary_where_clause(
 
 
 def _row_to_approval_summary(row: sqlite3.Row) -> dict[str, object]:
-    return {
+    parsed_decision_v2 = _optional_json_object(row["decision_v2_json"])
+    parsed_action_envelope = _optional_json_object(row["action_envelope_json"])
+    canonical_decision = canonical_approval_surfaces(
+        row["policy_action"],
+        parsed_decision_v2 if parsed_decision_v2 is not None else row["decision_v2_json"],
+        parsed_action_envelope if parsed_action_envelope is not None else row["action_envelope_json"],
+        reject_contradiction=False,
+    )
+    payload: dict[str, object] = {
         "request_id": str(row["request_id"]),
         "harness": str(row["harness"]),
         "artifact_id": str(row["artifact_id"]),
         "artifact_name": str(row["artifact_name"]),
         "artifact_type": str(row["artifact_type"]),
-        "policy_action": str(row["policy_action"]),
+        "policy_action": canonical_decision.policy_action,
         "changed_fields": _safe_json_list(row["changed_fields_json"]),
         "source_scope": str(row["source_scope"]),
         "config_path": str(row["config_path"]),
@@ -779,6 +814,9 @@ def _row_to_approval_summary(row: sqlite3.Row) -> dict[str, object]:
         "last_seen_at": row["last_seen_at"],
         "display_status": str(row["status"]),
     }
+    if canonical_decision.contract_error is not None:
+        payload["decision_contract_error"] = canonical_decision.contract_error
+    return payload
 
 
 def list_approval_request_summary_rows(
@@ -798,6 +836,7 @@ def list_approval_request_summary_rows(
     )
     query = f"""
         select request_id, harness, artifact_id, artifact_name, artifact_type, policy_action,
+               decision_v2_json, action_envelope_json,
                changed_fields_json, source_scope, config_path, workspace, launch_target,
                risk_summary, risk_headline, action_identity, queue_group_id, dedupe_count,
                raw_command_text, fallback_cli_command, review_command, created_at, last_seen_at, status
@@ -944,6 +983,9 @@ def resolve_request_with_queue_result(
         return _unresolved_queue_result(connection, error="not_found")
     if request["status"] != "pending":
         return _unresolved_queue_result(connection, error="already_resolved", item=request)
+    resolution_block_reason = approval_resolution_block_reason(request)
+    if resolution_block_reason is not None:
+        return _unresolved_queue_result(connection, error=resolution_block_reason, item=request)
     did_resolve = resolve_one_request_only(
         connection,
         request_id,
@@ -1048,7 +1090,7 @@ def resolve_matching_duplicate_requests(
     _begin_immediate(connection)
     rows = connection.execute(
         """
-        select request_id
+        select request_id, policy_action, decision_v2_json, action_envelope_json
         from approval_requests
         where queue_group_id = ?
           and oauth_source is ?
@@ -1058,22 +1100,72 @@ def resolve_matching_duplicate_requests(
         """,
         (queue_group_id, oauth_source, request_id),
     ).fetchall()
-    connection.execute(
-        """
-        update approval_requests
-        set status = 'resolved',
-            resolution_action = ?,
-            resolution_scope = ?,
-            reason = ?,
-            resolved_at = ?
-        where queue_group_id = ?
-          and oauth_source is ?
-          and request_id != ?
-          and status = 'pending'
-        """,
-        (resolution_action, resolution_scope, reason, resolved_at, queue_group_id, oauth_source, request_id),
+    resolvable_ids = [
+        str(row["request_id"])
+        for row in rows
+        if approval_request_surfaces_are_resolvable(
+            row["policy_action"],
+            row["decision_v2_json"],
+            row["action_envelope_json"],
+        )
+    ]
+    _resolve_request_ids(
+        connection,
+        resolvable_ids,
+        resolution_action=resolution_action,
+        resolution_scope=resolution_scope,
+        reason=reason,
+        resolved_at=resolved_at,
     )
-    return [str(row["request_id"]) for row in rows]
+    return resolvable_ids
+
+
+def approval_request_surfaces_are_resolvable(
+    policy_action: object,
+    decision_v2_json: object,
+    action_envelope_json: object,
+) -> bool:
+    """Return whether raw persisted approval surfaces form a resolvable row."""
+
+    parsed_decision_v2 = _optional_json_object(decision_v2_json)
+    parsed_action_envelope = _optional_json_object(action_envelope_json)
+    canonical_decision = canonical_approval_surfaces(
+        policy_action,
+        parsed_decision_v2 if parsed_decision_v2 is not None else decision_v2_json,
+        parsed_action_envelope if parsed_action_envelope is not None else action_envelope_json,
+        reject_contradiction=False,
+    )
+    request: dict[str, object] = {"policy_action": canonical_decision.policy_action}
+    if canonical_decision.contract_error is not None:
+        request["decision_contract_error"] = canonical_decision.contract_error
+    return approval_resolution_block_reason(request) is None
+
+
+def _resolve_request_ids(
+    connection: sqlite3.Connection,
+    request_ids: list[str],
+    *,
+    resolution_action: str,
+    resolution_scope: str,
+    reason: str | None,
+    resolved_at: str,
+) -> None:
+    for offset in range(0, len(request_ids), _APPROVAL_RESOLUTION_BATCH_SIZE):
+        chunk = request_ids[offset : offset + _APPROVAL_RESOLUTION_BATCH_SIZE]
+        placeholders = ", ".join("?" for _ in chunk)
+        connection.execute(
+            f"""
+            update approval_requests
+            set status = 'resolved',
+                resolution_action = ?,
+                resolution_scope = ?,
+                reason = ?,
+                resolved_at = ?
+            where request_id in ({placeholders})
+              and status = 'pending'
+            """,
+            (resolution_action, resolution_scope, reason, resolved_at, *chunk),
+        )
 
 
 def _approval_summary(item: dict[str, object]) -> dict[str, object]:

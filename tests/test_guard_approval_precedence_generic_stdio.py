@@ -915,8 +915,11 @@ def test_stdio_sensitive_read_current_review_still_queues_approval(tmp_path: Pat
     assert marker.exists() is False
     event = result["events"][0]
     assert event["approval_reuse_reason_code"] == "approval_reuse_no_saved_decision"
+    assert event["policy_action"] == "review"
+    assert event["decision"] == "review"
+    assert event["transport_outcome"] == "not-forwarded"
     assert len(event["approval_requests"]) == 1
-    assert store.list_approval_requests(limit=1)[0]["policy_action"] == "require-reapproval"
+    assert store.list_approval_requests(limit=1)[0]["policy_action"] == "review"
 
 
 def test_stdio_sensitive_read_unchanged_exact_one_shot_is_claimed_and_forwarded(
@@ -978,7 +981,9 @@ def test_stdio_sensitive_read_unchanged_exact_one_shot_is_claimed_and_forwarded(
 
     assert marker.exists() is True
     assert result["responses"][0]["result"]["ok"] is True
-    assert result["events"][0]["decision"] == "forward"
+    assert result["events"][0]["decision"] == "allow"
+    assert result["events"][0]["policy_action"] == "allow"
+    assert result["events"][0]["transport_outcome"] == "forwarded"
     assert result["events"][0]["approval_reuse_reason_code"] == "approval_reuse_accepted"
     claim_events = store.list_events(event_name="approval.local_once_applied")
     assert len(claim_events) == 1
@@ -1112,7 +1117,7 @@ def test_stdio_sensitive_read_fails_closed_when_postclaim_config_refresh_fails(
     assert marker.exists() is False
     assert result["responses"][0]["error"]["code"] == -32001
     event = result["events"][0]
-    assert event["decision"] == "block"
+    assert event["decision"] == "require-reapproval"
     assert event["approval_reuse_reason_code"] == "approval_reuse_current_config_refresh_failed"
     assert len(event["approval_requests"]) == 1
     approval_evidence = event["approval_requests"][0]["scanner_evidence"]
@@ -1163,7 +1168,7 @@ def test_stdio_invalidated_saved_allow_with_current_review_never_reaches_child(t
     assert result["responses"][0]["error"]["code"] == -32001
     assert marker.exists() is False
     event = result["events"][0]
-    assert event["decision"] == "block"
+    assert event["decision"] == "require-reapproval"
     assert event["approval_reuse_status"] == "rejected"
     assert event["approval_reuse_reason_code"] == "approval_reuse_identity_changed"
     assert len(event["approval_requests"]) == 1

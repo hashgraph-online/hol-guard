@@ -16,6 +16,7 @@ or a malformed action, cannot receive a permissive sentinel rank and lose to
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -25,6 +26,8 @@ from .models import GUARD_ACTION_VALUES, GuardAction
 
 UNKNOWN_GUARD_ACTION_REASON: Final = "guard_action_unknown"
 DEFAULT_UNKNOWN_GUARD_ACTION: Final[GuardAction] = "review"
+LEGACY_GUARD_ACTION_ALIASES: Final[Mapping[str, GuardAction]] = MappingProxyType({"ask": "review"})
+_SEMANTIC_ACTION_FIELD_ALIASES: Final[frozenset[str]] = frozenset({"preexecutionresult"})
 
 _GUARD_ACTION_SEVERITY: dict[GuardAction, int] = {
     "allow": 0,
@@ -69,6 +72,20 @@ def is_guard_action(value: object) -> TypeGuard[GuardAction]:
     return isinstance(value, str) and value in GUARD_ACTION_SEVERITY
 
 
+def is_action_bearing_key(key: str) -> bool:
+    """Return whether a field name can carry an alternate action authority.
+
+    CamelCase and separator-delimited names are tokenized so aliases such as
+    ``finalAction`` and ``observed_policy_action`` are recognized, while words
+    such as ``redaction`` are not mistaken for the standalone ``action`` token.
+    """
+
+    separated = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", key)
+    tokens = tuple(token for token in re.sub(r"[^A-Za-z0-9]+", " ", separated).lower().split() if token)
+    compact = "".join(tokens)
+    return compact in _SEMANTIC_ACTION_FIELD_ALIASES or any(token in {"action", "actions"} for token in tokens)
+
+
 def coerce_guard_action(value: object) -> GuardAction | None:
     """Return a typed action when recognized, otherwise ``None``.
 
@@ -92,6 +109,13 @@ def normalize_guard_action_result(
     if is_guard_action(value):
         return GuardActionNormalization(
             action=value,
+            reason_code=None,
+            original_action=value,
+            original_type="str",
+        )
+    if isinstance(value, str) and value in LEGACY_GUARD_ACTION_ALIASES:
+        return GuardActionNormalization(
+            action=LEGACY_GUARD_ACTION_ALIASES[value],
             reason_code=None,
             original_action=value,
             original_type="str",

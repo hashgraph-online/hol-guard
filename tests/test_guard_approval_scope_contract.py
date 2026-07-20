@@ -50,7 +50,10 @@ def _request(
         workspace="/workspace/repo",
         launch_target="echo test",
         action_envelope_json={"action_type": action_type, "command": "echo test"},
-        decision_v2_json={"action": "ask", "approval_scopes": decision_scopes or ["global"]},
+        decision_v2_json={
+            "action": "block" if policy_action == "block" else "ask",
+            "approval_scopes": decision_scopes or ["global"],
+        },
         review_command=f"hol-guard approvals approve {request_id}",
         approval_url=f"http://127.0.0.1:5474/approvals/{request_id}",
     )

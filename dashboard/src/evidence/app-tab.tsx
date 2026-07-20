@@ -6,18 +6,20 @@ import {
   HiMiniFunnel,
 } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
+import { guardActionDisposition } from "../guard-action";
 import { harnessDisplayName, isDisplayableHarness, formatRelativeTime } from "../approval-center-utils";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { guardAwareHref } from "../guard-api";
 import { Sparkline } from "./sparkline";
 import { ScopedEvidenceTable } from "./scoped-evidence-table";
 import type { EvidenceDecision } from "./evidence-types";
+import { filterByDecision } from "./evidence-filters";
 
 interface AppTabProps {
   receipts: GuardReceipt[];
 }
 
-type AppDecisionFilter = Extract<EvidenceDecision, "all" | "allow" | "block">;
+type AppDecisionFilter = EvidenceDecision;
 
 function hashString(str: string): number {
   let hash = 0;
@@ -44,8 +46,9 @@ interface AppListCardProps {
 }
 
 function AppListCard({ harness, items, onSelect }: AppListCardProps) {
-  const allowed = items.filter((r) => r.policy_decision === "allow").length;
-  const blocked = items.filter((r) => r.policy_decision === "block").length;
+  const allowed = items.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+  const blocked = items.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
+  const reviewed = items.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
   const lastActive = items[0]?.timestamp;
   const color = harnessColor(harness);
   const handleClick = useCallback(() => onSelect(harness), [harness, onSelect]);
@@ -65,7 +68,7 @@ function AppListCard({ harness, items, onSelect }: AppListCardProps) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-brand-dark truncate">{harnessDisplayName(harness)}</p>
           <p className="text-xs text-slate-500">
-            {items.length} actions · {allowed} allowed · {blocked} stopped
+            {items.length} actions · {allowed} allowed · {reviewed} review · {blocked} stopped
           </p>
           {lastActive && (
             <p className="text-xs text-slate-400">Last active {formatRelativeTime(lastActive)}</p>
@@ -126,7 +129,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
     if (!selectedApp) return [];
     let items = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
     if (decisionFilter !== "all") {
-      items = items.filter((r) => r.policy_decision === decisionFilter);
+      items = filterByDecision(items, decisionFilter);
     }
     if (categoryFilter) {
       items = items.filter((r) => detectCategory(r) === categoryFilter);
@@ -140,7 +143,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
 
   const handleDecisionFilterChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
     const nextValue = event.target.value;
-    if (nextValue === "all" || nextValue === "allow" || nextValue === "block") {
+    if (nextValue === "all" || nextValue === "allow" || nextValue === "ask" || nextValue === "block") {
       setDecisionFilter(nextValue);
     }
   }, []);
@@ -162,8 +165,9 @@ function AppTabRaw({ receipts }: AppTabProps) {
 
   if (selectedApp) {
     const allItems = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
-    const allowed = allItems.filter((r) => r.policy_decision === "allow").length;
-    const blocked = allItems.filter((r) => r.policy_decision === "block").length;
+    const allowed = allItems.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+    const blocked = allItems.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
+    const reviewed = allItems.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
     const color = harnessColor(selectedApp);
 
     return (
@@ -198,7 +202,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
             <div>
               <h2 className="text-base font-semibold text-brand-dark">{harnessDisplayName(selectedApp)}</h2>
               <p className="text-xs text-slate-500">
-                {allItems.length} action{allItems.length !== 1 ? "s" : ""} · {allowed} allowed · {blocked} stopped
+                {allItems.length} action{allItems.length !== 1 ? "s" : ""} · {allowed} allowed · {reviewed} review · {blocked} stopped
               </p>
             </div>
           </div>
@@ -218,6 +222,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
           >
             <option value="all">All decisions</option>
             <option value="allow">Allowed</option>
+            <option value="ask">Review</option>
             <option value="block">Stopped</option>
           </select>
           <select

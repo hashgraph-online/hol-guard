@@ -335,6 +335,7 @@ const CRITICAL_SIGNAL_ITEM: GuardApprovalRequest = {
   ...BASE_REQUEST,
   request_id: "ph09-critical",
   decision_v2_json: {
+    guard_action: "block",
     action: "block",
     reason: "Critical risk",
     user_title: "Critical",
@@ -352,6 +353,7 @@ const HIGH_SIGNAL_ITEM: GuardApprovalRequest = {
   ...BASE_REQUEST,
   request_id: "ph09-high",
   decision_v2_json: {
+    guard_action: "require-reapproval",
     action: "ask",
     reason: "High risk",
     user_title: "High",
@@ -690,6 +692,7 @@ const DUPLICATE_SUMMARY_WITH_SIGNAL_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-duplicate-summary-with-signal",
   decision_v2_json: {
+    guard_action: "require-reapproval",
     action: "ask",
     reason: "Prompt risk",
     user_title: "Prompt risk",
@@ -711,6 +714,7 @@ const DUPLICATE_SUMMARY_WITH_UNRENDERED_SIGNAL_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-duplicate-summary-with-unrendered-signal",
   decision_v2_json: {
+    guard_action: "require-reapproval",
     action: "ask",
     reason: "Prompt risk",
     user_title: "Prompt risk",
@@ -996,6 +1000,7 @@ const SKILL_ITEM: GuardApprovalRequest = {
   ...BASE_REQUEST,
   request_id: "ph09-skill",
   decision_v2_json: {
+    guard_action: "require-reapproval",
     action: "ask",
     reason: "Skill content risk",
     user_title: "Skill risk",
@@ -1013,6 +1018,7 @@ const SUPPLY_CHAIN_ITEM: GuardApprovalRequest = {
   ...BASE_REQUEST,
   request_id: "ph09-supply-chain",
   decision_v2_json: {
+    guard_action: "require-reapproval",
     action: "ask",
     reason: "Supply chain risk",
     user_title: "Supply chain",
@@ -1030,6 +1036,7 @@ const ENCODED_ITEM: GuardApprovalRequest = {
   ...BASE_REQUEST,
   request_id: "ph09-encoded",
   decision_v2_json: {
+    guard_action: "block",
     action: "block",
     reason: "Encoded shell",
     user_title: "Encoded",
@@ -1072,6 +1079,7 @@ const DATA_FLOW_ITEM: GuardApprovalRequest = {
   ...BASE_REQUEST,
   request_id: "ph09-data-flow",
   decision_v2_json: {
+    guard_action: "block",
     action: "block",
     reason: "Data flow exfiltration",
     user_title: "Exfiltration",

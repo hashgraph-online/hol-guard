@@ -48,7 +48,7 @@ type ApproveConsequenceProps = {
 export function ApproveConsequence(props: ApproveConsequenceProps) {
   const text =
     props.isCodex === true
-      ? "If you approve: Codex will continue the blocked action automatically."
+      ? "If you approve: Codex will continue the paused action automatically."
       : props.retryInstruction !== null
         ? `If you approve: ${props.retryInstruction}`
         : "If you approve: HOL Guard will let this action run and remember your choice within the selected scope.";

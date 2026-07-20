@@ -124,6 +124,8 @@ _POLICY_INDEX_STATEMENTS = (
     """,
 )
 
+_RECEIPT_WARN_ROLLUP_MIGRATION_VERSION = 16
+
 
 class StoreConnectionSchemaMixin:
     _startup_prefetched_policy_integrity_secret_material: object | tuple[bytes | None, str | None] = (
@@ -404,6 +406,14 @@ class StoreConnectionSchemaMixin:
               payload_json text not null,
               occurred_at text not null
             )
+            """,
+            """
+            create index if not exists idx_guard_events_recent
+            on guard_events (occurred_at desc, event_id desc)
+            """,
+            """
+            create index if not exists idx_guard_events_name_recent
+            on guard_events (event_name, occurred_at desc, event_id desc)
             """,
             """
             create table if not exists guard_remote_once_receipts (
@@ -717,6 +727,19 @@ class StoreConnectionSchemaMixin:
                 if receipt_rollups_need_backfill(connection):
                     backfill_receipt_rollups(connection)
                 self._record_schema_version(connection, version=6)
+            if not self._schema_version_applied(
+                connection,
+                version=_RECEIPT_WARN_ROLLUP_MIGRATION_VERSION,
+            ):
+                # P45 changes ``warn`` from the reviewed bucket to allowed.
+                # Existing v6 rollups can have the right total while retaining
+                # the old bucket semantics, so this migration must rebuild them
+                # unconditionally before incremental deltas are applied.
+                backfill_receipt_rollups(connection)
+                self._record_schema_version(
+                    connection,
+                    version=_RECEIPT_WARN_ROLLUP_MIGRATION_VERSION,
+                )
             if not self._schema_version_applied(connection, version=7):
                 self._record_schema_version(connection, version=7)
             if not self._schema_version_applied(connection, version=8):

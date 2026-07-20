@@ -18,6 +18,7 @@ from .action_lattice import normalize_guard_action_result
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
+from .approval_resolution import require_resolvable_approval_request
 from .approval_scope_support import (
     IneligibleApprovalScopeError,
     package_request_portable_workspace_scope,
@@ -33,6 +34,7 @@ from .cli.connect_flow import (
 )
 from .config import load_guard_config
 from .daemon.manager import load_guard_daemon_auth_token
+from .decision_boundaries import canonical_approval_surfaces
 from .desktop_notifications import (
     DesktopApprovalNotification,
     notify_pending_approval_once,
@@ -54,6 +56,7 @@ from .redaction import redact_text
 from .risk import artifact_risk_signals, artifact_risk_summary
 from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
+from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT, authoritative_decision_from_artifact
 from .runtime.protection_health_runtime import build_runtime_protection_health
 from .store import (
     GuardStore,
@@ -435,6 +438,26 @@ def queue_blocked_approvals(
         policy_action = normalization.action
         if policy_action not in {"require-reapproval", "review"}:
             continue
+        raw_action_envelope_json = item.get("action_envelope_json")
+        action_envelope_json = _item_action_envelope_json(item)
+        if raw_action_envelope_json is not None and action_envelope_json is None:
+            raise ValueError(AUTHORITATIVE_DECISION_INCONSISTENT)
+        boundary_item = {
+            **item,
+            "policy_action": policy_action,
+            "action_envelope_json": action_envelope_json,
+        }
+        try:
+            _ = authoritative_decision_from_artifact(boundary_item)
+            canonical_decision = canonical_approval_surfaces(
+                policy_action,
+                item.get("decision_v2_json"),
+                action_envelope_json,
+                reject_contradiction=True,
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError(AUTHORITATIVE_DECISION_INCONSISTENT) from error
+        policy_action = canonical_decision.policy_action
         scanner_evidence = _item_scanner_evidence(item)
         if not normalization.recognized:
             normalization_evidence: dict[str, object] = {
@@ -476,7 +499,7 @@ def queue_blocked_approvals(
             source_scope=_source_scope(item, artifact),
             config_path=_config_path(item, artifact),
             changed_fields=_string_list(item.get("changed_fields")),
-            policy_action=policy_action,
+            policy_action=canonical_decision.policy_action,
             launch_target=launch_target,
             risk_summary=risk_summary,
         )
@@ -506,8 +529,8 @@ def queue_blocked_approvals(
             why_now=incident["why_now"],
             launch_summary=incident["launch_summary"],
             risk_headline=incident["risk_headline"],
-            action_envelope_json=_item_action_envelope_json(item),
-            decision_v2_json=_item_decision_v2_json(item),
+            action_envelope_json=canonical_decision.action_envelope_json,
+            decision_v2_json=canonical_decision.decision_v2_json,
             scanner_evidence=scanner_evidence,
             raw_command_text=raw_command_text,
         )
@@ -572,6 +595,7 @@ def apply_approval_resolution(
         raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
     if request["status"] != "pending":
         raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
+    require_resolvable_approval_request(request)
     selection = resolve_request_scope_selection(
         request,
         action=action,
@@ -706,6 +730,8 @@ def apply_approval_resolution(
                 raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
             if error == "not_found":
                 raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
+            if isinstance(error, str) and error:
+                raise ValueError(error)
         if resolve_scope_matches and not exact_context_allow:
             resolved_scope_ids = store.resolve_matching_approval_requests(
                 harness=resolution_harness,
@@ -1032,11 +1058,11 @@ def _refresh_queue_result(
     result["remaining_pending_summaries"] = page["items"]
     result["resolved_scope_ids"] = resolved_scope_ids
     if remaining_count == 0:
-        result["resolution_summary"] = "Decision saved. No blocked actions remain."
+        result["resolution_summary"] = "Decision saved. No actions are awaiting a decision."
     elif remaining_count == 1:
-        result["resolution_summary"] = "Decision saved. 1 blocked action remains."
+        result["resolution_summary"] = "Decision saved. 1 action is awaiting a decision."
     else:
-        result["resolution_summary"] = f"Decision saved. {remaining_count} blocked actions remain."
+        result["resolution_summary"] = f"Decision saved. {remaining_count} actions are awaiting a decision."
 
 
 def approval_center_hint(
@@ -1411,13 +1437,6 @@ def _item_action_envelope_json(item: Mapping[str, object]) -> dict[str, object] 
     if isinstance(value, Mapping):
         return {str(key): item_value for key, item_value in value.items() if isinstance(key, str)}
     return None
-
-
-def _item_decision_v2_json(item: dict[str, object]) -> dict[str, object] | None:
-    value = item.get("decision_v2_json")
-    if not isinstance(value, Mapping):
-        return None
-    return {str(key): item_value for key, item_value in value.items() if isinstance(key, str)}
 
 
 def _item_scanner_evidence(item: dict[str, object]) -> tuple[dict[str, object], ...]:
@@ -1968,7 +1987,7 @@ def _resolve_runtime_headline_state(
     if runtime_state is None:
         return "setup"
     if pending_count > 0:
-        return "blocked"
+        return "needs_decision"
     if protection_state in {"protected", "partial"}:
         return protection_state
     return "degraded"
@@ -1980,7 +1999,7 @@ def _runtime_headline_label(headline_state: str) -> str:
         "protected": "Protected",
         "partial": "Partial",
         "degraded": "Degraded",
-        "blocked": "Blocked",
+        "needs_decision": "Decision needed",
         "local_only": "Local only",
         "connected": "Connected",
     }
@@ -1993,8 +2012,8 @@ def _runtime_headline_detail(headline_state: str) -> str:
         "protected": "This machine is protected and the local queue is clear.",
         "partial": "Core protection checks pass, but complete local evidence health cannot be proven.",
         "degraded": "One or more required protection checks failed or remain unproven.",
-        "blocked": "A blocked launch is waiting for review in the current request queue.",
-        "local_only": "This machine is running locally and can connect later when shared memory matters.",
+        "needs_decision": "One or more actions are waiting for a decision in the current review queue.",
+        "local_only": "This machine is protected locally and can connect later when shared memory matters.",
         "connected": "This machine is connected to Guard Cloud. Local Guard is sending the first shared proof now.",
     }
     return details.get(headline_state, "Complete local protection cannot be proven.")
@@ -2175,7 +2194,7 @@ _BULK_BLOCKED_COMMAND_HINTS = (
 
 def _bulk_request_is_bulk_blocked(request: Mapping[str, object]) -> bool:
     """True for actions that must be reviewed individually, never bulk-approved."""
-    if str(request.get("policy_action") or "") == "block":
+    if str(request.get("policy_action") or "") in {"block", "sandbox-required"}:
         return True
     if str(request.get("status") or "") != "pending":
         return True

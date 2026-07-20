@@ -93,6 +93,50 @@ class TestSourcePathIsAllowed:
         assert not decision.allowed
         assert decision.reason_code == "unsafe_hidden_dir"
 
+    def test_workflow_source_file_allowed(self, workspace: Path, home_dir: Path) -> None:
+        workflow = workspace / ".github" / "workflows" / "publish.yml"
+        workflow.parent.mkdir(parents=True)
+        workflow.write_text("jobs: {}\n")
+
+        decision = source_path_is_allowed(
+            ".github/workflows/publish.yml",
+            cwd=workspace,
+            home_dir=home_dir,
+        )
+
+        assert decision.allowed
+        assert decision.reason_code == "source_extension"
+
+    def test_other_hidden_github_source_file_rejected(self, workspace: Path, home_dir: Path) -> None:
+        hidden_source = workspace / ".github" / "private" / "config.yml"
+        hidden_source.parent.mkdir(parents=True)
+        hidden_source.write_text("token: fixture\n")
+
+        decision = source_path_is_allowed(
+            ".github/private/config.yml",
+            cwd=workspace,
+            home_dir=home_dir,
+        )
+
+        assert not decision.allowed
+        assert decision.reason_code == "unsafe_hidden_dir"
+
+    def test_workflow_source_symlink_rejected(self, workspace: Path, home_dir: Path, tmp_path: Path) -> None:
+        outside = tmp_path / "outside.yml"
+        outside.write_text("token: fixture\n")
+        workflow = workspace / ".github" / "workflows" / "publish.yml"
+        workflow.parent.mkdir(parents=True)
+        workflow.symlink_to(outside)
+
+        decision = source_path_is_allowed(
+            ".github/workflows/publish.yml",
+            cwd=workspace,
+            home_dir=home_dir,
+        )
+
+        assert not decision.allowed
+        assert decision.reason_code == "symlink_in_path"
+
     def test_benign_dotfile_allowed(self, workspace: Path, home_dir: Path) -> None:
         (workspace / ".nvmrc").write_text("20")
         decision = source_path_is_allowed(".nvmrc", cwd=workspace, home_dir=home_dir)
@@ -132,9 +176,7 @@ class TestSourcePathIsAllowed:
         assert decision.allowed
         assert decision.reason_code == "external_source_path"
 
-    def test_external_source_path_under_sibling_git_directory_allowed(
-        self, workspace: Path, home_dir: Path
-    ) -> None:
+    def test_external_source_path_under_sibling_git_directory_allowed(self, workspace: Path, home_dir: Path) -> None:
         source_root = home_dir / "sibling-repository"
         source_file = (source_root / "src" / "main.py").resolve()
         source_file.parent.mkdir(parents=True)
@@ -170,9 +212,7 @@ class TestSourcePathIsAllowed:
         assert not decision.allowed
         assert decision.reason_code == "external_target_not_sibling_git_checkout"
 
-    def test_external_source_path_outside_home_rejected(
-        self, workspace: Path, home_dir: Path, tmp_path: Path
-    ) -> None:
+    def test_external_source_path_outside_home_rejected(self, workspace: Path, home_dir: Path, tmp_path: Path) -> None:
         source_file = (tmp_path / "outside-home" / "scripts" / "guard-test").resolve()
         source_file.parent.mkdir(parents=True)
         source_file.write_text("#!/bin/sh\n")
@@ -187,9 +227,7 @@ class TestSourcePathIsAllowed:
         assert not decision.allowed
         assert decision.reason_code == "external_target_outside_home"
 
-    def test_external_source_path_without_home_rejected(
-        self, workspace: Path, home_dir: Path
-    ) -> None:
+    def test_external_source_path_without_home_rejected(self, workspace: Path, home_dir: Path) -> None:
         source_file = (home_dir / "sibling-source" / "scripts" / "guard-test").resolve()
         source_file.parent.mkdir(parents=True)
         source_file.write_text("#!/bin/sh\n")
@@ -302,9 +340,7 @@ class TestSourcePathIsAllowed:
         assert decision.allowed
         assert decision.reason_code == "external_source_path"
 
-    def test_external_symlinked_source_path_rejected(
-        self, workspace: Path, home_dir: Path, tmp_path: Path
-    ) -> None:
+    def test_external_symlinked_source_path_rejected(self, workspace: Path, home_dir: Path, tmp_path: Path) -> None:
         source_root = (home_dir / "sibling-source").resolve()
         real_file = source_root / "scripts" / "guard-test"
         real_file.parent.mkdir(parents=True)

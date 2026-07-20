@@ -24,7 +24,7 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_hash,
     evaluate_tool_call,
 )
-from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
+from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy, OpenCodeMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
@@ -927,6 +927,161 @@ def test_package_retry_validates_context_and_retained_authority_before_forward(
         assert scanner_evidence[-1]["effective_action"] == "review"
 
 
+@pytest.mark.parametrize(
+    (
+        "tool_action",
+        "package_action",
+        "expected_tool_queue",
+        "expected_package_queue",
+        "expected_executed",
+        "expected_observed",
+    ),
+    [
+        ("review", "allow", ["review"], [], "allow", "review"),
+        ("allow", "review", [], ["review"], "allow", "review"),
+        ("review", "require-reapproval", ["review"], ["require-reapproval"], "allow", "require-reapproval"),
+        ("warn", "allow", [], [], "warn", None),
+        ("allow", "warn", [], [], "warn", None),
+    ],
+)
+def test_package_observe_mode_queues_each_authority_source_once_and_records_executed_allow(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tool_action: GuardAction,
+    package_action: GuardAction,
+    expected_tool_queue: list[GuardAction],
+    expected_package_queue: list[GuardAction],
+    expected_executed: GuardAction,
+    expected_observed: GuardAction | None,
+) -> None:
+    context = _context(tmp_path)
+    assert context.workspace_dir is not None
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(
+        guard_home=context.guard_home,
+        workspace=context.workspace_dir,
+        mode="observe",
+    )
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace-tools",
+        command=_child_command(tmp_path / "observe-package-forward.json"),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    package_artifact = _package_artifact(
+        context=context,
+        harness="codex",
+        config_path=proxy.config_path,
+    )
+    base_evaluation = evaluate_package_request_artifact(
+        artifact=package_artifact,
+        store=store,
+        workspace_dir=context.workspace_dir,
+    )
+    package_evaluation = replace(
+        base_evaluation,
+        decision=("allow" if package_action == "allow" else "review"),
+        policy_action=package_action,
+    )
+    execution_context = build_package_execution_context(
+        workspace_dir=context.workspace_dir,
+        artifact=package_artifact,
+    )
+    package_resolution = runtime_mcp_module._PackagePolicyResolution(
+        base_evaluation=base_evaluation,
+        evaluation=package_evaluation,
+        current_action=package_action,
+        workspace=context.workspace_dir,
+        execution_context=execution_context,
+        artifact_digest="guard-approval-context:v1:observe-package",
+        policy_workspace=str(context.workspace_dir),
+        saved_policy_blocks=False,
+        pending_approval_reuse_decision=None,
+    )
+    tool_artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace-tools",
+        tool_name="run_terminal_command",
+        source_scope="project",
+        config_path=proxy.config_path,
+        transport="stdio",
+    )
+    tool_decision = ToolCallDecision(
+        action=tool_action,
+        source="policy",
+        signals=(f"tool {tool_action}",),
+        summary=f"tool {tool_action}",
+        current_action=tool_action,
+    )
+    catalog_fingerprint = runtime_mcp_module._tool_catalog_fingerprint(
+        proxy._tool_catalog,
+        state=proxy._tool_catalog_state,
+    )
+    tool_authority = runtime_mcp_module._ToolCallAuthority(
+        artifact=tool_artifact,
+        artifact_hash="guard-approval-context:v1:observe-tool",
+        decision=tool_decision,
+        catalog_generation=proxy._tool_catalog_generation,
+        catalog_state=proxy._tool_catalog_state,
+        catalog_fingerprint=catalog_fingerprint,
+    )
+    tool_queues: list[GuardAction] = []
+    package_queues: list[GuardAction] = []
+    forwarded: dict[str, object] = {}
+
+    monkeypatch.setattr(proxy, "_drain_and_validate_catalog_authority", lambda **_kwargs: True)
+    monkeypatch.setattr(proxy, "_resolve_tool_call_authority", lambda **_kwargs: tool_authority)
+    monkeypatch.setattr(proxy, "_resolve_package_policy", lambda **_kwargs: package_resolution)
+    monkeypatch.setattr(
+        proxy,
+        "_queue_observed_approval_requests",
+        lambda **kwargs: tool_queues.append(kwargs["policy_action"]) or [],
+    )
+    monkeypatch.setattr(
+        proxy,
+        "_queue_observed_package_request",
+        lambda **kwargs: package_queues.append(kwargs["policy_action"]),
+    )
+
+    def capture_forward(**kwargs: object) -> tuple[dict[str, Any], dict[str, Any]]:
+        forwarded.update(kwargs)
+        return ({"jsonrpc": "2.0", "id": 3, "result": {}}, {"policy_action": kwargs["policy_action"]})
+
+    monkeypatch.setattr(proxy, "_record_package_forward", capture_forward)
+
+    _response, event = proxy._handle_package_request(
+        message={"jsonrpc": "2.0", "id": 3, "method": "tools/call"},
+        child_stdin=io.StringIO(),
+        child_stdout=io.StringIO(),
+        client_input=None,
+        server_output=None,
+        tool_name="run_terminal_command",
+        params={"name": "run_terminal_command", "arguments": {"command": "npm install minimist@1.2.8"}},
+        artifact=package_artifact,
+        tool_artifact=tool_artifact,
+        tool_artifact_hash=tool_authority.artifact_hash,
+        tool_decision=tool_decision,
+        tool_scanner_evidence=(),
+        package_resolution=package_resolution,
+        expected_catalog_generation=proxy._tool_catalog_generation,
+        expected_catalog_state=proxy._tool_catalog_state,
+        expected_catalog_fingerprint=catalog_fingerprint,
+    )
+
+    assert tool_queues == expected_tool_queue
+    assert package_queues == expected_package_queue
+    assert forwarded["policy_action"] == expected_executed
+    assert event["decision"] == expected_executed
+    assert event["policy_action"] == expected_executed
+    if expected_observed is None:
+        assert "observed_policy_action" not in event
+        assert all(item.get("source") != "observe_mode" for item in forwarded["scanner_evidence"])
+    else:
+        assert event["observed_policy_action"] == expected_observed
+        assert forwarded["scanner_evidence"][-1]["observed_policy_action"] == expected_observed
 def test_mcp_executable_identity_uses_launch_cwd_and_stays_pinned_after_spawn(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1297,7 +1452,7 @@ def test_runtime_mcp_start_passes_configured_code_loading_env_to_launch_identity
         process.wait(timeout=5)
 
 
-def test_policy_review_never_auto_forwards_and_all_surfaces_use_reapproval(
+def test_first_policy_review_never_auto_forwards_and_all_surfaces_preserve_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1330,14 +1485,14 @@ def test_policy_review_never_auto_forwards_and_all_surfaces_use_reapproval(
 
     assert marker_path.exists() is False
     response = result["responses"][2]
-    assert response["error"]["data"]["guardPolicyAction"] == "require-reapproval"
+    assert response["error"]["data"]["guardPolicyAction"] == "review"
     event = result["events"][2]
-    assert event["policy_action"] == "require-reapproval"
+    assert event["policy_action"] == "review"
     request = store.list_approval_requests(limit=10)[0]
-    assert request["policy_action"] == "require-reapproval"
+    assert request["policy_action"] == "review"
     receipts = store.list_receipts(limit=10)
     assert len(receipts) == 1
-    assert receipts[0]["policy_decision"] == "require-reapproval"
+    assert receipts[0]["policy_decision"] == "review"
 
 
 @pytest.mark.parametrize("terminal_action", ["block", "sandbox-required"])
@@ -1510,7 +1665,14 @@ def test_observe_mode_does_not_consume_exact_saved_tool_approval(
     result = proxy.run_session(_messages(tool_name="dangerous_delete", arguments=arguments, elicitation=False))
 
     assert marker_path.exists()
-    assert result["events"][2]["decision"] == "observe-tool-call"
+    event = result["events"][2]
+    assert event["decision"] == "allow"
+    assert event["policy_action"] == "allow"
+    assert event["observed_policy_action"] == "review"
+    pending = store.list_approval_requests(limit=10)
+    assert len(pending) == 1
+    assert pending[0]["policy_action"] == "review"
+    assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
     with sqlite3.connect(store.path) as connection:
         claimed_at = connection.execute(
             "select claimed_at from guard_local_once_approvals where approval_id = ?",
@@ -1574,6 +1736,59 @@ def test_observe_mode_reprobes_terminal_tool_policy_immediately_before_forward(
     receipts = store.list_receipts(limit=10)
     assert len(receipts) == 1
     assert receipts[0]["policy_decision"] == "block"
+
+
+def test_observe_mode_preserves_fresh_executable_warn_at_final_tool_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(
+        guard_home=context.guard_home,
+        workspace=context.workspace_dir,
+        mode="observe",
+    )
+    marker_path = tmp_path / "observe-warn-forward.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace-tools",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    decisions = iter(
+        (
+            ToolCallDecision(
+                action="review",
+                source="policy",
+                signals=("initial review",),
+                summary="initial review",
+            ),
+            ToolCallDecision(
+                action="warn",
+                source="policy",
+                signals=("fresh warning",),
+                summary="fresh warning",
+            ),
+        )
+    )
+    monkeypatch.setattr(runtime_mcp_module, "evaluate_tool_call", lambda **_kwargs: next(decisions))
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", _forbidden_daemon)
+
+    result = proxy.run_session(_messages(tool_name="safe_echo", arguments={"value": "hello"}, elicitation=False))
+
+    assert marker_path.exists()
+    event = result["events"][2]
+    assert event["decision"] == "warn"
+    assert event["policy_action"] == "warn"
+    assert "observed_policy_action" not in event
+    assert store.list_approval_requests(limit=10) == []
+    receipt = store.list_receipts(limit=1)[0]
+    assert receipt["policy_decision"] == "warn"
+    assert all(item.get("source") != "observe_mode" for item in receipt["scanner_evidence"])
 
 
 def test_runtime_mcp_rebuilds_tool_authority_after_exact_claim_before_forward(

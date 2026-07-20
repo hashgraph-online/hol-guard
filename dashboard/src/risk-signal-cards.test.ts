@@ -37,6 +37,7 @@ function makeSignal(overrides: Partial<RiskSignalV2>): RiskSignalV2 {
 
 function makeDecisionV2(signals: RiskSignalV2[]): GuardDecisionV2 {
   return {
+    guard_action: "review",
     action: "ask",
     reason: "test",
     user_title: "Test",

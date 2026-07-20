@@ -41,7 +41,7 @@ const NOW = new Date("2024-06-15T12:00:00.000Z");
 
 const r1 = makeReceipt("r1", { harness: "codex", policy_decision: "allow", artifact_name: "my-secret-tool", capabilities_summary: "reads .env file", source_scope: "workspace" });
 const r2 = makeReceipt("r2", { harness: "claude", policy_decision: "block", artifact_name: "network-fetch", capabilities_summary: "calls http://example.com", source_scope: "global" });
-const r3 = makeReceipt("r3", { harness: "cursor", policy_decision: "ask", artifact_name: "file-writer", capabilities_summary: "writes to disk" });
+const r3 = makeReceipt("r3", { harness: "cursor", policy_decision: "review", artifact_name: "file-writer", capabilities_summary: "writes to disk" });
 const r4 = makeReceipt("r4", { harness: "codex", policy_decision: "allow", artifact_name: "token-helper", capabilities_summary: "handles api token" });
 const r5 = makeReceipt("r5", {
   harness: "claude",
@@ -80,7 +80,7 @@ assert(byHarness.length === 1 && byHarness[0].receipt_id === "r3", "search: harn
 const byCaps = filterBySearch(ALL, "http://example.com");
 assert(byCaps.length === 1 && byCaps[0].receipt_id === "r2", "search: capabilities_summary");
 
-const byDecisionText = filterBySearch(ALL, "ask");
+const byDecisionText = filterBySearch(ALL, "review");
 assert(byDecisionText.some((r) => r.receipt_id === "r3"), "search: policy_decision text");
 
 const byArtifactId = filterBySearch(ALL, "artifact-xyz123");

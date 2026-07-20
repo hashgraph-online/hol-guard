@@ -23,6 +23,7 @@ import pytest
 
 from codex_plugin_scanner.guard.models import GuardArtifact, GuardReceipt
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_receipt_rollups import backfill_receipt_rollups
 
 
 def _make_store(tmp_path: Path) -> GuardStore:
@@ -319,6 +320,72 @@ class TestDiffPersistence:
 
 
 class TestInventoryForExplain:
+    def test_inventory_rejects_unknown_action_writes(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        artifact = _make_artifact("codex:project:unknown-action-write")
+
+        with pytest.raises(ValueError, match="authoritative_decision_inconsistent"):
+            store.record_inventory_artifact(
+                artifact=artifact,
+                artifact_hash="sha256:unknown",
+                policy_action="future-action",  # type: ignore[arg-type]
+                changed=False,
+                now="2025-01-01T00:00:00Z",
+                approved=False,
+            )
+
+    def test_inventory_legacy_unknown_action_fails_closed_and_is_flagged(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        artifact = _make_artifact("codex:project:legacy-unknown")
+        store.record_inventory_artifact(
+            artifact=artifact,
+            artifact_hash="sha256:legacy",
+            policy_action="allow",
+            changed=False,
+            now="2025-01-01T00:00:00Z",
+            approved=True,
+        )
+        with store._connect() as connection:
+            connection.execute(
+                "update artifact_inventory set last_policy_action = ? where artifact_id = ?",
+                ("future-action", artifact.artifact_id),
+            )
+
+        listed = store.list_inventory()
+        found = store.find_inventory_item(artifact.artifact_id)
+
+        assert listed[0]["last_policy_action"] == "require-reapproval"
+        assert listed[0]["decision_contract_error"] == "authoritative_decision_inconsistent"
+        assert listed[0]["last_approved_at"] is None
+        assert found is not None
+        assert found["last_policy_action"] == "require-reapproval"
+        assert found["decision_contract_error"] == "authoritative_decision_inconsistent"
+
+    def test_blocking_inventory_update_clears_current_approval_state(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        artifact = _make_artifact("codex:project:authority-tightened")
+        store.record_inventory_artifact(
+            artifact=artifact,
+            artifact_hash="sha256:allow",
+            policy_action="allow",
+            changed=False,
+            now="2025-01-01T00:00:00Z",
+            approved=True,
+        )
+        store.record_inventory_artifact(
+            artifact=artifact,
+            artifact_hash="sha256:block",
+            policy_action="block",
+            changed=True,
+            now="2025-01-02T00:00:00Z",
+            approved=False,
+        )
+
+        item = store.find_inventory_item(artifact.artifact_id)
+        assert item is not None
+        assert item["last_policy_action"] == "block"
+        assert item["last_approved_at"] is None
+
     def test_record_then_find_inventory_item(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
         artifact = _make_artifact("codex:project:my_tool")
@@ -382,6 +449,59 @@ class TestInventoryForExplain:
 
 
 class TestReceiptAnalytics:
+    def test_warn_is_allowed_in_incremental_and_backfilled_rollups(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        store.add_receipt(_make_receipt(receipt_id="r-warn", policy_decision="warn"))
+
+        incremental = store.receipt_analytics(top_limit=5)
+        assert incremental["allowed"] == 1
+        assert incremental["blocked"] == 0
+        assert incremental["reviewed"] == 0
+
+        with store._connect() as connection:
+            backfill_receipt_rollups(connection)
+
+        backfilled = store.receipt_analytics(top_limit=5)
+        assert backfilled["allowed"] == 1
+        assert backfilled["blocked"] == 0
+        assert backfilled["reviewed"] == 0
+
+    def test_store_upgrade_rebuilds_historical_warn_rollup_bucket(self, tmp_path: Path) -> None:
+        guard_home = tmp_path / "guard"
+        store = GuardStore(guard_home)
+        store.add_receipt(_make_receipt(receipt_id="r-warn-upgrade", policy_decision="warn"))
+
+        with store._connect() as connection:
+            migration_versions = {
+                int(row["version"])
+                for row in connection.execute(
+                    "select version from schema_migrations where version in (10, 16)"
+                ).fetchall()
+            }
+            assert migration_versions == {10, 16}
+            for table in (
+                "receipt_aggregate_totals",
+                "receipt_daily_rollups",
+                "receipt_harness_rollups",
+                "receipt_artifact_rollups",
+            ):
+                connection.execute(f"update {table} set allowed = 0, reviewed = 1")
+            connection.execute("delete from schema_migrations where version = 16")
+
+        upgraded = GuardStore(guard_home)
+        analytics = upgraded.receipt_analytics(top_limit=5)
+        assert analytics["total"] == 1
+        assert analytics["allowed"] == 1
+        assert analytics["blocked"] == 0
+        assert analytics["reviewed"] == 0
+
+        upgraded.update_receipt_policy_decision("r-warn-upgrade", "block")
+        changed = upgraded.receipt_analytics(top_limit=5)
+        assert changed["total"] == 1
+        assert changed["allowed"] == 0
+        assert changed["blocked"] == 1
+        assert changed["reviewed"] == 0
+
     def test_receipt_analytics_aggregates_across_all_rows(self, tmp_path: Path) -> None:
         from datetime import datetime, timedelta, timezone
 

@@ -17,6 +17,7 @@ import type {
   GuardProtectionState,
   GuardRuntimeSnapshot,
 } from "./guard-types";
+import { normalizeGuardAction } from "./guard-action";
 import { LoggedActionPanel } from "./logged-action-panel";
 import { protectionHealthFor, unavailableProtectionHealth } from "./protection-health";
 
@@ -221,11 +222,18 @@ export function buildWhatWouldHappen(item: GuardApprovalRequest): string | null 
 }
 
 export function pastDecisionVerb(decision: string): string {
-  if (decision === "allow") {
-    return "allowed";
+  switch (normalizeGuardAction(decision)) {
+    case "allow":
+      return "allowed";
+    case "warn":
+      return "allowed with a warning";
+    case "review":
+      return "sent for review";
+    case "require-reapproval":
+      return "required fresh approval for";
+    case "sandbox-required":
+      return "required sandboxing for";
+    case "block":
+      return "blocked";
   }
-  if (decision === "block") {
-    return "blocked";
-  }
-  return "reviewed";
 }

@@ -918,7 +918,9 @@ def _incomplete_audit_receipt_metadata(
         [str(path) for path in lockfile_raw if isinstance(path, str)] if isinstance(lockfile_raw, (list, tuple)) else []
     )
     path_hashes = workspace_audit_path_hashes(workspace_dir, manifest_paths, lockfile_paths)
-    policy_decision = "ask" if outcome in {"sync_required", "inventory_empty", "no_project_files"} else "monitor"
+    policy_decision: GuardAction = (
+        "review" if outcome in {"sync_required", "inventory_empty", "no_project_files"} else "warn"
+    )
     return {
         "policy_decision": policy_decision,
         "capabilities_summary": message,
@@ -955,11 +957,13 @@ def audit_receipt_metadata(
     bundle = _cached_supply_chain_bundle_payload(store) if store is not None else None
     package_findings = _audit_package_findings_for_receipt(package_items, bundle=bundle)
     package_inventory = _audit_package_inventory_for_receipt(package_items, bundle=bundle)
-    policy_decision = "allow"
+    policy_decision: GuardAction = "allow"
     if decision == "block":
         policy_decision = "block"
     elif decision == "ask":
-        policy_decision = "ask"
+        policy_decision = "review"
+    elif decision == "warn":
+        policy_decision = "warn"
     inventory = result.get("inventory")
     inventory_summary = inventory if isinstance(inventory, dict) else {}
     manifest_paths = list(_string_items(result.get("manifest_paths")))
@@ -968,7 +972,7 @@ def audit_receipt_metadata(
     return {
         "policy_decision": policy_decision,
         "capabilities_summary": (
-            f"Workspace audit completed with {decision} decision across "
+            f"Workspace audit completed with {policy_decision} decision across "
             f"{inventory_summary.get('total_packages', len(package_items))} packages."
         ),
         "artifact_name": "Workspace supply-chain audit",
