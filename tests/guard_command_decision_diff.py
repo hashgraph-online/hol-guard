@@ -10,7 +10,7 @@ import sys
 import time
 import types
 from collections import defaultdict
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Mapping
 from itertools import chain
 from pathlib import Path
 from typing import Final, cast
@@ -39,34 +39,14 @@ def _install_evaluator_packages() -> None:
 
 _install_evaluator_packages()
 
-from codex_plugin_scanner.guard.action_lattice import guard_action_severity
-from codex_plugin_scanner.guard.models import GuardAction
-from codex_plugin_scanner.guard.runtime.command_decision_adapter import (
-    command_uncertainties,
-    decision_factors,
-    extension_evidence_batch,
-    extension_uncertainties,
-)
-from codex_plugin_scanner.guard.runtime.command_evaluation import (
-    CommandDecisionFloor,
-    CompositeCommandEvaluation,
-    evaluate_command,
-)
 from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
     COMMAND_SHADOW_BASELINE_PROPOSAL_VERSION,
-    CommandShadowCohort,
-    CommandShadowProposal,
 )
-from codex_plugin_scanner.guard.runtime.effect_decision import (
-    EFFECT_DECISION_SCHEMA_VERSION,
-    EffectDecisionRequest,
-    evaluate_effect_decision,
-)
+from codex_plugin_scanner.guard.runtime.effect_decision import EFFECT_DECISION_SCHEMA_VERSION
 from tests.guard_command_corpus import (
     KNOWN_GAPS_PATH,
     MANIFEST_PATH,
     PAIRS_PATH,
-    CommandCorpusCase,
     corpus_digest,
     iter_adversarial_corpus,
     iter_benign_corpus,
@@ -75,26 +55,20 @@ from tests.guard_command_corpus import (
 from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
 from tests.guard_command_corpus_oracle_types import OracleRecord
 from tests.guard_command_corpus_runner import peak_rss_mib
+from tests.guard_command_decision_diff_runner import (
+    MAX_CONCURRENT_WORKERS,
+    evaluate_decision_diff_shards,
+)
 
 REPORT_SCHEMA_VERSION: Final = "guard.command-decision-diff.v1"
 BASE_RELEASE_SHA: Final = "96ec0db6102de5a694b00809312e60686923a15a"
 REPORT_PATH: Final = REPO_ROOT / "tests" / "fixtures" / "guard-command-corpus" / "decision-diff-report.json"
-SYNTHETIC_CWD: Final = REPO_ROOT / "workspace"
-SYNTHETIC_HOME: Final = REPO_ROOT / "home"
-_ACTION_VALUES: Final[tuple[GuardAction, ...]] = (
-    "allow",
-    "warn",
-    "review",
-    "require-reapproval",
-    "sandbox-required",
-    "block",
-)
 _EVIDENCE_SOURCE_PATHS: Final = (
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "action_lattice.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "models.py",
     *(REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "runtime").glob("*.py"),
     *REPO_ROOT.joinpath("tests").glob("guard_command_corpus*.py"),
-    REPO_ROOT / "tests" / "guard_command_decision_diff.py",
+    *REPO_ROOT.joinpath("tests").glob("guard_command_decision_diff*.py"),
     REPO_ROOT / "tests" / "test_guard_command_corpus.py",
     REPO_ROOT / "tests" / "test_guard_command_decision_diff.py",
 )
@@ -127,49 +101,27 @@ def report_framed_sha256(report: Mapping[str, object] | None = None) -> str:
 def generate_decision_diff_report() -> dict[str, object]:
     """Evaluate the complete corpus and reconcile all legacy decisions."""
 
+    report, _rss_mib = _generate_decision_diff_report()
+    return report
+
+
+def _generate_decision_diff_report() -> tuple[dict[str, object], float]:
     manifest = load_seed_manifest()
     known_gaps = _load_object(KNOWN_GAPS_PATH)
     transition_ids: defaultdict[str, list[str]] = defaultdict(list)
     legacy_ids: defaultdict[str, list[str]] = defaultdict(list)
     reconciliation_ids: defaultdict[str, list[str]] = defaultdict(list)
     actual_gap_ids: defaultdict[str, list[str]] = defaultdict(list)
-    lowered_count = 0
-    legacy_lowered_count = 0
-    disposition_changed_count = 0
-    total = 0
-
-    for case, oracle in _case_oracle_pairs():
-        total += 1
-        evaluation = evaluate_command(case.command, cwd=SYNTHETIC_CWD, home_dir=SYNTHETIC_HOME)
-        current = evaluation.decision_plane
-        proposed = _baseline_proposal(evaluation).decision
-        legacy_action = _canonical_legacy_action(evaluation.minimum_action)
-        transition_key = "|".join(
-            (current.action, current.disposition.value, proposed.action, proposed.disposition.value)
-        )
-        transition_ids[transition_key].append(case.case_id)
-        legacy_ids[f"{legacy_action}|{current.action}"].append(case.case_id)
-        if guard_action_severity(proposed.action) < guard_action_severity(current.action):
-            lowered_count += 1
-        if guard_action_severity(current.action) < guard_action_severity(legacy_action):
-            legacy_lowered_count += 1
-        if current.disposition is not proposed.disposition:
-            disposition_changed_count += 1
-
-        reconciliation = _reconciliation_category(legacy_action, current.action, oracle.minimum_floor)
-        reconciliation_key = "|".join(
-            (reconciliation, legacy_action, current.action, oracle.minimum_floor, oracle.owner)
-        )
-        reconciliation_ids[reconciliation_key].append(case.case_id)
-        if guard_action_severity(legacy_action) != guard_action_severity(oracle.minimum_floor):
-            kind = (
-                "underclassified"
-                if guard_action_severity(legacy_action) < guard_action_severity(oracle.minimum_floor)
-                else "overclassified"
-            )
-            actual_gap_ids["|".join((oracle.owner, kind, oracle.minimum_floor, evaluation.minimum_action))].append(
-                case.case_id
-            )
+    shards = evaluate_decision_diff_shards()
+    for shard in shards:
+        _merge_groups(transition_ids, shard.transition_ids)
+        _merge_groups(legacy_ids, shard.legacy_ids)
+        _merge_groups(reconciliation_ids, shard.reconciliation_ids)
+        _merge_groups(actual_gap_ids, shard.actual_gap_ids)
+    lowered_count = sum(shard.lowered_count for shard in shards)
+    legacy_lowered_count = sum(shard.legacy_lowered_count for shard in shards)
+    disposition_changed_count = sum(shard.disposition_changed_count for shard in shards)
+    total = sum(shard.total for shard in shards)
 
     expected_gaps = _expected_known_gaps(known_gaps)
     actual_gaps = _known_gap_summaries(actual_gap_ids)
@@ -243,61 +195,13 @@ def generate_decision_diff_report() -> dict[str, object]:
         },
     }
     _validate_manifest_digests(report, manifest)
-    return report
+    active_rss = sum(sorted((shard.rss_mib for shard in shards), reverse=True)[:MAX_CONCURRENT_WORKERS])
+    return report, peak_rss_mib() + active_rss
 
 
-def _case_oracle_pairs() -> Iterator[tuple[CommandCorpusCase, OracleRecord]]:
-    yield from zip(iter_benign_corpus(), iter_benign_oracle(), strict=True)
-    yield from zip(iter_adversarial_corpus(), iter_adversarial_oracle(), strict=True)
-
-
-def _canonical_legacy_action(action: CommandDecisionFloor) -> GuardAction:
-    if action == "monitor":
-        return "warn"
-    return cast(GuardAction, action)
-
-
-def _baseline_proposal(evaluation: CompositeCommandEvaluation) -> CommandShadowProposal:
-    """Recompute the baseline proposal without using the current decision result."""
-
-    command = evaluation.command
-    observations = evaluation.extension_observations
-    evidence = extension_evidence_batch(command, observations)
-    uncertainties = tuple(
-        sorted(
-            {
-                *command_uncertainties(command, sensitive=bool(evaluation.matches)),
-                *extension_uncertainties(observations),
-            },
-            key=lambda item: item.value,
-        )
-    )
-    decision = evaluate_effect_decision(
-        EffectDecisionRequest(
-            factors=decision_factors(evidence, compatibility_action_class=None, compatibility_rule=None),
-            uncertainties=uncertainties,
-        )
-    )
-    return CommandShadowProposal(
-        decision=decision,
-        cohorts=frozenset({CommandShadowCohort.BASELINE}),
-        version=COMMAND_SHADOW_BASELINE_PROPOSAL_VERSION,
-    )
-
-
-def _reconciliation_category(legacy: GuardAction, current: GuardAction, oracle: GuardAction) -> str:
-    legacy_rank = guard_action_severity(legacy)
-    current_rank = guard_action_severity(current)
-    oracle_rank = guard_action_severity(oracle)
-    if current_rank < legacy_rank:
-        raise ValueError("current decision lowers a legacy decision")
-    if current_rank == legacy_rank:
-        return "unchanged_meets_oracle" if current_rank >= oracle_rank else "unchanged_below_oracle"
-    if current_rank < oracle_rank:
-        return "strengthened_below_oracle"
-    if current_rank == oracle_rank:
-        return "strengthened_meets_oracle"
-    return "strengthened_above_oracle"
+def _merge_groups(target: defaultdict[str, list[str]], source: Mapping[str, list[str]]) -> None:
+    for key, case_ids in source.items():
+        target[key].extend(case_ids)
 
 
 def _group_summaries(groups: Mapping[str, list[str]]) -> list[dict[str, object]]:
@@ -408,7 +312,7 @@ def _main() -> None:
     if arguments not in {(), ("--write",), ("--check",), ("--metrics",)}:
         raise SystemExit("usage: guard_command_decision_diff.py [--write|--check|--metrics]")
     started = time.perf_counter()
-    report = generate_decision_diff_report()
+    report, rss_mib = _generate_decision_diff_report()
     payload = canonical_json_bytes(report)
     if arguments == ("--write",):
         _ = REPORT_PATH.write_bytes(payload)
@@ -421,7 +325,7 @@ def _main() -> None:
                 {
                     "elapsed_seconds": time.perf_counter() - started,
                     "report_framed_sha256": report_framed_sha256(report),
-                    "rss_mib": peak_rss_mib(),
+                    "rss_mib": rss_mib,
                 },
                 sort_keys=True,
             )
