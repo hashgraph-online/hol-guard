@@ -96,6 +96,7 @@ def test_github_permission_catalog_is_exhaustive_and_admin_merge_is_distinct() -
     assert admin.permission_id == "command.github.permission.merge-admin"
     assert admin.rule_ids == ("command.github.admin-merge",)
     assert admin.action_classes == ("GitHub administrator pull-request merge command",)
+    assert registry.permission_for_action_class("  github ADMINISTRATOR pull-request MERGE command  ") is admin
     assert admin.baseline_floor == "review"
     assert ordinary.permission_id == "command.github.permission.merge-remote"
     assert ordinary.rule_ids == ("command.github.merge",)
@@ -171,6 +172,19 @@ def test_permission_catalog_rejects_duplicate_mappings_cycles_and_invalid_refere
         CommandPermissionCatalog((base, base))
     with pytest.raises(ValueError, match="mapped by multiple permissions"):
         CommandPermissionCatalog((base, replace(base, permission_id="command.test.permission.other")))
+    with pytest.raises(ValueError, match=r"action class .* mapped by multiple permissions"):
+        CommandPermissionCatalog(
+            (
+                base,
+                replace(
+                    base,
+                    permission_id="command.test.permission.normalized-collision",
+                    typed_capabilities=("test_normalized_collision",),
+                    action_classes=(" TEST BASE ACTION ",),
+                    rule_ids=("command.test.normalized-collision",),
+                ),
+            )
+        )
     with pytest.raises(ValueError, match="unknown dependency"):
         CommandPermissionCatalog((replace(base, dependencies=("command.test.permission.missing",)),))
     with pytest.raises(ValueError, match="relationship cycle"):

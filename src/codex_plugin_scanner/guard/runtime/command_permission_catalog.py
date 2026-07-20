@@ -110,7 +110,13 @@ class CommandPermissionCatalog:
                 raise ValueError(f"duplicate permission ID: {permission.permission_id}")
             by_id[permission.permission_id] = permission
             _index_unique(by_rule_id, permission.rule_ids, permission, "rule")
-            _index_unique(by_action_class, permission.action_classes, permission, "action class")
+            _index_unique(
+                by_action_class,
+                permission.action_classes,
+                permission,
+                "action class",
+                normalize=True,
+            )
             _index_unique(by_capability, permission.typed_capabilities, permission, "typed capability")
         _validate_references(ordered, by_id)
         _validate_dependency_cycles(ordered, by_id)
@@ -143,7 +149,7 @@ class CommandPermissionCatalog:
         return self._by_rule_id.get(rule_id)
 
     def for_action_class(self, action_class: str) -> CommandPermissionSpec | None:
-        return self._by_action_class.get(action_class)
+        return self._by_action_class.get(action_class.strip().lower())
 
     def for_typed_capability(self, capability: str) -> CommandPermissionSpec | None:
         return self._by_capability.get(capability)
@@ -356,14 +362,17 @@ def _index_unique(
     values: tuple[str, ...],
     permission: CommandPermissionSpec,
     kind: str,
+    *,
+    normalize: bool = False,
 ) -> None:
     for value in values:
-        existing = index.get(value)
+        key = value.strip().lower() if normalize else value
+        existing = index.get(key)
         if existing is not None:
             message = f"{kind} {value} is mapped by multiple permissions: {existing.permission_id}"
             message += f", {permission.permission_id}"
             raise ValueError(message)
-        index[value] = permission
+        index[key] = permission
 
 
 def _validate_references(
