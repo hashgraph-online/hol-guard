@@ -282,6 +282,62 @@ def test_resolve_queue_result_reports_duplicate_ids_without_unrelated_items() ->
     )
 
 
+def test_duplicate_resolution_leaves_terminal_and_contract_invalid_rows_pending() -> None:
+    connection = _connection()
+    add_approval_request(connection, _request("req-active"), "2026-05-08T10:00:00+00:00")
+    _force_duplicate_row(connection, "req-terminal", "req-active")
+    _force_duplicate_row(connection, "req-malformed", "req-active")
+
+    terminal_decision = list_approval_requests(connection, status="pending", limit=None)[0]["decision_v2_json"]
+    assert isinstance(terminal_decision, dict)
+    terminal_decision = {**terminal_decision, "guard_action": "block", "action": "block"}
+    connection.execute(
+        """
+        update approval_requests
+        set policy_action = 'block', decision_v2_json = ?
+        where request_id = 'req-terminal'
+        """,
+        (json.dumps(terminal_decision),),
+    )
+    connection.execute(
+        """
+        update approval_requests
+        set action_envelope_json = ?
+        where request_id = 'req-malformed'
+        """,
+        (
+            json.dumps(
+                {
+                    "action_type": "shell_command",
+                    "pre_execution_result": "require-reapproval",
+                    "preExecutionResult": "block",
+                }
+            ),
+        ),
+    )
+
+    result = resolve_request_with_queue_result(
+        connection,
+        "req-active",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="reviewed",
+        resolved_at="2026-05-08T10:03:00+00:00",
+    )
+
+    statuses = {
+        str(row["request_id"]): str(row["status"])
+        for row in connection.execute("select request_id, status from approval_requests order by request_id").fetchall()
+    }
+    assert result["resolved"] is True
+    assert result["resolved_duplicate_ids"] == []
+    assert statuses == {
+        "req-active": "resolved",
+        "req-malformed": "pending",
+        "req-terminal": "pending",
+    }
+
+
 def test_resolve_queue_result_reports_every_resolved_duplicate_id() -> None:
     connection = _connection()
     add_approval_request(connection, _request("req-active"), "2026-05-08T10:00:00+00:00")
@@ -579,6 +635,62 @@ def test_workspace_scope_resolution_preserves_root_workspace(tmp_path: Path) -> 
 
     assert resolved_ids == ["req-root"]
     assert store.get_approval_request("req-root")["status"] == "resolved"
+
+
+def test_broad_scope_resolution_leaves_terminal_and_contract_invalid_rows_pending(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    for index, request_id in enumerate(("req-valid", "req-terminal", "req-malformed")):
+        store.add_approval_request(
+            _request(request_id, artifact_id=f"codex:project:{request_id}"),
+            f"2026-05-08T10:0{index}:00+00:00",
+        )
+
+    terminal = store.get_approval_request("req-terminal")
+    assert terminal is not None
+    terminal_decision = terminal["decision_v2_json"]
+    assert isinstance(terminal_decision, dict)
+    with store._connect() as connection:
+        connection.execute(
+            """
+            update approval_requests
+            set policy_action = 'sandbox-required', decision_v2_json = ?
+            where request_id = 'req-terminal'
+            """,
+            (json.dumps({**terminal_decision, "guard_action": "sandbox-required", "action": "ask"}),),
+        )
+        connection.execute(
+            """
+            update approval_requests
+            set action_envelope_json = ?
+            where request_id = 'req-malformed'
+            """,
+            (
+                json.dumps(
+                    {
+                        "action_type": "shell_command",
+                        "pre_execution_result": "require-reapproval",
+                        "preExecutionResult": "block",
+                    }
+                ),
+            ),
+        )
+
+    resolved_ids = store.resolve_matching_approval_requests(
+        harness=None,
+        scope="global",
+        artifact_id=None,
+        workspace=None,
+        publisher=None,
+        resolution_action="allow",
+        resolution_scope="global",
+        reason="trusted globally",
+        resolved_at="2026-05-08T10:04:00+00:00",
+    )
+
+    assert resolved_ids == ["req-valid"]
+    assert store.get_approval_request("req-valid")["status"] == "resolved"
+    assert store.get_approval_request("req-terminal")["status"] == "pending"
+    assert store.get_approval_request("req-malformed")["status"] == "pending"
 
 
 def test_daemon_resolution_envelope_and_request_filters(tmp_path: Path) -> None:

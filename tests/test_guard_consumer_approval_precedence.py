@@ -378,6 +378,15 @@ def test_guard_run_claims_exact_saved_review_allow_only_at_real_launch(
     assert result["blocked"] is False
     assert result["launched"] is True
     assert launch_calls
+    item = result["artifacts"][0]
+    expected_claim = {
+        "status": "consumed",
+        "approval_context_hash": context_hash,
+        "reason_code": "approval_reuse_accepted",
+    }
+    assert item["approval_claim"] == expected_claim
+    assert item["policy_composition"]["saved_approval_claim"] == expected_claim
+    assert item["authoritative_decision"]["enforcement"]["authority_finalized"] is True
     assert (
         store.peek_local_once_approval(
             harness=artifact.harness,
@@ -2035,7 +2044,8 @@ def test_evaluation_records_exact_saved_allow_without_claiming_before_launch(
         "saved_action": "allow",
         "saved_state_present": True,
         "scanner_action": item["verdict_action"],
-        "scoring_recommendation": item["verdict_action"],
+        "raw_scoring_recommendation": item["scoring_recommendation"]["action"],
+        "scoring_recommendation_non_authoritative": True,
         "final_action": "allow",
         "trusted_request_override": False,
     }
@@ -2185,7 +2195,7 @@ def _with_runtime_detector_telemetry(
         ],
         "runtime_detector_composition": {
             "action": "allow",
-            "reason": "no detector signal",
+            "reason": "no detector signals; base policy action applies",
             "downgraded": False,
             "upgraded": False,
         },

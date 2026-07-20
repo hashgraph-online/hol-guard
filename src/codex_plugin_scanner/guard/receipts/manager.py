@@ -12,7 +12,7 @@ from ..runtime.actions import GuardActionEnvelope
 
 
 def _redacted_envelope_dict(
-    envelope: GuardActionEnvelope,
+    envelope: GuardActionEnvelope | Mapping[str, object],
     *,
     redaction_level: str = "full",
 ) -> dict[str, object]:
@@ -23,6 +23,17 @@ def _redacted_envelope_dict(
     - ``partial``: command text included (already secret-scrubbed via redact_text at source)
     - ``none``: command text, target paths, network hosts, package name included
     """
+    if isinstance(envelope, Mapping):
+        policy_fields = {key: envelope[key] for key in ("policy_action", "policyAction") if key in envelope}
+        typed_payload = {key: value for key, value in envelope.items() if key not in {"policy_action", "policyAction"}}
+        try:
+            typed_envelope = GuardActionEnvelope.from_dict(typed_payload)
+        except (TypeError, ValueError):
+            return _redacted_legacy_envelope_dict(envelope, redaction_level=redaction_level)
+        redacted = _redacted_envelope_dict(typed_envelope, redaction_level=redaction_level)
+        redacted.update(policy_fields)
+        return redacted
+
     base: dict[str, object] = {
         "schema_version": envelope.schema_version,
         "action_id": envelope.action_id,
@@ -58,6 +69,68 @@ def _redacted_envelope_dict(
             base["command"] = envelope.command
 
     return base
+
+
+def _redacted_legacy_envelope_dict(
+    envelope: Mapping[str, object],
+    *,
+    redaction_level: str,
+) -> dict[str, object]:
+    """Redact older receipt metadata that predates typed action envelopes."""
+
+    safe: dict[str, object] = {}
+    for key in (
+        "schema_version",
+        "action_id",
+        "actionId",
+        "harness",
+        "event_name",
+        "action_type",
+        "actionType",
+        "workspace_hash",
+        "tool_name",
+        "mcp_server",
+        "mcp_tool",
+        "package_manager",
+        "package_intent_kind",
+        "pre_execution_result",
+        "preExecutionResult",
+        "script_name",
+        "policy_action",
+        "policyAction",
+    ):
+        if key not in envelope:
+            continue
+        value = envelope.get(key)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            safe[key] = value
+
+    command = envelope.get("command")
+    if not isinstance(command, str):
+        command = envelope.get("redacted_command")
+    safe["command_length"] = len(command) if isinstance(command, str) else 0
+    safe["target_paths_count"] = _sequence_length(envelope.get("target_paths"))
+    safe["network_hosts_count"] = _sequence_length(envelope.get("network_hosts"))
+    safe["package_targets_count"] = _sequence_length(envelope.get("package_targets"))
+    package_name = envelope.get("package_name")
+    safe["has_package_name"] = isinstance(package_name, str) and bool(package_name)
+
+    if redaction_level in {"partial", "none"} and isinstance(command, str):
+        safe["command"] = command
+    if redaction_level == "none":
+        for key in ("target_paths", "network_hosts"):
+            value = envelope.get(key)
+            if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)) and value:
+                safe[key] = list(value)
+        if isinstance(package_name, str) and package_name:
+            safe["package_name"] = package_name
+    return safe
+
+
+def _sequence_length(value: object) -> int:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return 0
+    return len(value)
 
 
 def _auto_diff_summary(changed_capabilities: list[str]) -> str:

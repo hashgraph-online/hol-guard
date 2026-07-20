@@ -11,6 +11,7 @@ from typing import TypeGuard
 from ..action_lattice import is_guard_action as _is_guard_action
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
+from ..approval_resolution import require_resolvable_approval_request
 from ..cli.install_commands import (
     apply_managed_install,
     build_harness_verification,
@@ -36,6 +37,7 @@ from ..package_shim_status import record_package_shim_audit_result
 from ..review_contracts import (
     GuardReviewContractError,
     guard_review_oauth_metadata,
+    normalize_remote_approval_decision,
     validate_decision_memory_bundle_target,
     validate_remote_approval_request_binding,
     validated_decision_memory_bundle,
@@ -301,7 +303,7 @@ def _execute_approval_operation(
         "localRequestId",
         "local_request_id",
     )
-    normalized_outer_action = _normalize_remote_decision_action(action)
+    normalized_outer_action = normalize_remote_approval_decision(action)
     if action != "policy_sync" and normalized_outer_action is None:
         raise ValueError("invalid_approval_payload")
     if action == "policy_sync":
@@ -341,27 +343,26 @@ def _execute_approval_operation(
         oauth=oauth,
         store=store,
     )
+    require_resolvable_approval_request(request_row)
     request_policy_action = _optional_string(request_row.get("policy_action"))
     resolution_scope = _optional_string(request_row.get("recommended_scope"))
-    if (
-        request_policy_action not in {"block", "pause", "review", "require-reapproval"}
-        or resolution_scope not in DECISION_SCOPE_VALUES
-    ):
+    if request_policy_action not in {"review", "require-reapproval"} or resolution_scope not in DECISION_SCOPE_VALUES:
         raise ValueError("remote_approval_not_permitted")
     receipt_id = _optional_string(envelope.get("receiptId"))
     if receipt_id is None:
         raise ValueError("invalid_remote_approval_receipt")
+    envelope_decision = _optional_string(envelope.get("decision"))
+    resolution_action = normalize_remote_approval_decision(envelope_decision)
+    if resolution_action is None:
+        raise ValueError("invalid_remote_approval_decision")
+    if normalized_outer_action != resolution_action:
+        raise ValueError("remote_approval_decision_mismatch")
     if not store.claim_remote_once_receipt(
         receipt_id,
         request_id=local_request_id,
         claimed_at=generated_at,
     ):
         raise ValueError("remote_approval_replayed")
-    envelope_decision = _optional_string(envelope.get("decision"))
-    resolution_action = _normalize_remote_decision_action(envelope_decision)
-    if resolution_action is None:
-        store.release_remote_once_receipt(receipt_id)
-        raise ValueError("invalid_remote_approval_decision")
     resolution_scope = resolution_scope or "artifact"
     try:
         result = store.resolve_request_with_signed_remote_result(
@@ -398,7 +399,7 @@ def _execute_approval_operation(
         else {}
     )
     response_data: dict[str, object] = {
-        "action": normalized_outer_action or resolution_action,
+        "action": resolution_action,
         "daemonAckStatus": (
             "resolved"
             if resolved and _remote_resume_confirmed(resume_metadata, resolution_action)
@@ -426,18 +427,6 @@ def _remote_resume_confirmed(resume_metadata: dict[str, object], action: str) ->
         return False
     detail = resume_metadata.get("codexResume") or resume_metadata.get("harnessResume")
     return isinstance(detail, dict) and detail.get("reason") == "blocked_not_resumed"
-
-
-def _normalize_remote_decision_action(value: object) -> str | None:
-    normalized = _optional_string(value)
-    if normalized is None:
-        return None
-    folded = normalized.replace("_", "-")
-    if folded in {"allow", "allow-once"} or normalized == "allowOnce":
-        return "allow"
-    if folded in {"block", "deny", "denied", "blocked"}:
-        return "block"
-    return None
 
 
 def _target_string(mapping: dict[str, object], *keys: str) -> str | None:

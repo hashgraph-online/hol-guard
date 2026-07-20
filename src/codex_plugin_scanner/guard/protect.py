@@ -15,10 +15,12 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 from uuid import uuid4
 
+from .action_lattice import normalize_guard_action
 from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .config import GuardConfig
 from .models import GuardReceipt
 from .redaction import redact_text
+from .runtime.decisions import decision_from_legacy_policy_action
 from .runtime.package_manager_command import strip_package_manager_global_options
 
 ProtectAction = Literal["allow", "review", "block"]
@@ -327,14 +329,48 @@ def _merge_cached_advisory_into_package_payload(
         "executed": False,
         "dry_run": requested_dry_run or blocking,
     }
+    exact_action = normalize_guard_action(merged_action, unknown_action="block")
+    supply_chain_evaluation = payload.get("supply_chain_evaluation")
+    if isinstance(supply_chain_evaluation, dict):
+        canonical_copy = decision_from_legacy_policy_action(
+            exact_action,
+            reason=merged_reason,
+        )
+        existing_user_copy = supply_chain_evaluation.get("user_copy")
+        user_copy = dict(existing_user_copy) if isinstance(existing_user_copy, dict) else {}
+        user_copy.update(
+            {
+                "title": canonical_copy.user_title,
+                "summary": canonical_copy.user_body,
+                "next_step": canonical_copy.retry_instruction or canonical_copy.user_body,
+                "harness_message": canonical_copy.harness_message,
+            }
+        )
+        updated_payload["supply_chain_evaluation"] = {
+            **supply_chain_evaluation,
+            "decision": canonical_copy.action,
+            "policy_action": exact_action,
+            "risk_summary": merged_reason,
+            "user_copy": user_copy,
+        }
     receipt = payload.get("receipt")
     if isinstance(receipt, dict):
-        updated_receipt = {**receipt, "policy_decision": merged_action}
+        action_envelope = receipt.get("action_envelope_json")
+        updated_action_envelope = dict(action_envelope) if isinstance(action_envelope, dict) else None
+        if updated_action_envelope is not None:
+            for key in ("policy_action", "pre_execution_result"):
+                if key in updated_action_envelope:
+                    updated_action_envelope[key] = exact_action
+        updated_receipt = {
+            **receipt,
+            "policy_decision": exact_action,
+            **({"action_envelope_json": updated_action_envelope} if updated_action_envelope is not None else {}),
+        }
         updated_payload["receipt"] = updated_receipt
         if action_changed:
             receipt_id = updated_receipt.get("receipt_id")
             if isinstance(receipt_id, str) and receipt_id:
-                store.update_receipt_policy_decision(receipt_id, merged_action)
+                store.update_receipt_policy_decision(receipt_id, exact_action)
         if action_changed:
             request = payload.get("request")
             executor = request.get("executor") if isinstance(request, dict) else None

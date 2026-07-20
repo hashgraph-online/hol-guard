@@ -26,7 +26,7 @@ function makeReceipt(id: string, overrides: Partial<GuardReceipt> = {}): GuardRe
 const receipts = [
   makeReceipt("r1", { policy_decision: "allow", artifact_name: "normal-tool" }),
   makeReceipt("r2", { policy_decision: "block", artifact_name: 'Special "quoted" tool' }),
-  makeReceipt("r3", { policy_decision: "ask", artifact_name: "tool,with,commas" }),
+  makeReceipt("r3", { policy_decision: "review", artifact_name: "tool,with,commas" }),
 ];
 
 // CSV tests

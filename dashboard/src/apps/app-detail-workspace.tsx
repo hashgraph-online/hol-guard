@@ -45,6 +45,7 @@ import { EvidenceInsightStrip } from "../evidence/evidence-insight-strip";
 import { filterEvidence } from "../evidence/evidence-filters";
 import { sortEvidence } from "../evidence/evidence-sort";
 import { computeMetrics } from "../evidence/evidence-metrics";
+import { guardActionDisposition, guardActionPresentation } from "../guard-action";
 import { DEFAULT_FILTER_STATE } from "../evidence/evidence-url-state";
 import type { EvidenceFilterState, EvidenceSortKey } from "../evidence/evidence-types";
 import type {
@@ -273,8 +274,9 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
   );
 
   const totalActions = harnessReceipts.length;
-  const blockedCount = harnessReceipts.filter((r) => r.policy_decision === "block").length;
-  const allowedCount = harnessReceipts.filter((r) => r.policy_decision === "allow").length;
+  const blockedCount = harnessReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
+  const allowedCount = harnessReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+  const reviewedCount = harnessReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
   const blockRate = totalActions > 0 ? Math.round((blockedCount / totalActions) * 100) : 0;
 
   const lastActivity = harnessReceipts[0]?.timestamp ?? null;
@@ -404,6 +406,7 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
                 totalActions={totalActions}
                 allowedCount={allowedCount}
                 blockedCount={blockedCount}
+                reviewedCount={reviewedCount}
                 blockRate={blockRate}
                 lastActivity={lastActivity}
                 harnessReceipts={harnessReceipts}
@@ -479,6 +482,7 @@ function AppOverviewTab(props: {
   totalActions: number;
   allowedCount: number;
   blockedCount: number;
+  reviewedCount: number;
   blockRate: number;
   lastActivity: string | null;
   harnessReceipts: GuardReceipt[];
@@ -524,9 +528,10 @@ function AppOverviewTab(props: {
             <AppStatusBadge status={props.status} />
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
             <StatCard label="Total actions" value={props.totalActions} />
             <StatCard label="Allowed" value={props.allowedCount} tone="green" />
+            <StatCard label="Review" value={props.reviewedCount} tone={props.reviewedCount > 0 ? "blue" : "slate"} />
             <StatCard label="Blocked" value={props.blockedCount} tone={props.blockedCount > 0 ? "attention" : "slate"} />
             <StatCard label="Block rate" value={`${props.blockRate}%`} tone={props.blockRate > 10 ? "attention" : "slate"} />
           </div>
@@ -594,27 +599,26 @@ function AppOverviewTab(props: {
               What Guard decided recently.
             </p>
             <div className="mt-4 space-y-3">
-              {props.harnessReceipts.slice(0, 5).map((receipt) => (
-                <div
-                  key={receipt.receipt_id}
-                  className="flex items-start justify-between gap-3 rounded-xl border border-slate-200/70 bg-white px-4 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm text-brand-dark">
-                      <span className="font-medium">
-                        {receipt.policy_decision === "allow" ? "Allowed" : "Blocked"}
-                      </span>{" "}
-                      <span className="font-mono text-xs">{receipt.artifact_name ?? receipt.artifact_id}</span>
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatRelativeTime(receipt.timestamp)}
-                    </p>
+              {props.harnessReceipts.slice(0, 5).map((receipt) => {
+                const presentation = guardActionPresentation(receipt.policy_decision);
+                return (
+                  <div
+                    key={receipt.receipt_id}
+                    className="flex items-start justify-between gap-3 rounded-xl border border-slate-200/70 bg-white px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm text-brand-dark">
+                        <span className="font-medium">{presentation.label}</span>{" "}
+                        <span className="font-mono text-xs">{receipt.artifact_name ?? receipt.artifact_id}</span>
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {formatRelativeTime(receipt.timestamp)}
+                      </p>
+                    </div>
+                    <Badge tone={presentation.tone}>{presentation.label}</Badge>
                   </div>
-                  <Tag tone={receipt.policy_decision === "allow" ? "green" : "attention"}>
-                    {receipt.policy_decision}
-                  </Tag>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ) : showFirstRunGuide ? (
@@ -943,7 +947,7 @@ function AppActivityTab(props: {
         ) : (
           <EmptyState
             title="No pending reviews"
-            body="Guard will surface blocked actions here when this app needs a decision."
+            body="Guard will surface actions here when this app needs a decision."
             tone="teach"
           />
         )
@@ -1638,7 +1642,7 @@ function setupSuccessTitle(action: GuardHarnessAction, displayName: string): str
 function ActivitySparkline({ receipts }: { receipts: GuardReceipt[] }) {
   const days = 7;
   const data = useMemo(() => {
-    const result: { date: string; allowed: number; blocked: number }[] = [];
+    const result: { date: string; allowed: number; reviewed: number; blocked: number }[] = [];
     const now = new Date();
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(now);
@@ -1652,14 +1656,15 @@ function ActivitySparkline({ receipts }: { receipts: GuardReceipt[] }) {
       });
       result.push({
         date: d.toLocaleDateString("en-US", { weekday: "short" }),
-        allowed: dayReceipts.filter((r) => r.policy_decision === "allow").length,
-        blocked: dayReceipts.filter((r) => r.policy_decision === "block").length,
+        allowed: dayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length,
+        reviewed: dayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length,
+        blocked: dayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length,
       });
     }
     return result;
   }, [receipts]);
 
-  const maxVal = Math.max(...data.map((d) => d.allowed + d.blocked), 1);
+  const maxVal = Math.max(...data.map((d) => d.allowed + d.reviewed + d.blocked), 1);
 
   return (
     <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
@@ -1669,7 +1674,7 @@ function ActivitySparkline({ receipts }: { receipts: GuardReceipt[] }) {
       </div>
       <div className="mt-4 flex items-end gap-2">
         {data.map((day) => {
-          const total = day.allowed + day.blocked;
+          const total = day.allowed + day.reviewed + day.blocked;
           const height = total > 0 ? Math.max(20, (total / maxVal) * 100) : 4;
           return (
             <div key={day.date} className="flex flex-1 flex-col items-center gap-1">
@@ -1678,6 +1683,11 @@ function ActivitySparkline({ receipts }: { receipts: GuardReceipt[] }) {
                   className="flex-1 rounded-t bg-brand-green/60"
                   style={{ height: `${day.allowed > 0 ? (day.allowed / total) * 100 : 0}%` }}
                   title={`${day.allowed} allowed`}
+                />
+                <div
+                  className="flex-1 rounded-t bg-brand-blue/50"
+                  style={{ height: `${day.reviewed > 0 ? (day.reviewed / total) * 100 : 0}%` }}
+                  title={`${day.reviewed} awaiting review`}
                 />
                 <div
                   className="flex-1 rounded-t bg-brand-attention/60"
@@ -1691,6 +1701,10 @@ function ActivitySparkline({ receipts }: { receipts: GuardReceipt[] }) {
         })}
       </div>
       <div className="mt-2 flex items-center gap-4">
+        <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <span className="h-2 w-2 rounded-sm bg-brand-blue/50" />
+          Review
+        </span>
         <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
           <span className="h-2 w-2 rounded-sm bg-brand-green/60" />
           Allowed
@@ -1706,9 +1720,10 @@ function ActivitySparkline({ receipts }: { receipts: GuardReceipt[] }) {
 
 function RiskSnapshot({ receipts }: { receipts: GuardReceipt[] }) {
   const analysis = useMemo(() => {
-    const blockedCount = receipts.filter((r) => r.policy_decision === "block").length;
-    const allowedCount = receipts.filter((r) => r.policy_decision === "allow").length;
-    return { blocked: blockedCount, allowed: allowedCount, total: receipts.length };
+    const blockedCount = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
+    const allowedCount = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+    const reviewedCount = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
+    return { blocked: blockedCount, allowed: allowedCount, reviewed: reviewedCount, total: receipts.length };
   }, [receipts]);
 
   if (analysis.total === 0) return null;
@@ -1721,6 +1736,12 @@ function RiskSnapshot({ receipts }: { receipts: GuardReceipt[] }) {
           <span className="font-medium">{analysis.allowed}</span>{" "}
           <span className="text-muted-foreground">allowed</span>
         </p>
+        {analysis.reviewed > 0 && (
+          <p>
+            <span className="font-medium text-brand-blue">{analysis.reviewed}</span>{" "}
+            <span className="text-muted-foreground">awaiting review</span>
+          </p>
+        )}
         {analysis.blocked > 0 && (
           <p>
             <span className="font-medium text-brand-attention">{analysis.blocked}</span>{" "}

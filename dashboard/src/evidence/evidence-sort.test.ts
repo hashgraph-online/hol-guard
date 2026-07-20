@@ -40,7 +40,7 @@ const r2 = makeReceipt("r2", {
 });
 const r3 = makeReceipt("r3", {
   harness: "codex",
-  policy_decision: "ask",
+  policy_decision: "review",
   artifact_name: "beta-tool",
   timestamp: "2024-06-16T06:00:00.000Z",
 });
@@ -72,9 +72,9 @@ const byApp = sortEvidence(receipts, "app");
 assert(byApp[0].harness === "claude", "app: claude first");
 assert(byApp[byApp.length - 1].harness === "cursor", "app: cursor last");
 
-// decision (allow < ask < block)
+// decision (allow < review < block)
 const byDecision = sortEvidence(receipts, "decision");
-assert(byDecision[0].policy_decision === "allow" || byDecision[0].policy_decision === "allow", "decision: allow before block");
+assert(byDecision[0].policy_decision === "allow", "decision: allow before block");
 const decisions = byDecision.map((r) => r.policy_decision);
 const firstBlock = decisions.indexOf("block");
 const lastAllow = decisions.lastIndexOf("allow");

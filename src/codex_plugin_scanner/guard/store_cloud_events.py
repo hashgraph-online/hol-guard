@@ -9,6 +9,7 @@ from typing import cast
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_receipt_rollups import reconcile_dirty_receipt_rollups, reconcile_pending_receipt_events
 
 
 class StoreCloudEventsMixin:
@@ -386,6 +387,11 @@ class StoreCloudEventsMixin:
         query += " order by occurred_at asc, event_id asc limit ?"
         params.append(limit)
         with self._connect() as connection:
+            if receipt_rollups_need_backfill(connection):
+                backfill_receipt_rollups(connection)
+            else:
+                reconcile_dirty_receipt_rollups(connection)
+            reconcile_pending_receipt_events(connection)
             rows = connection.execute(query, tuple(params)).fetchall()
         events: list[dict[str, object]] = []
         for row in rows:

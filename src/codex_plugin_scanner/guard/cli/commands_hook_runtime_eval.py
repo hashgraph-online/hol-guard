@@ -816,11 +816,13 @@ def _evaluate_runtime_artifact_hook(
         if remembered_rule_reason is not None:
             decision_v2_payload["harness_message"] = remembered_rule_reason
             decision_v2_payload["dashboard_primary_detail"] = remembered_rule_reason
+            decision_v2_payload["detail_reason_code"] = "remembered_rule_ignored_degraded_trust"
             response_payload["risk_headline"] = remembered_rule_reason
     if package_evaluation is not None:
         response_payload["supply_chain_evaluation"] = package_evaluation.to_dict()
     if (
         _canonical_harness_name(args.harness) == "cursor"
+        and config.mode != "observe"
         and event_name == "PreToolUse"
         and runtime_artifact.artifact_type == "tool_action_request"
     ):

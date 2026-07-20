@@ -90,6 +90,16 @@ def test_unknown_inputs_fail_closed_with_stable_diagnostics(value: object) -> No
     assert guard_action_severity(value) == GUARD_ACTION_SEVERITY["review"]
 
 
+def test_legacy_product_ask_alias_normalizes_to_exact_review_without_contract_error() -> None:
+    result = normalize_guard_action_result("ask", unknown_action="require-reapproval")
+
+    assert result.action == "review"
+    assert result.reason_code is None
+    assert result.original_action == "ask"
+    assert result.recognized is True
+    assert guard_action_severity("ask") == GUARD_ACTION_SEVERITY["review"]
+
+
 def test_unknown_action_never_loses_to_allow_or_warn() -> None:
     assert most_restrictive_guard_action("future-action", "allow") == "review"
     assert most_restrictive_guard_action("warn", "future-action") == "review"
