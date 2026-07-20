@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import builtins
 import json
+import os
 from pathlib import Path
 
 import pytest
 
+import codex_plugin_scanner.guard.runtime.cisco_preflight as cisco_preflight_module
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -290,7 +292,7 @@ def test_cisco_preflight_changed_skill_file_produces_normalized_signal(
     assert signals[0].scanner_rule_id == "CISCO-SKILL-EXFIL"
 
 
-def test_cisco_preflight_scans_skill_targets_that_resolve_outside_workspace_via_symlink(
+def test_cisco_preflight_rejects_skill_targets_that_resolve_outside_workspace_via_symlink(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -318,11 +320,12 @@ def test_cisco_preflight_scans_skill_targets_that_resolve_outside_workspace_via_
         workspace=tmp_path,
     )
 
-    assert [signal.source for signal in signals] == ["cisco_skill"]
-    assert called == [external_skill.parent]
+    assert [signal.scanner_rule_id for signal in signals] == ["outside_approved_workspace"]
+    assert called == []
+    assert str(external_root) not in json.dumps(signals[0].to_dict())
 
 
-def test_cisco_preflight_scans_explicit_absolute_skill_targets_outside_workspace(
+def test_cisco_preflight_rejects_absolute_skill_targets_outside_workspace(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -341,11 +344,11 @@ def test_cisco_preflight_scans_explicit_absolute_skill_targets_outside_workspace
 
     signals = scan_action_for_cisco_evidence(_absolute_file_write_action(external_skill), workspace=tmp_path)
 
-    assert [signal.source for signal in signals] == ["cisco_skill"]
-    assert called == [external_skill.parent]
+    assert [signal.scanner_rule_id for signal in signals] == ["outside_approved_workspace"]
+    assert called == []
 
 
-def test_cisco_preflight_scans_explicit_relative_traversal_skill_targets(
+def test_cisco_preflight_rejects_relative_traversal_skill_targets(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -367,11 +370,11 @@ def test_cisco_preflight_scans_explicit_relative_traversal_skill_targets(
         workspace=tmp_path,
     )
 
-    assert [signal.source for signal in signals] == ["cisco_skill"]
-    assert called == [external_skill.parent]
+    assert [signal.scanner_rule_id for signal in signals] == ["outside_approved_workspace"]
+    assert called == []
 
 
-def test_cisco_preflight_scans_explicit_relative_traversal_mcp_targets(
+def test_cisco_preflight_rejects_relative_traversal_mcp_targets(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -393,11 +396,11 @@ def test_cisco_preflight_scans_explicit_relative_traversal_mcp_targets(
         workspace=tmp_path,
     )
 
-    assert [signal.source for signal in signals] == ["cisco_mcp"]
-    assert called == [external_mcp.parent]
+    assert [signal.scanner_rule_id for signal in signals] == ["outside_approved_workspace"]
+    assert called == []
 
 
-def test_cisco_preflight_scans_mcp_targets_that_resolve_outside_workspace_via_symlink(
+def test_cisco_preflight_rejects_mcp_targets_that_resolve_outside_workspace_via_symlink(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -422,8 +425,8 @@ def test_cisco_preflight_scans_mcp_targets_that_resolve_outside_workspace_via_sy
 
     signals = scan_action_for_cisco_evidence(_file_write_action(workspace_mcp, tmp_path), workspace=tmp_path)
 
-    assert [signal.source for signal in signals] == ["cisco_mcp"]
-    assert called == [external_root]
+    assert [signal.scanner_rule_id for signal in signals] == ["outside_approved_workspace"]
+    assert called == []
 
 
 def test_cisco_preflight_changed_mcp_config_produces_normalized_signal(
@@ -444,6 +447,205 @@ def test_cisco_preflight_changed_mcp_config_produces_normalized_signal(
 
     assert [signal.source for signal in signals] == ["cisco_mcp"]
     assert signals[0].scanner_rule_id == "CISCO-MCP-POISON"
+
+
+def test_cisco_preflight_scans_absolute_target_inside_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    mcp_path = tmp_path / "nested" / ".mcp.json"
+    mcp_path.parent.mkdir()
+    mcp_path.write_text("{}", encoding="utf-8")
+    called: list[Path] = []
+
+    def fake_scan(path: Path, mode: str = "auto", timeout_seconds: float | None = None):
+        called.append(path)
+        return _mcp_summary(CiscoIntegrationStatus.ENABLED, (_mcp_finding(),))
+
+    monkeypatch.setattr(cisco_mcp_scanner, "run_cisco_mcp_scan", fake_scan)
+
+    signals = cisco_preflight_module.scan_action_for_cisco_evidence(
+        _absolute_file_write_action(mcp_path),
+        workspace=tmp_path,
+    )
+
+    assert [signal.source for signal in signals] == ["cisco_mcp"]
+    assert called == [mcp_path.parent]
+
+
+def test_cisco_preflight_scans_external_target_only_when_root_is_explicitly_approved(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    external_root = tmp_path.parent / f"{tmp_path.name}-approved"
+    external_skill = external_root / "skills" / "demo" / "SKILL.md"
+    external_skill.parent.mkdir(parents=True)
+    external_skill.write_text("# Approved\n", encoding="utf-8")
+    called: list[Path] = []
+
+    def fake_scan(path: Path, mode: str = "auto", timeout_seconds: float | None = None):
+        called.append(path)
+        return _skill_summary(CiscoIntegrationStatus.ENABLED, (_skill_finding(),))
+
+    monkeypatch.setattr(cisco_skill_scanner, "run_cisco_skill_scan", fake_scan)
+
+    signals = cisco_preflight_module.scan_action_for_cisco_evidence(
+        _absolute_file_write_action(external_skill),
+        workspace=tmp_path,
+        approved_scan_roots=(external_root,),
+    )
+
+    assert [signal.source for signal in signals] == ["cisco_skill"]
+    assert called == [external_root / "skills"]
+
+
+def test_cisco_preflight_rejects_derived_skill_root_broader_than_explicit_approval(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    external_skill_root = tmp_path.parent / f"{tmp_path.name}-narrow" / "skills" / "demo"
+    external_skill_root.mkdir(parents=True)
+    external_skill = external_skill_root / "SKILL.md"
+    external_skill.write_text("# Narrow\n", encoding="utf-8")
+    called: list[Path] = []
+    monkeypatch.setattr(
+        cisco_skill_scanner,
+        "run_cisco_skill_scan",
+        lambda path, **kwargs: called.append(path),
+    )
+
+    signals = cisco_preflight_module.scan_action_for_cisco_evidence(
+        _absolute_file_write_action(external_skill),
+        workspace=tmp_path,
+        approved_scan_roots=(external_skill_root,),
+    )
+
+    assert [signal.scanner_rule_id for signal in signals] == ["outside_approved_workspace"]
+    assert signals[0].technical_detail == "outside_approved_workspace: derived_scan_root_outside_approved_root"
+    assert called == []
+
+
+def test_cisco_preflight_redacted_skill_target_falls_back_only_to_selected_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    skills_root = tmp_path / "skills"
+    (skills_root / "demo").mkdir(parents=True)
+    (skills_root / "demo" / "SKILL.md").write_text("# Demo\n", encoding="utf-8")
+    called: list[Path] = []
+
+    def fake_scan(path: Path, mode: str = "auto", timeout_seconds: float | None = None):
+        called.append(path)
+        return _skill_summary(CiscoIntegrationStatus.ENABLED, (_skill_finding(),))
+
+    monkeypatch.setattr(cisco_skill_scanner, "run_cisco_skill_scan", fake_scan)
+
+    signals = cisco_preflight_module.scan_action_for_cisco_evidence(
+        _relative_target_write_action(".../SKILL.md"),
+        workspace=tmp_path,
+        approved_scan_roots=(tmp_path.parent,),
+    )
+
+    assert [signal.source for signal in signals] == ["cisco_skill"]
+    assert called == [skills_root]
+
+
+@pytest.mark.parametrize("target_kind", ["missing", "unreadable", "special"])
+def test_cisco_preflight_rejects_ambiguous_or_non_regular_targets_without_scanning(
+    target_kind: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    skill_path = tmp_path / "skills" / "demo" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    if target_kind == "unreadable":
+        skill_path.write_text("# Unreadable\n", encoding="utf-8")
+        skill_path.chmod(0)
+    elif target_kind == "special":
+        if not hasattr(os, "mkfifo"):
+            pytest.skip("FIFOs are unavailable on this platform")
+        os.mkfifo(skill_path)
+    called: list[Path] = []
+    monkeypatch.setattr(
+        cisco_skill_scanner,
+        "run_cisco_skill_scan",
+        lambda path, **kwargs: called.append(path),
+    )
+
+    try:
+        signals = cisco_preflight_module.scan_action_for_cisco_evidence(
+            _relative_target_write_action("skills/demo/SKILL.md"),
+            workspace=tmp_path,
+        )
+    finally:
+        if target_kind == "unreadable":
+            skill_path.chmod(0o600)
+
+    assert [signal.scanner_rule_id for signal in signals] == ["outside_approved_workspace"]
+    assert called == []
+
+
+def test_cisco_preflight_accepts_canonical_workspace_selected_through_symlink(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    real_workspace = tmp_path / "real-workspace"
+    skill_path = real_workspace / "skills" / "demo" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text("# Demo\n", encoding="utf-8")
+    workspace_link = tmp_path / "workspace-link"
+    try:
+        workspace_link.symlink_to(real_workspace, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are not supported in this environment")
+    called: list[Path] = []
+
+    def fake_scan(path: Path, mode: str = "auto", timeout_seconds: float | None = None):
+        called.append(path)
+        return _skill_summary(CiscoIntegrationStatus.ENABLED, (_skill_finding(),))
+
+    monkeypatch.setattr(cisco_skill_scanner, "run_cisco_skill_scan", fake_scan)
+
+    signals = cisco_preflight_module.scan_action_for_cisco_evidence(
+        _relative_target_write_action("skills/demo/SKILL.md"),
+        workspace=workspace_link,
+    )
+
+    assert [signal.source for signal in signals] == ["cisco_skill"]
+    assert called == [real_workspace / "skills"]
+
+
+def test_cisco_preflight_revalidation_catches_target_symlink_race_before_scanner_call(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    skill_path = tmp_path / "skills" / "demo" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text("# Before\n", encoding="utf-8")
+    outside = tmp_path.parent / f"{tmp_path.name}-race-target.md"
+    outside.write_text("# Outside\n", encoding="utf-8")
+    called: list[Path] = []
+    real_revalidate = cisco_preflight_module._revalidate_scan_target
+
+    def swap_then_revalidate(target: object) -> None:
+        skill_path.unlink()
+        skill_path.symlink_to(outside)
+        real_revalidate(target)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(cisco_preflight_module, "_revalidate_scan_target", swap_then_revalidate)
+    monkeypatch.setattr(
+        cisco_skill_scanner,
+        "run_cisco_skill_scan",
+        lambda path, **kwargs: called.append(path),
+    )
+
+    signals = cisco_preflight_module.scan_action_for_cisco_evidence(
+        _relative_target_write_action("skills/demo/SKILL.md"),
+        workspace=tmp_path,
+    )
+
+    assert [signal.scanner_rule_id for signal in signals] == ["outside_approved_workspace"]
+    assert called == []
 
 
 def test_cisco_policy_blocks_critical_balanced_but_not_low_confidence_info(tmp_path: Path) -> None:
