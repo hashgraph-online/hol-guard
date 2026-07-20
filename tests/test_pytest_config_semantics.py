@@ -224,6 +224,31 @@ def test_selected_test_file_without_config_does_not_fail_as_not_a_directory(tmp_
     assert match.pytest_config_sources == ()
 
 
+@pytest.mark.parametrize(
+    "command",
+    (
+        "uv run pytest -c selected.ini -q",
+        "poetry run pytest --config-file=selected.ini -q",
+    ),
+)
+def test_pytest_runner_preserves_explicit_config_arguments(tmp_path: Path, command: str) -> None:
+    _write(tmp_path / "pytest.ini", "[pytest]\naddopts = -q\n")
+    _write(tmp_path / "selected.ini", "[pytest]\naddopts = -p evil\n")
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+    direct_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest -c selected.ini -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert direct_match is not None
+    assert match.action_class == "pytest repository-code execution"
+    assert match.pytest_config_sources == ("selected.ini",)
+    assert match.pytest_config_identity_sha256 == direct_match.pytest_config_identity_sha256
+
+
 def test_non_applicable_pyproject_does_not_hide_later_tox_config(tmp_path: Path) -> None:
     _write(tmp_path / "pyproject.toml", '[build-system]\nrequires = ["fixture"]\n')
     _write(tmp_path / "tox.ini", "[pytest]\naddopts = -p evil\n")

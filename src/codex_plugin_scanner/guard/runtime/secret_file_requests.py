@@ -7210,17 +7210,23 @@ def _segment_targets_pytest(
 
 
 def _argument_sequence_targets_pytest(args: list[str]) -> bool:
+    return _pytest_args_from_argument_sequence(args) is not None
+
+
+def _pytest_args_from_argument_sequence(args: list[str]) -> list[str] | None:
     for index, token in enumerate(args):
         command_token = token.rsplit(":", 1)[-1]
         command_name = _normalized_shell_command_name(command_token)
         if command_name in _PYTEST_COMMAND_NAMES:
-            return True
-        if _is_pytest_python_interpreter_command(command_name) and (
-            _python_segment_targets_module(args[index + 1 :], "pytest")
-            or _python_inline_script_runs_pytest(args[index + 1 :])
-        ):
-            return True
-    return False
+            return args[index + 1 :]
+        if not _is_pytest_python_interpreter_command(command_name):
+            continue
+        python_args = _pytest_args_from_python(args[index + 1 :])
+        if python_args is not None:
+            return python_args
+        if _python_inline_script_runs_pytest(args[index + 1 :]):
+            return []
+    return None
 
 
 def _python_inline_script_runs_pytest(args: list[str]) -> bool:
@@ -7963,31 +7969,58 @@ def _pytest_config_assessment_for_command(
                 PytestConfigAssessment((), False, True, (reason_code or PYTEST_CONFIG_PATH_INVALID,), None)
             )
             continue
-        assessments.append(_pytest_config_assessment(segment_cwd, _pytest_args_from_segment(segment, command_index)))
+        pytest_args = _pytest_args_from_segment(segment, command_index)
+        assessments.append(
+            _pytest_config_assessment(segment_cwd, pytest_args)
+            if pytest_args is not None
+            else PytestConfigAssessment((), False, True, (PYTEST_CONFIG_PATH_INVALID,), None)
+        )
     if not assessments and _shell_command_targets_pytest(command_text):
         assessments.append(_pytest_config_assessment(cwd, []))
     return combine_pytest_config_assessments(assessments)
 
 
-def _pytest_args_from_segment(segment: list[str], command_index: int) -> list[str]:
+def _pytest_args_from_segment(segment: list[str], command_index: int) -> list[str] | None:
     command_name = _normalized_shell_command_name(segment[command_index])
     command_args = segment[command_index + 1 :]
-    if command_name == "pytest":
+    if command_name in _PYTEST_COMMAND_NAMES:
         return command_args
-    if not _is_pytest_python_interpreter_command(command_name):
-        return []
+    if _is_pytest_python_interpreter_command(command_name):
+        return _pytest_args_from_python(command_args)
+    if command_name == "uvx" or command_name in _PYTEST_EXECUTOR_COMMANDS:
+        return _pytest_args_from_argument_sequence(command_args)
+    runner_subcommands = _PYTEST_COMMAND_RUNNER_SUBCOMMANDS.get(command_name)
+    if runner_subcommands is not None:
+        for index, token in enumerate(command_args):
+            if token in runner_subcommands:
+                return _pytest_args_from_argument_sequence(command_args[index + 1 :])
+        return None
+    if command_name == "find":
+        for index, token in enumerate(command_args):
+            if token in _FIND_EXEC_ACTION_FLAGS:
+                return _pytest_args_from_argument_sequence(command_args[index + 1 :])
+        return None
+    if command_name == "fd":
+        for index, token in enumerate(command_args):
+            if fd_arg_requests_exec(token):
+                return _pytest_args_from_argument_sequence(command_args[index + 1 :])
+        return None
+    return None
+
+
+def _pytest_args_from_python(command_args: list[str]) -> list[str] | None:
     index = 0
     while index < len(command_args):
         token = command_args[index]
         if token == "-m" and index + 1 < len(command_args):
-            return command_args[index + 2 :] if command_args[index + 1].split(".", 1)[0] == "pytest" else []
+            return command_args[index + 2 :] if command_args[index + 1].split(".", 1)[0] == "pytest" else None
         if token.startswith("-m") and len(token) > 2:
-            return command_args[index + 1 :] if token[2:].split(".", 1)[0] == "pytest" else []
+            return command_args[index + 1 :] if token[2:].split(".", 1)[0] == "pytest" else None
         if token in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
             index += 2
             continue
         index += 1
-    return []
+    return None
 
 
 def _pytest_config_search_dirs(module_args: list[str], *, cwd: Path) -> tuple[str, ...] | None:
