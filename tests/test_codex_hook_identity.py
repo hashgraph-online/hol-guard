@@ -178,6 +178,17 @@ def test_detect_inventories_every_toml_event_and_deduplicates_mixed_sources(tmp_
     assert future.metadata["source_paths"] == sorted([str(config_path), str(hooks_path)])
 
 
+def test_authenticated_guard_hooks_do_not_become_consumer_artifacts(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=tmp_path / "guard-home")
+    adapter = codex_adapter.CodexHarnessAdapter()
+
+    adapter.install(context)
+    detection = adapter.detect(context)
+
+    assert not [artifact for artifact in detection.artifacts if artifact.artifact_type == "hook"]
+
+
 def test_hash_diff_and_approval_identity_survive_json_to_toml_format_change(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     config_path = home_dir / ".codex" / "config.toml"

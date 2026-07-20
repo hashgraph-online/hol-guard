@@ -726,6 +726,8 @@ def _codex_hook_artifacts(
 ) -> tuple[GuardArtifact, ...]:
     by_identity: dict[str, list[CodexHookInventoryRecord]] = {}
     for record in records:
+        if record.ownership != "unmanaged":
+            continue
         by_identity.setdefault(record.canonical_identity, []).append(record)
     artifacts: list[GuardArtifact] = []
     for identity, matching_records in sorted(by_identity.items()):
@@ -746,7 +748,7 @@ def _codex_hook_artifacts(
             "codex_hook_identity_schema": CODEX_HOOK_IDENTITY_SCHEMA,
             "codex_hook_identity": identity,
             "event": primary.event_name,
-            "matcher": primary.matcher,
+            "matcher": primary.matcher if isinstance(primary.matcher, str | type(None)) else None,
             "handler_type": primary.handler_type,
             "timeout": primary.timeout,
             "env_keys": list(primary.environment_keys),
@@ -1007,6 +1009,9 @@ class CodexHarnessAdapter(HarnessAdapter):
         hook_records: list[CodexHookInventoryRecord] = []
         warnings: list[str] = []
         config_payloads: dict[Path, dict[str, object]] = {}
+        authenticated_manifest = load_hook_manifest_baseline(_hook_manifest_spec(context))
+        authenticated_bindings = _manifest_bindings(authenticated_manifest)
+        hook_config_path = self._hook_config_path(context)
         for config_path, _hooks_path in self._config_hook_pairs(context):
             payload = _read_toml(config_path)
             config_payloads[config_path] = payload
@@ -1021,6 +1026,7 @@ class CodexHarnessAdapter(HarnessAdapter):
                 source_format="toml",
                 source_hooks_enabled=_payload_has_hooks_feature_enabled(payload),
                 context=context,
+                authenticated_bindings=authenticated_bindings if config_path == hook_config_path else (),
             )
             hook_records.extend(inventory.records)
             warnings.extend(
