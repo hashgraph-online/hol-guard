@@ -23,7 +23,6 @@ from .store_workflow_capability_common import (
     _private_reference,
     _require_store_key,
     _validate_claim_row,
-    _validate_public_identifier,
     _workflow_capability_event_payload,
 )
 from .store_workflow_capability_control import (
@@ -41,6 +40,7 @@ from .workflow_capabilities import (
     WorkflowCapabilityError,
     WorkflowCapabilityReceipt,
     sign_workflow_capability_receipt,
+    validate_workflow_capability_identifier,
     verify_workflow_capability,
     workflow_capability_claim_sha256,
 )
@@ -50,6 +50,9 @@ class StoreWorkflowCapabilitiesMixin:
     """Persist and atomically consume exact signed workflow capabilities."""
 
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        raise NotImplementedError
+
+    def hold_workflow_capability_authority_lock(self) -> AbstractContextManager[None]:
         raise NotImplementedError
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
@@ -74,7 +77,7 @@ class StoreWorkflowCapabilitiesMixin:
         if type(signed) is not SignedWorkflowCapability:
             raise WorkflowCapabilityError("invalid_signed_capability")
         claim = signed.claim
-        _validate_public_identifier("approval_provenance_id", approval_provenance_id)
+        validate_workflow_capability_identifier("approval_provenance_id", approval_provenance_id)
         if approval_provenance_id != claim.approval_provenance_id:
             raise WorkflowCapabilityError("capability_approval_binding_mismatch")
         key, key_id = _require_store_key(self, create=False)
@@ -162,15 +165,15 @@ class StoreWorkflowCapabilitiesMixin:
         now = WORKFLOW_CAPABILITY_STORE_CLOCK.now()
         if type(expected_binding) is not WorkflowCapabilityBinding:
             raise WorkflowCapabilityError("invalid_expected_capability_binding")
-        _validate_public_identifier("capability_id", capability_id)
-        _validate_public_identifier("invocation_id", invocation_id)
+        validate_workflow_capability_identifier("capability_id", capability_id)
+        validate_workflow_capability_identifier("invocation_id", invocation_id)
         for name, value in (
             ("expected_subject_id", expected_subject_id),
             ("expected_task_id", expected_task_id),
             ("expected_issuer_id", expected_issuer_id),
             ("expected_approval_provenance_id", expected_approval_provenance_id),
         ):
-            _validate_public_identifier(name, value)
+            validate_workflow_capability_identifier(name, value)
         key, key_id = _require_store_key(self, create=False)
         with self._connect() as connection:
             connection.execute("begin immediate")

@@ -5,15 +5,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from functools import wraps
-from typing import Concatenate, ParamSpec, Protocol, TypeVar, cast
+from typing import Concatenate, ParamSpec, Protocol, TypeVar
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
-_T = TypeVar("_T")
 
 
-class _WorkflowCapabilityLockBoundary(Protocol):
+class WorkflowCapabilityLockBoundary(Protocol):
     def hold_workflow_capability_authority_lock(self) -> AbstractContextManager[None]: ...
+
+
+_T = TypeVar("_T", bound=WorkflowCapabilityLockBoundary)
 
 
 def serialized_workflow_capability_authority(
@@ -21,8 +23,7 @@ def serialized_workflow_capability_authority(
 ) -> Callable[Concatenate[_T, _P], _R]:
     @wraps(method)
     def wrapped(self: _T, *args: _P.args, **kwargs: _P.kwargs) -> _R:
-        boundary = cast(_WorkflowCapabilityLockBoundary, cast(object, self))
-        with boundary.hold_workflow_capability_authority_lock():
+        with self.hold_workflow_capability_authority_lock():
             return method(self, *args, **kwargs)
 
     return wrapped

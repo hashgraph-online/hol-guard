@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.workflow_capabilities import (
     WorkflowCapabilityBinding,
     WorkflowCapabilityError,
     sign_workflow_capability,
+    validate_workflow_capability_identifier,
     verify_workflow_capability,
     verify_workflow_capability_receipt,
     verify_workflow_capability_signature,
@@ -68,6 +69,31 @@ def test_expected_binding_requires_exact_contract_type() -> None:
             key_id=_KEY_ID,
             now=_now(),
             expected_binding=cast(WorkflowCapabilityBinding, object()),
+        )
+
+
+def test_all_public_identifier_boundaries_use_canonical_alphabet(tmp_path) -> None:
+    store = _store(tmp_path)
+    with pytest.raises(WorkflowCapabilityError, match="invalid_capability_id"):
+        store.lookup_workflow_capability("!capability")
+    with pytest.raises(WorkflowCapabilityError, match="invalid_capability_id"):
+        store.revoke_workflow_capability("!capability", reason_code="operator.revoked")
+    with pytest.raises(WorkflowCapabilityError, match="invalid_receipt_id"):
+        store.lookup_workflow_capability_receipt(receipt_id="!receipt")
+    with pytest.raises(WorkflowCapabilityError, match="invalid_event_name"):
+        validate_workflow_capability_identifier("event_name", "event!name")
+
+    claim = _claim(capability_id="wc-canonical-identifiers")
+    _issue(store, claim)
+    with pytest.raises(WorkflowCapabilityError, match="invalid_expected_subject_id"):
+        store.claim_workflow_capability(
+            claim.capability_id,
+            invocation_id="invocation-canonical-identifiers",
+            expected_binding=claim.binding,
+            expected_subject_id="subject!invalid",
+            expected_task_id=claim.task_id,
+            expected_issuer_id=claim.issuer_id,
+            expected_approval_provenance_id=claim.approval_provenance_id,
         )
 
 

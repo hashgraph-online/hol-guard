@@ -10,6 +10,7 @@ import sqlite3
 from dataclasses import asdict, dataclass, replace
 from typing import Protocol, cast
 
+from .store_workflow_capability_time import validate_monotonic_workflow_capability_time
 from .store_workflow_capability_transitions import validate_global_authority_ledger
 from .workflow_capabilities import WorkflowCapabilityError, parse_utc_timestamp
 from .workflow_capability_transitions import (
@@ -92,9 +93,7 @@ def load_validate_and_observe_control(
         _store_control(store, control)
     if sequence != control.committed_sequence or head != control.committed_head_sha256:
         raise WorkflowCapabilityError("capability_control_rollback_detected")
-    if parse_utc_timestamp(now) < parse_utc_timestamp(control.observed_at):
-        raise WorkflowCapabilityError("capability_clock_rollback")
-    if now != control.observed_at:
+    if validate_monotonic_workflow_capability_time(now=now, observed_at=control.observed_at):
         control = replace(control, observed_at=now)
         _store_control(store, control)
     return control

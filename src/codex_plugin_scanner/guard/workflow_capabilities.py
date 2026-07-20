@@ -37,8 +37,8 @@ class WorkflowCapabilityRuleBinding:
     rule_version: str
 
     def __post_init__(self) -> None:
-        _validate_identifier("rule_id", self.rule_id)
-        _validate_identifier("rule_version", self.rule_version)
+        validate_workflow_capability_identifier("rule_id", self.rule_id)
+        validate_workflow_capability_identifier("rule_version", self.rule_version)
 
     @classmethod
     def from_dict(cls, payload: object) -> WorkflowCapabilityRuleBinding:
@@ -81,7 +81,7 @@ class WorkflowCapabilityBinding:
             "decision_id",
             "decision_version",
         ):
-            _validate_identifier(name, getattr(self, name))
+            validate_workflow_capability_identifier(name, getattr(self, name))
         for name in (
             "resource_sha256",
             "repository_sha256",
@@ -132,7 +132,7 @@ class WorkflowCapabilityClaim:
         if type(self.binding) is not WorkflowCapabilityBinding:
             raise WorkflowCapabilityError("invalid_capability_binding")
         for name in ("capability_id", "approval_provenance_id", "task_id", "issuer_id", "subject_id"):
-            _validate_identifier(name, getattr(self, name))
+            validate_workflow_capability_identifier(name, getattr(self, name))
         if type(self.nonce) is not str or not re.fullmatch(r"[0-9a-f]{32,64}", self.nonce):
             raise WorkflowCapabilityError("invalid_nonce")
         issued = parse_utc_timestamp(self.issued_at)
@@ -183,7 +183,7 @@ class SignedWorkflowCapability:
             raise WorkflowCapabilityError("unsupported_capability_envelope")
         if self.algorithm != WORKFLOW_CAPABILITY_ALGORITHM or self.algorithm != self.claim.algorithm:
             raise WorkflowCapabilityError("unsupported_capability_algorithm")
-        _validate_identifier("key_id", self.key_id)
+        validate_workflow_capability_identifier("key_id", self.key_id)
         _validate_sha256("signature", self.signature)
 
     def to_dict(self) -> dict[str, object]:
@@ -221,7 +221,7 @@ class WorkflowCapabilityReceipt:
         if self.schema_version != WORKFLOW_CAPABILITY_RECEIPT_SCHEMA:
             raise WorkflowCapabilityError("unsupported_receipt_schema")
         for name in ("receipt_id", "capability_id", "task_id", "invocation_id", "approval_provenance_id"):
-            _validate_identifier(name, getattr(self, name))
+            validate_workflow_capability_identifier(name, getattr(self, name))
         _validate_sha256("claim_sha256", self.claim_sha256)
         parse_utc_timestamp(self.claimed_at)
         if type(self.use_number) is not int or self.use_number < 1:
@@ -268,7 +268,7 @@ class SignedWorkflowCapabilityReceipt:
             raise WorkflowCapabilityError("unsupported_receipt_envelope")
         if self.algorithm != WORKFLOW_CAPABILITY_ALGORITHM:
             raise WorkflowCapabilityError("unsupported_receipt_algorithm")
-        _validate_identifier("key_id", self.key_id)
+        validate_workflow_capability_identifier("key_id", self.key_id)
         _validate_sha256("signature", self.signature)
 
     def to_dict(self) -> dict[str, object]:
@@ -301,7 +301,7 @@ def canonical_framed_payload(purpose: str, payload: object) -> bytes:
 
 def sign_workflow_capability(claim: WorkflowCapabilityClaim, *, key: bytes, key_id: str) -> SignedWorkflowCapability:
     _validate_key(key)
-    _validate_identifier("key_id", key_id)
+    validate_workflow_capability_identifier("key_id", key_id)
     claim = _validated_claim(claim)
     authenticated = {
         "algorithm": WORKFLOW_CAPABILITY_ALGORITHM,
@@ -358,7 +358,7 @@ def _verify_workflow_capability_signature_fields(signed: SignedWorkflowCapabilit
         raise WorkflowCapabilityError("unsupported_capability_schema")
     if signed.algorithm != WORKFLOW_CAPABILITY_ALGORITHM or signed.claim.algorithm != signed.algorithm:
         raise WorkflowCapabilityError("unsupported_capability_algorithm")
-    _validate_identifier("key_id", signed.key_id)
+    validate_workflow_capability_identifier("key_id", signed.key_id)
     _validate_sha256("signature", signed.signature)
     if signed.key_id != key_id:
         raise WorkflowCapabilityError("capability_key_mismatch")
@@ -371,7 +371,7 @@ def sign_workflow_capability_receipt(
     receipt: WorkflowCapabilityReceipt, *, key: bytes, key_id: str
 ) -> SignedWorkflowCapabilityReceipt:
     _validate_key(key)
-    _validate_identifier("key_id", key_id)
+    validate_workflow_capability_identifier("key_id", key_id)
     receipt = _validated_receipt(receipt)
     authenticated = {
         "algorithm": WORKFLOW_CAPABILITY_ALGORITHM,
@@ -410,7 +410,7 @@ def _verify_workflow_capability_receipt_fields(
         raise WorkflowCapabilityError("unsupported_receipt_schema")
     if signed.algorithm != WORKFLOW_CAPABILITY_ALGORITHM:
         raise WorkflowCapabilityError("unsupported_receipt_algorithm")
-    _validate_identifier("key_id", signed.key_id)
+    validate_workflow_capability_identifier("key_id", signed.key_id)
     _validate_sha256("signature", signed.signature)
     if signed.key_id != key_id:
         raise WorkflowCapabilityError("receipt_key_mismatch")
@@ -473,7 +473,7 @@ def _require_string(name: str, value: object) -> str:
     return value
 
 
-def _validate_identifier(name: str, value: str) -> None:
+def validate_workflow_capability_identifier(name: str, value: str) -> None:
     if type(value) is not str or not _IDENTIFIER_PATTERN.fullmatch(value) or "*" in value:
         raise WorkflowCapabilityError(f"invalid_{name}")
 

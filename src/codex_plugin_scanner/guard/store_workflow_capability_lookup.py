@@ -14,16 +14,22 @@ from .store_workflow_capability_common import (
     _decode_signed_claim,
     _require_store_key,
     _validate_claim_row,
-    _validate_public_identifier,
     _verify_persisted_claim_signature,
 )
 from .store_workflow_capability_control import load_validate_and_observe_control
 from .store_workflow_capability_lock import serialized_workflow_capability_authority
-from .workflow_capabilities import SignedWorkflowCapability, WorkflowCapabilityError
+from .workflow_capabilities import (
+    SignedWorkflowCapability,
+    WorkflowCapabilityError,
+    validate_workflow_capability_identifier,
+)
 
 
 class StoreWorkflowCapabilityLookupMixin:
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        raise NotImplementedError
+
+    def hold_workflow_capability_authority_lock(self) -> AbstractContextManager[None]:
         raise NotImplementedError
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
@@ -39,7 +45,7 @@ class StoreWorkflowCapabilityLookupMixin:
 
     @serialized_workflow_capability_authority
     def lookup_workflow_capability(self, capability_id: str) -> SignedWorkflowCapability | None:
-        _validate_public_identifier("capability_id", capability_id)
+        validate_workflow_capability_identifier("capability_id", capability_id)
         key, key_id = _require_store_key(self, create=False)
         with self._connect() as connection:
             connection.execute("begin")

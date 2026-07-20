@@ -11,11 +11,15 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Final, cast
 
-from .workflow_capabilities import WorkflowCapabilityError, canonical_framed_payload, parse_utc_timestamp
+from .workflow_capabilities import (
+    WorkflowCapabilityError,
+    canonical_framed_payload,
+    parse_utc_timestamp,
+    validate_workflow_capability_identifier,
+)
 
 AUTHORITY_STATE_SCHEMA: Final = "hol-guard.workflow-capability-authority-state.v1"
 REVOCATION_SCHEMA: Final = "hol-guard.workflow-capability-revocation.v1"
-_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -33,7 +37,7 @@ class WorkflowCapabilityAuthorityState:
     def __post_init__(self) -> None:
         if self.schema_version != AUTHORITY_STATE_SCHEMA:
             raise WorkflowCapabilityError("unsupported_authority_state_schema")
-        _identifier("capability_id", self.capability_id)
+        validate_workflow_capability_identifier("capability_id", self.capability_id)
         _digest("claim_sha256", self.claim_sha256)
         parse_utc_timestamp(self.observed_at)
         if type(self.use_high_water) is not int or self.use_high_water < 0:
@@ -43,7 +47,7 @@ class WorkflowCapabilityAuthorityState:
         if (self.revocation_id is None) != (self.revoked_at is None):
             raise WorkflowCapabilityError("invalid_authority_revocation_binding")
         if self.revocation_id is not None:
-            _identifier("revocation_id", self.revocation_id)
+            validate_workflow_capability_identifier("revocation_id", self.revocation_id)
             parse_utc_timestamp(cast(str, self.revoked_at))
 
     @classmethod
@@ -73,8 +77,8 @@ class WorkflowCapabilityRevocation:
     def __post_init__(self) -> None:
         if self.schema_version != REVOCATION_SCHEMA:
             raise WorkflowCapabilityError("unsupported_revocation_schema")
-        _identifier("revocation_id", self.revocation_id)
-        _identifier("capability_id", self.capability_id)
+        validate_workflow_capability_identifier("revocation_id", self.revocation_id)
+        validate_workflow_capability_identifier("capability_id", self.capability_id)
         _digest("claim_sha256", self.claim_sha256)
         if type(self.reason_code) is not str or re.fullmatch(r"[a-z][a-z0-9_.-]{0,63}", self.reason_code) is None:
             raise WorkflowCapabilityError("invalid_reason_code")
@@ -177,7 +181,7 @@ def decode_signed_revocation(encoded: str) -> SignedRevocation:
 def _mac(purpose: str, payload: object, *, key: bytes, key_id: str) -> str:
     if type(key) is not bytes or len(key) < 32:
         raise WorkflowCapabilityError("invalid_capability_key")
-    _identifier("key_id", key_id)
+    validate_workflow_capability_identifier("key_id", key_id)
     authenticated = {"key_id": key_id, "payload": payload}
     return hmac.new(key, canonical_framed_payload(purpose, authenticated), hashlib.sha256).hexdigest()
 
@@ -208,11 +212,6 @@ def _strict(payload: object, keys: set[str]) -> dict[str, object]:
     if set(typed) != keys or not all(type(key) is str for key in typed):
         raise WorkflowCapabilityError("invalid_contract_keys")
     return typed
-
-
-def _identifier(name: str, value: str) -> None:
-    if type(value) is not str or _ID.fullmatch(value) is None or "*" in value:
-        raise WorkflowCapabilityError(f"invalid_{name}")
 
 
 def _digest(name: str, value: str) -> None:

@@ -14,7 +14,6 @@ from .store_workflow_capability_common import (
     _claim_event_payload,
     _decode_signed_receipt,
     _require_store_key,
-    _validate_public_identifier,
 )
 from .store_workflow_capability_control import load_validate_and_observe_control
 from .store_workflow_capability_lock import serialized_workflow_capability_authority
@@ -22,6 +21,7 @@ from .store_workflow_capability_lookup import require_validated_workflow_capabil
 from .workflow_capabilities import (
     SignedWorkflowCapabilityReceipt,
     WorkflowCapabilityError,
+    validate_workflow_capability_identifier,
     verify_workflow_capability_receipt,
     workflow_capability_claim_sha256,
 )
@@ -29,6 +29,9 @@ from .workflow_capabilities import (
 
 class StoreWorkflowCapabilityReceiptLookupMixin:
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        raise NotImplementedError
+
+    def hold_workflow_capability_authority_lock(self) -> AbstractContextManager[None]:
         raise NotImplementedError
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
@@ -55,7 +58,7 @@ class StoreWorkflowCapabilityReceiptLookupMixin:
         selector_value = receipt_id if receipt_id is not None else invocation_id
         if selector_value is None:
             raise WorkflowCapabilityError("receipt_lookup_requires_exact_selector")
-        _validate_public_identifier(selector_name, selector_value)
+        validate_workflow_capability_identifier(selector_name, selector_value)
         key, key_id = _require_store_key(self, create=False)
         with self._connect() as connection:
             connection.execute("begin")

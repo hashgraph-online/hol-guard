@@ -10,7 +10,12 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Final, cast
 
-from .workflow_capabilities import WorkflowCapabilityError, canonical_framed_payload, parse_utc_timestamp
+from .workflow_capabilities import (
+    WorkflowCapabilityError,
+    canonical_framed_payload,
+    parse_utc_timestamp,
+    validate_workflow_capability_identifier,
+)
 
 AUTHORITY_TRANSITION_SCHEMA: Final = "hol-guard.workflow-capability-authority-transition.v1"
 AUTHORITY_TRANSITION_ALGORITHM: Final = "hmac-sha256"
@@ -46,7 +51,7 @@ class WorkflowCapabilityAuthorityTransition:
             raise WorkflowCapabilityError("invalid_authority_transition_sequence")
         if type(self.revision) is not int or self.revision < 0:
             raise WorkflowCapabilityError("invalid_authority_transition_revision")
-        _identifier("capability_id", self.capability_id)
+        validate_workflow_capability_identifier("capability_id", self.capability_id)
         _digest("claim_sha256", self.claim_sha256)
         _digest("previous_transition_sha256", self.previous_transition_sha256)
         _digest("signed_state_sha256", self.signed_state_sha256)
@@ -55,14 +60,14 @@ class WorkflowCapabilityAuthorityTransition:
             raise WorkflowCapabilityError("invalid_authority_transition_kind")
         if type(self.event_id) is not int or self.event_id < 1:
             raise WorkflowCapabilityError("invalid_authority_transition_event")
-        _identifier("event_name", cast(str, self.event_name))
+        validate_workflow_capability_identifier("event_name", cast(str, self.event_name))
         _digest("event_payload_sha256", cast(str, self.event_payload_sha256))
         if self.use_number is not None and (type(self.use_number) is not int or self.use_number < 1):
             raise WorkflowCapabilityError("invalid_authority_transition_use_number")
         if self.receipt_id is not None:
-            _identifier("receipt_id", self.receipt_id)
+            validate_workflow_capability_identifier("receipt_id", self.receipt_id)
         if self.revocation_id is not None:
-            _identifier("revocation_id", self.revocation_id)
+            validate_workflow_capability_identifier("revocation_id", self.revocation_id)
         if (self.transition_kind == "claimed") != (self.receipt_id is not None):
             raise WorkflowCapabilityError("invalid_authority_transition_receipt")
         if (self.transition_kind == "claimed") != (self.use_number is not None):
@@ -104,7 +109,7 @@ def sign_authority_transition(
     transition: WorkflowCapabilityAuthorityTransition, *, key: bytes, key_id: str
 ) -> SignedAuthorityTransition:
     _key(key)
-    _identifier("key_id", key_id)
+    validate_workflow_capability_identifier("key_id", key_id)
     payload = {"key_id": key_id, "transition": asdict(transition)}
     signature = hmac.new(key, canonical_framed_payload("authority-transition", payload), hashlib.sha256).hexdigest()
     return SignedAuthorityTransition(transition=transition, key_id=key_id, signature=signature)
@@ -169,13 +174,6 @@ def _strict(payload: object, keys: set[str]) -> dict[str, object]:
     if set(typed) != keys:
         raise WorkflowCapabilityError("invalid_contract_keys")
     return typed
-
-
-def _identifier(name: str, value: str) -> None:
-    if type(value) is not str or not value or len(value) > 256 or value.strip() != value or "*" in value:
-        raise WorkflowCapabilityError(f"invalid_{name}")
-    if any(character.isspace() or ord(character) < 33 or ord(character) > 126 for character in value):
-        raise WorkflowCapabilityError(f"invalid_{name}")
 
 
 def _digest(name: str, value: str) -> None:

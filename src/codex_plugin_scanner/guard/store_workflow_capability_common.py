@@ -137,13 +137,6 @@ def _canonical_json(payload: object) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
-def _validate_public_identifier(name: str, value: str) -> None:
-    if type(value) is not str or not value or len(value) > 256 or value.strip() != value or "*" in value:
-        raise WorkflowCapabilityError(f"invalid_{name}")
-    if any(character.isspace() or ord(character) < 33 or ord(character) > 126 for character in value):
-        raise WorkflowCapabilityError(f"invalid_{name}")
-
-
 def _validate_reason_code(value: str) -> None:
     if type(value) is not str or re.fullmatch(r"[a-z][a-z0-9_.-]{0,63}", value) is None:
         raise WorkflowCapabilityError("invalid_reason_code")

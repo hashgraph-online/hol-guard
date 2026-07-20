@@ -21,7 +21,6 @@ from .store_workflow_capability_common import (
     _private_reference,
     _require_store_key,
     _validate_claim_row,
-    _validate_public_identifier,
     _validate_reason_code,
     _verify_persisted_claim_signature,
     _workflow_capability_event_payload,
@@ -33,10 +32,14 @@ from .store_workflow_capability_control import (
 )
 from .store_workflow_capability_lock import serialized_workflow_capability_authority
 from .store_workflow_capability_transitions import append_authority_transition, build_authority_transition
+from .workflow_capabilities import validate_workflow_capability_identifier
 
 
 class StoreWorkflowCapabilityRevocationMixin:
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        raise NotImplementedError
+
+    def hold_workflow_capability_authority_lock(self) -> AbstractContextManager[None]:
         raise NotImplementedError
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
@@ -65,7 +68,7 @@ class StoreWorkflowCapabilityRevocationMixin:
     @serialized_workflow_capability_authority
     def revoke_workflow_capability(self, capability_id: str, *, reason_code: str) -> bool:
         now = WORKFLOW_CAPABILITY_STORE_CLOCK.now()
-        _validate_public_identifier("capability_id", capability_id)
+        validate_workflow_capability_identifier("capability_id", capability_id)
         _validate_reason_code(reason_code)
         key, key_id = _require_store_key(self, create=False)
         with self._connect() as connection:
