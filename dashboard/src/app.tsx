@@ -9,6 +9,7 @@ import {
   fetchPolicy,
   fetchReceipts,
   fetchRequest,
+  fetchMcpPolicyRequest,
   fetchApprovalPage,
   fetchAllPendingRequests,
   fetchInboxState,
@@ -39,6 +40,9 @@ const SupplyChainHubWorkspace = lazy(() =>
 );
 const PolicyWorkspacePage = lazy(() =>
   import("./policy-workspace-page").then((m) => ({ default: m.PolicyWorkspacePage }))
+);
+const McpPolicyRequestPanel = lazy(() =>
+  import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 const AboutWorkspace = lazy(() =>
   import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
@@ -79,7 +83,8 @@ type DetailState =
       diff: GuardArtifactDiff | null;
       receipt: GuardReceipt | null;
       policy: GuardPolicyDecision[];
-    };
+    }
+  | { kind: "mcp-policy"; requestId: string };
 
 type ReceiptsState =
   | { kind: "loading" }
@@ -211,6 +216,18 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("404")) {
+      // VPC045-047/056: a 404 on /v1/requests/<id> may mean this is a staged
+      // MCP policy creation request rather than a regular approval. Probe the
+      // MCP endpoint; if it exists, render the MCP panel. Otherwise fall back
+      // to the stale state so the inbox shows an honest "gone" message.
+      try {
+        const mcpRequest = await fetchMcpPolicyRequest(requestId);
+        if (mcpRequest !== null) {
+          return { kind: "mcp-policy", requestId };
+        }
+      } catch {
+        // Swallow — the original 404 is the source of truth here.
+      }
       return { kind: "stale" };
     }
     return {

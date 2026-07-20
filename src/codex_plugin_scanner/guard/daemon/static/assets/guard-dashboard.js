@@ -494,7 +494,7 @@ function requireReact_production() {
   react_production.useTransition = function() {
     return ReactSharedInternals.H.useTransition();
   };
-  react_production.version = "19.2.7";
+  react_production.version = "19.2.5";
   return react_production;
 }
 var hasRequiredReact;
@@ -516,7 +516,7 @@ var hasRequiredScheduler_production;
 function requireScheduler_production() {
   if (hasRequiredScheduler_production) return scheduler_production;
   hasRequiredScheduler_production = 1;
-  (function(exports) {
+  (function(exports$1) {
     function push(heap, node) {
       var index = heap.length;
       heap.push(node);
@@ -550,15 +550,15 @@ function requireScheduler_production() {
       var diff = a.sortIndex - b.sortIndex;
       return 0 !== diff ? diff : a.id - b.id;
     }
-    exports.unstable_now = void 0;
+    exports$1.unstable_now = void 0;
     if ("object" === typeof performance && "function" === typeof performance.now) {
       var localPerformance = performance;
-      exports.unstable_now = function() {
+      exports$1.unstable_now = function() {
         return localPerformance.now();
       };
     } else {
       var localDate = Date, initialTime = localDate.now();
-      exports.unstable_now = function() {
+      exports$1.unstable_now = function() {
         return localDate.now() - initialTime;
       };
     }
@@ -585,12 +585,12 @@ function requireScheduler_production() {
     }
     var isMessageLoopRunning = false, taskTimeoutID = -1, frameInterval = 5, startTime = -1;
     function shouldYieldToHost() {
-      return needsPaint ? true : exports.unstable_now() - startTime < frameInterval ? false : true;
+      return needsPaint ? true : exports$1.unstable_now() - startTime < frameInterval ? false : true;
     }
     function performWorkUntilDeadline() {
       needsPaint = false;
       if (isMessageLoopRunning) {
-        var currentTime = exports.unstable_now();
+        var currentTime = exports$1.unstable_now();
         startTime = currentTime;
         var hasMoreWork = true;
         try {
@@ -610,7 +610,7 @@ function requireScheduler_production() {
                     var continuationCallback = callback(
                       currentTask.expirationTime <= currentTime
                     );
-                    currentTime = exports.unstable_now();
+                    currentTime = exports$1.unstable_now();
                     if ("function" === typeof continuationCallback) {
                       currentTask.callback = continuationCallback;
                       advanceTimers(currentTime);
@@ -660,27 +660,27 @@ function requireScheduler_production() {
       };
     function requestHostTimeout(callback, ms) {
       taskTimeoutID = localSetTimeout(function() {
-        callback(exports.unstable_now());
+        callback(exports$1.unstable_now());
       }, ms);
     }
-    exports.unstable_IdlePriority = 5;
-    exports.unstable_ImmediatePriority = 1;
-    exports.unstable_LowPriority = 4;
-    exports.unstable_NormalPriority = 3;
-    exports.unstable_Profiling = null;
-    exports.unstable_UserBlockingPriority = 2;
-    exports.unstable_cancelCallback = function(task) {
+    exports$1.unstable_IdlePriority = 5;
+    exports$1.unstable_ImmediatePriority = 1;
+    exports$1.unstable_LowPriority = 4;
+    exports$1.unstable_NormalPriority = 3;
+    exports$1.unstable_Profiling = null;
+    exports$1.unstable_UserBlockingPriority = 2;
+    exports$1.unstable_cancelCallback = function(task) {
       task.callback = null;
     };
-    exports.unstable_forceFrameRate = function(fps) {
+    exports$1.unstable_forceFrameRate = function(fps) {
       0 > fps || 125 < fps ? console.error(
         "forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported"
       ) : frameInterval = 0 < fps ? Math.floor(1e3 / fps) : 5;
     };
-    exports.unstable_getCurrentPriorityLevel = function() {
+    exports$1.unstable_getCurrentPriorityLevel = function() {
       return currentPriorityLevel;
     };
-    exports.unstable_next = function(eventHandler) {
+    exports$1.unstable_next = function(eventHandler) {
       switch (currentPriorityLevel) {
         case 1:
         case 2:
@@ -698,10 +698,10 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports.unstable_requestPaint = function() {
+    exports$1.unstable_requestPaint = function() {
       needsPaint = true;
     };
-    exports.unstable_runWithPriority = function(priorityLevel, eventHandler) {
+    exports$1.unstable_runWithPriority = function(priorityLevel, eventHandler) {
       switch (priorityLevel) {
         case 1:
         case 2:
@@ -720,8 +720,8 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports.unstable_scheduleCallback = function(priorityLevel, callback, options) {
-      var currentTime = exports.unstable_now();
+    exports$1.unstable_scheduleCallback = function(priorityLevel, callback, options) {
+      var currentTime = exports$1.unstable_now();
       "object" === typeof options && null !== options ? (options = options.delay, options = "number" === typeof options && 0 < options ? currentTime + options : currentTime) : options = currentTime;
       switch (priorityLevel) {
         case 1:
@@ -751,8 +751,8 @@ function requireScheduler_production() {
       options > currentTime ? (priorityLevel.sortIndex = options, push(timerQueue, priorityLevel), null === peek(taskQueue) && priorityLevel === peek(timerQueue) && (isHostTimeoutScheduled ? (localClearTimeout(taskTimeoutID), taskTimeoutID = -1) : isHostTimeoutScheduled = true, requestHostTimeout(handleTimeout, options - currentTime))) : (priorityLevel.sortIndex = timeout, push(taskQueue, priorityLevel), isHostCallbackScheduled || isPerformingWork || (isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline())));
       return priorityLevel;
     };
-    exports.unstable_shouldYield = shouldYieldToHost;
-    exports.unstable_wrapCallback = function(callback) {
+    exports$1.unstable_shouldYield = shouldYieldToHost;
+    exports$1.unstable_wrapCallback = function(callback) {
       var parentPriorityLevel = currentPriorityLevel;
       return function() {
         var previousPriorityLevel = currentPriorityLevel;
@@ -922,7 +922,7 @@ function requireReactDom_production() {
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
   };
-  reactDom_production.version = "19.2.7";
+  reactDom_production.version = "19.2.5";
   return reactDom_production;
 }
 var hasRequiredReactDom;
@@ -12366,12 +12366,12 @@ function requireReactDomClient_production() {
     }
   };
   var isomorphicReactPackageVersion$jscomp$inline_1840 = React2.version;
-  if ("19.2.7" !== isomorphicReactPackageVersion$jscomp$inline_1840)
+  if ("19.2.5" !== isomorphicReactPackageVersion$jscomp$inline_1840)
     throw Error(
       formatProdErrorMessage(
         527,
         isomorphicReactPackageVersion$jscomp$inline_1840,
-        "19.2.7"
+        "19.2.5"
       )
     );
   ReactDOMSharedInternals.findDOMNode = function(componentOrElement) {
@@ -12389,10 +12389,10 @@ function requireReactDomClient_production() {
   };
   var internals$jscomp$inline_2347 = {
     bundleType: 0,
-    version: "19.2.7",
+    version: "19.2.5",
     rendererPackageName: "react-dom",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.2.7"
+    reconcilerVersion: "19.2.5"
   };
   if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
     var hook$jscomp$inline_2348 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -12459,7 +12459,7 @@ function requireReactDomClient_production() {
     listenToAllSupportedEvents(container2);
     return new ReactDOMHydrationRoot(initialChildren);
   };
-  reactDomClient_production.version = "19.2.7";
+  reactDomClient_production.version = "19.2.5";
   return reactDomClient_production;
 }
 var hasRequiredClient;
@@ -17554,6 +17554,116 @@ async function runPackageSync(credentials) {
     );
   }
   return normalizePackageFirewallAction(payloadBody);
+}
+const MCP_POLICY_TERMINAL_STATUSES = {
+  applied: true,
+  declined: true,
+  expired: true,
+  failed: true,
+  pending: false
+};
+function normalizeMcpPolicyStatus(value) {
+  if (typeof value === "string" && value in MCP_POLICY_TERMINAL_STATUSES) {
+    return value;
+  }
+  return "pending";
+}
+function normalizeMcpPolicyApplyResult(value) {
+  const record = isRecord$1(value) ? value : {};
+  const inserted = record["inserted"];
+  const replaced = record["replaced"];
+  return {
+    inserted: typeof inserted === "number" && Number.isFinite(inserted) ? inserted : 0,
+    replaced: typeof replaced === "number" && Number.isFinite(replaced) ? replaced : 0
+  };
+}
+function asStringList(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+}
+function normalizeMcpPolicyWritePlan(value) {
+  const record = isRecord$1(value) ? value : {};
+  return {
+    additions: asStringList(record["additions"]),
+    replacements: asStringList(record["replacements"]),
+    removals: asStringList(record["removals"])
+  };
+}
+function normalizeMcpPolicySemanticDiff(value) {
+  const record = isRecord$1(value) ? value : {};
+  const additionCount = record["additionCount"];
+  const replacementCount = record["replacementCount"];
+  const removalCount = record["removalCount"];
+  return {
+    additionCount: typeof additionCount === "number" && Number.isFinite(additionCount) ? additionCount : 0,
+    replacementCount: typeof replacementCount === "number" && Number.isFinite(replacementCount) ? replacementCount : 0,
+    removalCount: typeof removalCount === "number" && Number.isFinite(removalCount) ? removalCount : 0
+  };
+}
+function normalizeMcpPolicyRequest(raw) {
+  const record = isRecord$1(raw) ? raw : {};
+  const expectedPolicyGeneration = record["expectedPolicyGeneration"];
+  return {
+    requestId: typeof record["requestId"] === "string" ? record["requestId"] : "",
+    status: normalizeMcpPolicyStatus(record["status"]),
+    documentId: typeof record["documentId"] === "string" ? record["documentId"] : "",
+    candidateDigest: typeof record["candidateDigest"] === "string" ? record["candidateDigest"] : "",
+    expectedCurrentDigest: typeof record["expectedCurrentDigest"] === "string" ? record["expectedCurrentDigest"] : null,
+    expectedPolicyGeneration: typeof expectedPolicyGeneration === "number" && Number.isFinite(expectedPolicyGeneration) ? expectedPolicyGeneration : null,
+    mode: record["mode"] === "replace" ? "replace" : "merge",
+    createdAt: typeof record["createdAt"] === "string" ? record["createdAt"] : "",
+    expiresAt: typeof record["expiresAt"] === "string" ? record["expiresAt"] : "",
+    resolvedAt: typeof record["resolvedAt"] === "string" ? record["resolvedAt"] : null,
+    failureCode: typeof record["failureCode"] === "string" ? record["failureCode"] : null,
+    isTerminal: record["isTerminal"] === true,
+    isExpired: record["isExpired"] === true,
+    result: normalizeMcpPolicyApplyResult(record["result"]),
+    writePlan: normalizeMcpPolicyWritePlan(record["writePlan"]),
+    semanticDiff: normalizeMcpPolicySemanticDiff(record["semanticDiff"]),
+    activeEnforcementWarning: record["activeEnforcementWarning"] === true
+  };
+}
+async function fetchMcpPolicyRequest(requestId) {
+  const response = await fetchGuardApi(`/v1/mcp-policy/requests/${encodeURIComponent(requestId)}`, {
+    method: "GET"
+  });
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
+  }
+  const payload = await response.json().catch(() => null);
+  return normalizeMcpPolicyRequest(payload);
+}
+async function resolveMcpPolicyRequest(input) {
+  const response = await fetchGuardApi(
+    `/v1/mcp-policy/requests/${encodeURIComponent(input.requestId)}/decision`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: input.action,
+        ...input.approval_password ? { approval_password: input.approval_password } : {},
+        ...input.approval_totp_code ? { approval_totp_code: input.approval_totp_code } : {}
+      })
+    }
+  );
+  const payloadBody = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null
+    );
+  }
+  const record = isRecord$1(payloadBody) ? payloadBody : {};
+  return {
+    resolved: record["resolved"] === true,
+    requestId: typeof record["requestId"] === "string" ? record["requestId"] : "",
+    status: normalizeMcpPolicyStatus(record["status"]),
+    resolvedAt: typeof record["resolvedAt"] === "string" ? record["resolvedAt"] : null,
+    failureCode: typeof record["failureCode"] === "string" ? record["failureCode"] : null,
+    message: typeof record["message"] === "string" ? record["message"] : void 0
+  };
 }
 const GITHUB_ISSUE_BASE_URL = "https://github.com/hashgraph-online/hol-guard/issues/new";
 const DEFAULT_ISSUE_BODY = [
@@ -26321,6 +26431,9 @@ function QueueConnectionError(props) {
     ] })
   ] }) });
 }
+const McpPolicyRequestPanel = reactExports.lazy(
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+);
 function renderInboxContent(props) {
   if (props.requests.kind === "loading") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", "aria-busy": "true", "aria-live": "polite", children: [
@@ -26337,6 +26450,25 @@ function renderInboxContent(props) {
         approvalUrl: props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null,
         onRetry: props.onRetry,
         onRepair: props.onRepair
+      }
+    );
+  }
+  if (props.detail.kind === "mcp-policy") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      reactExports.Suspense,
+      {
+        fallback: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", "aria-busy": "true", "aria-live": "polite", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-72" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-24 w-full" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-40 w-full" })
+        ] }),
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          McpPolicyRequestPanel,
+          {
+            requestId: props.detail.requestId,
+            approvalGate: props.approvalGate ?? null
+          }
+        )
       }
     );
   }
@@ -26615,6 +26747,9 @@ const SupplyChainHubWorkspace = reactExports.lazy(
 const PolicyWorkspacePage = reactExports.lazy(
   () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? [] : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
+reactExports.lazy(
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+);
 const AboutWorkspace = reactExports.lazy(
   () => __vitePreload(() => import("./chunks/about-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
@@ -26716,6 +26851,13 @@ async function loadDetail(requestId) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("404")) {
+      try {
+        const mcpRequest = await fetchMcpPolicyRequest(requestId);
+        if (mcpRequest !== null) {
+          return { kind: "mcp-policy", requestId };
+        }
+      } catch {
+      }
       return { kind: "stale" };
     }
     return {
@@ -27363,8 +27505,8 @@ export {
   HiMiniClipboardDocumentCheck as N,
   HiMiniClipboard as O,
   ProofStrip as P,
-  getDefaultExportFromCjs as Q,
-  React as R,
+  requireReact as Q,
+  getDefaultExportFromCjs as R,
   SectionLabel as S,
   HiMiniKey as T,
   HiMiniLockClosed as U,
@@ -27452,20 +27594,23 @@ export {
   fetchReceipts as b9,
   HiMiniQueueList as bA,
   HiMiniPlay as bB,
-  Surface as bC,
-  HiMiniCheckBadge as bD,
-  fetchSupplyChainBundle as bE,
-  isSupplyChainScannerEvidence as bF,
-  isBlockedGuardAction as bG,
-  HiMiniDocumentMagnifyingGlass as bH,
-  HiMiniShieldExclamation as bI,
-  HiMiniComputerDesktop as bJ,
-  HiMiniChevronLeft as bK,
-  HiMiniFunnel as bL,
-  HiMiniArrowDown as bM,
-  HiMiniArrowUp as bN,
-  runAuditRemediation as bO,
-  HiMiniSignal as bP,
+  fetchMcpPolicyRequest as bC,
+  resolveMcpPolicyRequest as bD,
+  HiMiniDocumentPlus as bE,
+  HiMiniDocumentMagnifyingGlass as bF,
+  Surface as bG,
+  HiMiniCheckBadge as bH,
+  fetchSupplyChainBundle as bI,
+  isSupplyChainScannerEvidence as bJ,
+  isBlockedGuardAction as bK,
+  HiMiniShieldExclamation as bL,
+  HiMiniComputerDesktop as bM,
+  HiMiniChevronLeft as bN,
+  HiMiniFunnel as bO,
+  HiMiniArrowDown as bP,
+  HiMiniArrowUp as bQ,
+  runAuditRemediation as bR,
+  HiMiniSignal as bS,
   WorkspacePageHeader as ba,
   __vitePreload as bb,
   scopeLabel as bc,

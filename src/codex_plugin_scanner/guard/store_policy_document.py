@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 # pyright: reportAttributeAccessIssue=false, reportUnknownMemberType=false
 from dataclasses import dataclass
 from typing import Literal
@@ -109,6 +111,37 @@ class StorePolicyDocumentMixin:
         if mode not in {"merge", "replace"}:
             raise ValueError("invalid_policy_import_mode")
 
+        normalized_rows = self._normalize_compiled_rows(compiled_rows)
+
+        require_high_risk(
+            self.guard_home,
+            purpose="policy_import",
+            approval_gate_grant=approval_gate_grant,
+            now=now,
+        )
+
+        digest = policy_document_digest(document)
+        secret_material = self._policy_integrity_secret_material(create=True)
+        with self._connect() as connection:
+            connection.execute("begin immediate")
+            result = self._import_policy_rows_on_connection(
+                connection,
+                document=document,
+                compiled_rows=compiled_rows,
+                normalized_rows=normalized_rows,
+                mode=mode,
+                now=now,
+                digest=digest,
+                secret_material=secret_material,
+            )
+            connection.commit()
+
+        return result
+
+    def _normalize_compiled_rows(
+        self,
+        compiled_rows: tuple[CompiledPolicyRow, ...],
+    ) -> list[tuple[CompiledPolicyRow, str | None, str | None, str | None, str | None]]:
         normalized_rows: list[tuple[CompiledPolicyRow, str | None, str | None, str | None, str | None]] = []
         seen_keys: set[tuple[str, str, str | None, str | None, str | None, str | None]] = set()
         for compiled in compiled_rows:
@@ -128,64 +161,51 @@ class StorePolicyDocumentMixin:
                 raise ValueError(f"duplicate_policy_selector:{compiled.rule_id}")
             seen_keys.add(key)
             normalized_rows.append((compiled, artifact_id, artifact_hash, workspace, publisher))
+        return normalized_rows
 
-        require_high_risk(
-            self.guard_home,
-            purpose="policy_import",
-            approval_gate_grant=approval_gate_grant,
-            now=now,
-        )
+    def _import_policy_rows_on_connection(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        document: GuardPolicyDocument,
+        compiled_rows: tuple[CompiledPolicyRow, ...],
+        normalized_rows: list[tuple[CompiledPolicyRow, str | None, str | None, str | None, str | None]],
+        mode: PolicyImportMode,
+        now: str,
+        digest: str,
+        secret_material: tuple[bytes | None, str | None],
+    ) -> PolicyDocumentImportResult:
+        """Write policy rows on a caller-owned connection (already in BEGIN IMMEDIATE).
 
-        digest = policy_document_digest(document)
+        The caller is responsible for commit/rollback.  This method is the
+        shared row-write core used by both ``import_policy_document`` and
+        ``apply_policy_creation_request``.
+        """
         next_control_state: dict[str, object] | None = None
         inserted_ids: set[int] = set()
         replaced = 0
-        secret_material = self._policy_integrity_secret_material(create=True)
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            state = self._refresh_policy_integrity_state(
-                connection,
-                now=now,
-                create_key=True,
-                secret_material=secret_material,
-                allow_cutover_resign=False,
-            )
-            if mode == "replace":
-                cursor = connection.execute("delete from policy_decisions where source = 'policy-yaml-import'")
-                replaced += max(cursor.rowcount, 0)
+        state = self._refresh_policy_integrity_state(
+            connection,
+            now=now,
+            create_key=True,
+            secret_material=secret_material,
+            allow_cutover_resign=False,
+        )
+        if mode == "replace":
+            cursor = connection.execute("delete from policy_decisions where source = 'policy-yaml-import'")
+            replaced += max(cursor.rowcount, 0)
 
-            for compiled, artifact_id, artifact_hash, workspace, publisher in normalized_rows:
-                decision = compiled.decision
-                if mode == "merge":
-                    cursor = connection.execute(
-                        """
-                        delete from policy_decisions
-                        where source = 'policy-yaml-import'
-                          and harness = ? and scope = ? and coalesce(artifact_id, '') = coalesce(?, '')
-                          and coalesce(artifact_hash, '') = coalesce(?, '')
-                          and coalesce(workspace, '') = coalesce(?, '')
-                          and coalesce(publisher, '') = coalesce(?, '')
-                        """,
-                        (
-                            decision.harness,
-                            decision.scope,
-                            artifact_id,
-                            artifact_hash,
-                            workspace,
-                            publisher,
-                        ),
-                    )
-                    replaced += max(cursor.rowcount, 0)
+        for compiled, artifact_id, artifact_hash, workspace, publisher in normalized_rows:
+            decision = compiled.decision
+            if mode == "merge":
                 cursor = connection.execute(
                     """
-                    insert into policy_decisions (
-                      harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason,
-                      owner, source, expires_at, policy_document_schema_version, policy_document_id,
-                      policy_document_digest, policy_rule_id, policy_provenance_json, updated_at,
-                      integrity_version, integrity_generation, payload_hash, payload_mac,
-                      integrity_key_id, signed_at
-                    )
-                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    delete from policy_decisions
+                    where source = 'policy-yaml-import'
+                      and harness = ? and scope = ? and coalesce(artifact_id, '') = coalesce(?, '')
+                      and coalesce(artifact_hash, '') = coalesce(?, '')
+                      and coalesce(workspace, '') = coalesce(?, '')
+                      and coalesce(publisher, '') = coalesce(?, '')
                     """,
                     (
                         decision.harness,
@@ -194,43 +214,63 @@ class StorePolicyDocumentMixin:
                         artifact_hash,
                         workspace,
                         publisher,
-                        decision.action,
-                        decision.reason,
-                        decision.owner,
-                        decision.source,
-                        decision.expires_at,
-                        document.api_version,
-                        document.metadata.id,
-                        digest,
-                        compiled.rule_id,
-                        compiled.provenance_json,
-                        now,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
                     ),
                 )
-                if cursor.lastrowid is None:
-                    raise RuntimeError("Guard policy decision row was not inserted.")
-                inserted_ids.add(cursor.lastrowid)
+                replaced += max(cursor.rowcount, 0)
+            cursor = connection.execute(
+                """
+                insert into policy_decisions (
+                  harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason,
+                  owner, source, expires_at, policy_document_schema_version, policy_document_id,
+                  policy_document_digest, policy_rule_id, policy_provenance_json, updated_at,
+                  integrity_version, integrity_generation, payload_hash, payload_mac,
+                  integrity_key_id, signed_at
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    decision.harness,
+                    decision.scope,
+                    artifact_id,
+                    artifact_hash,
+                    workspace,
+                    publisher,
+                    decision.action,
+                    decision.reason,
+                    decision.owner,
+                    decision.source,
+                    decision.expires_at,
+                    document.api_version,
+                    document.metadata.id,
+                    digest,
+                    compiled.rule_id,
+                    compiled.provenance_json,
+                    now,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+            )
+            if cursor.lastrowid is None:
+                raise RuntimeError("Guard policy decision row was not inserted.")
+            inserted_ids.add(cursor.lastrowid)
 
-            if state.get("mode") == "protected":
-                key, key_id = secret_material
-                if key is not None and key_id is not None:
-                    trusted_state = self._load_policy_integrity_control_state(create=True)
-                    if trusted_state is not None:
-                        next_control_state = self._advance_policy_integrity_generation(
-                            connection,
-                            now=now,
-                            key=key,
-                            key_id=key_id,
-                            trusted_state=trusted_state,
-                            force_sign_decision_ids=inserted_ids,
-                        )
-            connection.commit()
+        if state.get("mode") == "protected":
+            key, key_id = secret_material
+            if key is not None and key_id is not None:
+                trusted_state = self._load_policy_integrity_control_state(create=True)
+                if trusted_state is not None:
+                    next_control_state = self._advance_policy_integrity_generation(
+                        connection,
+                        now=now,
+                        key=key,
+                        key_id=key_id,
+                        trusted_state=trusted_state,
+                        force_sign_decision_ids=inserted_ids,
+                    )
 
         if next_control_state is not None:
             self._finalize_policy_integrity_control_state(next_control_state)
@@ -239,4 +279,42 @@ class StorePolicyDocumentMixin:
             digest=digest,
             inserted=len(inserted_ids),
             replaced=replaced,
+        )
+
+    def apply_policy_creation_request(
+        self,
+        document: GuardPolicyDocument,
+        compiled_rows: tuple[CompiledPolicyRow, ...],
+        *,
+        mode: PolicyImportMode,
+        now: str,
+        approval_gate_grant: ApprovalGateGrant | None,
+        connection: sqlite3.Connection,
+    ) -> PolicyDocumentImportResult:
+        """Apply policy rows on a caller-owned transaction (BEGIN IMMEDIATE).
+
+        Used by the MCP policy creation path so that policy row writes and
+        the pending-request status transition commit atomically in one
+        shared transaction.  The caller owns commit/rollback.
+        """
+        if mode not in {"merge", "replace"}:
+            raise ValueError("invalid_policy_import_mode")
+        normalized_rows = self._normalize_compiled_rows(compiled_rows)
+        require_high_risk(
+            self.guard_home,
+            purpose="policy_import",
+            approval_gate_grant=approval_gate_grant,
+            now=now,
+        )
+        digest = policy_document_digest(document)
+        secret_material = self._policy_integrity_secret_material(create=True)
+        return self._import_policy_rows_on_connection(
+            connection,
+            document=document,
+            compiled_rows=compiled_rows,
+            normalized_rows=normalized_rows,
+            mode=mode,
+            now=now,
+            digest=digest,
+            secret_material=secret_material,
         )

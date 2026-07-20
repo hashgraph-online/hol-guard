@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from .mcp.policy_store import ensure_mcp_policy_request_schema
+
 # ruff: noqa: F403,F405
 from .store_base import *
 from .store_live_request_outbox import ensure_live_request_outbox_schema, seed_live_request_outbox
@@ -653,6 +655,7 @@ class StoreConnectionSchemaMixin:
             self._ensure_policy_column(connection, "policy_provenance_json", "text")
             for index_statement in _POLICY_INDEX_STATEMENTS:
                 connection.execute(index_statement)
+            ensure_mcp_policy_request_schema(connection)
             self._ensure_column(connection, "guard_local_once_approvals", "integrity_version", "integer")
             self._ensure_column(connection, "guard_local_once_approvals", "payload_hash", "text")
             self._ensure_column(connection, "guard_local_once_approvals", "payload_mac", "text")
