@@ -52,6 +52,20 @@ def test_incomplete_javascript_lockfile_fallback_preserves_package_manager(
     assert target["package_manager"] == package_manager
 
 
+def test_incomplete_composer_lockfile_fallback_uses_packagist_ecosystem() -> None:
+    parse_result = lockfile_parse_module.incomplete_lockfile_result(
+        "composer.lock",
+        b"",
+        error_reason="parse_error",
+        budget_ms=200,
+    )
+
+    target = incomplete_lockfile_fallback_target(parse_result)
+
+    assert target["ecosystem"] == "packagist"
+    assert target["package_manager"] == "composer"
+
+
 def test_evaluate_package_request_artifact_preserves_direct_version_when_package_lock_contains_nested_duplicate(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

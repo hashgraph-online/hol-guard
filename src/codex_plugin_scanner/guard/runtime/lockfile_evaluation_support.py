@@ -111,7 +111,7 @@ def incomplete_lockfile_fallback_target(parse_result: LockfileParseResult) -> di
     ecosystem = {
         "bundler-lock": "rubygems",
         "cargo-lock": "cargo",
-        "composer-lock": "composer",
+        "composer-lock": "packagist",
         "pipenv-lock": "pypi",
         "poetry-lock": "pypi",
         "uv-lock": "pypi",
