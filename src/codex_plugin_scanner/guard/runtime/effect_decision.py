@@ -24,7 +24,7 @@ from .effect_contract import (
 )
 from .extension_evidence import ExtensionEvidenceBatch
 
-EFFECT_DECISION_SCHEMA_VERSION: Final = "1.0.0"
+EFFECT_DECISION_SCHEMA_VERSION: Final = "1.1.0"
 _REASON_CODE: Final = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
 _REFERENCE: Final = re.compile(r"[a-z][a-z0-9_-]*:[a-z0-9][a-z0-9._/-]*")
 _SHA256: Final = re.compile(r"[0-9a-f]{64}")
@@ -36,6 +36,8 @@ class DecisionFactorSource(str, Enum):
     POLICY = "policy"
     CONTAINMENT = "containment"
     AUTHORIZATION = "authorization"
+
+    CONTROL = "control"
 
 
 class FinalDisposition(str, Enum):

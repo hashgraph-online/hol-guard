@@ -109,7 +109,7 @@ class CommandPermissionCatalog:
             if permission.permission_id in by_id:
                 raise ValueError(f"duplicate permission ID: {permission.permission_id}")
             by_id[permission.permission_id] = permission
-            _index_unique(by_rule_id, permission.rule_ids, permission, "rule")
+            _index_unique(by_rule_id, permission.rule_ids, permission, "rule", normalize=True)
             _index_unique(
                 by_action_class,
                 permission.action_classes,
@@ -117,7 +117,13 @@ class CommandPermissionCatalog:
                 "action class",
                 normalize=True,
             )
-            _index_unique(by_capability, permission.typed_capabilities, permission, "typed capability")
+            _index_unique(
+                by_capability,
+                permission.typed_capabilities,
+                permission,
+                "typed capability",
+                normalize=True,
+            )
         _validate_references(ordered, by_id)
         _validate_dependency_cycles(ordered, by_id)
         self._permissions = ordered
@@ -143,16 +149,16 @@ class CommandPermissionCatalog:
         }
 
     def get(self, permission_id: str) -> CommandPermissionSpec | None:
-        return self._by_id.get(permission_id)
+        return self._by_id.get(permission_id.strip().lower())
 
     def for_rule_id(self, rule_id: str) -> CommandPermissionSpec | None:
-        return self._by_rule_id.get(rule_id)
+        return self._by_rule_id.get(rule_id.strip().lower())
 
     def for_action_class(self, action_class: str) -> CommandPermissionSpec | None:
         return self._by_action_class.get(action_class.strip().lower())
 
     def for_typed_capability(self, capability: str) -> CommandPermissionSpec | None:
-        return self._by_capability.get(capability)
+        return self._by_capability.get(capability.strip().lower())
 
 
 def permission_for_rule(
