@@ -17,6 +17,7 @@ from pathlib import Path
 from ..protect import _collect_package_specs
 from ._shell_execution_context_support import ShellPathIdentity
 from .command_model import CanonicalCommand
+from .env_wrapper import parse_env_wrapper
 from .homebrew_intent import parse_brew_intent
 from .mcp_protection import _command_name, _package_token
 from .package_intent_common import (
@@ -1403,94 +1404,41 @@ def _effective_execution_context(
     if command_name != "env":
         return _path_for_resolution(effective_path, effective_cwd), path_source, effective_cwd, cwd_source
 
-    index += 1
-    parsing_options = True
-    split_expansions = 0
-    while index < len(raw_segment):
-        token = raw_segment[index]
-        if _ENV_ASSIGNMENT_RE.match(token):
-            name, _, value = token.partition("=")
-            if name == "PATH":
-                effective_path = _expanded_path_assignment(value, effective_path)
-                path_source = "env" if effective_path is not None else "env_unresolved"
-            index += 1
-            parsing_options = False
-            continue
-        if not parsing_options:
-            break
-        if token == "--":
-            index += 1
-            parsing_options = False
-            continue
-        if token in {"-i", "--ignore-environment"}:
-            effective_path = os.defpath
-            path_source = "env_default"
-            index += 1
-            continue
-        if token in {"-u", "--unset"} and index + 1 < len(raw_segment):
-            if raw_segment[index + 1] == "PATH":
-                effective_path = os.defpath
-                path_source = "env_default"
-            index += 2
-            continue
-        if token.startswith("--unset="):
-            if token.partition("=")[2] == "PATH":
-                effective_path = os.defpath
-                path_source = "env_default"
-            index += 1
-            continue
-        if token.startswith("-u") and token != "-u":
-            if token[2:] == "PATH":
-                effective_path = os.defpath
-                path_source = "env_default"
-            index += 1
-            continue
-        if token in {"-C", "--chdir"} and index + 1 < len(raw_segment):
-            effective_cwd, cwd_source = _updated_effective_cwd(
-                effective_cwd,
-                raw_segment[index + 1],
-            )
-            index += 2
-            continue
-        if token.startswith("--chdir="):
-            effective_cwd, cwd_source = _updated_effective_cwd(
-                effective_cwd,
-                token.partition("=")[2],
-            )
-            index += 1
-            continue
-        if token.startswith("-C") and token != "-C":
-            effective_cwd, cwd_source = _updated_effective_cwd(
-                effective_cwd,
-                token[2:],
-            )
-            index += 1
-            continue
-        if token == "-P" and index + 1 < len(raw_segment):
-            effective_path = _expanded_path_assignment(raw_segment[index + 1], effective_path)
-            path_source = "env_search_path" if effective_path is not None else "env_search_path_unresolved"
-            index += 2
-            continue
-        if token.startswith("-P") and token != "-P":
-            effective_path = _expanded_path_assignment(token[2:], effective_path)
-            path_source = "env_search_path" if effective_path is not None else "env_search_path_unresolved"
-            index += 1
-            continue
-        split_value, consumed = _env_split_value(raw_segment, index)
-        if split_value is not None:
-            if split_expansions >= 4:
-                return None, "env_split_unresolved", effective_cwd, cwd_source
+    inherited_environment = dict(os.environ)
+    if effective_path is None:
+        inherited_environment.pop("PATH", None)
+    else:
+        inherited_environment["PATH"] = effective_path
+    parsed_env = parse_env_wrapper(
+        raw_segment[index + 1 :],
+        inherited_environment=inherited_environment,
+        cwd=effective_cwd,
+    )
+    if not parsed_env.complete:
+        return None, f"env_{parsed_env.error or 'unresolved'}", effective_cwd, cwd_source
+    path_was_unset = "PATH" in parsed_env.option_effects.unset_names
+    path_assignment = next(
+        (value for name, value in reversed(parsed_env.environment_delta.assignments) if name == "PATH"),
+        None,
+    )
+    if parsed_env.option_effects.search_path is not None:
+        effective_path = _expanded_path_assignment(parsed_env.option_effects.search_path, effective_path)
+        path_source = "env_search_path" if effective_path is not None else "env_search_path_unresolved"
+    elif path_assignment is not None:
+        effective_path = _expanded_path_assignment(path_assignment, effective_path)
+        path_source = "env" if effective_path is not None else "env_unresolved"
+    elif parsed_env.option_effects.ignore_environment or path_was_unset:
+        effective_path = os.defpath
+        path_source = "env_default"
+    if parsed_env.option_effects.chdir is not None:
+        if "$" in parsed_env.option_effects.chdir or "\x00" in parsed_env.option_effects.chdir:
+            cwd_source = "env_chdir_unresolved"
+        elif parsed_env.effective_cwd is not None:
             try:
-                split_tokens = shlex.split(split_value)
-            except ValueError:
-                return None, "env_split_unresolved", effective_cwd, cwd_source
-            raw_segment = [*raw_segment[:index], *split_tokens, *raw_segment[index + consumed :]]
-            split_expansions += 1
-            continue
-        if token.startswith("-"):
-            index += 1
-            continue
-        break
+                effective_cwd = parsed_env.effective_cwd.resolve()
+                cwd_source = "env_chdir"
+            except (OSError, RuntimeError):
+                cwd_source = "env_chdir_unresolved"
     return _path_for_resolution(effective_path, effective_cwd), path_source, effective_cwd, cwd_source
 
 
@@ -1715,80 +1663,20 @@ def _strip_sudo_prefix(tokens: list[str]) -> list[str]:
 
 
 def _strip_env_prefix(tokens: list[str]) -> list[str]:
-    index = 0
-    parsing_options = True
-    while index < len(tokens):
-        token = tokens[index]
-        if _ENV_ASSIGNMENT_RE.match(token):
-            index += 1
-            parsing_options = False
-            continue
-        if not parsing_options:
-            break
-        if not token.startswith("-"):
-            break
-        if token == "--":
-            index += 1
-            break
-        split_value, consumed = _env_split_value(tokens, index)
-        if split_value is not None:
-            try:
-                split_tokens = shlex.split(split_value)
-            except ValueError:
-                return tokens[index + consumed :]
-            return _strip_env_prefix([*split_tokens, *tokens[index + consumed :]])
-        if token in {"-u", "--unset", "-C", "--chdir", "-P", "-S", "--split-string"} and index + 1 < len(tokens):
-            index += 2
-            continue
-        index += 1
-    return tokens[index:]
+    parsed = parse_env_wrapper(tokens)
+    return list(parsed.executable_argv) if parsed.complete else []
 
 
 def _strip_env_prefix_for_redaction(tokens: list[str]) -> tuple[list[str], list[str]]:
-    preserved_env: list[str] = []
-    index = 0
-    parsing_options = True
-    while index < len(tokens):
-        token = tokens[index]
-        if _ENV_ASSIGNMENT_RE.match(token):
-            if _package_source_env_assignment(token):
-                preserved_env.append(token)
-            index += 1
-            parsing_options = False
-            continue
-        if not parsing_options:
-            break
-        if not token.startswith("-"):
-            break
-        if token == "--":
-            index += 1
-            break
-        split_value, consumed = _env_split_value(tokens, index)
-        if split_value is not None:
-            try:
-                split_tokens = shlex.split(split_value)
-            except ValueError:
-                return preserved_env, tokens[index + consumed :]
-            nested_preserved, nested_tokens = _strip_env_prefix_for_redaction(
-                [*split_tokens, *tokens[index + consumed :]]
-            )
-            return [*preserved_env, *nested_preserved], nested_tokens
-        if token in {"-u", "--unset", "-C", "--chdir", "-P", "-S", "--split-string"} and index + 1 < len(tokens):
-            index += 2
-            continue
-        index += 1
-    return preserved_env, tokens[index:]
-
-
-def _env_split_value(tokens: list[str], index: int) -> tuple[str | None, int]:
-    token = tokens[index]
-    if token in {"-S", "--split-string"}:
-        return (tokens[index + 1], 2) if index + 1 < len(tokens) else (None, 1)
-    if token.startswith("--split-string="):
-        return token.partition("=")[2], 1
-    if token.startswith("-S") and token != "-S":
-        return token[2:], 1
-    return None, 0
+    parsed = parse_env_wrapper(tokens)
+    if not parsed.complete:
+        return [], []
+    preserved_env = [
+        f"{name}={value}"
+        for name, value in parsed.environment_delta.assignments
+        if _package_source_env_assignment(f"{name}={value}")
+    ]
+    return preserved_env, list(parsed.executable_argv)
 
 
 def _strip_plain_wrapper_flags(tokens: list[str]) -> list[str]:

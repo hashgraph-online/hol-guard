@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from ..runtime.env_wrapper import parse_env_wrapper
 from ..runtime.shell_execution_context import model_shell_execution_context, validate_shell_execution_segment
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -97,46 +98,21 @@ def _codex_strip_command_wrapper(parts: list[str]) -> list[str]:
 
 
 def _codex_strip_env_wrapper(parts: list[str]) -> list[str]:
-    index = 0
-    while index < len(parts):
-        part = parts[index]
-        if part == "--":
-            return parts[index + 1 :]
-        if part in {"-i", "-0", "--ignore-environment", "--null"}:
-            index += 1
-            continue
-        if part in {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}:
-            index += 2
-            continue
-        if part.startswith(("--unset=", "--chdir=", "--split-string=")):
-            index += 1
-            continue
-        if part.startswith("-"):
-            index += 1
-            continue
-        if "=" in part and not part.startswith("="):
-            index += 1
-            continue
-        return parts[index:]
-    return []
+    parsed = parse_env_wrapper(parts)
+    return list(parsed.executable_argv) if parsed.complete else []
 
 
 def _codex_env_args_clear_environment(parts: list[str]) -> bool:
-    saw_clear_environment = False
-    for part in parts:
-        if part == "--":
-            return False
-        if part in {"-i", "--ignore-environment"}:
-            saw_clear_environment = True
-            continue
-        if part.startswith("-"):
-            continue
-        if "=" in part and not part.startswith("="):
-            if _codex_env_assignment_uses_shell_expansion(part):
-                return False
-            continue
-        return False
-    return saw_clear_environment
+    parsed = parse_env_wrapper(parts)
+    return (
+        parsed.complete
+        and parsed.option_effects.ignore_environment
+        and not parsed.executable_argv
+        and not any(
+            _codex_env_assignment_uses_shell_expansion(f"{name}={value}")
+            for name, value in parsed.environment_delta.assignments
+        )
+    )
 
 
 def _codex_env_assignment_uses_shell_expansion(part: str) -> bool:
