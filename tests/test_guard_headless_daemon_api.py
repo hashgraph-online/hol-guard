@@ -555,18 +555,6 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
             workspace_id="workspace-1",
         ),
     )
-    connect_finalized = threading.Event()
-    set_guard_cloud_connect_state = daemon_server._set_guard_cloud_connect_state
-
-    def set_state_and_signal(
-        server: daemon_server._GuardDaemonHttpServer,
-        state: dict[str, object] | None,
-    ) -> None:
-        set_guard_cloud_connect_state(server, state)
-        if state is None:
-            connect_finalized.set()
-
-    monkeypatch.setattr(daemon_server, "_set_guard_cloud_connect_state", set_state_and_signal)
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -593,23 +581,32 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
             ),
         )
         assert status == 200
-        connect_flow = running["connect_flow"]
-        assert connect_flow["state"] in {"idle", "running"}
-        if connect_flow["state"] == "running":
-            assert connect_flow["authorize_url"] == "https://hol.org/mock-authorize"
-        assert connect_finalized.wait(timeout=30), "Guard Cloud connect did not finalize repaired credentials"
-        status, refreshed = _read_json_response(
-            _request(
-                daemon.port,
-                "/v1/supply-chain/package-shims",
-                method="GET",
-                token=token,
-            ),
-        )
-        assert status == 200
-        assert refreshed["entitlement"]["allowed"] is True
-        assert refreshed["entitlement"]["reason"] == "paid_oauth_entitlement_active"
-        assert refreshed["connect_flow"] is None
+        assert running["connect_flow"]["state"] == "running"
+        assert running["connect_flow"]["authorize_url"] == "https://hol.org/mock-authorize"
+        deadline = time.monotonic() + 10.0
+        refreshed: dict[str, object] = {}
+        while time.monotonic() < deadline:
+            status, refreshed = _read_json_response(
+                _request(
+                    daemon.port,
+                    "/v1/supply-chain/package-shims",
+                    method="GET",
+                    token=token,
+                ),
+            )
+            if refreshed["entitlement"]["allowed"] is True:
+                assert status == 200
+                assert refreshed["entitlement"]["reason"] == "paid_oauth_entitlement_active"
+                assert refreshed["connect_flow"] is None
+                break
+            connect_flow = refreshed.get("connect_flow")
+            if isinstance(connect_flow, dict) and connect_flow.get("state") == "failed":
+                pytest.fail(f"Guard Cloud connect failed: {connect_flow.get('detail', 'unknown error')}")
+            time.sleep(0.1)
+        else:
+            raise AssertionError(
+                f"package firewall status never unlocked after local connect repair: last response={refreshed!r}"
+            )
     finally:
         daemon.stop()
 
@@ -2690,159 +2687,6 @@ def test_headless_policy_sync_does_not_ack_failed_policy_replacement(
 
     assert store.get_sync_payload("policy_bundle") is None
     assert store.get_sync_payload("policy_bundle_ack") is None
-
-
-@pytest.mark.parametrize("legacy_available", [True, False])
-def test_headless_policy_sync_enforces_canonical_v2_bundle(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    legacy_available: bool,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    if legacy_available:
-        store.set_sync_payload(
-            "policy_bundle_legacy_last_good",
-            {
-                "contractVersion": "guard-policy-bundle.v1",
-                "bundleVersion": "policy-2026-07-16.7",
-                "bundleHash": "sha256:legacy",
-                "issuedAt": "2026-07-16T09:59:00Z",
-                "rules": [
-                    {
-                        "ruleId": "rule-1",
-                        "action": "block",
-                        "artifactId": "skill:hol/deploy",
-                        "scope": {},
-                    }
-                ],
-            },
-            "2026-07-16T09:59:00Z",
-        )
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    bundle: dict[str, object] = {
-        "contractVersion": "guard-policy-bundle.v2",
-        "bundleVersion": 8,
-        "bundleHash": "sha256:canonical",
-        "issuedAt": "2026-07-16T10:00:00Z",
-        "workspaceId": "workspace-1",
-        "payload": {
-            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
-            "kind": "GuardPolicy",
-            "metadata": {"id": "test-policy", "name": "Test policy", "revision": 1},
-            "spec": {
-                "defaults": {"mode": "prompt"},
-                "rules": [
-                    {
-                        "id": "rule-1",
-                        "enabled": True,
-                        "effect": "block",
-                        "match": {"artifacts": ["skill:hol/deploy"]},
-                        "lifetime": {"mode": "permanent", "expiresAt": None},
-                        "provenance": {
-                            "source": "import",
-                            "createdAt": "2026-07-16T10:00:00Z",
-                            "createdBy": "owner@example.com",
-                        },
-                    }
-                ],
-            },
-        },
-    }
-    monkeypatch.setenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", "true")
-    monkeypatch.setattr(
-        daemon_server,
-        "validate_synced_policy_bundle",
-        lambda *_args, **_kwargs: (bundle, None, {}),
-    )
-    try:
-        token = _dashboard_token_for(store)
-        status, payload = _read_json_response(
-            _request(
-                daemon.port,
-                "/v1/policy/sync",
-                token=token,
-                payload={
-                    "harness": "codex",
-                    "operation": "policy_sync",
-                    "policy_bundle": json.dumps(bundle),
-                },
-            ),
-        )
-        repeat_status, repeat_payload = _read_json_response(
-            _request(
-                daemon.port,
-                "/v1/policy/sync",
-                token=token,
-                payload={
-                    "harness": "codex",
-                    "operation": "policy_sync",
-                    "policy_bundle": json.dumps(bundle),
-                },
-            ),
-        )
-        repeated_ack = store.get_sync_payload("policy_bundle_ack")
-        bundle["bundleVersion"] = 9
-        bundle["bundleHash"] = "sha256:higher"
-        higher_status, higher_payload = _read_json_response(
-            _request(
-                daemon.port,
-                "/v1/policy/sync",
-                token=token,
-                payload={
-                    "harness": "codex",
-                    "operation": "policy_sync",
-                    "policy_bundle": json.dumps(bundle),
-                },
-            ),
-        )
-        previous_good = store.get_sync_payload("policy_bundle_canonical_previous_good")
-        bundle["bundleVersion"] = 7
-        bundle["bundleHash"] = "sha256:lower"
-        downgrade_status, downgrade_payload = _read_json_response(
-            _request(
-                daemon.port,
-                "/v1/policy/sync",
-                token=token,
-                payload={
-                    "harness": "codex",
-                    "operation": "policy_sync",
-                    "policy_bundle": json.dumps(bundle),
-                },
-            ),
-        )
-        bundle["bundleVersion"] = 9
-        bundle["bundleHash"] = "sha256:substitution"
-        substitution_status, substitution_payload = _read_json_response(
-            _request(
-                daemon.port,
-                "/v1/policy/sync",
-                token=token,
-                payload={
-                    "harness": "codex",
-                    "operation": "policy_sync",
-                    "policy_bundle": json.dumps(bundle),
-                },
-            ),
-        )
-    finally:
-        daemon.stop()
-
-    assert status == 200, (payload, store.list_events())
-    assert payload["bundle_version"] == "8"
-    assert store.get_sync_payload("policy_bundle")["contractVersion"] == "guard-policy-bundle.v2"
-    decisions = store.list_policy_decisions()
-    assert [(decision["owner"], decision["source"]) for decision in decisions] == [
-        ("rule-1", "policy-bundle-canonical")
-    ]
-    assert repeat_status == 200, repeat_payload
-    assert repeated_ack["sequence"] == 2
-    assert higher_status == 200, higher_payload
-    assert previous_good["bundleVersion"] == 8
-    assert downgrade_status == 400
-    assert downgrade_payload["error"] == "bundle_version_downgrade"
-    assert substitution_status == 400
-    assert substitution_payload["error"] == "bundle_version_downgrade"
 
 
 def test_headless_policy_sync_rejects_unsupported_daemon_version(tmp_path: Path) -> None:

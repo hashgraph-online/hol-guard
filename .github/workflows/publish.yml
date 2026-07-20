@@ -15,7 +15,7 @@ on:
         required: true
         type: choice
         options:
-          - "3.1"
+          - "2.2"
       release_version:
         description: "Exact canonical release version"
         required: true
@@ -25,9 +25,9 @@ on:
         required: true
         type: string
   push:
-    branches: [main, release/3.1]
+    branches: [main, release/2.2]
   pull_request:
-    branches: [main, release/3.1]
+    branches: [main, release/2.2]
 
 permissions:
   contents: read
@@ -62,12 +62,12 @@ jobs:
             echo "Release dispatch actor is not an authorized maintainer" >&2
             exit 1
           fi
-          if [[ "$RELEASE_CHANNEL" != "alpha" || "$RELEASE_TRAIN" != "3.1" ]]; then
-            echo "Only the release/3.1 alpha train is authorized" >&2
+          if [[ "$RELEASE_CHANNEL" != "alpha" || "$RELEASE_TRAIN" != "2.2" ]]; then
+            echo "Only the release/2.2 alpha train is authorized" >&2
             exit 1
           fi
-          if [[ "$GITHUB_REF" != "refs/heads/release/3.1" ]]; then
-            echo "Alpha releases must run from refs/heads/release/3.1" >&2
+          if [[ "$GITHUB_REF" != "refs/heads/release/2.2" ]]; then
+            echo "Alpha releases must run from refs/heads/release/2.2" >&2
             exit 1
           fi
           if [[ "$EXPECTED_SHA" != "$GITHUB_SHA" ]]; then
@@ -147,14 +147,14 @@ jobs:
             fi
             CHANNEL="$RELEASE_CHANNEL"
             TRAIN="$RELEASE_TRAIN"
-            if [[ "$TRAIN" != "3.1" ]]; then
+            if [[ "$TRAIN" != "2.2" ]]; then
               echo "Unsupported release train: ${TRAIN}" >&2
               exit 1
             fi
             TRAIN_REF="refs/heads/release/${TRAIN}"
 
             if [[ "$CHANNEL" != "alpha" ]]; then
-              echo "The release/3.1 train is alpha-only" >&2
+              echo "The release/2.2 train is alpha-only" >&2
               exit 1
             fi
             if [[ "$GITHUB_REF" != "$TRAIN_REF" ]]; then
@@ -370,7 +370,7 @@ jobs:
       (needs.alpha-cross-platform.result == 'success' || needs.alpha-cross-platform.result == 'skipped')
     needs: [build, alpha-cross-platform]
     runs-on: ubuntu-latest
-    environment: testpypi
+    environment: testpypi-alpha
     permissions:
       contents: read
       id-token: write
@@ -611,11 +611,8 @@ jobs:
         env:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
         run: |
-          remote_main_sha=$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')
-          if [[ "$remote_main_sha" != "$SOURCE_SHA" ]]; then
-            echo "Main publication source is no longer the branch head" >&2
-            exit 1
-          fi
+          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main
       - name: Inspect TestPyPI release state
         id: testpypi
         env:
@@ -703,11 +700,8 @@ jobs:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          remote_main_sha=$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')
-          if [[ "$remote_main_sha" != "$SOURCE_SHA" ]]; then
-            echo "Main publication source is no longer the branch head" >&2
-            exit 1
-          fi
+          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main
           BASE_VERSION=$(uv run --with packaging==25.0 python scripts/sync_repo_version.py --check)
           PYPI_VERSIONS=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
             list-versions --registry pypi)

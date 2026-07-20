@@ -48,16 +48,10 @@ dependencies = [
     "cryptography>=49.0.0",
     "keyring>=25.0",
     "packaging>=24.0",
-    "jsonschema>=4.26.0",
-    "pyyaml>=6.0.3",
     "requests>=2.32,<3",
     "tomli>=2.0; python_version < '3.11'",
     "cisco-ai-skill-scanner~=2.0.11; python_version < '3.14'",
     "mcp>=1.28.1,<2; python_version >= '3.10'",
-    "pystray>=0.19.5,<0.20",
-    "pillow>=11.0,<13",
-    "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",
-    "python-xlib>=0.33; sys_platform == 'linux' and platform_machine != 'aarch64'",
 ]
 
 [project.optional-dependencies]
@@ -67,6 +61,8 @@ cisco = [
 dev = [
     "basedpyright>=1.39.8",
     "build>=1.5.0",
+    "jsonschema>=4.26.0",
+    "pyyaml>=6.0.3",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.15",
@@ -122,11 +118,7 @@ line-length = 120
 packages = ["src/codex_plugin_scanner"]
 
 [tool.hatch.build]
-artifacts = [
-    "src/codex_plugin_scanner/guard/daemon/static/**",
-    "src/codex_plugin_scanner/guard/schemas/**",
-    "src/codex_plugin_scanner/guard/tray/assets/**",
-]
+artifacts = ["src/codex_plugin_scanner/guard/daemon/static/**"]
 exclude = [
     ".guard-live/**",
     ".guard-package-venv/**",
@@ -135,8 +127,6 @@ exclude = [
     ".guard-e2e-prod2/**",
     ".guard-prod-venv/**",
     ".guard-prod-venv-fresh/**",
-    ".venv/**",
-    ".venv-*/**",
     "dashboard/node_modules/**",
 ]
 

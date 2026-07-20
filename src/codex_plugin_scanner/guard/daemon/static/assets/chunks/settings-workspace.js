@@ -1,4 +1,4 @@
-import { Q as getDefaultExportFromCjs, r as reactExports, R as React, j as jsxRuntimeExports, x as useFocusTrap, T as HiMiniKey, S as SectionLabel, A as ActionButton, k as HiMiniShieldCheck, U as HiMiniLockClosed, V as HiMiniBellAlert, W as HiMiniAdjustmentsHorizontal, X as HiMiniCog6Tooth, Y as HiMiniWindow, Z as HiMiniCircleStack, _ as TabBar, F as HiMiniChevronRight, $ as fetchTrayStatus, a0 as runTrayAction, a1 as resolveProtectionLevelCopy, a2 as fetchSettings, a3 as fetchRuntimeSnapshot, a4 as updateSettings, a5 as clearPolicy, a6 as clearReviewQueue, a7 as revokeApprovalGateCooldown, a8 as disableApprovalGateTotp, a9 as importSettings, aa as resetSettings, ab as enrollApprovalGateTotp, ac as verifyApprovalGateTotp, ad as clearEvidence, ae as exportDiagnostics, af as repairApprovalCenter, ag as exportSettings, ah as setupDesktopNotifications, b as EmptyState, e as GuardHero, ai as Tag, aj as HiMiniMagnifyingGlass, d as HiMiniCheckCircle, z as HiMiniExclamationTriangle, ak as approvalGateCooldownLabel, p as HiMiniXMark } from "../guard-dashboard.js";
+import { Q as getDefaultExportFromCjs, r as reactExports, R as React, j as jsxRuntimeExports, x as useFocusTrap, T as HiMiniKey, S as SectionLabel, A as ActionButton, k as HiMiniShieldCheck, U as HiMiniLockClosed, V as HiMiniBellAlert, W as HiMiniAdjustmentsHorizontal, X as HiMiniCog6Tooth, Y as HiMiniCircleStack, Z as TabBar, F as HiMiniChevronRight, _ as resolveProtectionLevelCopy, $ as fetchSettings, a0 as fetchRuntimeSnapshot, a1 as updateSettings, a2 as clearPolicy, a3 as clearReviewQueue, a4 as revokeApprovalGateCooldown, a5 as disableApprovalGateTotp, a6 as importSettings, a7 as resetSettings, a8 as enrollApprovalGateTotp, a9 as verifyApprovalGateTotp, aa as clearEvidence, ab as exportDiagnostics, ac as repairApprovalCenter, ad as exportSettings, ae as setupDesktopNotifications, b as EmptyState, e as GuardHero, af as Tag, ag as HiMiniMagnifyingGlass, d as HiMiniCheckCircle, z as HiMiniExclamationTriangle, ah as approvalGateCooldownLabel, p as HiMiniXMark } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
 var propTypes$2 = { exports: {} };
 var ReactPropTypesSecret_1;
@@ -2182,7 +2182,6 @@ const ICON_NOTIFICATIONS = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBellAlert
 const ICON_RISK = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "h-4 w-4", "aria-hidden": "true" });
 const ICON_DEFAULTS = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCog6Tooth, { className: "h-4 w-4", "aria-hidden": "true" });
 const ICON_MAINTENANCE = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { className: "h-4 w-4", "aria-hidden": "true" });
-const ICON_TRAY = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWindow, { className: "h-4 w-4", "aria-hidden": "true" });
 const localSettingsNavItems = [
   {
     key: "protection",
@@ -2223,14 +2222,6 @@ const localSettingsNavItems = [
     summary: "What Guard does when it has not seen something before.",
     group: "local",
     icon: ICON_DEFAULTS
-  },
-  {
-    key: "tray",
-    label: "Tray icon",
-    mobileLabel: "Tray",
-    summary: "Menu-bar icon for opening the dashboard without a terminal.",
-    group: "local",
-    icon: ICON_TRAY
   },
   {
     key: "maintenance",
@@ -2381,199 +2372,6 @@ function SettingsToggleRow({
             className: `absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-0"}`
           }
         )
-      }
-    )
-  ] });
-}
-const IDLE_STATE = { status: "idle", message: "" };
-function actionFeedbackClassName(status) {
-  if (status === "error") {
-    return "rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700";
-  }
-  if (status === "success") {
-    return "rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700";
-  }
-  return "rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600";
-}
-function TraySettingsPanel() {
-  const [trayStatus, setTrayStatus] = reactExports.useState(null);
-  const [statusLoading, setStatusLoading] = reactExports.useState(true);
-  const [statusError, setStatusError] = reactExports.useState(null);
-  const [actionState, setActionState] = reactExports.useState(IDLE_STATE);
-  const [pendingAction, setPendingAction] = reactExports.useState(null);
-  const refreshStatus = reactExports.useCallback(async () => {
-    setStatusLoading(true);
-    setStatusError(null);
-    try {
-      const status = await fetchTrayStatus();
-      setTrayStatus(status);
-    } catch (error) {
-      setStatusError(error instanceof Error ? error.message : "Failed to load tray status");
-      setTrayStatus(null);
-    } finally {
-      setStatusLoading(false);
-    }
-  }, []);
-  reactExports.useEffect(() => {
-    void refreshStatus();
-  }, [refreshStatus]);
-  const handleAction = reactExports.useCallback(
-    async (action) => {
-      setPendingAction(action);
-      setActionState({ status: "loading", message: "" });
-      try {
-        const result = await runTrayAction(action);
-        setActionState({
-          status: result.ok ? "success" : "error",
-          message: result.message
-        });
-        await refreshStatus();
-      } catch (error) {
-        setActionState({
-          status: "error",
-          message: error instanceof Error ? error.message : `Tray ${action} failed`
-        });
-      } finally {
-        setPendingAction(null);
-      }
-    },
-    [refreshStatus]
-  );
-  const isRunning = trayStatus?.state === "running";
-  const isSupported = trayStatus?.capability.supported ?? false;
-  const platformLabel = trayStatus?.capability.platform ?? "Unknown";
-  const backendLabel = trayStatus?.capability.backend ?? "none";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      SettingsFormSection,
-      {
-        title: "Menu-bar tray icon",
-        description: "A persistent icon in your menu bar (macOS) or system tray (Windows/Linux) that opens the HOL Guard dashboard without a terminal.",
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 py-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-slate-200 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Current status" }),
-              statusLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Loading…" }) : statusError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-red-600", children: statusError }) : trayStatus ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 space-y-1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-700", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "State:" }),
-                  " ",
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "span",
-                    {
-                      className: isRunning ? "rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700" : "rounded bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600",
-                      children: trayStatus.state
-                    }
-                  )
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
-                  "Platform: ",
-                  platformLabel,
-                  " · Backend: ",
-                  backendLabel
-                ] }),
-                !isSupported && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-amber-600", children: "Tray icons are not supported on this platform." })
-              ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "No status available." })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: () => void refreshStatus(), variant: "outline", disabled: statusLoading, children: statusLoading ? "Refreshing…" : "Refresh" })
-          ] }) }),
-          actionState.status !== "idle" && /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "div",
-            {
-              className: actionFeedbackClassName(actionState.status),
-              role: actionState.status === "error" ? "alert" : "status",
-              children: actionState.status === "loading" ? "Working…" : actionState.message
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Start tray" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Launch the menu-bar icon now." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                ActionButton,
-                {
-                  onClick: () => void handleAction("start"),
-                  disabled: !isSupported || pendingAction !== null || isRunning,
-                  variant: "primary",
-                  children: pendingAction === "start" ? "Starting…" : "Start"
-                }
-              ) })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Stop tray" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Quit the running menu-bar icon." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                ActionButton,
-                {
-                  onClick: () => void handleAction("stop"),
-                  disabled: pendingAction !== null || !isRunning,
-                  variant: "outline",
-                  children: pendingAction === "stop" ? "Stopping…" : "Stop"
-                }
-              ) })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Restart tray" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Stop and start again (use if the icon is stuck)." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                ActionButton,
-                {
-                  onClick: () => void handleAction("restart"),
-                  disabled: !isSupported || pendingAction !== null,
-                  variant: "outline",
-                  children: pendingAction === "restart" ? "Restarting…" : "Restart"
-                }
-              ) })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Repair tray" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Reset crash state if the tray won't start." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                ActionButton,
-                {
-                  onClick: () => void handleAction("repair"),
-                  disabled: pendingAction !== null,
-                  variant: "outline",
-                  children: pendingAction === "repair" ? "Repairing…" : "Repair"
-                }
-              ) })
-            ] })
-          ] })
-        ] })
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      SettingsFormSection,
-      {
-        title: "Start at login",
-        description: "Automatically launch the tray icon when you log in to your computer.",
-        children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Install login item" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Registers the tray to start automatically (LaunchAgent on macOS, Run key on Windows, XDG autostart on Linux)." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-              ActionButton,
-              {
-                onClick: () => void handleAction("install"),
-                disabled: !isSupported || pendingAction !== null,
-                variant: "primary",
-                children: pendingAction === "install" ? "Installing…" : "Install"
-              }
-            ) })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Remove login item" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Unregister the automatic start-at-login entry." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-              ActionButton,
-              {
-                onClick: () => void handleAction("uninstall"),
-                disabled: pendingAction !== null,
-                variant: "outline",
-                children: pendingAction === "uninstall" ? "Removing…" : "Remove"
-              }
-            ) })
-          ] })
-        ] }) })
       }
     )
   ] });
@@ -3945,7 +3743,6 @@ function SettingsWorkspace({ onApprovalGateChange }) {
               ]
             }
           ) }),
-          activeTab === "tray" && /* @__PURE__ */ jsxRuntimeExports.jsx(TraySettingsPanel, {}),
           activeTab === "maintenance" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-0 flex-1 flex-col space-y-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsFormSection, { title: "Keep this machine tidy", description: "Export, reset, clear history, or fix a broken approval link.", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 py-3", children: [
             perfSnapshot !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticsPerfCard, { snapshot: perfSnapshot }) : null,
             /* @__PURE__ */ jsxRuntimeExports.jsx(

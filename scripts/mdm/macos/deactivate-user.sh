@@ -18,4 +18,3 @@ chmod +a "${USER_NAME} allow search,delete_child" "${AUTH_ROOT}"
 launchctl asuser "${USER_UID}" sudo -u "${USER_NAME}" -- \
   "${GUARD}" mdm deactivate --home "${USER_HOME}" --user "${USER_NAME}" \
   --authorization-file "${AUTH_FILE}" --json
-"${GUARD}" mdm harness-coverage-unregister --home "${USER_HOME}" --user "${USER_NAME}" --json
