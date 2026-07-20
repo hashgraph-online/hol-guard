@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal, cast
 
+from ..action_lattice import is_guard_action, most_restrictive_guard_action, normalize_guard_action
 from .contracts import (
     MDM_POLICY_SCHEMA_VERSION,
     InstallOwner,
@@ -24,14 +25,6 @@ from .contracts import (
 )
 
 _MAX_POLICY_BYTES = 1024 * 1024
-_ACTION_STRENGTH = {
-    "allow": 0,
-    "warn": 1,
-    "review": 2,
-    "require-reapproval": 3,
-    "sandbox-required": 4,
-    "block": 5,
-}
 _MODE_STRENGTH = {"observe": 0, "prompt": 1, "enforce": 2}
 _TOP_LEVEL_KEYS = {
     "schemaVersion",
@@ -294,28 +287,32 @@ def _set_path(payload: dict[str, object], path: str, value: object) -> None:
 
 
 def _merge_strongest_actions(local: object, managed: object) -> object:
-    if (
-        isinstance(local, str)
-        and isinstance(managed, str)
-        and local in _ACTION_STRENGTH
-        and managed in _ACTION_STRENGTH
-    ):
-        return max((local, managed), key=_ACTION_STRENGTH.__getitem__)
-    if isinstance(local, dict) and isinstance(managed, dict):
-        merged = dict(local)
+    if isinstance(managed, dict):
+        merged = dict(local) if isinstance(local, dict) else {}
         for key, value in managed.items():
             merged[key] = _merge_strongest_actions(merged.get(key), value)
         return merged
-    return managed
+    if local is None:
+        return normalize_guard_action(managed, unknown_action="block")
+    if managed is None:
+        return normalize_guard_action(local, unknown_action="block")
+    return most_restrictive_guard_action(local, managed, unknown_action="block")
 
 
 def _strongest_security_value(local: object, managed: object) -> object:
     if isinstance(local, str) and isinstance(managed, str):
-        if local in _ACTION_STRENGTH and managed in _ACTION_STRENGTH:
-            return max((local, managed), key=_ACTION_STRENGTH.__getitem__)
+        if is_guard_action(local) or is_guard_action(managed):
+            return most_restrictive_guard_action(local, managed, unknown_action="block")
         if local in _MODE_STRENGTH and managed in _MODE_STRENGTH:
             return max((local, managed), key=_MODE_STRENGTH.__getitem__)
     return managed
+
+
+def _is_action_setting_path(path: str) -> bool:
+    parts = tuple(path.split("."))
+    return any(part == "actions" or part.endswith(("_actions", "Actions")) for part in parts) or parts[-1].endswith(
+        ("_action", "Action")
+    )
 
 
 def _compose_managed_value(local: object, managed: object) -> object:
@@ -333,7 +330,7 @@ def apply_managed_policy(local_payload: Mapping[str, object], policy: ManagedPol
     composed = dict(local_payload)
     for key, managed_value in policy.settings.items():
         local_value = composed.get(key)
-        if key == "actions" or key.endswith("Actions"):
+        if _is_action_setting_path(key):
             composed[key] = _merge_strongest_actions(local_value, managed_value)
         elif key in composed:
             composed[key] = _compose_managed_value(local_value, managed_value)
@@ -343,11 +340,12 @@ def apply_managed_policy(local_payload: Mapping[str, object], policy: ManagedPol
         managed_value = _get_path(policy.settings, setting_path)
         if managed_value is not _MISSING:
             local_value = _get_path(composed, setting_path)
-            _set_path(
-                composed,
-                setting_path,
-                _strongest_security_value(local_value, managed_value),
+            strongest_value = (
+                _merge_strongest_actions(local_value, managed_value)
+                if _is_action_setting_path(setting_path)
+                else _strongest_security_value(local_value, managed_value)
             )
+            _set_path(composed, setting_path, strongest_value)
     return composed
 
 

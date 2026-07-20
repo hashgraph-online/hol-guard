@@ -10,6 +10,12 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import IO, Any, TextIO
 
+from ..action_lattice import (
+    GuardActionNormalization,
+    most_restrictive_guard_action,
+    normalize_guard_action,
+    normalize_guard_action_result,
+)
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..approval_scope_support import package_request_runtime_workspace_scope
@@ -50,31 +56,9 @@ from .stdio import (
     _timeout_response,
 )
 
-_PACKAGE_POLICY_ACTION_RANK = {
-    "allow": 0,
-    "warn": 1,
-    "review": 2,
-    "require-reapproval": 2,
-    "block": 3,
-}
 
-
-def _guard_action(value: str) -> GuardAction:
-    match value:
-        case "allow":
-            return "allow"
-        case "warn":
-            return "warn"
-        case "review":
-            return "review"
-        case "block":
-            return "block"
-        case "sandbox-required":
-            return "sandbox-required"
-        case "require-reapproval":
-            return "require-reapproval"
-        case _:
-            return "review"
+def _guard_action(value: object) -> GuardAction:
+    return normalize_guard_action(value)
 
 
 def _approval_surface_policy_for_browser(configured_policy: object, approval_flow: Mapping[str, object]) -> str:
@@ -88,12 +72,26 @@ def _approval_surface_policy_for_browser(configured_policy: object, approval_flo
     return policy
 
 
-def _most_restrictive_package_policy_action(stored_action: str | None, current_action: str) -> str:
+def _most_restrictive_package_policy_action(stored_action: object | None, current_action: object) -> GuardAction:
     if stored_action is None:
-        return current_action
-    stored_rank = _PACKAGE_POLICY_ACTION_RANK.get(stored_action, -1)
-    current_rank = _PACKAGE_POLICY_ACTION_RANK.get(current_action, -1)
-    return stored_action if stored_rank >= current_rank else current_action
+        return normalize_guard_action(current_action)
+    return most_restrictive_guard_action(stored_action, current_action)
+
+
+def _guard_action_normalization_evidence(
+    source: str,
+    normalization: GuardActionNormalization,
+) -> dict[str, object] | None:
+    if normalization.recognized:
+        return None
+    return {
+        "source": "guard_action_normalizer",
+        "input_source": source,
+        "reason_code": normalization.reason_code,
+        "original_action": normalization.original_action,
+        "original_type": normalization.original_type,
+        "normalized_action": normalization.action,
+    }
 
 
 class RuntimeMcpGuardProxy:
@@ -354,6 +352,17 @@ class RuntimeMcpGuardProxy:
             artifact_hash=tool_artifact_hash,
             arguments=arguments,
         )
+        decision_normalization_evidence: tuple[dict[str, object], ...] = ()
+        if decision.normalization_reason_code is not None:
+            decision_normalization_evidence = (
+                {
+                    "source": "guard_action_normalizer",
+                    "input_source": "stored_tool_policy",
+                    "reason_code": decision.normalization_reason_code,
+                    "original_action": decision.original_action,
+                    "normalized_action": decision.action,
+                },
+            )
         package_artifact = self._package_request_artifact(tool_name=tool_name, arguments=arguments)
         if package_artifact is not None:
             if decision.action in {"allow", "warn"}:
@@ -403,6 +412,7 @@ class RuntimeMcpGuardProxy:
                             tool_name=tool_name,
                             signals=decision.signals,
                             params=params,
+                            scanner_evidence=decision_normalization_evidence,
                         )
                     response, package_event = self._handle_package_request(
                         message=message,
@@ -469,6 +479,7 @@ class RuntimeMcpGuardProxy:
                     policy_action="require-reapproval",
                     risk_summary=decision.summary,
                     risk_signals=list(decision.signals),
+                    extra_fields={"scanner_evidence": list(decision_normalization_evidence)},
                 )
                 response, package_event = self._handle_package_request(
                     message=message,
@@ -495,6 +506,7 @@ class RuntimeMcpGuardProxy:
                 tool_name=tool_name,
                 signals=decision.signals,
                 params=params,
+                scanner_evidence=decision_normalization_evidence,
             )
             return response, queued_event
         if decision.action == "allow" or (decision.source == "policy" and decision.action in {"warn", "review"}):
@@ -592,6 +604,7 @@ class RuntimeMcpGuardProxy:
                 policy_action="require-reapproval",
                 risk_summary=decision.summary,
                 risk_signals=list(decision.signals),
+                extra_fields={"scanner_evidence": list(decision_normalization_evidence)},
             )
             response, observe_event = self._allow_and_forward(
                 message=message,
@@ -617,6 +630,7 @@ class RuntimeMcpGuardProxy:
             tool_name=tool_name,
             signals=decision.signals,
             params=params,
+            scanner_evidence=decision_normalization_evidence,
         )
         return response, queued_event
 
@@ -685,10 +699,39 @@ class RuntimeMcpGuardProxy:
             artifact_hash=artifact_digest,
             workspace=policy_workspace,
         )
-        policy_action = _most_restrictive_package_policy_action(
-            stored_policy_action if isinstance(stored_policy_action, str) else None,
-            package_evaluation.policy_action,
+        current_action_normalization = normalize_guard_action_result(package_evaluation.policy_action)
+        stored_action_normalization = (
+            normalize_guard_action_result(stored_policy_action) if stored_policy_action is not None else None
         )
+        policy_action = _most_restrictive_package_policy_action(stored_policy_action, package_evaluation.policy_action)
+        action_normalization_evidence = tuple(
+            evidence
+            for evidence in (
+                _guard_action_normalization_evidence("package_evaluation", current_action_normalization),
+                (
+                    _guard_action_normalization_evidence("stored_policy", stored_action_normalization)
+                    if stored_action_normalization is not None
+                    else None
+                ),
+            )
+            if evidence is not None
+        )
+        effective_package_reasons = (
+            *package_evaluation.reasons,
+            *(
+                {
+                    "code": evidence["reason_code"],
+                    "message": "Guard found an unknown action and conservatively requires review.",
+                    "original_action": evidence["original_action"],
+                    "normalized_action": evidence["normalized_action"],
+                }
+                for evidence in action_normalization_evidence
+            ),
+        )
+        package_scanner_evidence = [
+            *([package_context.to_evidence()] if package_context is not None else []),
+            *action_normalization_evidence,
+        ]
         queue_policy_action = "require-reapproval" if policy_action == "review" else policy_action
         if is_execution_permitted(queue_policy_action):
             if remember_allow and remember_decision_source is not None:
@@ -731,7 +774,7 @@ class RuntimeMcpGuardProxy:
             decision_v2_payload = build_decision_v2(
                 _guard_action(queue_policy_action),
                 reason=queue_policy_action,
-                signals=_package_reason_signals(package_evaluation.reasons),
+                signals=_package_reason_signals(effective_package_reasons),
             ).to_dict()
             decision_v2_payload["user_title"] = package_evaluation.user_copy.title
             decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
@@ -744,13 +787,11 @@ class RuntimeMcpGuardProxy:
                 params=params,
                 policy_action=queue_policy_action,
                 risk_summary=package_evaluation.risk_summary,
-                risk_signals=[
-                    str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons
-                ],
+                risk_signals=[str(item.get("message") or item.get("code") or "") for item in effective_package_reasons],
                 decision_v2_payload=decision_v2_payload,
                 extra_fields={
                     "changed_fields": ["runtime_tool_call", "package_request"],
-                    "scanner_evidence": [package_context.to_evidence()] if package_context is not None else [],
+                    "scanner_evidence": package_scanner_evidence,
                     "supply_chain_evaluation": package_evaluation.to_dict(),
                 },
             )
@@ -794,7 +835,7 @@ class RuntimeMcpGuardProxy:
         decision_v2_payload = build_decision_v2(
             _guard_action(queue_policy_action),
             reason=queue_policy_action,
-            signals=_package_reason_signals(package_evaluation.reasons),
+            signals=_package_reason_signals(effective_package_reasons),
         ).to_dict()
         decision_v2_payload["user_title"] = package_evaluation.user_copy.title
         decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
@@ -826,13 +867,10 @@ class RuntimeMcpGuardProxy:
                             "launch_target": self._launch_target(tool_name, params.get("arguments")),
                             "risk_summary": package_evaluation.risk_summary,
                             "risk_signals": [
-                                str(item.get("message") or item.get("code") or "")
-                                for item in package_evaluation.reasons
+                                str(item.get("message") or item.get("code") or "") for item in effective_package_reasons
                             ],
                             "decision_v2_json": decision_v2_payload,
-                            "scanner_evidence": (
-                                [package_context.to_evidence()] if package_context is not None else []
-                            ),
+                            "scanner_evidence": package_scanner_evidence,
                             "supply_chain_evaluation": package_evaluation.to_dict(),
                         }
                     ]
@@ -1169,6 +1207,7 @@ class RuntimeMcpGuardProxy:
         signals: tuple[str, ...],
         *,
         policy_action: str = "require-reapproval",
+        scanner_evidence: tuple[dict[str, object], ...] = (),
     ) -> dict[str, Any]:
         """Build the artifact payload for approval center queueing.
 
@@ -1221,6 +1260,8 @@ class RuntimeMcpGuardProxy:
         }
         if browser_intent_dict is not None:
             payload["browser_intent"] = browser_intent_dict
+        if scanner_evidence:
+            payload["scanner_evidence"] = list(scanner_evidence)
         return payload
 
     def _queue_approval_center_response(
@@ -1232,6 +1273,7 @@ class RuntimeMcpGuardProxy:
         tool_name: str,
         signals: tuple[str, ...],
         params: dict[str, Any],
+        scanner_evidence: tuple[dict[str, object], ...] = (),
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
         queued = queue_blocked_approvals(
@@ -1245,7 +1287,14 @@ class RuntimeMcpGuardProxy:
             ),
             evaluation={
                 "artifacts": [
-                    self._build_artifact_payload(artifact, artifact_hash, tool_name, params, signals),
+                    self._build_artifact_payload(
+                        artifact,
+                        artifact_hash,
+                        tool_name,
+                        params,
+                        signals,
+                        scanner_evidence=scanner_evidence,
+                    ),
                 ]
             },
             store=self.store,

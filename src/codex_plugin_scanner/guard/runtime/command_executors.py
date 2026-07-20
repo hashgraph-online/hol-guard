@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypeGuard
 
+from ..action_lattice import is_guard_action as _is_guard_action
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..cli.install_commands import (
@@ -30,7 +31,7 @@ from ..local_supply_chain import (
     sync_supply_chain_cloud_state,
 )
 from ..memory_decision_outbox import enqueue_memory_decision_event
-from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, DecisionScope, GuardAction, PolicyDecision
+from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision
 from ..package_shim_status import record_package_shim_audit_result
 from ..review_contracts import (
     GuardReviewContractError,
@@ -710,10 +711,6 @@ def _local_policy_scope(scope: str | None) -> DecisionScope:
 
 def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
     return isinstance(value, str) and value in DECISION_SCOPE_VALUES
-
-
-def _is_guard_action(value: object) -> TypeGuard[GuardAction]:
-    return isinstance(value, str) and value in GUARD_ACTION_VALUES
 
 
 def _local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:

@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .commands_support_runtime_resolution import _canonical_harness_name
 
 
+from ..action_lattice import most_restrictive_guard_action, normalize_guard_action
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -391,8 +392,10 @@ def _resolve_claude_permission_request_policy_action(
             store=store,
             workspace_dir=runtime_workspace,
         )
-        if guard_action_severity(package_evaluation.policy_action) > guard_action_severity(policy_action):
-            policy_action = package_evaluation.policy_action
+        policy_action = most_restrictive_guard_action(
+            policy_action,
+            normalize_guard_action(package_evaluation.policy_action),
+        )
     stub: dict[str, object] = {
         "harness": _canonical_harness_name(args.harness),
         "policy_action": policy_action,

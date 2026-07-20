@@ -122,6 +122,37 @@ class TestImmediateApproveDecisionPropagation:
         assert immediate_eval.get("blocked") is False, "T722: Policy must be written before request is marked resolved"
 
 
+def test_unknown_evaluation_action_queues_conservative_reapproval(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard"
+    store = GuardStore(guard_home)
+    artifact = _make_artifact(name="future_action")
+
+    approvals = queue_blocked_approvals(
+        detection=_make_detection(artifact),
+        evaluation={
+            "artifacts": [
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_hash": "sha256:future-action",
+                    "policy_action": "future-action",
+                    "risk_summary": "Unknown action from a newer producer.",
+                }
+            ]
+        },
+        store=store,
+        approval_center_url="http://127.0.0.1:6174",
+    )
+
+    assert len(approvals) == 1
+    assert approvals[0]["policy_action"] == "require-reapproval"
+    assert approvals[0]["scanner_evidence"][-1] == {
+        "source": "guard_action_normalizer",
+        "reason_code": "guard_action_unknown",
+        "original_action": "future-action",
+        "normalized_action": "require-reapproval",
+    }
+
+
 class TestImmediateDenyDecisionPropagation:
     """T724: Browser deny writes decision before harness retry resumes."""
 
