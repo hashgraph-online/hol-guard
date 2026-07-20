@@ -1,17 +1,12 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
-  if (relList && relList.supports && relList.supports("modulepreload"))
-    return;
-  for (const link of document.querySelectorAll('link[rel="modulepreload"]'))
-    processPreload(link);
+  if (relList && relList.supports && relList.supports("modulepreload")) return;
+  for (const link of document.querySelectorAll('link[rel="modulepreload"]')) processPreload(link);
   new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      if (mutation.type !== "childList")
-        continue;
-      for (const node of mutation.addedNodes)
-        if (node.tagName === "LINK" && node.rel === "modulepreload")
-          processPreload(node);
+      if (mutation.type !== "childList") continue;
+      for (const node of mutation.addedNodes) if (node.tagName === "LINK" && node.rel === "modulepreload") processPreload(node);
     }
   }).observe(document, {
     childList: true,
@@ -19,21 +14,15 @@ const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-das
   });
   function getFetchOpts(link) {
     const fetchOpts = {};
-    if (link.integrity)
-      fetchOpts.integrity = link.integrity;
-    if (link.referrerPolicy)
-      fetchOpts.referrerPolicy = link.referrerPolicy;
-    if (link.crossOrigin === "use-credentials")
-      fetchOpts.credentials = "include";
-    else if (link.crossOrigin === "anonymous")
-      fetchOpts.credentials = "omit";
-    else
-      fetchOpts.credentials = "same-origin";
+    if (link.integrity) fetchOpts.integrity = link.integrity;
+    if (link.referrerPolicy) fetchOpts.referrerPolicy = link.referrerPolicy;
+    if (link.crossOrigin === "use-credentials") fetchOpts.credentials = "include";
+    else if (link.crossOrigin === "anonymous") fetchOpts.credentials = "omit";
+    else fetchOpts.credentials = "same-origin";
     return fetchOpts;
   }
   function processPreload(link) {
-    if (link.ep)
-      return;
+    if (link.ep) return;
     link.ep = true;
     const fetchOpts = getFetchOpts(link);
     fetch(link.href, fetchOpts);
@@ -12512,42 +12501,37 @@ const __vitePreload = function preload(baseModule, deps, importerUrl) {
       }))));
     };
     document.getElementsByTagName("link");
-    const cspNonceMeta = document.querySelector("meta[property=csp-nonce]"), cspNonce = cspNonceMeta?.nonce || cspNonceMeta?.getAttribute("nonce");
+    const cspNonceMeta = document.querySelector("meta[property=csp-nonce]");
+    const cspNonce = cspNonceMeta?.nonce || cspNonceMeta?.getAttribute("nonce");
     promise = allSettled(deps.map((dep) => {
       dep = assetsURL(dep);
-      if (dep in seen)
-        return;
+      if (dep in seen) return;
       seen[dep] = true;
-      const isCss = dep.endsWith(".css"), cssSelector = isCss ? '[rel="stylesheet"]' : "";
-      if (document.querySelector(`link[href="${dep}"]${cssSelector}`))
-        return;
+      const isCss = dep.endsWith(".css");
+      const cssSelector = isCss ? '[rel="stylesheet"]' : "";
+      if (document.querySelector(`link[href="${dep}"]${cssSelector}`)) return;
       const link = document.createElement("link");
       link.rel = isCss ? "stylesheet" : scriptRel;
-      if (!isCss)
-        link.as = "script";
+      if (!isCss) link.as = "script";
       link.crossOrigin = "";
       link.href = dep;
-      if (cspNonce)
-        link.setAttribute("nonce", cspNonce);
+      if (cspNonce) link.setAttribute("nonce", cspNonce);
       document.head.appendChild(link);
-      if (isCss)
-        return new Promise((res, rej) => {
-          link.addEventListener("load", res);
-          link.addEventListener("error", () => rej(Error(`Unable to preload CSS for ${dep}`)));
-        });
+      if (isCss) return new Promise((res, rej) => {
+        link.addEventListener("load", res);
+        link.addEventListener("error", () => rej(/* @__PURE__ */ new Error(`Unable to preload CSS for ${dep}`)));
+      });
     }));
   }
   function handlePreloadError(err$2) {
     const e$1 = new Event("vite:preloadError", { cancelable: true });
     e$1.payload = err$2;
     window.dispatchEvent(e$1);
-    if (!e$1.defaultPrevented)
-      throw err$2;
+    if (!e$1.defaultPrevented) throw err$2;
   }
   return promise.then((res) => {
     for (const item of res || []) {
-      if (item.status !== "rejected")
-        continue;
+      if (item.status !== "rejected") continue;
       handlePreloadError(item.reason);
     }
     return baseModule().catch(handlePreloadError);
@@ -13130,6 +13114,163 @@ function groupByCategory(receipts) {
   }
   return map;
 }
+const DEFAULT_SCOPE_CHOICES = [
+  {
+    value: "artifact",
+    label: "Approve once",
+    description: "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved."
+  },
+  {
+    value: "workspace",
+    label: "Remember for project",
+    description: "Save this decision for the current project. Future matching actions skip review here without asking again."
+  },
+  {
+    value: "publisher",
+    label: "This source",
+    description: "Save this decision for all actions from the same source. Matching actions skip review in any project."
+  },
+  {
+    value: "harness",
+    label: "This app",
+    description: "Save this decision for this AI app everywhere. Matching actions from this app skip review in all your projects."
+  },
+  {
+    value: "global",
+    label: "Everywhere",
+    description: "Save this decision across all your projects on this machine. All matching actions skip review. Use only if you fully trust this."
+  }
+];
+const BLOCK_SCOPE_CHOICES = [
+  {
+    value: "artifact",
+    label: "Block this action",
+    description: "Block only this exact action. Other actions still follow their current Guard policy."
+  },
+  {
+    value: "workspace",
+    label: "Block in project",
+    description: "Block matching actions in the current project."
+  },
+  {
+    value: "publisher",
+    label: "Block this source",
+    description: "Block matching actions from this source."
+  },
+  {
+    value: "harness",
+    label: "Block in this app",
+    description: "Block matching actions from this AI app."
+  },
+  {
+    value: "global",
+    label: "Block everywhere",
+    description: "Block matching actions across every project and AI app on this machine."
+  }
+];
+function hasScopeContractMetadata(item) {
+  return item.scope_contract_version !== void 0 || item.scope_contract_digest !== void 0 || item.allowed_scopes_by_action !== void 0 || item.recommended_scope_by_action !== void 0 || item.scope_restrictions !== void 0 || item.task_capability_eligibility !== void 0;
+}
+function hasCompleteScopeContractBinding(item) {
+  return typeof item.scope_contract_version === "string" && item.scope_contract_version.length > 0 && typeof item.scope_contract_digest === "string" && item.scope_contract_digest.length > 0;
+}
+function declaredScopesForAction(item, action) {
+  if (hasScopeContractMetadata(item) && !hasCompleteScopeContractBinding(item)) {
+    return [];
+  }
+  const actionScopes = item.allowed_scopes_by_action?.[action];
+  if (Array.isArray(actionScopes)) {
+    return actionScopes;
+  }
+  if (action === "allow" && Array.isArray(item.allowed_scopes)) {
+    return item.allowed_scopes;
+  }
+  return null;
+}
+function requestSupportsScope(item, action, scope) {
+  const declaredScopes = declaredScopesForAction(item, action);
+  if (declaredScopes !== null) {
+    return declaredScopes.includes(scope);
+  }
+  return scope === "artifact";
+}
+function filterScopeChoicesForRequest(item, action, choices) {
+  return choices.filter((choice) => requestSupportsScope(item, action, choice.value));
+}
+function scopeChoicesForRequest(item, action = "allow") {
+  return filterScopeChoicesForRequest(
+    item,
+    action,
+    action === "allow" ? DEFAULT_SCOPE_CHOICES : BLOCK_SCOPE_CHOICES
+  );
+}
+const ADVANCED_SCOPE_VALUES = /* @__PURE__ */ new Set(["global"]);
+function advancedScopeChoicesForRequest(item, action = "allow") {
+  return scopeChoicesForRequest(item, action).filter(
+    (choice) => ADVANCED_SCOPE_VALUES.has(choice.value)
+  );
+}
+function standardScopeChoicesForRequest(item, action = "allow") {
+  return scopeChoicesForRequest(item, action).filter(
+    (choice) => !ADVANCED_SCOPE_VALUES.has(choice.value)
+  );
+}
+function recommendedScopeForAction(item, action) {
+  const actionRecommendation = item.recommended_scope_by_action?.[action] ?? null;
+  if (actionRecommendation !== null && requestSupportsScope(item, action, actionRecommendation)) {
+    return actionRecommendation;
+  }
+  if (action === "allow" && item.recommended_scope !== null && requestSupportsScope(item, action, item.recommended_scope)) {
+    return item.recommended_scope;
+  }
+  return scopeChoicesForRequest(item, action)[0]?.value ?? null;
+}
+function normalizeDecisionScope(item, action, scope) {
+  if (requestSupportsScope(item, action, scope)) {
+    return scope;
+  }
+  return recommendedScopeForAction(item, action);
+}
+function taskCapabilityExplanation(item) {
+  const eligibility = item.task_capability_eligibility;
+  if (eligibility === void 0) {
+    return null;
+  }
+  if (eligibility.eligible) {
+    return "Task access can cover only the approved operations and expires automatically.";
+  }
+  if (eligibility.reason_codes.includes("current_action_not_overridable") || item.scope_restrictions?.includes("current_action_not_overridable") === true) {
+    return "Task access cannot override this blocked or protected Guard action.";
+  }
+  if (eligibility.reason_codes.includes("task_capability_not_enabled")) {
+    return "Task access is not available for this action. Guard will ask again after this one-time approval.";
+  }
+  return "Task access is unavailable because this request does not include complete reusable proof.";
+}
+function buildDecisionPayload(input) {
+  const contractVersion = input.item.scope_contract_version;
+  const contractDigest = input.item.scope_contract_digest;
+  const hasCompleteBinding = typeof contractVersion === "string" && contractVersion.length > 0 && typeof contractDigest === "string" && contractDigest.length > 0;
+  if (hasScopeContractMetadata(input.item) && !hasCompleteBinding) {
+    throw new Error("The approval scope contract is incomplete. Refresh this request before deciding.");
+  }
+  const normalizedScope = normalizeDecisionScope(input.item, input.action, input.scope);
+  if (normalizedScope === null) {
+    throw new Error(`No eligible ${input.action} scope is available for this request.`);
+  }
+  const workspace = normalizedScope === "workspace" && typeof input.item.workspace === "string" ? input.item.workspace : void 0;
+  return {
+    requestId: input.item.request_id,
+    action: input.action,
+    scope: normalizedScope,
+    workspace,
+    reason: input.reason,
+    ...hasCompleteBinding ? {
+      scope_contract_version: contractVersion,
+      scope_contract_digest: contractDigest
+    } : {}
+  };
+}
 const REVIEW_SEMANTIC_GROUPS = [
   { id: "all", label: "All", matches: [] },
   {
@@ -13413,7 +13554,7 @@ function bulkApprovalRiskTier(group) {
   return "elevated";
 }
 function isBulkApprovableGroup(group) {
-  return bulkApprovalRiskTier(group) !== "blocked";
+  return bulkApprovalRiskTier(group) !== "blocked" && requestSupportsScope(group.primary, "allow", "artifact");
 }
 function countSensitiveFileReadGroups(groups) {
   return groups.filter((g) => {
@@ -15753,9 +15894,62 @@ function parseDecisionV2(raw) {
     confidence
   };
 }
+const DECISION_SCOPE_VALUES = /* @__PURE__ */ new Set([
+  "artifact",
+  "workspace",
+  "publisher",
+  "harness",
+  "global"
+]);
+function isDecisionScope(value) {
+  return typeof value === "string" && DECISION_SCOPE_VALUES.has(value);
+}
+function parseDecisionScopeList(value) {
+  if (!Array.isArray(value) || !value.every(isDecisionScope)) {
+    return null;
+  }
+  return [...new Set(value)];
+}
+function parseStringList(value) {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+    return null;
+  }
+  return [...new Set(value)];
+}
+function parseOptionalString(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
 function normalizeApprovalRequest(item) {
+  const hasScopeContract = item.scope_contract_version !== void 0 || item.scope_contract_digest !== void 0 || item.allowed_scopes_by_action !== void 0 || item.recommended_scope_by_action !== void 0 || item.scope_restrictions !== void 0 || item.task_capability_eligibility !== void 0;
+  const scopeContractVersion = parseOptionalString(item.scope_contract_version);
+  const scopeContractDigest = parseOptionalString(item.scope_contract_digest);
+  const hasCompleteScopeContract = scopeContractVersion !== null && scopeContractDigest !== null;
+  const rawAllowedByAction = isRecord$1(item.allowed_scopes_by_action) ? item.allowed_scopes_by_action : {};
+  const rawRecommendedByAction = isRecord$1(item.recommended_scope_by_action) ? item.recommended_scope_by_action : {};
+  const rawTaskEligibility = isRecord$1(item.task_capability_eligibility) ? item.task_capability_eligibility : null;
+  const taskReasonCodes = parseStringList(rawTaskEligibility?.reason_codes);
+  const taskCapabilityEligibility = typeof rawTaskEligibility?.eligible === "boolean" && taskReasonCodes !== null ? {
+    eligible: rawTaskEligibility.eligible,
+    reason_codes: taskReasonCodes
+  } : void 0;
+  const allowedScopes = parseDecisionScopeList(item.allowed_scopes);
+  const scopeRestrictions = parseStringList(item.scope_restrictions);
   return {
     ...item,
+    recommended_scope: isDecisionScope(item.recommended_scope) ? item.recommended_scope : null,
+    allowed_scopes: allowedScopes ?? void 0,
+    scope_contract_version: hasScopeContract ? scopeContractVersion : void 0,
+    scope_contract_digest: hasScopeContract ? scopeContractDigest : void 0,
+    allowed_scopes_by_action: hasScopeContract ? {
+      allow: hasCompleteScopeContract ? parseDecisionScopeList(rawAllowedByAction.allow) ?? [] : [],
+      block: hasCompleteScopeContract ? parseDecisionScopeList(rawAllowedByAction.block) ?? [] : []
+    } : void 0,
+    recommended_scope_by_action: hasScopeContract ? {
+      allow: hasCompleteScopeContract && isDecisionScope(rawRecommendedByAction.allow) ? rawRecommendedByAction.allow : null,
+      block: hasCompleteScopeContract && isDecisionScope(rawRecommendedByAction.block) ? rawRecommendedByAction.block : null
+    } : void 0,
+    scope_restrictions: hasScopeContract ? scopeRestrictions ?? [] : void 0,
+    task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : void 0,
     action_envelope_json: parseActionEnvelope(item.action_envelope_json),
     decision_v2_json: parseDecisionV2(item.decision_v2_json)
   };
@@ -16868,6 +17062,8 @@ async function resolveRequestWithQueueResult(input) {
       scope: input.scope,
       workspace: input.workspace || void 0,
       reason: input.reason || void 0,
+      ...input.scope_contract_version !== void 0 ? { scope_contract_version: input.scope_contract_version } : {},
+      ...input.scope_contract_digest !== void 0 ? { scope_contract_digest: input.scope_contract_digest } : {},
       ...input.approval_password !== void 0 ? { approval_password: input.approval_password } : {},
       ...input.approval_totp_code !== void 0 ? { approval_totp_code: input.approval_totp_code } : {},
       ...input.approval_gate_use_cooldown !== void 0 ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {}
@@ -24922,331 +25118,6 @@ function ReceiptsWorkspace(props) {
     }
   );
 }
-function SkillRiskCard(props) {
-  const skillSignals = deriveSkillRiskSignals(props.item);
-  if (skillSignals.length === 0) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-4",
-      "aria-label": "Skill risk details",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Skill risk" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: skillSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(SkillSignalRow, { signal }, signal.signal_id)) })
-      ]
-    }
-  );
-}
-function SkillSignalRow(props) {
-  const { signal } = props;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "space-y-1", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: signal.title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/70", children: signal.plain_reason }),
-    signal.technical_detail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] text-muted-foreground break-all", children: signal.technical_detail }) : null,
-    signal.false_positive_hint !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs leading-5 text-brand-dark/60", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Might be safe if: " }),
-      signal.false_positive_hint
-    ] }) : null
-  ] });
-}
-function SupplyChainRiskCard(props) {
-  const scSignals = deriveSupplyChainRiskSignals(props.item);
-  const packageContext = props.item.scanner_evidence?.find(isPackageExecutionContextEvidence) ?? null;
-  const isSupplyChainArtifact = props.item.artifact_type === "supply_chain" || props.item.artifact_type === "package_request" || typeof props.item.artifact_type === "string" && props.item.artifact_type.endsWith("_package");
-  if (scSignals.length === 0 && !isSupplyChainArtifact) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "rounded-xl border border-brand-purple/20 bg-brand-purple/[0.04] p-4",
-      "aria-label": "Supply-chain risk",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Supply-chain risk" }),
-        scSignals.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainSignalRow, { signal }, signal.signal_id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: "This action originates from a supply-chain artifact. Verify the publisher and version before approving." }),
-        packageContext !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PackageExecutionContextSummary, { context: packageContext }) : null
-      ]
-    }
-  );
-}
-const PACKAGE_CONTEXT_LABELS = {
-  environment_policy: "registry and proxy environment",
-  exact_workspace: "project location",
-  lifecycle_hooks_overrides_and_patches: "lifecycle hooks, overrides, or patches",
-  manifests_and_lockfiles: "manifests or lockfiles",
-  package_manager_executable: "package manager executable",
-  registry_and_proxy_configuration: "registry or proxy configuration",
-  repository_identity: "Git repository identity",
-  workspace_configuration: "workspace configuration",
-  workspace_identity: "workspace location within the repository"
-};
-function packageContextLabel(value) {
-  return PACKAGE_CONTEXT_LABELS[value] ?? value.replaceAll("_", " ");
-}
-function nonPortableReason(value) {
-  switch (value) {
-    case "dynamic_manager_configuration":
-      return "the package manager loads configuration dynamically";
-    case "dynamic_lifecycle_hook":
-      return "the project defines a lifecycle hook that can load additional local inputs";
-    case "oversized_configuration":
-      return "a package configuration input is too large to bind safely";
-    case "package_manager_executable_unavailable":
-      return "the package manager executable could not be verified";
-    case "repository_identity_unavailable":
-      return "a linked Git repository identity could not be verified";
-    case "symlinked_configuration":
-      return "a package configuration file is symlinked";
-    case "unreadable_configuration":
-      return "a package configuration input could not be read";
-    case "unsupported_package_manager":
-    case "unsupported_configuration":
-      return "the package configuration is not safely portable";
-    default:
-      return "Guard could not verify every package execution input";
-  }
-}
-function packageExecutionContextMessages(context) {
-  const messages = [
-    context.portable ? "A project approval is reused only in linked Git worktrees when the repository, package manager executable, dependency files, settings, hooks, overrides, patches, and registry/proxy environment all match." : `This approval is limited to one retry because ${nonPortableReason(context.non_portable_reason)}.`
-  ];
-  const changedComponents = context.changed_components ?? [];
-  if (changedComponents.length > 0) {
-    messages.push(
-      `Guard asked again because the following changed: ${changedComponents.map(packageContextLabel).join(", ")}.`
-    );
-  }
-  return messages;
-}
-function PackageExecutionContextSummary(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 border-t border-brand-purple/10 pt-3", "aria-label": "Package approval reuse", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-brand-purple", children: "Approval reuse" }),
-    packageExecutionContextMessages(props.context).map((message) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: message }, message))
-  ] });
-}
-function SupplyChainSignalRow(props) {
-  const { signal } = props;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "space-y-1", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: signal.title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/70", children: signal.plain_reason }),
-    signal.advisory_id !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] text-brand-purple", children: signal.advisory_id }) : null,
-    signal.false_positive_hint !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs leading-5 text-brand-dark/60", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Might be safe if: " }),
-      signal.false_positive_hint
-    ] }) : null
-  ] });
-}
-function DecodedLayerCard(props) {
-  const encodedSignals = deriveEncodedLayerSignals(props.item);
-  if (encodedSignals.length === 0) return null;
-  const primary = encodedSignals[0];
-  const extraCount = Math.max(0, (() => {
-    const m = /Decoded (\d+) encoding layer/i.exec(primary.plain_reason ?? "");
-    return m != null ? parseInt(m[1], 10) - 1 : encodedSignals.length - 1;
-  })());
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "rounded-xl border border-brand-purple/20 bg-brand-purple/[0.04] p-4",
-      "aria-label": "Decoded-layer evidence",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Encoded payload detected" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: primary.plain_reason }),
-        primary.technical_detail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-mono text-[11px] text-muted-foreground break-all", children: primary.technical_detail }) : null,
-        primary.evidence_ref !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 font-mono text-[11px] text-brand-purple/70 break-all", children: primary.evidence_ref }) : null,
-        extraCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: `and ${extraCount} more encoded ${extraCount === 1 ? "layer" : "layers"}` }) : null
-      ]
-    }
-  );
-}
-function DataFlowEvidenceCard(props) {
-  const evidence = deriveDataFlowEvidence(props.item);
-  if (evidence === null) return null;
-  const extraCount = evidence.count - 1;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-4",
-      "aria-label": "Data flow evidence",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Data flow detected" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "div",
-          {
-            className: "mt-3 flex flex-wrap items-center gap-2",
-            role: "group",
-            "aria-label": "Source to sink route",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-brand-purple/10 px-2.5 py-1 text-xs font-medium text-brand-purple", children: evidence.sourceLabel }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "select-none text-muted-foreground", "aria-hidden": "true", children: "->" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-brand-blue/10 px-2.5 py-1 text-xs font-medium text-brand-blue", children: evidence.sinkLabel })
-            ]
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: evidence.signalTitle }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-mono text-[11px] text-muted-foreground", children: evidence.signalId }),
-        extraCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: `and ${extraCount} more data-flow ${extraCount === 1 ? "signal" : "signals"}` }) : null
-      ]
-    }
-  );
-}
-function ScannerEvidenceBadge(props) {
-  const isScannerCategory = props.signal.category === "skill" || props.signal.category === "mcp";
-  if (!isScannerCategory) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex items-center gap-1 rounded-full border border-brand-blue/30 bg-brand-blue/[0.08] px-2 py-0.5 text-[10px] font-semibold text-brand-blue", children: "Scanner" });
-}
-function ScannerSignalRow(props) {
-  const { signal } = props;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "space-y-1", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: signal.title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceBadge, { signal })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/70", children: signal.plain_reason }),
-    signal.technical_detail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] text-muted-foreground break-all", children: signal.technical_detail }) : null,
-    signal.false_positive_hint !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs leading-5 text-brand-dark/60", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Might be safe if: " }),
-      signal.false_positive_hint
-    ] }) : null
-  ] });
-}
-function ScannerEvidenceSection(props) {
-  const scannerSignals = props.signals.filter(
-    (s) => s.category === "skill" || s.category === "mcp"
-  );
-  if (scannerSignals.length === 0) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-4", "aria-label": "Scanner evidence", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Scanner evidence" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scannerSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerSignalRow, { signal }, signal.signal_id)) })
-  ] });
-}
-const DEFAULT_SCOPE_CHOICES = [
-  {
-    value: "artifact",
-    label: "Approve once",
-    description: "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved."
-  },
-  {
-    value: "workspace",
-    label: "Remember for project",
-    description: "Save this decision for the current project. Future matching actions skip review here without asking again."
-  },
-  {
-    value: "publisher",
-    label: "This source",
-    description: "Save this decision for all actions from the same source. Matching actions skip review in any project."
-  },
-  {
-    value: "harness",
-    label: "This app",
-    description: "Save this decision for this AI app everywhere. Matching actions from this app skip review in all your projects."
-  },
-  {
-    value: "global",
-    label: "Everywhere",
-    description: "Save this decision across all your projects on this machine. All matching actions skip review. Use only if you fully trust this."
-  }
-];
-function requestSupportsScope(item, scope) {
-  if (Array.isArray(item.allowed_scopes)) {
-    return item.allowed_scopes.includes(scope);
-  }
-  if (scope === "workspace") {
-    return typeof item.workspace === "string" && item.workspace.trim().length > 0;
-  }
-  if (scope === "publisher") {
-    return typeof item.publisher === "string" && item.publisher.trim().length > 0;
-  }
-  return true;
-}
-function filterScopeChoicesForRequest(item, choices) {
-  return choices.filter((choice) => requestSupportsScope(item, choice.value));
-}
-const ADVANCED_SCOPE_VALUES = /* @__PURE__ */ new Set(["global"]);
-function advancedScopeChoicesForRequest(item) {
-  return filterScopeChoicesForRequest(item, DEFAULT_SCOPE_CHOICES).filter(
-    (choice) => ADVANCED_SCOPE_VALUES.has(choice.value)
-  );
-}
-function standardScopeChoicesForRequest(item) {
-  return filterScopeChoicesForRequest(item, DEFAULT_SCOPE_CHOICES).filter(
-    (choice) => !ADVANCED_SCOPE_VALUES.has(choice.value)
-  );
-}
-function normalizeDecisionScope(item, scope) {
-  if (requestSupportsScope(item, scope)) {
-    return scope;
-  }
-  if (requestSupportsScope(item, item.recommended_scope)) {
-    return item.recommended_scope;
-  }
-  return "artifact";
-}
-function buildDecisionPayload(input) {
-  const normalizedScope = normalizeDecisionScope(input.item, input.scope);
-  const workspace = normalizedScope === "workspace" && typeof input.item.workspace === "string" ? input.item.workspace : void 0;
-  return {
-    requestId: input.item.request_id,
-    action: input.action,
-    scope: normalizedScope,
-    workspace,
-    reason: input.reason
-  };
-}
-function ConsolidatedEvidenceAlert({ items }) {
-  const [index, setIndex] = reactExports.useState(0);
-  reactExports.useEffect(() => {
-    if (index >= items.length) {
-      setIndex(0);
-    }
-  }, [items.length, index]);
-  const handleNext = reactExports.useCallback(() => {
-    setIndex((prev) => (prev + 1) % items.length);
-  }, [items.length]);
-  if (items.length === 0) return null;
-  const current = items[Math.min(index, items.length - 1)];
-  const hasMultiple = items.length > 1;
-  const iconClasses = {
-    blue: "text-brand-blue",
-    purple: "text-brand-purple",
-    amber: "text-brand-attention",
-    slate: "text-slate-400"
-  };
-  const Icon = current.icon ?? HiMiniInformationCircle;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5 min-w-0 flex-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          Icon,
-          {
-            className: `mt-0.5 h-4 w-4 shrink-0 ${iconClasses[current.tone]}`,
-            "aria-hidden": "true"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-w-0 flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: current.title }) })
-      ] }),
-      hasMultiple && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 shrink-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs font-medium text-muted-foreground tabular-nums", children: [
-          index + 1,
-          " of ",
-          items.length
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            onClick: handleNext,
-            className: "flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-brand-dark transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
-            "aria-label": "Next insight",
-            children: [
-              "Next",
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
-            ]
-          }
-        )
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-brand-dark", children: current.content })
-  ] });
-}
 const FETCH_DEBOUNCE_MS = 2e3;
 function useRequestReadState() {
   const [readIds, setReadIds] = reactExports.useState(() => /* @__PURE__ */ new Set());
@@ -25315,246 +25186,6 @@ function useRequestReadState() {
   );
 }
 const REQUEST_READ_STATE_LIMIT = 5e4;
-function approvalGateCooldownLabel(seconds) {
-  if (seconds === 0) return "Every approval";
-  if (seconds === 900) return "15 minutes";
-  if (seconds === 3600) return "1 hour";
-  return `${seconds} seconds`;
-}
-function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, selectedScope) {
-  if (selectedScope === "global") {
-    return true;
-  }
-  if (!cooldownActive) {
-    return true;
-  }
-  return strictAllDecisions;
-}
-function approvalProofRequiresPassword(gate) {
-  return gate?.totp_enabled !== true;
-}
-function isApprovalProofSubmitDisabled(gate, credentials, busy) {
-  if (busy) {
-    return true;
-  }
-  if (approvalProofRequiresPassword(gate)) {
-    return credentials.approvalPassword.trim() === "";
-  }
-  return credentials.approvalTotpCode.trim() === "";
-}
-function buildApprovalProofCredentials(gate, credentials) {
-  if (approvalProofRequiresPassword(gate)) {
-    return { approval_password: credentials.approvalPassword };
-  }
-  return { approval_totp_code: credentials.approvalTotpCode };
-}
-function ApprovalProofFieldInputs(props) {
-  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "input",
-      {
-        ref: props.passwordRef,
-        type: "password",
-        autoComplete: "current-password",
-        value: props.approvalPassword,
-        onChange: props.onApprovalPasswordChange,
-        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-      }
-    )
-  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "input",
-      {
-        type: "text",
-        inputMode: "numeric",
-        pattern: "[0-9]*",
-        autoComplete: "one-time-code",
-        value: props.approvalTotpCode,
-        onChange: props.onApprovalTotpCodeChange,
-        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-      }
-    )
-  ] }) });
-}
-function ApprovalProofInline(props) {
-  const passwordRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
-    const timer = window.setTimeout(() => {
-      passwordRef.current?.focus();
-    }, 50);
-    return () => window.clearTimeout(timer);
-  }, []);
-  const submitDisabled = isApprovalProofSubmitDisabled(
-    props.approvalGate,
-    {
-      approvalPassword: props.approvalPassword,
-      approvalTotpCode: props.approvalTotpCode
-    },
-    props.submitBusy
-  );
-  const handleKeyDown = reactExports.useCallback(
-    (event) => {
-      if (event.key === "Enter" && !submitDisabled) {
-        event.preventDefault();
-        props.onSubmit();
-      }
-    },
-    [props.onSubmit, submitDisabled]
-  );
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", onKeyDown: handleKeyDown, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Approval proof required" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-600", children: "Enter your local approval proof before Guard syncs supply-chain intel on this device." })
-      ] })
-    ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ApprovalProofFieldInputs,
-      {
-        approvalGate: props.approvalGate,
-        approvalPassword: props.approvalPassword,
-        approvalTotpCode: props.approvalTotpCode,
-        passwordRef,
-        onApprovalPasswordChange: props.onApprovalPasswordChange,
-        onApprovalTotpCodeChange: props.onApprovalTotpCodeChange
-      }
-    ),
-    props.error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "alert", children: props.error }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row sm:items-center", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: props.onSubmit, disabled: submitDisabled, children: props.submitLabel }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onBack, disabled: props.submitBusy, children: "Go back" })
-    ] })
-  ] });
-}
-function ApprovalPasswordModal(props) {
-  const passwordRef = reactExports.useRef(null);
-  const totpRef = reactExports.useRef(null);
-  const needsPassword = approvalProofRequiresPassword(props.gate);
-  const submitDisabled = needsPassword ? props.approvalPassword.trim() === "" : props.approvalTotpCode.trim() === "";
-  reactExports.useEffect(() => {
-    const timer = setTimeout(() => {
-      if (needsPassword) {
-        passwordRef.current?.focus();
-      } else {
-        totpRef.current?.focus();
-      }
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [needsPassword]);
-  const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
-  const handleBackdropClick = reactExports.useCallback(
-    (e) => {
-      if (e.target === e.currentTarget) props.onCancel();
-    },
-    [props.onCancel]
-  );
-  const handleKeyDown = reactExports.useCallback(
-    (e) => {
-      if (e.key === "Enter" && !submitDisabled) {
-        e.preventDefault();
-        props.onSubmit();
-      }
-    },
-    [props.onSubmit, submitDisabled]
-  );
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      className: "fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm",
-      onClick: handleBackdropClick,
-      onKeyDown: handleKeyDown,
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-labelledby": "approval-password-modal-title",
-      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "h2",
-              {
-                id: "approval-password-modal-title",
-                className: "text-lg font-semibold tracking-tight text-brand-dark",
-                children: needsPassword ? "Approval password required" : "Authenticator code required"
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "Guard needs a fresh proof before it can save this decision." })
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3", children: [
-          needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                ref: passwordRef,
-                type: "password",
-                autoComplete: "current-password",
-                value: props.approvalPassword,
-                onChange: props.onApprovalPasswordChange,
-                className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-              }
-            )
-          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                ref: totpRef,
-                type: "text",
-                inputMode: "numeric",
-                pattern: "[0-9]*",
-                autoComplete: "one-time-code",
-                value: props.approvalTotpCode,
-                onChange: props.onApprovalTotpCodeChange,
-                className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-              }
-            )
-          ] }),
-          showCooldownOption && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-center gap-2 text-sm text-brand-dark", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "checkbox",
-                checked: props.useCooldown,
-                onChange: props.onUseCooldownChange,
-                className: "h-4 w-4 accent-brand-blue"
-              }
-            ),
-            "Skip password for next ",
-            approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase(),
-            " (use cooldown)"
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: props.onCancel,
-              className: "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
-              children: "Go back"
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: props.onSubmit,
-              disabled: submitDisabled,
-              className: "rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50",
-              children: props.submitLabel
-            }
-          )
-        ] })
-      ] })
-    }
-  );
-}
 function isBulkApproveGateReady(gate) {
   return gate?.enabled === true && gate?.configured === true;
 }
@@ -26412,6 +26043,671 @@ function useQueueBulkApprove(props) {
     }
   };
 }
+function approvalGateCooldownLabel(seconds) {
+  if (seconds === 0) return "Every approval";
+  if (seconds === 900) return "15 minutes";
+  if (seconds === 3600) return "1 hour";
+  return `${seconds} seconds`;
+}
+function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, selectedScope) {
+  if (selectedScope === "global") {
+    return true;
+  }
+  if (!cooldownActive) {
+    return true;
+  }
+  return strictAllDecisions;
+}
+function approvalProofRequiresPassword(gate) {
+  return gate?.totp_enabled !== true;
+}
+function isApprovalProofSubmitDisabled(gate, credentials, busy) {
+  if (busy) {
+    return true;
+  }
+  if (approvalProofRequiresPassword(gate)) {
+    return credentials.approvalPassword.trim() === "";
+  }
+  return credentials.approvalTotpCode.trim() === "";
+}
+function buildApprovalProofCredentials(gate, credentials) {
+  if (approvalProofRequiresPassword(gate)) {
+    return { approval_password: credentials.approvalPassword };
+  }
+  return { approval_totp_code: credentials.approvalTotpCode };
+}
+function ApprovalProofFieldInputs(props) {
+  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        ref: props.passwordRef,
+        type: "password",
+        autoComplete: "current-password",
+        value: props.approvalPassword,
+        onChange: props.onApprovalPasswordChange,
+        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      }
+    )
+  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        type: "text",
+        inputMode: "numeric",
+        pattern: "[0-9]*",
+        autoComplete: "one-time-code",
+        value: props.approvalTotpCode,
+        onChange: props.onApprovalTotpCodeChange,
+        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      }
+    )
+  ] }) });
+}
+function ApprovalProofInline(props) {
+  const passwordRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    const timer = window.setTimeout(() => {
+      passwordRef.current?.focus();
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const submitDisabled = isApprovalProofSubmitDisabled(
+    props.approvalGate,
+    {
+      approvalPassword: props.approvalPassword,
+      approvalTotpCode: props.approvalTotpCode
+    },
+    props.submitBusy
+  );
+  const handleKeyDown = reactExports.useCallback(
+    (event) => {
+      if (event.key === "Enter" && !submitDisabled) {
+        event.preventDefault();
+        props.onSubmit();
+      }
+    },
+    [props.onSubmit, submitDisabled]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", onKeyDown: handleKeyDown, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Approval proof required" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-600", children: "Enter your local approval proof before Guard syncs supply-chain intel on this device." })
+      ] })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalProofFieldInputs,
+      {
+        approvalGate: props.approvalGate,
+        approvalPassword: props.approvalPassword,
+        approvalTotpCode: props.approvalTotpCode,
+        passwordRef,
+        onApprovalPasswordChange: props.onApprovalPasswordChange,
+        onApprovalTotpCodeChange: props.onApprovalTotpCodeChange
+      }
+    ),
+    props.error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "alert", children: props.error }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row sm:items-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: props.onSubmit, disabled: submitDisabled, children: props.submitLabel }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onBack, disabled: props.submitBusy, children: "Go back" })
+    ] })
+  ] });
+}
+function ApprovalPasswordModal(props) {
+  const passwordRef = reactExports.useRef(null);
+  const totpRef = reactExports.useRef(null);
+  const needsPassword = approvalProofRequiresPassword(props.gate);
+  const submitDisabled = needsPassword ? props.approvalPassword.trim() === "" : props.approvalTotpCode.trim() === "";
+  reactExports.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (needsPassword) {
+        passwordRef.current?.focus();
+      } else {
+        totpRef.current?.focus();
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [needsPassword]);
+  const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
+  const handleBackdropClick = reactExports.useCallback(
+    (e) => {
+      if (e.target === e.currentTarget) props.onCancel();
+    },
+    [props.onCancel]
+  );
+  const handleKeyDown = reactExports.useCallback(
+    (e) => {
+      if (e.key === "Enter" && !submitDisabled) {
+        e.preventDefault();
+        props.onSubmit();
+      }
+    },
+    [props.onSubmit, submitDisabled]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm",
+      onClick: handleBackdropClick,
+      onKeyDown: handleKeyDown,
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "approval-password-modal-title",
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "h2",
+              {
+                id: "approval-password-modal-title",
+                className: "text-lg font-semibold tracking-tight text-brand-dark",
+                children: needsPassword ? "Approval password required" : "Authenticator code required"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "Guard needs a fresh proof before it can save this decision." })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3", children: [
+          needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                ref: passwordRef,
+                type: "password",
+                autoComplete: "current-password",
+                value: props.approvalPassword,
+                onChange: props.onApprovalPasswordChange,
+                className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                ref: totpRef,
+                type: "text",
+                inputMode: "numeric",
+                pattern: "[0-9]*",
+                autoComplete: "one-time-code",
+                value: props.approvalTotpCode,
+                onChange: props.onApprovalTotpCodeChange,
+                className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] }),
+          showCooldownOption && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-center gap-2 text-sm text-brand-dark", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "checkbox",
+                checked: props.useCooldown,
+                onChange: props.onUseCooldownChange,
+                className: "h-4 w-4 accent-brand-blue"
+              }
+            ),
+            "Skip password for next ",
+            approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase(),
+            " (use cooldown)"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: props.onCancel,
+              className: "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
+              children: "Go back"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: props.onSubmit,
+              disabled: submitDisabled,
+              className: "rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50",
+              children: props.submitLabel
+            }
+          )
+        ] })
+      ] })
+    }
+  );
+}
+function ConsolidatedEvidenceAlert({ items }) {
+  const [index, setIndex] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    if (index >= items.length) {
+      setIndex(0);
+    }
+  }, [items.length, index]);
+  const handleNext = reactExports.useCallback(() => {
+    setIndex((prev) => (prev + 1) % items.length);
+  }, [items.length]);
+  if (items.length === 0) return null;
+  const current = items[Math.min(index, items.length - 1)];
+  const hasMultiple = items.length > 1;
+  const iconClasses = {
+    blue: "text-brand-blue",
+    purple: "text-brand-purple",
+    amber: "text-brand-attention",
+    slate: "text-slate-400"
+  };
+  const Icon = current.icon ?? HiMiniInformationCircle;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5 min-w-0 flex-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          Icon,
+          {
+            className: `mt-0.5 h-4 w-4 shrink-0 ${iconClasses[current.tone]}`,
+            "aria-hidden": "true"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-w-0 flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: current.title }) })
+      ] }),
+      hasMultiple && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 shrink-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs font-medium text-muted-foreground tabular-nums", children: [
+          index + 1,
+          " of ",
+          items.length
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handleNext,
+            className: "flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-brand-dark transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+            "aria-label": "Next insight",
+            children: [
+              "Next",
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+            ]
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-brand-dark", children: current.content })
+  ] });
+}
+function DataFlowEvidenceCard(props) {
+  const evidence = deriveDataFlowEvidence(props.item);
+  if (evidence === null) return null;
+  const extraCount = evidence.count - 1;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-4",
+      "aria-label": "Data flow evidence",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Data flow detected" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "mt-3 flex flex-wrap items-center gap-2",
+            role: "group",
+            "aria-label": "Source to sink route",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-brand-purple/10 px-2.5 py-1 text-xs font-medium text-brand-purple", children: evidence.sourceLabel }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "select-none text-muted-foreground", "aria-hidden": "true", children: "->" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-brand-blue/10 px-2.5 py-1 text-xs font-medium text-brand-blue", children: evidence.sinkLabel })
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: evidence.signalTitle }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-mono text-[11px] text-muted-foreground", children: evidence.signalId }),
+        extraCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: `and ${extraCount} more data-flow ${extraCount === 1 ? "signal" : "signals"}` }) : null
+      ]
+    }
+  );
+}
+function SkillRiskCard(props) {
+  const skillSignals = deriveSkillRiskSignals(props.item);
+  if (skillSignals.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-4",
+      "aria-label": "Skill risk details",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Skill risk" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: skillSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(SkillSignalRow, { signal }, signal.signal_id)) })
+      ]
+    }
+  );
+}
+function SkillSignalRow(props) {
+  const { signal } = props;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "space-y-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: signal.title }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/70", children: signal.plain_reason }),
+    signal.technical_detail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] text-muted-foreground break-all", children: signal.technical_detail }) : null,
+    signal.false_positive_hint !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs leading-5 text-brand-dark/60", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Might be safe if: " }),
+      signal.false_positive_hint
+    ] }) : null
+  ] });
+}
+function SupplyChainRiskCard(props) {
+  const scSignals = deriveSupplyChainRiskSignals(props.item);
+  const packageContext = props.item.scanner_evidence?.find(isPackageExecutionContextEvidence) ?? null;
+  const isSupplyChainArtifact = props.item.artifact_type === "supply_chain" || props.item.artifact_type === "package_request" || typeof props.item.artifact_type === "string" && props.item.artifact_type.endsWith("_package");
+  if (scSignals.length === 0 && !isSupplyChainArtifact) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "rounded-xl border border-brand-purple/20 bg-brand-purple/[0.04] p-4",
+      "aria-label": "Supply-chain risk",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Supply-chain risk" }),
+        scSignals.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainSignalRow, { signal }, signal.signal_id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: "This action originates from a supply-chain artifact. Verify the publisher and version before approving." }),
+        packageContext !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PackageExecutionContextSummary, { context: packageContext }) : null
+      ]
+    }
+  );
+}
+const PACKAGE_CONTEXT_LABELS = {
+  environment_policy: "registry and proxy environment",
+  exact_workspace: "project location",
+  lifecycle_hooks_overrides_and_patches: "lifecycle hooks, overrides, or patches",
+  manifests_and_lockfiles: "manifests or lockfiles",
+  package_manager_executable: "package manager executable",
+  registry_and_proxy_configuration: "registry or proxy configuration",
+  repository_identity: "Git repository identity",
+  workspace_configuration: "workspace configuration",
+  workspace_identity: "workspace location within the repository"
+};
+function packageContextLabel(value) {
+  return PACKAGE_CONTEXT_LABELS[value] ?? value.replaceAll("_", " ");
+}
+function nonPortableReason(value) {
+  switch (value) {
+    case "dynamic_manager_configuration":
+      return "the package manager loads configuration dynamically";
+    case "dynamic_lifecycle_hook":
+      return "the project defines a lifecycle hook that can load additional local inputs";
+    case "oversized_configuration":
+      return "a package configuration input is too large to bind safely";
+    case "package_manager_executable_unavailable":
+      return "the package manager executable could not be verified";
+    case "repository_identity_unavailable":
+      return "a linked Git repository identity could not be verified";
+    case "symlinked_configuration":
+      return "a package configuration file is symlinked";
+    case "unreadable_configuration":
+      return "a package configuration input could not be read";
+    case "unsupported_package_manager":
+    case "unsupported_configuration":
+      return "the package configuration is not safely portable";
+    default:
+      return "Guard could not verify every package execution input";
+  }
+}
+function packageExecutionContextMessages(context) {
+  const messages = [
+    context.portable ? "A project approval is reused only in linked Git worktrees when the repository, package manager executable, dependency files, settings, hooks, overrides, patches, and registry/proxy environment all match." : `This approval is limited to one retry because ${nonPortableReason(context.non_portable_reason)}.`
+  ];
+  const changedComponents = context.changed_components ?? [];
+  if (changedComponents.length > 0) {
+    messages.push(
+      `Guard asked again because the following changed: ${changedComponents.map(packageContextLabel).join(", ")}.`
+    );
+  }
+  return messages;
+}
+function PackageExecutionContextSummary(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 border-t border-brand-purple/10 pt-3", "aria-label": "Package approval reuse", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-brand-purple", children: "Approval reuse" }),
+    packageExecutionContextMessages(props.context).map((message) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: message }, message))
+  ] });
+}
+function SupplyChainSignalRow(props) {
+  const { signal } = props;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "space-y-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: signal.title }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/70", children: signal.plain_reason }),
+    signal.advisory_id !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] text-brand-purple", children: signal.advisory_id }) : null,
+    signal.false_positive_hint !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs leading-5 text-brand-dark/60", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Might be safe if: " }),
+      signal.false_positive_hint
+    ] }) : null
+  ] });
+}
+function DecodedLayerCard(props) {
+  const encodedSignals = deriveEncodedLayerSignals(props.item);
+  if (encodedSignals.length === 0) return null;
+  const primary = encodedSignals[0];
+  const extraCount = Math.max(0, (() => {
+    const m = /Decoded (\d+) encoding layer/i.exec(primary.plain_reason ?? "");
+    return m != null ? parseInt(m[1], 10) - 1 : encodedSignals.length - 1;
+  })());
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "rounded-xl border border-brand-purple/20 bg-brand-purple/[0.04] p-4",
+      "aria-label": "Decoded-layer evidence",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Encoded payload detected" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: primary.plain_reason }),
+        primary.technical_detail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-mono text-[11px] text-muted-foreground break-all", children: primary.technical_detail }) : null,
+        primary.evidence_ref !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 font-mono text-[11px] text-brand-purple/70 break-all", children: primary.evidence_ref }) : null,
+        extraCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: `and ${extraCount} more encoded ${extraCount === 1 ? "layer" : "layers"}` }) : null
+      ]
+    }
+  );
+}
+function ScannerEvidenceBadge(props) {
+  const isScannerCategory = props.signal.category === "skill" || props.signal.category === "mcp";
+  if (!isScannerCategory) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex items-center gap-1 rounded-full border border-brand-blue/30 bg-brand-blue/[0.08] px-2 py-0.5 text-[10px] font-semibold text-brand-blue", children: "Scanner" });
+}
+function ScannerSignalRow(props) {
+  const { signal } = props;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "space-y-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: signal.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceBadge, { signal })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/70", children: signal.plain_reason }),
+    signal.technical_detail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] text-muted-foreground break-all", children: signal.technical_detail }) : null,
+    signal.false_positive_hint !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs leading-5 text-brand-dark/60", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Might be safe if: " }),
+      signal.false_positive_hint
+    ] }) : null
+  ] });
+}
+function ScannerEvidenceSection(props) {
+  const scannerSignals = props.signals.filter(
+    (s) => s.category === "skill" || s.category === "mcp"
+  );
+  if (scannerSignals.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-4", "aria-label": "Scanner evidence", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Scanner evidence" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scannerSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerSignalRow, { signal }, signal.signal_id)) })
+  ] });
+}
+function buildTopAlertItems(item) {
+  const items = [];
+  const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
+  const pauseReason = whyPaused(item);
+  if (secondaryRiskSummary) {
+    items.push({
+      id: "secondary-risk",
+      title: "Additional risk",
+      tone: "amber",
+      icon: HiMiniExclamationTriangle,
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: secondaryRiskSummary })
+    });
+  }
+  if (pauseReason) {
+    items.push({
+      id: "why-paused",
+      title: "Why paused",
+      tone: "blue",
+      icon: HiMiniInformationCircle,
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: pauseReason })
+    });
+  }
+  return items;
+}
+function buildEvidenceItems(item) {
+  const items = [];
+  const allSignals = item.decision_v2_json?.signals ?? [];
+  if (allSignals.some((signal) => signal.category === "skill" || signal.category === "mcp")) {
+    items.push({
+      id: "scanner",
+      title: "Scanner evidence",
+      tone: "blue",
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSection, { signals: allSignals })
+    });
+  }
+  if (item.why_now) {
+    items.push({
+      id: "why-now",
+      title: "Why now",
+      tone: "purple",
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: item.why_now })
+    });
+  }
+  if (deriveDataFlowEvidence(item) !== null) {
+    items.push({
+      id: "data-flow",
+      title: "Data flow detected",
+      tone: "blue",
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx(DataFlowEvidenceCard, { item })
+    });
+  }
+  if (deriveSkillRiskSignals(item).length > 0) {
+    items.push({
+      id: "skill-risk",
+      title: "Skill risk",
+      tone: "blue",
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx(SkillRiskCard, { item })
+    });
+  }
+  const isSupplyChainArtifact = item.artifact_type === "supply_chain" || item.artifact_type === "package_request" || typeof item.artifact_type === "string" && item.artifact_type.endsWith("_package");
+  if (deriveSupplyChainRiskSignals(item).length > 0 || isSupplyChainArtifact) {
+    items.push({
+      id: "supply-chain",
+      title: "Supply chain risk",
+      tone: "amber",
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainRiskCard, { item })
+    });
+  }
+  if (deriveEncodedLayerSignals(item).length > 0) {
+    items.push({
+      id: "decoded-layer",
+      title: "Decoded layer",
+      tone: "slate",
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx(DecodedLayerCard, { item })
+    });
+  }
+  return items;
+}
+function ReviewScopeControls(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval scope" }),
+    !props.hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "status", children: "This action cannot be approved under its current Guard policy." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Allow scope selection", children: props.commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ScopeChoiceButton,
+      {
+        choice,
+        checked: props.allowScope === choice.value,
+        onScopeChange: props.onAllowScopeChange
+      },
+      choice.value
+    )) }),
+    props.broaderScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "Save for project or app" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "These options save a decision that skips review for matching actions going forward. Choose the narrowest scope that fits what you meant to allow." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2 md:grid-cols-2", children: props.broaderScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ScopeChoiceButton,
+        {
+          choice,
+          checked: props.allowScope === choice.value,
+          onScopeChange: props.onAllowScopeChange
+        },
+        choice.value
+      )) })
+    ] }),
+    props.advancedScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-attention", children: "Advanced: save everywhere on this machine" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "This saves a decision that applies across all your projects on this machine. Matching actions skip review permanently. Only use this if you fully trust this action everywhere." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2", children: props.advancedScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ScopeChoiceButton,
+        {
+          choice,
+          checked: props.allowScope === choice.value,
+          onScopeChange: props.onAllowScopeChange
+        },
+        choice.value
+      )) })
+    ] }),
+    props.taskCapabilityCopy !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 pt-1 text-xs text-brand-dark/70", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: props.taskCapabilityCopy })
+    ] }),
+    props.blockScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-slate-200/70 bg-slate-50/60 p-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-dark", children: "Block matching actions" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "Blocking can cover a wider trusted selector without granting permission to run anything." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Block scope selection", children: props.blockScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ScopeChoiceButton,
+        {
+          choice,
+          checked: props.blockScope === choice.value,
+          onScopeChange: props.onBlockScopeChange
+        },
+        choice.value
+      )) })
+    ] })
+  ] });
+}
+function ScopeChoiceButton(props) {
+  const handleClick = reactExports.useCallback(() => {
+    props.onScopeChange(props.choice.value);
+  }, [props.onScopeChange, props.choice.value]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      onClick: handleClick,
+      role: "radio",
+      "aria-checked": props.checked,
+      className: `rounded-xl border px-4 py-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-brand-blue/20 ${props.checked ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200/70 bg-white hover:bg-slate-50"}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: props.choice.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-muted-foreground", children: props.choice.description })
+      ]
+    }
+  );
+}
+function allowButtonLabel(scope) {
+  if (scope === "artifact") {
+    return "Approve once";
+  }
+  if (scope === "workspace") {
+    return "Remember for project";
+  }
+  return "Approve and remember";
+}
+function blockButtonLabel(scope) {
+  if (scope === "artifact") {
+    return "Keep blocked";
+  }
+  if (scope === "workspace") {
+    return "Block in project";
+  }
+  return "Block matching actions";
+}
 const PROTECTION_APPEARANCE = {
   protected: {
     Icon: HiMiniShieldCheck,
@@ -26429,35 +26725,1058 @@ const PROTECTION_APPEARANCE = {
     iconClass: "bg-brand-attention/10 text-brand-attention"
   }
 };
-const scopeChoices = [
-  {
-    value: "artifact",
-    label: "Just this time",
-    description: "Allow only this exact action. Guard will ask again for anything different."
-  },
-  {
-    value: "workspace",
-    label: "This project",
-    description: "Allow this action in the current workspace only."
-  },
-  {
-    value: "publisher",
-    label: "This source",
-    description: "Allow actions from the same source or publisher."
-  },
-  {
-    value: "harness",
-    label: "This app",
-    description: "Allow similar actions from this AI app everywhere."
-  },
-  {
-    value: "global",
-    label: "Everywhere",
-    description: "Allow this action across all your projects. Use with care."
+function ReviewCodexResumePanel({ resume, onRetry }) {
+  const ux = buildCodexResumeUx(resume);
+  const isPending = resume.status === "pending" || resume.status === "in_progress";
+  const isSuccess = resume.status === "sent" || resume.status === "already_sent";
+  const isFailed = resume.status === "failed";
+  const borderClass = isFailed ? "border-brand-purple/25 bg-brand-purple/[0.05]" : isSuccess ? "border-brand-green/25 bg-brand-green-bg/30" : isPending ? "border-brand-blue/25 bg-brand-blue/[0.04]" : "border-slate-200/60 bg-slate-50/40";
+  const iconClass = isFailed ? "text-brand-purple" : isSuccess ? "text-brand-green" : "text-brand-blue";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex items-start gap-3 rounded-2xl border px-4 py-3 ${borderClass}`, children: [
+    isPending && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: `mt-0.5 h-4 w-4 shrink-0 animate-spin ${iconClass}`, "aria-hidden": "true" }),
+    isSuccess && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: `mt-0.5 h-4 w-4 shrink-0 ${iconClass}`, "aria-hidden": "true" }),
+    isFailed && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: `mt-0.5 h-4 w-4 shrink-0 ${iconClass}`, "aria-hidden": "true" }),
+    !isPending && !isSuccess && !isFailed && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-slate-500", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: ux.headline }),
+      ux.body !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground", children: ux.body }),
+      isFailed && onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRetry, children: "Retry resume" }) })
+    ] })
+  ] });
+}
+function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume }) {
+  const protectionHealth = runtime ? protectionHealthFor(runtime) : unavailableProtectionHealth();
+  const protectedAppsCount = protectionHealth.apps.filter((app) => app.state === "protected").length;
+  const heroStatus = protectionHealth.state === "protected" ? "clear" : protectionHealth.state;
+  const {
+    Icon: ProtectionIcon,
+    cardClass: healthCardClass,
+    iconClass: healthIconClass
+  } = PROTECTION_APPEARANCE[protectionHealth.state];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      GuardHero,
+      {
+        status: heroStatus,
+        headline: "Nothing to review",
+        subheadline: `No actions need your decision right now. ${protectionHealth.detail}`
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ProofStrip,
+      {
+        items: [
+          { label: "Queue", value: "All clear", tone: "green" },
+          { label: "Protection", value: protectionHealth.label, tone: protectionHealth.state === "protected" ? "green" : "slate" },
+          { label: "Apps protected", value: protectedAppsCount, tone: protectedAppsCount > 0 ? "green" : "slate" }
+        ]
+      }
+    ),
+    codexResume !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewCodexResumePanel, { resume: codexResume, onRetry: onRetryResume }),
+    codexResume === null && resolutionMessage && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: resolutionMessage })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `rounded-xl border p-4 sm:p-5 ${healthCardClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${healthIconClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionIcon, { className: "h-5 w-5", "aria-hidden": "true" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: protectionHealth.label }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-muted-foreground", children: [
+            protectionHealth.detail,
+            " When something needs review, it will appear here."
+          ] })
+        ] })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What Guard does" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-2", children: [
+          "Pauses risky file reads and writes",
+          "Blocks commands that could delete data",
+          "Warns about new network connections",
+          "Stops credential sharing"
+        ].map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-start gap-2 text-sm text-brand-dark", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green", "aria-hidden": "true" }),
+          item
+        ] }, item)) })
+      ] })
+    ] })
+  ] });
+}
+function PrimaryActionCard({ item }) {
+  const action = buildPrimaryReviewAction(item);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What was stopped" }),
+        action.detail !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action.detail })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: action.label })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      LoggedActionPanel,
+      {
+        label: action.label,
+        text: action.text,
+        copyAriaLabel: "Copy full stopped action to clipboard",
+        expandAriaLabel: "Expand full stopped action",
+        collapseAriaLabel: "Collapse full stopped action"
+      },
+      item.request_id
+    ) })
+  ] });
+}
+function buildWhatWouldHappen(item) {
+  const type = item.artifact_type;
+  if (type?.includes("file_write") || type?.includes("file_read")) {
+    return `Without Guard, ${harnessDisplayName(item.harness)} would access "${item.artifact_name ?? item.artifact_id}" immediately. Guard paused it so you can review first.`;
   }
-];
-const QUEUE_PAGE_SIZE = 10;
+  if (type?.includes("shell") || type?.includes("command")) {
+    return `Without Guard, this shell command would run immediately. Guard paused it so you can review what it does first.`;
+  }
+  if (type?.includes("network") || type?.includes("request")) {
+    return `Without Guard, this request would go to the network immediately. Guard paused it so you can review the destination first.`;
+  }
+  if (type?.includes("mcp") || type?.includes("tool")) {
+    return `Without Guard, this tool would execute immediately. Guard paused it so you can review what data it accesses.`;
+  }
+  return `Without Guard, this action would run immediately. Guard paused it so you can review and decide.`;
+}
+function pastDecisionVerb(decision) {
+  if (decision === "allow") {
+    return "allowed";
+  }
+  if (decision === "block") {
+    return "blocked";
+  }
+  return "reviewed";
+}
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact"]);
+function resolvedActionCopy(item, action) {
+  if (item !== null) return buildRetryAfterApprovalCopy(item, action);
+  if (action === "allow") return "Approved: action can proceed";
+  return "Blocked: action stopped";
+}
+function ReviewDecisionCard(props) {
+  const detail = props.detail;
+  const item = detail?.item ?? null;
+  const [allowScope, setAllowScope] = reactExports.useState("artifact");
+  const [blockScope, setBlockScope] = reactExports.useState("artifact");
+  const [submitting, setSubmitting] = reactExports.useState(null);
+  const [resolved, setResolved] = reactExports.useState(null);
+  const [showConsequences, setShowConsequences] = reactExports.useState(false);
+  const [showEvidence, setShowEvidence] = reactExports.useState(false);
+  const [lastAction, setLastAction] = reactExports.useState(null);
+  const [errorMessage, setErrorMessage] = reactExports.useState(null);
+  const [approvalPassword, setApprovalPassword] = reactExports.useState("");
+  const [approvalTotpCode, setApprovalTotpCode] = reactExports.useState("");
+  const [useCooldown, setUseCooldown] = reactExports.useState(false);
+  const [pendingAction, setPendingAction] = reactExports.useState(null);
+  const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
+  const timerRef = reactExports.useRef(null);
+  const allowButtonRef = reactExports.useRef(null);
+  const availableScopeChoices = reactExports.useMemo(
+    () => item ? standardScopeChoicesForRequest(item, "allow") : [],
+    [item]
+  );
+  const commonScopeOptions = reactExports.useMemo(
+    () => availableScopeChoices.filter((choice) => commonScopeValues.has(choice.value)),
+    [availableScopeChoices]
+  );
+  const broaderScopeOptions = reactExports.useMemo(
+    () => availableScopeChoices.filter((choice) => !commonScopeValues.has(choice.value)),
+    [availableScopeChoices]
+  );
+  const advancedScopeOptions = reactExports.useMemo(
+    () => item ? advancedScopeChoicesForRequest(item, "allow") : [],
+    [item]
+  );
+  const blockScopeOptions = reactExports.useMemo(
+    () => item ? scopeChoicesForRequest(item, "block") : [],
+    [item]
+  );
+  const taskCapabilityCopy = item ? taskCapabilityExplanation(item) : null;
+  const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
+  const decisionContractKey = item ? `${item.request_id}:${item.scope_contract_version ?? "legacy"}:${item.scope_contract_digest ?? "legacy"}` : null;
+  reactExports.useEffect(() => {
+    if (item) {
+      setAllowScope(recommendedScopeForAction(item, "allow") ?? "artifact");
+      setBlockScope(recommendedScopeForAction(item, "block") ?? "artifact");
+      setResolved(null);
+      setSubmitting(null);
+      setLastAction(null);
+      setErrorMessage(null);
+      setApprovalPassword("");
+      setApprovalTotpCode("");
+      setUseCooldown(false);
+      setPendingAction(null);
+      setPendingContractKey(null);
+    }
+  }, [item?.request_id, item?.scope_contract_version, item?.scope_contract_digest]);
+  reactExports.useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+  const handleResolve = reactExports.useCallback(
+    async (action) => {
+      if (!item) return;
+      setSubmitting(action);
+      setErrorMessage(null);
+      try {
+        const requestedScope = action === "allow" ? allowScope : blockScope;
+        const gate = props.approvalGate;
+        const needsPassword = approvalProofRequiresPassword(gate);
+        const includeGateFields = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, requestedScope);
+        await props.onResolve({
+          ...buildDecisionPayload({
+            item,
+            action,
+            scope: requestedScope,
+            reason: action === "allow" ? "approved in review" : "blocked in review"
+          }),
+          ...includeGateFields && needsPassword ? { approval_password: approvalPassword } : {},
+          ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
+          ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
+        });
+        setResolved(action);
+        setApprovalPassword("");
+        setApprovalTotpCode("");
+        setUseCooldown(false);
+        setPendingAction(null);
+        setPendingContractKey(null);
+        timerRef.current = setTimeout(() => setResolved(null), 2e3);
+      } catch (err) {
+        setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
+      } finally {
+        setSubmitting(null);
+      }
+    },
+    [
+      item,
+      allowScope,
+      blockScope,
+      props.onResolve,
+      props.approvalGate,
+      approvalPassword,
+      approvalTotpCode,
+      useCooldown
+    ]
+  );
+  const handleRequestResolve = reactExports.useCallback(
+    (action) => {
+      if (action === "allow" && !hasAllowScope) {
+        setErrorMessage("This action has no eligible approval scope.");
+        return;
+      }
+      if (action === "block" && blockScopeOptions.length === 0) {
+        setErrorMessage("This action has no eligible block scope.");
+        return;
+      }
+      setLastAction(action);
+      const requestedScope = action === "allow" ? allowScope : blockScope;
+      const gate = props.approvalGate;
+      const gateRequiresPassword = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, requestedScope);
+      if (gateRequiresPassword) {
+        setPendingAction(action);
+        setPendingContractKey(decisionContractKey);
+        setErrorMessage(null);
+        return;
+      }
+      void handleResolve(action);
+    },
+    [
+      allowScope,
+      blockScope,
+      blockScopeOptions.length,
+      decisionContractKey,
+      handleResolve,
+      hasAllowScope,
+      props.approvalGate
+    ]
+  );
+  const handleAllow = reactExports.useCallback(() => {
+    handleRequestResolve("allow");
+  }, [handleRequestResolve]);
+  const handleBlock = reactExports.useCallback(() => {
+    handleRequestResolve("block");
+  }, [handleRequestResolve]);
+  reactExports.useEffect(() => {
+    function handleKeyDown(event) {
+      if (submitting !== null || pendingAction !== null) return;
+      const target = event.target;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+      if (event.key === "a" || event.key === "A") {
+        event.preventDefault();
+        handleRequestResolve("allow");
+      }
+      if (event.key === "b" || event.key === "B") {
+        event.preventDefault();
+        handleRequestResolve("block");
+      }
+      const scopeIndex = parseInt(event.key, 10);
+      if (scopeIndex >= 1 && scopeIndex <= availableScopeChoices.length) {
+        event.preventDefault();
+        setAllowScope(availableScopeChoices[scopeIndex - 1].value);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [availableScopeChoices, handleRequestResolve, pendingAction, submitting]);
+  const handleModalSubmit = reactExports.useCallback(() => {
+    if (pendingAction === null) {
+      return;
+    }
+    if (pendingContractKey !== decisionContractKey) {
+      setPendingAction(null);
+      setPendingContractKey(null);
+      setErrorMessage("This request changed while you were reviewing it. Review the current scopes and try again.");
+      return;
+    }
+    void handleResolve(pendingAction);
+  }, [decisionContractKey, handleResolve, pendingAction, pendingContractKey]);
+  const handleModalCancel = reactExports.useCallback(() => {
+    setPendingAction(null);
+    setPendingContractKey(null);
+    setApprovalPassword("");
+    setApprovalTotpCode("");
+    setUseCooldown(false);
+  }, []);
+  const handleToggleConsequences = reactExports.useCallback(() => {
+    setShowConsequences((visible) => !visible);
+  }, []);
+  const handleToggleEvidence = reactExports.useCallback(() => {
+    setShowEvidence((visible) => !visible);
+  }, []);
+  const handleRetryLastAction = reactExports.useCallback(() => {
+    setErrorMessage(null);
+    if (lastAction !== null) {
+      handleRequestResolve(lastAction);
+    }
+  }, [handleRequestResolve, lastAction]);
+  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
+    setApprovalPassword(event.target.value);
+  }, []);
+  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
+    setApprovalTotpCode(event.target.value);
+  }, []);
+  const handleUseCooldownChange = reactExports.useCallback((event) => {
+    setUseCooldown(event.target.checked);
+  }, []);
+  if (!detail || !item) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EmptyState,
+      {
+        title: "Select an action",
+        body: "Choose a paused action from the queue to review and decide.",
+        tone: "teach"
+      }
+    );
+  }
+  const plainTitle = plainEnglishRequestTitle(item);
+  const harnessName = harnessDisplayName(item.harness);
+  const whatWouldHappen = buildWhatWouldHappen(item);
+  const topAlertItems = buildTopAlertItems(item);
+  const evidenceItems = buildEvidenceItems(item);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
+    resolved && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: `guard-fade-in flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${resolved === "allow" ? "border-brand-green/25 bg-brand-green-bg/30" : "border-brand-attention/25 bg-brand-attention/[0.04]"}`,
+        role: "status",
+        "aria-live": "polite",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            HiMiniCheckCircle,
+            {
+              className: `h-5 w-5 shrink-0 ${resolved === "allow" ? "text-brand-green" : "text-brand-attention"}`,
+              "aria-hidden": "true"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`, children: resolvedActionCopy(item, resolved) })
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Paused action" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "mt-2 text-lg font-semibold text-brand-dark", children: plainTitle }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-muted-foreground", children: [
+            "From ",
+            harnessName
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: item.policy_action === "block" ? "attention" : "info", children: item.policy_action === "block" ? "Blocked" : "Needs review" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
+      topAlertItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: topAlertItems }, item.request_id) }),
+      whatWouldHappen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handleToggleConsequences,
+            className: "flex items-center gap-2 text-sm font-medium text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 rounded-lg px-2 py-1 -ml-2",
+            "aria-expanded": showConsequences,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "h-4 w-4", "aria-hidden": "true" }),
+              "What would happen without Guard?",
+              showConsequences ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3 w-3", "aria-hidden": "true" })
+            ]
+          }
+        ),
+        showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ReviewScopeControls,
+        {
+          commonScopeOptions,
+          broaderScopeOptions,
+          advancedScopeOptions,
+          blockScopeOptions,
+          hasAllowScope,
+          taskCapabilityCopy,
+          allowScope,
+          blockScope,
+          onAllowScopeChange: setAllowScope,
+          onBlockScopeChange: setBlockScope
+        }
+      ),
+      errorMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in mt-4 rounded-xl border border-brand-purple/25 bg-brand-purple/[0.05] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-purple", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-purple", children: errorMessage }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: handleRetryLastAction,
+              className: "mt-2 inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
+              children: "Retry"
+            }
+          )
+        ] })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ActionButton,
+          {
+            ref: allowButtonRef,
+            variant: "success",
+            onClick: handleAllow,
+            disabled: !hasAllowScope || submitting !== null || pendingAction !== null,
+            children: submitting === "allow" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
+              "Approving..."
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4", "aria-hidden": "true" }),
+              allowButtonLabel(allowScope)
+            ] })
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ActionButton,
+          {
+            variant: "outline",
+            onClick: handleBlock,
+            disabled: blockScopeOptions.length === 0 || submitting !== null || pendingAction !== null,
+            children: submitting === "block" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
+              "Blocking..."
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-4 w-4", "aria-hidden": "true" }),
+              blockButtonLabel(blockScope)
+            ] })
+          }
+        )
+      ] })
+    ] }),
+    evidenceItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: handleToggleEvidence,
+          className: "flex w-full items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-brand-blue/20 rounded-lg px-2 py-1 -ml-2",
+          "aria-expanded": showEvidence,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Review details" }),
+            showEvidence ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" })
+          ]
+        }
+      ),
+      showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: evidenceItems }, item.request_id) })
+    ] }),
+    detail.receipt && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last time" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-muted-foreground", children: [
+        "You previously ",
+        pastDecisionVerb(detail.receipt.policy_decision),
+        " a similar action",
+        " ",
+        formatRelativeTime(detail.receipt.timestamp),
+        "."
+      ] }),
+      detail.diff && detail.diff.changed_fields.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "What changed since then:" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", children: detail.diff.changed_fields.map((field) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-center gap-2 text-sm text-brand-dark", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+          field
+        ] }, field)) })
+      ] })
+    ] }),
+    pendingAction !== null && props.approvalGate !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalPasswordModal,
+      {
+        gate: props.approvalGate,
+        approvalPassword,
+        approvalTotpCode,
+        useCooldown,
+        onApprovalPasswordChange: handleApprovalPasswordChange,
+        onApprovalTotpCodeChange: handleApprovalTotpCodeChange,
+        onUseCooldownChange: handleUseCooldownChange,
+        onSubmit: handleModalSubmit,
+        onCancel: handleModalCancel,
+        submitLabel: pendingAction === "allow" ? allowButtonLabel(allowScope) : blockButtonLabel(blockScope)
+      }
+    )
+  ] });
+}
+function riskLevelFromScore(score) {
+  if (score <= 2) return "high";
+  if (score <= 4) return "medium";
+  return "low";
+}
+function riskIndicatorClass(level) {
+  if (level === "high") return "bg-red-400";
+  if (level === "medium") return "bg-amber-400";
+  return "bg-emerald-400";
+}
+function QueueItemRow({ item, active, readState, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }) {
+  const risk = riskScore(item);
+  const riskLevel = riskLevelFromScore(risk);
+  const category = resolveQueueCategory(item);
+  const CategoryIcon = iconForQueueCategory(category.id);
+  const preview = queueItemPreview(item);
+  const isRead = readState.isRead(item.request_id);
+  const showCheckbox = selectionMode;
+  const canSelect = selectionMode && selectable;
+  const handleClick = reactExports.useCallback(() => {
+    onOpenRequest(item.request_id);
+  }, [item.request_id, onOpenRequest]);
+  const handleCheckboxChange = reactExports.useCallback(
+    (event) => {
+      event.stopPropagation();
+      if (!canSelect) return;
+      onToggleSelect?.(item);
+    },
+    [item, onToggleSelect, canSelect]
+  );
+  const handleKeyDown = reactExports.useCallback(
+    (event) => {
+      if (!canSelect) return;
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        onToggleSelect?.(item);
+      }
+    },
+    [item, onToggleSelect, canSelect]
+  );
+  const checkboxLabel = canSelect ? `Select ${preview} for bulk approval` : `Not eligible for bulk approval: ${category.shortLabel.toLowerCase()}`;
+  const rowClassName = (() => {
+    if (selected) return "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20";
+    if (active) return "border border-brand-blue bg-brand-blue/[0.06]";
+    if (isRead) return "border border-transparent bg-white hover:bg-slate-50";
+    return "border border-transparent bg-slate-50 hover:bg-slate-100";
+  })();
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      role: "none",
+      className: `group w-full rounded-lg py-2.5 px-2 transition-all ${rowClassName}`,
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+        showCheckbox ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "label",
+          {
+            className: `flex shrink-0 items-center ${canSelect ? "cursor-pointer" : "cursor-not-allowed"}`,
+            title: checkboxLabel,
+            onClick: (event) => event.stopPropagation(),
+            onKeyDown: handleKeyDown,
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "checkbox",
+                checked: selected,
+                disabled: !canSelect,
+                onChange: handleCheckboxChange,
+                "aria-label": checkboxLabel,
+                className: "h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30 disabled:opacity-40"
+              }
+            )
+          }
+        ) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handleClick,
+            role: "option",
+            "aria-selected": active,
+            "aria-posinset": index + 1,
+            "aria-setsize": void 0,
+            tabIndex: active ? 0 : -1,
+            className: "flex min-w-0 flex-1 items-center gap-2 text-left",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `truncate text-sm ${isRead ? "font-medium text-slate-500" : "font-bold text-brand-dark"}`, children: [
+                  !isRead && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Unread request:" }),
+                  preview
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
+                  harnessDisplayName(item.harness),
+                  " · ",
+                  category.shortLabel,
+                  " · ",
+                  formatQueueRequestDate(item)
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "span",
+                {
+                  role: "img",
+                  "aria-label": `Risk: ${riskLevel}`,
+                  className: "group/icon relative flex h-2 w-2 shrink-0 items-center justify-center",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `h-2 w-2 rounded-full ${riskIndicatorClass(riskLevel)}` }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100", children: `Risk: ${riskLevel}` })
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "span",
+                {
+                  role: "img",
+                  "aria-label": category.label,
+                  className: `group/icon relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100", children: category.label })
+                  ]
+                }
+              )
+            ]
+          }
+        )
+      ] })
+    }
+  );
+}
+function iconForQueueCategory(categoryId) {
+  switch (categoryId) {
+    case "credential_output":
+      return HiMiniKey;
+    case "secret_file_read":
+      return HiMiniDocumentMagnifyingGlass;
+    case "file_read":
+      return HiMiniDocumentMagnifyingGlass;
+    case "secret_exfiltration":
+      return HiMiniArrowTopRightOnSquare;
+    case "system_prompt_access":
+      return HiMiniInformationCircle;
+    case "prompt_injection":
+      return HiMiniExclamationTriangle;
+    case "guard_bypass":
+      return HiMiniNoSymbol;
+    case "generated_inventory_edit":
+      return HiMiniClipboardDocumentCheck;
+    case "docs_edit":
+      return HiMiniDocumentText;
+    case "source_edit":
+      return HiMiniPencilSquare;
+    case "config_change":
+      return HiMiniCog6Tooth;
+    case "file_upload":
+      return HiMiniArrowTopRightOnSquare;
+    case "file_delete_cleanup":
+      return HiMiniNoSymbol;
+    case "git_operation":
+      return HiMiniCodeBracket;
+    case "process_control":
+      return HiMiniArrowPath;
+    case "container_or_deploy":
+      return HiMiniServerStack;
+    case "persistence_change":
+      return HiMiniClock;
+    case "package_install":
+      return HiMiniCube;
+    case "package_script":
+      return HiMiniCommandLine;
+    case "destructive_shell":
+      return HiMiniNoSymbol;
+    case "encoded_shell":
+      return HiMiniCodeBracket;
+    case "network":
+      return HiMiniGlobeAlt;
+    case "mcp_tool":
+      return HiMiniServerStack;
+    case "browser_action":
+      return HiMiniArrowTopRightOnSquare;
+    case "harness_start":
+      return HiMiniShieldCheck;
+    case "shell_command":
+      return HiMiniCommandLine;
+    case "other":
+      return HiMiniDocumentPlus;
+  }
+}
+function queueItemPreview(item) {
+  const envelope = item.action_envelope_json;
+  return envelope?.command ?? item.raw_command_text ?? envelope?.mcp_tool ?? (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? envelope?.package_name ?? displayArtifactName(item);
+}
+const QUEUE_PAGE_SIZE$1 = 10;
+function ReviewHeader({
+  count,
+  filteredCount,
+  progress,
+  activeHarness
+}) {
+  const isFiltered = filteredCount !== count;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-xl font-semibold tracking-[-0.02em] text-brand-dark sm:text-2xl", children: "Review" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground", children: "Guard paused these actions before they ran. Review each one and decide what should happen." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-muted-foreground", children: [
+      progress,
+      isFiltered ? ` · ${filteredCount} of ${count} shown` : "",
+      " · from ",
+      harnessDisplayName(activeHarness)
+    ] })
+  ] });
+}
+function resolveSemanticGroup(categoryId) {
+  for (const group of REVIEW_SEMANTIC_GROUPS) {
+    if (group.matches.includes(categoryId)) return group.id;
+  }
+  return "other";
+}
+const ReviewQueueList = reactExports.forwardRef(({
+  requests,
+  allFilteredRequests,
+  totalCount,
+  filteredCount,
+  activeRequestId,
+  readState,
+  categoryOptions,
+  categoryFilter,
+  searchTerm,
+  sortDirection,
+  semanticFilter,
+  dateFrom,
+  dateTo,
+  page,
+  totalPages,
+  onCategoryFilterChange,
+  onSearchTermChange,
+  onSortDirectionChange,
+  onSemanticFilterChange,
+  onDateFromChange,
+  onDateToChange,
+  onPageChange,
+  onOpenRequest,
+  selectionMode = false,
+  isBulkSelectable,
+  isBulkSelected,
+  onBulkToggleSelect,
+  onBulkSelectAll,
+  onBulkClearAll
+}, ref) => {
+  const [showFilters, setShowFilters] = reactExports.useState(false);
+  const handleSearchChange = reactExports.useCallback((event) => {
+    onSearchTermChange(event.target.value);
+  }, [onSearchTermChange]);
+  reactExports.useCallback((event) => {
+    onCategoryFilterChange(event.target.value);
+  }, [onCategoryFilterChange]);
+  const handleSortChange = reactExports.useCallback((event) => {
+    onSortDirectionChange(event.target.value);
+  }, [onSortDirectionChange]);
+  const handleDateFromChange = reactExports.useCallback((event) => {
+    onDateFromChange(event.target.value);
+  }, [onDateFromChange]);
+  const handleDateToChange = reactExports.useCallback((event) => {
+    onDateToChange(event.target.value);
+  }, [onDateToChange]);
+  const handleToggleFilters = reactExports.useCallback(() => {
+    setShowFilters((visible) => !visible);
+  }, []);
+  const handleClearFilters = reactExports.useCallback(() => {
+    onSearchTermChange("");
+    onCategoryFilterChange("all");
+    onSortDirectionChange("newest");
+    onSemanticFilterChange("all");
+    onDateFromChange("");
+    onDateToChange("");
+  }, [
+    onCategoryFilterChange,
+    onDateFromChange,
+    onDateToChange,
+    onSearchTermChange,
+    onSemanticFilterChange,
+    onSortDirectionChange
+  ]);
+  const handlePreviousPage = reactExports.useCallback(() => {
+    onPageChange(Math.max(1, page - 1));
+  }, [page, onPageChange]);
+  const handleNextPage = reactExports.useCallback(() => {
+    onPageChange(Math.min(totalPages, page + 1));
+  }, [page, totalPages, onPageChange]);
+  const activeSemanticGroup = semanticFilter;
+  const visibleGroups = reactExports.useMemo(() => {
+    const available = /* @__PURE__ */ new Set();
+    for (const item of allFilteredRequests) {
+      available.add(resolveSemanticGroup(resolveQueueCategory(item).id));
+    }
+    return REVIEW_SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
+  }, [allFilteredRequests]);
+  const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest" || dateFrom || dateTo;
+  const showPagination = filteredCount > QUEUE_PAGE_SIZE$1;
+  const pageSelectableItems = reactExports.useMemo(
+    () => requests.filter((item) => isBulkSelectable?.(item) === true),
+    [requests, isBulkSelectable]
+  );
+  const pageSelectedCount = reactExports.useMemo(
+    () => pageSelectableItems.filter((item) => isBulkSelected?.(item) === true).length,
+    [pageSelectableItems, isBulkSelected]
+  );
+  const pageAllSelected = pageSelectableItems.length > 0 && pageSelectedCount === pageSelectableItems.length;
+  const pageSomeSelected = pageSelectedCount > 0 && !pageAllSelected;
+  const handlePageSelectAll = reactExports.useCallback(() => {
+    if (pageAllSelected) {
+      onBulkClearAll?.();
+    } else {
+      onBulkSelectAll?.();
+    }
+  }, [pageAllSelected, onBulkSelectAll, onBulkClearAll]);
+  const setIndeterminate = reactExports.useCallback(
+    (el) => {
+      if (el) el.indeterminate = pageSomeSelected;
+    },
+    [pageSomeSelected]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-3", ref, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Queue" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            disabled: allFilteredRequests.length > 0 && allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT,
+            title: allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT ? `Cannot mark all read: doing so would exceed the read-state storage cap (${REQUEST_READ_STATE_LIMIT.toLocaleString()}). Reduce filters to shrink the visible queue, or mark requests read one by one.` : `Marks every visible filtered request as read (remembering up to ${REQUEST_READ_STATE_LIMIT.toLocaleString()}).`,
+            onClick: () => readState.markAllRead(allFilteredRequests.map((item) => item.request_id)),
+            className: `text-xs font-medium transition-colors ${allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT ? "text-slate-400 cursor-not-allowed" : "text-brand-blue hover:text-brand-dark"}`,
+            children: "Mark all read"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] font-semibold text-muted-foreground", children: [
+          filteredCount,
+          "/",
+          totalCount
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 rounded-xl border border-slate-100 bg-white p-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search review queue" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            id: "guard-review-queue-search",
+            name: "guard-review-queue-search",
+            type: "search",
+            value: searchTerm,
+            onChange: handleSearchChange,
+            placeholder: "Search queue...",
+            className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: handleToggleFilters,
+          className: "flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
+          children: [
+            showFilters ? "Hide filters" : "Show filters",
+            isFiltered && !showFilters && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 h-1.5 w-1.5 rounded-full bg-brand-attention" })
+          ]
+        }
+      ),
+      showFilters && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-1", children: visibleGroups.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SemanticFilterButton,
+          {
+            group,
+            selected: activeSemanticGroup === group.id,
+            onSelect: onSemanticFilterChange
+          },
+          group.id
+        )) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "Sort by date" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "select",
+            {
+              value: sortDirection,
+              onChange: handleSortChange,
+              "aria-label": "Sort review queue",
+              className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "newest", children: "Newest first" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "oldest", children: "Oldest first" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "highest_risk", children: "Highest risk first" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "category", children: "Category" })
+              ]
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-2 sm:grid-cols-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "From date" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "date",
+                value: dateFrom,
+                onChange: handleDateFromChange,
+                "aria-label": "Filter requests from date",
+                className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "To date" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "date",
+                value: dateTo,
+                onChange: handleDateToChange,
+                "aria-label": "Filter requests to date",
+                className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] })
+        ] }),
+        isFiltered && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: handleClearFilters,
+            className: "text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
+            children: "Clear all filters"
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        role: "listbox",
+        "aria-label": "Review queue",
+        className: "space-y-2 rounded-lg border border-slate-100 bg-white p-1.5",
+        children: [
+          selectionMode && pageSelectableItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2 border-b border-slate-100 px-2 pb-1.5 pt-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex shrink-0 cursor-pointer items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "checkbox",
+                checked: pageAllSelected,
+                ref: setIndeterminate,
+                onChange: handlePageSelectAll,
+                "aria-label": pageAllSelected ? "Clear selection of eligible reads on this page" : "Select all eligible reads on this page",
+                className: "h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-medium text-muted-foreground", children: pageSelectedCount > 0 ? `${pageSelectedCount} of ${pageSelectableItems.length} selected` : `Select all eligible (${pageSelectableItems.length})` })
+          ] }) }),
+          requests.length > 0 ? requests.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            QueueItemRow,
+            {
+              item,
+              active: item.request_id === activeRequestId,
+              readState,
+              index,
+              onOpenRequest,
+              selectionMode,
+              selectable: isBulkSelectable?.(item) === true,
+              selected: isBulkSelected?.(item) === true,
+              onToggleSelect: onBulkToggleSelect
+            },
+            item.request_id
+          )) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-3 py-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: "No matching actions", body: "Try a different search or filter.", tone: "teach" }) })
+        ]
+      }
+    ),
+    showPagination && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2 text-xs text-muted-foreground", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        (page - 1) * QUEUE_PAGE_SIZE$1 + 1,
+        "-",
+        Math.min(filteredCount, page * QUEUE_PAGE_SIZE$1),
+        " of ",
+        filteredCount
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: handlePreviousPage,
+            disabled: page <= 1,
+            className: "min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
+            children: "Previous"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] text-slate-400", children: [
+          page,
+          "/",
+          totalPages
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: handleNextPage,
+            disabled: page >= totalPages,
+            className: "min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
+            children: "Next"
+          }
+        )
+      ] })
+    ] })
+  ] });
+});
+ReviewQueueList.displayName = "ReviewQueueList";
+function SemanticFilterButton(props) {
+  const { group, selected, onSelect } = props;
+  const handleSelect = reactExports.useCallback(() => {
+    onSelect(group.id);
+  }, [group.id, onSelect]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      type: "button",
+      onClick: handleSelect,
+      className: `rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${selected ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
+      children: group.label
+    }
+  );
+}
+const QUEUE_PAGE_SIZE = 10;
 function ReviewWorkspace(props) {
   const { requests, activeRequestId, detail } = props;
   const readState = useRequestReadState();
@@ -26682,1125 +28001,6 @@ function ReviewWorkspace(props) {
       )
     ] })
   ] });
-}
-function ReviewHeader({
-  count,
-  filteredCount,
-  progress,
-  activeHarness
-}) {
-  const isFiltered = filteredCount !== count;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-xl font-semibold tracking-[-0.02em] text-brand-dark sm:text-2xl", children: "Review" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground", children: "Guard paused these actions before they ran. Review each one and decide what should happen." })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-muted-foreground", children: [
-      progress,
-      isFiltered ? ` · ${filteredCount} of ${count} shown` : "",
-      " · from ",
-      harnessDisplayName(activeHarness)
-    ] })
-  ] });
-}
-function resolveSemanticGroup(categoryId) {
-  for (const group of REVIEW_SEMANTIC_GROUPS) {
-    if (group.matches.includes(categoryId)) return group.id;
-  }
-  return "other";
-}
-const ReviewQueueList = reactExports.forwardRef(({
-  requests,
-  allFilteredRequests,
-  totalCount,
-  filteredCount,
-  activeRequestId,
-  readState,
-  categoryOptions,
-  categoryFilter,
-  searchTerm,
-  sortDirection,
-  semanticFilter,
-  dateFrom,
-  dateTo,
-  page,
-  totalPages,
-  onCategoryFilterChange,
-  onSearchTermChange,
-  onSortDirectionChange,
-  onSemanticFilterChange,
-  onDateFromChange,
-  onDateToChange,
-  onPageChange,
-  onOpenRequest,
-  selectionMode = false,
-  isBulkSelectable,
-  isBulkSelected,
-  onBulkToggleSelect,
-  onBulkSelectAll,
-  onBulkClearAll
-}, ref) => {
-  const [showFilters, setShowFilters] = reactExports.useState(false);
-  const handleSearchChange = reactExports.useCallback((event) => {
-    onSearchTermChange(event.target.value);
-  }, [onSearchTermChange]);
-  reactExports.useCallback((event) => {
-    onCategoryFilterChange(event.target.value);
-  }, [onCategoryFilterChange]);
-  const handleSortChange = reactExports.useCallback((event) => {
-    onSortDirectionChange(event.target.value);
-  }, [onSortDirectionChange]);
-  const handleDateFromChange = reactExports.useCallback((event) => {
-    onDateFromChange(event.target.value);
-  }, [onDateFromChange]);
-  const handleDateToChange = reactExports.useCallback((event) => {
-    onDateToChange(event.target.value);
-  }, [onDateToChange]);
-  const handleToggleFilters = reactExports.useCallback(() => {
-    setShowFilters((visible) => !visible);
-  }, []);
-  const handleClearFilters = reactExports.useCallback(() => {
-    onSearchTermChange("");
-    onCategoryFilterChange("all");
-    onSortDirectionChange("newest");
-    onSemanticFilterChange("all");
-    onDateFromChange("");
-    onDateToChange("");
-  }, [
-    onCategoryFilterChange,
-    onDateFromChange,
-    onDateToChange,
-    onSearchTermChange,
-    onSemanticFilterChange,
-    onSortDirectionChange
-  ]);
-  const handlePreviousPage = reactExports.useCallback(() => {
-    onPageChange(Math.max(1, page - 1));
-  }, [page, onPageChange]);
-  const handleNextPage = reactExports.useCallback(() => {
-    onPageChange(Math.min(totalPages, page + 1));
-  }, [page, totalPages, onPageChange]);
-  const activeSemanticGroup = semanticFilter;
-  const visibleGroups = reactExports.useMemo(() => {
-    const available = /* @__PURE__ */ new Set();
-    for (const item of allFilteredRequests) {
-      available.add(resolveSemanticGroup(resolveQueueCategory(item).id));
-    }
-    return REVIEW_SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
-  }, [allFilteredRequests]);
-  const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest" || dateFrom || dateTo;
-  const showPagination = filteredCount > QUEUE_PAGE_SIZE;
-  const pageSelectableItems = reactExports.useMemo(
-    () => requests.filter((item) => isBulkSelectable?.(item) === true),
-    [requests, isBulkSelectable]
-  );
-  const pageSelectedCount = reactExports.useMemo(
-    () => pageSelectableItems.filter((item) => isBulkSelected?.(item) === true).length,
-    [pageSelectableItems, isBulkSelected]
-  );
-  const pageAllSelected = pageSelectableItems.length > 0 && pageSelectedCount === pageSelectableItems.length;
-  const pageSomeSelected = pageSelectedCount > 0 && !pageAllSelected;
-  const handlePageSelectAll = reactExports.useCallback(() => {
-    if (pageAllSelected) {
-      onBulkClearAll?.();
-    } else {
-      onBulkSelectAll?.();
-    }
-  }, [pageAllSelected, onBulkSelectAll, onBulkClearAll]);
-  const setIndeterminate = reactExports.useCallback(
-    (el) => {
-      if (el) el.indeterminate = pageSomeSelected;
-    },
-    [pageSomeSelected]
-  );
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-3", ref, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Queue" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            disabled: allFilteredRequests.length > 0 && allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT,
-            title: allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT ? `Cannot mark all read: doing so would exceed the read-state storage cap (${REQUEST_READ_STATE_LIMIT.toLocaleString()}). Reduce filters to shrink the visible queue, or mark requests read one by one.` : `Marks every visible filtered request as read (remembering up to ${REQUEST_READ_STATE_LIMIT.toLocaleString()}).`,
-            onClick: () => readState.markAllRead(allFilteredRequests.map((item) => item.request_id)),
-            className: `text-xs font-medium transition-colors ${allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT ? "text-slate-400 cursor-not-allowed" : "text-brand-blue hover:text-brand-dark"}`,
-            children: "Mark all read"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] font-semibold text-muted-foreground", children: [
-          filteredCount,
-          "/",
-          totalCount
-        ] })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 rounded-xl border border-slate-100 bg-white p-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search review queue" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            id: "guard-review-queue-search",
-            name: "guard-review-queue-search",
-            type: "search",
-            value: searchTerm,
-            onChange: handleSearchChange,
-            placeholder: "Search queue...",
-            className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          }
-        )
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          type: "button",
-          onClick: handleToggleFilters,
-          className: "flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
-          children: [
-            showFilters ? "Hide filters" : "Show filters",
-            isFiltered && !showFilters && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 h-1.5 w-1.5 rounded-full bg-brand-attention" })
-          ]
-        }
-      ),
-      showFilters && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-1", children: visibleGroups.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          SemanticFilterButton,
-          {
-            group,
-            selected: activeSemanticGroup === group.id,
-            onSelect: onSemanticFilterChange
-          },
-          group.id
-        )) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "Sort by date" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "select",
-            {
-              value: sortDirection,
-              onChange: handleSortChange,
-              "aria-label": "Sort review queue",
-              className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "newest", children: "Newest first" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "oldest", children: "Oldest first" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "highest_risk", children: "Highest risk first" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "category", children: "Category" })
-              ]
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-2 sm:grid-cols-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "From date" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "date",
-                value: dateFrom,
-                onChange: handleDateFromChange,
-                "aria-label": "Filter requests from date",
-                className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-              }
-            )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "To date" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "date",
-                value: dateTo,
-                onChange: handleDateToChange,
-                "aria-label": "Filter requests to date",
-                className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-              }
-            )
-          ] })
-        ] }),
-        isFiltered && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: handleClearFilters,
-            className: "text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
-            children: "Clear all filters"
-          }
-        )
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "div",
-      {
-        role: "listbox",
-        "aria-label": "Review queue",
-        className: "space-y-2 rounded-lg border border-slate-100 bg-white p-1.5",
-        children: [
-          selectionMode && pageSelectableItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2 border-b border-slate-100 px-2 pb-1.5 pt-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex shrink-0 cursor-pointer items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "checkbox",
-                checked: pageAllSelected,
-                ref: setIndeterminate,
-                onChange: handlePageSelectAll,
-                "aria-label": pageAllSelected ? "Clear selection of eligible reads on this page" : "Select all eligible reads on this page",
-                className: "h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30"
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-medium text-muted-foreground", children: pageSelectedCount > 0 ? `${pageSelectedCount} of ${pageSelectableItems.length} selected` : `Select all eligible (${pageSelectableItems.length})` })
-          ] }) }),
-          requests.length > 0 ? requests.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-            QueueItemRow,
-            {
-              item,
-              active: item.request_id === activeRequestId,
-              readState,
-              index,
-              onOpenRequest,
-              selectionMode,
-              selectable: isBulkSelectable?.(item) === true,
-              selected: isBulkSelected?.(item) === true,
-              onToggleSelect: onBulkToggleSelect
-            },
-            item.request_id
-          )) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-3 py-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: "No matching actions", body: "Try a different search or filter.", tone: "teach" }) })
-        ]
-      }
-    ),
-    showPagination && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2 text-xs text-muted-foreground", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-        (page - 1) * QUEUE_PAGE_SIZE + 1,
-        "-",
-        Math.min(filteredCount, page * QUEUE_PAGE_SIZE),
-        " of ",
-        filteredCount
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: handlePreviousPage,
-            disabled: page <= 1,
-            className: "min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
-            children: "Previous"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] text-slate-400", children: [
-          page,
-          "/",
-          totalPages
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: handleNextPage,
-            disabled: page >= totalPages,
-            className: "min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
-            children: "Next"
-          }
-        )
-      ] })
-    ] })
-  ] });
-});
-ReviewQueueList.displayName = "ReviewQueueList";
-function SemanticFilterButton(props) {
-  const { group, selected, onSelect } = props;
-  const handleSelect = reactExports.useCallback(() => {
-    onSelect(group.id);
-  }, [group.id, onSelect]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "button",
-    {
-      type: "button",
-      onClick: handleSelect,
-      className: `rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${selected ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
-      children: group.label
-    }
-  );
-}
-function riskLevelFromScore(score) {
-  if (score <= 2) return "high";
-  if (score <= 4) return "medium";
-  return "low";
-}
-function QueueItemRow({ item, active, readState, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }) {
-  const risk = riskScore(item);
-  const riskLevel = riskLevelFromScore(risk);
-  const category = resolveQueueCategory(item);
-  const CategoryIcon = iconForQueueCategory(category.id);
-  const preview = queueItemPreview(item);
-  const isRead = readState.isRead(item.request_id);
-  const showCheckbox = selectionMode;
-  const canSelect = selectionMode && selectable;
-  const handleClick = reactExports.useCallback(() => {
-    onOpenRequest(item.request_id);
-  }, [item.request_id, onOpenRequest]);
-  const handleCheckboxChange = reactExports.useCallback(
-    (event) => {
-      event.stopPropagation();
-      if (!canSelect) return;
-      onToggleSelect?.(item);
-    },
-    [item, onToggleSelect, canSelect]
-  );
-  const handleKeyDown = reactExports.useCallback(
-    (event) => {
-      if (!canSelect) return;
-      if (event.key === "Enter") {
-        event.preventDefault();
-        event.stopPropagation();
-        onToggleSelect?.(item);
-      }
-    },
-    [item, onToggleSelect, canSelect]
-  );
-  const checkboxLabel = canSelect ? `Select ${preview} for bulk approval` : `Not eligible for bulk approval: ${category.shortLabel.toLowerCase()}`;
-  const rowClassName = (() => {
-    if (selected) return "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20";
-    if (active) return "border border-brand-blue bg-brand-blue/[0.06]";
-    if (isRead) return "border border-transparent bg-white hover:bg-slate-50";
-    return "border border-transparent bg-slate-50 hover:bg-slate-100";
-  })();
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      role: "none",
-      className: `group w-full rounded-lg py-2.5 px-2 transition-all ${rowClassName}`,
-      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
-        showCheckbox ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "label",
-          {
-            className: `flex shrink-0 items-center ${canSelect ? "cursor-pointer" : "cursor-not-allowed"}`,
-            title: checkboxLabel,
-            onClick: (event) => event.stopPropagation(),
-            onKeyDown: handleKeyDown,
-            children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "checkbox",
-                checked: selected,
-                disabled: !canSelect,
-                onChange: handleCheckboxChange,
-                "aria-label": checkboxLabel,
-                className: "h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30 disabled:opacity-40"
-              }
-            )
-          }
-        ) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            onClick: handleClick,
-            role: "option",
-            "aria-selected": active,
-            "aria-posinset": index + 1,
-            "aria-setsize": void 0,
-            tabIndex: active ? 0 : -1,
-            className: "flex min-w-0 flex-1 items-center gap-2 text-left",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `truncate text-sm ${isRead ? "font-medium text-slate-500" : "font-bold text-brand-dark"}`, children: [
-                  !isRead && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Unread request:" }),
-                  preview
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
-                  harnessDisplayName(item.harness),
-                  " · ",
-                  category.shortLabel,
-                  " · ",
-                  formatQueueRequestDate(item)
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "span",
-                {
-                  role: "img",
-                  "aria-label": `Risk: ${riskLevel}`,
-                  className: "group/icon relative flex h-2 w-2 shrink-0 items-center justify-center",
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(
-                      "span",
-                      {
-                        className: `h-2 w-2 rounded-full ${riskLevel === "high" ? "bg-red-400" : riskLevel === "medium" ? "bg-amber-400" : "bg-emerald-400"}`
-                      }
-                    ),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100", children: `Risk: ${riskLevel}` })
-                  ]
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "span",
-                {
-                  role: "img",
-                  "aria-label": category.label,
-                  className: `group/icon relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100", children: category.label })
-                  ]
-                }
-              )
-            ]
-          }
-        )
-      ] })
-    }
-  );
-}
-function iconForQueueCategory(categoryId) {
-  switch (categoryId) {
-    case "credential_output":
-      return HiMiniKey;
-    case "secret_file_read":
-      return HiMiniDocumentMagnifyingGlass;
-    case "file_read":
-      return HiMiniDocumentMagnifyingGlass;
-    case "secret_exfiltration":
-      return HiMiniArrowTopRightOnSquare;
-    case "system_prompt_access":
-      return HiMiniInformationCircle;
-    case "prompt_injection":
-      return HiMiniExclamationTriangle;
-    case "guard_bypass":
-      return HiMiniNoSymbol;
-    case "generated_inventory_edit":
-      return HiMiniClipboardDocumentCheck;
-    case "docs_edit":
-      return HiMiniDocumentText;
-    case "source_edit":
-      return HiMiniPencilSquare;
-    case "config_change":
-      return HiMiniCog6Tooth;
-    case "file_upload":
-      return HiMiniArrowTopRightOnSquare;
-    case "file_delete_cleanup":
-      return HiMiniNoSymbol;
-    case "git_operation":
-      return HiMiniCodeBracket;
-    case "process_control":
-      return HiMiniArrowPath;
-    case "container_or_deploy":
-      return HiMiniServerStack;
-    case "persistence_change":
-      return HiMiniClock;
-    case "package_install":
-      return HiMiniCube;
-    case "package_script":
-      return HiMiniCommandLine;
-    case "destructive_shell":
-      return HiMiniNoSymbol;
-    case "encoded_shell":
-      return HiMiniCodeBracket;
-    case "network":
-      return HiMiniGlobeAlt;
-    case "mcp_tool":
-      return HiMiniServerStack;
-    case "browser_action":
-      return HiMiniArrowTopRightOnSquare;
-    case "harness_start":
-      return HiMiniShieldCheck;
-    case "shell_command":
-      return HiMiniCommandLine;
-    case "other":
-      return HiMiniDocumentPlus;
-  }
-}
-function queueItemPreview(item) {
-  const envelope = item.action_envelope_json;
-  return envelope?.command ?? item.raw_command_text ?? envelope?.mcp_tool ?? (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? envelope?.package_name ?? displayArtifactName(item);
-}
-function ReviewDecisionCard(props) {
-  const detail = props.detail;
-  const item = detail?.item ?? null;
-  const [scope, setScope] = reactExports.useState(item?.recommended_scope ?? "artifact");
-  const [submitting, setSubmitting] = reactExports.useState(null);
-  const [resolved, setResolved] = reactExports.useState(null);
-  const [showConsequences, setShowConsequences] = reactExports.useState(false);
-  const [showEvidence, setShowEvidence] = reactExports.useState(false);
-  const [lastAction, setLastAction] = reactExports.useState(null);
-  const [errorMessage, setErrorMessage] = reactExports.useState(null);
-  const [approvalPassword, setApprovalPassword] = reactExports.useState("");
-  const [approvalTotpCode, setApprovalTotpCode] = reactExports.useState("");
-  const [useCooldown, setUseCooldown] = reactExports.useState(false);
-  const [pendingAction, setPendingAction] = reactExports.useState(null);
-  const timerRef = reactExports.useRef(null);
-  const allowButtonRef = reactExports.useRef(null);
-  const availableScopeChoices = reactExports.useMemo(
-    () => item ? standardScopeChoicesForRequest(item) : scopeChoices.filter((choice) => choice.value !== "global"),
-    [item]
-  );
-  const commonScopeOptions = reactExports.useMemo(
-    () => availableScopeChoices.filter((choice) => commonScopeValues.has(choice.value)),
-    [availableScopeChoices]
-  );
-  const broaderScopeOptions = reactExports.useMemo(
-    () => availableScopeChoices.filter((choice) => !commonScopeValues.has(choice.value)),
-    [availableScopeChoices]
-  );
-  const advancedScopeOptions = reactExports.useMemo(
-    () => item ? advancedScopeChoicesForRequest(item) : scopeChoices.filter((choice) => choice.value === "global"),
-    [item]
-  );
-  const gateRequiresPassword = reactExports.useMemo(() => {
-    const gate = props.approvalGate;
-    return gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
-  }, [props.approvalGate, scope]);
-  reactExports.useEffect(() => {
-    if (item) {
-      setScope(normalizeDecisionScope(item, item.recommended_scope));
-      setResolved(null);
-      setSubmitting(null);
-      setLastAction(null);
-      setErrorMessage(null);
-      setApprovalPassword("");
-      setApprovalTotpCode("");
-      setUseCooldown(false);
-      setPendingAction(null);
-    }
-  }, [item?.request_id]);
-  reactExports.useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
-  reactExports.useEffect(() => {
-    function handleKeyDown(event) {
-      if (submitting !== null || pendingAction !== null) return;
-      const target = event.target;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
-      if (event.key === "a" || event.key === "A") {
-        event.preventDefault();
-        handleRequestResolve("allow");
-      }
-      if (event.key === "b" || event.key === "B") {
-        event.preventDefault();
-        handleRequestResolve("block");
-      }
-      const scopeIndex = parseInt(event.key, 10);
-      if (scopeIndex >= 1 && scopeIndex <= availableScopeChoices.length) {
-        event.preventDefault();
-        setScope(availableScopeChoices[scopeIndex - 1].value);
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [submitting, pendingAction, scope, item?.request_id, availableScopeChoices]);
-  const handleResolve = reactExports.useCallback(
-    async (action) => {
-      if (!item) return;
-      setSubmitting(action);
-      setErrorMessage(null);
-      try {
-        const gate = props.approvalGate;
-        const needsPassword = approvalProofRequiresPassword(gate);
-        const includeGateFields = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
-        await props.onResolve({
-          ...buildDecisionPayload({
-            item,
-            action,
-            scope,
-            reason: action === "allow" ? "approved in review" : "blocked in review"
-          }),
-          ...includeGateFields && needsPassword ? { approval_password: approvalPassword } : {},
-          ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
-          ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
-        });
-        setResolved(action);
-        setApprovalPassword("");
-        setApprovalTotpCode("");
-        setUseCooldown(false);
-        setPendingAction(null);
-        timerRef.current = setTimeout(() => setResolved(null), 2e3);
-      } catch (err) {
-        setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
-      } finally {
-        setSubmitting(null);
-      }
-    },
-    [item, scope, props.onResolve, props.approvalGate, approvalPassword, approvalTotpCode, useCooldown]
-  );
-  const handleRequestResolve = reactExports.useCallback(
-    (action) => {
-      setLastAction(action);
-      if (gateRequiresPassword) {
-        setPendingAction(action);
-        setErrorMessage(null);
-        return;
-      }
-      void handleResolve(action);
-    },
-    [handleResolve, gateRequiresPassword]
-  );
-  const handleAllow = reactExports.useCallback(() => {
-    handleRequestResolve("allow");
-  }, [handleRequestResolve]);
-  const handleBlock = reactExports.useCallback(() => {
-    handleRequestResolve("block");
-  }, [handleRequestResolve]);
-  const handleModalSubmit = reactExports.useCallback(() => {
-    if (pendingAction !== null) {
-      void handleResolve(pendingAction);
-    }
-  }, [pendingAction, handleResolve]);
-  const handleModalCancel = reactExports.useCallback(() => {
-    setPendingAction(null);
-    setApprovalPassword("");
-    setApprovalTotpCode("");
-    setUseCooldown(false);
-  }, []);
-  const handleToggleConsequences = reactExports.useCallback(() => {
-    setShowConsequences((visible) => !visible);
-  }, []);
-  const handleToggleEvidence = reactExports.useCallback(() => {
-    setShowEvidence((visible) => !visible);
-  }, []);
-  const handleRetryLastAction = reactExports.useCallback(() => {
-    setErrorMessage(null);
-    if (lastAction !== null) {
-      handleRequestResolve(lastAction);
-    }
-  }, [handleRequestResolve, lastAction]);
-  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
-    setApprovalPassword(event.target.value);
-  }, []);
-  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
-    setApprovalTotpCode(event.target.value);
-  }, []);
-  const handleUseCooldownChange = reactExports.useCallback((event) => {
-    setUseCooldown(event.target.checked);
-  }, []);
-  if (!detail || !item) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(
-      EmptyState,
-      {
-        title: "Select an action",
-        body: "Choose a paused action from the queue to review and decide.",
-        tone: "teach"
-      }
-    );
-  }
-  const plainTitle = plainEnglishRequestTitle(item);
-  const harnessName = harnessDisplayName(item.harness);
-  const whatWouldHappen = buildWhatWouldHappen(item);
-  const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
-  const pauseReason = whyPaused(item);
-  const topAlertItems = [];
-  if (secondaryRiskSummary) {
-    topAlertItems.push({
-      id: "secondary-risk",
-      title: "Additional risk",
-      tone: "amber",
-      icon: HiMiniExclamationTriangle,
-      content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: secondaryRiskSummary })
-    });
-  }
-  if (pauseReason) {
-    topAlertItems.push({
-      id: "why-paused",
-      title: "Why paused",
-      tone: "blue",
-      icon: HiMiniInformationCircle,
-      content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: pauseReason })
-    });
-  }
-  const evidenceItems = [];
-  const allSignals = item.decision_v2_json?.signals ?? [];
-  if (allSignals.some((s) => s.category === "skill" || s.category === "mcp")) {
-    evidenceItems.push({
-      id: "scanner",
-      title: "Scanner evidence",
-      tone: "blue",
-      content: /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSection, { signals: allSignals })
-    });
-  }
-  if (item.why_now) {
-    evidenceItems.push({
-      id: "why-now",
-      title: "Why now",
-      tone: "purple",
-      content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: item.why_now })
-    });
-  }
-  if (deriveDataFlowEvidence(item) !== null) {
-    evidenceItems.push({
-      id: "data-flow",
-      title: "Data flow detected",
-      tone: "blue",
-      content: /* @__PURE__ */ jsxRuntimeExports.jsx(DataFlowEvidenceCard, { item })
-    });
-  }
-  if (deriveSkillRiskSignals(item).length > 0) {
-    evidenceItems.push({
-      id: "skill-risk",
-      title: "Skill risk",
-      tone: "blue",
-      content: /* @__PURE__ */ jsxRuntimeExports.jsx(SkillRiskCard, { item })
-    });
-  }
-  const isSupplyChainArtifact = item.artifact_type === "supply_chain" || item.artifact_type === "package_request" || typeof item.artifact_type === "string" && item.artifact_type.endsWith("_package");
-  if (deriveSupplyChainRiskSignals(item).length > 0 || isSupplyChainArtifact) {
-    evidenceItems.push({
-      id: "supply-chain",
-      title: "Supply chain risk",
-      tone: "amber",
-      content: /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainRiskCard, { item })
-    });
-  }
-  if (deriveEncodedLayerSignals(item).length > 0) {
-    evidenceItems.push({
-      id: "decoded-layer",
-      title: "Decoded layer",
-      tone: "slate",
-      content: /* @__PURE__ */ jsxRuntimeExports.jsx(DecodedLayerCard, { item })
-    });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
-    resolved && /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "div",
-      {
-        className: `guard-fade-in flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${resolved === "allow" ? "border-brand-green/25 bg-brand-green-bg/30" : "border-brand-attention/25 bg-brand-attention/[0.04]"}`,
-        role: "status",
-        "aria-live": "polite",
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            HiMiniCheckCircle,
-            {
-              className: `h-5 w-5 shrink-0 ${resolved === "allow" ? "text-brand-green" : "text-brand-attention"}`,
-              "aria-hidden": "true"
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`, children: item ? buildRetryAfterApprovalCopy(item, resolved) : resolved === "allow" ? "Approved: action can proceed" : "Blocked: action stopped" })
-        ]
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Paused action" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "mt-2 text-lg font-semibold text-brand-dark", children: plainTitle }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-muted-foreground", children: [
-            "From ",
-            harnessName
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: item.policy_action === "block" ? "attention" : "info", children: item.policy_action === "block" ? "Blocked" : "Needs review" })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
-      topAlertItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: topAlertItems }, item.request_id) }),
-      whatWouldHappen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            onClick: handleToggleConsequences,
-            className: "flex items-center gap-2 text-sm font-medium text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 rounded-lg px-2 py-1 -ml-2",
-            "aria-expanded": showConsequences,
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "h-4 w-4", "aria-hidden": "true" }),
-              "What would happen without Guard?",
-              showConsequences ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3 w-3", "aria-hidden": "true" })
-            ]
-          }
-        ),
-        showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "How long should this choice last?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Scope selection", children: commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ScopeChoiceButton,
-          {
-            choice,
-            checked: scope === choice.value,
-            onScopeChange: setScope
-          },
-          choice.value
-        )) }),
-        broaderScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "Save for project or app" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "These options save a decision that skips review for matching actions going forward. Choose the narrowest scope that fits what you meant to allow." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2 md:grid-cols-2", children: broaderScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ScopeChoiceButton,
-            {
-              choice,
-              checked: scope === choice.value,
-              onScopeChange: setScope
-            },
-            choice.value
-          )) })
-        ] }),
-        advancedScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-attention", children: "Advanced: save everywhere on this machine" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "This saves a decision that applies across all your projects on this machine. Matching actions skip review permanently. Only use this if you fully trust this action everywhere." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2", children: advancedScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ScopeChoiceButton,
-            {
-              choice,
-              checked: scope === choice.value,
-              onScopeChange: setScope
-            },
-            choice.value
-          )) })
-        ] })
-      ] }),
-      errorMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in mt-4 rounded-xl border border-brand-purple/25 bg-brand-purple/[0.05] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-purple", "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-purple", children: errorMessage }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: handleRetryLastAction,
-              className: "mt-2 inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
-              children: "Retry"
-            }
-          )
-        ] })
-      ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ActionButton,
-          {
-            ref: allowButtonRef,
-            variant: "success",
-            onClick: handleAllow,
-            disabled: submitting !== null || pendingAction !== null,
-            children: submitting === "allow" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
-              "Approving..."
-            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4", "aria-hidden": "true" }),
-              allowButtonLabel(scope)
-            ] })
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ActionButton,
-          {
-            variant: "outline",
-            onClick: handleBlock,
-            disabled: submitting !== null || pendingAction !== null,
-            children: submitting === "block" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
-              "Blocking..."
-            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-4 w-4", "aria-hidden": "true" }),
-              "Keep blocked"
-            ] })
-          }
-        )
-      ] })
-    ] }),
-    evidenceItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          type: "button",
-          onClick: handleToggleEvidence,
-          className: "flex w-full items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-brand-blue/20 rounded-lg px-2 py-1 -ml-2",
-          "aria-expanded": showEvidence,
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Review details" }),
-            showEvidence ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" })
-          ]
-        }
-      ),
-      showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: evidenceItems }, item.request_id) })
-    ] }),
-    detail.receipt && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last time" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-muted-foreground", children: [
-        "You previously ",
-        pastDecisionVerb(detail.receipt.policy_decision),
-        " a similar action",
-        " ",
-        formatRelativeTime(detail.receipt.timestamp),
-        "."
-      ] }),
-      detail.diff && detail.diff.changed_fields.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "What changed since then:" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", children: detail.diff.changed_fields.map((field) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-center gap-2 text-sm text-brand-dark", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
-          field
-        ] }, field)) })
-      ] })
-    ] }),
-    pendingAction !== null && props.approvalGate !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ApprovalPasswordModal,
-      {
-        gate: props.approvalGate,
-        approvalPassword,
-        approvalTotpCode,
-        useCooldown,
-        onApprovalPasswordChange: handleApprovalPasswordChange,
-        onApprovalTotpCodeChange: handleApprovalTotpCodeChange,
-        onUseCooldownChange: handleUseCooldownChange,
-        onSubmit: handleModalSubmit,
-        onCancel: handleModalCancel,
-        submitLabel: pendingAction === "allow" ? allowButtonLabel(scope) : "Keep blocked"
-      }
-    )
-  ] });
-}
-function ScopeChoiceButton(props) {
-  const handleClick = reactExports.useCallback(() => {
-    props.onScopeChange(props.choice.value);
-  }, [props.onScopeChange, props.choice.value]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      type: "button",
-      onClick: handleClick,
-      role: "radio",
-      "aria-checked": props.checked,
-      className: `rounded-xl border px-4 py-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-brand-blue/20 ${props.checked ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200/70 bg-white hover:bg-slate-50"}`,
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: props.choice.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-muted-foreground", children: props.choice.description })
-      ]
-    }
-  );
-}
-function allowButtonLabel(scope) {
-  if (scope === "artifact") {
-    return "Approve once";
-  }
-  if (scope === "workspace") {
-    return "Remember for project";
-  }
-  return "Approve and remember";
-}
-function ReviewCodexResumePanel({ resume, onRetry }) {
-  const ux = buildCodexResumeUx(resume);
-  const isPending = resume.status === "pending" || resume.status === "in_progress";
-  const isSuccess = resume.status === "sent" || resume.status === "already_sent";
-  const isFailed = resume.status === "failed";
-  const borderClass = isFailed ? "border-brand-purple/25 bg-brand-purple/[0.05]" : isSuccess ? "border-brand-green/25 bg-brand-green-bg/30" : isPending ? "border-brand-blue/25 bg-brand-blue/[0.04]" : "border-slate-200/60 bg-slate-50/40";
-  const iconClass = isFailed ? "text-brand-purple" : isSuccess ? "text-brand-green" : "text-brand-blue";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex items-start gap-3 rounded-2xl border px-4 py-3 ${borderClass}`, children: [
-    isPending && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: `mt-0.5 h-4 w-4 shrink-0 animate-spin ${iconClass}`, "aria-hidden": "true" }),
-    isSuccess && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: `mt-0.5 h-4 w-4 shrink-0 ${iconClass}`, "aria-hidden": "true" }),
-    isFailed && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: `mt-0.5 h-4 w-4 shrink-0 ${iconClass}`, "aria-hidden": "true" }),
-    !isPending && !isSuccess && !isFailed && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-slate-500", "aria-hidden": "true" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 space-y-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: ux.headline }),
-      ux.body !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground", children: ux.body }),
-      isFailed && onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRetry, children: "Retry resume" }) })
-    ] })
-  ] });
-}
-function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume }) {
-  const protectionHealth = runtime ? protectionHealthFor(runtime) : unavailableProtectionHealth();
-  const protectedAppsCount = protectionHealth.apps.filter((app) => app.state === "protected").length;
-  const heroStatus = protectionHealth.state === "protected" ? "clear" : protectionHealth.state;
-  const {
-    Icon: ProtectionIcon,
-    cardClass: healthCardClass,
-    iconClass: healthIconClass
-  } = PROTECTION_APPEARANCE[protectionHealth.state];
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GuardHero,
-      {
-        status: heroStatus,
-        headline: "Nothing to review",
-        subheadline: `No actions need your decision right now. ${protectionHealth.detail}`
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ProofStrip,
-      {
-        items: [
-          { label: "Queue", value: "All clear", tone: "green" },
-          { label: "Protection", value: protectionHealth.label, tone: protectionHealth.state === "protected" ? "green" : "slate" },
-          { label: "Apps protected", value: protectedAppsCount, tone: protectedAppsCount > 0 ? "green" : "slate" }
-        ]
-      }
-    ),
-    codexResume !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewCodexResumePanel, { resume: codexResume, onRetry: onRetryResume }),
-    codexResume === null && resolutionMessage && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: resolutionMessage })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `rounded-xl border p-4 sm:p-5 ${healthCardClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${healthIconClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionIcon, { className: "h-5 w-5", "aria-hidden": "true" }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: protectionHealth.label }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-muted-foreground", children: [
-            protectionHealth.detail,
-            " When something needs review, it will appear here."
-          ] })
-        ] })
-      ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What Guard does" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-2", children: [
-          "Pauses risky file reads and writes",
-          "Blocks commands that could delete data",
-          "Warns about new network connections",
-          "Stops credential sharing"
-        ].map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-start gap-2 text-sm text-brand-dark", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green", "aria-hidden": "true" }),
-          item
-        ] }, item)) })
-      ] })
-    ] })
-  ] });
-}
-function PrimaryActionCard({ item }) {
-  const action = buildPrimaryReviewAction(item);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What was stopped" }),
-        action.detail !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action.detail })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: action.label })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      LoggedActionPanel,
-      {
-        label: action.label,
-        text: action.text,
-        copyAriaLabel: "Copy full stopped action to clipboard",
-        expandAriaLabel: "Expand full stopped action",
-        collapseAriaLabel: "Collapse full stopped action"
-      },
-      item.request_id
-    ) })
-  ] });
-}
-function buildWhatWouldHappen(item) {
-  const type = item.artifact_type;
-  if (type?.includes("file_write") || type?.includes("file_read")) {
-    return `Without Guard, ${harnessDisplayName(item.harness)} would access "${item.artifact_name ?? item.artifact_id}" immediately. Guard paused it so you can review first.`;
-  }
-  if (type?.includes("shell") || type?.includes("command")) {
-    return `Without Guard, this shell command would run immediately. Guard paused it so you can review what it does first.`;
-  }
-  if (type?.includes("network") || type?.includes("request")) {
-    return `Without Guard, this request would go to the network immediately. Guard paused it so you can review the destination first.`;
-  }
-  if (type?.includes("mcp") || type?.includes("tool")) {
-    return `Without Guard, this tool would execute immediately. Guard paused it so you can review what data it accesses.`;
-  }
-  return `Without Guard, this action would run immediately. Guard paused it so you can review and decide.`;
-}
-function pastDecisionVerb(decision) {
-  if (decision === "allow") {
-    return "allowed";
-  }
-  if (decision === "block") {
-    return "blocked";
-  }
-  return "reviewed";
 }
 function QueueConnectionError(props) {
   const [repairing, setRepairing] = reactExports.useState(false);

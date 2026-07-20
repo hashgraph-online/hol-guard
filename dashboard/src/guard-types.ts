@@ -1,4 +1,14 @@
 export type DecisionScope = "artifact" | "workspace" | "publisher" | "harness" | "global";
+export type ApprovalResolutionAction = "allow" | "block";
+
+export type GuardApprovalScopesByAction = Record<ApprovalResolutionAction, DecisionScope[]>;
+
+export type GuardRecommendedScopesByAction = Record<ApprovalResolutionAction, DecisionScope | null>;
+
+export type GuardTaskCapabilityEligibility = {
+  eligible: boolean;
+  reason_codes: string[];
+};
 
 export const GUARD_ACTION_TYPES = [
   "prompt",
@@ -140,8 +150,14 @@ export type GuardApprovalRequest = {
   artifact_hash: string;
   publisher: string | null;
   policy_action: string;
-  recommended_scope: DecisionScope;
+  recommended_scope: DecisionScope | null;
   allowed_scopes?: DecisionScope[];
+  scope_contract_version?: string | null;
+  scope_contract_digest?: string | null;
+  allowed_scopes_by_action?: GuardApprovalScopesByAction;
+  recommended_scope_by_action?: GuardRecommendedScopesByAction;
+  scope_restrictions?: string[];
+  task_capability_eligibility?: GuardTaskCapabilityEligibility;
   risk_headline?: string;
   risk_summary?: string;
   risk_signals?: string[];

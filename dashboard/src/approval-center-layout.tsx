@@ -81,6 +81,8 @@ type LayoutProps = {
     approval_password?: string;
     approval_totp_code?: string;
     approval_gate_use_cooldown?: boolean;
+    scope_contract_version?: string;
+    scope_contract_digest?: string;
   }) => void;
   onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
   onRepair?: () => Promise<void>;

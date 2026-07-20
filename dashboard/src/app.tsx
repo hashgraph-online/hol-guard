@@ -643,6 +643,8 @@ export function App() {
     approval_password?: string;
     approval_totp_code?: string;
     approval_gate_use_cooldown?: boolean;
+    scope_contract_version?: string;
+    scope_contract_digest?: string;
   }) => {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];

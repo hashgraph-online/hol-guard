@@ -114,8 +114,8 @@ assert.equal(
 
 const appDetailSource = readFileSync(new URL("./apps/app-detail-workspace.tsx", import.meta.url), "utf8");
 const fleetSource = readFileSync(new URL("./fleet-workspace.tsx", import.meta.url), "utf8");
-const reviewSource = readFileSync(new URL("./review-workspace.tsx", import.meta.url), "utf8");
+const reviewStatesSource = readFileSync(new URL("./review-states.tsx", import.meta.url), "utf8");
 assert.match(appDetailSource, /Install state" value=\{active \? "Installed"/);
 assert.match(appDetailSource, /protectionHealthFor\(runtime, harness\)/);
 assert.match(fleetSource, /resolveAppStatus\(install, appProtection\.state/);
-assert.match(reviewSource, /protectedAppsCount = protectionHealth\.apps\.filter/);
+assert.match(reviewStatesSource, /protectedAppsCount = protectionHealth\.apps\.filter/);
