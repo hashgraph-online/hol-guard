@@ -120,7 +120,33 @@ def _serialize_artifact(artifact: GuardArtifact) -> dict[str, object]:
     return payload
 
 
+def _codex_hook_identity(artifact: GuardArtifact) -> str | None:
+    if artifact.harness != "codex" or artifact.artifact_type != "hook":
+        return None
+    identity = artifact.metadata.get("codex_hook_identity")
+    return identity if isinstance(identity, str) and identity else None
+
+
+def _snapshot_codex_hook_identity(snapshot: Mapping[str, object]) -> str | None:
+    if snapshot.get("harness") != "codex" or snapshot.get("artifact_type") != "hook":
+        return None
+    metadata = snapshot.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return None
+    identity = metadata.get("codex_hook_identity")
+    return identity if isinstance(identity, str) and identity else None
+
+
 def _hash_payload(artifact: GuardArtifact) -> dict[str, object]:
+    codex_hook_identity = _codex_hook_identity(artifact)
+    if codex_hook_identity is not None:
+        return {
+            "schema": "codex-hook-artifact-hash-v1",
+            "harness": artifact.harness,
+            "artifact_type": artifact.artifact_type,
+            "source_scope": artifact.source_scope,
+            "codex_hook_identity": codex_hook_identity,
+        }
     payload = artifact.to_dict()
     metadata = artifact.metadata
     if (
@@ -170,6 +196,19 @@ def diff_artifact(previous: dict[str, object] | None, current: GuardArtifact) ->
             "current_snapshot": current_payload,
         }
     previous_payload = dict(previous)
+    previous_codex_hook_identity = _snapshot_codex_hook_identity(previous_payload)
+    current_codex_hook_identity = _codex_hook_identity(current)
+    if current_codex_hook_identity is not None and previous_codex_hook_identity == current_codex_hook_identity:
+        previous_hash = previous.get("artifact_hash")
+        previous_hash_value = previous_hash if isinstance(previous_hash, str) else None
+        hash_changed = previous_hash_value is not None and previous_hash_value != current_hash
+        return {
+            "changed": hash_changed,
+            "changed_fields": ["metadata"] if hash_changed else [],
+            "previous_hash": previous_hash_value,
+            "current_hash": current_hash,
+            "current_snapshot": current_payload,
+        }
     if "env_keys" not in previous_payload:
         previous_payload["env_keys"] = []
     changed_fields = [key for key, value in current_payload.items() if previous_payload.get(key) != value]
@@ -496,6 +535,12 @@ def _consumer_execution_identity(
 
 
 def _consumer_context_metadata(artifact: GuardArtifact) -> dict[str, object]:
+    codex_hook_identity = _codex_hook_identity(artifact)
+    if codex_hook_identity is not None:
+        return {
+            "codex_hook_identity_schema": artifact.metadata.get("codex_hook_identity_schema"),
+            "codex_hook_identity": codex_hook_identity,
+        }
     if artifact.artifact_type != "prompt_request":
         return dict(artifact.metadata)
     return {
@@ -587,8 +632,29 @@ def _consumer_approval_context_token(
     effective_cwd = _consumer_effective_cwd(config)
     normalized_cwd = _normalized_consumer_path(effective_cwd)
     normalized_workspace = _normalized_consumer_path(config.workspace) if config.workspace is not None else None
-    return build_approval_context_token(
-        identity={
+    codex_hook_identity = _codex_hook_identity(artifact)
+    if codex_hook_identity is not None:
+        identity_payload: dict[str, object] = {
+            "artifact_id": artifact.artifact_id,
+            "artifact_name": artifact.name,
+            "artifact_type": artifact.artifact_type,
+            "codex_hook_identity": codex_hook_identity,
+            "config_path": f"codex-hook://{artifact.source_scope}",
+            "cwd": normalized_cwd,
+            "detection_harness": detection.harness,
+            "executable": {"codex_hook_identity": codex_hook_identity},
+            "harness": artifact.harness,
+            "publisher": artifact.publisher,
+            "source_scope": artifact.source_scope,
+            "workspace": normalized_workspace,
+        }
+        content_payload: dict[str, object] = {
+            "artifact_hash": content_hash,
+            "codex_hook_identity": codex_hook_identity,
+            "metadata": _consumer_context_metadata(artifact),
+        }
+    else:
+        identity_payload = {
             "artifact_id": artifact.artifact_id,
             "artifact_name": artifact.name,
             "artifact_type": artifact.artifact_type,
@@ -605,14 +671,17 @@ def _consumer_approval_context_token(
             "publisher": artifact.publisher,
             "source_scope": artifact.source_scope,
             "workspace": normalized_workspace,
-        },
-        content={
+        }
+        content_payload = {
             "args": list(artifact.args),
             "artifact_hash": content_hash,
             "command": artifact.command,
             "metadata": _consumer_context_metadata(artifact),
             "url": artifact.url,
-        },
+        }
+    return build_approval_context_token(
+        identity=identity_payload,
+        content=content_payload,
         capabilities={
             "artifact_capabilities": dict(capability_snapshot),
             "command_available": detection.command_available,
