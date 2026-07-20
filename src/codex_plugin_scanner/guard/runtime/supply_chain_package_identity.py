@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 
 _LOWERCASE_ECOSYSTEMS = frozenset({"npm", "packagist", "pypi"})
+_NPM_SCOPE_RE = re.compile(r"^@[^/@]+$")
 
 
 class PackageIdentityError(ValueError):
@@ -71,9 +72,7 @@ def canonical_package_identity(
     )
     normalized_name = normalize_package_component(normalized_ecosystem, name)
     if normalized_ecosystem == "npm":
-        if normalized_namespace is not None and (
-            not normalized_namespace.startswith("@") or normalized_namespace == "@" or "/" in normalized_namespace
-        ):
+        if normalized_namespace is not None and _NPM_SCOPE_RE.fullmatch(normalized_namespace) is None:
             raise PackageIdentityError("npm namespace must be one non-empty @scope")
         if normalized_name.startswith("@") or "/" in normalized_name:
             raise PackageIdentityError("npm name must be an unqualified leaf name")

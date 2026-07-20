@@ -413,6 +413,7 @@ def test_supply_chain_bundle_rejects_conflicting_canonical_package_records(
     "package",
     [
         _package_record(name="pkg", namespace="scope"),
+        _package_record(name="pkg", namespace="@scope@"),
         _package_record(name="@scope/pkg", namespace=None),
         _package_record(ecosystem="pypi", name="org/pkg", namespace=None),
         _package_record(ecosystem="packagist", name="pkg", namespace=None),

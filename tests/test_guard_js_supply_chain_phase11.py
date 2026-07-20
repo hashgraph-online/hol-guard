@@ -830,9 +830,7 @@ def test_transitive_scoped_and_unscoped_packages_keep_distinct_bundle_actions(
 
     artifact = _artifact_from_command("npm audit fix --package-lock-only", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
-    decisions = {
-        (package["namespace"], package["name"]): package["decision"] for package in result.packages
-    }
+    decisions = {(package["namespace"], package["name"]): package["decision"] for package in result.packages}
 
     assert decisions[(None, "pkg")] == "warn"
     assert decisions[("@scope", "pkg")] == "block"
@@ -849,20 +847,34 @@ def test_scoped_package_evidence_ids_are_collision_free() -> None:
         "resolvedVersion": "1.2.3",
         "dependencyPath": None,
     }
-    unscoped = supply_chain_package_eval_module._evidence_id(
-        "same-intent", {**common, "namespace": None}
-    )
-    scoped = supply_chain_package_eval_module._evidence_id(
-        "same-intent", {**common, "namespace": "@scope"}
-    )
-    other_scope = supply_chain_package_eval_module._evidence_id(
-        "same-intent", {**common, "namespace": "@other"}
-    )
+    unscoped = supply_chain_package_eval_module._evidence_id("same-intent", {**common, "namespace": None})
+    scoped = supply_chain_package_eval_module._evidence_id("same-intent", {**common, "namespace": "@scope"})
+    other_scope = supply_chain_package_eval_module._evidence_id("same-intent", {**common, "namespace": "@other"})
     other_ecosystem = supply_chain_package_eval_module._evidence_id(
         "same-intent", {**common, "ecosystem": "go", "namespace": None}
     )
 
     assert len({unscoped, scoped, other_scope, other_ecosystem}) == 4
+
+
+def test_malformed_result_identities_remain_opaque_and_collision_free() -> None:
+    direct = {
+        "name": "pkg",
+        "resolvedVersion": "1.2.3",
+        "decision": "block",
+        "dependencyPath": "direct",
+    }
+    transitive = {**direct, "dependencyPath": "root > pkg"}
+    explicit_unknown = {**direct, "ecosystem": "unknown"}
+
+    direct_identity = supply_chain_package_eval_module._result_package_identity(direct)
+    transitive_identity = supply_chain_package_eval_module._result_package_identity(transitive)
+    explicit_unknown_identity = supply_chain_package_eval_module._result_package_identity(explicit_unknown)
+
+    assert direct_identity[0] == "opaque"
+    assert transitive_identity[0] == "opaque"
+    assert direct_identity != transitive_identity
+    assert direct_identity != explicit_unknown_identity
 
 
 def test_scoped_recommended_fix_does_not_use_unscoped_record(

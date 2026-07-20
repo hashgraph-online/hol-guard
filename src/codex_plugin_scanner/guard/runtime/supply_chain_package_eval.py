@@ -3983,6 +3983,8 @@ def _bundle_package_name_matches(package: SupplyChainBundlePackage, target: dict
     if target_ecosystem is not None and package.ecosystem != normalize_ecosystem(target_ecosystem):
         return False
     try:
+        # Bundle ingestion has already canonicalized package fields; the target
+        # remains case-sensitive for ecosystems such as Go.
         package_identity = canonical_package_identity(
             ecosystem=package.ecosystem,
             namespace=package.namespace,
@@ -4464,20 +4466,33 @@ def _evidence_id(package_intent_hash: str, package: dict[str, object]) -> str:
     return f"evidence-{stable_digest_hex(identity.encode(), length=16)}"
 
 
-def _result_package_identity(package: dict[str, object]) -> object:
-    ecosystem = _optional_string(package.get("ecosystem")) or "unknown"
+def _result_package_identity(package: dict[str, object]) -> tuple[str, str, str, str, str, str]:
+    ecosystem = _optional_string(package.get("ecosystem"))
     name = _optional_string(package.get("name")) or "package"
     namespace = _optional_string(package.get("namespace"))
     version = _optional_string(package.get("resolvedVersion")) or _optional_string(package.get("requestedVersion"))
-    try:
-        return canonical_package_identity(
-            ecosystem=ecosystem,
-            namespace=namespace,
-            name=name,
-            version=version or "*",
-        )
-    except PackageIdentityError:
-        return (ecosystem, namespace, name, version)
+    if ecosystem is not None:
+        try:
+            identity = canonical_package_identity(
+                ecosystem=ecosystem,
+                namespace=namespace,
+                name=name,
+                version=version or "*",
+            )
+            return (
+                "canonical",
+                identity.ecosystem,
+                identity.namespace or "",
+                identity.name,
+                identity.version,
+                "",
+            )
+        except PackageIdentityError:
+            pass
+    opaque_sha256 = stable_digest_hex(
+        json.dumps(package, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    )
+    return ("opaque", ecosystem or "", namespace or "", name, version or "", opaque_sha256)
 
 
 def _with_additional_reason(
