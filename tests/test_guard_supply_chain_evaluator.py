@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.runtime.package_intent_common import (
     python_target,
 )
 from codex_plugin_scanner.guard.runtime.package_manifest_diff import _DeadlineExceededError
+from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
     PackageRequestEvaluation,
@@ -245,6 +246,19 @@ def _tarball_bytes(entries: list[tuple[str, bytes]]) -> bytes:
             info.size = len(content)
             archive.addfile(info, io.BytesIO(content))
     return buffer.getvalue()
+
+
+def _downloaded_archive(tmp_path: Path, payload: bytes) -> RestrictedArchiveDownload:
+    archive_path = tmp_path / "downloaded-archive.blob"
+    archive_path.write_bytes(payload)
+    archive_path.chmod(0o400)
+    return RestrictedArchiveDownload(
+        path=archive_path,
+        sha256=hashlib.sha256(payload).hexdigest(),
+        size=len(payload),
+        source_url="https://packages.example.com/archive.tgz",
+        final_url="https://packages.example.com/archive.tgz",
+    )
 
 
 class _EvaluateHandler(BaseHTTPRequestHandler):
@@ -1141,16 +1155,42 @@ def test_evaluate_package_request_artifact_rejects_untrusted_cloud_endpoint_befo
     assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
 
 
+def test_evaluate_external_tarball_requires_approval_without_network(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail_scan(_source_url: str) -> object:
+        raise AssertionError("external archive inspection ran before approval")
+
+    def fail_cloud(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("external archive evaluation reached cloud network before approval")
+
+    monkeypatch.setattr(evaluator_module, "_scan_external_tarball", fail_scan)
+    monkeypatch.setattr(evaluator_module, "_evaluate_with_cloud", fail_cloud)
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("https://packages.example.com/review-first.tgz"),
+        store=GuardStore(tmp_path / "guard-home"),
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "review"
+    assert any(reason["code"] == "external_tarball_source" for reason in result.reasons)
+
+
 def test_evaluate_package_request_artifact_blocks_external_tarball_zip_slip(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     archive = _tarball_bytes([("../escape.sh", b"#!/bin/sh\necho pwned\n")])
-    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: archive)
+    downloaded = _downloaded_archive(tmp_path, archive)
+    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("https://packages.example.com/unsafe.tgz"),
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=tmp_path / "workspace",
         now="2026-05-19T00:00:00Z",
+        external_archive_network_authorized=True,
     )
 
     assert result.decision == "block"
@@ -1175,12 +1215,14 @@ def test_evaluate_package_request_artifact_blocks_external_tarball_install_scrip
         }
     ).encode("utf-8")
     archive = _tarball_bytes([("package/package.json", package_json)])
-    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: archive)
+    downloaded = _downloaded_archive(tmp_path, archive)
+    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("https://packages.example.com/scripted.tgz"),
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=tmp_path / "workspace",
         now="2026-05-19T00:00:00Z",
+        external_archive_network_authorized=True,
     )
 
     assert result.decision == "block"
@@ -1207,12 +1249,14 @@ def test_evaluate_package_request_artifact_blocks_shai_hulud_style_credential_th
         }
     ).encode("utf-8")
     archive = _tarball_bytes([("package/package.json", package_json)])
-    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: archive)
+    downloaded = _downloaded_archive(tmp_path, archive)
+    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("https://packages.example.com/shai-hulud-fixture.tgz"),
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=tmp_path / "workspace",
         now="2026-05-19T00:00:00Z",
+        external_archive_network_authorized=True,
     )
 
     assert result.decision == "block"
@@ -1225,16 +1269,18 @@ def test_evaluate_package_request_artifact_reviews_clean_external_tarball(
 ) -> None:
     package_json = json.dumps({"name": "safe-package", "version": "1.0.0"}).encode("utf-8")
     archive = _tarball_bytes([("package/package.json", package_json)])
-    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: archive)
+    downloaded = _downloaded_archive(tmp_path, archive)
+    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("https://packages.example.com/safe.tgz"),
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=tmp_path / "workspace",
         now="2026-05-19T00:00:00Z",
+        external_archive_network_authorized=True,
     )
 
     assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
+    assert result.policy_action == "review"
     assert any(reason["code"] == "external_tarball_source" for reason in result.reasons)
 
 

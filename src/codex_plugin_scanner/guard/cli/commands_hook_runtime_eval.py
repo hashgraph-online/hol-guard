@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import os
+import shlex
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
@@ -38,6 +40,10 @@ from ..action_lattice import (
     normalize_guard_action_result,
 )
 from ..approval_scope_support import package_request_runtime_workspace_scope
+from ..local_supply_chain import (
+    _package_evaluation_requires_external_archive_binding,
+    _package_policy_override_evaluation,
+)
 from ..models import GuardAction
 from ..package_execution_context import PackageExecutionContext, build_package_execution_context
 from ..runtime.approval_context import approval_context_tokens_validation_reason
@@ -48,6 +54,7 @@ from ..runtime.approval_reuse import (
     ApprovalReuseValidationFailure,
     evaluate_approval_reuse,
 )
+from ..shims import package_shim_status
 from ._commands_shared import *
 from .commands_hook_runtime_state import RuntimeArtifactHookState
 from .commands_parser_helpers import *
@@ -89,6 +96,93 @@ def _cursor_native_saved_approval_hash(
     if approved is None:
         return None
     return _optional_string(approved.get("artifact_hash"))
+
+
+def _runtime_package_raw_command(
+    payload: Mapping[str, object],
+    action_envelope: GuardActionEnvelope | None,
+) -> str | None:
+    for candidate in (
+        payload.get("tool_input"),
+        payload.get("arguments"),
+        payload,
+    ):
+        if not isinstance(candidate, Mapping):
+            continue
+        for key in ("command", "cmd", "shell_command", "shellCommand"):
+            value = candidate.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+    return action_envelope.command if action_envelope is not None else None
+
+
+def _runtime_external_archive_command_matches_executable(raw_command: str | None, executable: str) -> bool:
+    if (
+        raw_command is None
+        or os.name == "nt"
+        or "`" in raw_command
+        or "$(" in raw_command
+        or "\n" in raw_command
+        or "\r" in raw_command
+    ):
+        return False
+    lexer = shlex.shlex(raw_command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    try:
+        tokens = list(lexer)
+    except ValueError:
+        return False
+    if not tokens or tokens[0] != executable:
+        return False
+    return not any(token and all(character in "();<>|&" for character in token) for token in tokens)
+
+
+def _runtime_external_archive_has_digest_binding_sink(
+    *,
+    artifact: GuardArtifact,
+    context: HarnessContext,
+    raw_command: str | None,
+    runtime_workspace: Path | None,
+) -> bool:
+    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
+    manager = _optional_string(metadata.get("package_manager"))
+    executable = _optional_string(metadata.get("package_executable"))
+    if manager is None or executable is None:
+        return False
+    if not any(separator in executable for separator in ("/", "\\")):
+        return False
+    if not _runtime_external_archive_command_matches_executable(raw_command, executable):
+        return False
+    try:
+        status = package_shim_status(context, path_env=os.environ.get("PATH", ""))
+    except (OSError, RuntimeError, ValueError):
+        return False
+    details = status.get("manager_details")
+    if not isinstance(details, list):
+        return False
+    detail = next(
+        (
+            item
+            for item in details
+            if isinstance(item, Mapping) and item.get("manager") == manager and item.get("integrity") == "ok"
+        ),
+        None,
+    )
+    if detail is None:
+        return False
+    shim_path_value = detail.get("shim_path")
+    if not isinstance(shim_path_value, str):
+        return False
+    try:
+        shim_path = Path(shim_path_value).resolve(strict=True)
+        candidate = Path(executable).expanduser()
+        if not candidate.is_absolute():
+            candidate = (runtime_workspace or Path.cwd()) / candidate
+        resolved_executable = candidate.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    return resolved_executable == shim_path
 
 
 def _evaluate_runtime_artifact_hook(
@@ -152,7 +246,52 @@ def _evaluate_runtime_artifact_hook(
             artifact=runtime_artifact,
             store=store,
             workspace_dir=runtime_workspace,
+            external_archive_network_authorized=False,
         )
+        if _package_evaluation_requires_external_archive_binding(package_evaluation):
+            has_binding_sink = _runtime_external_archive_has_digest_binding_sink(
+                artifact=runtime_artifact,
+                context=context,
+                raw_command=_runtime_package_raw_command(payload_map, action_envelope),
+                runtime_workspace=runtime_workspace,
+            )
+            if not has_binding_sink:
+                package_evaluation = _package_policy_override_evaluation(
+                    package_evaluation,
+                    decision="block",
+                    policy_action="block",
+                    title="External archive binding unavailable",
+                    summary="Guard cannot prove this command will execute through its digest-binding package shim.",
+                    harness_message=(
+                        "HOL Guard blocked the external archive because the verified package shim is not the "
+                        "resolved executable. Repair or activate package shims and retry."
+                    ),
+                    reason_code="external_archive_binding_unavailable",
+                    reason_message=(
+                        "External archives may run only through a verified Guard package shim that installs the "
+                        "already inspected blob."
+                    ),
+                )
+            else:
+                # The verified shim is the sole approval owner: it performs
+                # the post-approval restricted download, digest binding, and
+                # launch.  Asking under the hook artifact as well would create
+                # a second, unrelated approval that cannot authorize the shim.
+                package_evaluation = _package_policy_override_evaluation(
+                    package_evaluation,
+                    decision="allow",
+                    policy_action="allow",
+                    title="External archive delegated to Guard shim",
+                    summary="The verified package shim will own approval and digest-bound execution.",
+                    harness_message=(
+                        "HOL Guard delegated this package request to its verified digest-binding package shim."
+                    ),
+                    reason_code="external_archive_delegated_to_binding_shim",
+                    reason_message=(
+                        "The runtime hook permits only the exact verified shim; that shim requires approval before "
+                        "restricted download and executes only the inspected digest-bound blob."
+                    ),
+                )
         effective_package_workspace = runtime_workspace or Path.cwd()
         package_execution_context = build_package_execution_context(
             workspace_dir=effective_package_workspace,

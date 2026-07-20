@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -39,6 +40,16 @@ from .package_manager_command import strip_package_manager_global_options
 from .secret_file_requests import _SHELL_TOOL_NAMES, _candidate_command_texts, _normalize_tool_name
 
 _CONTROL_TOKENS = {"&&", "||", ";", "|", "|&", "&"}
+_CONTROL_CONTEXT_LABELS = {
+    "&&": "and",
+    "||": "or",
+    ";": "sequence",
+    "|": "pipe",
+    "|&": "pipe-stderr",
+    "&": "background",
+    None: "end",
+}
+_EXECUTION_CONTEXT_HMAC_KEY = os.urandom(32)
 _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
 _LOCAL_EXECUTION_COMMANDS = frozenset({"bunx", "npx"})
 _LOCAL_EXECUTION_FLAGS_BY_COMMAND = {
@@ -1109,7 +1120,9 @@ def _normalized_command_segments(
     segments: list[_CommandSegment] = []
     effective_shell_cwd = (workspace or Path.cwd()).expanduser().resolve()
     shell_cwd_source = "workspace" if workspace is not None else "process"
-    for segment_index, (raw_segment, following_operator) in enumerate(_raw_command_segments_with_operators(tokens)):
+    raw_segments = _raw_command_segments_with_operators(tokens)
+    control_shape = tuple(_CONTROL_CONTEXT_LABELS[operator] for _segment, operator in raw_segments)
+    for segment_index, (raw_segment, following_operator) in enumerate(raw_segments):
         normalized_tokens = _normalize_segment(raw_segment)
         if not normalized_tokens:
             continue
@@ -1128,7 +1141,15 @@ def _normalized_command_segments(
                 path_source,
                 effective_cwd,
                 cwd_source,
-                _execution_context_hash(command_text, segment_index),
+                _execution_context_hash(
+                    control_shape,
+                    segment_index,
+                    opaque_context_binding=_opaque_unresolved_context_binding(
+                        raw_segment,
+                        path_source=path_source,
+                        cwd_source=cwd_source,
+                    ),
+                ),
             )
         )
         if following_operator in {"&&", ";"}:
@@ -1140,12 +1161,46 @@ def _normalized_command_segments(
     return tuple(segments)
 
 
-def _execution_context_hash(command_text: str, segment_index: int) -> str:
+def _opaque_unresolved_context_binding(
+    raw_segment: list[str],
+    *,
+    path_source: str,
+    cwd_source: str,
+) -> str | None:
+    """Key unresolved context without creating an offline credential oracle."""
+
+    if not (
+        "unresolved" in path_source
+        or path_source == "inherited_unset"
+        or "unresolved" in cwd_source
+        or "failed" in cwd_source
+    ):
+        return None
+    sensitive_context = "\0".join(raw_segment).encode("utf-8", errors="surrogatepass")
+    return hmac.new(_EXECUTION_CONTEXT_HMAC_KEY, sensitive_context, hashlib.sha256).hexdigest()
+
+
+def _execution_context_hash(
+    control_shape: tuple[str, ...],
+    segment_index: int,
+    *,
+    opaque_context_binding: str | None = None,
+) -> str:
+    """Fingerprint only non-secret compound-command structure.
+
+    Exact package targets, redacted command shape, resolved executables, and
+    workspace evidence are bound elsewhere in the artifact. Unresolved context
+    receives a process-ephemeral HMAC so distinct uncertain commands cannot
+    share approval identity, while stored hashes cannot be brute-forced as an
+    offline oracle for credentials embedded in arguments or source URLs.
+    """
+
     payload = json.dumps(
         {
-            "schema": "local-package-execution-context-v1",
-            "command": command_text,
+            "schema": "local-package-execution-context-v2",
+            "control_shape": control_shape,
             "segment_index": segment_index,
+            "opaque_context_binding": opaque_context_binding,
         },
         sort_keys=True,
         separators=(",", ":"),

@@ -288,9 +288,9 @@ def test_evaluate_package_request_artifact_uses_source_specific_risk_summary_for
 @pytest.mark.parametrize(
     ("security_level", "expected_decision", "expected_code", "expected_message"),
     [
-        ("balanced", "ask", "external_tarball_source", "requires review before install"),
-        ("strict", "block", "external_tarball_scan_unavailable", "strict mode blocked the install"),
-        ("paranoid", "block", "external_tarball_scan_unavailable", "strict mode blocked the install"),
+        ("balanced", "block", "external_archive_inspection_incomplete", "could not complete"),
+        ("strict", "block", "external_archive_inspection_incomplete", "could not complete"),
+        ("paranoid", "block", "external_archive_inspection_incomplete", "could not complete"),
     ],
 )
 def test_external_tarball_scan_failure_respects_security_level(
@@ -307,20 +307,29 @@ def test_external_tarball_scan_failure_respects_security_level(
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     _write_text(home_dir / "config.toml", f'security_level = "{security_level}"\n')
     store = GuardStore(home_dir)
-    monkeypatch.setattr(supply_chain_package_eval_module, "_scan_external_tarball", lambda _url: None)
+    monkeypatch.setattr(
+        supply_chain_package_eval_module,
+        "_scan_external_tarball",
+        lambda _url, **_kwargs: (None, None),
+    )
 
     artifact = _artifact_from_command(
         "npm install guard-query@https://example.com/guard.tgz?token=demo",
         workspace=workspace_dir,
     )
-    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+    result = evaluate_package_request_artifact(
+        artifact=artifact,
+        store=store,
+        workspace_dir=workspace_dir,
+        external_archive_network_authorized=True,
+    )
 
     assert result.decision == expected_decision
     assert result.packages[0]["reasons"][0]["code"] == expected_code
     assert expected_message in str(result.packages[0]["reasons"][0]["message"]).lower()
 
 
-def test_external_tarball_scan_failure_ignores_cloud_advisory_block_in_balanced_mode(
+def test_external_tarball_scan_failure_blocks_after_approval_in_balanced_mode(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -330,16 +339,25 @@ def test_external_tarball_scan_failure_ignores_cloud_advisory_block_in_balanced_
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     _write_text(home_dir / "config.toml", 'security_level = "balanced"\n[risks]\ncloud_advisory = "block"\n')
     store = GuardStore(home_dir)
-    monkeypatch.setattr(supply_chain_package_eval_module, "_scan_external_tarball", lambda _url: None)
+    monkeypatch.setattr(
+        supply_chain_package_eval_module,
+        "_scan_external_tarball",
+        lambda _url, **_kwargs: (None, None),
+    )
 
     artifact = _artifact_from_command(
         "npm install guard-query@https://example.com/guard.tgz?token=demo",
         workspace=workspace_dir,
     )
-    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+    result = evaluate_package_request_artifact(
+        artifact=artifact,
+        store=store,
+        workspace_dir=workspace_dir,
+        external_archive_network_authorized=True,
+    )
 
-    assert result.decision == "ask"
-    assert result.packages[0]["reasons"][0]["code"] == "external_tarball_source"
+    assert result.decision == "block"
+    assert result.packages[0]["reasons"][0]["code"] == "external_archive_inspection_incomplete"
 
 
 @pytest.mark.parametrize(

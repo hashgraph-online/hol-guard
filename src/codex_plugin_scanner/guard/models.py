@@ -81,9 +81,14 @@ class GuardArtifact:
     transport: str | None = None
     publisher: str | None = None
     metadata: dict[str, object] = field(default_factory=dict)
+    # Ephemeral values needed to enforce a request (for example, an exact
+    # signed archive URL) must never enter receipts, API payloads, logs, reprs,
+    # or persistent artifact metadata.
+    runtime_private_metadata: dict[str, object] = field(default_factory=dict, repr=False, compare=False)
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
+        payload.pop("runtime_private_metadata", None)
         payload["args"] = [_redact_arg(value) for value in self.args]
         payload["url"] = _redact_url(self.url)
         payload["metadata"] = _redact_metadata(payload.get("metadata", {}))

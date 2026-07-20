@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 import shlex
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePath
 from typing import Literal
 
@@ -19,22 +19,38 @@ EvidenceStatus = Literal["available", "missing", "not_regular", "unreadable", "u
 _EXTRAS_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)\[(?P<extras>[A-Za-z0-9_,.-]+)\]$")
 _EGG_FRAGMENT_RE = re.compile(r"(?:^|[#&])egg=([^&#]+)")
 _PYTHON_VERSION_RE = re.compile(r"(?P<name>[^<>=!~\s]+)(?P<op>===|==|~=|!=|<=|>=|<|>|=)?(?P<version>.*)")
-_JS_SOURCE_PREFIXES = ("http://", "https://", "git+", "github:", "gitlab:", "bitbucket:", "file:")
+_JS_SOURCE_PREFIXES = ("http:", "https:", "git+", "github:", "gitlab:", "bitbucket:", "file:")
+_HTTP_SOURCE_IN_TOKEN_RE = re.compile(r"https?:", re.IGNORECASE)
+_NAMED_JS_SOURCE_SEPARATOR_RE = re.compile(
+    r"@(?=(?:https?|git\+|github|gitlab|bitbucket|file):)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class PackageIntentTarget:
     ecosystem: str
     package_name: str | None
-    raw_spec: str
+    raw_spec: str = field(repr=False)
     requested_specifier: str | None
-    source_url: str | None = None
+    source_url: str | None = field(default=None, repr=False)
     alias: str | None = None
     dependency_group: str | None = None
     extras: tuple[str, ...] = ()
     editable: bool = False
 
     def to_dict(self) -> dict[str, object]:
+        payload = asdict(self)
+        payload["raw_spec"] = _sanitize_url(self.raw_spec)
+        payload["raw_spec_hash"] = hashlib.sha256(self.raw_spec.encode("utf-8")).hexdigest()
+        if self.source_url is not None:
+            payload["source_url"] = _sanitize_url(self.source_url)
+            payload["source_url_hash"] = hashlib.sha256(self.source_url.encode("utf-8")).hexdigest()
+        return payload
+
+    def to_execution_dict(self) -> dict[str, object]:
+        """Return exact request values for ephemeral in-process enforcement."""
+
         return asdict(self)
 
 
@@ -79,7 +95,7 @@ class LocalPackageExecutionEvidence:
 class PackageIntent:
     package_manager: str
     intent_kind: IntentKind
-    command_tokens: tuple[str, ...]
+    command_tokens: tuple[str, ...] = field(repr=False)
     redacted_command: str
     targets: tuple[PackageIntentTarget, ...]
     manifest_paths: tuple[str, ...] = ()
@@ -90,6 +106,7 @@ class PackageIntent:
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
+        payload["command_tokens"] = shlex.split(self.redacted_command)
         payload["targets"] = [target.to_dict() for target in self.targets]
         return payload
 
@@ -159,6 +176,9 @@ def build_package_request_artifact(
             "runtime_request_summary": package_runtime_summary(intent),
             "runtime_request_reason": package_runtime_reason(intent),
             **_local_execution_runtime_metadata(intent),
+        },
+        runtime_private_metadata={
+            "package_targets": [target.to_execution_dict() for target in intent.targets],
         },
     )
 
@@ -276,11 +296,17 @@ def redacted_command(tokens: tuple[str, ...]) -> str:
         if token.startswith("--hash="):
             redacted.append("--hash=<hash>")
             continue
-        if "://" in token or token.startswith("git+"):
+        if _HTTP_SOURCE_IN_TOKEN_RE.search(token) is not None or token.startswith("git+"):
             redacted.append(_sanitize_url(token))
             continue
         redacted.append(token)
     return shlex.join(redacted)
+
+
+def redact_package_request_token(value: str) -> str:
+    """Return a persistence-safe package argv token without URL credentials."""
+
+    return _sanitize_url(value)
 
 
 def flag_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
@@ -341,6 +367,18 @@ def js_target(spec: str) -> PackageIntentTarget:
     normalized_spec = spec
     if "@npm:" in spec and not spec.startswith("@npm:"):
         alias, _, normalized_spec = spec.partition("@npm:")
+    # A complete URL can itself contain '@' in userinfo or its path.  Treat it
+    # as a source before looking for the package@source separator so an
+    # attacker cannot demote it into a schemeless/git-style request.
+    if normalized_spec.lower().startswith(_JS_SOURCE_PREFIXES):
+        return PackageIntentTarget(
+            "npm",
+            _source_url_package_name(normalized_spec),
+            spec,
+            None,
+            source_url=normalized_spec,
+            alias=alias,
+        )
     named_source_package, source_url = _split_js_named_source_spec(normalized_spec)
     if source_url is not None:
         return PackageIntentTarget("npm", named_source_package, spec, None, source_url=source_url, alias=alias)
@@ -371,14 +409,14 @@ def python_target(
         return PackageIntentTarget("pypi", package_name.strip(), spec, None, source_url=source.strip())
     if "://" in spec or spec.startswith("git+"):
         match = _EGG_FRAGMENT_RE.search(spec)
-        sanitized_source = spec.split("?", 1)[0].split("#", 1)[0]
+        sanitized_source = _sanitize_url(spec)
         package_name = match.group(1) if match else PurePath(sanitized_source).name.removesuffix(".git")
         return PackageIntentTarget(
             "pypi",
             package_name or None,
             spec,
             None,
-            source_url=sanitized_source,
+            source_url=spec,
             editable=editable,
         )
     if "@" in spec and not spec.startswith(("./", "../", "/")):
@@ -454,22 +492,33 @@ def split_python_extras(name: str) -> tuple[str, tuple[str, ...]]:
 
 
 def _sanitize_url(value: str) -> str:
+    http_source = _HTTP_SOURCE_IN_TOKEN_RE.search(value)
+    if http_source is not None:
+        source = value[http_source.start() :]
+        if re.match(r"(?i)^https?://[^/\\]", source) is None:
+            scheme = source.partition(":")[0].lower()
+            # npm treats slashless, single-slash, and backslash HTTP(S)
+            # specifiers as remote URLs.  They are rejected by Guard, and the
+            # persisted command shape must not retain their query/userinfo.
+            return f"{value[: http_source.start()]}{scheme}:<redacted-source>"
     if "://" not in value and not value.startswith("git+"):
         return value
     scheme_split = value.split("://", 1)
     if len(scheme_split) == 2 and "@" in scheme_split[1].split("/", 1)[0]:
         scheme, remainder = scheme_split
         authority, *tail = remainder.split("/", 1)
-        authority = authority.split("@", 1)[1]
+        authority = authority.rsplit("@", 1)[1]
         suffix = f"/{tail[0]}" if tail else ""
         return f"{scheme}://{authority}{suffix}".split("?", 1)[0].split("#", 1)[0]
     return value.split("?", 1)[0].split("#", 1)[0]
 
 
 def _split_js_named_source_spec(spec: str) -> tuple[str | None, str | None]:
-    if "@" not in spec:
+    separator = _NAMED_JS_SOURCE_SEPARATOR_RE.search(spec)
+    if separator is None:
         return None, None
-    package_name, source_candidate = spec.rsplit("@", 1)
+    package_name = spec[: separator.start()]
+    source_candidate = spec[separator.end() :]
     normalized_package_name = package_name.strip()
     normalized_source = source_candidate.strip()
     if not normalized_package_name or not _looks_like_js_source_spec(normalized_source):
@@ -481,7 +530,7 @@ def _looks_like_js_source_spec(value: str | None) -> bool:
     if not value:
         return False
     normalized = value.strip()
-    if normalized.startswith(_JS_SOURCE_PREFIXES) or "://" in normalized:
+    if normalized.lower().startswith(_JS_SOURCE_PREFIXES) or "://" in normalized:
         return True
     if normalized.startswith("@") or normalized.startswith(("./", "../", "/")) or ":" in normalized:
         return False
