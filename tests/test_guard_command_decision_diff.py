@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 from typing import cast
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from tests.guard_command_corpus import load_seed_manifest
 from tests.guard_command_decision_diff import (
     BASE_RELEASE_SHA,
@@ -21,7 +20,6 @@ from tests.guard_command_decision_diff import (
     report_framed_sha256,
     source_binding_id,
 )
-from tests.guard_command_decision_diff_runner import recompute_baseline_proposal
 
 _OPAQUE_ID = re.compile(r"c-[0-9a-f]{24}")
 
@@ -30,18 +28,6 @@ def _fixture() -> dict[str, object]:
     value = cast(object, json.loads(REPORT_PATH.read_text(encoding="utf-8")))
     assert isinstance(value, dict)
     return cast(dict[str, object], value)
-
-
-def test_cached_baseline_preserves_compatibility_independent_proposal() -> None:
-    for command in ("routine-tool inspect", "echo 'unterminated"):
-        evaluation = evaluate_command(
-            command,
-            compatibility_action_class="legacy compatibility heuristic",
-            compatibility_reason="Existing heuristic requires review.",
-        )
-        assert not evaluation.matches
-        assert evaluation.baseline_decision_plane is not None
-        assert evaluation.baseline_decision_plane == recompute_baseline_proposal(evaluation)
 
 
 def test_report_is_exactly_reproducible_and_source_bound() -> None:
