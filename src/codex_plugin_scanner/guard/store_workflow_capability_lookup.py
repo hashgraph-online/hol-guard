@@ -7,16 +7,16 @@ from __future__ import annotations
 import sqlite3
 from contextlib import AbstractContextManager
 
-from . import store_workflow_capabilities as workflow_capability_store
-from .store_workflow_capabilities import (
+from .store_workflow_capabilities_schema import ensure_workflow_capability_schema
+from .store_workflow_capability_authority import load_and_validate_authority
+from .store_workflow_capability_common import (
+    WORKFLOW_CAPABILITY_STORE_CLOCK,
     _decode_signed_claim,
     _require_store_key,
     _validate_claim_row,
     _validate_public_identifier,
     _verify_persisted_claim_signature,
 )
-from .store_workflow_capabilities_schema import ensure_workflow_capability_schema
-from .store_workflow_capability_authority import load_and_validate_authority
 from .store_workflow_capability_control import load_validate_and_observe_control
 from .store_workflow_capability_lock import serialized_workflow_capability_authority
 from .workflow_capabilities import SignedWorkflowCapability, WorkflowCapabilityError
@@ -43,7 +43,7 @@ class StoreWorkflowCapabilityLookupMixin:
         key, key_id = _require_store_key(self, create=False)
         with self._connect() as connection:
             connection.execute("begin")
-            now = workflow_capability_store._workflow_capability_store_now()
+            now = WORKFLOW_CAPABILITY_STORE_CLOCK.now()
             ensure_workflow_capability_schema(connection, applied_at=now)
             load_validate_and_observe_control(self, connection, key=key, key_id=key_id, now=now, create=False)
             return load_validated_workflow_capability(

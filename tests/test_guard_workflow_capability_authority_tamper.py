@@ -12,8 +12,8 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard import store_workflow_capabilities as workflow_store_module
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import (
     WorkflowCapabilityBinding,
     WorkflowCapabilityError,
@@ -38,7 +38,7 @@ def _fixed_authority(monkeypatch: pytest.MonkeyPatch) -> None:
         "_policy_integrity_secret_material",
         lambda self, *, create: (_KEY, _KEY_ID),
     )
-    monkeypatch.setattr(workflow_store_module, "_workflow_capability_store_now", _now)
+    monkeypatch.setattr(WORKFLOW_CAPABILITY_STORE_CLOCK, "now", _now)
 
 
 def test_expected_binding_requires_exact_contract_type() -> None:
@@ -211,14 +211,14 @@ def test_expired_denial_commits_monotonic_time_high_water(tmp_path, monkeypatch:
     store = _store(tmp_path)
     claim = _claim(capability_id="wc-clock-high-water")
     _issue(store, claim)
-    monkeypatch.setattr(workflow_store_module, "_workflow_capability_store_now", lambda: _now(61))
+    monkeypatch.setattr(WORKFLOW_CAPABILITY_STORE_CLOCK, "now", lambda: _now(61))
     with pytest.raises(WorkflowCapabilityError, match="capability_expired"):
         _claim_capability(store, claim, invocation_id="invocation-expired")
     encoded = store._load_workflow_capability_control()
     assert encoded is not None
     assert json.loads(encoded)["observed_at"] == _now(61)
 
-    monkeypatch.setattr(workflow_store_module, "_workflow_capability_store_now", lambda: _now(1))
+    monkeypatch.setattr(WORKFLOW_CAPABILITY_STORE_CLOCK, "now", lambda: _now(1))
     with pytest.raises(WorkflowCapabilityError, match="capability_clock_rollback"):
         _claim_capability(store, claim, invocation_id="invocation-backdated")
     with sqlite3.connect(store.path) as connection:

@@ -9,8 +9,14 @@ import sqlite3
 from contextlib import AbstractContextManager
 from uuid import uuid4
 
-from . import store_workflow_capabilities as workflow_capability_store
-from .store_workflow_capabilities import (
+from .store_workflow_capabilities_schema import ensure_workflow_capability_schema
+from .store_workflow_capability_authority import (
+    advance_authority_state,
+    append_revocation,
+    load_and_validate_authority,
+)
+from .store_workflow_capability_common import (
+    WORKFLOW_CAPABILITY_STORE_CLOCK,
     _decode_signed_claim,
     _private_reference,
     _require_store_key,
@@ -19,12 +25,6 @@ from .store_workflow_capabilities import (
     _validate_reason_code,
     _verify_persisted_claim_signature,
     _workflow_capability_event_payload,
-)
-from .store_workflow_capabilities_schema import ensure_workflow_capability_schema
-from .store_workflow_capability_authority import (
-    advance_authority_state,
-    append_revocation,
-    load_and_validate_authority,
 )
 from .store_workflow_capability_control import (
     finalize_control_transition,
@@ -64,7 +64,7 @@ class StoreWorkflowCapabilityRevocationMixin:
 
     @serialized_workflow_capability_authority
     def revoke_workflow_capability(self, capability_id: str, *, reason_code: str) -> bool:
-        now = workflow_capability_store._workflow_capability_store_now()
+        now = WORKFLOW_CAPABILITY_STORE_CLOCK.now()
         _validate_public_identifier("capability_id", capability_id)
         _validate_reason_code(reason_code)
         key, key_id = _require_store_key(self, create=False)

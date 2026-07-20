@@ -12,8 +12,9 @@ import sqlite3
 
 import pytest
 
-from codex_plugin_scanner.guard import store_workflow_capabilities as workflow_store_module
+from codex_plugin_scanner.guard import store_workflow_capabilities as workflow_capability_store_mixin
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import (
     WorkflowCapabilityError,
     sign_workflow_capability,
@@ -40,7 +41,7 @@ def _fixed_authority(monkeypatch: pytest.MonkeyPatch) -> None:
         "_policy_integrity_secret_material",
         lambda self, *, create: (_KEY, _KEY_ID),
     )
-    monkeypatch.setattr(workflow_store_module, "_workflow_capability_store_now", _now)
+    monkeypatch.setattr(WORKFLOW_CAPABILITY_STORE_CLOCK, "now", _now)
 
 
 def _state_row(connection: sqlite3.Connection, capability_id: str) -> tuple[object, ...]:
@@ -226,7 +227,7 @@ def test_pre_commit_failure_leaves_forward_only_pending_control_blocked(
     def fail_transition(*args: object, **kwargs: object) -> None:
         raise RuntimeError("forced_transition_failure")
 
-    monkeypatch.setattr(workflow_store_module, "append_authority_transition", fail_transition)
+    monkeypatch.setattr(workflow_capability_store_mixin, "append_authority_transition", fail_transition)
     with pytest.raises(RuntimeError, match="forced_transition_failure"):
         _issue(store, claim)
     with pytest.raises(WorkflowCapabilityError, match="capability_control_pending_unresolved"):

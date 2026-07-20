@@ -36,10 +36,12 @@ from .store_workflow_capabilities import StoreWorkflowCapabilitiesMixin
 from .store_workflow_capability_lookup import StoreWorkflowCapabilityLookupMixin
 from .store_workflow_capability_receipt_lookup import StoreWorkflowCapabilityReceiptLookupMixin
 from .store_workflow_capability_revocation import StoreWorkflowCapabilityRevocationMixin
+from .store_workflow_capability_secret_control import StoreWorkflowCapabilitySecretControlMixin
 
 
 class GuardStore(
     StoreSecretPolicyIntegrityMixin,
+    StoreWorkflowCapabilitySecretControlMixin,
     StoreConnectionSchemaMixin,
     StoreCommandActivityMixin,
     StoreCommandActivityApiMixin,

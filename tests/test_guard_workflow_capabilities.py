@@ -18,9 +18,9 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard import store_workflow_capabilities as workflow_store_module
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_workflow_capabilities import StoreWorkflowCapabilitiesMixin
+from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import (
     WORKFLOW_CAPABILITY_ALGORITHM,
     WORKFLOW_CAPABILITY_RECEIPT_SCHEMA,
@@ -51,7 +51,7 @@ def _fixed_policy_integrity_key(monkeypatch: pytest.MonkeyPatch) -> None:
         "_policy_integrity_secret_material",
         lambda self, *, create: (_KEY, _KEY_ID),
     )
-    monkeypatch.setattr(workflow_store_module, "_workflow_capability_store_now", _now)
+    monkeypatch.setattr(WORKFLOW_CAPABILITY_STORE_CLOCK, "now", _now)
 
 
 def _binding(**changes: object) -> WorkflowCapabilityBinding:

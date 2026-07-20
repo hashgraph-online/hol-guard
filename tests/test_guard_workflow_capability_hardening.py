@@ -17,8 +17,8 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard import store_workflow_capabilities as workflow_store_module
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import (
     WORKFLOW_CAPABILITY_ALGORITHM,
     WORKFLOW_CAPABILITY_ENVELOPE_SCHEMA,
@@ -49,7 +49,7 @@ def _fixed_policy_integrity_key(monkeypatch: pytest.MonkeyPatch) -> None:
         "_policy_integrity_secret_material",
         lambda self, *, create: (_KEY, _KEY_ID),
     )
-    monkeypatch.setattr(workflow_store_module, "_workflow_capability_store_now", _now)
+    monkeypatch.setattr(WORKFLOW_CAPABILITY_STORE_CLOCK, "now", _now)
 
 
 @pytest.mark.parametrize(
@@ -279,7 +279,7 @@ def test_store_clock_cannot_be_backdated_after_expiry(tmp_path, monkeypatch: pyt
     store = _store(tmp_path)
     claim = _claim(capability_id="wc-clock-expiry")
     _issue(store, claim)
-    monkeypatch.setattr(workflow_store_module, "_workflow_capability_store_now", lambda: _now(61))
+    monkeypatch.setattr(WORKFLOW_CAPABILITY_STORE_CLOCK, "now", lambda: _now(61))
     with pytest.raises(WorkflowCapabilityError, match="expired"):
         _claim_capability(
             store,
