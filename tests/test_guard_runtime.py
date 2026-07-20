@@ -6853,12 +6853,15 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_python_heredo
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    fixture_dir = workspace_dir / "hashgraph-online"
+    fixture_dir.mkdir()
+    _write_text(fixture_dir / "bounty_submissions.txt", "fixture row\n")
     event = {
         "hookName": "preToolUse",
         "toolName": "bash",
         "toolArgs": {
             "command": (
-                "cd /tmp/hol-guard-fixtures/hashgraph-online && python - <<'PY'\n"
+                f"cd {shlex.quote(str(fixture_dir))} && python - <<'PY'\n"
                 "from pathlib import Path\n"
                 "text = Path('bounty_submissions.txt').read_text()\n"
                 "print('bytes', len(text))\n"
@@ -15792,6 +15795,7 @@ def test_guard_runtime_ignores_patch_syntax_for_other_write_tools(tmp_path):
 
 
 def test_guard_runtime_allows_cd_prefixed_pytest_module_invocation(tmp_path):
+    (tmp_path / "tests").mkdir()
     match = extract_sensitive_tool_action_request(
         "Bash",
         {
@@ -15818,6 +15822,7 @@ def test_guard_runtime_allows_ruff_check_and_fix_module_invocations(tmp_path):
 
 
 def test_guard_runtime_allows_chained_cd_and_ruff_dev_workflow(tmp_path):
+    (tmp_path / "tests").mkdir()
     command = (
         "cd tests && PYTHONPATH=src python3 -m ruff check --fix ../src/foo.py 2>&1 && "
         "PYTHONPATH=src python3 -m ruff check ../src/foo.py 2>&1"
@@ -15885,7 +15890,8 @@ def test_guard_runtime_blocks_unsafe_cd_before_pytest_module_invocation(tmp_path
     )
 
     assert match is not None
-    assert match.action_class == "destructive shell command"
+    assert match.action_class == "unresolved shell execution context"
+    assert match.shell_execution_context_reason_code == "shell_cwd_unresolved_expression"
 
 
 def test_guard_runtime_blocks_pythonpath_ruff_module_shadow(tmp_path):
@@ -16308,6 +16314,7 @@ def test_guard_runtime_checks_selected_test_path_ancestor_pytest_config_addopts(
 
 
 def test_guard_runtime_allows_prior_cd_before_pytest(tmp_path):
+    (tmp_path / "sub").mkdir()
     match = extract_sensitive_tool_action_request(
         "Bash",
         {"command": "cd sub && pytest -q"},
@@ -16318,6 +16325,7 @@ def test_guard_runtime_allows_prior_cd_before_pytest(tmp_path):
 
 
 def test_guard_runtime_allows_prior_pushd_before_pytest(tmp_path):
+    (tmp_path / "sub").mkdir()
     match = extract_sensitive_tool_action_request(
         "Bash",
         {"command": "pushd sub >/dev/null; pytest -q"},
@@ -16463,6 +16471,7 @@ def test_guard_hook_codex_does_not_block_simple_pytest_command(tmp_path, capsys,
 
 
 def test_guard_runtime_allows_literal_exit_code_echo_after_safe_pytest(tmp_path):
+    (tmp_path / "sub").mkdir()
     match = extract_sensitive_tool_action_request(
         "Bash",
         {
@@ -16482,6 +16491,7 @@ def test_guard_hook_codex_does_not_block_safe_pytest_exit_code_echo(tmp_path, ca
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    (workspace_dir / "sub").mkdir()
     event = {
         "event": "PreToolUse",
         "tool_name": "Bash",
@@ -16520,6 +16530,7 @@ def test_guard_hook_codex_does_not_block_safe_pytest_exit_code_echo(tmp_path, ca
     ],
 )
 def test_guard_runtime_keeps_static_shell_expansions_blocked_after_safe_pytest(tmp_path, command_suffix):
+    (tmp_path / "sub").mkdir()
     match = extract_sensitive_tool_action_request(
         "Bash",
         {

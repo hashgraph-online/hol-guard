@@ -440,7 +440,28 @@ def _runtime_hook_approval_context_token(
     never serialized into the stored token itself.
     """
 
-    effective_cwd = _normalized_runtime_context_path(runtime_workspace or Path.cwd())
+    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
+    shell_context_present = bool(
+        metadata.get("shell_execution_context_hash") or metadata.get("shell_execution_context_hashes")
+    )
+    # Reuse requires the producer's explicit completeness proof.  Missing or
+    # malformed legacy metadata fails closed instead of being inferred from a
+    # separate reason-code field.
+    shell_context_complete = metadata.get("shell_execution_context_complete") is True
+    raw_effective_cwds = metadata.get("shell_execution_effective_cwds")
+    effective_cwd_values = raw_effective_cwds if isinstance(raw_effective_cwds, list) else []
+    shell_effective_cwds = tuple(
+        _normalized_runtime_context_path(Path(value))
+        for value in effective_cwd_values
+        if isinstance(value, str) and value.strip()
+    )
+    launch_cwd = Path(shell_effective_cwds[-1]) if shell_effective_cwds else runtime_workspace or Path.cwd()
+    if shell_effective_cwds:
+        effective_cwd = shell_effective_cwds[-1]
+    elif shell_context_present:
+        effective_cwd = None
+    else:
+        effective_cwd = _normalized_runtime_context_path(runtime_workspace or Path.cwd())
     configured_workspace = (
         _normalized_runtime_context_path(config.workspace) if config.workspace is not None else None
     )
@@ -449,7 +470,37 @@ def _runtime_hook_approval_context_token(
         if action_envelope is not None and action_envelope.workspace is not None
         else None
     )
-    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
+    executable_identity: object
+    shell_executable_identities: tuple[dict[str, object], ...] | None = None
+    if shell_context_present and not shell_context_complete:
+        executable_identity = {
+            "status": "unresolved_shell_execution_context",
+            "reason_code": metadata.get("shell_execution_context_reason_code")
+            or metadata.get("shell_execution_context_reason_codes"),
+            "reuse_nonce": secrets.token_hex(16),
+        }
+        shell_executable_identities = (
+            {
+                "cwd": None,
+                "identity": executable_identity,
+            },
+        )
+    else:
+        executable_identity = _runtime_hook_executable_identity(
+            artifact,
+            launch_cwd=launch_cwd,
+        )
+        if shell_context_present:
+            shell_executable_identities = tuple(
+                {
+                    "cwd": cwd,
+                    "identity": _runtime_hook_executable_identity(
+                        artifact,
+                        launch_cwd=Path(cwd),
+                    ),
+                }
+                for cwd in shell_effective_cwds
+            )
     return build_approval_context_token(
         identity={
             "artifact_id": artifact.artifact_id,
@@ -458,12 +509,11 @@ def _runtime_hook_approval_context_token(
             "config_path": artifact.config_path,
             "configured_workspace": configured_workspace,
             "cwd": effective_cwd,
+            "shell_effective_cwds": shell_effective_cwds,
+            "shell_executables": shell_executable_identities,
             "envelope_workspace": envelope_workspace,
             "envelope_workspace_hash": action_envelope.workspace_hash if action_envelope is not None else None,
-            "executable": _runtime_hook_executable_identity(
-                artifact,
-                launch_cwd=runtime_workspace or Path.cwd(),
-            ),
+            "executable": executable_identity,
             "guard_home": _normalized_runtime_context_path(config.guard_home),
             "harness": artifact.harness,
             "publisher": artifact.publisher,
@@ -472,6 +522,10 @@ def _runtime_hook_approval_context_token(
         content={
             "artifact_content_hash": content_hash,
             "command_security_identity": metadata.get("command_security_identity"),
+            "shell_execution_context_hash": metadata.get("shell_execution_context_hash"),
+            "shell_execution_context_hashes": metadata.get("shell_execution_context_hashes"),
+            "shell_execution_context_reason_code": metadata.get("shell_execution_context_reason_code"),
+            "shell_execution_context_reason_codes": metadata.get("shell_execution_context_reason_codes"),
         },
         capabilities={
             "action_envelope": _runtime_hook_action_capabilities(action_envelope),

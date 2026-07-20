@@ -45,6 +45,11 @@ from .self_approval import (
     is_guard_approval_mutation_command,
 )
 from .shell_command_wrappers import normalize_transparent_shell_command
+from .shell_execution_context import (
+    ShellExecutionContext,
+    model_shell_execution_context,
+    validate_shell_execution_segment,
+)
 
 _FILE_READ_TOOL_NAMES = frozenset(
     {
@@ -651,6 +656,9 @@ class ToolActionRequestMatch:
     raw_command_text: str | None = None
     wrapper_chain: tuple[str, ...] = ()
     canonical_command: CanonicalCommand | None = None
+    shell_execution_context_hash: str | None = None
+    shell_execution_context_reason_code: str | None = None
+    shell_execution_effective_cwds: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -931,6 +939,11 @@ def extract_sensitive_tool_action_request(
             command_text=command_text,
         )
         if docker_sensitive_request is not None:
+            docker_sensitive_request = _request_with_shell_execution_context(
+                docker_sensitive_request,
+                command_text=command_text,
+                cwd=cwd,
+            )
             if wrapper_chain:
                 docker_sensitive_request = _request_with_wrapper_context(
                     docker_sensitive_request,
@@ -945,6 +958,11 @@ def extract_sensitive_tool_action_request(
                 command_text=raw_command_text,
             )
             if docker_sensitive_request is not None:
+                docker_sensitive_request = _request_with_shell_execution_context(
+                    docker_sensitive_request,
+                    command_text=normalized_command_text,
+                    cwd=cwd,
+                )
                 if wrapper_chain:
                     docker_sensitive_request = _request_with_wrapper_context(
                         replace(
@@ -963,6 +981,11 @@ def extract_sensitive_tool_action_request(
             home_dir=home_dir,
         )
         if docker_config_request is not None:
+            docker_config_request = _request_with_shell_execution_context(
+                docker_config_request,
+                command_text=command_text,
+                cwd=cwd,
+            )
             if wrapper_chain:
                 docker_config_request = _request_with_wrapper_context(
                     docker_config_request,
@@ -982,6 +1005,11 @@ def extract_sensitive_tool_action_request(
                     "they can expose cluster credentials or application secrets before the user confirms the action."
                 ),
             )
+            kubernetes_secret_request = _request_with_shell_execution_context(
+                kubernetes_secret_request,
+                command_text=command_text,
+                cwd=cwd,
+            )
             if wrapper_chain:
                 kubernetes_secret_request = _request_with_wrapper_context(
                     kubernetes_secret_request,
@@ -989,6 +1017,11 @@ def extract_sensitive_tool_action_request(
                     wrapper_chain=wrapper_chain,
                 )
             return kubernetes_secret_request
+        destructive_execution_context = model_shell_execution_context(
+            command_text,
+            cwd=cwd,
+            workspace_root=cwd,
+        )
         destructive_shell_request = _destructive_shell_tool_action_request(
             tool_name=requested_tool_name,
             normalized_tool_name=effective_tool_name,
@@ -1001,8 +1034,15 @@ def extract_sensitive_tool_action_request(
                 else None
             ),
             raw_command_text=raw_command_text,
+            execution_context=destructive_execution_context,
         )
         if destructive_shell_request is not None:
+            destructive_shell_request = _request_with_shell_execution_context(
+                destructive_shell_request,
+                command_text=command_text,
+                cwd=cwd,
+                context=destructive_execution_context,
+            )
             if wrapper_chain:
                 destructive_shell_request = _request_with_wrapper_context(
                     destructive_shell_request,
@@ -1011,6 +1051,11 @@ def extract_sensitive_tool_action_request(
                 )
             return destructive_shell_request
         if wrapper_chain:
+            raw_execution_context = model_shell_execution_context(
+                raw_command_text,
+                cwd=cwd,
+                workspace_root=cwd,
+            )
             destructive_shell_request = _destructive_shell_tool_action_request(
                 tool_name=requested_tool_name,
                 normalized_tool_name=effective_tool_name,
@@ -1019,8 +1064,14 @@ def extract_sensitive_tool_action_request(
                 home_dir=home_dir,
                 canonical_command=candidate_canonical,
                 raw_command_text=raw_command_text,
+                execution_context=raw_execution_context,
             )
             if destructive_shell_request is not None:
+                destructive_shell_request = _request_with_shell_execution_context(
+                    destructive_shell_request,
+                    command_text=normalized_command_text,
+                    cwd=cwd,
+                )
                 destructive_shell_request = _request_with_wrapper_context(
                     replace(
                         destructive_shell_request,
@@ -1119,10 +1170,16 @@ def _destructive_shell_tool_action_request(
     home_dir: Path | None,
     canonical_command: CanonicalCommand | None = None,
     raw_command_text: str | None = None,
+    execution_context: ShellExecutionContext | None = None,
 ) -> ToolActionRequestMatch | None:
     if normalized_tool_name not in _SHELL_TOOL_NAMES:
         return None
     canonical_command = canonical_command or parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
+    execution_context = execution_context or model_shell_execution_context(
+        command_text,
+        cwd=cwd,
+        workspace_root=cwd,
+    )
     detection_command_text = command_text
     if is_guard_approval_mutation_command(detection_command_text):
         return ToolActionRequestMatch(
@@ -1197,7 +1254,29 @@ def _destructive_shell_tool_action_request(
             reason=rule.description,
             canonical_command=canonical_command,
         )
-    if _looks_destructive_shell_command(detection_command_text, cwd=cwd, home_dir=home_dir):
+    execution_context_reason = _shell_execution_context_validation_reason(execution_context)
+    if execution_context.directory_change_present and execution_context_reason is not None:
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="unresolved shell execution context",
+            reason=(
+                "Guard could not prove the working directory for every shell segment and requires one "
+                f"conservative decision ({execution_context_reason}). Use a literal, existing in-workspace directory "
+                "with deterministic cd/pushd/popd control flow, or run the command from the intended directory."
+            ),
+            canonical_command=canonical_command,
+            shell_execution_context_hash=execution_context.context_hash,
+            shell_execution_context_reason_code=execution_context_reason,
+            shell_execution_effective_cwds=tuple(str(path) for path in execution_context.effective_cwds),
+        )
+    if _looks_destructive_shell_command(
+        detection_command_text,
+        cwd=cwd,
+        home_dir=home_dir,
+        execution_context=execution_context,
+    ):
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
@@ -1208,6 +1287,15 @@ def _destructive_shell_tool_action_request(
                 "the local machine before the user confirms the action."
             ),
             canonical_command=canonical_command,
+            shell_execution_context_hash=(
+                execution_context.context_hash if execution_context.directory_change_present else None
+            ),
+            shell_execution_context_reason_code=execution_context.reason_code,
+            shell_execution_effective_cwds=(
+                tuple(str(path) for path in execution_context.effective_cwds)
+                if execution_context.directory_change_present
+                else ()
+            ),
         )
     github_assessment = _github_shell_capability_assessment(
         detection_command_text,
@@ -1244,6 +1332,16 @@ def _destructive_shell_tool_action_request(
             reason=rule.description,
             canonical_command=canonical_command,
         )
+    return None
+
+
+def _shell_execution_context_validation_reason(context: ShellExecutionContext) -> str | None:
+    if not context.complete:
+        return context.reason_code
+    for segment in context.segments:
+        _effective_cwd, reason = validate_shell_execution_segment(context, segment)
+        if reason is not None:
+            return reason
     return None
 
 
@@ -3881,6 +3979,7 @@ def build_tool_action_request_artifact(
                 "tool_name": request.normalized_tool_name,
                 "command_text": request.command_text,
                 "action_class": request.action_class,
+                "shell_execution_context_hash": request.shell_execution_context_hash,
             },
             sort_keys=True,
         ).encode("utf-8")
@@ -3898,6 +3997,16 @@ def build_tool_action_request_artifact(
             f"Guard normalized the transparent wrapper chain {' -> '.join(wrapper_chain)} "
             f"before evaluation. {request.reason}"
         )
+    execution_context_metadata: dict[str, object] = {}
+    if request.shell_execution_context_hash is not None:
+        effective_cwds = list(request.shell_execution_effective_cwds)
+        execution_context_metadata = {
+            "shell_execution_context_hash": request.shell_execution_context_hash,
+            "shell_execution_context_complete": request.shell_execution_context_reason_code is None,
+            "shell_execution_context_reason_code": request.shell_execution_context_reason_code,
+            "shell_execution_effective_cwds": effective_cwds,
+            "effective_cwd": effective_cwds[-1] if effective_cwds else None,
+        }
     return GuardArtifact(
         artifact_id=f"{harness}:{source_scope}:tool-action:{fingerprint}",
         name=f"{request.tool_name} {request.action_class}",
@@ -3921,6 +4030,7 @@ def build_tool_action_request_artifact(
             "risk_classes": list(evaluation.risk_classes),
             "command_parse_confidence": evaluation.command.confidence,
             "command_uncertainty_reason": evaluation.command.uncertainty_reason,
+            **execution_context_metadata,
         },
     )
 
@@ -3940,6 +4050,28 @@ def _request_with_wrapper_context(
         raw_command_text=raw_command_text,
         wrapper_chain=wrapper_chain,
         canonical_command=request.canonical_command,
+        shell_execution_context_hash=request.shell_execution_context_hash,
+        shell_execution_context_reason_code=request.shell_execution_context_reason_code,
+        shell_execution_effective_cwds=request.shell_execution_effective_cwds,
+    )
+
+
+def _request_with_shell_execution_context(
+    request: ToolActionRequestMatch,
+    *,
+    command_text: str,
+    cwd: Path | None,
+    context: ShellExecutionContext | None = None,
+) -> ToolActionRequestMatch:
+    context = context or model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
+    if not context.directory_change_present:
+        return request
+    reason_code = _shell_execution_context_validation_reason(context)
+    return replace(
+        request,
+        shell_execution_context_hash=context.context_hash,
+        shell_execution_context_reason_code=reason_code,
+        shell_execution_effective_cwds=tuple(str(path) for path in context.effective_cwds),
     )
 
 
@@ -4708,10 +4840,62 @@ def _looks_destructive_shell_command(
     *,
     cwd: Path | None = None,
     home_dir: Path | None = None,
+    execution_context: ShellExecutionContext | None = None,
+    _execution_context_applied: bool = False,
 ) -> bool:
     normalized = command_text.strip()
     if not normalized:
         return False
+    if not _execution_context_applied:
+        execution_context = execution_context or model_shell_execution_context(
+            normalized,
+            cwd=cwd,
+            workspace_root=cwd,
+        )
+        if execution_context.directory_change_present:
+            if not execution_context.complete:
+                return True
+            has_heredoc = bool(extract_heredocs(normalized))
+            heredoc_segment_cwds: list[Path] = []
+            for context_segment in execution_context.segments:
+                if context_segment.directory_operation is not None:
+                    continue
+                segment_cwd, validation_reason = validate_shell_execution_segment(
+                    execution_context,
+                    context_segment,
+                )
+                if segment_cwd is None or validation_reason is not None:
+                    return True
+                command_name, command_index = _shell_segment_primary_command(list(context_segment.tokens))
+                if (
+                    command_name in _SAFE_STATIC_SHELL_COMMANDS
+                    and command_index is not None
+                    and not _static_shell_segment_is_safe(list(context_segment.tokens[command_index + 1 :]))
+                ):
+                    return True
+                segment_has_heredoc = any(token.startswith("<<") for token in context_segment.tokens)
+                if segment_has_heredoc:
+                    heredoc_segment_cwds.append(segment_cwd)
+                elif _looks_destructive_shell_command(
+                    context_segment.command_text,
+                    cwd=segment_cwd,
+                    home_dir=home_dir,
+                    _execution_context_applied=True,
+                ):
+                    return True
+            if has_heredoc:
+                if len(heredoc_segment_cwds) != 1:
+                    return True
+                return _looks_destructive_shell_command(
+                    normalized,
+                    cwd=heredoc_segment_cwds[0],
+                    home_dir=home_dir,
+                    _execution_context_applied=True,
+                )
+            contextual_parts = _split_shell_parts(normalized)
+            return _contains_prior_pytest_state_mutation(contextual_parts) or _contains_pytest_env_shell_script_wrapper(
+                contextual_parts
+            )
     if _is_literal_cat_heredoc_to_stdout(normalized):
         return False
     for substitution_payload in _shell_command_substitution_payloads(normalized):

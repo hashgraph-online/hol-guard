@@ -103,6 +103,9 @@ class PackageIntent:
     flags: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
     local_executions: tuple[LocalPackageExecutionEvidence, ...] = ()
+    execution_context_hashes: tuple[str, ...] = ()
+    execution_context_cwds: tuple[str, ...] = ()
+    execution_context_reason_codes: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
@@ -148,6 +151,9 @@ def build_package_request_artifact(
                 "manifest_paths": list(manifest_paths),
                 "lockfile_paths": list(lockfile_paths),
                 "local_executions": [evidence.to_dict() for evidence in intent.local_executions],
+                "execution_context_hashes": list(intent.execution_context_hashes),
+                "execution_context_cwds": list(intent.execution_context_cwds),
+                "execution_context_reason_codes": list(intent.execution_context_reason_codes),
             },
             sort_keys=True,
         ).encode("utf-8")
@@ -170,6 +176,11 @@ def build_package_request_artifact(
             "flags": list(intent.flags),
             "notes": list(intent.notes),
             "local_executions": [evidence.to_dict() for evidence in intent.local_executions],
+            "shell_execution_context_hashes": list(intent.execution_context_hashes),
+            "shell_execution_effective_cwds": list(intent.execution_context_cwds),
+            "shell_execution_context_reason_codes": list(intent.execution_context_reason_codes),
+            "shell_execution_context_complete": not intent.execution_context_reason_codes,
+            "effective_cwd": intent.execution_context_cwds[-1] if intent.execution_context_cwds else None,
             "redacted_command": intent.redacted_command,
             "request_summary": package_request_summary(intent),
             "runtime_request_signals": [f"invokes a package {intent.intent_kind} request via {intent.package_manager}"],

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 
 import pytest
@@ -1047,6 +1048,7 @@ def test_tool_action_request_classifier_blocks_mutating_python_module_invocation
 
 
 def test_tool_action_request_classifier_allows_safe_ruff_fix_invocations(tmp_path):
+    (tmp_path / "repo").mkdir()
     for command in (
         "python -m ruff check --fix .",
         "python -m ruff check --fix-only .",
@@ -1138,7 +1140,8 @@ def test_tool_action_request_classifier_skips_perl_sleep_wait():
     assert request is None
 
 
-def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trailer():
+def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trailer(tmp_path):
+    (tmp_path / "hol-guard").mkdir()
     request = extract_sensitive_tool_action_request(
         "bash",
         {
@@ -1151,6 +1154,7 @@ def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trai
                 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>" 2>&1'
             )
         },
+        cwd=tmp_path,
     )
 
     assert request is None
@@ -1551,7 +1555,8 @@ NODE"""
     )
 
     assert request is not None
-    assert request.action_class == "destructive shell command"
+    assert request.action_class == "unresolved shell execution context"
+    assert request.shell_execution_context_reason_code == "shell_cwd_workspace_escape"
 
 
 def test_tool_action_request_classifier_detects_node_heredoc_setup_command_substitution():
@@ -1566,7 +1571,8 @@ NODE"""
     )
 
     assert request is not None
-    assert request.action_class == "destructive shell command"
+    assert request.action_class == "unresolved shell execution context"
+    assert request.shell_execution_context_reason_code == "shell_cwd_unresolved_expression"
 
 
 def test_tool_action_request_classifier_detects_node_heredoc_dynamic_path_traversal_placeholder():
@@ -2628,12 +2634,15 @@ def test_tool_action_request_classifier_allows_read_only_python_heredoc_debuggin
     assert request is None
 
 
-def test_tool_action_request_classifier_allows_read_only_python_heredoc_debugging_after_cd():
+def test_tool_action_request_classifier_allows_read_only_python_heredoc_debugging_after_cd(tmp_path):
+    fixture_dir = tmp_path / "hashgraph-online"
+    fixture_dir.mkdir()
+    (fixture_dir / "bounty_submissions.txt").write_text("fixture row\n", encoding="utf-8")
     request = extract_sensitive_tool_action_request(
         "bash",
         {
             "command": (
-                "cd /tmp/hol-guard-fixtures/hashgraph-online && python - <<'PY'\n"
+                f"cd {shlex.quote(str(fixture_dir))} && python - <<'PY'\n"
                 "from pathlib import Path\n"
                 "text = Path('bounty_submissions.txt').read_text()\n"
                 "print('bytes', len(text))\n"
@@ -2641,6 +2650,7 @@ def test_tool_action_request_classifier_allows_read_only_python_heredoc_debuggin
                 "PY"
             )
         },
+        cwd=tmp_path,
     )
 
     assert request is None
