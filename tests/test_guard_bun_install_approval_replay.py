@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.approval_scope_support import IneligibleApprovalScopeError
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.local_supply_chain import build_package_protect_payload
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -84,15 +85,16 @@ def test_bun_install_approval_never_lowers_current_block_when_integrity_is_degra
         ),
         "2026-06-14T00:00:30Z",
     )
-    apply_approval_resolution(
-        store=store,
-        request_id="req-bun-install",
-        action="allow",
-        scope="artifact",
-        workspace=None,
-        reason="same bun install",
-        now="2026-06-14T00:01:00Z",
-    )
+    with pytest.raises(IneligibleApprovalScopeError, match="request_action_not_overridable"):
+        apply_approval_resolution(
+            store=store,
+            request_id="req-bun-install",
+            action="allow",
+            scope="artifact",
+            workspace=None,
+            reason="same bun install",
+            now="2026-06-14T00:01:00Z",
+        )
     store._policy_integrity_secret_store = None
 
     first_retry_payload, first_retry_rc = build_package_protect_payload(
@@ -125,11 +127,6 @@ def test_bun_install_approval_never_lowers_current_block_when_integrity_is_degra
         assert retry_receipt["artifact_hash"] == receipt["artifact_hash"]
         evaluation = retry_payload["supply_chain_evaluation"]
         assert isinstance(evaluation, dict)
-        assert any(
-            isinstance(reason, dict)
-            and reason.get("code") in {"approval_reuse_current_block", "approval_reuse_integrity_failure"}
-            for reason in evaluation.get("reasons", [])
-        )
         assert not any(
             isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
             for reason in evaluation.get("reasons", [])

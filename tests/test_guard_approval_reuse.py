@@ -483,7 +483,7 @@ def test_approval_resolution_preserves_exact_context_token_across_every_scope(tm
         ),
         "2026-07-17T12:00:00+00:00",
     )
-    apply_approval_resolution(
+    resolved = apply_approval_resolution(
         store=store,
         request_id=f"request-context-{scope}",
         action="allow",
@@ -495,8 +495,10 @@ def test_approval_resolution_preserves_exact_context_token_across_every_scope(tm
     )
 
     stored = store.list_policy_decisions()
-    assert len(stored) == 1
-    assert stored[0]["artifact_hash"] == current_token
+    assert stored == []
+    assert resolved["applied_scope"] == "artifact"
+    if scope != "artifact":
+        assert resolved["scope_warning"] == "legacy_scope_narrowed_to_artifact"
     assert (
         store.resolve_policy(
             "codex",
