@@ -62,6 +62,15 @@ def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _command_handler_argv(handler: dict[str, object]) -> tuple[str, ...]:
+    command = handler.get("command")
+    args = handler.get("args")
+    assert isinstance(command, str)
+    assert isinstance(args, list)
+    assert all(isinstance(arg, str) for arg in args)
+    return (command, *args)
+
+
 def _seed_guard_cloud(
     store, *, workspace_id="workspace-1", sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"
 ):
@@ -2887,34 +2896,28 @@ args = ["workspace-skill.js", "--changed"]
         assert pretool_entries[0] == {"command": "python guard-pre.py"}
         guard_pretool_entry = pretool_entries[1]
         assert install_output["managed_install"]["manifest"]["notes"][0]
-        expected_session_start_command = ClaudeCodeHarnessAdapter._session_start_command(
-            HarnessContext(
-                home_dir=home_dir,
-                workspace_dir=workspace_dir,
-                guard_home=home_dir,
-            )
+        context = HarnessContext(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            guard_home=home_dir,
         )
+        expected_session_start_argv = ClaudeCodeHarnessAdapter._session_start_command_parts(context)
         assert guard_pretool_entry["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
         assert (
-            install_settings_payload["hooks"]["SessionStart"][0]["hooks"][0]["command"]
-            == expected_session_start_command
+            _command_handler_argv(install_settings_payload["hooks"]["SessionStart"][0]["hooks"][0])
+            == expected_session_start_argv
         )
-        expected_hook_command = ClaudeCodeHarnessAdapter._daemon_hook_command(
-            HarnessContext(
-                home_dir=home_dir,
-                workspace_dir=workspace_dir,
-                guard_home=home_dir,
-            )
-        )
+        expected_hook_argv = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)
         assert guard_pretool_entry["hooks"][0]["type"] == "command"
-        assert guard_pretool_entry["hooks"][0]["command"] == expected_hook_command
+        assert _command_handler_argv(guard_pretool_entry["hooks"][0]) == expected_hook_argv
         assert "url" not in guard_pretool_entry["hooks"][0]
         assert install_settings_payload["hooks"].get("UserPromptSubmit", []) == []
         assert install_settings_payload["hooks"]["Notification"][0]["matcher"] == "permission_prompt"
-        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["type"] == "command"
-        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["command"] == expected_hook_command
-        assert "url" not in install_settings_payload["hooks"]["Notification"][0]["hooks"][0]
-        assert install_settings_payload["hooks"]["Stop"][0]["hooks"][0]["command"] == expected_hook_command
+        notification_handler = install_settings_payload["hooks"]["Notification"][0]["hooks"][0]
+        assert notification_handler["type"] == "command"
+        assert _command_handler_argv(notification_handler) == expected_hook_argv
+        assert "url" not in notification_handler
+        assert _command_handler_argv(install_settings_payload["hooks"]["Stop"][0]["hooks"][0]) == expected_hook_argv
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
         assert settings_payload["hooks"]["SessionStart"] == []
@@ -3172,7 +3175,7 @@ args = ["workspace-skill.js", "--changed"]
         assert len(payload["hooks"]["Notification"]) == 1
         assert len(payload["hooks"]["Stop"]) == 1
         pretool_hook_commands = [
-            hook["command"]
+            "\0".join(_command_handler_argv(hook))
             for hook in payload["hooks"]["PreToolUse"][0]["hooks"]
             if isinstance(hook, dict) and isinstance(hook.get("command"), str)
         ]
@@ -3180,7 +3183,7 @@ args = ["workspace-skill.js", "--changed"]
         assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in pretool_hook_commands[0]
         assert "legacy-guard-home" not in pretool_hook_commands[0]
         notification_hook_commands = [
-            hook["command"]
+            "\0".join(_command_handler_argv(hook))
             for hook in payload["hooks"]["Notification"][0]["hooks"]
             if isinstance(hook, dict) and isinstance(hook.get("command"), str)
         ]
