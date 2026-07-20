@@ -12,6 +12,7 @@ from .data_flow import (
     extract_command_substitutions,
     extract_input_redirects,
 )
+from .env_wrapper import parse_env_wrapper
 from .kubernetes_command_support import (
     WRITE_ONLY_COMMANDS,
     is_output_redirect_target,
@@ -24,7 +25,6 @@ from .kubernetes_command_support import (
 _ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _HEREDOC_WRAPPER_COMMANDS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
 _HEREDOC_WRAPPER_OPTIONS_WITH_VALUES = {
-    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
     "nice": frozenset({"-n", "--adjustment"}),
     "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
     "sudo": frozenset(
@@ -125,25 +125,6 @@ def kubernetes_heredoc_secret_source(command: str) -> str | None:
         if script_reads_sensitive_env(body):
             return "Kubernetes pod environment"
     return None
-
-
-def _env_looks_like_wrapper(tokens: tuple[str, ...]) -> bool:
-    index = 0
-    saw_wrapper_syntax = False
-    while index < len(tokens):
-        token = tokens[index]
-        if token == "--":
-            return saw_wrapper_syntax and index + 1 < len(tokens)
-        if _ASSIGNMENT_PATTERN.match(token):
-            saw_wrapper_syntax = True
-            index += 1
-            continue
-        if token.startswith("-"):
-            saw_wrapper_syntax = True
-            index += _wrapper_option_tokens_consumed("env", token)
-            continue
-        return saw_wrapper_syntax
-    return False
 
 
 def _interpreter_reads_stdin(args: tuple[str, ...]) -> bool:
@@ -377,8 +358,20 @@ def _unwrap_heredoc_remote_command(tokens: tuple[str, ...]) -> tuple[str | None,
         command_name = Path(token).name.lower()
         if command_name not in _HEREDOC_WRAPPER_COMMANDS:
             return command_name, tokens[index + 1 :]
-        if command_name == "env" and not _env_looks_like_wrapper(tokens[index + 1 :]):
-            return command_name, tokens[index + 1 :]
+        if command_name == "env":
+            parsed = parse_env_wrapper(tokens[index + 1 :])
+            if parsed.complete and (
+                not parsed.executable_argv or parsed.executable_argv[0] in {"&&", "||", ";", "|", "|&", "&"}
+            ):
+                return command_name, tokens[index + 1 :]
+            if not parsed.complete:
+                return None, ()
+            if parsed.split_expansions:
+                return _unwrap_heredoc_remote_command(parsed.executable_argv)
+            if parsed.command_index is None:
+                return None, ()
+            index += parsed.command_index + 1
+            continue
         index += 1
         while index < len(tokens):
             current = tokens[index]

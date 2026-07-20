@@ -21,6 +21,7 @@ from .command_evaluation import evaluate_command
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .command_model import CanonicalCommand, parse_shell_command
 from .data_flow import extract_heredocs
+from .env_wrapper import parse_env_wrapper
 from .false_positive_rules import (
     SOURCE_INSPECTION_BENIGN_DOTFILES,
     SOURCE_INSPECTION_EXTENSIONS,
@@ -564,7 +565,6 @@ _GIT_GLOBAL_OPTIONS_WITH_VALUE = frozenset(
     }
 )
 _WRAPPER_FLAGS_WITH_VALUES = {
-    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
     "exec": frozenset({"-a"}),
     "nice": frozenset({"-n", "--adjustment"}),
     "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
@@ -1640,42 +1640,15 @@ def _gh_pr_create_body_has_shell_command_substitution(command_text: str, *, dept
 
 
 def _gh_pr_env_split_string_payloads_with_substitution(segment: list[_ShellTokenWithQuoteContext]) -> tuple[str, ...]:
-    payloads: list[str] = []
     env_index = _shell_segment_env_index([token.plain for token in segment])
     if env_index is None:
         return ()
-    index = env_index + 1
-    while index < len(segment):
-        token = segment[index]
-        plain = token.plain
-        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(plain)):
-            index += 1
-            continue
-        if plain == "--":
-            break
-        if not plain.startswith("-"):
-            break
-        if plain in {"-S", "--split-string"} and index + 1 < len(segment):
-            payload_token = segment[index + 1]
-            if _shell_command_substitution_payloads(payload_token.raw):
-                payloads.append(payload_token.plain.strip())
-            index += _wrapper_option_tokens_consumed("env", plain)
-            continue
-        if plain.startswith("--split-string="):
-            if _shell_command_substitution_payloads(token.raw):
-                payloads.append(plain.split("=", 1)[1].strip())
-            index += _wrapper_option_tokens_consumed("env", plain)
-            continue
-        clustered_payload = _env_clustered_split_string_payload(plain)
-        if clustered_payload is not None:
-            if clustered_payload:
-                if _shell_command_substitution_payloads(token.raw):
-                    payloads.append(clustered_payload.strip())
-            elif index + 1 < len(segment) and _shell_command_substitution_payloads(segment[index + 1].raw):
-                payloads.append(segment[index + 1].plain.strip())
-            index += _wrapper_option_tokens_consumed("env", plain)
-            continue
-        index += _wrapper_option_tokens_consumed("env", plain)
+    parsed = parse_env_wrapper([token.plain for token in segment[env_index + 1 :]])
+    payloads: list[str] = []
+    for expansion in parsed.split_expansions:
+        source_index = env_index + 1 + expansion.source_index
+        if source_index < len(segment) and _shell_command_substitution_payloads(segment[source_index].raw):
+            payloads.append(expansion.payload.strip())
     return tuple(payload for payload in payloads if payload)
 
 
@@ -1824,28 +1797,10 @@ def _skip_shell_select_header(segment: list[_ShellTokenWithQuoteContext], index:
 
 
 def _skip_env_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
-    while index < len(segment):
-        plain = segment[index].plain
-        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(plain)):
-            index += 1
-            continue
-        if plain in {"-i", "-0", "--ignore-environment", "--null"}:
-            index += 1
-            continue
-        if plain == "--":
-            index += 1
-            break
-        if plain in {"-u", "-C", "-S", "--unset", "--chdir", "--split-string"}:
-            index += 2
-            continue
-        if any(plain.startswith(f"{flag}=") for flag in {"--unset", "--chdir", "--split-string"}):
-            index += 1
-            continue
-        if plain.startswith("-"):
-            index += 1
-            continue
-        break
-    return index
+    parsed = parse_env_wrapper([token.plain for token in segment[index:]])
+    if not parsed.complete or parsed.command_index is None or parsed.split_expansions:
+        return len(segment)
+    return index + parsed.command_index
 
 
 def _skip_sudo_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
@@ -4534,32 +4489,18 @@ def _docker_sensitive_reason(command_text: str, *, _inherited_sensitive_env: boo
     exported_env_context: dict[str, bool] = {}
     for segment in _iter_shell_command_segments(parts):
         if segment and _normalized_shell_command_name(segment[0]) == "env":
-            env_tokens = segment[1:]
-            env_sensitive = _inherited_sensitive_env or _docker_env_context_is_sensitive(env_tokens)
-            remaining_tokens: list[str] = []
-            split_found = False
-            for i, tok in enumerate(env_tokens):
-                split_payload = _docker_env_split_string_payload(
-                    tok,
-                    env_tokens[i + 1] if i + 1 < len(env_tokens) else None,
+            parsed_env = parse_env_wrapper(segment[1:])
+            if not parsed_env.complete:
+                return "env-wrapper-unresolved"
+            env_sensitive = False if parsed_env.option_effects.ignore_environment else _inherited_sensitive_env
+            env_sensitive = env_sensitive or _docker_env_assignments_are_sensitive(
+                parsed_env.environment_delta.assignments
+            )
+            if parsed_env.executable_argv:
+                remaining_reason = _docker_sensitive_reason(
+                    shlex.join(parsed_env.executable_argv),
+                    _inherited_sensitive_env=env_sensitive,
                 )
-                if split_payload is not None:
-                    split_found = True
-                    nested_reason = _docker_sensitive_reason(split_payload)
-                    if nested_reason is not None:
-                        return nested_reason
-                    if _docker_env_context_is_sensitive(_split_shell_parts(split_payload)):
-                        env_sensitive = True
-                    consumed = 1 if tok in {"--split-string", "-S"} else 0
-                    remaining_tokens = env_tokens[i + consumed + 1 :]
-                    break
-            if not split_found:
-                remaining_tokens = [
-                    tok for tok in env_tokens if not tok.startswith("-") and not _SHELL_ASSIGNMENT_PATTERN.match(tok)
-                ]
-            remaining_cmd = " ".join(remaining_tokens)
-            if remaining_cmd:
-                remaining_reason = _docker_sensitive_reason(remaining_cmd, _inherited_sensitive_env=env_sensitive)
                 if remaining_reason is not None:
                     return remaining_reason
             continue
@@ -4703,22 +4644,27 @@ def _docker_global_context_value_is_sensitive(flag: str, value: str) -> bool:
 
 
 def _docker_env_context_is_sensitive(prefix_tokens: list[str]) -> bool:
-    index = 0
-    while index < len(prefix_tokens):
-        token = prefix_tokens[index]
-        assignment = _docker_env_assignment(token)
-        if assignment is not None:
-            key, value = assignment
-            if _docker_env_context_value_is_sensitive(key, value):
-                return True
-        split_payload = _docker_env_split_string_payload(
-            token,
-            prefix_tokens[index + 1] if index + 1 < len(prefix_tokens) else None,
-        )
-        if split_payload is not None and _docker_env_context_is_sensitive(_split_shell_parts(split_payload)):
+    env_index = next(
+        (index for index, token in enumerate(prefix_tokens) if _normalized_shell_command_name(token) == "env"),
+        None,
+    )
+    if env_index is not None:
+        parsed = parse_env_wrapper(prefix_tokens[env_index + 1 :])
+        if not parsed.complete:
             return True
-        index += 1
-    return False
+        return _docker_env_assignments_are_sensitive(parsed.environment_delta.assignments)
+    return any(
+        assignment is not None and _docker_env_context_value_is_sensitive(*assignment)
+        for assignment in (_docker_env_assignment(token) for token in prefix_tokens)
+    )
+
+
+def _docker_env_assignments_are_sensitive(assignments: tuple[tuple[str, str], ...]) -> bool:
+    return any(
+        name.upper() in _DOCKER_SENSITIVE_CONTEXT_ENV_KEYS
+        and _docker_env_context_value_is_sensitive(name.upper(), value)
+        for name, value in assignments
+    )
 
 
 def _docker_exported_env_context_sensitivity(args: list[str]) -> dict[str, bool]:
@@ -4743,19 +4689,6 @@ def _docker_env_assignment(token: str) -> tuple[str, str] | None:
     if key not in _DOCKER_SENSITIVE_CONTEXT_ENV_KEYS:
         return None
     return key, value.strip().strip("\"'")
-
-
-def _docker_env_split_string_payload(token: str, next_token: str | None) -> str | None:
-    if token in {"--split-string", "-S"}:
-        return next_token or ""
-    if token.startswith("--split-string="):
-        return token.split("=", 1)[1]
-    if token.startswith("-S"):
-        return token[2:] or (next_token or "")
-    clustered_payload = _env_clustered_split_string_payload(token)
-    if clustered_payload is None:
-        return None
-    return clustered_payload or (next_token or "")
 
 
 def _docker_env_context_value_is_sensitive(key: str, value: str) -> bool:
@@ -6203,14 +6136,13 @@ def _shell_segment_primary_command(segment: list[str]) -> tuple[str | None, int 
             continue
         command_name = _normalized_shell_command_name(normalized_token)
         if command_name == "env":
-            index += 1
-            while index < len(segment):
-                token = segment[index]
-                if not token.startswith("-") and not _SHELL_ASSIGNMENT_PATTERN.match(token):
-                    break
-                tokens_consumed = _wrapper_option_tokens_consumed(command_name, token)
-                index += tokens_consumed
-                continue
+            parsed = parse_env_wrapper(segment[index + 1 :])
+            command_index = parsed.command_index
+            if parsed.complete and command_index is None:
+                return command_name, index
+            if not parsed.complete or parsed.split_expansions or command_index is None:
+                return None, None
+            index += command_index + 1
             continue
         if command_name in _SHELL_COMMAND_WRAPPERS:
             index += 1
@@ -6391,38 +6323,8 @@ def _env_split_string_payloads(parts: list[str]) -> tuple[str, ...]:
         env_index = _shell_segment_env_index(segment)
         if env_index is None:
             continue
-        index = env_index + 1
-        while index < len(segment):
-            token = segment[index]
-            if _SHELL_ASSIGNMENT_PATTERN.match(token):
-                index += 1
-                continue
-            if token == "--":
-                break
-            if not token.startswith("-"):
-                break
-            if token in {"-S", "--split-string"} and index + 1 < len(segment):
-                payload = segment[index + 1].strip()
-                if payload:
-                    payloads.append(payload)
-                index += _wrapper_option_tokens_consumed("env", token)
-                continue
-            if token.startswith("--split-string="):
-                payload = token.split("=", 1)[1].strip()
-                if payload:
-                    payloads.append(payload)
-                index += _wrapper_option_tokens_consumed("env", token)
-                continue
-            clustered_split_string_payload = _env_clustered_split_string_payload(token)
-            if clustered_split_string_payload is not None:
-                payload = clustered_split_string_payload.strip()
-                if not payload and index + 1 < len(segment):
-                    payload = segment[index + 1].strip()
-                if payload:
-                    payloads.append(payload)
-                index += _wrapper_option_tokens_consumed("env", token)
-                continue
-            index += _wrapper_option_tokens_consumed("env", token)
+        parsed = parse_env_wrapper(segment[env_index + 1 :])
+        payloads.extend(expansion.payload for expansion in parsed.split_expansions if expansion.payload.strip())
     return tuple(payloads)
 
 
@@ -6762,10 +6664,6 @@ def _replace_unquoted_newlines_with_separators(command_text: str) -> str:
 def _wrapper_option_tokens_consumed(command_name: str, token: str) -> int:
     if not token.startswith("-"):
         return 1
-    if command_name == "env":
-        env_short_option_tokens = _env_short_option_tokens_consumed(token)
-        if env_short_option_tokens is not None:
-            return env_short_option_tokens
     if command_name == "sudo":
         sudo_short_option_tokens = _sudo_short_option_tokens_consumed(token)
         if sudo_short_option_tokens is not None:
@@ -6775,18 +6673,6 @@ def _wrapper_option_tokens_consumed(command_name: str, token: str) -> int:
         return 2
     if _wrapper_flag_has_attached_value(command_name, token):
         return 1
-    return 1
-
-
-def _env_short_option_tokens_consumed(token: str) -> int | None:
-    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
-        return None
-    for index, flag_character in enumerate(token[1:], start=1):
-        if flag_character not in {"C", "S", "u"}:
-            continue
-        if index < len(token) - 1:
-            return 1
-        return 2
     return 1
 
 
@@ -6802,28 +6688,7 @@ def _sudo_short_option_tokens_consumed(token: str) -> int | None:
     return 1
 
 
-def _env_clustered_split_string_payload(token: str) -> str | None:
-    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
-        return None
-    split_index = token.find("S", 1)
-    if split_index == -1:
-        return None
-    if split_index + 1 >= len(token):
-        return ""
-    return token[split_index + 1 :]
-
-
 def _wrapper_flag_has_attached_value(command_name: str, token: str) -> bool:
-    if command_name == "env":
-        return any(
-            token.startswith(prefix)
-            for prefix in (
-                "--unset=",
-                "--chdir=",
-                "--split-string=",
-                "-C",
-            )
-        )
     if command_name == "nice":
         return token.startswith("--adjustment=") or (token.startswith("-n") and token != "-n")
     if command_name == "stdbuf":
@@ -6875,27 +6740,10 @@ def _is_shell_env_assignment_token(token: str) -> bool:
 
 def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
     command_names: list[str] = []
-    expect_command = True
-    for part in parts:
-        token = part.strip()
-        if not token:
-            continue
-        if token in _SHELL_COMMAND_SEPARATORS:
-            expect_command = True
-            continue
-        normalized_token = _shell_command_token_without_attached_redirection(token)
-        if not normalized_token:
-            continue
-        if not expect_command:
-            continue
-        if _is_shell_env_assignment_token(normalized_token):
-            continue
-        normalized_command = _normalized_shell_command_name(normalized_token)
-        if normalized_command in {"env", "command", "builtin", "nohup", "nice", "sudo", "time", "stdbuf"}:
-            expect_command = True
-            continue
-        command_names.append(normalized_command)
-        expect_command = False
+    for segment in _iter_shell_command_segments(parts):
+        command_name, _command_index = _shell_segment_primary_command(segment)
+        if command_name is not None:
+            command_names.append(command_name)
     return tuple(command_names)
 
 
@@ -6964,43 +6812,19 @@ def _shell_command_targets_pytest(command_text: str, *, depth: int = 0) -> bool:
 
 def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
     scripts: list[str] = []
-    current_command: str | None = None
-    expect_command = True
-    index = 0
-    while index < len(parts):
-        token = parts[index].strip()
-        if not token:
-            index += 1
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
             continue
-        if token in _SHELL_COMMAND_SEPARATORS:
-            current_command = None
-            expect_command = True
-            index += 1
+        if command_name not in _SHELL_COMMAND_STRING_INTERPRETERS and not _is_script_interpreter_command(command_name):
             continue
-        normalized_token = token.lstrip("(").rstrip(")")
-        if not normalized_token:
-            index += 1
-            continue
-        if expect_command:
-            if _is_shell_env_assignment_token(normalized_token):
-                index += 1
-                continue
-            normalized_command = _normalized_shell_command_name(normalized_token)
-            if normalized_command in {"env", "command", "builtin", "nohup", "nice", "time", "stdbuf"}:
-                current_command = None
-                index += 1
-                continue
-            current_command = normalized_command
-            expect_command = False
-            index += 1
-            continue
-        if current_command is not None and _is_script_interpreter_command(current_command):
-            flag_payload = _interpreter_flag_payload(parts, index)
+        index = command_index + 1
+        while index < len(segment):
+            flag_payload = _interpreter_flag_payload(segment, index)
             if flag_payload is not None:
                 scripts.append(flag_payload.script_text)
-                index += flag_payload.tokens_consumed
-                continue
-        index += 1
+                break
+            index += 1
     return tuple(scripts)
 
 
@@ -7644,8 +7468,46 @@ def _pytest_binary_segment_is_safe(command_token: str, module_args: list[str], *
 
 
 def _shell_segment_sets_env_key(segment: list[str], command_index: int, env_key: str) -> bool:
+    is_set, _value, complete = _shell_segment_explicit_env_value(segment, command_index, env_key)
+    return is_set or not complete
+
+
+def _shell_segment_explicit_env_value(
+    segment: list[str],
+    command_index: int,
+    env_key: str,
+) -> tuple[bool, str | None, bool]:
     normalized_env_key = env_key.upper()
-    return any(_shell_env_assignment_key(token) == normalized_env_key for token in segment[:command_index])
+    is_set = False
+    value: str | None = None
+    index = 0
+    while index < command_index:
+        token = _shell_command_token_without_attached_redirection(segment[index])
+        assignment_key = _shell_env_assignment_key(token)
+        if assignment_key == normalized_env_key:
+            is_set = True
+            value = token.split("=", 1)[1] if "=" in token else ""
+            index += 1
+            continue
+        if _normalized_shell_command_name(token) != "env":
+            index += 1
+            continue
+        parsed = parse_env_wrapper(segment[index + 1 :])
+        if not parsed.complete:
+            return is_set, value, False
+        if parsed.option_effects.ignore_environment or any(
+            name.upper() == normalized_env_key for name in parsed.option_effects.unset_names
+        ):
+            is_set = False
+            value = None
+        for name, assignment_value in parsed.environment_delta.assignments:
+            if name.upper() == normalized_env_key:
+                is_set = True
+                value = assignment_value
+        if parsed.command_index is None or parsed.split_expansions:
+            break
+        index += parsed.command_index + 1
+    return is_set, value, True
 
 
 def _shell_directory_setup_segment_is_safe(command_name: str, segment_args: list[str]) -> bool:
@@ -7727,19 +7589,12 @@ def _shell_segment_uses_env_split_string_wrapper(segment: list[str], command_ind
         if command_name != "env":
             index += 1
             continue
-        index += 1
-        while index < command_index:
-            token = segment[index]
-            if _SHELL_ASSIGNMENT_PATTERN.match(token):
-                index += 1
-                continue
-            if token in {"-S", "--split-string"} or token.startswith("--split-string="):
-                return True
-            if _env_clustered_split_string_payload(token) is not None:
-                return True
-            if not token.startswith("-"):
-                break
-            index += _wrapper_option_tokens_consumed("env", token)
+        parsed = parse_env_wrapper(segment[index + 1 :])
+        if parsed.split_expansions:
+            return True
+        if not parsed.complete or parsed.command_index is None:
+            break
+        index += parsed.command_index + 1
     return False
 
 
@@ -7751,17 +7606,12 @@ def _shell_segment_uses_env_chdir(segment: list[str], command_index: int) -> boo
         if command_name != "env":
             index += 1
             continue
-        index += 1
-        while index < command_index:
-            token = segment[index]
-            if _SHELL_ASSIGNMENT_PATTERN.match(token):
-                index += 1
-                continue
-            if token in {"-C", "--chdir"} or token.startswith(("-C", "--chdir=")):
-                return True
-            if not token.startswith("-"):
-                break
-            index += _wrapper_option_tokens_consumed("env", token)
+        parsed = parse_env_wrapper(segment[index + 1 :])
+        if parsed.option_effects.chdir is not None:
+            return True
+        if not parsed.complete or parsed.command_index is None or parsed.split_expansions:
+            break
+        index += parsed.command_index + 1
     return False
 
 
@@ -7923,16 +7773,19 @@ def _pythonpath_search_roots_from_segment(
     if cwd is None:
         return []
     search_roots: list[Path] = []
-    for token in segment[:command_index]:
-        if _shell_env_assignment_key(token) != "PYTHONPATH":
+    is_set, path_value, complete = _shell_segment_explicit_env_value(
+        segment,
+        command_index,
+        "PYTHONPATH",
+    )
+    if not complete or not is_set or path_value is None:
+        return search_roots
+    for entry in path_value.split(":"):
+        normalized_entry = entry.strip()
+        if not normalized_entry:
             continue
-        path_value = token.split("=", 1)[1] if "=" in token else ""
-        for entry in path_value.split(":"):
-            normalized_entry = entry.strip()
-            if not normalized_entry:
-                continue
-            candidate = Path(normalized_entry)
-            search_roots.append(candidate if candidate.is_absolute() else cwd / candidate)
+        candidate = Path(normalized_entry)
+        search_roots.append(candidate if candidate.is_absolute() else cwd / candidate)
     return search_roots
 
 
