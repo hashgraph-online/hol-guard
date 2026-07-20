@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 from .command_contained_routine_candidates import contained_routine_candidate_factor
+from .command_critical_floors import command_critical_floor_factors
 from .command_decision_adapter import (
     command_uncertainties,
     decision_factors,
@@ -25,6 +26,10 @@ from .command_rules import CommandRuleMatch, CommandRuleMode, CommandSafetyRule
 from .command_verified_read_candidates import verified_read_candidate_factor
 from .command_workspace_write_candidates import workspace_write_candidate_factors
 from .effect_decision import EffectDecision, EffectDecisionRequest, evaluate_effect_decision
+from .github_workflow_authorization import (
+    GitHubWorkflowAuthorization,
+    github_workflow_authorization_evidence,
+)
 
 CommandDecisionFloor = Literal["allow", "monitor", "review", "block"]
 _FLOOR_RANK: dict[CommandDecisionFloor, int] = {"allow": 0, "monitor": 1, "review": 2, "block": 3}
@@ -97,6 +102,7 @@ def evaluate_command(
     compatibility_reason: str | None = None,
     cwd: Path | None = None,
     home_dir: Path | None = None,
+    workflow_authorization: GitHubWorkflowAuthorization | None = None,
     registry: CommandSafetyExtensionRegistry = BUILT_IN_COMMAND_EXTENSION_REGISTRY,
 ) -> CompositeCommandEvaluation:
     """Evaluate every built-in rule without executing or persisting the command."""
@@ -154,6 +160,12 @@ def evaluate_command(
     contained_routine_candidate = contained_routine_candidate_factor(command)
     verified_read_candidate = verified_read_candidate_factor(command)
     workspace_write_candidates = workspace_write_candidate_factors(command)
+    authorization_evidence = github_workflow_authorization_evidence(
+        workflow_authorization,
+        command_identity=command.security_identity,
+    )
+    critical_floor_factors = command_critical_floor_factors(command, workflow_authorization)
+    authorized_action_class = authorization_evidence[1] if authorization_evidence is not None else None
     if contained_routine_candidate is not None:
         minimum_action = _stronger_floor(minimum_action, "review")
     if verified_read_candidate is not None:
@@ -166,12 +178,17 @@ def evaluate_command(
             factors=(
                 *decision_factors(
                     evidence_batch,
-                    compatibility_action_class=compatibility_action_class,
+                    compatibility_action_class=(
+                        None
+                        if authorized_action_class is not None and compatibility_action_class == authorized_action_class
+                        else compatibility_action_class
+                    ),
                     compatibility_rule=compatibility_rule,
                 ),
                 *((contained_routine_candidate,) if contained_routine_candidate is not None else ()),
                 *((verified_read_candidate,) if verified_read_candidate is not None else ()),
                 *workspace_write_candidates,
+                *critical_floor_factors,
             ),
             uncertainties=tuple(
                 sorted(

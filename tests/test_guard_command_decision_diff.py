@@ -100,16 +100,20 @@ def test_report_reconciles_every_case_without_lowering_or_widening_gaps() -> Non
         str(group["key"]): int(str(group["count"]))
         for group in cast(list[dict[str, object]], legacy["transition_groups"])
     }
-    assert groups == {"allow|review": 26314, "block|block": 4167, "review|review": 20519}
+    assert groups == {
+        "allow|block": 9373,
+        "allow|require-reapproval": 16716,
+        "allow|review": 225,
+        "block|block": 4167,
+        "review|block": 19794,
+        "review|review": 725,
+    }
 
     reconciliation = cast(dict[str, object], report["oracle_reconciliation"])
     assert reconciliation["known_gap_equality"] is True
     assert reconciliation["reconciled_count"] == 51000
     assert reconciliation["unreconciled_count"] == 0
-    assert all(
-        not str(key).startswith(("CDX-060|", "CDX-061|", "CDX-062|"))
-        for key in cast(dict[str, object], reconciliation["legacy_known_gaps"])
-    )
+    assert reconciliation["known_gaps"] == {}
     category_groups = cast(list[dict[str, object]], reconciliation["category_groups"])
     assert sum(int(str(group["count"])) for group in category_groups) == 51000
     assert all(

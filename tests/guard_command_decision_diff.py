@@ -199,7 +199,7 @@ def _generate_decision_diff_report() -> tuple[dict[str, object], float]:
                 "strengthened_above_oracle": "current conservatively exceeds the oracle floor",
             },
             "category_groups": _group_summaries(reconciliation_ids),
-            "legacy_known_gaps": actual_gaps,
+            "known_gaps": actual_gaps,
             "known_gap_equality": True,
             "reconciled_count": reconciled_count,
             "unreconciled_count": unreconciled_count,

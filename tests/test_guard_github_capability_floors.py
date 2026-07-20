@@ -17,6 +17,23 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
 )
 
+_EXPECTED_FLOORS = {
+    "read_local": "allow",
+    "read_remote": "allow",
+    "write_local": "review",
+    "maintain_remote": "review",
+    "content_remote": "review",
+    "merge_remote": "require-reapproval",
+    "publish_remote": "require-reapproval",
+    "workflow_remote": "require-reapproval",
+    "force_remote": "block",
+    "delete_remote": "require-reapproval",
+    "secret_remote": "block",
+    "access_remote": "require-reapproval",
+    "mutate_remote": "require-reapproval",
+    "unknown": "require-reapproval",
+}
+
 
 @pytest.mark.parametrize(
     ("args", "capabilities", "workflow_authorizable"),
@@ -79,31 +96,15 @@ def test_capability_sets_preserve_every_effect(
     assessment = classify_github_cli(args)
 
     assert assessment.capabilities == capabilities
-    assert assessment.action_floor == ("allow" if assessment.capability.startswith("read_") else "review")
+    assert assessment.action_floor == _EXPECTED_FLOORS[assessment.capability]
     assert assessment.workflow_authorizable is workflow_authorizable
 
 
-@pytest.mark.parametrize(
-    "capability",
-    (
-        "maintain_remote",
-        "content_remote",
-        "merge_remote",
-        "publish_remote",
-        "workflow_remote",
-        "force_remote",
-        "delete_remote",
-        "secret_remote",
-        "access_remote",
-        "mutate_remote",
-        "write_local",
-        "unknown",
-    ),
-)
-def test_every_non_read_capability_has_a_review_floor(capability: GitHubCommandCapability) -> None:
+@pytest.mark.parametrize(("capability", "expected"), tuple(_EXPECTED_FLOORS.items()))
+def test_every_capability_has_an_explicit_floor(capability: GitHubCommandCapability, expected: str) -> None:
     assessment = github_assessment(capability, "test.reason", "test detail")
 
-    assert assessment.action_floor == "review"
+    assert assessment.action_floor == expected
 
 
 @pytest.mark.parametrize("capability", ("read_local", "read_remote"))

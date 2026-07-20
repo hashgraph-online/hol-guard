@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import TypedDict, cast
 
 EVALUATION_SHARD_COUNT = 4
-MAX_CONCURRENT_WORKERS = 2
-WORKER_TIMEOUT_SECONDS = 15
+MAX_CONCURRENT_WORKERS = 4
+WORKER_TIMEOUT_SECONDS = 30
 REPO_ROOT = Path(__file__).parents[1]
 SYNTHETIC_CWD = REPO_ROOT / "workspace"
 SYNTHETIC_HOME = REPO_ROOT / "home"
@@ -103,14 +103,20 @@ def _worker_report(worker_index: int, worker_count: int) -> WorkerReport:
     ranks["monitor"] = ranks["warn"]
     groups: defaultdict[str, list[str]] = defaultdict(list)
     streams = chain(
-        zip(iter_benign_corpus(), iter_benign_oracle(), strict=True),
-        zip(iter_adversarial_corpus(), iter_adversarial_oracle(), strict=True),
+        zip(
+            iter_benign_corpus(shard_index=worker_index, shard_count=worker_count),
+            iter_benign_oracle(shard_index=worker_index, shard_count=worker_count),
+            strict=True,
+        ),
+        zip(
+            iter_adversarial_corpus(shard_index=worker_index, shard_count=worker_count),
+            iter_adversarial_oracle(shard_index=worker_index, shard_count=worker_count),
+            strict=True,
+        ),
     )
     started = time.perf_counter()
-    for position, (case, oracle) in enumerate(streams):
-        if position % worker_count != worker_index:
-            continue
-        observed = evaluate_command(case.command, cwd=SYNTHETIC_CWD, home_dir=SYNTHETIC_HOME).minimum_action
+    for case, oracle in streams:
+        observed = evaluate_command(case.command, cwd=SYNTHETIC_CWD, home_dir=SYNTHETIC_HOME).decision_plane.action
         if ranks[observed] == ranks[oracle.minimum_floor]:
             continue
         kind = "underclassified" if ranks[observed] < ranks[oracle.minimum_floor] else "overclassified"

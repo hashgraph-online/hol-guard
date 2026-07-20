@@ -6,16 +6,16 @@
   "corpus_domain": "hol-guard-command-corpus-v1",
   "fixed_seed": 22020,
   "permutation_multiplier": 7919,
-  "generator_source_sha256": "6e2d16b8666a755b2f12d99b86774e7315cf2f349625dd472a22a728133919f1",
+  "generator_source_sha256": "47d191710b9a903f539375d25b3b356057d09480874f862ec676173727595ecb",
   "oracle_source_sha256": {
     "guard_command_corpus_oracle.py": "7c7dee62735838dd5cf759156a64860e24c1afc6a5df54aeb402a9785f1a0d91",
     "guard_command_corpus_oracle_types.py": "31ae3f338de752bf5d122e9a8274184bc525c1fc4dbf4410f970bb380628e59c",
     "guard_command_corpus_oracle_benign.py": "a857e5b8d4c4abce7e92c7b7f66f6440ee269a0c5201c88ed23bd4a40eb6e5b6",
     "guard_command_corpus_oracle_adversarial.py": "cbe6761e3ae7e6f646947d212998a26846742ccd702f2d6b237c72f83b8d23c5",
-    "guard_command_corpus_oracle_loader.py": "22e766e8fe437c675ac38256433b2a47dfe122ad06c5d3d60f88eaccdefeec48"
+    "guard_command_corpus_oracle_loader.py": "21c96c2bfbb655cce88f70c17cad3a8681c9cfc4d87118fbb6685b8d88c6032f"
   },
   "pairs_sha256": "f8a972f4924ad015753659cd0a987e5d077f2c9981b42187184ad689231c459f",
-  "known_gaps_sha256": "30799152d2b698ec1e160d010a09b013692016e435fe98fb7dd5387105b3dc58",
+  "known_gaps_sha256": "4eb29138e2ddc3b592990654b84202b4599c092b74b013f5a6763b0b827d70b7",
   "reproducible_command": "uv run --no-sync pytest -q tests/test_guard_command_corpus.py",
   "evaluation_budget_seconds": 30,
   "evaluation_rss_budget_mib": 512,

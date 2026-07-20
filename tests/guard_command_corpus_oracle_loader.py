@@ -27,7 +27,8 @@ def oracle_record(source_id: str, variant: int, seed: OracleSeed) -> OracleRecor
     )
 
 
-def iter_benign_oracle() -> Iterator[OracleRecord]:
+def iter_benign_oracle(*, shard_index: int = 0, shard_count: int = 1) -> Iterator[OracleRecord]:
+    _validate_shard(shard_index, shard_count)
     manifest = load_seed_manifest()
     variants_value = manifest["benign_variants_per_seed"]
     if not isinstance(variants_value, int):
@@ -56,19 +57,25 @@ def iter_benign_oracle() -> Iterator[OracleRecord]:
             source_id = f"workflow:{workflow_id}:{seed_id}"
             for variant in range(variants_value):
                 records.append(oracle_record(source_id, variant, seed))
-    yield from sorted(records, key=lambda record: record.case_id)
+    yield from sorted(records, key=lambda record: record.case_id)[shard_index::shard_count]
 
 
-def iter_adversarial_oracle() -> Iterator[OracleRecord]:
+def iter_adversarial_oracle(*, shard_index: int = 0, shard_count: int = 1) -> Iterator[OracleRecord]:
+    _validate_shard(shard_index, shard_count)
     manifest = load_seed_manifest()
     target_value, categories_value = manifest["adversarial_target_count"], manifest["adversarial_categories"]
     if not isinstance(target_value, int) or not isinstance(categories_value, list):
         raise ValueError("adversarial manifest shape is invalid")
     categories = cast(list[object], categories_value)
-    for position in range(target_value):
+    for position in range(shard_index, target_value, shard_count):
         index = (position * 7919 + 22020) % target_value
         category_value = categories[index % len(categories)]
         if not isinstance(category_value, list) or not category_value or not isinstance(category_value[0], str):
             raise ValueError("adversarial category shape is invalid")
         technique = category_value[0]
         yield oracle_record(f"adversarial:{technique}", index // len(categories), ADVERSARIAL_ORACLE[technique])
+
+
+def _validate_shard(shard_index: int, shard_count: int) -> None:
+    if shard_count < 1 or shard_index < 0 or shard_index >= shard_count:
+        raise ValueError("oracle shard must satisfy 0 <= shard_index < shard_count")

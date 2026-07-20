@@ -285,7 +285,7 @@ def test_malformed_resolution_contract_returns_400(tmp_path: Path, payload: dict
     ("field", "value"),
     [
         ("scope_contract_version", "guard.approval-scopes.v1"),
-        ("scope_contract_version", "guard.approval-scopes.v3"),
+        ("scope_contract_version", f"{APPROVAL_SCOPE_CONTRACT_VERSION}0"),
         ("scope_contract_digest", "0" * 64),
     ],
 )

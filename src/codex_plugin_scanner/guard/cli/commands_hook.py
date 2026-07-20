@@ -297,6 +297,7 @@ def _run_guard_hook_command(
             *,
             claimed_saved_allow_hash: str | None = None,
             claimed_trusted_request_override: bool = False,
+            claimed_approval_request_id: str | None = None,
             trusted_request_override_hash: str | None = None,
         ):
             fresh_config = overlay_synced_guard_policy(
@@ -339,16 +340,19 @@ def _run_guard_hook_command(
                 post_claim_revalidator=(revalidate_runtime_after_claim if claimed_saved_allow_hash is None else None),
                 _claimed_saved_allow_hash=claimed_saved_allow_hash,
                 _claimed_trusted_request_override=claimed_trusted_request_override,
+                _claimed_approval_request_id=claimed_approval_request_id,
                 _claim_saved_approval=claimed_saved_allow_hash is None,
             )
 
         def revalidate_runtime_after_claim(
             claimed_artifact_hash: str,
             trusted_request_override: bool,
+            approval_request_id: str | None,
         ):
             return evaluate_fresh_runtime_artifact(
                 claimed_saved_allow_hash=claimed_artifact_hash,
                 claimed_trusted_request_override=trusted_request_override,
+                claimed_approval_request_id=approval_request_id,
             )
 
         evaluated = _evaluate_runtime_artifact_hook(

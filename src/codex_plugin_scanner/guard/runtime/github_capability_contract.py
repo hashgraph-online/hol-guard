@@ -54,11 +54,20 @@ _CAPABILITY_ORDER: Final[tuple[GitHubCommandCapability, ...]] = (
 _CAPABILITY_RANK: Final = MappingProxyType({capability: rank for rank, capability in enumerate(_CAPABILITY_ORDER)})
 _CONTRACTS: Final = MappingProxyType(
     {
-        capability: GitHubCapabilityContract(
-            action_floor="allow" if capability in {"read_local", "read_remote"} else "review",
-            workflow_authorizable=capability == "maintain_remote",
-        )
-        for capability in _CAPABILITY_ORDER
+        "read_local": GitHubCapabilityContract("allow", False),
+        "read_remote": GitHubCapabilityContract("allow", False),
+        "write_local": GitHubCapabilityContract("review", False),
+        "maintain_remote": GitHubCapabilityContract("review", True),
+        "content_remote": GitHubCapabilityContract("review", False),
+        "merge_remote": GitHubCapabilityContract("require-reapproval", False),
+        "publish_remote": GitHubCapabilityContract("require-reapproval", False),
+        "workflow_remote": GitHubCapabilityContract("require-reapproval", False),
+        "force_remote": GitHubCapabilityContract("block", False),
+        "delete_remote": GitHubCapabilityContract("require-reapproval", False),
+        "secret_remote": GitHubCapabilityContract("block", False),
+        "access_remote": GitHubCapabilityContract("require-reapproval", False),
+        "mutate_remote": GitHubCapabilityContract("require-reapproval", False),
+        "unknown": GitHubCapabilityContract("require-reapproval", False),
     }
 )
 
