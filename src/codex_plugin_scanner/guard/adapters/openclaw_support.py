@@ -9,7 +9,12 @@ from pathlib import Path
 
 from ..models import GuardArtifact, HarnessDetection
 from .base import HarnessContext
-from .openclaw_mcp_inventory import OpenClawMcpInventory, OpenClawMcpServer, effective_mcp_inventory
+from .openclaw_mcp_inventory import (
+    OpenClawMcpInventory,
+    OpenClawMcpServer,
+    effective_mcp_inventory,
+    effective_mcp_transport,
+)
 
 _MAX_FILE_READ = 64 * 1024
 _SKILL_SUBDIRS = ("references", "templates", "scripts", "assets")
@@ -176,7 +181,7 @@ def _mcp_artifacts(path: Path, inventory: OpenClawMcpInventory) -> list[GuardArt
         config = definition.config
         command = config.get("command")
         url = config.get("url")
-        configured_transport = config.get("transport")
+        transport = effective_mcp_transport(config)
         env = _dict_value(config.get("env"))
         headers = _dict_value(config.get("headers"))
         args = _string_list(config.get("args"))
@@ -191,11 +196,7 @@ def _mcp_artifacts(path: Path, inventory: OpenClawMcpInventory) -> list[GuardArt
                 command=command if isinstance(command, str) else None,
                 args=tuple(args),
                 url=url if isinstance(url, str) else None,
-                transport=(
-                    configured_transport.strip().lower()
-                    if isinstance(configured_transport, str) and configured_transport.strip()
-                    else ("http" if isinstance(url, str) else "stdio")
-                ),
+                transport=transport,
                 metadata={
                     "source_key": definition.source_key,
                     "source_scope": definition.source_scope,

@@ -14,6 +14,13 @@ _MCP_SOURCES = (
     ("mcp.mcpServers", ("mcp", "mcpServers")),
     ("mcpServers", ("mcpServers",)),
 )
+_MCP_TRANSPORT_ALIASES = {
+    "http": "http",
+    "sse": "sse",
+    "stdio": "stdio",
+    "streamable-http": "http",
+    "streamable_http": "http",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +83,15 @@ def effective_mcp_inventory(payload: dict[str, object]) -> OpenClawMcpInventory:
             name = raw_name.strip()
             config = dict(raw_config)
             enabled = config.get("enabled", True) is not False
+            configured_transport = _optional_string(config.get("transport"))
+            if configured_transport is not None and configured_transport.lower() not in _MCP_TRANSPORT_ALIASES:
+                warnings.append(
+                    {
+                        "reason": "unsupported_mcp_transport",
+                        "server_name": name,
+                        "source_scope": source_scope,
+                    }
+                )
             config_identity = _server_identity(name=name, config=config, source_scope=None)
             definition = OpenClawMcpDefinition(
                 name=name,
@@ -133,11 +149,8 @@ def _path_value(payload: dict[str, object], path: tuple[str, ...]) -> object:
 def _server_identity(*, name: str, config: dict[str, object], source_scope: str | None) -> str:
     command = _optional_string(config.get("command"))
     url = _optional_string(config.get("url"))
-    transport = _optional_string(config.get("transport"))
-    if transport is None:
-        transport = "stdio"
-        if url is not None:
-            transport = "http"
+    configured_transport = _optional_string(config.get("transport"))
+    transport = effective_mcp_transport(config)
     args = config.get("args")
     normalized_args: list[str] = []
     if isinstance(args, list):
@@ -147,6 +160,7 @@ def _server_identity(*, name: str, config: dict[str, object], source_scope: str 
     identity = {
         "args": normalized_args,
         "command": command,
+        "configuredTransport": configured_transport.lower() if configured_transport is not None else None,
         "envKeys": _mapping_keys(env),
         "headerKeys": _mapping_keys(headers),
         "name": name,
@@ -156,6 +170,17 @@ def _server_identity(*, name: str, config: dict[str, object], source_scope: str 
     }
     encoded = json.dumps(identity, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def effective_mcp_transport(config: dict[str, object]) -> str:
+    """Return one downstream-supported transport for an OpenClaw definition."""
+
+    configured = _optional_string(config.get("transport"))
+    if configured is not None:
+        normalized = _MCP_TRANSPORT_ALIASES.get(configured.lower())
+        if normalized is not None:
+            return normalized
+    return "http" if _optional_string(config.get("url")) is not None else "stdio"
 
 
 def _mapping_keys(value: object) -> list[str]:

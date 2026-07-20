@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.inventory_contract import serialize_inventory_sn
 from codex_plugin_scanner.guard.risk import artifact_risk_signals
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.models import Finding, Severity
+from tests.openclaw_test_support import mcp_artifact
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
@@ -25,12 +26,6 @@ def _ctx(tmp_path: Path) -> HarnessContext:
     workspace_dir.mkdir(parents=True, exist_ok=True)
     guard_home.mkdir(parents=True, exist_ok=True)
     return HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
-
-
-def _mcp_artifact(detection, name: str):
-    return next(
-        artifact for artifact in detection.artifacts if artifact.artifact_type == "mcp_server" and artifact.name == name
-    )
 
 
 def _write(path: Path, content: str) -> None:
@@ -107,8 +102,8 @@ def test_detects_openclaw_config_channels_mcp_and_skills(tmp_path: Path) -> None
     assert str(config_path) in detection.config_paths
     assert "openclaw:config:global" in artifacts
     assert "openclaw:channel:telegram" in artifacts
-    docs_mcp = _mcp_artifact(detection, "docs")
-    local_mcp = _mcp_artifact(detection, "local")
+    docs_mcp = mcp_artifact(detection, "docs")
+    local_mcp = mcp_artifact(detection, "local")
     assert any(artifact.name == "deploy-helper" for artifact in artifacts.values())
     assert artifacts["openclaw:config:global"].metadata["workspace_path"] == str(workspace_path)
     assert docs_mcp.transport == "http"
@@ -283,7 +278,7 @@ def test_openclaw_accepts_json5_unquoted_keys_and_single_quotes(tmp_path: Path) 
 
     detection = OpenClawHarnessAdapter().detect(context)
     channel = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:channel:telegram")
-    mcp = _mcp_artifact(detection, "remote")
+    mcp = mcp_artifact(detection, "remote")
 
     assert any("network traffic" in signal for signal in artifact_risk_signals(channel))
     assert any("remote server" in signal for signal in artifact_risk_signals(mcp))
