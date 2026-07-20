@@ -224,7 +224,7 @@ def test_workflow_marker_lookup_errors_fail_closed(tmp_path: Path, monkeypatch: 
     assert github_workflow_capability_required(store, "request-github-1")
 
 
-def test_resolved_guard_lineage_issues_once_and_retry_is_workflow_authorized(tmp_path: Path) -> None:
+def test_resolved_guard_lineage_issues_bounded_retry_capability(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     descriptor = _descriptor()
     request = _seed_resolved_request(store, descriptor)
@@ -242,6 +242,10 @@ def test_resolved_guard_lineage_issues_once_and_retry_is_workflow_authorized(tmp
         workflow_authorization=authorization,
     )
     assert evaluation.decision_plane.disposition is FinalDisposition.WORKFLOW_AUTHORIZED
+    assert all(
+        claim_resolved_github_workflow_authorization(store, "request-github-1", descriptor) is not None
+        for _ in range(9)
+    )
     assert claim_resolved_github_workflow_authorization(store, "request-github-1", descriptor) is None
 
 

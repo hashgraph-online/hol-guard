@@ -565,6 +565,8 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         state: dict[str, object] | None,
     ) -> None:
         set_guard_cloud_connect_state(server, state)
+        if server.store is not store:
+            return
         if state is None:
             connect_finalized.set()
         elif state.get("state") == "failed":

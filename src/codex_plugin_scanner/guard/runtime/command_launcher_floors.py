@@ -32,13 +32,17 @@ _XARGS_VALUE_OPTIONS = frozenset(
 )
 _PARALLEL_VALUE_OPTIONS = frozenset(
     {
+        "--colsep",
         "--delay",
+        "--header",
         "--joblog",
         "--jobs",
+        "--load",
         "--max-procs",
         "--results",
         "--retries",
         "--sshlogin",
+        "--tagstring",
         "--timeout",
         "--workdir",
         "-P",

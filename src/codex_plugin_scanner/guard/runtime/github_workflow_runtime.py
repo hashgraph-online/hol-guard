@@ -33,6 +33,7 @@ from .github_workflow_operations import parse_github_workflow_operation
 
 _ISSUER_ID = "guard.local"
 _CAPABILITY_TTL = timedelta(minutes=10)
+_CAPABILITY_MAX_USES = 10
 
 
 class GitHubWorkflowRuntimeStore(WorkflowCapabilityStore, Protocol):
@@ -84,7 +85,7 @@ def issue_resolved_github_workflow_capability(
             issued_at=format_utc_timestamp(issued_at),
             not_before=format_utc_timestamp(issued_at),
             expires_at=format_utc_timestamp(issued_at + _CAPABILITY_TTL),
-            max_uses=1,
+            max_uses=_CAPABILITY_MAX_USES,
             key=key,
             key_id=key_id,
         )
@@ -253,7 +254,7 @@ def _existing_matches(
         and claim.subject_id == _required_string(session, "session_id")
         and claim.issuer_id == _ISSUER_ID
         and claim.binding == record.binding
-        and claim.max_uses == 1
+        and claim.max_uses == _CAPABILITY_MAX_USES
     )
 
 
