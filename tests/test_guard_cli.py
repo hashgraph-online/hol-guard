@@ -4286,11 +4286,17 @@ args = ["workspace-skill.js", "--changed"]
         assert isinstance(entries, list)
         entry = entries[0]
         assert isinstance(entry, dict)
-        entry["command"] = f"{entry['command']} --tampered"
         config_path = home_dir / ".codex" / "config.toml"
+        guard_update_commands_module.CodexHarnessAdapter._write_authenticated_hook_config(
+            context,
+            config_path=config_path,
+            payload=config_payload,
+            previous_manifest=None,
+        )
+        entry["command"] = f"{entry['command']} --tampered"
         _write_text(config_path, dump_toml(config_payload))
         stale_state = guard_update_commands_module.codex_native_hook_state(context)
-        assert stale_state["protection_active"] is True
+        assert stale_state["protection_active"] is False
         assert stale_state["shell_protection_active"] is False
         GuardStore(home_dir).set_managed_install(
             "codex",

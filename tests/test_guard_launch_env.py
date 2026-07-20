@@ -20,7 +20,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-from codex_plugin_scanner.guard.codex_config import read_toml_payload, write_toml_payload
+from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.consumer.service import diff_artifact
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
@@ -82,7 +82,12 @@ def _install_codex_native_hooks(home_dir: Path, workspace_dir: Path) -> None:
     config_path = home_dir / ".codex" / "config.toml"
     payload = read_toml_payload(config_path)
     CodexHarnessAdapter._install_config_hooks(payload, context)
-    write_toml_payload(config_path, payload)
+    CodexHarnessAdapter._write_authenticated_hook_config(
+        context,
+        config_path=config_path,
+        payload=payload,
+        previous_manifest=None,
+    )
 
 
 class _CompletedProcess:

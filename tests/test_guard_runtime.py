@@ -44,7 +44,7 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _runtime_policy_path
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
-from codex_plugin_scanner.guard.codex_config import read_toml_payload, write_toml_payload
+from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, overlay_synced_guard_policy
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -151,7 +151,12 @@ def _install_codex_native_hooks(home_dir: Path, workspace_dir: Path) -> None:
     config_path = home_dir / ".codex" / "config.toml"
     payload = read_toml_payload(config_path)
     CodexHarnessAdapter._install_config_hooks(payload, context)
-    write_toml_payload(config_path, payload)
+    CodexHarnessAdapter._write_authenticated_hook_config(
+        context,
+        config_path=config_path,
+        payload=payload,
+        previous_manifest=None,
+    )
 
 
 def _make_pinnable_harness_executable(

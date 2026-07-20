@@ -721,6 +721,7 @@ def test_guard_codex_launch_uses_remote_control_for_dashboard_continuation(tmp_p
         captured.update(kwargs)
         return ["/usr/bin/codex", "--remote", "unix:///guarded.sock", "Fix it."]
 
+    monkeypatch.setattr(codex_adapter, "_require_codex_authoritative_shell_hook", lambda _context: None)
     monkeypatch.setattr(codex_adapter, "guarded_codex_launch_command", fake_remote_launch)
     monkeypatch.setattr(CodexHarnessAdapter, "resolved_executable", lambda self, ctx: "/usr/bin/codex")
 
@@ -1038,7 +1039,12 @@ def test_guard_install_and_repair_codex_preserve_ambiguous_legacy_post_tool_hook
         tokens for tokens in command_tokens if len(tokens) > 1 and Path(tokens[1]).resolve() == current_bridge_path
     ]
     final_state = codex_adapter.codex_native_hook_state(
-        HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
+        HarnessContext(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            guard_home=guard_home,
+            home_override_explicit=True,
+        )
     )
 
     assert install_rc == 0
@@ -2387,8 +2393,7 @@ def test_guard_install_codex_disables_empty_alternate_hook_config(tmp_path: Path
             {
                 "features": {"experimental": True, "hooks": True},
                 "hooks": {
-                    event_name: [group]
-                    for event_name, group in codex_adapter._managed_hook_groups(context).items()
+                    event_name: [group] for event_name, group in codex_adapter._managed_hook_groups(context).items()
                 },
             }
         ),

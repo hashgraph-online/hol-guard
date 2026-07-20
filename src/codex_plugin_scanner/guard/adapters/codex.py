@@ -266,6 +266,22 @@ def _guard_python_executable() -> str:
     return str(Path(sys.executable).expanduser().absolute())
 
 
+def _home_is_current(context: HarnessContext) -> bool:
+    return not context.home_override_explicit and context.home_dir.resolve() == Path.home().resolve()
+
+
+def _runtime_guard_home(context: HarnessContext) -> Path:
+    return resolve_guard_home() if _home_is_current(context) else context.guard_home
+
+
+def _local_hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
+    return _local_hook_command_parts_for_home_mode(
+        context,
+        home_is_current=_home_is_current(context),
+        python_executable=_guard_python_executable(),
+    )
+
+
 def _daemon_start_command(guard_home: Path, *, python_executable: str = sys.executable) -> tuple[str, ...]:
     package_root = Path(__file__).resolve().parents[3]
     code = (
@@ -316,7 +332,7 @@ def _hook_command_parts_for_home_mode(
 def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
     return _hook_command_parts_for_home_mode(
         context,
-        home_is_current=(not context.home_override_explicit and context.home_dir.resolve() == Path.home().resolve()),
+        home_is_current=_home_is_current(context),
         python_executable=_guard_python_executable(),
     )
 
@@ -447,7 +463,10 @@ def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
         package_version=__version__,
         packaged_file_paths=_hook_packaged_file_paths(),
         fallback_argv=_local_hook_command_parts(context),
-        daemon_start_argv=_daemon_start_command(_runtime_guard_home(context)),
+        daemon_start_argv=_daemon_start_command(
+            _runtime_guard_home(context),
+            python_executable=_guard_python_executable(),
+        ),
         event_bindings=tuple(_manifest_event_bindings(context)),
     )
 
@@ -639,7 +658,7 @@ def _is_managed_hook_group(group: object) -> bool:
 
 
 def _hook_command_matches_current_boundary(command: object, context: HarnessContext) -> bool:
-    tokens = _split_hook_command(command)
+    tokens = split_hook_command(command)
     if tokens is None or len(tokens) != 3:
         return False
     try:
@@ -1600,7 +1619,9 @@ class CodexHarnessAdapter(HarnessAdapter):
             state = codex_native_hook_state(context)
             if not bool(state.get("protection_active")):
                 reason = str(state.get("integrity_reason") or "codex_hook_integrity_readback_failed")
-                raise RuntimeError(f"Codex hook authentication readback failed: {reason}")
+                raise RuntimeError(
+                    f"{_AUTHORITATIVE_HOOK_UNAVAILABLE_REASON}: Codex hook authentication readback failed: {reason}"
+                )
             return state
         except BaseException:
             rollback_error: BaseException | None = None
@@ -1620,7 +1641,6 @@ class CodexHarnessAdapter(HarnessAdapter):
                     "Codex hook transaction failed and rollback could not be completed."
                 ) from rollback_error
             raise
-
 
     @staticmethod
     def _uninstall_shell_guard(context: HarnessContext) -> None:

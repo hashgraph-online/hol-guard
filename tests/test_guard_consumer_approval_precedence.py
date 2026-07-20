@@ -22,7 +22,6 @@ from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode_artifacts import runtime_config_path
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
-from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.consumer.service import _consumer_execution_identity
@@ -185,7 +184,12 @@ def _install_codex_native_hooks(context: HarnessContext) -> None:
     CodexHarnessAdapter._install_config_hooks(payload, context)
     config_path = CodexHarnessAdapter._hook_config_path(context)
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(dump_toml(payload), encoding="utf-8")
+    CodexHarnessAdapter._write_authenticated_hook_config(
+        context,
+        config_path=config_path,
+        payload=payload,
+        previous_manifest=None,
+    )
 
 
 def test_guard_run_launch_environment_hash_is_canonical_and_value_sensitive() -> None:
