@@ -695,6 +695,13 @@ class StoreConnectionSchemaMixin:
                 if receipt_rollups_need_backfill(connection):
                     backfill_receipt_rollups(connection)
                 self._record_schema_version(connection, version=6)
+            if not self._schema_version_applied(connection, version=10):
+                # P45 changes ``warn`` from the reviewed bucket to allowed.
+                # Existing v6 rollups can have the right total while retaining
+                # the old bucket semantics, so this migration must rebuild them
+                # unconditionally before incremental deltas are applied.
+                backfill_receipt_rollups(connection)
+                self._record_schema_version(connection, version=10)
             if not self._schema_version_applied(connection, version=7):
                 self._record_schema_version(connection, version=7)
             if not self._schema_version_applied(connection, version=8):

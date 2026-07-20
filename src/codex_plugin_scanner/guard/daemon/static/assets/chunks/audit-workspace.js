@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, ad as Tag, l as formatRelativeTime, r as reactExports, A as ActionButton, bD as HiMiniChevronLeft, z as HiMiniChevronRight, aK as IconActionButton, n as HiMiniXMark, aP as GuardModalLayer, bE as HiMiniFunnel, ae as HiMiniMagnifyingGlass, bF as HiMiniArrowDown, bG as HiMiniArrowUp, S as SectionLabel, ax as HiMiniArrowPath, aO as HiMiniBugAnt, b as EmptyState, U as HiMiniAdjustmentsHorizontal, aQ as ConnectFlowCard, x as HiMiniExclamationTriangle, bH as runAuditRemediation, B as Badge, aD as isSupplyChainAuditEvidence, d as HiMiniCheckCircle, J as HiMiniXCircle, h as harnessDisplayName, b8 as HiMiniDocumentText, b7 as guardAwareHref, k as HiMiniShieldCheck } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, af as Tag, m as formatRelativeTime, r as reactExports, A as ActionButton, bH as HiMiniChevronLeft, F as HiMiniChevronRight, aN as IconActionButton, p as HiMiniXMark, aS as GuardModalLayer, bI as HiMiniFunnel, ag as HiMiniMagnifyingGlass, bJ as HiMiniArrowDown, bK as HiMiniArrowUp, S as SectionLabel, aA as HiMiniArrowPath, aR as HiMiniBugAnt, b as EmptyState, W as HiMiniAdjustmentsHorizontal, aT as ConnectFlowCard, z as HiMiniExclamationTriangle, bL as runAuditRemediation, C as Badge, bD as isBlockedGuardAction, aG as isSupplyChainAuditEvidence, d as HiMiniCheckCircle, L as HiMiniXCircle, h as harnessDisplayName, bb as HiMiniDocumentText, ba as guardAwareHref, k as HiMiniShieldCheck } from "../guard-dashboard.js";
 import { p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, s as sortPackageWorkbenchFindings, u as useResolvedApprovalGate, i as isApprovalGateRequiredError, A as ApprovalProofModal } from "./supply-chain-hub-workspace.js";
 import { r as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
 const STEPS = [
@@ -1001,7 +1001,7 @@ function deriveFrontendAuditResults(receipts, snapshot) {
       }
     }
   }
-  const blockedReceipts = receipts.filter((r) => r.policy_decision === "block");
+  const blockedReceipts = receipts.filter((r) => isBlockedGuardAction(r.policy_decision));
   for (const r of blockedReceipts.slice(0, 20)) {
     const evidenceParams = new URLSearchParams();
     evidenceParams.set("harness", r.harness || "global");

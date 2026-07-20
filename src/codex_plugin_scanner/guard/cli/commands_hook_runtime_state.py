@@ -10,6 +10,7 @@ from ._commands_shared import *
 from dataclasses import dataclass, replace
 
 from ..action_lattice import normalize_guard_action
+from ..incident import build_incident_context
 from ..models import GuardReceipt
 from ..runtime.signals import RiskSignalV2
 
@@ -44,13 +45,26 @@ def set_runtime_artifact_hook_final_action(
     *,
     approval_request_id: str | None = None,
     approval_source: str | None = None,
+    observed_policy_action: str | None = None,
 ) -> None:
     """Make one post-review action authoritative across every hook surface."""
 
+    previous_action = normalize_guard_action(state.policy_action, unknown_action="block")
     normalized_action = normalize_guard_action(policy_action, unknown_action="block")
     state.policy_action = normalized_action
     state.response_payload["policy_action"] = normalized_action
     state.response_payload["resolved_policy_action"] = normalized_action
+    normalized_observed_action = (
+        normalize_guard_action(observed_policy_action, unknown_action="block")
+        if observed_policy_action is not None
+        else None
+    )
+    if normalized_observed_action is not None:
+        state.response_payload["observed_policy_action"] = normalized_observed_action
+        # Observe mode records the non-executed policy only in explicitly
+        # diagnostic fields; no unqualified terminal action may contradict
+        # the final action that was actually executed.
+        state.response_payload.pop("terminal_action", None)
     if state.action_envelope is not None:
         state.action_envelope = state.action_envelope.with_pre_execution_result(normalized_action)
 
@@ -66,17 +80,82 @@ def set_runtime_artifact_hook_final_action(
     state.decision_v2_payload = decision_v2_payload
     state.response_payload["decision_v2_json"] = decision_v2_payload
 
+    if previous_action != normalized_action:
+        final_risk_summary = str(decision_v2_payload["dashboard_primary_detail"])
+        state.risk_summary = final_risk_summary
+        state.response_payload["risk_summary"] = final_risk_summary
+        raw_supply_chain = state.response_payload.get("supply_chain_evaluation")
+        if isinstance(raw_supply_chain, dict):
+            observed_supply_chain = dict(raw_supply_chain)
+            raw_user_copy = raw_supply_chain.get("user_copy")
+            user_copy = dict(raw_user_copy) if isinstance(raw_user_copy, dict) else {}
+            if normalized_observed_action is not None:
+                raw_package_action = observed_supply_chain.get(
+                    "policy_action",
+                    observed_supply_chain.get("decision"),
+                )
+                observed_package_action = (
+                    normalize_guard_action(raw_package_action, unknown_action="block")
+                    if isinstance(raw_package_action, str)
+                    else normalized_observed_action
+                )
+                raw_supply_chain["observed_policy_action"] = observed_package_action
+                raw_supply_chain["observed_risk_summary"] = observed_supply_chain.get("risk_summary")
+                raw_supply_chain["observed_user_copy"] = observed_supply_chain.get("user_copy")
+            user_copy.update(
+                {
+                    "title": decision_v2_payload["user_title"],
+                    "summary": decision_v2_payload["user_body"],
+                    "next_step": decision_v2_payload["retry_instruction"]
+                    or decision_v2_payload["user_body"],
+                    "harness_message": decision_v2_payload["harness_message"],
+                }
+            )
+            raw_supply_chain.update(
+                {
+                    "decision": decision_v2_payload["action"],
+                    "policy_action": normalized_action,
+                    "risk_summary": final_risk_summary,
+                    "user_copy": user_copy,
+                }
+            )
+
+    incident = build_incident_context(
+        harness=state.receipt.harness,
+        artifact=state.runtime_artifact,
+        artifact_id=state.artifact_id,
+        artifact_name=state.artifact_name,
+        artifact_type=state.runtime_artifact.artifact_type,
+        source_scope=state.runtime_artifact.source_scope,
+        config_path=state.runtime_artifact.config_path,
+        changed_fields=state.changed_capabilities,
+        policy_action=normalized_action,
+        launch_target=None,
+        risk_summary=state.risk_summary,
+    )
+    for key in ("trigger_summary", "why_now", "risk_headline"):
+        state.response_payload[key] = incident[key]
+
     policy_composition = state.response_payload.get("policy_composition")
     if isinstance(policy_composition, dict):
         policy_composition["authoritative_action"] = normalized_action
+        if normalized_observed_action is not None:
+            policy_composition["observed_policy_action"] = normalized_observed_action
     for evidence in state.scanner_evidence_payload:
         if evidence.get("source") == "policy_composition":
             evidence["authoritative_action"] = normalized_action
+            if normalized_observed_action is not None:
+                evidence["observed_policy_action"] = normalized_observed_action
 
     receipt_evidence = tuple(
         {
             **evidence,
             "authoritative_action": normalized_action,
+            **(
+                {"observed_policy_action": normalized_observed_action}
+                if normalized_observed_action is not None
+                else {}
+            ),
         }
         if evidence.get("source") == "policy_composition"
         else evidence

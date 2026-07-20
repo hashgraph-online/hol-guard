@@ -2,16 +2,18 @@ import { useMemo, useState } from "react";
 import type { GuardReceipt } from "./guard-types";
 import { harnessDisplayName } from "./approval-center-utils";
 import { detectCategory } from "./evidence/categories";
+import { guardActionDisposition } from "./guard-action";
 
 // ──────────────────────────────────────────
 // Decision Pie Chart (SVG donut)
 // ──────────────────────────────────────────
 
 export function DecisionPieChart({ receipts }: { receipts: GuardReceipt[] }) {
-  const { allow, block, total } = useMemo(() => {
-    const allow = receipts.filter((r) => r.policy_decision === "allow").length;
-    const block = receipts.filter((r) => r.policy_decision === "block").length;
-    return { allow, block, total: receipts.length };
+  const { allow, review, block, total } = useMemo(() => {
+    const allow = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+    const review = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
+    const block = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
+    return { allow, review, block, total: receipts.length };
   }, [receipts]);
 
   if (total === 0) {
@@ -23,15 +25,17 @@ export function DecisionPieChart({ receipts }: { receipts: GuardReceipt[] }) {
   }
 
   const allowPct = Math.round((allow / total) * 100);
+  const reviewPct = Math.round((review / total) * 100);
   const blockPct = Math.round((block / total) * 100);
 
   const radius = 40;
   const circumference = 2 * Math.PI * radius;
   const allowDash = (allow / total) * circumference;
+  const reviewDash = (review / total) * circumference;
   const blockDash = (block / total) * circumference;
 
   return (
-    <div className="space-y-2" aria-label={`Decision breakdown: ${allowPct}% allowed, ${blockPct}% blocked`}>
+    <div className="space-y-2" aria-label={`Decision breakdown: ${allowPct}% allowed, ${reviewPct}% review, ${blockPct}% blocked`}>
       <h4 className="text-xs font-semibold text-brand-dark">Decisions</h4>
       <div className="flex items-center gap-4">
         <svg viewBox="0 0 100 100" className="h-20 w-20 -rotate-90">
@@ -61,8 +65,26 @@ export function DecisionPieChart({ receipts }: { receipts: GuardReceipt[] }) {
               strokeLinecap="round"
             />
           )}
+          {review > 0 && (
+            <circle
+              cx="50"
+              cy="50"
+              r={radius}
+              fill="none"
+              stroke="#3b82f6"
+              strokeWidth="12"
+              strokeDasharray={`${reviewDash} ${circumference - reviewDash}`}
+              strokeDashoffset={-(allowDash + blockDash)}
+              strokeLinecap="round"
+            />
+          )}
         </svg>
         <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+            <span className="text-slate-500">Review</span>
+            <span className="ml-auto font-medium text-brand-dark">{reviewPct}%</span>
+          </div>
           <div className="flex items-center gap-1.5 text-xs">
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
             <span className="text-slate-500">Allowed</span>
@@ -85,30 +107,32 @@ export function DecisionPieChart({ receipts }: { receipts: GuardReceipt[] }) {
 
 export function ActivityBarChart({ receipts }: { receipts: GuardReceipt[] }) {
   const days = useMemo(() => {
-    const map = new Map<string, { allow: number; block: number }>();
+    const map = new Map<string, { allow: number; review: number; block: number }>();
     const now = new Date();
     // Initialize last 30 days with zeros
     for (let i = 29; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      map.set(key, { allow: 0, block: 0 });
+      map.set(key, { allow: 0, review: 0, block: 0 });
     }
     for (const r of receipts) {
       const d = new Date(r.timestamp);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       if (map.has(key)) {
         const existing = map.get(key)!;
-        if (r.policy_decision === "allow") existing.allow += 1;
-        if (r.policy_decision === "block") existing.block += 1;
+        const disposition = guardActionDisposition(r.policy_decision);
+        if (disposition === "allowed") existing.allow += 1;
+        if (disposition === "reviewed") existing.review += 1;
+        if (disposition === "blocked") existing.block += 1;
       }
     }
     return Array.from(map.entries()).map(([date, counts]) => ({ date, ...counts }));
   }, [receipts]);
 
-  const maxTotal = Math.max(1, ...days.map((d) => d.allow + d.block));
+  const maxTotal = Math.max(1, ...days.map((d) => d.allow + d.review + d.block));
 
-  if (days.every((d) => d.allow === 0 && d.block === 0)) {
+  if (days.every((d) => d.allow === 0 && d.review === 0 && d.block === 0)) {
     return (
       <div className="flex h-40 items-center justify-center">
         <p className="text-xs text-slate-400">No activity to chart</p>
@@ -124,13 +148,14 @@ export function ActivityBarChart({ receipts }: { receipts: GuardReceipt[] }) {
   const showEvery = days.length > 14 ? Math.ceil(days.length / 14) : 1;
 
   return (
-    <div className="space-y-2" aria-label="Activity bar chart showing allowed and blocked decisions over time">
+    <div className="space-y-2" aria-label="Activity bar chart showing allowed, review, and blocked decisions over time">
       <h4 className="text-xs font-semibold text-brand-dark">Activity (last 30 days)</h4>
       <div className="flex h-32 items-end gap-0.5">
         {days.map((day, idx) => {
-          const total = day.allow + day.block;
+          const total = day.allow + day.review + day.block;
           const heightPct = total > 0 ? (total / maxTotal) * 100 : 0;
           const allowPctOfTotal = total > 0 ? (day.allow / total) * 100 : 0;
+          const reviewPctOfTotal = total > 0 ? (day.review / total) * 100 : 0;
           const label = formatDayLabel(day.date);
           return (
             <div key={day.date} className="group relative flex flex-1 flex-col justify-end" title={`${label}: ${total} actions`}>
@@ -139,7 +164,10 @@ export function ActivityBarChart({ receipts }: { receipts: GuardReceipt[] }) {
                   <div className="bg-emerald-400 transition-all" style={{ height: `${allowPctOfTotal}%`, minHeight: day.allow > 0 ? 1 : 0 }} />
                 )}
                 {day.block > 0 && (
-                  <div className="bg-amber-400 transition-all" style={{ height: `${100 - allowPctOfTotal}%`, minHeight: day.block > 0 ? 1 : 0 }} />
+                  <div className="bg-amber-400 transition-all" style={{ height: `${(day.block / total) * 100}%`, minHeight: 1 }} />
+                )}
+                {day.review > 0 && (
+                  <div className="bg-blue-400 transition-all" style={{ height: `${reviewPctOfTotal}%`, minHeight: 1 }} />
                 )}
               </div>
               {idx % showEvery === 0 && (
@@ -152,6 +180,10 @@ export function ActivityBarChart({ receipts }: { receipts: GuardReceipt[] }) {
         })}
       </div>
       <div className="flex items-center gap-3 text-[10px] text-slate-400">
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-sm bg-blue-400" />
+          Review
+        </span>
         <span className="flex items-center gap-1">
           <span className="h-2 w-2 rounded-sm bg-emerald-400" />
           Allowed
@@ -231,27 +263,29 @@ export function AppActivityBars({ receipts }: { receipts: GuardReceipt[] }) {
 
 export function DecisionTrendLine({ receipts }: { receipts: GuardReceipt[] }) {
   const days = useMemo(() => {
-    const map = new Map<string, { allow: number; block: number }>();
+    const map = new Map<string, { allow: number; review: number; block: number }>();
     const now = new Date();
     for (let i = 29; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      map.set(key, { allow: 0, block: 0 });
+      map.set(key, { allow: 0, review: 0, block: 0 });
     }
     for (const r of receipts) {
       const d = new Date(r.timestamp);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       if (map.has(key)) {
         const existing = map.get(key)!;
-        if (r.policy_decision === "allow") existing.allow += 1;
-        if (r.policy_decision === "block") existing.block += 1;
+        const disposition = guardActionDisposition(r.policy_decision);
+        if (disposition === "allowed") existing.allow += 1;
+        if (disposition === "reviewed") existing.review += 1;
+        if (disposition === "blocked") existing.block += 1;
       }
     }
     return Array.from(map.entries()).map(([date, counts]) => ({ date, ...counts }));
   }, [receipts]);
 
-  const hasData = days.some((d) => d.allow > 0 || d.block > 0);
+  const hasData = days.some((d) => d.allow > 0 || d.review > 0 || d.block > 0);
   if (!hasData) {
     return (
       <div className="flex h-40 items-center justify-center">
@@ -265,7 +299,7 @@ export function DecisionTrendLine({ receipts }: { receipts: GuardReceipt[] }) {
   const padding = { top: 4, right: 4, bottom: 16, left: 20 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
-  const totalMax = Math.max(1, ...days.map((d) => d.allow + d.block));
+  const totalMax = Math.max(1, ...days.map((d) => d.allow + d.review + d.block));
 
   const allowPoints = days.map((day, i) => {
     const x = padding.left + (i / (days.length - 1)) * chartWidth;
@@ -279,10 +313,16 @@ export function DecisionTrendLine({ receipts }: { receipts: GuardReceipt[] }) {
     return `${x},${y}`;
   }).join(" ");
 
+  const reviewPoints = days.map((day, i) => {
+    const x = padding.left + (i / (days.length - 1)) * chartWidth;
+    const y = padding.top + chartHeight - (day.review / totalMax) * chartHeight;
+    return `${x},${y}`;
+  }).join(" ");
+
   const yTicks = [0, Math.round(totalMax / 2), totalMax];
 
   return (
-    <div className="space-y-2" aria-label="Decision trend line chart showing allowed and blocked over 30 days">
+    <div className="space-y-2" aria-label="Decision trend line chart showing allowed, review, and blocked over 30 days">
       <h4 className="text-xs font-semibold text-brand-dark">Decision trend (30 days)</h4>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
         {/* Y axis ticks */}
@@ -295,6 +335,14 @@ export function DecisionTrendLine({ receipts }: { receipts: GuardReceipt[] }) {
             </g>
           );
         })}
+        <polyline
+          fill="none"
+          stroke="#3b82f6"
+          strokeWidth="2"
+          points={reviewPoints}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
         <polyline
           fill="none"
           stroke="#10b981"
@@ -314,6 +362,10 @@ export function DecisionTrendLine({ receipts }: { receipts: GuardReceipt[] }) {
       </svg>
       <div className="flex items-center gap-3 text-[10px] text-slate-400">
         <span className="flex items-center gap-1">
+          <span className="h-1 w-4 rounded-full bg-blue-400" />
+          Review
+        </span>
+        <span className="flex items-center gap-1">
           <span className="h-1 w-4 rounded-full bg-emerald-400" />
           Allowed
         </span>
@@ -332,7 +384,7 @@ export function DecisionTrendLine({ receipts }: { receipts: GuardReceipt[] }) {
 
 export function BlockReasonBreakdown({ receipts }: { receipts: GuardReceipt[] }) {
   const reasons = useMemo(() => {
-    const blocked = receipts.filter((r) => r.policy_decision === "block");
+    const blocked = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked");
     const counts = new Map<string, number>();
     for (const r of blocked) {
       const cat = detectCategory(r);

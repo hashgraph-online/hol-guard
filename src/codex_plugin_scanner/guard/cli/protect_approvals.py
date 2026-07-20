@@ -8,15 +8,18 @@ import shlex
 from collections.abc import Callable
 from pathlib import Path
 
+from ..action_lattice import is_guard_action, most_restrictive_guard_action
 from ..adapters.base import HarnessContext
 from ..approvals import approval_center_hint, attach_primary_approval_link, queue_blocked_approvals
 from ..config import load_guard_config
-from ..models import GuardArtifact, HarnessDetection
+from ..models import GuardAction, GuardArtifact, HarnessDetection
 from ..package_execution_context import (
     changed_package_execution_context_components,
     package_execution_context_from_evidence,
     package_execution_context_from_scanner_evidence,
 )
+from ..policy import build_decision_v2
+from ..runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from ..shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from ..store import GuardStore
 
@@ -151,13 +154,28 @@ def _protect_approval_item(
     if not isinstance(supply_chain_evaluation, dict) or not isinstance(receipt, dict) or not isinstance(verdict, dict):
         return None
     policy_action = _protect_policy_action(response_payload)
-    if policy_action not in {"block", "require-reapproval"}:
+    if policy_action not in {"block", "review", "require-reapproval"}:
         return None
     user_copy = supply_chain_evaluation.get("user_copy")
     user_copy_map = user_copy if isinstance(user_copy, dict) else {}
     request = response_payload.get("request")
     package_context = request.get("package_execution_context") if isinstance(request, dict) else None
     scanner_evidence = [dict(package_context)] if isinstance(package_context, dict) else []
+    if _protect_policy_actions_disagree(response_payload):
+        scanner_evidence.append(
+            {
+                "source": "decision_contract",
+                "reason_code": AUTHORITATIVE_DECISION_INCONSISTENT,
+                "final_action": policy_action,
+            }
+        )
+    risk_summary = (
+        _optional_string(verdict.get("reason"))
+        or _optional_string(supply_chain_evaluation.get("risk_summary"))
+        or _optional_string(user_copy_map.get("summary"))
+    )
+    decision_reason = risk_summary or f"package_supply_chain_{policy_action.replace('-', '_')}"
+    decision_v2 = build_decision_v2(policy_action, reason=decision_reason)
     return {
         "artifact_id": artifact.artifact_id,
         "artifact_name": artifact.name,
@@ -167,19 +185,12 @@ def _protect_approval_item(
         "config_path": artifact.config_path,
         "policy_action": policy_action,
         "changed_fields": _protect_target_labels(response_payload),
-        "risk_summary": _optional_string(verdict.get("reason"))
-        or _optional_string(supply_chain_evaluation.get("risk_summary"))
-        or _optional_string(user_copy_map.get("summary")),
+        "risk_summary": risk_summary,
         "risk_signals": _string_list(verdict.get("risk_signals")),
         "action_envelope_json": (
             receipt.get("action_envelope_json") if isinstance(receipt.get("action_envelope_json"), dict) else None
         ),
-        "decision_v2_json": {
-            "action": policy_action,
-            "user_title": _optional_string(user_copy_map.get("title")) or "Review required",
-            "summary": _optional_string(user_copy_map.get("summary")) or _optional_string(verdict.get("reason")) or "",
-            "harness_message": _optional_string(user_copy_map.get("harness_message")) or "",
-        },
+        "decision_v2_json": decision_v2.to_dict(),
         "scanner_evidence": scanner_evidence,
     }
 
@@ -260,18 +271,39 @@ def _protect_display_harness(response_payload: dict[str, object]) -> str:
     return _protect_payload_harness(response_payload)
 
 
-def _protect_policy_action(response_payload: dict[str, object]) -> str | None:
+def _protect_policy_action_candidates(
+    response_payload: dict[str, object],
+) -> tuple[GuardAction | None, GuardAction | None]:
     verdict = response_payload.get("verdict")
+    verdict_action: GuardAction | None = None
     if isinstance(verdict, dict):
-        action = _optional_string(verdict.get("action"))
-        if action == "block":
-            return "block"
-        if action == "review":
-            return "require-reapproval"
+        verdict_action = _normalize_protect_policy_action(verdict.get("action"))
     supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
-    if not isinstance(supply_chain_evaluation, dict):
-        return None
-    return _optional_string(supply_chain_evaluation.get("policy_action"))
+    supply_action = (
+        _normalize_protect_policy_action(supply_chain_evaluation.get("policy_action"))
+        if isinstance(supply_chain_evaluation, dict)
+        else None
+    )
+    return verdict_action, supply_action
+
+
+def _protect_policy_action(response_payload: dict[str, object]) -> GuardAction | None:
+    verdict_action, supply_action = _protect_policy_action_candidates(response_payload)
+    if verdict_action is None:
+        return supply_action
+    if supply_action is None:
+        return verdict_action
+    return most_restrictive_guard_action(verdict_action, supply_action, unknown_action="block")
+
+
+def _protect_policy_actions_disagree(response_payload: dict[str, object]) -> bool:
+    verdict_action, supply_action = _protect_policy_action_candidates(response_payload)
+    return verdict_action is not None and supply_action is not None and verdict_action != supply_action
+
+
+def _normalize_protect_policy_action(value: object) -> GuardAction | None:
+    action = _optional_string(value)
+    return action if is_guard_action(action) else None
 
 
 def _protect_has_reason_code(response_payload: dict[str, object], reason_code: str) -> bool:

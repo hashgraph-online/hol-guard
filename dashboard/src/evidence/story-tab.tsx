@@ -2,13 +2,13 @@ import { useMemo, memo } from "react";
 import {
   HiMiniChevronLeft,
   HiMiniChevronRight,
-  HiMiniCheckCircle,
-  HiMiniNoSymbol,
 } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { plainEnglishDescription } from "./plain-english";
+import { guardActionDisposition } from "../guard-action";
+import { DecisionBadge } from "./decision-badge";
 
 interface StoryTabProps {
   receipts: GuardReceipt[];
@@ -47,9 +47,10 @@ function StoryTabRaw({ receipts, selectedDay, onSelectDay }: StoryTabProps) {
   }, [receipts, effectiveDay]);
 
   const summary = useMemo(() => {
-    const allowed = dayReceipts.filter((r) => r.policy_decision === "allow").length;
-    const blocked = dayReceipts.filter((r) => r.policy_decision === "block").length;
-    return { allowed, blocked, total: dayReceipts.length };
+    const allowed = dayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+    const blocked = dayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
+    const reviewed = dayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
+    return { allowed, blocked, reviewed, total: dayReceipts.length };
   }, [dayReceipts]);
 
   const dayLabel = useMemo(() => {
@@ -113,6 +114,9 @@ function StoryTabRaw({ receipts, selectedDay, onSelectDay }: StoryTabProps) {
           {summary.blocked > 0 && (
             <span className="text-brand-attention">Stopped {summary.blocked}.</span>
           )}
+          {summary.reviewed > 0 && (
+            <span className="text-brand-blue">Review required {summary.reviewed}.</span>
+          )}
         </p>
       </div>
 
@@ -165,7 +169,6 @@ function StoryCard({ receipt }: { receipt: GuardReceipt }) {
   const category = detectCategory(receipt);
   const catInfo = getCategoryInfo(category);
   const description = plainEnglishDescription(receipt);
-  const isAllowed = receipt.policy_decision === "allow";
 
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-all hover:shadow-md">
@@ -181,7 +184,7 @@ function StoryCard({ receipt }: { receipt: GuardReceipt }) {
           </div>
           <p className="mt-2 text-sm text-brand-dark">{description}</p>
         </div>
-        <DecisionBadge allowed={isAllowed} />
+        <DecisionBadge decision={receipt.policy_decision} />
       </div>
       <div className="mt-3 flex items-center gap-2">
         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${catInfo.color} bg-slate-50`}>
@@ -189,23 +192,6 @@ function StoryCard({ receipt }: { receipt: GuardReceipt }) {
         </span>
       </div>
     </div>
-  );
-}
-
-function DecisionBadge({ allowed }: { allowed: boolean }) {
-  if (allowed) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-        <HiMiniCheckCircle className="h-3.5 w-3.5" aria-hidden="true" />
-        Allowed
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-brand-dark">
-      <HiMiniNoSymbol className="h-3.5 w-3.5" aria-hidden="true" />
-      Stopped
-    </span>
   );
 }
 

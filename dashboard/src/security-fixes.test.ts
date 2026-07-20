@@ -76,6 +76,7 @@ const secretFileReadItem = makeItem({
   risk_headline: "secret file access",
   risk_summary: "reads .env file containing credentials",
   decision_v2_json: {
+    guard_action: "require-reapproval",
     action: "ask",
     reason: "secret read",
     user_title: "Secret file access",

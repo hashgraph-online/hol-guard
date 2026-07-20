@@ -755,7 +755,8 @@ def test_local_request_snapshot_preserves_scrubbed_command_when_redaction_is_par
     assert payload["rawCommandText"] is None
     assert payload["commandText"] == payload["command_text"]
     assert envelope["command"] == "cat PRIVATE_KEY_FILE"
-    assert "target_paths" not in envelope
+    assert envelope["target_paths"] == []
+    assert envelope["targetPaths"] == []
     assert envelope["operation"] == "run"
     assert envelope["target_class"] == "shell_command"
     assert envelope["target_count"] == 1
@@ -930,6 +931,130 @@ def test_cloud_review_payload_malformed_envelope_gets_safe_display_contract() ->
     assert envelope["action_type"] == "unknown"
     assert envelope["actionType"] == "unknown"
     assert envelope["operation"] == "parse_action_envelope"
+
+
+@pytest.mark.parametrize("redaction_level", ["full", "none"])
+def test_cloud_review_payload_preserves_exact_action_across_redaction_levels(
+    redaction_level: str,
+) -> None:
+    row = {
+        **_approval_request_row("req-exact-sandbox-action"),
+        "policy_action": "sandbox-required",
+        "action_envelope_json": {
+            "action_type": "shell_command",
+            "command": "python build.py",
+            "pre_execution_result": "sandbox-required",
+        },
+    }
+
+    payload = local_request_snapshots._cloud_safe_local_request_payload(
+        row,
+        redaction_level=redaction_level,
+    )
+
+    envelope = payload["action_envelope_json"]
+    assert isinstance(envelope, dict)
+    assert payload["policy_action"] == "sandbox-required"
+    assert payload["policyAction"] == "sandbox-required"
+    assert envelope["policy_action"] == "sandbox-required"
+    assert envelope["policyAction"] == "sandbox-required"
+    assert envelope["pre_execution_result"] == "sandbox-required"
+    assert envelope["preExecutionResult"] == "sandbox-required"
+
+
+def test_cloud_review_payload_projects_missing_legacy_action_fail_closed() -> None:
+    row = _approval_request_row("req-legacy-missing-action")
+    row.pop("policy_action")
+
+    payload = local_request_snapshots._cloud_safe_local_request_payload(
+        row,
+        redaction_level="full",
+    )
+
+    assert payload["policy_action"] == "require-reapproval"
+    assert payload["policyAction"] == "require-reapproval"
+
+
+def test_cloud_review_payload_rejects_explicit_unknown_action() -> None:
+    row = {
+        **_approval_request_row("req-explicit-unknown-action"),
+        "policy_action": "require-approval",
+    }
+
+    with pytest.raises(ValueError, match="authoritative_decision_inconsistent"):
+        local_request_snapshots._cloud_safe_local_request_payload(
+            row,
+            redaction_level="full",
+        )
+
+
+def test_cloud_action_envelope_matches_the_dashboard_round_trip_fixture() -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[1] / "dashboard" / "src" / "test-fixtures" / "cloud-action-envelope.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    actual = local_request_snapshots._cloud_safe_action_envelope(
+        {
+            "action_type": "shell_command",
+            "command": "python build.py",
+            "pre_execution_result": "sandbox-required",
+        },
+        redaction_level="full",
+        reason="Sandbox execution is required.",
+        policy_action="sandbox-required",
+        fallback_action_id="req-cloud-round-trip",
+        fallback_harness="codex",
+    )
+
+    assert actual == fixture
+
+
+@pytest.mark.parametrize(
+    ("snake_key", "camel_key"),
+    [
+        ("action_id", "actionId"),
+        ("action_type", "actionType"),
+        ("policy_action", "policyAction"),
+        ("pre_execution_result", "preExecutionResult"),
+    ],
+)
+def test_cloud_action_envelope_rejects_conflicting_documented_aliases(
+    snake_key: str,
+    camel_key: str,
+) -> None:
+    envelope: dict[str, object] = {
+        "action_id": "same-action",
+        "actionId": "same-action",
+        "action_type": "shell_command",
+        "actionType": "shell_command",
+        "policy_action": "allow",
+        "policyAction": "allow",
+        "pre_execution_result": "allow",
+        "preExecutionResult": "allow",
+    }
+    envelope[camel_key] = "block" if "policy" in snake_key or "execution" in snake_key else "different"
+
+    with pytest.raises(ValueError, match="authoritative_decision_inconsistent"):
+        local_request_snapshots._cloud_safe_action_envelope(
+            envelope,
+            redaction_level="full",
+            policy_action="allow",
+        )
+
+
+def test_cloud_review_payload_rejects_an_envelope_action_that_differs_from_outer_authority() -> None:
+    row = {
+        **_approval_request_row("req-contradictory-cloud-action"),
+        "policy_action": "allow",
+        "action_envelope_json": {
+            "action_type": "shell_command",
+            "pre_execution_result": "block",
+        },
+    }
+
+    with pytest.raises(ValueError, match="authoritative_decision_inconsistent"):
+        local_request_snapshots._cloud_safe_local_request_payload(row, redaction_level="full")
 
 
 def test_local_request_snapshot_syncs_display_fields_when_command_missing(tmp_path: Path) -> None:
@@ -2675,11 +2800,20 @@ def test_executor_rejects_duplicate_signed_receipt_without_resolving_again(tmp_p
     assert store.resolved == []
 
 
-def test_executor_uses_signed_remote_approval_decision_over_outer_payload(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("outer_action", "signed_decision"),
+    [("allow_once", "block"), ("block", "allow_once")],
+)
+def test_executor_rejects_outer_and_signed_remote_decision_mismatches_before_claim(
+    tmp_path: Path,
+    outer_action: str,
+    signed_decision: str,
+) -> None:
     class ApprovalStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
             super().__init__(guard_home)
             self.resolved: list[dict[str, object]] = []
+            self.claimed_receipts: list[str] = []
             self.request_row = _approval_request_row("request-1")
 
         def get_approval_request(self, request_id: str) -> dict[str, object] | None:
@@ -2692,7 +2826,8 @@ def test_executor_uses_signed_remote_approval_decision_over_outer_payload(tmp_pa
             request_id: str,
             claimed_at: str,
         ) -> bool:
-            del receipt_id, request_id, claimed_at
+            del request_id, claimed_at
+            self.claimed_receipts.append(receipt_id)
             return True
 
         def resolve_request_with_signed_remote_result(
@@ -2719,15 +2854,15 @@ def test_executor_uses_signed_remote_approval_decision_over_outer_payload(tmp_pa
     remote_approval = _signed_remote_approval(
         store,
         store.request_row,
-        decision="block",
-        receipt_id="cloud-receipt-block",
+        decision=signed_decision,
+        receipt_id="cloud-receipt-mismatch",
     )
     result = command_executors.execute_guard_command_job(
         {
             "operation": "guard.approval.resolve",
             "payload": {
                 "localRequestId": "request-1",
-                "action": "allow_once",
+                "action": outer_action,
                 "remoteApproval": remote_approval,
                 "scope": "artifact",
             },
@@ -2737,19 +2872,12 @@ def test_executor_uses_signed_remote_approval_decision_over_outer_payload(tmp_pa
         now=lambda: "2026-06-13T00:00:00+00:00",
     )
 
-    assert result["data"]["status"] == "completed"
-    assert store.resolved == [
-        {
-            "request_id": "request-1",
-            "resolution_action": "block",
-            "resolution_scope": "artifact",
-            "reason": "Guard Cloud signed remote approval",
-            "resolved_at": "2026-06-13T00:00:00+00:00",
-        }
-    ]
+    assert result["failureCode"] == "remote_approval_decision_mismatch"
+    assert store.claimed_receipts == []
+    assert store.resolved == []
 
 
-def test_executor_releases_remote_once_receipt_on_invalid_signed_decision(tmp_path: Path) -> None:
+def test_executor_rejects_invalid_signed_decision_before_claim(tmp_path: Path) -> None:
     class ApprovalStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
             super().__init__(guard_home)
@@ -2795,8 +2923,71 @@ def test_executor_releases_remote_once_receipt_on_invalid_signed_decision(tmp_pa
     )
 
     assert result["failureCode"] == "invalid_remote_approval_decision"
-    assert store.claimed_receipts == ["cloud-receipt-1"]
-    assert store.released_receipts == ["cloud-receipt-1"]
+    assert store.claimed_receipts == []
+    assert store.released_receipts == []
+
+
+@pytest.mark.parametrize(
+    ("policy_action", "contract_error", "expected_failure"),
+    [
+        ("block", None, "terminal_policy_action_not_resolvable"),
+        ("sandbox-required", None, "terminal_policy_action_not_resolvable"),
+        ("require-reapproval", "authoritative_decision_inconsistent", "authoritative_decision_inconsistent"),
+    ],
+)
+def test_executor_rejects_non_resolvable_signed_remote_requests_before_claim(
+    tmp_path: Path,
+    policy_action: str,
+    contract_error: str | None,
+    expected_failure: str,
+) -> None:
+    class ApprovalStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.claimed_receipts: list[str] = []
+            self.resolved: list[dict[str, object]] = []
+            self.request_row = _approval_request_row("request-non-resolvable", policy_action=policy_action)
+            if contract_error is not None:
+                self.request_row["decision_contract_error"] = contract_error
+
+        def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+            return self.request_row if request_id == "request-non-resolvable" else None
+
+        def claim_remote_once_receipt(
+            self,
+            receipt_id: str,
+            *,
+            request_id: str,
+            claimed_at: str,
+        ) -> bool:
+            del request_id, claimed_at
+            self.claimed_receipts.append(receipt_id)
+            return True
+
+        def resolve_request_with_signed_remote_result(self, *args, **kwargs) -> dict[str, object]:
+            self.resolved.append({"args": args, "kwargs": kwargs})
+            return {"resolved": True}
+
+    store = ApprovalStore(tmp_path / "guard-home")
+    remote_approval = _signed_remote_approval(store, store.request_row)
+
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "localRequestId": "request-non-resolvable",
+                "action": "allow_once",
+                "remoteApproval": remote_approval,
+            },
+        },
+        context=_context(tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["failureCode"] == expected_failure
+    assert store.claimed_receipts == []
+    assert store.resolved == []
 
 
 def test_executor_syncs_policy_without_local_request_id(tmp_path: Path) -> None:
@@ -3081,8 +3272,8 @@ def test_executor_rejects_remote_approval_for_removed_one_time_scope(tmp_path: P
     assert store.resolved == []
 
 
-def test_executor_resolves_block_policy_action_with_workspace_allow(tmp_path: Path) -> None:
-    """Prove policy_action='block' can be remotely allowed with the requested scope."""
+def test_executor_does_not_override_block_policy_action_with_workspace_allow(tmp_path: Path) -> None:
+    """A signed remote allow cannot convert a terminal block into an approval."""
 
     class WorkspaceAllowStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
@@ -3142,16 +3333,9 @@ def test_executor_resolves_block_policy_action_with_workspace_allow(tmp_path: Pa
         now=lambda: "2026-06-13T00:00:00+00:00",
     )
 
-    assert result["generatedAt"] == "2026-06-13T00:00:00+00:00"
-    assert result["data"]["status"] == "completed"
-    assert store.resolved == [
-        {
-            "request_id": "request-workspace-allow",
-            "resolution_action": "allow",
-            "resolution_scope": "workspace",
-        }
-    ]
-    assert len(store.claimed_receipts) == 1
+    assert result["failureCode"] == "terminal_policy_action_not_resolvable"
+    assert store.resolved == []
+    assert store.claimed_receipts == []
 
 
 def test_executor_resolves_harness_scope_with_block(tmp_path: Path) -> None:
@@ -3205,7 +3389,7 @@ def test_executor_resolves_harness_scope_with_block(tmp_path: Path) -> None:
         {
             "operation": "guard.approval.resolve",
             "payload": {
-                "action": "allow_once",
+                "action": "block",
                 "localRequestId": "request-harness-block",
                 "remoteApproval": remote_approval,
             },

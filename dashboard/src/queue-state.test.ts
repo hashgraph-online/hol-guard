@@ -16,6 +16,8 @@ import {
   isDuplicateGroup,
   filterQueueByDateRange,
   formatQueueRequestDate,
+  bulkApprovalRiskTier,
+  isBulkApprovableGroup,
 } from "./queue-state";
 
 function assert(condition: boolean, message: string): void {
@@ -131,6 +133,30 @@ const reqA2: GuardApprovalRequest = { ...BASE_REQUEST, request_id: "req-a2", que
 const reqB: GuardApprovalRequest = { ...BASE_REQUEST, request_id: "req-b" };
 
 const groups = groupDuplicates([reqA1, reqA2, reqB]);
+
+const sandboxGroup = groupDuplicates([
+  { ...BASE_REQUEST, request_id: "req-sandbox", policy_action: "sandbox-required" },
+])[0];
+assert(
+  bulkApprovalRiskTier(sandboxGroup) === "blocked",
+  "T-QS-08A: sandbox-required groups are terminal for bulk approval",
+);
+assert(
+  isBulkApprovableGroup(sandboxGroup) === false,
+  "T-QS-08B: sandbox-required groups cannot be bulk approved",
+);
+
+const inconsistentGroup = groupDuplicates([
+  {
+    ...BASE_REQUEST,
+    request_id: "req-inconsistent-authority",
+    decision_contract_error: "authoritative_decision_inconsistent",
+  },
+])[0];
+assert(
+  bulkApprovalRiskTier(inconsistentGroup) === "blocked" && !isBulkApprovableGroup(inconsistentGroup),
+  "P45: contract-invalid queue rows cannot be bulk approved",
+);
 
 assert(groups.length === 2, "T-QS-09: groupDuplicates collapses items with same queue_group_id into one group");
 
@@ -492,8 +518,8 @@ assert(
   "T-QS-44: buildHomePrimaryState includes action count in copy when pending"
 );
 assert(
-  needsDecision.ctaLabel === "Review blocked action",
-  "T-QS-45: buildHomePrimaryState CTA is 'Review blocked action' when pending"
+  needsDecision.ctaLabel === "Review waiting action",
+  "T-QS-45: buildHomePrimaryState CTA identifies a waiting action when pending"
 );
 
 const setupNeeded = buildHomePrimaryState(0, 0);
@@ -733,6 +759,7 @@ const supplyChainScriptItem: GuardApprovalRequest = {
     script_name: "build",
   },
   decision_v2_json: {
+    guard_action: "require-reapproval",
     action: "ask",
     reason: "Package script can execute project code.",
     user_title: "Review package script",

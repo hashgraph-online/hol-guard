@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from hashlib import sha256
 from pathlib import Path
 
+from ..action_lattice import is_guard_action
 from .base import HarnessContext
 from .cursor_native_approval import ensure_cursor_hook_attestation_secret
 
@@ -141,13 +142,8 @@ def cursor_hook_would_prompt_user(
 ) -> bool:
     """Return True when Guard maps this hook result to Cursor permission ask."""
 
-    if policy_action in {"require-reapproval", "review"}:
-        return True
-    return (
-        policy_action == "warn"
-        and guard_payload is not None
-        and _guard_payload_has_actionable_risk_for_policy(guard_payload)
-    )
+    del guard_payload
+    return policy_action in {"require-reapproval", "review"}
 
 
 def cursor_hook_requires_approval_center_queue(
@@ -543,6 +539,7 @@ GUARD_CLI = __GUARD_CLI__
 GUARD_HOOK_ARGV = __GUARD_HOOK_ARGV__
 GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__
 GUARD_HOOK_TIMEOUT_SECONDS = __GUARD_HOOK_TIMEOUT_SECONDS__
+GUARD_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
 
 
 def _hook_process_env() -> dict[str, str]:
@@ -718,6 +715,11 @@ def _daemon_hook_result(
         return None
     if not isinstance(parsed_body, dict):
         return None
+    raw_event_name = _raw_hook_event_name(request_payload)
+    if raw_event_name not in {"aftershellexecution", "aftermcpexecution"}:
+        policy_action = parsed_body.get("policy_action")
+        if not isinstance(policy_action, str) or policy_action not in GUARD_ACTIONS:
+            return None
     return (0, body_stripped, "")
 
 
@@ -862,31 +864,13 @@ def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object
     return normalized
 
 
-def _guard_payload_has_actionable_risk(guard_payload: dict[str, object]) -> bool:
-    risk_signals = guard_payload.get("risk_signals")
-    if isinstance(risk_signals, list) and risk_signals:
-        return True
-    approval_requests = guard_payload.get("approval_requests")
-    if isinstance(approval_requests, list) and approval_requests:
-        return True
-    for key in ("review_hint", "risk_summary", "why_now", "risk_headline"):
-        value = guard_payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return True
-    decision = guard_payload.get("decision_v2_json")
-    if isinstance(decision, Mapping):
-        signals = decision.get("signals")
-        if isinstance(signals, list) and signals:
-            return True
-    return False
-
-
 def _cursor_permission(policy_action: str, guard_payload: dict[str, object]) -> str:
+    del guard_payload
+    if policy_action not in GUARD_ACTIONS:
+        return "deny"
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
     if policy_action in {"require-reapproval", "review"}:
-        return "ask"
-    if policy_action == "warn" and _guard_payload_has_actionable_risk(guard_payload):
         return "ask"
     return "allow"
 
@@ -1136,8 +1120,8 @@ def _compute_cursor_after_observer_proof(
 def main() -> int:
     raw = sys.stdin.read()
     if not raw.strip():
-        print(json.dumps({"permission": "allow"}))
-        return 0
+        print(json.dumps({"permission": "deny", "user_message": "HOL Guard received empty Cursor hook input."}))
+        return 2
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError:
@@ -1222,10 +1206,21 @@ def main() -> int:
                 guard_payload = parsed
         except json.JSONDecodeError:
             guard_payload = {}
-    policy_action = str(guard_payload.get("policy_action") or "allow")
     if hook_event_name.strip().lower() in {"aftershellexecution", "aftermcpexecution"}:
         print("{}")
         return 0
+    raw_policy_action = guard_payload.get("policy_action")
+    if not isinstance(raw_policy_action, str) or raw_policy_action not in GUARD_ACTIONS:
+        print(
+            json.dumps(
+                {
+                    "permission": "deny",
+                    "user_message": "HOL Guard returned an invalid policy action and failed closed.",
+                }
+            )
+        )
+        return 2
+    policy_action = raw_policy_action
     if proc.returncode != 0 and not guard_payload:
         print(
             json.dumps(
@@ -1373,38 +1368,16 @@ def _tool_input_dict(value: object) -> dict[str, object]:
     return {}
 
 
-def _guard_payload_has_actionable_risk_for_policy(guard_payload: Mapping[str, object]) -> bool:
-    risk_signals = guard_payload.get("risk_signals")
-    if isinstance(risk_signals, list) and risk_signals:
-        return True
-    approval_requests = guard_payload.get("approval_requests")
-    if isinstance(approval_requests, list) and approval_requests:
-        return True
-    for key in ("review_hint", "risk_summary", "why_now", "risk_headline"):
-        value = guard_payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return True
-    decision = guard_payload.get("decision_v2_json")
-    if isinstance(decision, Mapping):
-        signals = decision.get("signals")
-        if isinstance(signals, list) and signals:
-            return True
-    return False
-
-
 def _cursor_permission_for_policy(
     policy_action: str,
     guard_payload: Mapping[str, object] | None = None,
 ) -> str:
+    del guard_payload
+    if not is_guard_action(policy_action):
+        return "deny"
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
     if policy_action in {"require-reapproval", "review"}:
-        return "ask"
-    if (
-        policy_action == "warn"
-        and guard_payload is not None
-        and _guard_payload_has_actionable_risk_for_policy(guard_payload)
-    ):
         return "ask"
     return "allow"
 

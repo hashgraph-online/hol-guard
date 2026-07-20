@@ -494,7 +494,7 @@ function requireReact_production() {
   react_production.useTransition = function() {
     return ReactSharedInternals.H.useTransition();
   };
-  react_production.version = "19.2.5";
+  react_production.version = "19.2.7";
   return react_production;
 }
 var hasRequiredReact;
@@ -516,7 +516,7 @@ var hasRequiredScheduler_production;
 function requireScheduler_production() {
   if (hasRequiredScheduler_production) return scheduler_production;
   hasRequiredScheduler_production = 1;
-  (function(exports$1) {
+  (function(exports) {
     function push(heap, node) {
       var index = heap.length;
       heap.push(node);
@@ -550,15 +550,15 @@ function requireScheduler_production() {
       var diff = a.sortIndex - b.sortIndex;
       return 0 !== diff ? diff : a.id - b.id;
     }
-    exports$1.unstable_now = void 0;
+    exports.unstable_now = void 0;
     if ("object" === typeof performance && "function" === typeof performance.now) {
       var localPerformance = performance;
-      exports$1.unstable_now = function() {
+      exports.unstable_now = function() {
         return localPerformance.now();
       };
     } else {
       var localDate = Date, initialTime = localDate.now();
-      exports$1.unstable_now = function() {
+      exports.unstable_now = function() {
         return localDate.now() - initialTime;
       };
     }
@@ -585,12 +585,12 @@ function requireScheduler_production() {
     }
     var isMessageLoopRunning = false, taskTimeoutID = -1, frameInterval = 5, startTime = -1;
     function shouldYieldToHost() {
-      return needsPaint ? true : exports$1.unstable_now() - startTime < frameInterval ? false : true;
+      return needsPaint ? true : exports.unstable_now() - startTime < frameInterval ? false : true;
     }
     function performWorkUntilDeadline() {
       needsPaint = false;
       if (isMessageLoopRunning) {
-        var currentTime = exports$1.unstable_now();
+        var currentTime = exports.unstable_now();
         startTime = currentTime;
         var hasMoreWork = true;
         try {
@@ -610,7 +610,7 @@ function requireScheduler_production() {
                     var continuationCallback = callback(
                       currentTask.expirationTime <= currentTime
                     );
-                    currentTime = exports$1.unstable_now();
+                    currentTime = exports.unstable_now();
                     if ("function" === typeof continuationCallback) {
                       currentTask.callback = continuationCallback;
                       advanceTimers(currentTime);
@@ -660,27 +660,27 @@ function requireScheduler_production() {
       };
     function requestHostTimeout(callback, ms) {
       taskTimeoutID = localSetTimeout(function() {
-        callback(exports$1.unstable_now());
+        callback(exports.unstable_now());
       }, ms);
     }
-    exports$1.unstable_IdlePriority = 5;
-    exports$1.unstable_ImmediatePriority = 1;
-    exports$1.unstable_LowPriority = 4;
-    exports$1.unstable_NormalPriority = 3;
-    exports$1.unstable_Profiling = null;
-    exports$1.unstable_UserBlockingPriority = 2;
-    exports$1.unstable_cancelCallback = function(task) {
+    exports.unstable_IdlePriority = 5;
+    exports.unstable_ImmediatePriority = 1;
+    exports.unstable_LowPriority = 4;
+    exports.unstable_NormalPriority = 3;
+    exports.unstable_Profiling = null;
+    exports.unstable_UserBlockingPriority = 2;
+    exports.unstable_cancelCallback = function(task) {
       task.callback = null;
     };
-    exports$1.unstable_forceFrameRate = function(fps) {
+    exports.unstable_forceFrameRate = function(fps) {
       0 > fps || 125 < fps ? console.error(
         "forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported"
       ) : frameInterval = 0 < fps ? Math.floor(1e3 / fps) : 5;
     };
-    exports$1.unstable_getCurrentPriorityLevel = function() {
+    exports.unstable_getCurrentPriorityLevel = function() {
       return currentPriorityLevel;
     };
-    exports$1.unstable_next = function(eventHandler) {
+    exports.unstable_next = function(eventHandler) {
       switch (currentPriorityLevel) {
         case 1:
         case 2:
@@ -698,10 +698,10 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports$1.unstable_requestPaint = function() {
+    exports.unstable_requestPaint = function() {
       needsPaint = true;
     };
-    exports$1.unstable_runWithPriority = function(priorityLevel, eventHandler) {
+    exports.unstable_runWithPriority = function(priorityLevel, eventHandler) {
       switch (priorityLevel) {
         case 1:
         case 2:
@@ -720,8 +720,8 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports$1.unstable_scheduleCallback = function(priorityLevel, callback, options) {
-      var currentTime = exports$1.unstable_now();
+    exports.unstable_scheduleCallback = function(priorityLevel, callback, options) {
+      var currentTime = exports.unstable_now();
       "object" === typeof options && null !== options ? (options = options.delay, options = "number" === typeof options && 0 < options ? currentTime + options : currentTime) : options = currentTime;
       switch (priorityLevel) {
         case 1:
@@ -751,8 +751,8 @@ function requireScheduler_production() {
       options > currentTime ? (priorityLevel.sortIndex = options, push(timerQueue, priorityLevel), null === peek(taskQueue) && priorityLevel === peek(timerQueue) && (isHostTimeoutScheduled ? (localClearTimeout(taskTimeoutID), taskTimeoutID = -1) : isHostTimeoutScheduled = true, requestHostTimeout(handleTimeout, options - currentTime))) : (priorityLevel.sortIndex = timeout, push(taskQueue, priorityLevel), isHostCallbackScheduled || isPerformingWork || (isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline())));
       return priorityLevel;
     };
-    exports$1.unstable_shouldYield = shouldYieldToHost;
-    exports$1.unstable_wrapCallback = function(callback) {
+    exports.unstable_shouldYield = shouldYieldToHost;
+    exports.unstable_wrapCallback = function(callback) {
       var parentPriorityLevel = currentPriorityLevel;
       return function() {
         var previousPriorityLevel = currentPriorityLevel;
@@ -922,7 +922,7 @@ function requireReactDom_production() {
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
   };
-  reactDom_production.version = "19.2.5";
+  reactDom_production.version = "19.2.7";
   return reactDom_production;
 }
 var hasRequiredReactDom;
@@ -12366,12 +12366,12 @@ function requireReactDomClient_production() {
     }
   };
   var isomorphicReactPackageVersion$jscomp$inline_1840 = React2.version;
-  if ("19.2.5" !== isomorphicReactPackageVersion$jscomp$inline_1840)
+  if ("19.2.7" !== isomorphicReactPackageVersion$jscomp$inline_1840)
     throw Error(
       formatProdErrorMessage(
         527,
         isomorphicReactPackageVersion$jscomp$inline_1840,
-        "19.2.5"
+        "19.2.7"
       )
     );
   ReactDOMSharedInternals.findDOMNode = function(componentOrElement) {
@@ -12389,10 +12389,10 @@ function requireReactDomClient_production() {
   };
   var internals$jscomp$inline_2347 = {
     bundleType: 0,
-    version: "19.2.5",
+    version: "19.2.7",
     rendererPackageName: "react-dom",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.2.5"
+    reconcilerVersion: "19.2.7"
   };
   if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
     var hook$jscomp$inline_2348 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -12459,7 +12459,7 @@ function requireReactDomClient_production() {
     listenToAllSupportedEvents(container2);
     return new ReactDOMHydrationRoot(initialChildren);
   };
-  reactDomClient_production.version = "19.2.5";
+  reactDomClient_production.version = "19.2.7";
   return reactDomClient_production;
 }
 var hasRequiredClient;
@@ -12537,6 +12537,14 @@ const __vitePreload = function preload(baseModule, deps, importerUrl) {
     return baseModule().catch(handlePreloadError);
   });
 };
+const GUARD_ACTIONS = [
+  "allow",
+  "warn",
+  "review",
+  "require-reapproval",
+  "sandbox-required",
+  "block"
+];
 const GUARD_ACTION_TYPES = [
   "prompt",
   "shell_command",
@@ -13389,7 +13397,9 @@ const BULK_HIGH_CATEGORY_IDS = /* @__PURE__ */ new Set([
   "file_delete_cleanup"
 ]);
 function bulkApprovalRiskTier(group) {
-  if (group.primary.policy_action === "block") return "blocked";
+  if (group.primary.decision_contract_error !== void 0 || group.primary.policy_action === "block" || group.primary.policy_action === "sandbox-required") {
+    return "blocked";
+  }
   const categoryId = resolveQueueCategory(group.primary).id;
   if (BULK_BLOCKED_CATEGORY_IDS.has(categoryId)) return "blocked";
   if (BULK_HIGH_CATEGORY_IDS.has(categoryId)) return "high";
@@ -13953,6 +13963,118 @@ function searchQueue(items, term) {
     return parts.join(" ").toLowerCase().includes(normalized);
   });
 }
+const AUTHORITATIVE_DECISION_INCONSISTENT = "authoritative_decision_inconsistent";
+const ACTION_PRESENTATIONS = {
+  allow: {
+    action: "allow",
+    disposition: "allowed",
+    label: "Allowed",
+    copy: "allowed",
+    tone: "success",
+    allowsLaunch: true
+  },
+  warn: {
+    action: "warn",
+    disposition: "allowed",
+    label: "Allowed with warning",
+    copy: "allowed with a warning",
+    tone: "warning",
+    allowsLaunch: true
+  },
+  review: {
+    action: "review",
+    disposition: "reviewed",
+    label: "Needs review",
+    copy: "paused for review",
+    tone: "info",
+    allowsLaunch: false
+  },
+  "require-reapproval": {
+    action: "require-reapproval",
+    disposition: "reviewed",
+    label: "Needs fresh approval",
+    copy: "paused for fresh approval",
+    tone: "info",
+    allowsLaunch: false
+  },
+  "sandbox-required": {
+    action: "sandbox-required",
+    disposition: "reviewed",
+    label: "Sandbox required",
+    copy: "paused until sandbox requirements are met",
+    tone: "info",
+    allowsLaunch: false
+  },
+  block: {
+    action: "block",
+    disposition: "blocked",
+    label: "Stopped",
+    copy: "blocked",
+    tone: "attention",
+    allowsLaunch: false
+  }
+};
+function isGuardAction(value) {
+  return typeof value === "string" && GUARD_ACTIONS.some((action) => action === value);
+}
+function isRecognizedGuardActionInput(value) {
+  return value === "ask" || isGuardAction(value);
+}
+function isActionBearingKey(key) {
+  const separated = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+  const tokens = separated.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return tokens.join("") === "preexecutionresult" || tokens.some((token) => token === "action" || token === "actions");
+}
+function normalizeGuardAction(value) {
+  if (value === "ask") return "review";
+  return isGuardAction(value) ? value : "review";
+}
+function guardActionPresentation(value) {
+  return ACTION_PRESENTATIONS[normalizeGuardAction(value)];
+}
+function mostRestrictiveGuardAction(...values) {
+  if (values.length === 0) return "review";
+  const rank = new Map(GUARD_ACTIONS.map((action, index) => [action, index]));
+  return values.map(normalizeGuardAction).reduce(
+    (strongest, candidate) => (rank.get(candidate) ?? 0) > (rank.get(strongest) ?? 0) ? candidate : strongest
+  );
+}
+function guardActionDisposition(value) {
+  return guardActionPresentation(value).disposition;
+}
+function guardDecisionV2Action(value) {
+  switch (normalizeGuardAction(value)) {
+    case "allow":
+      return "allow";
+    case "warn":
+      return "warn";
+    case "block":
+      return "block";
+    case "review":
+    case "require-reapproval":
+    case "sandbox-required":
+      return "ask";
+  }
+}
+function guardActionActivityCopy(value, subject, object) {
+  switch (normalizeGuardAction(value)) {
+    case "allow":
+      return `${subject} allowed ${object}`;
+    case "warn":
+      return `${subject} allowed ${object} with a warning`;
+    case "review":
+      return `${subject} paused ${object} for review`;
+    case "require-reapproval":
+      return `${subject} paused ${object} for fresh approval`;
+    case "sandbox-required":
+      return `${subject} paused ${object} until sandbox requirements are met`;
+    case "block":
+      return `${subject} blocked ${object}`;
+  }
+}
+function isBlockedGuardAction(value) {
+  return guardActionDisposition(value) === "blocked";
+}
 function getArtifactType(receipt) {
   return (receipt.artifact_type ?? "").toLowerCase();
 }
@@ -14096,13 +14218,17 @@ function plainEnglishDescription(receipt) {
   const type = resolveActionType(receipt);
   const title = resolveActionTitle(receipt);
   const subtitle = resolveActionSubtitle(receipt);
-  if (receipt.policy_decision === "allow") {
+  const action = guardActionPresentation(receipt.policy_decision);
+  if (action.disposition === "allowed") {
+    const outcome = action.action === "warn" ? "allowed it with a warning" : "allowed it";
     if (receipt.user_override !== null) {
-      return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} You reviewed and allowed it.` : `${app} ${pastTenseVerb(type)} ${title}. You reviewed and allowed it.`;
+      return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} You reviewed and ${outcome}.` : `${app} ${pastTenseVerb(type)} ${title}. You reviewed and ${outcome}.`;
     }
-    return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} Guard allowed it automatically.` : `${app} ${pastTenseVerb(type)} ${title}. Guard allowed it automatically.`;
+    const automaticOutcome = action.action === "warn" ? "Guard allowed it automatically with a warning." : "Guard allowed it automatically.";
+    return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} ${automaticOutcome}` : `${app} ${pastTenseVerb(type)} ${title}. ${automaticOutcome}`;
   }
-  return subtitle ? `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it: ${formatSubtitle(subtitle)}` : `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it.`;
+  const enforcementCopy = `${guardActionActivityCopy(action.action, "Guard", "it")}.`;
+  return subtitle ? `${app} tried to ${infinitiveVerb(type)} ${title}. ${enforcementCopy} ${formatSubtitle(subtitle)}` : `${app} tried to ${infinitiveVerb(type)} ${title}. ${enforcementCopy}`;
 }
 function pastTenseVerb(type) {
   switch (type) {
@@ -14164,7 +14290,7 @@ function plainEnglishRequestTitle(request) {
   const category = detectCategory({
     ...request,
     timestamp: request.created_at,
-    policy_decision: request.policy_action === "block" ? "block" : "allow",
+    policy_decision: normalizeGuardAction(request.policy_action),
     receipt_id: request.request_id
   });
   const app = harnessDisplayName(request.harness);
@@ -14190,7 +14316,7 @@ function whyPaused(request) {
   const category = detectCategory({
     ...request,
     timestamp: request.created_at,
-    policy_decision: request.policy_action === "block" ? "block" : "allow",
+    policy_decision: normalizeGuardAction(request.policy_action),
     receipt_id: request.request_id
   });
   switch (category) {
@@ -14347,6 +14473,10 @@ function humanizeChangedFields(values) {
   return humanizeList(translated);
 }
 function buildQueueSummary(item) {
+  const resolutionBlockReason = requestResolutionBlockReason(item);
+  if (resolutionBlockReason !== null) {
+    return resolutionBlockReason;
+  }
   if (item.policy_action === "block") {
     return "You already chose to block this action.";
   }
@@ -14388,16 +14518,19 @@ function scopeLabel(scope, variant = "review") {
   }
 }
 function policyActionLabel(action) {
-  switch (action) {
-    case "require-reapproval":
-      return "Needs review";
-    case "block":
-      return "Blocked";
-    case "allow":
-      return "Allowed";
-    default:
-      return action;
+  return guardActionPresentation(action).label;
+}
+function requestResolutionBlockReason(item) {
+  if (item.decision_contract_error !== void 0) {
+    return "HOL Guard found inconsistent stored decision data. This request cannot be approved; rerun the action to create a fresh, consistent review request.";
   }
+  if (item.policy_action === "sandbox-required") {
+    return "Policy requires this action to run in an approved sandbox. An approval cannot bypass the sandbox requirement.";
+  }
+  if (item.policy_action === "block") {
+    return "Policy terminally blocked this action. This queue record is diagnostic and cannot be overridden by an approval.";
+  }
+  return null;
 }
 function capitalizeHarness(harness) {
   if (harness.length === 0) {
@@ -14646,7 +14779,7 @@ function resolveTerminalLabel(item) {
   if (item.artifact_type === "file_read_request") return "File path";
   if (item.artifact_type === "prompt_request") return "Prompt excerpt";
   if (item.artifact_type === "tool_action_request") return "Tool action";
-  return "Stopped command";
+  return "Command";
 }
 function summarizeBulkApproveSelection(groups) {
   return groups.map((group) => {
@@ -14738,8 +14871,9 @@ function computeTrendBuckets(receipts, days, now2) {
       const key = formatDateKey(d);
       const bucket = bucketMap.get(key);
       if (!bucket) continue;
-      if (r.policy_decision === "allow") bucket.allowed++;
-      else if (r.policy_decision === "block") bucket.blocked++;
+      const disposition = guardActionDisposition(r.policy_decision);
+      if (disposition === "allowed") bucket.allowed++;
+      else if (disposition === "blocked") bucket.blocked++;
       else bucket.reviewed++;
     } catch {
     }
@@ -14760,8 +14894,9 @@ function computeMetrics(receipts, now2) {
     } catch {
       continue;
     }
-    if (r.policy_decision === "allow") allowed++;
-    else if (r.policy_decision === "block") blocked++;
+    const disposition = guardActionDisposition(r.policy_decision);
+    if (disposition === "allowed") allowed++;
+    else if (disposition === "blocked") blocked++;
     else reviewed++;
     if (!lastActivityAt || r.timestamp > lastActivityAt) {
       lastActivityAt = r.timestamp;
@@ -14773,13 +14908,13 @@ function computeMetrics(receipts, now2) {
       allowed: 0
     };
     hEntry.total++;
-    if (r.policy_decision === "block") hEntry.blocked++;
-    if (r.policy_decision === "allow") hEntry.allowed++;
+    if (disposition === "blocked") hEntry.blocked++;
+    if (disposition === "allowed") hEntry.allowed++;
     byHarness.set(harness, hEntry);
     const cat = detectCategory(r);
     const cEntry = byCategory.get(cat) ?? { total: 0, blocked: 0 };
     cEntry.total++;
-    if (r.policy_decision === "block") cEntry.blocked++;
+    if (disposition === "blocked") cEntry.blocked++;
     byCategory.set(cat, cEntry);
     const name = r.artifact_name ?? r.artifact_id;
     const rEntry = recurringMap.get(name) ?? {
@@ -14788,8 +14923,8 @@ function computeMetrics(receipts, now2) {
       allowed: 0
     };
     rEntry.total++;
-    if (r.policy_decision === "block") rEntry.blocked++;
-    if (r.policy_decision === "allow") rEntry.allowed++;
+    if (disposition === "blocked") rEntry.blocked++;
+    if (disposition === "allowed") rEntry.allowed++;
     recurringMap.set(name, rEntry);
   }
   const total = allowed + blocked + reviewed;
@@ -14890,10 +15025,10 @@ function computePeriodComparison(receipts, days, now2) {
       if (isNaN(ts)) continue;
       if (ts >= currentStart.getTime() && ts <= base.getTime()) {
         currentTotal++;
-        if (r.policy_decision === "block") currentBlocked++;
+        if (guardActionDisposition(r.policy_decision) === "blocked") currentBlocked++;
       } else if (ts >= previousStart.getTime() && ts < currentStart.getTime()) {
         previousTotal++;
-        if (r.policy_decision === "block") previousBlocked++;
+        if (guardActionDisposition(r.policy_decision) === "blocked") previousBlocked++;
       }
     } catch {
       continue;
@@ -15480,15 +15615,47 @@ function isGuardHarnessActionErrorPayload(value) {
 function isApprovalPageStatus(value) {
   return value === "pending" || value === "resolved" || value === "all";
 }
+function matchingAliasedField(raw, snakeKey, camelKey) {
+  const hasSnake = Object.prototype.hasOwnProperty.call(raw, snakeKey);
+  const hasCamel = Object.prototype.hasOwnProperty.call(raw, camelKey);
+  if (hasSnake && hasCamel && raw[snakeKey] !== raw[camelKey]) {
+    return { matches: false, value: void 0 };
+  }
+  return { matches: true, value: hasSnake ? raw[snakeKey] : raw[camelKey] };
+}
 function parseActionEnvelope(raw) {
   if (!isRecord$1(raw)) {
     return null;
   }
+  const allowedActionFields = /* @__PURE__ */ new Set([
+    "action_id",
+    "action_type",
+    "pre_execution_result",
+    "policy_action",
+    "actionId",
+    "actionType",
+    "preExecutionResult",
+    "policyAction"
+  ]);
+  if (Object.keys(raw).some((key) => isActionBearingKey(key) && !allowedActionFields.has(key))) {
+    return null;
+  }
+  const aliasedActionId = matchingAliasedField(raw, "action_id", "actionId");
+  const aliasedActionType = matchingAliasedField(raw, "action_type", "actionType");
+  const aliasedPreExecutionResult = matchingAliasedField(
+    raw,
+    "pre_execution_result",
+    "preExecutionResult"
+  );
+  const aliasedPolicyAction = matchingAliasedField(raw, "policy_action", "policyAction");
+  if (!aliasedActionId.matches || !aliasedActionType.matches || !aliasedPreExecutionResult.matches || !aliasedPolicyAction.matches) {
+    return null;
+  }
   const schemaVersion = raw["schema_version"];
-  const actionId = raw["action_id"];
+  const actionId = aliasedActionId.value;
   const harness = raw["harness"];
   const eventName = raw["event_name"];
-  const actionType = raw["action_type"];
+  const actionType = aliasedActionType.value;
   const workspace = raw["workspace"];
   const workspaceHash = raw["workspace_hash"];
   const toolName = raw["tool_name"];
@@ -15501,15 +15668,19 @@ function parseActionEnvelope(raw) {
   const mcpTool = raw["mcp_tool"];
   const packageManager = raw["package_manager"];
   const packageName = raw["package_name"];
+  const packageIntentKind = raw["package_intent_kind"];
+  const packageTargets = raw["package_targets"];
+  const preExecutionResult = aliasedPreExecutionResult.value;
+  const policyAction = aliasedPolicyAction.value;
   const scriptName = raw["script_name"];
   const rawPayloadRedacted = raw["raw_payload_redacted"];
   if (typeof schemaVersion !== "number" || typeof actionId !== "string" || typeof harness !== "string" || typeof eventName !== "string" || !isGuardActionType(actionType)) {
     return null;
   }
-  if (!isStringOrNull(workspace) || !isStringOrNull(workspaceHash) || !isStringOrNull(toolName) || !isStringOrNull(command) || !isStringOrNull(promptExcerpt) || promptText !== void 0 && !isStringOrNull(promptText) || !isStringOrNull(mcpServer) || !isStringOrNull(mcpTool) || !isStringOrNull(packageManager) || !isStringOrNull(packageName) || !isStringOrNull(scriptName)) {
+  if (!isStringOrNull(workspace) || !isStringOrNull(workspaceHash) || !isStringOrNull(toolName) || !isStringOrNull(command) || !isStringOrNull(promptExcerpt) || promptText !== void 0 && !isStringOrNull(promptText) || !isStringOrNull(mcpServer) || !isStringOrNull(mcpTool) || !isStringOrNull(packageManager) || !isStringOrNull(packageName) || packageIntentKind !== void 0 && !isStringOrNull(packageIntentKind) || preExecutionResult !== void 0 && preExecutionResult !== null && !isGuardAction(preExecutionResult) || policyAction !== void 0 && policyAction !== null && !isGuardAction(policyAction) || !isStringOrNull(scriptName)) {
     return null;
   }
-  if (!isStringArray(targetPaths) || !isStringArray(networkHosts)) {
+  if (!isStringArray(targetPaths) || !isStringArray(networkHosts) || packageTargets !== void 0 && !isStringArray(packageTargets)) {
     return null;
   }
   if (!isRecord$1(rawPayloadRedacted)) {
@@ -15533,6 +15704,10 @@ function parseActionEnvelope(raw) {
     mcp_tool: mcpTool,
     package_manager: packageManager,
     package_name: packageName,
+    package_intent_kind: isStringOrNull(packageIntentKind) ? packageIntentKind : null,
+    package_targets: isStringArray(packageTargets) ? packageTargets : [],
+    pre_execution_result: isGuardAction(preExecutionResult) ? preExecutionResult : null,
+    ...policyAction === void 0 ? {} : { policy_action: isGuardAction(policyAction) ? policyAction : null },
     script_name: scriptName,
     raw_payload_redacted: rawPayloadRedacted
   };
@@ -15567,6 +15742,11 @@ function parseDecisionV2(raw) {
   if (!isRecord$1(raw)) {
     return null;
   }
+  const allowedActionFields = /* @__PURE__ */ new Set(["guard_action", "action"]);
+  if (Object.keys(raw).some((key) => isActionBearingKey(key) && !allowedActionFields.has(key))) {
+    return null;
+  }
+  const guardAction = raw["guard_action"];
   const action = raw["action"];
   const reason = raw["reason"];
   const userTitle = raw["user_title"];
@@ -15577,10 +15757,11 @@ function parseDecisionV2(raw) {
   const retryInstruction = raw["retry_instruction"];
   const signals = raw["signals"];
   const confidence = raw["confidence"];
-  if (!isDecisionV2Action(action) || !isNonEmptyString(reason) || !isNonEmptyString(userTitle) || !isNonEmptyString(userBody) || !isNonEmptyString(harnessMessage) || !isNonEmptyString(dashboardPrimaryDetail) || !isStringArray(approvalScopes) || !isStringOrNull(retryInstruction) || !isRiskSignalV2Array(signals) || !isDecisionV2Confidence(confidence)) {
+  if (!isGuardAction(guardAction) || !isDecisionV2Action(action) || action !== guardDecisionV2Action(guardAction) || !isNonEmptyString(reason) || !isNonEmptyString(userTitle) || !isNonEmptyString(userBody) || !isNonEmptyString(harnessMessage) || !isNonEmptyString(dashboardPrimaryDetail) || !isStringArray(approvalScopes) || !isStringOrNull(retryInstruction) || !isRiskSignalV2Array(signals) || !isDecisionV2Confidence(confidence)) {
     return null;
   }
   return {
+    guard_action: guardAction,
     action,
     reason,
     user_title: userTitle,
@@ -15593,11 +15774,42 @@ function parseDecisionV2(raw) {
     confidence
   };
 }
+function parseLegacyPackageActionMetadata(raw) {
+  if (!isRecord$1(raw) || raw["schema_version"] !== void 0 || !("policy_action" in raw) || typeof raw["package_manager"] !== "string" || !isStringArray(raw["package_targets"]) || typeof raw["redacted_command"] !== "string") {
+    return { recognized: false, action: null };
+  }
+  if (Object.keys(raw).some((key) => isActionBearingKey(key) && key !== "policy_action")) {
+    return { recognized: false, action: null };
+  }
+  const action = raw["policy_action"];
+  return { recognized: true, action: isRecognizedGuardActionInput(action) ? normalizeGuardAction(action) : null };
+}
 function normalizeApprovalRequest(item) {
+  const { decision_contract_error: rawContractError, ...baseItem } = item;
+  const policyAction = normalizeGuardAction(item.policy_action);
+  const decisionV2 = parseDecisionV2(item.decision_v2_json);
+  const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
+  const legacyActionMetadata = parseLegacyPackageActionMetadata(item.action_envelope_json);
+  const hasUnknownPolicyAction = !isRecognizedGuardActionInput(item.policy_action);
+  const hasMalformedActionEnvelope = item.action_envelope_json !== void 0 && item.action_envelope_json !== null && actionEnvelope === null && !(legacyActionMetadata.recognized && legacyActionMetadata.action !== null);
+  const hasContradictoryActionEnvelope = actionEnvelope !== null && [actionEnvelope.pre_execution_result, actionEnvelope.policy_action].some(
+    (action) => action !== void 0 && action !== null && action !== policyAction
+  ) || legacyActionMetadata.recognized && legacyActionMetadata.action !== policyAction;
+  const hasDecisionContractError = rawContractError !== void 0 || hasUnknownPolicyAction || hasMalformedActionEnvelope || hasContradictoryActionEnvelope || item.decision_v2_json !== void 0 && item.decision_v2_json !== null && decisionV2 === null || decisionV2 !== null && (decisionV2.guard_action !== policyAction || decisionV2.action !== guardDecisionV2Action(policyAction));
+  const failClosedPolicyAction = hasDecisionContractError ? mostRestrictiveGuardAction(
+    policyAction,
+    "require-reapproval",
+    decisionV2?.guard_action,
+    actionEnvelope?.pre_execution_result,
+    actionEnvelope?.policy_action,
+    legacyActionMetadata.action
+  ) : policyAction;
   return {
-    ...item,
-    action_envelope_json: parseActionEnvelope(item.action_envelope_json),
-    decision_v2_json: parseDecisionV2(item.decision_v2_json)
+    ...baseItem,
+    policy_action: failClosedPolicyAction,
+    action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
+    decision_v2_json: hasDecisionContractError ? null : decisionV2,
+    ...hasDecisionContractError ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT } : {}
   };
 }
 function normalizeApprovalRequests(items) {
@@ -15737,6 +15949,8 @@ function normalizeRuntimeSnapshot(snapshot) {
   return {
     ...snapshot,
     items: normalizeApprovalRequests(snapshot.items),
+    latest_receipts: normalizeReceipts(snapshot.latest_receipts),
+    inventory: normalizeInventory(snapshot.inventory),
     queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count),
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
     managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
@@ -15997,9 +16211,9 @@ function buildDemoRuntimeSnapshot() {
     },
     pending_count: demoRequests2.length,
     receipt_count: demoReceipts.length,
-    headline_state: demoRequests2.length > 0 ? "blocked" : "connected",
-    headline_label: demoRequests2.length > 0 ? "Blocked" : "Connected",
-    headline_detail: demoRequests2.length > 0 ? "A blocked action is waiting for review." : "This machine is connected to Guard Cloud and waiting for the first protected session to appear.",
+    headline_state: demoRequests2.length > 0 ? "needs_decision" : "connected",
+    headline_label: demoRequests2.length > 0 ? "Decision needed" : "Connected",
+    headline_detail: demoRequests2.length > 0 ? "An action is waiting for a decision in the review queue." : "This machine is connected to Guard Cloud and waiting for the first protected session to appear.",
     sync_configured: true,
     cloud_user_profile: {
       email: "demo@hol.org",
@@ -16054,7 +16268,7 @@ async function fetchInventory() {
     return [];
   }
   const payload = await readJson("/v1/inventory");
-  return payload.items;
+  return normalizeInventory(payload.items);
 }
 async function fetchSettings() {
   if (isGuardDemoMode()) {
@@ -16160,9 +16374,27 @@ async function fetchRequest(requestId) {
   return normalizeApprovalRequest(payload);
 }
 function normalizeReceipt(item) {
+  const policyAction = normalizeGuardAction(item.policy_decision);
+  const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
+  const legacyActionMetadata = parseLegacyPackageActionMetadata(item.action_envelope_json);
+  const hasUnknownPolicyAction = !isRecognizedGuardActionInput(item.policy_decision);
+  const hasMalformedActionEnvelope = item.action_envelope_json !== void 0 && item.action_envelope_json !== null && actionEnvelope === null && !(legacyActionMetadata.recognized && legacyActionMetadata.action !== null);
+  const hasContradictoryActionEnvelope = actionEnvelope !== null && [actionEnvelope.pre_execution_result, actionEnvelope.policy_action].some(
+    (action) => action !== void 0 && action !== null && action !== policyAction
+  ) || legacyActionMetadata.recognized && legacyActionMetadata.action !== policyAction;
+  const hasDecisionContractError = item.decision_contract_error !== void 0 || hasUnknownPolicyAction || hasMalformedActionEnvelope || hasContradictoryActionEnvelope;
+  const failClosedPolicyAction = hasDecisionContractError ? mostRestrictiveGuardAction(
+    policyAction,
+    "require-reapproval",
+    actionEnvelope?.pre_execution_result,
+    actionEnvelope?.policy_action,
+    legacyActionMetadata.action
+  ) : policyAction;
   return {
     ...item,
-    action_envelope_json: parseActionEnvelope(item.action_envelope_json)
+    policy_decision: failClosedPolicyAction,
+    action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
+    ...hasDecisionContractError ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT } : {}
   };
 }
 function normalizeReceipts(items) {
@@ -16170,6 +16402,19 @@ function normalizeReceipts(items) {
     return [];
   }
   return items.map(normalizeReceipt);
+}
+function normalizeInventory(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items.map((item) => {
+    const hasDecisionContractError = item.decision_contract_error !== void 0 || !isRecognizedGuardActionInput(item.last_policy_action);
+    return {
+      ...item,
+      last_policy_action: hasDecisionContractError ? mostRestrictiveGuardAction(item.last_policy_action, "require-reapproval") : normalizeGuardAction(item.last_policy_action),
+      ...hasDecisionContractError ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT } : {}
+    };
+  });
 }
 async function fetchReceipts() {
   if (isGuardDemoMode()) {
@@ -16240,8 +16485,8 @@ function normalizeReceiptAnalytics(raw) {
   };
 }
 function buildReceiptAnalyticsFromSample(receipts) {
-  const allowed = receipts.filter((r) => r.policy_decision === "allow").length;
-  const blocked = receipts.filter((r) => r.policy_decision === "block").length;
+  const allowed = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+  const blocked = receipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
   const reviewed = receipts.length - allowed - blocked;
   const timestamps = receipts.map((r) => r.timestamp).sort();
   const trend_buckets = computeTrendBuckets(receipts, 7).map((bucket) => ({
@@ -18355,6 +18600,15 @@ function filterByTime(receipts, time, day, now2) {
 }
 function filterByDecision(receipts, decision) {
   if (decision === "all") return receipts;
+  if (decision === "allow") {
+    return receipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed");
+  }
+  if (decision === "block") {
+    return receipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked");
+  }
+  if (decision === "ask") {
+    return receipts.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed");
+  }
   return receipts.filter((r) => r.policy_decision === decision);
 }
 function filterByHarness(receipts, harness) {
@@ -18875,21 +19129,28 @@ function hasMore(page, pageSize, total) {
   return (page + 1) * pageSize < total;
 }
 function DecisionBadge({ decision }) {
-  if (decision === "allow") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "success", children: [
+  const presentation = guardActionPresentation(decision);
+  if (presentation.action === "allow") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: presentation.tone, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-3 w-3", "aria-hidden": "true" }),
-      "Allowed"
+      presentation.label
     ] });
   }
-  if (decision === "block") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "attention", children: [
+  if (presentation.action === "warn") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: presentation.tone, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-3 w-3", "aria-hidden": "true" }),
+      presentation.label
+    ] });
+  }
+  if (presentation.action === "block") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: presentation.tone, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-3 w-3", "aria-hidden": "true" }),
-      "Stopped"
+      presentation.label
     ] });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "info", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: presentation.tone, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniQuestionMarkCircle, { className: "h-3 w-3", "aria-hidden": "true" }),
-    "Reviewed"
+    presentation.label
   ] });
 }
 const SORT_TOGGLE_MAP = {
@@ -19378,18 +19639,35 @@ function DetailRow({ label, value, mono }) {
     )
   ] });
 }
-function NextSafeCommandHint({ receipt }) {
-  const category = detectCategory(receipt);
-  let hint = null;
-  if (category === "supply-chain") {
-    hint = `Review the package source and version, then approve it from the review queue if it is safe.`;
-  } else if (category === "tool-call" || category === "mcp") {
-    hint = "Review the tool call in Evidence, then approve it in the review queue if it is safe.";
-  } else if (category === "file-write" || category === "destructive") {
-    hint = "Check if the file operation is expected, then allow it from the review queue.";
-  } else if (category === "secret" || category === "network") {
-    hint = "Inspect the access pattern, then update your policy rules if this should be allowed.";
+function nextSafeStep(receipt) {
+  const action = guardActionPresentation(receipt.policy_decision).action;
+  if (action === "block") {
+    return "This action is blocked. Review the governing policy or choose a safer alternative; it cannot be approved from the review queue.";
   }
+  if (action === "sandbox-required") {
+    return "Run this action through an approved sandbox, then retry only after the sandbox requirement is satisfied.";
+  }
+  if (action === "allow" || action === "warn") {
+    return null;
+  }
+  const category = detectCategory(receipt);
+  const approvalCopy = action === "require-reapproval" ? "grant fresh approval" : "approve it";
+  if (category === "supply-chain") {
+    return `Review the package source and version, then ${approvalCopy} from the review queue if it is safe.`;
+  }
+  if (category === "tool-call" || category === "mcp") {
+    return `Review the tool call in Evidence, then ${approvalCopy} in the review queue if it is safe.`;
+  }
+  if (category === "file-write" || category === "destructive") {
+    return `Check whether the file operation is expected, then ${approvalCopy} from the review queue.`;
+  }
+  if (category === "secret" || category === "network") {
+    return "Inspect the access pattern, then make the required review decision before retrying.";
+  }
+  return null;
+}
+function NextSafeCommandHint({ receipt }) {
+  const hint = nextSafeStep(receipt);
   if (!hint) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2.5", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Next safe step" }),
@@ -19397,6 +19675,7 @@ function NextSafeCommandHint({ receipt }) {
   ] });
 }
 function EvidenceTimeline({ receipt }) {
+  const action = guardActionPresentation(receipt.policy_decision);
   const events = [
     {
       label: "Action received",
@@ -19404,9 +19683,9 @@ function EvidenceTimeline({ receipt }) {
       icon: "start"
     },
     {
-      label: receipt.policy_decision === "allow" ? "Approved" : "Stopped",
+      label: action.label,
       time: receipt.timestamp,
-      icon: receipt.policy_decision === "allow" ? "allow" : "block"
+      icon: action.disposition
     }
   ];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -19415,7 +19694,7 @@ function EvidenceTimeline({ receipt }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "span",
         {
-          className: `absolute -left-1.5 flex h-3 w-3 items-center justify-center rounded-full border ${event.icon === "allow" ? "border-brand-green bg-brand-green/20" : event.icon === "block" ? "border-brand-attention bg-brand-attention/20" : "border-slate-300 bg-slate-100"}`,
+          className: `absolute -left-1.5 flex h-3 w-3 items-center justify-center rounded-full border ${event.icon === "allowed" ? "border-brand-green bg-brand-green/20" : event.icon === "blocked" ? "border-brand-attention bg-brand-attention/20" : "border-slate-300 bg-slate-100"}`,
           "aria-hidden": "true"
         }
       ),
@@ -19544,7 +19823,7 @@ function EvidenceActionDetail({
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-700", children: receipt.diff_summary })
           ] }),
-          receipt.policy_decision === "block" && /* @__PURE__ */ jsxRuntimeExports.jsx(NextSafeCommandHint, { receipt }),
+          guardActionPresentation(receipt.policy_decision).disposition !== "allowed" && /* @__PURE__ */ jsxRuntimeExports.jsx(NextSafeCommandHint, { receipt }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSection$1, { signals }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTimeline, { receipt }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(TechnicalSection, { receipt }),
@@ -22270,8 +22549,9 @@ function harnessColor(harness) {
   return `hsl(${hue} 70% 45%)`;
 }
 function AppListCard({ harness, items, onSelect }) {
-  const allowed = items.filter((r) => r.policy_decision === "allow").length;
-  const blocked = items.filter((r) => r.policy_decision === "block").length;
+  const allowed = items.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+  const blocked = items.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
+  const reviewed = items.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
   const lastActive = items[0]?.timestamp;
   const color = harnessColor(harness);
   const handleClick = reactExports.useCallback(() => onSelect(harness), [harness, onSelect]);
@@ -22296,6 +22576,8 @@ function AppListCard({ harness, items, onSelect }) {
             " actions · ",
             allowed,
             " allowed · ",
+            reviewed,
+            " review · ",
             blocked,
             " stopped"
           ] }),
@@ -22351,7 +22633,7 @@ function AppTabRaw({ receipts }) {
     if (!selectedApp) return [];
     let items = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
     if (decisionFilter !== "all") {
-      items = items.filter((r) => r.policy_decision === decisionFilter);
+      items = filterByDecision(items, decisionFilter);
     }
     if (categoryFilter) {
       items = items.filter((r) => detectCategory(r) === categoryFilter);
@@ -22363,7 +22645,7 @@ function AppTabRaw({ receipts }) {
   }, []);
   const handleDecisionFilterChange = reactExports.useCallback((event) => {
     const nextValue = event.target.value;
-    if (nextValue === "all" || nextValue === "allow" || nextValue === "block") {
+    if (nextValue === "all" || nextValue === "allow" || nextValue === "ask" || nextValue === "block") {
       setDecisionFilter(nextValue);
     }
   }, []);
@@ -22380,8 +22662,9 @@ function AppTabRaw({ receipts }) {
   }
   if (selectedApp) {
     const allItems = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
-    const allowed = allItems.filter((r) => r.policy_decision === "allow").length;
-    const blocked = allItems.filter((r) => r.policy_decision === "block").length;
+    const allowed = allItems.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+    const blocked = allItems.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
+    const reviewed = allItems.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
     const color = harnessColor(selectedApp);
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
@@ -22429,6 +22712,8 @@ function AppTabRaw({ receipts }) {
               " · ",
               allowed,
               " allowed · ",
+              reviewed,
+              " review · ",
               blocked,
               " stopped"
             ] })
@@ -22450,6 +22735,7 @@ function AppTabRaw({ receipts }) {
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All decisions" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "allow", children: "Allowed" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ask", children: "Review" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "block", children: "Stopped" })
             ]
           }
@@ -22573,7 +22859,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }) {
     if (!selectedCategory) return [];
     let items = groups.get(selectedCategory) ?? [];
     if (decisionFilter !== "all") {
-      items = items.filter((r) => r.policy_decision === decisionFilter);
+      items = filterByDecision(items, decisionFilter);
     }
     if (harnessFilter) {
       items = items.filter((r) => r.harness === harnessFilter);
@@ -22629,6 +22915,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }) {
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All decisions" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "allow", children: "Allowed" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ask", children: "Review" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "block", children: "Stopped" })
             ]
           }
@@ -22695,7 +22982,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }) {
         {
           cat,
           count: items.length,
-          blocked: items.filter((r) => r.policy_decision === "block").length,
+          blocked: items.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length,
           onSelect: handleSelectCategory
         },
         cat.key
@@ -23499,48 +23786,54 @@ function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, sele
   }
   return strictAllDecisions;
 }
-function approvalProofRequiresTotp(gate) {
-  return gate?.totp_enabled === true;
+function approvalProofRequiresPassword(gate) {
+  return gate?.totp_enabled !== true;
 }
 function isApprovalProofSubmitDisabled(gate, credentials, busy) {
   if (busy) {
     return true;
   }
-  return approvalProofRequiresTotp(gate) ? credentials.approvalTotpCode.trim() === "" : credentials.approvalPassword.trim() === "";
+  if (approvalProofRequiresPassword(gate)) {
+    return credentials.approvalPassword.trim() === "";
+  }
+  return credentials.approvalTotpCode.trim() === "";
 }
 function buildApprovalProofCredentials(gate, credentials) {
-  return approvalProofRequiresTotp(gate) ? { approval_totp_code: credentials.approvalTotpCode } : { approval_password: credentials.approvalPassword };
+  if (approvalProofRequiresPassword(gate)) {
+    return { approval_password: credentials.approvalPassword };
+  }
+  return { approval_totp_code: credentials.approvalTotpCode };
 }
 function ApprovalProofFieldInputs(props) {
-  const needsTotp = approvalProofRequiresTotp(props.approvalGate);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsTotp ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          type: "text",
-          inputMode: "numeric",
-          pattern: "[0-9]*",
-          autoComplete: "one-time-code",
-          value: props.approvalTotpCode,
-          onChange: props.onApprovalTotpCodeChange,
-          className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-        }
-      )
-    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          ref: props.passwordRef,
-          type: "password",
-          autoComplete: "current-password",
-          value: props.approvalPassword,
-          onChange: props.onApprovalPasswordChange,
-          className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-        }
-      )
-    ] }) });
+  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        ref: props.passwordRef,
+        type: "password",
+        autoComplete: "current-password",
+        value: props.approvalPassword,
+        onChange: props.onApprovalPasswordChange,
+        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      }
+    )
+  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        type: "text",
+        inputMode: "numeric",
+        pattern: "[0-9]*",
+        autoComplete: "one-time-code",
+        value: props.approvalTotpCode,
+        onChange: props.onApprovalTotpCodeChange,
+        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      }
+    )
+  ] }) });
 }
 function ApprovalProofInline(props) {
   const passwordRef = reactExports.useRef(null);
@@ -23596,18 +23889,18 @@ function ApprovalProofInline(props) {
 function ApprovalPasswordModal(props) {
   const passwordRef = reactExports.useRef(null);
   const totpRef = reactExports.useRef(null);
-  const needsTotp = approvalProofRequiresTotp(props.gate);
-  const submitDisabled = needsTotp ? props.approvalTotpCode.trim() === "" : props.approvalPassword.trim() === "";
+  const needsPassword = approvalProofRequiresPassword(props.gate);
+  const submitDisabled = needsPassword ? props.approvalPassword.trim() === "" : props.approvalTotpCode.trim() === "";
   reactExports.useEffect(() => {
     const timer = setTimeout(() => {
-      if (needsTotp) {
-        totpRef.current?.focus();
-      } else {
+      if (needsPassword) {
         passwordRef.current?.focus();
+      } else {
+        totpRef.current?.focus();
       }
     }, 50);
     return () => clearTimeout(timer);
-  }, [needsTotp]);
+  }, [needsPassword]);
   const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
   const handleBackdropClick = reactExports.useCallback(
     (e) => {
@@ -23642,14 +23935,14 @@ function ApprovalPasswordModal(props) {
               {
                 id: "approval-password-modal-title",
                 className: "text-lg font-semibold tracking-tight text-brand-dark",
-                children: needsTotp ? "Authenticator code required" : "Approval password required"
+                children: needsPassword ? "Approval password required" : "Authenticator code required"
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "Guard needs a fresh proof before it can save this decision." })
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3", children: [
-          !needsTotp ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "input",
@@ -23662,8 +23955,7 @@ function ApprovalPasswordModal(props) {
                 className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
-          ] }) : null,
-          needsTotp ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "input",
@@ -23678,7 +23970,7 @@ function ApprovalPasswordModal(props) {
                 className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
-          ] }) : null,
+          ] }),
           showCooldownOption && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-center gap-2 text-sm text-brand-dark", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "input",
@@ -23738,10 +24030,13 @@ function buildBulkGateCredentials(gate, password, totpCode) {
   if (!isBulkApproveGateReady(gate)) {
     return void 0;
   }
-  return gate?.totp_enabled === true ? {
-    approval_totp_code: totpCode.trim(),
-    approval_gate_use_cooldown: false
-  } : {
+  if (gate?.totp_enabled === true) {
+    return {
+      approval_totp_code: totpCode.trim(),
+      approval_gate_use_cooldown: false
+    };
+  }
+  return {
     approval_password: password.trim(),
     approval_gate_use_cooldown: false
   };
@@ -24049,21 +24344,21 @@ function QueueBulkDrawer(props) {
       gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
         props.approvalGate?.totp_enabled !== true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            id: "guard-bulk-approval-password",
-            type: "password",
-            value: props.bulkApprovePassword,
-            onChange: props.onBulkApprovePasswordChange,
-            placeholder: "Enter your approval password",
-            autoComplete: "current-password",
-            disabled: props.step === "submitting",
-            className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
-          }
+            "input",
+            {
+              id: "guard-bulk-approval-password",
+              type: "password",
+              value: props.bulkApprovePassword,
+              onChange: props.onBulkApprovePasswordChange,
+              placeholder: "Enter your approval password",
+              autoComplete: "current-password",
+              disabled: props.step === "submitting",
+              className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+            }
           )
         ] }),
         props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -25362,6 +25657,7 @@ function queueItemPreview(item) {
 function ReviewDecisionCard(props) {
   const detail = props.detail;
   const item = detail?.item ?? null;
+  const resolutionBlockReason = item ? requestResolutionBlockReason(item) : null;
   const [scope, setScope] = reactExports.useState(item?.recommended_scope ?? "artifact");
   const [submitting, setSubmitting] = reactExports.useState(null);
   const [resolved, setResolved] = reactExports.useState(null);
@@ -25415,7 +25711,7 @@ function ReviewDecisionCard(props) {
   }, []);
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
-      if (submitting !== null || pendingAction !== null) return;
+      if (submitting !== null || pendingAction !== null || resolutionBlockReason !== null) return;
       const target = event.target;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
       if (event.key === "a" || event.key === "A") {
@@ -25434,15 +25730,15 @@ function ReviewDecisionCard(props) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [submitting, pendingAction, scope, item?.request_id, availableScopeChoices]);
+  }, [submitting, pendingAction, scope, item?.request_id, availableScopeChoices, resolutionBlockReason]);
   const handleResolve = reactExports.useCallback(
     async (action) => {
-      if (!item) return;
+      if (!item || resolutionBlockReason !== null) return;
       setSubmitting(action);
       setErrorMessage(null);
       try {
         const gate = props.approvalGate;
-        const needsTotp = approvalProofRequiresTotp(gate);
+        const needsPassword = approvalProofRequiresPassword(gate);
         const includeGateFields = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
         await props.onResolve({
           ...buildDecisionPayload({
@@ -25451,8 +25747,8 @@ function ReviewDecisionCard(props) {
             scope,
             reason: action === "allow" ? "approved in review" : "blocked in review"
           }),
-          ...includeGateFields && !needsTotp ? { approval_password: approvalPassword } : {},
-          ...includeGateFields && needsTotp ? { approval_totp_code: approvalTotpCode } : {},
+          ...includeGateFields && needsPassword ? { approval_password: approvalPassword } : {},
+          ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
           ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
         });
         setResolved(action);
@@ -25467,7 +25763,7 @@ function ReviewDecisionCard(props) {
         setSubmitting(null);
       }
     },
-    [item, scope, props.onResolve, props.approvalGate, approvalPassword, approvalTotpCode, useCooldown]
+    [item, scope, props.onResolve, props.approvalGate, approvalPassword, approvalTotpCode, useCooldown, resolutionBlockReason]
   );
   const handleRequestResolve = reactExports.useCallback(
     (action) => {
@@ -25534,6 +25830,7 @@ function ReviewDecisionCard(props) {
   const whatWouldHappen = buildWhatWouldHappen(item);
   const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
   const pauseReason = whyPaused(item);
+  const actionPresentation = guardActionPresentation(item.policy_action);
   const topAlertItems = [];
   if (secondaryRiskSummary) {
     topAlertItems.push({
@@ -25633,9 +25930,22 @@ function ReviewDecisionCard(props) {
             harnessName
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: item.policy_action === "block" ? "attention" : "info", children: item.policy_action === "block" ? "Blocked" : "Needs review" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: actionPresentation.tone, children: actionPresentation.label })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
+      resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          HiMiniExclamationTriangle,
+          {
+            className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention",
+            "aria-hidden": "true"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-attention", children: "This decision cannot be overridden" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark", children: resolutionBlockReason })
+        ] })
+      ] }) }),
       topAlertItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: topAlertItems }, item.request_id) }),
       whatWouldHappen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -25654,7 +25964,7 @@ function ReviewDecisionCard(props) {
         ),
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
+      resolutionBlockReason === null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "How long should this choice last?" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Scope selection", children: commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           ScopeChoiceButton,
@@ -25707,7 +26017,7 @@ function ReviewDecisionCard(props) {
           )
         ] })
       ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
+      resolutionBlockReason === null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           ActionButton,
           {
@@ -25927,13 +26237,20 @@ function buildWhatWouldHappen(item) {
   return `Without Guard, this action would run immediately. Guard paused it so you can review and decide.`;
 }
 function pastDecisionVerb(decision) {
-  if (decision === "allow") {
-    return "allowed";
+  switch (normalizeGuardAction(decision)) {
+    case "allow":
+      return "allowed";
+    case "warn":
+      return "allowed with a warning";
+    case "review":
+      return "sent for review";
+    case "require-reapproval":
+      return "required fresh approval for";
+    case "sandbox-required":
+      return "required sandboxing for";
+    case "block":
+      return "blocked";
   }
-  if (decision === "block") {
-    return "blocked";
-  }
-  return "reviewed";
 }
 function QueueConnectionError(props) {
   const [repairing, setRepairing] = reactExports.useState(false);
@@ -26993,145 +27310,149 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  updateSettings as $,
+  fetchSettings as $,
   ActionButton as A,
-  Badge as B,
-  HiMiniMinusCircle as C,
+  HiMiniBolt as B,
+  Badge as C,
   DeviceProofCard as D,
   EvidenceInsightsShareButton as E,
-  HiMiniEye as F,
+  HiMiniChevronRight as F,
   GuardStatMetric as G,
   HomeInsightsMetrics as H,
-  HiMiniWrenchScrewdriver as I,
-  HiMiniXCircle as J,
-  HiMiniExclamationCircle as K,
-  HiMiniClipboardDocumentCheck as L,
-  HiMiniClipboard as M,
-  requireReact as N,
-  getDefaultExportFromCjs as O,
+  HiMiniMinusCircle as I,
+  HiMiniEye as J,
+  HiMiniWrenchScrewdriver as K,
+  HiMiniXCircle as L,
+  HiMiniExclamationCircle as M,
+  HiMiniClipboardDocumentCheck as N,
+  HiMiniClipboard as O,
   ProofStrip as P,
-  HiMiniKey as Q,
-  HiMiniLockClosed as R,
+  getDefaultExportFromCjs as Q,
+  React as R,
   SectionLabel as S,
-  HiMiniBellAlert as T,
-  HiMiniAdjustmentsHorizontal as U,
-  HiMiniCog6Tooth as V,
-  HiMiniCircleStack as W,
-  TabBar as X,
-  resolveProtectionLevelCopy as Y,
-  fetchSettings as Z,
-  fetchRuntimeSnapshot as _,
+  HiMiniKey as T,
+  HiMiniLockClosed as U,
+  HiMiniBellAlert as V,
+  HiMiniAdjustmentsHorizontal as W,
+  HiMiniCog6Tooth as X,
+  HiMiniCircleStack as Y,
+  TabBar as Z,
+  resolveProtectionLevelCopy as _,
   EvidenceActivityHeatmapMini as a,
-  runPackageFirewallAction as a$,
-  clearPolicy as a0,
-  clearReviewQueue as a1,
-  revokeApprovalGateCooldown as a2,
-  disableApprovalGateTotp as a3,
-  importSettings as a4,
-  resetSettings as a5,
-  enrollApprovalGateTotp as a6,
-  verifyApprovalGateTotp as a7,
-  clearEvidence as a8,
-  exportDiagnostics as a9,
-  formatHarnessCommand as aA,
-  HiMiniCommandLine as aB,
-  isSupplyChainAuditIncomplete as aC,
-  isSupplyChainAuditEvidence as aD,
-  buildApprovalProofCredentials as aE,
-  isApprovalProofSubmitDisabled as aF,
-  ApprovalProofFieldInputs as aG,
-  readString$1 as aH,
-  isRecord$2 as aI,
-  HiMiniClock as aJ,
-  IconActionButton as aK,
-  HiMiniBeaker as aL,
-  ActivationSummary as aM,
-  ActionResultPanel as aN,
-  HiMiniBugAnt as aO,
-  GuardModalLayer as aP,
-  ConnectFlowCard as aQ,
-  ApprovalProofInline as aR,
-  HiMiniArrowTopRightOnSquare as aS,
-  HiMiniCloudArrowDown as aT,
-  fetchPackageFirewallStatus as aU,
-  runPackageAudit as aV,
-  resolveSupplyChainAuditFailure as aW,
-  runPackageSync as aX,
-  startPackageFirewallConnect as aY,
-  openPackageFirewallAuthorizeFallback as aZ,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as a_,
-  repairApprovalCenter as aa,
-  exportSettings as ab,
-  setupDesktopNotifications as ac,
-  Tag as ad,
-  HiMiniMagnifyingGlass as ae,
-  approvalGateCooldownLabel as af,
-  fetchApprovalPage as ag,
-  fetchPolicy as ah,
-  HiMiniArrowLeft as ai,
-  HiMiniHome as aj,
-  DEFAULT_FILTER_STATE as ak,
-  filterEvidence as al,
-  sortEvidence as am,
-  computeMetrics as an,
-  EvidenceFilterBar as ao,
-  EvidenceInsightStrip as ap,
-  EvidenceActionList as aq,
-  EvidenceActionDetail as ar,
-  policyIdentityKey as as,
-  HiMiniChartBar as at,
-  runHarnessAction as au,
-  GuardHarnessActionError as av,
-  HiMiniRocketLaunch as aw,
-  HiMiniArrowPath as ax,
-  HiMiniTrash as ay,
-  clearLabelForScope as az,
+  startPackageFirewallConnect as a$,
+  fetchRuntimeSnapshot as a0,
+  updateSettings as a1,
+  clearPolicy as a2,
+  clearReviewQueue as a3,
+  revokeApprovalGateCooldown as a4,
+  disableApprovalGateTotp as a5,
+  importSettings as a6,
+  resetSettings as a7,
+  enrollApprovalGateTotp as a8,
+  verifyApprovalGateTotp as a9,
+  HiMiniArrowPath as aA,
+  HiMiniTrash as aB,
+  clearLabelForScope as aC,
+  formatHarnessCommand as aD,
+  HiMiniCommandLine as aE,
+  isSupplyChainAuditIncomplete as aF,
+  isSupplyChainAuditEvidence as aG,
+  buildApprovalProofCredentials as aH,
+  isApprovalProofSubmitDisabled as aI,
+  ApprovalProofFieldInputs as aJ,
+  readString$1 as aK,
+  isRecord$2 as aL,
+  HiMiniClock as aM,
+  IconActionButton as aN,
+  HiMiniBeaker as aO,
+  ActivationSummary as aP,
+  ActionResultPanel as aQ,
+  HiMiniBugAnt as aR,
+  GuardModalLayer as aS,
+  ConnectFlowCard as aT,
+  ApprovalProofInline as aU,
+  HiMiniArrowTopRightOnSquare as aV,
+  HiMiniCloudArrowDown as aW,
+  fetchPackageFirewallStatus as aX,
+  runPackageAudit as aY,
+  resolveSupplyChainAuditFailure as aZ,
+  runPackageSync as a_,
+  clearEvidence as aa,
+  exportDiagnostics as ab,
+  repairApprovalCenter as ac,
+  exportSettings as ad,
+  setupDesktopNotifications as ae,
+  Tag as af,
+  HiMiniMagnifyingGlass as ag,
+  approvalGateCooldownLabel as ah,
+  fetchApprovalPage as ai,
+  fetchPolicy as aj,
+  HiMiniArrowLeft as ak,
+  HiMiniHome as al,
+  guardActionPresentation as am,
+  DEFAULT_FILTER_STATE as an,
+  filterEvidence as ao,
+  sortEvidence as ap,
+  computeMetrics as aq,
+  EvidenceFilterBar as ar,
+  EvidenceInsightStrip as as,
+  EvidenceActionList as at,
+  EvidenceActionDetail as au,
+  policyIdentityKey as av,
+  HiMiniChartBar as aw,
+  runHarnessAction as ax,
+  GuardHarnessActionError as ay,
+  HiMiniRocketLaunch as az,
   EmptyState as b,
-  parseInterceptProofSnapshot as b0,
-  activatePackageFirewallRuntime as b1,
-  EntitlementNotice as b2,
-  fetchReceipts as b3,
-  WorkspacePageHeader as b4,
-  __vitePreload as b5,
-  scopeLabel as b6,
-  guardAwareHref as b7,
-  HiMiniDocumentText as b8,
-  HiMiniCloudArrowUp as b9,
-  HiMiniDocumentMagnifyingGlass as bA,
-  HiMiniShieldExclamation as bB,
-  HiMiniComputerDesktop as bC,
-  HiMiniChevronLeft as bD,
-  HiMiniFunnel as bE,
-  HiMiniArrowDown as bF,
-  HiMiniArrowUp as bG,
-  runAuditRemediation as bH,
-  HiMiniSignal as bI,
-  HiMiniCheck as ba,
-  HiMiniCodeBracket as bb,
-  HiMiniClipboardDocument as bc,
-  HiMiniUsers as bd,
-  HiMiniFolder as be,
-  HiMiniInformationCircle as bf,
-  HiMiniIdentification as bg,
-  policyActionLabel as bh,
-  createCloudExceptionRequest as bi,
-  HiMiniArrowRight as bj,
-  HiMiniPuzzlePiece as bk,
-  HiMiniGlobeAlt as bl,
-  fetchCloudExceptions as bm,
-  fetchCloudExceptionRequests as bn,
-  downloadBlob as bo,
-  PolicyStatField as bp,
-  PaginationControls as bq,
-  HiMiniNoSymbol as br,
-  HiMiniCube as bs,
-  HiMiniArrowDownTray as bt,
-  HiMiniQueueList as bu,
-  HiMiniPlay as bv,
-  Surface as bw,
-  HiMiniCheckBadge as bx,
-  fetchSupplyChainBundle as by,
-  isSupplyChainScannerEvidence as bz,
+  openPackageFirewallAuthorizeFallback as b0,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as b1,
+  runPackageFirewallAction as b2,
+  parseInterceptProofSnapshot as b3,
+  activatePackageFirewallRuntime as b4,
+  EntitlementNotice as b5,
+  fetchReceipts as b6,
+  WorkspacePageHeader as b7,
+  __vitePreload as b8,
+  scopeLabel as b9,
+  HiMiniCheckBadge as bA,
+  fetchSupplyChainBundle as bB,
+  isSupplyChainScannerEvidence as bC,
+  isBlockedGuardAction as bD,
+  HiMiniDocumentMagnifyingGlass as bE,
+  HiMiniShieldExclamation as bF,
+  HiMiniComputerDesktop as bG,
+  HiMiniChevronLeft as bH,
+  HiMiniFunnel as bI,
+  HiMiniArrowDown as bJ,
+  HiMiniArrowUp as bK,
+  runAuditRemediation as bL,
+  HiMiniSignal as bM,
+  guardAwareHref as ba,
+  HiMiniDocumentText as bb,
+  HiMiniCloudArrowUp as bc,
+  HiMiniCheck as bd,
+  HiMiniCodeBracket as be,
+  HiMiniClipboardDocument as bf,
+  HiMiniUsers as bg,
+  HiMiniFolder as bh,
+  HiMiniInformationCircle as bi,
+  HiMiniIdentification as bj,
+  policyActionLabel as bk,
+  createCloudExceptionRequest as bl,
+  HiMiniArrowRight as bm,
+  HiMiniPuzzlePiece as bn,
+  HiMiniGlobeAlt as bo,
+  fetchCloudExceptions as bp,
+  fetchCloudExceptionRequests as bq,
+  downloadBlob as br,
+  PolicyStatField as bs,
+  PaginationControls as bt,
+  HiMiniNoSymbol as bu,
+  HiMiniCube as bv,
+  HiMiniArrowDownTray as bw,
+  HiMiniQueueList as bx,
+  HiMiniPlay as by,
+  Surface as bz,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,
@@ -27141,19 +27462,19 @@ export {
   isDisplayableHarness as i,
   jsxRuntimeExports as j,
   HiMiniShieldCheck as k,
-  formatRelativeTime as l,
-  HiMiniSparkles as m,
-  HiMiniXMark as n,
-  HiMiniChevronUp as o,
-  HiMiniChevronDown as p,
-  resolveCloudIntelCopy as q,
+  guardActionDisposition as l,
+  formatRelativeTime as m,
+  guardActionActivityCopy as n,
+  HiMiniSparkles as o,
+  HiMiniXMark as p,
+  HiMiniChevronUp as q,
   reactExports as r,
-  HiMiniCloud as s,
-  HiMiniQuestionMarkCircle as t,
+  HiMiniChevronDown as s,
+  resolveCloudIntelCopy as t,
   useReceiptAnalytics as u,
-  useFocusTrap as v,
-  approvalProofRequiresTotp as w,
-  HiMiniExclamationTriangle as x,
-  HiMiniBolt as y,
-  HiMiniChevronRight as z
+  HiMiniCloud as v,
+  HiMiniQuestionMarkCircle as w,
+  useFocusTrap as x,
+  approvalProofRequiresPassword as y,
+  HiMiniExclamationTriangle as z
 };

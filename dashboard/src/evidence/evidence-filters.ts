@@ -2,6 +2,7 @@ import type { GuardReceipt } from "../guard-types";
 import type { EvidenceFilterState } from "./evidence-types";
 import { detectCategory } from "./categories";
 import { receiptUtcDateKey } from "./evidence-format";
+import { guardActionDisposition } from "../guard-action";
 
 export function filterByTime(
   receipts: GuardReceipt[],
@@ -42,6 +43,15 @@ export function filterByDecision(
   decision: string
 ): GuardReceipt[] {
   if (decision === "all") return receipts;
+  if (decision === "allow") {
+    return receipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed");
+  }
+  if (decision === "block") {
+    return receipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked");
+  }
+  if (decision === "ask") {
+    return receipts.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed");
+  }
   return receipts.filter((r) => r.policy_decision === decision);
 }
 

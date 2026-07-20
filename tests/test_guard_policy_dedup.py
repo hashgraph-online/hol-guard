@@ -53,7 +53,7 @@ def _add_approval(store: GuardStore, artifact: GuardArtifact, request_id: str) -
             artifact_id=artifact.artifact_id,
             artifact_name=artifact.name,
             artifact_hash="hash-test",
-            policy_action="block",
+            policy_action="review",
             recommended_scope="artifact",
             changed_fields=(),
             source_scope="local",
