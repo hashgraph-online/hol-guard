@@ -119,7 +119,13 @@ jobs:
           tests/test_guard_aibom_detection.py
           tests/test_guard_aibom_content_upload_batches.py
           tests/test_guard_aibom_skill_directory_identity.py
+          --tb=short
+      - name: Run Windows Codex hook process-tree regressions
+        if: runner.os == 'Windows'
+        run: >-
+          uv run --no-sync pytest
           tests/test_codex_hook_fallback_isolation.py
+          -k "isolated_process_timeout_kills_descendants or isolated_process_closes_descendant_held_pipes_after_parent_exit"
           --tb=short
 
   windows-updater:
