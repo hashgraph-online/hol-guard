@@ -385,5 +385,6 @@ clap = "4.5"
 
     assert result.decision == "ask"
     assert result.policy_action == "require-reapproval"
-    assert any(reason["code"] == "lockfile_parse_error" for reason in result.reasons)
+    assert any(reason["code"] == "lockfile_parse_incomplete" for reason in result.reasons)
+    assert result.packages[0]["lockfileParseError"] == "syntax_error"
     assert result.packages[0]["supportLevel"] == "beta"
