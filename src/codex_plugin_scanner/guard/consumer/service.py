@@ -519,6 +519,8 @@ def _skill_directory_identity_reusable(
         return None
     if "skillDirectoryIdentity" not in metadata:
         return None
+    if metadata.get("inspection_complete") is False:
+        return False
     return validated_complete_skill_directory_hash(metadata) is not None
 
 

@@ -726,7 +726,8 @@ class TestSkillSubdirectoryScanning:
         instruction = next(item for item in snapshot.items if item.metadata.get("artifactType") == "instruction")
 
         assert "skill_file" not in artifact_types
-        assert primary_skill.content_hash == f"sha256:{hashlib.sha256(skill_body.encode()).hexdigest()}"
+        assert primary_skill.content_hash == primary_skill.metadata["directory_hash"]
+        assert primary_skill.metadata["content_hash"] == f"sha256:{hashlib.sha256(skill_body.encode()).hexdigest()}"
         assert instruction.content_hash == f"sha256:{hashlib.sha256(instruction_body.encode()).hexdigest()}"
 
     def test_discovers_script_files(self, tmp_path: Path):
@@ -1568,6 +1569,25 @@ class TestInstallHostHomeAwareness:
 
 class TestHostHomeFallbackEdgeCases:
     """Edge cases for the HERMES_HOST_HOME fallback."""
+
+    def test_malformed_primary_config_disables_host_home_fallback(self, tmp_path: Path, monkeypatch):
+        """Incomplete primary inspection must not inherit mirror artifacts."""
+        _write(
+            tmp_path / ".hermes" / "config.yaml",
+            "mcp_servers:\n  duplicate: {command: node}\n  duplicate: {command: python}\n",
+        )
+        host_home = tmp_path / "host-hermes"
+        _write(
+            host_home / "config.yaml",
+            "mcp_servers:\n  host-server:\n    command: python\n",
+        )
+
+        monkeypatch.setenv("HERMES_HOST_HOME", str(host_home))
+        detection = HermesHarnessAdapter().detect(_ctx(tmp_path))
+
+        assert not any(artifact.artifact_type == "mcp_server" for artifact in detection.artifacts)
+        issue = next(artifact for artifact in detection.artifacts if artifact.artifact_type == "configuration")
+        assert issue.metadata["config_reason"] == "config_duplicate_key"
 
     def test_small_config_with_mcp_servers_not_treated_as_empty(self, tmp_path: Path, monkeypatch):
         """A small config.yaml with real MCP servers should NOT trigger
