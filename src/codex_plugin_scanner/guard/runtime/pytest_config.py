@@ -417,8 +417,13 @@ def _read_config_bytes(workspace_root: Path, relative_path: str) -> _ConfigRead:
             descriptor = None
             content = handle.read(MAX_PYTEST_CONFIG_FILE_BYTES + 1)
             opened_after_read = os.fstat(handle.fileno())
-        if len(content) > MAX_PYTEST_CONFIG_FILE_BYTES:
+            handle.seek(0)
+            verified_content = handle.read(MAX_PYTEST_CONFIG_FILE_BYTES + 1)
+            opened_after_verify = os.fstat(handle.fileno())
+        if len(content) > MAX_PYTEST_CONFIG_FILE_BYTES or len(verified_content) > MAX_PYTEST_CONFIG_FILE_BYTES:
             return _ConfigRead(True, None, PYTEST_CONFIG_OVERSIZE)
+        if verified_content != content:
+            return _ConfigRead(True, None, PYTEST_CONFIG_FILE_CHANGED)
         opened_identity = (
             opened.st_dev,
             opened.st_ino,
@@ -432,6 +437,14 @@ def _read_config_bytes(workspace_root: Path, relative_path: str) -> _ConfigRead:
             opened_after_read.st_size,
             opened_after_read.st_mtime_ns,
             opened_after_read.st_ctime_ns,
+        ) != opened_identity:
+            return _ConfigRead(True, None, PYTEST_CONFIG_FILE_CHANGED)
+        if (
+            opened_after_verify.st_dev,
+            opened_after_verify.st_ino,
+            opened_after_verify.st_size,
+            opened_after_verify.st_mtime_ns,
+            opened_after_verify.st_ctime_ns,
         ) != opened_identity:
             return _ConfigRead(True, None, PYTEST_CONFIG_FILE_CHANGED)
         after = resolved.stat()
