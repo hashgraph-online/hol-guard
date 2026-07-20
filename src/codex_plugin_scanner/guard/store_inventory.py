@@ -4,8 +4,49 @@
 
 from __future__ import annotations
 
+from .action_lattice import normalize_guard_action_result
+from .models import GuardAction
+from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
+
 # ruff: noqa: F403,F405
 from .store_base import *
+
+
+def _canonical_inventory_action(value: object, *, reject_unknown: bool) -> tuple[GuardAction, str | None]:
+    normalization = normalize_guard_action_result(value, unknown_action="require-reapproval")
+    if reject_unknown and not normalization.recognized:
+        raise ValueError(AUTHORITATIVE_DECISION_INCONSISTENT)
+    return (
+        normalization.action,
+        None if normalization.recognized else AUTHORITATIVE_DECISION_INCONSISTENT,
+    )
+
+
+def _inventory_payload_from_row(row: sqlite3.Row) -> dict[str, object]:
+    action, contract_error = _canonical_inventory_action(row["last_policy_action"], reject_unknown=False)
+    payload: dict[str, object] = {
+        "artifact_id": str(row["artifact_id"]),
+        "harness": str(row["harness"]),
+        "artifact_name": str(row["artifact_name"]),
+        "artifact_type": str(row["artifact_type"]),
+        "source_scope": str(row["source_scope"]),
+        "config_path": str(row["config_path"]),
+        "publisher": row["publisher"],
+        "origin_url": row["origin_url"],
+        "launch_command": row["launch_command"],
+        "transport": row["transport"],
+        "first_seen_at": str(row["first_seen_at"]),
+        "last_seen_at": str(row["last_seen_at"]),
+        "last_changed_at": row["last_changed_at"],
+        "last_approved_at": row["last_approved_at"] if action in {"allow", "warn"} else None,
+        "removed_at": row["removed_at"],
+        "present": bool(row["present"]),
+        "last_policy_action": action,
+        "artifact_hash": str(row["artifact_hash"]),
+    }
+    if contract_error is not None:
+        payload["decision_contract_error"] = contract_error
+    return payload
 
 
 class StoreInventoryMixin:
@@ -150,11 +191,14 @@ class StoreInventoryMixin:
         *,
         artifact: GuardArtifact,
         artifact_hash: str,
-        policy_action: str,
+        policy_action: GuardAction,
         changed: bool,
         now: str,
         approved: bool,
     ) -> None:
+        canonical_action, _contract_error = _canonical_inventory_action(policy_action, reject_unknown=True)
+        if approved and canonical_action not in {"allow", "warn"}:
+            raise ValueError(AUTHORITATIVE_DECISION_INCONSISTENT)
         launch_command = None
         if artifact.command:
             launch_command = " ".join([artifact.command, *artifact.args]).strip()
@@ -187,7 +231,7 @@ class StoreInventoryMixin:
                   transport = excluded.transport,
                   last_seen_at = excluded.last_seen_at,
                   last_changed_at = coalesce(excluded.last_changed_at, artifact_inventory.last_changed_at),
-                  last_approved_at = coalesce(excluded.last_approved_at, artifact_inventory.last_approved_at),
+                  last_approved_at = excluded.last_approved_at,
                   removed_at = null,
                   present = 1,
                   last_policy_action = excluded.last_policy_action,
@@ -210,7 +254,7 @@ class StoreInventoryMixin:
                     last_approved_at,
                     None,
                     1,
-                    policy_action,
+                    canonical_action,
                     artifact_hash,
                 ),
             )
@@ -220,19 +264,21 @@ class StoreInventoryMixin:
         *,
         harness: str,
         artifact_id: str,
-        policy_action: str,
+        policy_action: GuardAction,
         artifact_hash: str,
         now: str,
     ) -> None:
+        canonical_action, _contract_error = _canonical_inventory_action(policy_action, reject_unknown=True)
         with self._connect() as connection:
             connection.execute(
                 """
                 update artifact_inventory
                 set last_seen_at = ?, last_changed_at = ?, removed_at = ?, present = 0,
+                    last_approved_at = case when ? in ('allow', 'warn') then last_approved_at else null end,
                     last_policy_action = ?, artifact_hash = ?
                 where artifact_id = ? and harness = ?
                 """,
-                (now, now, now, policy_action, artifact_hash, artifact_id, harness),
+                (now, now, now, canonical_action, canonical_action, artifact_hash, artifact_id, harness),
             )
 
     def list_inventory(self, harness: str | None = None) -> list[dict[str, object]]:
@@ -249,29 +295,7 @@ class StoreInventoryMixin:
         query += " order by harness asc, artifact_name asc"
         with self._connect() as connection:
             rows = connection.execute(query, params).fetchall()
-        return [
-            {
-                "artifact_id": str(row["artifact_id"]),
-                "harness": str(row["harness"]),
-                "artifact_name": str(row["artifact_name"]),
-                "artifact_type": str(row["artifact_type"]),
-                "source_scope": str(row["source_scope"]),
-                "config_path": str(row["config_path"]),
-                "publisher": row["publisher"],
-                "origin_url": row["origin_url"],
-                "launch_command": row["launch_command"],
-                "transport": row["transport"],
-                "first_seen_at": str(row["first_seen_at"]),
-                "last_seen_at": str(row["last_seen_at"]),
-                "last_changed_at": row["last_changed_at"],
-                "last_approved_at": row["last_approved_at"],
-                "removed_at": row["removed_at"],
-                "present": bool(row["present"]),
-                "last_policy_action": str(row["last_policy_action"]),
-                "artifact_hash": str(row["artifact_hash"]),
-            }
-            for row in rows
-        ]
+        return [_inventory_payload_from_row(row) for row in rows]
 
     def find_inventory_item(self, artifact_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
@@ -289,26 +313,7 @@ class StoreInventoryMixin:
             ).fetchone()
         if row is None:
             return None
-        return {
-            "artifact_id": str(row["artifact_id"]),
-            "harness": str(row["harness"]),
-            "artifact_name": str(row["artifact_name"]),
-            "artifact_type": str(row["artifact_type"]),
-            "source_scope": str(row["source_scope"]),
-            "config_path": str(row["config_path"]),
-            "publisher": row["publisher"],
-            "origin_url": row["origin_url"],
-            "launch_command": row["launch_command"],
-            "transport": row["transport"],
-            "first_seen_at": str(row["first_seen_at"]),
-            "last_seen_at": str(row["last_seen_at"]),
-            "last_changed_at": row["last_changed_at"],
-            "last_approved_at": row["last_approved_at"],
-            "removed_at": row["removed_at"],
-            "present": bool(row["present"]),
-            "last_policy_action": str(row["last_policy_action"]),
-            "artifact_hash": str(row["artifact_hash"]),
-        }
+        return _inventory_payload_from_row(row)
 
     def save_artifact_capability(
         self,

@@ -2507,6 +2507,10 @@
     background-color: var(--color-blue-300);
   }
 
+  .bg-blue-400 {
+    background-color: var(--color-blue-400);
+  }
+
   .bg-blue-500 {
     background-color: var(--color-blue-500);
   }
@@ -2662,6 +2666,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-brand-blue\/20 {
       background-color: color-mix(in oklab, var(--brand-blue) 20%, transparent);
+    }
+  }
+
+  .bg-brand-blue\/50 {
+    background-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-brand-blue\/50 {
+      background-color: color-mix(in oklab, var(--brand-blue) 50%, transparent);
     }
   }
 
@@ -5557,6 +5571,10 @@
 
     .sm\:grid-cols-4 {
       grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .sm\:grid-cols-5 {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
     }
 
     .sm\:grid-cols-\[8rem_minmax\(0\,1fr\)\] {

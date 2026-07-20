@@ -1,4 +1,4 @@
-import { r as reactExports, bD as fetchSupplyChainBundle, j as jsxRuntimeExports, S as SectionLabel, k as EmptyState, aX as HiMiniArrowTopRightOnSquare, ai as Tag, s as formatRelativeTime, K as Badge, I as HiMiniExclamationTriangle, aT as HiMiniBugAnt, bE as isSupplyChainScannerEvidence, aD as HiMiniArrowPath, bF as HiMiniDocumentMagnifyingGlass, bG as HiMiniShieldExclamation, bH as HiMiniComputerDesktop, z as HiMiniCloud, m as HiMiniCheckCircle, an as HiMiniArrowLeft, bo as HiMiniArrowRight, A as ActionButton, be as HiMiniCloudArrowUp, bk as HiMiniInformationCircle, N as HiMiniWrenchScrewdriver, b8 as fetchReceipts, O as HiMiniXCircle, e as harnessDisplayName, w as HiMiniChevronUp, x as HiMiniChevronDown } from "../guard-dashboard.js";
+import { r as reactExports, bG as fetchSupplyChainBundle, j as jsxRuntimeExports, S as SectionLabel, k as EmptyState, a_ as HiMiniArrowTopRightOnSquare, ak as Tag, t as formatRelativeTime, M as Badge, K as HiMiniExclamationTriangle, aW as HiMiniBugAnt, ar as guardActionPresentation, bH as isSupplyChainScannerEvidence, bI as isBlockedGuardAction, aG as HiMiniArrowPath, bJ as HiMiniDocumentMagnifyingGlass, bK as HiMiniShieldExclamation, bL as HiMiniComputerDesktop, C as HiMiniCloud, m as HiMiniCheckCircle, ap as HiMiniArrowLeft, br as HiMiniArrowRight, A as ActionButton, bh as HiMiniCloudArrowUp, bn as HiMiniInformationCircle, Q as HiMiniWrenchScrewdriver, bb as fetchReceipts, R as HiMiniXCircle, e as harnessDisplayName, y as HiMiniChevronUp, z as HiMiniChevronDown } from "../guard-dashboard.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
 import { b as buildSupplyChainStats } from "./supply-chain-protection-stats.js";
@@ -200,7 +200,7 @@ function receiptEvidenceOperations(receipt) {
   return operations;
 }
 function isPackageBlockReceipt(receipt) {
-  if (receipt.policy_decision !== "block") {
+  if (!isBlockedGuardAction(receipt.policy_decision)) {
     return false;
   }
   const operations = receiptEvidenceOperations(receipt);
@@ -268,18 +268,32 @@ function auditRailItem(receipt) {
       tone: "attention"
     };
   }
-  const decision = evidence !== void 0 && typeof evidence.audit_decision === "string" ? evidence.audit_decision : receipt.policy_decision;
+  const action = guardActionPresentation(receipt.policy_decision);
   const blockedCount = evidence !== void 0 && typeof evidence.blocked_package_count === "number" ? evidence.blocked_package_count : 0;
   const totalPackages = evidence !== void 0 && typeof evidence.total_packages === "number" ? evidence.total_packages : blockedCount;
-  const detail = receipt.capabilities_summary.trim().length > 0 ? receipt.capabilities_summary : `Workspace audit returned ${decision} across ${totalPackages} package(s).`;
+  const detail = receipt.capabilities_summary.trim().length > 0 ? receipt.capabilities_summary : `Workspace audit returned ${action.copy} across ${totalPackages} package(s).`;
+  let title = "Workspace audit completed";
+  if (blockedCount > 0) {
+    title = `Audit flagged ${blockedCount} package(s)`;
+  } else if (action.action === "warn") {
+    title = "Workspace audit completed with warning";
+  } else if (action.action === "review") {
+    title = "Workspace audit needs review";
+  } else if (action.action === "require-reapproval") {
+    title = "Workspace audit needs fresh approval";
+  } else if (action.action === "sandbox-required") {
+    title = "Workspace audit requires a sandbox";
+  } else if (action.action === "block") {
+    title = "Workspace audit blocked";
+  }
   return {
     kind: "audit",
     timestamp: receipt.timestamp,
-    title: blockedCount > 0 ? `Audit flagged ${blockedCount} package(s)` : "Workspace audit completed",
+    title,
     detail,
     receiptId: receipt.receipt_id,
     harness: receipt.harness,
-    tone: blockedCount > 0 || decision === "block" ? "attention" : "green"
+    tone: blockedCount > 0 || action.action !== "allow" ? "attention" : "green"
   };
 }
 function syncRailItem(receipt) {

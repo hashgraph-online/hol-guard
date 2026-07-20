@@ -10,7 +10,7 @@ from hashlib import sha256
 from pathlib import Path, PurePath
 from typing import Literal, cast
 
-from .action_lattice import most_restrictive_guard_action
+from .action_lattice import most_restrictive_guard_action, normalize_guard_action
 from .approval_gate import ApprovalGateGrant
 from .config import DEFAULT_SECURITY_LEVEL, GuardConfig, resolve_risk_action
 from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
@@ -40,6 +40,19 @@ from .store import GuardStore, browser_mcp_exact_match_context
 
 # Bump when MCP risk classification or action-composition semantics change.
 _MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION = "mcp-tool-call-evaluation-v2"
+
+_NON_EXECUTED_TOOL_CALL_TAXONOMY: Mapping[GuardAction, tuple[str, str]] = {
+    "review": ("runtime_tool_call_review_required", "runtime tool call awaiting review"),
+    "require-reapproval": (
+        "runtime_tool_call_reapproval_required",
+        "runtime tool call awaiting fresh approval",
+    ),
+    "sandbox-required": (
+        "runtime_tool_call_sandbox_required",
+        "runtime tool call requires an enforceable sandbox",
+    ),
+    "block": ("runtime_tool_call_blocked", "runtime tool call blocked"),
+}
 
 ApprovalReuseClaimDisposition = Literal["consumed", "retained"]
 
@@ -140,6 +153,28 @@ class ToolCallDecision:
     approval_reuse_claim_disposition: ApprovalReuseClaimDisposition | None = None
     post_claim_revalidated: bool = False
     post_claim_authority: ToolCallAuthority | None = None
+
+
+def resolve_tool_call_policy_action(
+    decision: ToolCallDecision,
+    *,
+    action: object | None = None,
+) -> GuardAction:
+    """Resolve the exact action enforced for a tool-call decision.
+
+    A first-time review remains ``review``.  A rejected attempt to reuse prior
+    authority is a genuine fresh-approval boundary and is therefore surfaced as
+    ``require-reapproval`` instead of silently making every review look stale.
+    """
+
+    normalized = normalize_guard_action(decision.action if action is None else action)
+    stale_prior_authority = (
+        decision.approval_reuse_status == "rejected"
+        and decision.approval_reuse_reason_code not in {None, APPROVAL_REUSE_NO_SAVED_DECISION}
+    )
+    if normalized == "review" and stale_prior_authority:
+        return "require-reapproval"
+    return normalized
 
 
 _MCP_COMMAND_ARGUMENT_KEYS: tuple[str, ...] = (
@@ -1357,6 +1392,10 @@ def block_tool_call(
     additional_scanner_evidence: tuple[dict[str, object], ...] = (),
     policy_action: GuardAction = "block",
 ) -> GuardReceipt:
+    try:
+        event_name, provenance_action = _NON_EXECUTED_TOOL_CALL_TAXONOMY[policy_action]
+    except KeyError as exc:
+        raise ValueError(f"block_tool_call cannot record executing action {policy_action!r}.") from exc
     store.record_inventory_artifact(
         artifact=artifact,
         artifact_hash=artifact_hash,
@@ -1373,7 +1412,7 @@ def block_tool_call(
         policy_decision=policy_action,
         capabilities_summary=f"mcp tool call • {artifact.name}",
         changed_capabilities=["runtime_tool_call", decision_source, *signals],
-        provenance_summary=f"runtime tool call blocked from {artifact.config_path}",
+        provenance_summary=f"{provenance_action} from {artifact.config_path}",
         artifact_name=artifact.name,
         source_scope=artifact.source_scope,
         user_override="inline-deny" if decision_source == "inline-denied" else None,
@@ -1389,12 +1428,13 @@ def block_tool_call(
     )
     store.add_receipt(receipt)
     store.add_event(
-        "runtime_tool_call_blocked",
+        event_name,
         {
             "artifact_id": artifact.artifact_id,
             "artifact_hash": artifact_hash,
             "decision_source": decision_source,
             "policy_action": policy_action,
+            "execution_outcome": "not-executed",
             "risk_categories": list(risk_categories),
             "signals": list(signals),
         },

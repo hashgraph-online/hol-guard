@@ -97,6 +97,7 @@ def _usage_events(
     events: list[HarnessUsageEventTuple] = []
     request_id = _string_from_keys(raw_payload, _REQUEST_ID_KEYS)
     session_id = _string_from_keys(raw_payload, _SESSION_ID_KEYS)
+    policy_action = _string_from_keys(raw_payload, ("policy_action", "policyAction"))
     base_payload = {
         "harness": action.harness,
         "eventName": action.event_name,
@@ -104,6 +105,7 @@ def _usage_events(
         "workspaceHash": action.workspace_hash,
         "requestId": request_id,
         "sessionId": session_id,
+        "policyAction": policy_action,
         "status": _usage_status(action, raw_payload),
     }
     if action.action_type == "mcp_tool" and action.mcp_server is not None:
@@ -146,7 +148,7 @@ def _usage_status(action: GuardActionEnvelope, raw_payload: Mapping[str, object]
         raw_payload,
         ("policy_action", "policyAction", "permission_decision", "permissionDecision"),
     )
-    if explicit in {"block", "deny", "sandbox-required", "require-reapproval"}:
+    if explicit in {"block", "deny", "review", "sandbox-required", "require-reapproval"}:
         return "blocked"
     if explicit in {"allow", "approve", "approved", "warn"}:
         return "allowed"

@@ -8,6 +8,7 @@ import json
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
@@ -39,6 +40,8 @@ _DECISION_MEMORY_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _CLAIM_HASH_KEYS = ("claimHash",)
 _SIGNED_PAYLOAD_STRIP_KEYS = ("payloadHash", "signature", "signatureAlgorithm", "verificationKeys", "bundleHash")
 _GUARD_REVIEW_VERIFICATION_KEYRING_SYNC_KEY = "guard_review_verification_keyring"
+
+RemoteApprovalDecision = Literal["allow", "block"]
 
 
 class GuardReviewContractError(ValueError):
@@ -369,10 +372,12 @@ def payload_hash_for_remote_approval_envelope(envelope: dict[str, object]) -> st
     return _sha256_hex(_canonical_signed_payload(envelope))
 
 
-def normalize_remote_approval_decision(value: object) -> str | None:
-    normalized = _non_empty_string(value)
-    if normalized is None:
+def normalize_remote_approval_decision(value: object) -> RemoteApprovalDecision | None:
+    """Normalize only the documented signed remote decision wire values."""
+
+    if not isinstance(value, str) or not value.strip():
         return None
+    normalized = value.strip()
     folded = normalized.replace("_", "-")
     if folded in {"allow", "allow-once"} or normalized == "allowOnce":
         return "allow"

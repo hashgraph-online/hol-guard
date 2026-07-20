@@ -2,6 +2,7 @@ import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag, ProofStr
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
 import type { GuardCloudCommandCapability, GuardCloudSyncHealth, GuardInventoryItem, GuardProofStatus, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
 import { protectionHealthFor } from "./protection-health";
+import { guardActionPresentation } from "./guard-action";
 
 const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw", "kimi", "grok"] as const;
 
@@ -25,12 +26,12 @@ function headlineTone(state: GuardRuntimeSnapshot["headline_state"]): "info" | "
   return "info";
 }
 
-function remediationLine(snapshot: GuardRuntimeSnapshot): string {
+export function remediationLine(snapshot: GuardRuntimeSnapshot): string {
   if (snapshot.runtime_state === null) {
     return "Start Guard with hol-guard bootstrap so the approval center can receive live requests again.";
   }
   if (snapshot.pending_count > 0) {
-    return "Open the review queue, choose what to do with the blocked action, then retry in the same chat.";
+    return "Open the review queue, choose what to do with the waiting action, then retry in the same chat.";
   }
   if (snapshot.cloud_state === "paired_waiting") {
     return "Keep Local Guard running while it finishes the first cloud sync automatically, or run hol-guard sync now.";
@@ -438,6 +439,7 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
   const { snapshot, inventory } = props;
   const securityLevel = snapshot.security_level;
   const latestReceipt = snapshot.latest_receipts[0];
+  const latestAction = latestReceipt ? guardActionPresentation(latestReceipt.policy_decision) : null;
   const daemonHealthLabel = snapshot.runtime_state !== null ? "running" : "offline";
   const resolvedInventory = inventory ?? snapshot.inventory ?? [];
   const protectionHealth = protectionHealthFor(snapshot);
@@ -484,7 +486,17 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
           items={[
             { label: "Protection health", value: protectionHealth.label, tone: protectionHealth.state === "protected" ? "green" : protectionHealth.state === "partial" ? "blue" : "slate" },
             { label: "Protection level", value: securityLevel ?? "balanced", tone: securityLevel === "strict" ? "purple" : "blue" },
-            { label: "Recent decision", value: latestReceipt ? (latestReceipt.policy_decision) : "None", tone: latestReceipt ? (latestReceipt.policy_decision === "allow" ? "green" : "purple") : "slate" },
+            {
+              label: "Recent decision",
+              value: latestAction?.label ?? "None",
+              tone: latestAction?.disposition === "allowed"
+                ? "green"
+                : latestAction?.disposition === "blocked"
+                ? "attention"
+                : latestAction
+                ? "blue"
+                : "slate",
+            },
             { label: "Cloud state", value: snapshot.cloud_state === "local_only" ? "Local only" : "Syncing", tone: snapshot.cloud_state === "local_only" ? "slate" : "green" },
           ]}
         />

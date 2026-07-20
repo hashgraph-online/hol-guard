@@ -227,6 +227,42 @@ def _blocked_tool_response(
     return payload
 
 
+def _sensitive_read_non_forward_message(
+    policy_action: GuardAction,
+    *,
+    tool_name: str,
+    path_class: str,
+) -> str:
+    if policy_action == "review":
+        return f"Guard paused sensitive local file access for {tool_name} pending review: {path_class}."
+    if policy_action == "require-reapproval":
+        return (
+            f"Guard paused sensitive local file access for {tool_name} until fresh approval is granted: {path_class}."
+        )
+    if policy_action == "sandbox-required":
+        return (
+            f"Guard requires an enforceable sandbox before sensitive local file access for {tool_name}: {path_class}."
+        )
+    if policy_action == "block":
+        return f"Guard blocked sensitive local file access for {tool_name}: {path_class}."
+    raise ValueError(f"Sensitive-read non-forward response cannot represent action {policy_action!r}.")
+
+
+def _sensitive_read_review_hint(
+    policy_action: GuardAction,
+    *,
+    approval_summary: object,
+    review_url: str,
+) -> str:
+    if policy_action == "review":
+        instruction = "review the waiting request"
+    elif policy_action == "require-reapproval":
+        instruction = "grant or deny fresh approval"
+    else:
+        raise ValueError(f"Sensitive-read approval hint cannot represent action {policy_action!r}.")
+    return f"{approval_summary} Open {review_url} to {instruction}."
+
+
 def _timeout_response(
     message_id: Any,
     *,
@@ -735,7 +771,11 @@ class StdioGuardProxy:
                         runtime_artifact = fresh_artifact
                         runtime_artifact_hash = fresh_artifact_hash
                         current_action = fresh_current_action
-                policy_action = "require-reapproval" if reuse.action == "review" else reuse.action
+                policy_action = (
+                    "require-reapproval"
+                    if reuse.action == "review" and reuse.reason_code != APPROVAL_REUSE_NO_SAVED_DECISION
+                    else reuse.action
+                )
                 reuse_evidence = _approval_reuse_evidence(reuse)
                 if config_refresh_failed:
                     reuse_evidence = (
@@ -779,13 +819,20 @@ class StdioGuardProxy:
                             scanner_evidence=reuse_evidence,
                         )
                     )
+                forwarded = policy_action in {"allow", "warn"}
+                event["decision"] = policy_action
+                event["policy_action"] = policy_action
+                event["transport_outcome"] = "forwarded" if forwarded else "not-forwarded"
                 if policy_action in {"block", "review", "sandbox-required", "require-reapproval"}:
-                    event["decision"] = "block"
-                    blocked_message = (
-                        f"Guard blocked sensitive local file access for {tool_name}: "
-                        f"{sensitive_request.path_match.path_class}."
+                    non_forward_message = _sensitive_read_non_forward_message(
+                        policy_action,
+                        tool_name=tool_name,
+                        path_class=sensitive_request.path_match.path_class,
                     )
-                    response_data = None
+                    response_data: dict[str, Any] = {
+                        "guardPolicyAction": policy_action,
+                        "transportOutcome": "not-forwarded",
+                    }
                     if (
                         self.guard_store is not None
                         and self.approval_center_url is not None
@@ -839,24 +886,28 @@ class StdioGuardProxy:
                                 for item in event["approval_requests"]
                                 if isinstance(item, dict) and isinstance(item.get("request_id"), str)
                             ),
-                            "blocked-request",
+                            "waiting-request",
                         )
                         self._maybe_open_approval_center(review_url=review_url, open_key=request_id)
-                        event["review_hint"] = (
-                            f"{approval_flow['summary']} Open {review_url} to review the blocked request."
+                        event["review_hint"] = _sensitive_read_review_hint(
+                            policy_action,
+                            approval_summary=approval_flow["summary"],
+                            review_url=review_url,
                         )
-                        blocked_message = f"{blocked_message} {event['review_hint']}"
-                        response_data = {
-                            "approvalCenterUrl": self.approval_center_url,
-                            "approvalRequests": event["approval_requests"],
-                            "approvalDelivery": event["approval_delivery"],
-                            "reviewHint": event["review_hint"],
-                            "reviewUrl": review_url,
-                        }
+                        non_forward_message = f"{non_forward_message} {event['review_hint']}"
+                        response_data.update(
+                            {
+                                "approvalCenterUrl": self.approval_center_url,
+                                "approvalRequests": event["approval_requests"],
+                                "approvalDelivery": event["approval_delivery"],
+                                "reviewHint": event["review_hint"],
+                                "reviewUrl": review_url,
+                            }
+                        )
                     response = _blocked_tool_response(
                         message.get("id"),
                         tool_name,
-                        blocked_message,
+                        non_forward_message,
                         response_data,
                     )
                     events.append(event)
@@ -873,7 +924,9 @@ class StdioGuardProxy:
         if response is None:
             return None
         if _is_timeout_response(response):
-            event["decision"] = "timeout"
+            event["transport_outcome"] = "timeout"
+            if "policy_action" not in event:
+                event["decision"] = "timeout"
         responses.append(response)
         events.append(event)
         return response

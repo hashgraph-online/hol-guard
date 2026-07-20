@@ -8,6 +8,7 @@ import {
   QUEUE_CONNECTION_ERROR_HEADLINE,
   QUEUE_CONNECTION_ERROR_INSTRUCTION,
   buildRecommendation,
+  requestResolutionBlockReason,
   scopeLabel,
   buildCodexResumeUx,
   resolveApprovalShareUrl,
@@ -208,18 +209,18 @@ assert(
 );
 
 assert(
-  resolveTerminalLabel(BASE_REQUEST) === "Stopped command",
-  "T479-T484: resolveTerminalLabel returns 'Stopped command' when no envelope present"
+  resolveTerminalLabel(BASE_REQUEST) === "Command",
+  "P45: pending requests without an envelope use a neutral command label"
 );
 
 assert(
-  EMPTY_QUEUE_TITLE === "No blocked actions",
-  'C5: Empty queue shows friendly copy "No blocked actions"; EMPTY_QUEUE_TITLE constant is correct'
+  EMPTY_QUEUE_TITLE === "Review queue is clear",
+  'C5: Empty queue reports that the review queue is clear'
 );
 
 assert(
-  EMPTY_QUEUE_TITLE.toLowerCase().includes("no blocked"),
-  'C5: Empty queue title does not say "no items"; uses friendly language instead'
+  !EMPTY_QUEUE_TITLE.toLowerCase().includes("blocked"),
+  "P45: Empty review queue does not relabel pending decisions as blocks"
 );
 
 assert(
@@ -245,6 +246,21 @@ assert(
 assert(
   buildRecommendation(BASE_REQUEST).includes("Project approval remembers this same action"),
   "C9: Recommendation explains project approval does not trust new sensitive actions"
+);
+
+const sandboxRequest: GuardApprovalRequest = { ...BASE_REQUEST, policy_action: "sandbox-required" };
+assert(
+  requestResolutionBlockReason(sandboxRequest)?.includes("cannot bypass") === true &&
+    !buildRecommendation(sandboxRequest).toLowerCase().includes("scope"),
+  "P45: terminal sandbox requests never advertise or enable an approval bypass",
+);
+const inconsistentRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  decision_contract_error: "authoritative_decision_inconsistent",
+};
+assert(
+  requestResolutionBlockReason(inconsistentRequest)?.includes("cannot be approved") === true,
+  "P45: inconsistent stored authority has explicit non-resolvable UI copy",
 );
 
 assert(

@@ -1555,6 +1555,107 @@ clearer UX and an implementation plan with technical references.
         assert output["recorded"] is True
         assert "approval_requests" not in output
 
+    @pytest.mark.parametrize(
+        "command",
+        (
+            "rg -n 'SMTP_TOKEN' src/example.ts; sed -n '1,20p' src/example.ts",
+            "nl -ba src/example.ts | sed -n '1,20p'",
+            "wc -l src/example.ts; sed -n '1,20p' src/example.ts",
+            ("yq '.jobs.build.steps[] | select(.name == \"Compute publish version\")' .github/workflows/publish.yml"),
+        ),
+    )
+    def test_codex_post_tool_use_allows_common_read_only_source_inspection(
+        self,
+        command,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(workspace_dir / "src" / "example.ts", "const SMTP_TOKEN = process.env.SMTP_TOKEN;\n")
+        _write_text(
+            workspace_dir / ".github" / "workflows" / "publish.yml",
+            "jobs:\n  build:\n    steps:\n      - name: Compute publish version\n",
+        )
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": "const SMTP_TOKEN = process.env.SMTP_TOKEN;\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recorded"] is True
+        assert "approval_requests" not in output
+
+    @pytest.mark.parametrize(
+        "command",
+        (
+            "sed -n '1,20p' src/example.ts; rm src/example.ts",
+            "nl -ba .env",
+        ),
+    )
+    def test_codex_post_tool_use_keeps_unsafe_source_inspection_guarded(
+        self,
+        command,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(workspace_dir / "src" / "example.ts", "const SMTP_TOKEN = process.env.SMTP_TOKEN;\n")
+        _write_text(workspace_dir / ".github" / "workflows" / "publish.yml", "jobs: {}\n")
+        _write_text(workspace_dir / ".env", "API_TOKEN=fixture-only\n")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": "API_TOKEN=fixture-only\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] in {"block", "require-reapproval"}
+        assert output["approval_requests"]
+
     def test_codex_post_tool_use_allows_absolute_source_view_with_secret_like_output(
         self,
         monkeypatch,
@@ -7821,6 +7922,7 @@ def test_guard_hook_emits_copilot_permission_request_deny_for_risky_mcp_tool(
     usage_events = [event for event in events if event["event_type"] == "harness.mcp.used"]
     assert len(usage_events) == 1
     assert usage_events[0]["payload"]["payload"]["status"] == "blocked"
+    assert usage_events[0]["payload"]["payload"]["policyAction"] == "review"
 
 
 def test_guard_hook_emits_copilot_permission_request_deny_from_tool_calls_payload(
@@ -8102,9 +8204,11 @@ def test_guard_hook_emits_copilot_native_allow_for_safe_mcp_pre_tool_use(
     assert output == {"permissionDecision": "allow"}
     assert any(
         receipt["artifact_id"] == "copilot:runtime:project:danger_lab:safe_echo"
-        and receipt["policy_decision"] == "allow"
+        and receipt["policy_decision"] == "warn"
         for receipt in receipts
     )
+    runtime_event = store.list_events(limit=1, event_name="runtime_tool_call_allowed")[0]
+    assert runtime_event["payload"]["policy_action"] == "warn"
 
 
 def test_guard_hook_resolves_copilot_nested_cwd_back_to_workspace_root(
@@ -8159,7 +8263,7 @@ def test_guard_hook_resolves_copilot_nested_cwd_back_to_workspace_root(
     assert output == {"permissionDecision": "allow"}
     assert any(
         receipt["artifact_id"] == "copilot:runtime:project:danger_lab:safe_echo"
-        and receipt["policy_decision"] == "allow"
+        and receipt["policy_decision"] == "warn"
         for receipt in receipts
     )
 
@@ -9340,6 +9444,53 @@ def test_guard_hook_claude_signed_unseen_pending_cannot_bootstrap_allow(tmp_path
         and event_payload.get("artifact_id") == artifact.artifact_id
         for event_payload in event_payloads
     )
+
+
+def test_guard_hook_claude_native_allow_preserves_authoritative_warn_inventory(tmp_path):
+    store = GuardStore(tmp_path / "home")
+    session_id = "session-claude-native-allow-authoritative-warn"
+    artifact = GuardArtifact(
+        artifact_id="claude-code:runtime:file-read:.env",
+        name="Read",
+        harness="claude-code",
+        artifact_type="file_read_request",
+        source_scope="project",
+        config_path="/workspace/.env",
+    )
+    artifact_hash_value = "hash-native-allow-authoritative-warn"
+    prompt_payload = {"session_id": session_id, "tool_name": "Read"}
+    guard_commands_module._record_claude_permission_notice(
+        store=store,
+        payload=prompt_payload,
+        reason="HOL Guard warned about Claude's attempt to read .env.",
+        artifact=artifact,
+        artifact_hash=artifact_hash_value,
+    )
+    notice = guard_commands_module._peek_claude_permission_notice(store, prompt_payload)
+    assert notice is not None
+    guard_commands_module._mark_claude_pending_permission_prompt_seen(
+        store=store,
+        payload=prompt_payload,
+        notice=notice,
+    )
+
+    observed, saved = guard_commands_module._persist_claude_native_permission_for_runtime_artifact(
+        store=store,
+        payload=prompt_payload,
+        artifact=artifact,
+        artifact_hash=artifact_hash_value,
+        action="allow",
+        authoritative_action="warn",
+        reason="The native allow remains subordinate to Guard's authoritative warning.",
+    )
+
+    inventory = store.find_inventory_item(artifact.artifact_id)
+    assert observed is True
+    assert saved is False
+    assert store.list_policy_decisions("claude-code") == []
+    assert inventory is not None
+    assert inventory["last_policy_action"] == "warn"
+    assert isinstance(inventory["last_approved_at"], str)
 
 
 def test_guard_hook_claude_ask_user_question_unsigned_legacy_pending_state_cannot_persist_decision(tmp_path):
@@ -11625,22 +11776,14 @@ def test_guard_run_prompt_allow_once_launches_and_records_override(tmp_path, cap
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
-    _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
-    global_server = home_dir / "global-server.py"
-    workspace_server = workspace_dir / "workspace-server.py"
-    _write_text(global_server, "print('global server')\n")
-    _write_text(workspace_server, "print('workspace server')\n")
+    codex_executable = _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
     _write_text(
         home_dir / ".codex" / "config.toml",
-        "[mcp_servers.global_tools]\n"
-        f"command = {json.dumps(sys.executable)}\n"
-        f"args = [{json.dumps(str(global_server))}]\n",
+        f"[mcp_servers.global_tools]\ncommand = {json.dumps(str(codex_executable))}\nargs = []\n",
     )
     _write_text(
         workspace_dir / ".codex" / "config.toml",
-        "[mcp_servers.workspace_skill]\n"
-        f"command = {json.dumps(sys.executable)}\n"
-        f"args = [{json.dumps(str(workspace_server))}]\n",
+        f"[mcp_servers.workspace_skill]\ncommand = {json.dumps(str(codex_executable))}\nargs = []\n",
     )
     answers = iter(["1", "1"])
     monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
@@ -11675,22 +11818,14 @@ def test_guard_run_prompt_allow_artifact_persists_for_next_run(tmp_path, capsys,
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
-    _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
-    global_server = home_dir / "global-server.py"
-    workspace_server = workspace_dir / "workspace-server.py"
-    _write_text(global_server, "print('global server')\n")
-    _write_text(workspace_server, "print('workspace server')\n")
+    codex_executable = _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
     _write_text(
         home_dir / ".codex" / "config.toml",
-        "[mcp_servers.global_tools]\n"
-        f"command = {json.dumps(sys.executable)}\n"
-        f"args = [{json.dumps(str(global_server))}]\n",
+        f"[mcp_servers.global_tools]\ncommand = {json.dumps(str(codex_executable))}\nargs = []\n",
     )
     _write_text(
         workspace_dir / ".codex" / "config.toml",
-        "[mcp_servers.workspace_skill]\n"
-        f"command = {json.dumps(sys.executable)}\n"
-        f"args = [{json.dumps(str(workspace_server))}]\n",
+        f"[mcp_servers.workspace_skill]\ncommand = {json.dumps(str(codex_executable))}\nargs = []\n",
     )
     answers = iter(["2", "2"])
     monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
@@ -12423,6 +12558,41 @@ def test_guard_run_renderer_filters_unchanged_artifacts_and_counts_review_items(
     assert "Needs review 1" in output
 
 
+def test_guard_run_renderer_explains_authority_contract_failure_without_stale_allow_copy(capsys):
+    emit_guard_payload(
+        "run",
+        {
+            "harness": "codex",
+            "blocked": True,
+            "dry_run": False,
+            "launched": False,
+            "receipts_recorded": 0,
+            "authority_error": "authoritative_decision_inconsistent",
+            "authority_error_message": ("Guard detected contradictory decision fields and refused to launch."),
+            "artifacts": [
+                {
+                    "artifact_id": "codex:project:stale-allow",
+                    "artifact_name": "stale-allow",
+                    "changed": False,
+                    "changed_fields": [],
+                    "policy_action": "allow",
+                }
+            ],
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+
+    assert "Launch refused: inconsistent decision" in output
+    assert "authoritative_decision_inconsistent" in output
+    assert "Guard detected contradictory decision fields and refused to" in output
+    assert "launch." in output
+    assert "Repair and rescan Guard authority" in output
+    assert "hol-guard doctor codex" in output
+    assert "Needs review 0" not in output
+    assert "stale-allow" not in output
+
+
 def test_guard_run_renderer_keeps_unchanged_blockers_visible(capsys):
     emit_guard_payload(
         "run",
@@ -12837,11 +13007,11 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
-    _make_pinnable_harness_executable(tmp_path, monkeypatch, "claude")
+    claude_executable = _make_pinnable_harness_executable(tmp_path, monkeypatch, "claude")
     _write_text(workspace_dir / "guard-pre.py", "pass\n")
     _write_json(
         workspace_dir / ".mcp.json",
-        {"mcpServers": {"workspace-tools": {"command": sys.executable, "args": ["-c", "pass"]}}},
+        {"mcpServers": {"workspace-tools": {"command": str(claude_executable), "args": []}}},
     )
     _write_text(
         home_dir / "config.toml",
@@ -12983,7 +13153,7 @@ def test_guard_run_headless_redetects_before_persisted_resume(tmp_path, monkeypa
     monkeypatch.setattr(guard_runner_module, "detect_harness", fake_detect)
 
     def resolve_pending() -> None:
-        for _ in range(40):
+        for _ in range(100):
             pending = store.list_approval_requests(limit=10)
             if pending:
                 apply_approval_resolution(
@@ -13000,7 +13170,7 @@ def test_guard_run_headless_redetects_before_persisted_resume(tmp_path, monkeypa
     worker = threading.Thread(target=resolve_pending, daemon=True)
     worker.start()
 
-    config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+    config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=5)
     blocked_resolver = guard_commands_module._headless_approval_resolver(
         args=argparse.Namespace(harness="claude-code"),
         context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
@@ -13110,13 +13280,13 @@ def test_guard_run_interactive_allow_once_redetects_before_resume(tmp_path, monk
 
     assert result["blocked"] is True
     assert result["launched"] is False
-    assert result["artifacts"][0]["policy_action"] == "require-reapproval"
+    assert result["artifacts"][0]["policy_action"] == "sandbox-required"
     assert result["artifacts"][0]["trusted_request_override"]["applied"] is False
     assert call_count["detect"] >= 2
     assert launch_calls == []
     receipts = store.list_receipts(limit=10)
     assert len(receipts) == 1
-    assert receipts[0]["policy_decision"] == "require-reapproval"
+    assert receipts[0]["policy_decision"] == "sandbox-required"
     assert receipts[0]["user_override"] is None
 
 
@@ -14568,6 +14738,149 @@ def test_guard_hook_codex_emits_no_native_output_for_safe_requests(tmp_path, cap
     assert output == ""
     assert GuardStore(home_dir).list_receipts(limit=10) == []
     assert pending == []
+
+
+@pytest.mark.parametrize(
+    "strict_config",
+    (
+        'default_action = "require-reapproval"\n',
+        '[harnesses.codex]\ndefault_action = "require-reapproval"\n',
+    ),
+    ids=("global", "harness"),
+)
+def test_guard_hook_codex_strict_default_allows_verified_benign_git_status(
+    strict_config,
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", strict_config)
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status --short"},
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    output = capsys.readouterr().out
+    store = GuardStore(home_dir)
+
+    assert rc == 0
+    assert output == ""
+    assert store.list_approval_requests(limit=10) == []
+    assert store.list_receipts(limit=1) == []
+
+
+@pytest.mark.parametrize("explicit_action", ("block", "require-reapproval"))
+def test_guard_hook_codex_verified_benign_does_not_override_explicit_policy(
+    explicit_action,
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(
+        home_dir / "config.toml",
+        (
+            'default_action = "require-reapproval"\n'
+            "approval_wait_timeout_seconds = 0\n"
+            f'[artifacts."codex:project:Bash"]\naction = "{explicit_action}"\n'
+        ),
+    )
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status --short"},
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize(
+    "strict_config",
+    (
+        'default_action = "require-reapproval"\napproval_wait_timeout_seconds = 0\n',
+        'approval_wait_timeout_seconds = 0\n[harnesses.codex]\ndefault_action = "require-reapproval"\n',
+    ),
+    ids=("global", "harness"),
+)
+def test_guard_hook_codex_strict_default_still_denies_destructive_shell_command(
+    strict_config,
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", strict_config)
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status --short && rm -rf ./build"},
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "destructive shell command" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_guard_hook_codex_reviews_github_token_substitution_command(
@@ -18519,7 +18832,10 @@ def test_stdio_proxy_blocks_sensitive_file_reads_without_forwarding(tmp_path):
     assert "http://127.0.0.1:4455" in blocked["responses"][0]["error"]["message"]
     assert blocked["responses"][0]["error"]["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
     assert blocked["responses"][0]["error"]["data"]["reviewHint"]
-    assert blocked["events"][0]["decision"] == "block"
+    assert blocked["events"][0]["decision"] == "require-reapproval"
+    assert blocked["events"][0]["policy_action"] == "require-reapproval"
+    assert blocked["events"][0]["transport_outcome"] == "not-forwarded"
+    assert blocked["responses"][0]["error"]["data"]["guardPolicyAction"] == "require-reapproval"
     assert blocked["events"][0]["approval_delivery"]["destination"] == "harness"
     assert blocked["events"][0]["redacted_params"]["arguments"]["headers"]["Authorization"] == "*****"
     assert blocked["events"][0]["path_summary"].endswith("/.env")
@@ -22914,10 +23230,22 @@ def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_pat
     assert artifact is None
 
 
-def test_codex_read_only_source_inspection_still_blocks_value_like_secret_output(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "command",
+    (
+        "rg -n \"token\" src | sed -n '1,40p'",
+        "nl -ba src/config.ts | sed -n '1,40p'",
+        "wc -l src/config.ts; sed -n '1,40p' src/config.ts",
+        "yq '.jobs' .github/workflows/publish.yml",
+    ),
+)
+def test_codex_read_only_source_inspection_still_blocks_value_like_secret_output(
+    command: str,
+    tmp_path: Path,
+) -> None:
     workspace_dir = tmp_path / "workspace"
     _write_text(workspace_dir / "src" / "config.ts", "export const label = 'token';\n")
-    command = "rg -n \"token\" src | sed -n '1,40p'"
+    _write_text(workspace_dir / ".github" / "workflows" / "publish.yml", "jobs: {}\n")
 
     artifact = guard_commands_module._codex_post_tool_output_artifact(
         payload={
@@ -23556,7 +23884,7 @@ def test_codex_read_only_source_inspection_rejects_malformed_chains(tmp_path: Pa
         "sed -n '1,10p' src/safe.ts &&",
         "sed -n '1,10p' src/safe.ts && && cat src/safe.ts",
         "sed -n '1,10p' src/safe.ts || cat src/safe.ts",
-        "sed -n '1,10p' src/safe.ts; cat src/safe.ts",
+        "sed -n '1,10p' src/safe.ts;; cat src/safe.ts",
     ]
 
     for command in commands:

@@ -30,6 +30,7 @@ import { EvidenceInsightsShareModal } from "./evidence/evidence-insights-share-m
 import { useReceiptAnalytics } from "./evidence/use-receipt-analytics";
 import { HomeCommandActivityCard } from "./command-activity/command-activity-home-card";
 import { protectionHealthFor } from "./protection-health";
+import { guardActionActivityCopy, guardActionDisposition } from "./guard-action";
 import type {
   GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
@@ -108,8 +109,11 @@ export function redactHomeArtifactLabel(value: string | null | undefined): strin
 }
 
 export function buildRecentProtectionCopy(receipt: GuardReceipt): string {
-  const decisionLabel = receipt.policy_decision === "block" ? "blocked" : "allowed";
-  return `${harnessDisplayName(receipt.harness)} ${decisionLabel} ${redactHomeArtifactLabel(receipt.artifact_name)}`;
+  return guardActionActivityCopy(
+    receipt.policy_decision,
+    harnessDisplayName(receipt.harness),
+    redactHomeArtifactLabel(receipt.artifact_name),
+  );
 }
 
 type HomeRequestState =
@@ -548,7 +552,7 @@ export function deriveHomeState(input: {
     return {
       heroStatus: "needs_review",
       headline: queuedCount === 1 ? "1 action needs review" : `${queuedCount} actions need review`,
-      subheadline: "Guard stopped something. Review and decide whether to allow or block it.",
+      subheadline: "Guard paused an action for your decision. Review it, then choose whether to allow or block it.",
       ctaLabel: "Review now",
       ctaTarget: "inbox",
     };
@@ -610,8 +614,9 @@ export function buildDailyStory(
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayReceipts = receipts.filter((r) => new Date(r.timestamp) >= today);
-  const allowedToday = todayReceipts.filter((r) => r.policy_decision === "allow").length;
-  const blockedToday = todayReceipts.filter((r) => r.policy_decision === "block").length;
+  const allowedToday = todayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+  const blockedToday = todayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
+  const reviewedToday = todayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
 
   if (queuedCount > 0) {
     const actionText = queuedCount === 1 ? "1 action is" : `${queuedCount} actions are`;
@@ -623,13 +628,21 @@ export function buildDailyStory(
     };
   }
 
-  if (allowedToday + blockedToday > 0) {
+  if (allowedToday + blockedToday + reviewedToday > 0) {
+    const clauses: string[] = [];
+    if (allowedToday > 0) clauses.push(`allowed ${allowedToday} action${allowedToday !== 1 ? "s" : ""}`);
+    if (blockedToday > 0) clauses.push(`blocked ${blockedToday}`);
+    if (reviewedToday > 0) clauses.push(`sent ${reviewedToday} for review`);
+    const story = clauses.length > 1
+      ? `${clauses.slice(0, -1).join(", ")} and ${clauses[clauses.length - 1]}`
+      : clauses[0];
     return {
       title: "Today so far",
-      body: `Guard allowed ${allowedToday} action${allowedToday !== 1 ? "s" : ""} and blocked ${blockedToday}.`,
+      body: `Guard ${story}.`,
       stats: [
-        { label: "allowed", value: allowedToday },
-        { label: "blocked", value: blockedToday },
+        ...(allowedToday > 0 ? [{ label: "allowed", value: allowedToday }] : []),
+        ...(blockedToday > 0 ? [{ label: "blocked", value: blockedToday }] : []),
+        ...(reviewedToday > 0 ? [{ label: "review", value: reviewedToday }] : []),
       ],
     };
   }

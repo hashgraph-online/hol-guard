@@ -87,8 +87,15 @@ from .approval_reuse import (
     APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED,
 )
 from .composition_rules import compose_action_from_signals
+from .decisions import (
+    AUTHORITATIVE_DECISION_INCONSISTENT,
+    build_authoritative_decision,
+    evaluation_authority_error,
+    rebuild_artifact_authority,
+)
 from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
 from .prompt_injection import detect_prompt_injection_requests
+from .signals import RiskSignalV2
 from .supply_chain_bundle import (
     SupplyChainBundleError,
     load_supply_chain_bundle_response,
@@ -234,7 +241,7 @@ def _runtime_detector_authority(evaluation: Mapping[str, object]) -> tuple[Guard
         return None, None
     action = composition.get("action")
     reason = composition.get("reason")
-    if not is_guard_action(action) or action not in {"warn", "review", "block"}:
+    if not is_guard_action(action) or action not in {"allow", "warn", "review", "block"}:
         return None, None
     return action, reason if isinstance(reason, str) and reason else None
 
@@ -659,11 +666,18 @@ def _guard_sync_auth_lock(store: GuardStore):
         yield
 
 
+_INSTALL_TIME_STOP_EVENTS = frozenset(
+    {
+        "install_time_block",
+        "install_time_review",
+        "install_time_require-reapproval",
+        "install_time_sandbox-required",
+    }
+)
 _PAIN_SIGNAL_EVENTS = frozenset(
     {
         "changed_artifact_caught",
-        "install_time_block",
-        "install_time_review",
+        *_INSTALL_TIME_STOP_EVENTS,
         "install_time_warn",
         "supply_chain_bundle_refresh_requested",
         "approval_gate/remote_policy_sync_blocked",
@@ -1467,6 +1481,20 @@ def guard_run(
             context=context,
             passthrough_args=passthrough_args,
         )
+    authority_error = evaluation_authority_error(
+        evaluation,
+        require_launch_permitted=not dry_run and evaluation.get("blocked") is False,
+    )
+    if authority_error is not None:
+        evaluation["blocked"] = True
+        evaluation["launched"] = False
+        evaluation["launch_command"] = []
+        evaluation["authority_error"] = AUTHORITATIVE_DECISION_INCONSISTENT
+        evaluation["authority_error_message"] = (
+            "Guard detected contradictory decision fields and refused to launch. "
+            "Re-run the Guard scan or repair the local Guard installation before retrying."
+        )
+        return evaluation
     if evaluation["blocked"] or dry_run:
         evaluation["launched"] = False
         evaluation["launch_command"] = []
@@ -1638,6 +1666,44 @@ _RUNTIME_DETECTOR_RESULT_KEYS = (
 )
 
 
+def _artifact_with_authority_updates(
+    item: Mapping[str, object],
+    *,
+    reason: str | None,
+    composition_updates: Mapping[str, object],
+    additional_signals: Sequence[RiskSignalV2] = (),
+) -> dict[str, object]:
+    """Apply runner trace changes without allowing serialized aliases to drift."""
+
+    try:
+        return rebuild_artifact_authority(
+            item,
+            reason=reason,
+            composition_updates=composition_updates,
+            additional_signals=additional_signals,
+        )
+    except (TypeError, ValueError):
+        # Preserve evidence for the final gate. The malformed decision remains
+        # intentionally unmodified so evaluation_authority_error fails closed.
+        return {**dict(item), "decision_contract_error": AUTHORITATIVE_DECISION_INCONSISTENT}
+
+
+def _runtime_detector_signals_from_evaluation(
+    evaluation: Mapping[str, object],
+) -> tuple[RiskSignalV2, ...]:
+    raw_signals = evaluation.get("runtime_detector_signals_v2")
+    if raw_signals is None:
+        return ()
+    if not isinstance(raw_signals, list):
+        raise ValueError("runtime_detector_signals_v2 must be a list")
+    signals: list[RiskSignalV2] = []
+    for raw_signal in raw_signals:
+        if not isinstance(raw_signal, Mapping):
+            raise ValueError("runtime detector signal must be an object")
+        signals.append(RiskSignalV2.from_dict(raw_signal))
+    return tuple(signals)
+
+
 def _evaluation_with_recorded_detector_result(
     evaluation: dict[str, Any],
     detector_evaluation: Mapping[str, object],
@@ -1653,15 +1719,31 @@ def _evaluation_with_recorded_detector_result(
         next_evaluation["blocked"] = True
         next_evaluation["blocked_by_detector"] = blocked_by_detector
     detector_action, detector_reason = _runtime_detector_authority(detector_evaluation)
-    evidence = _runtime_detector_nonterminal_evidence(detector_action, detector_reason)
-    if evidence is None:
+    try:
+        detector_signals = _runtime_detector_signals_from_evaluation(detector_evaluation)
+    except (TypeError, ValueError):
+        next_evaluation["decision_contract_error"] = AUTHORITATIVE_DECISION_INCONSISTENT
         return next_evaluation
+    evidence = _runtime_detector_nonterminal_evidence(detector_action, detector_reason)
 
     raw_artifacts = next_evaluation.get("artifacts")
     if not isinstance(raw_artifacts, list) or not raw_artifacts:
-        if detector_action == "review":
-            next_evaluation["blocked"] = True
-            next_evaluation["blocked_by_detector"] = evidence["reason"]
+        if detector_action is not None:
+            authority_reason = detector_reason or (
+                str(evidence["reason"]) if evidence is not None else "runtime detector blocked this launch"
+            )
+            run_decision = build_authoritative_decision(
+                detector_action,
+                reason=authority_reason,
+                composition_trace={"runtime_detector_action": detector_action},
+                signals=detector_signals,
+                authority_finalized=detector_action != "review",
+                source="runtime-detector-registry",
+            )
+            next_evaluation["run_authoritative_decision"] = run_decision.to_dict()
+            next_evaluation["blocked"] = bool(next_evaluation.get("blocked")) or run_decision.enforcement.blocking
+            if run_decision.enforcement.blocking:
+                next_evaluation["blocked_by_detector"] = authority_reason
         return next_evaluation
     artifacts: list[object] = []
     for raw_item in raw_artifacts:
@@ -1678,7 +1760,7 @@ def _evaluation_with_recorded_detector_result(
             if isinstance(raw_scanner_evidence, list)
             else []
         )
-        if not any(
+        if evidence is not None and not any(
             isinstance(raw_evidence, Mapping)
             and raw_evidence.get("source") == evidence["source"]
             and raw_evidence.get("reason_code") == evidence["reason_code"]
@@ -1686,16 +1768,23 @@ def _evaluation_with_recorded_detector_result(
         ):
             scanner_evidence.append(evidence)
         item["scanner_evidence"] = scanner_evidence
-        composition = item.get("policy_composition")
-        item["policy_composition"] = {
-            **(dict(composition) if isinstance(composition, Mapping) else {}),
-            "runtime_detector_action": detector_action,
-            "runtime_detector_reason": evidence["reason"],
-        }
-        if item.get("policy_action") == detector_action:
-            decision = item.get("decision_v2_json")
-            if isinstance(decision, Mapping):
-                item["decision_v2_json"] = {**dict(decision), "reason": evidence["reason_code"]}
+        composition_updates: dict[str, object] = {}
+        if detector_action is not None:
+            composition_updates = {
+                "runtime_detector_action": detector_action,
+                "runtime_detector_reason": detector_reason
+                or (str(evidence["reason"]) if evidence is not None else "runtime detector authority"),
+            }
+        item = _artifact_with_authority_updates(
+            item,
+            reason=(
+                str(evidence["reason_code"])
+                if evidence is not None and item.get("policy_action") == detector_action
+                else None
+            ),
+            composition_updates=composition_updates,
+            additional_signals=detector_signals,
+        )
         artifacts.append(item)
     next_evaluation["artifacts"] = artifacts
     return next_evaluation
@@ -1746,16 +1835,14 @@ def _evaluation_with_preclaim_failure(
             "reason_code": reason_code,
             "should_claim": False,
         }
-        composition = item.get("policy_composition")
-        item["policy_composition"] = {
-            **(dict(composition) if isinstance(composition, Mapping) else {}),
-            "claim_revalidation": revalidation_status,
-            "claim_revalidation_reason": reason_code,
-            "final_action": item.get("policy_action"),
-        }
-        decision = item.get("decision_v2_json")
-        if isinstance(decision, Mapping):
-            item["decision_v2_json"] = {**dict(decision), "reason": reason_code}
+        item = _artifact_with_authority_updates(
+            item,
+            reason=reason_code,
+            composition_updates={
+                "claim_revalidation": revalidation_status,
+                "claim_revalidation_reason": reason_code,
+            },
+        )
         artifacts.append(item)
     return {
         **evaluation,
@@ -1810,18 +1897,14 @@ def _evaluation_with_claim_context_failure(
             "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
             "should_claim": False,
         }
-        composition = item.get("policy_composition")
-        item["policy_composition"] = {
-            **(dict(composition) if isinstance(composition, Mapping) else {}),
-            "claim_revalidation": "changed",
-            "claim_revalidation_reason": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-        }
-        decision = item.get("decision_v2_json")
-        if isinstance(decision, Mapping):
-            item["decision_v2_json"] = {
-                **dict(decision),
-                "reason": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-            }
+        item = _artifact_with_authority_updates(
+            item,
+            reason=_APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
+            composition_updates={
+                "claim_revalidation": "changed",
+                "claim_revalidation_reason": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
+            },
+        )
         artifacts.append(item)
     next_evaluation = {
         **evaluation,
@@ -4781,7 +4864,7 @@ def _build_value_metrics(store: GuardStore) -> dict[str, dict[str, object]]:
         payload = event.get("payload")
         if not isinstance(payload, dict):
             continue
-        if event_name in {"install_time_block", "install_time_review"}:
+        if event_name in _INSTALL_TIME_STOP_EVENTS:
             installs_stopped += 1
             install_kind = (_optional_string(payload.get("install_kind")) or "").lower()
             risk_signals = payload.get("risk_signals")
@@ -4805,7 +4888,7 @@ def _build_value_metrics(store: GuardStore) -> dict[str, dict[str, object]]:
     return {
         "installs_stopped_before_execution": {
             "value": installs_stopped,
-            "source": "guard_events:install_time_block|install_time_review",
+            "source": "guard_events:install_time_block|review|require-reapproval|sandbox-required",
         },
         "scripts_prevented": {
             "value": scripts_prevented,
@@ -4868,7 +4951,7 @@ def _should_emit_pain_signal(
     payload: dict[str, object],
     warn_occurrences: dict[tuple[str, str], int] | None,
 ) -> bool:
-    if event_name in {"install_time_block", "install_time_review"}:
+    if event_name in _INSTALL_TIME_STOP_EVENTS:
         return True
     if event_name == "install_time_warn":
         warn_key = _warning_occurrence_key(payload)

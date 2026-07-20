@@ -226,6 +226,28 @@ def test_is_bulk_allow_once_eligible_rejects_blocked(tmp_path: Path) -> None:
     assert is_bulk_allow_once_eligible(stored) is False
 
 
+def test_bulk_allow_once_never_overrides_sandbox_required(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    sandboxed = _file_read_request("req-sandbox", policy_action="sandbox-required")
+    store.add_approval_request(sandboxed, "2026-06-16T00:00:00+00:00")
+    stored = store.get_approval_request("req-sandbox")
+    assert stored is not None
+    assert stored["policy_action"] == "sandbox-required"
+    assert is_bulk_allow_once_eligible(stored) is False
+
+    result = bulk_allow_read_only_once(
+        store=store,
+        request_ids=["req-sandbox"],
+        approval_gate_input=ApprovalGateInput(password=PASSWORD),
+        now="2026-06-16T00:01:00+00:00",
+    )
+
+    assert result["resolved_count"] == 0
+    assert result["failed"] == [{"request_id": "req-sandbox", "error": "ineligible"}]
+    assert store.get_approval_request("req-sandbox")["status"] == "pending"
+
+
 def test_is_bulk_allow_once_eligible_allows_shell_command(tmp_path: Path) -> None:
     """Shell commands are now bulk-eligible with a tiered risk disclosure."""
     store = _store(tmp_path)

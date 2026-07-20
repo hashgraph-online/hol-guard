@@ -177,7 +177,7 @@ assert(
 const incompleteAuditReceipt: GuardReceipt = {
   ...auditReceipt,
   receipt_id: "receipt-audit-incomplete-1",
-  policy_decision: "ask",
+  policy_decision: "review",
   capabilities_summary: "Sync Guard supply-chain intel on this device before auditing workspace packages.",
   timestamp: "2026-06-09T16:00:00.000Z",
   scanner_evidence: [
@@ -196,5 +196,23 @@ assert(
   "SCSR154-H: incomplete audit receipts surface warning copy on evidence rail",
 );
 assert(incompleteRail.audit.tone === "attention", "SCSR154-I: incomplete audit receipts use attention tone");
+
+const reviewAuditReceipt: GuardReceipt = {
+  ...auditReceipt,
+  receipt_id: "receipt-audit-review-1",
+  policy_decision: "review",
+  capabilities_summary: "Workspace audit completed with review decision across 3 packages.",
+  scanner_evidence: [
+    {
+      operation: "audit",
+      audit_decision: "ask",
+      blocked_package_count: 0,
+      total_packages: 3,
+    },
+  ] as unknown as GuardReceipt["scanner_evidence"],
+};
+const reviewRail = deriveSupplyChainEvidenceRail([reviewAuditReceipt]);
+assert(reviewRail.audit.title === "Workspace audit needs review", "P45: rail uses authoritative receipt action");
+assert(reviewRail.audit.tone === "attention", "P45: review-required audit is never rendered green");
 
 console.log("scsr-phase09c-evidence-rail.test.ts: all assertions passed");

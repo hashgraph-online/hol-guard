@@ -13,6 +13,7 @@ import {
   buildRetryAfterApprovalCopy,
   formatRelativeTime,
   harnessDisplayName,
+  requestResolutionBlockReason,
 } from "./approval-center-utils";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
 import {
@@ -27,6 +28,7 @@ import { approvalProofRequiresPassword } from "./approval-proof-inline";
 import { ConsolidatedEvidenceAlert } from "./consolidated-evidence-alert";
 import { plainEnglishRequestTitle } from "./evidence/plain-english";
 import type { DecisionScope, GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
+import { guardActionPresentation } from "./guard-action";
 import { requiresApprovalPasswordPrompt } from "./approval-gate-utils";
 import { buildEvidenceItems, buildTopAlertItems } from "./review-evidence";
 import {
@@ -53,6 +55,7 @@ export function ReviewDecisionCard(props: {
 }) {
   const detail = props.detail;
   const item = detail?.item ?? null;
+  const resolutionBlockReason = item ? requestResolutionBlockReason(item) : null;
   const [allowScope, setAllowScope] = useState<DecisionScope>("artifact");
   const [blockScope, setBlockScope] = useState<DecisionScope>("artifact");
   const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
@@ -118,7 +121,7 @@ export function ReviewDecisionCard(props: {
 
   const handleResolve = useCallback(
     async (action: "allow" | "block") => {
-      if (!item) return;
+      if (!item || resolutionBlockReason !== null) return;
       setSubmitting(action);
       setErrorMessage(null);
       try {
@@ -162,11 +165,13 @@ export function ReviewDecisionCard(props: {
       approvalPassword,
       approvalTotpCode,
       useCooldown,
+      resolutionBlockReason,
     ]
   );
 
   const handleRequestResolve = useCallback(
     (action: "allow" | "block") => {
+      if (resolutionBlockReason !== null) return;
       if (action === "allow" && !hasAllowScope) {
         setErrorMessage("This action has no eligible approval scope.");
         return;
@@ -198,6 +203,7 @@ export function ReviewDecisionCard(props: {
       handleResolve,
       hasAllowScope,
       props.approvalGate,
+      resolutionBlockReason,
     ]
   );
 
@@ -210,7 +216,7 @@ export function ReviewDecisionCard(props: {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (submitting !== null || pendingAction !== null) return;
+      if (submitting !== null || pendingAction !== null || resolutionBlockReason !== null) return;
       const target = event.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
@@ -230,7 +236,7 @@ export function ReviewDecisionCard(props: {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [availableScopeChoices, handleRequestResolve, pendingAction, submitting]);
+  }, [availableScopeChoices, handleRequestResolve, pendingAction, resolutionBlockReason, submitting]);
 
   const handleModalSubmit = useCallback(() => {
     if (pendingAction === null) {
@@ -292,6 +298,7 @@ export function ReviewDecisionCard(props: {
   const whatWouldHappen = buildWhatWouldHappen(item);
   const topAlertItems = buildTopAlertItems(item);
   const evidenceItems = buildEvidenceItems(item);
+  const actionPresentation = guardActionPresentation(item.policy_action);
   return (
     <div className="space-y-5">
       {resolved && (
@@ -323,12 +330,27 @@ export function ReviewDecisionCard(props: {
               From {harnessName}
             </p>
           </div>
-          <Badge tone={item.policy_action === "block" ? "attention" : "info"}>
-            {item.policy_action === "block" ? "Blocked" : "Needs review"}
+          <Badge tone={actionPresentation.tone}>
+            {actionPresentation.label}
           </Badge>
         </div>
 
         <PrimaryActionCard item={item} />
+
+        {resolutionBlockReason !== null && (
+          <div className="mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4" role="alert">
+            <div className="flex items-start gap-3">
+              <HiMiniExclamationTriangle
+                className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-sm font-semibold text-brand-attention">This decision cannot be overridden</p>
+                <p className="mt-1 text-sm text-brand-dark">{resolutionBlockReason}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {topAlertItems.length > 0 && (
           <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
@@ -360,18 +382,20 @@ export function ReviewDecisionCard(props: {
           </div>
         )}
 
-        <ReviewScopeControls
-          commonScopeOptions={commonScopeOptions}
-          broaderScopeOptions={broaderScopeOptions}
-          advancedScopeOptions={advancedScopeOptions}
-          blockScopeOptions={blockScopeOptions}
-          hasAllowScope={hasAllowScope}
-          taskCapabilityCopy={taskCapabilityCopy}
-          allowScope={allowScope}
-          blockScope={blockScope}
-          onAllowScopeChange={setAllowScope}
-          onBlockScopeChange={setBlockScope}
-        />
+        {resolutionBlockReason === null && (
+          <ReviewScopeControls
+            commonScopeOptions={commonScopeOptions}
+            broaderScopeOptions={broaderScopeOptions}
+            advancedScopeOptions={advancedScopeOptions}
+            blockScopeOptions={blockScopeOptions}
+            hasAllowScope={hasAllowScope}
+            taskCapabilityCopy={taskCapabilityCopy}
+            allowScope={allowScope}
+            blockScope={blockScope}
+            onAllowScopeChange={setAllowScope}
+            onBlockScopeChange={setBlockScope}
+          />
+        )}
         {errorMessage && (
           <div className="guard-fade-in mt-4 rounded-xl border border-brand-purple/25 bg-brand-purple/[0.05] p-4">
             <div className="flex items-start gap-3">
@@ -390,7 +414,7 @@ export function ReviewDecisionCard(props: {
           </div>
         )}
 
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {resolutionBlockReason === null && <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <ActionButton
             ref={allowButtonRef}
             variant="success"
@@ -426,7 +450,7 @@ export function ReviewDecisionCard(props: {
               </span>
             )}
           </ActionButton>
-        </div>
+        </div>}
 
       </div>
 

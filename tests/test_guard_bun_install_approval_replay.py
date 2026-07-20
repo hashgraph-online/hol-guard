@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.approval_scope_support import IneligibleApprovalScopeError
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.local_supply_chain import build_package_protect_payload
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -63,6 +62,7 @@ def test_bun_install_approval_never_lowers_current_block_when_integrity_is_degra
         timeout_seconds=30,
     )
     assert baseline_rc == 2
+    assert baseline_payload["verdict"]["action"] == "block"
     receipt = baseline_payload["receipt"]
     assert isinstance(receipt, dict)
     store.add_approval_request(
@@ -85,7 +85,7 @@ def test_bun_install_approval_never_lowers_current_block_when_integrity_is_degra
         ),
         "2026-06-14T00:00:30Z",
     )
-    with pytest.raises(IneligibleApprovalScopeError, match="request_action_not_overridable"):
+    with pytest.raises(ValueError, match="terminal_policy_action_not_resolvable"):
         apply_approval_resolution(
             store=store,
             request_id="req-bun-install",
@@ -95,6 +95,10 @@ def test_bun_install_approval_never_lowers_current_block_when_integrity_is_degra
             reason="same bun install",
             now="2026-06-14T00:01:00Z",
         )
+    pending_request = store.get_approval_request("req-bun-install")
+    assert pending_request is not None
+    assert pending_request["status"] == "pending"
+    assert store.list_policy_decisions() == []
     store._policy_integrity_secret_store = None
 
     first_retry_payload, first_retry_rc = build_package_protect_payload(
@@ -125,6 +129,7 @@ def test_bun_install_approval_never_lowers_current_block_when_integrity_is_degra
         retry_receipt = retry_payload["receipt"]
         assert isinstance(retry_receipt, dict)
         assert retry_receipt["artifact_hash"] == receipt["artifact_hash"]
+        assert retry_receipt["policy_decision"] == "block"
         evaluation = retry_payload["supply_chain_evaluation"]
         assert isinstance(evaluation, dict)
         assert not any(

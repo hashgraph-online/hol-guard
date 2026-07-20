@@ -32,6 +32,7 @@ import { AppTab } from "./evidence/app-tab";
 import { CategoryTab } from "./evidence/category-tab";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { CommandActivityWorkspace } from "./command-activity/command-activity-workspace";
+import { guardActionDisposition } from "./guard-action";
 
 export type ReceiptsState =
   | { kind: "loading" }
@@ -476,7 +477,13 @@ export function filterReceiptItems(
   const last7Start = now - 7 * 24 * 60 * 60 * 1000;
   return items.filter((receipt) => {
     const matchesHarness = activeHarnessFilter === "all" || receipt.harness === activeHarnessFilter;
-    const matchesDecision = decisionFilter === "all" || receipt.policy_decision === decisionFilter;
+    const disposition = guardActionDisposition(receipt.policy_decision);
+    const matchesDecision =
+      decisionFilter === "all" ||
+      (decisionFilter === "allow" && disposition === "allowed") ||
+      ((decisionFilter === "ask" || decisionFilter === "review") && disposition === "reviewed") ||
+      (decisionFilter === "block" && disposition === "blocked") ||
+      receipt.policy_decision === decisionFilter;
     if (!matchesHarness || !matchesDecision) {
       return false;
     }

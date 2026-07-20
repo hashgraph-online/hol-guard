@@ -1,4 +1,4 @@
-import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, u as useReceiptAnalytics, e as harnessDisplayName, i as isDisplayableHarness, p as protectionHealthFor, k as EmptyState, A as ActionButton, l as EvidenceInsightsShareModal, m as HiMiniCheckCircle, n as GuardHero, o as formatNumber, q as HiMiniShieldCheck, D as DeviceProofCard, s as formatRelativeTime, t as HiMiniSparkles, v as HiMiniXMark, w as HiMiniChevronUp, x as HiMiniChevronDown, y as resolveCloudIntelCopy, z as HiMiniCloud, B as HiMiniQuestionMarkCircle, C as useFocusTrap, F as approvalProofRequiresPassword, I as HiMiniExclamationTriangle, J as HiMiniBolt, K as Badge, L as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, u as useReceiptAnalytics, e as harnessDisplayName, i as isDisplayableHarness, p as protectionHealthFor, k as EmptyState, A as ActionButton, l as EvidenceInsightsShareModal, m as HiMiniCheckCircle, n as GuardHero, o as formatNumber, q as HiMiniShieldCheck, D as DeviceProofCard, s as guardActionDisposition, t as formatRelativeTime, v as guardActionActivityCopy, w as HiMiniSparkles, x as HiMiniXMark, y as HiMiniChevronUp, z as HiMiniChevronDown, B as resolveCloudIntelCopy, C as HiMiniCloud, F as HiMiniQuestionMarkCircle, I as useFocusTrap, J as approvalProofRequiresPassword, K as HiMiniExclamationTriangle, L as HiMiniBolt, M as Badge, N as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { H as HomeProtectionModule } from "./home-protection-module.js";
 function HomeInsightsSkeleton() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -161,8 +161,11 @@ function redactHomeArtifactLabel(value) {
   return trimmed;
 }
 function buildRecentProtectionCopy(receipt) {
-  const decisionLabel = receipt.policy_decision === "block" ? "blocked" : "allowed";
-  return `${harnessDisplayName(receipt.harness)} ${decisionLabel} ${redactHomeArtifactLabel(receipt.artifact_name)}`;
+  return guardActionActivityCopy(
+    receipt.policy_decision,
+    harnessDisplayName(receipt.harness),
+    redactHomeArtifactLabel(receipt.artifact_name)
+  );
 }
 function HomeWorkspace(props) {
   const [toastMessage, setToastMessage] = reactExports.useState(null);
@@ -501,7 +504,7 @@ function deriveHomeState(input) {
     return {
       heroStatus: "needs_review",
       headline: queuedCount === 1 ? "1 action needs review" : `${queuedCount} actions need review`,
-      subheadline: "Guard stopped something. Review and decide whether to allow or block it.",
+      subheadline: "Guard paused an action for your decision. Review it, then choose whether to allow or block it.",
       ctaLabel: "Review now",
       ctaTarget: "inbox"
     };
@@ -554,8 +557,9 @@ function buildDailyStory(receipts, queuedCount) {
   const today = /* @__PURE__ */ new Date();
   today.setHours(0, 0, 0, 0);
   const todayReceipts = receipts.filter((r) => new Date(r.timestamp) >= today);
-  const allowedToday = todayReceipts.filter((r) => r.policy_decision === "allow").length;
-  const blockedToday = todayReceipts.filter((r) => r.policy_decision === "block").length;
+  const allowedToday = todayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "allowed").length;
+  const blockedToday = todayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "blocked").length;
+  const reviewedToday = todayReceipts.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
   if (queuedCount > 0) {
     const actionText = queuedCount === 1 ? "1 action is" : `${queuedCount} actions are`;
     const pronoun = queuedCount === 1 ? "it" : "them";
@@ -565,13 +569,19 @@ function buildDailyStory(receipts, queuedCount) {
       stats: [{ label: "pending review", value: queuedCount }]
     };
   }
-  if (allowedToday + blockedToday > 0) {
+  if (allowedToday + blockedToday + reviewedToday > 0) {
+    const clauses = [];
+    if (allowedToday > 0) clauses.push(`allowed ${allowedToday} action${allowedToday !== 1 ? "s" : ""}`);
+    if (blockedToday > 0) clauses.push(`blocked ${blockedToday}`);
+    if (reviewedToday > 0) clauses.push(`sent ${reviewedToday} for review`);
+    const story = clauses.length > 1 ? `${clauses.slice(0, -1).join(", ")} and ${clauses[clauses.length - 1]}` : clauses[0];
     return {
       title: "Today so far",
-      body: `Guard allowed ${allowedToday} action${allowedToday !== 1 ? "s" : ""} and blocked ${blockedToday}.`,
+      body: `Guard ${story}.`,
       stats: [
-        { label: "allowed", value: allowedToday },
-        { label: "blocked", value: blockedToday }
+        ...allowedToday > 0 ? [{ label: "allowed", value: allowedToday }] : [],
+        ...blockedToday > 0 ? [{ label: "blocked", value: blockedToday }] : [],
+        ...reviewedToday > 0 ? [{ label: "review", value: reviewedToday }] : []
       ]
     };
   }

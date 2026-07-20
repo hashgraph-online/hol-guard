@@ -204,7 +204,7 @@ class TestNoDashboardApprovalURLWake:
         monkeypatch.setattr(
             daemon_manager_module,
             "_retire_guard_daemon_process",
-            lambda state: retire_calls.append(state),
+            lambda state: retire_calls.append(state) or True,
         )
         monkeypatch.setattr(daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _gh: [])
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _gh: False)

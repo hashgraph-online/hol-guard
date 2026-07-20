@@ -855,6 +855,13 @@ class TestGuardProtect:
             source_scope="project",
         )
         store.add_receipt(receipt)
+        initial_action_envelope = {
+            "package_manager": "npm",
+            "package_targets": ["badpkg@1.0.0"],
+            "policy_action": "allow",
+            "redacted_command": "npm install badpkg@1.0.0",
+        }
+        store.set_receipt_action_envelope(receipt.receipt_id, initial_action_envelope)
         payload: dict[str, object] = {
             "request": {"executor": "npm", "install_kind": "install"},
             "verdict": {
@@ -867,7 +874,21 @@ class TestGuardProtect:
             "matched_advisories": [],
             "executed": False,
             "dry_run": False,
-            "receipt": receipt.to_dict(),
+            "supply_chain_evaluation": {
+                "decision": "allow",
+                "policy_action": "allow",
+                "risk_summary": "Initial package authority allowed execution.",
+                "user_copy": {
+                    "title": "Package allowed",
+                    "summary": "Initial package authority allowed execution.",
+                    "next_step": "Continue.",
+                    "harness_message": "Package allowed.",
+                },
+            },
+            "receipt": {
+                **receipt.to_dict(),
+                "action_envelope_json": initial_action_envelope,
+            },
         }
         cached_verdict = protect.ProtectVerdict(
             action="block",
@@ -887,9 +908,14 @@ class TestGuardProtect:
         assert returncode == 2
         assert merged_payload["verdict"]["action"] == "block"
         assert merged_payload["receipt"]["policy_decision"] == "block"
+        assert merged_payload["receipt"]["action_envelope_json"]["policy_action"] == "block"
+        assert merged_payload["supply_chain_evaluation"]["policy_action"] == "block"
+        assert merged_payload["supply_chain_evaluation"]["decision"] == "block"
+        assert "blocked" in merged_payload["supply_chain_evaluation"]["user_copy"]["title"].lower()
         stored_receipts = store.list_receipts(limit=10)
         assert len(stored_receipts) == 1
         assert stored_receipts[0]["policy_decision"] == "block"
+        assert stored_receipts[0]["action_envelope_json"]["policy_action"] == "block"
         events = store.list_events(event_name="install_time_block")
         assert len(events) == 1
         assert events[0]["payload"]["cached_advisory_override"] is True

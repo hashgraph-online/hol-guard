@@ -32,6 +32,7 @@ import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { resolveManagerCoverageStatus } from "./supply-chain-protection-stats";
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
 import type { SupplyChainAuditSession } from "./use-supply-chain-audit-session";
+import { isBlockedGuardAction } from "./guard-action";
 
 export type AuditSeverity = "critical" | "high" | "medium" | "low" | "info";
 
@@ -179,7 +180,7 @@ export function deriveFrontendAuditResults(
     }
   }
 
-  const blockedReceipts = receipts.filter((r) => r.policy_decision === "block");
+  const blockedReceipts = receipts.filter((r) => isBlockedGuardAction(r.policy_decision));
   for (const r of blockedReceipts.slice(0, 20)) {
     const evidenceParams = new URLSearchParams();
     evidenceParams.set("harness", r.harness || "global");
