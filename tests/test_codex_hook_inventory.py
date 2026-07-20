@@ -66,7 +66,7 @@ def test_every_known_and_future_executable_event_blocks_preactivation(
     workspace_dir = tmp_path / "workspace"
     config_path = workspace_dir / ".codex" / "config.toml"
     hooks_path = workspace_dir / ".codex" / "hooks.json"
-    original_config = 'approval_policy = "never"\n'
+    original_config = 'approval_policy = "never"\n\n[features]\nhooks = false\n'
     original_hooks = json.dumps({"hooks": {event_name: [_command_group()]}}, indent=2) + "\n"
     _write(config_path, original_config)
     _write(hooks_path, original_hooks)
@@ -233,10 +233,17 @@ def test_mixed_exact_legacy_and_unmanaged_handlers_block_only_the_unmanaged_hand
     assert "PreToolUse/group[0]/handler[1]" in captured.err
 
 
-def test_disabled_unmanaged_entry_and_metadata_only_event_are_preserved_without_review(tmp_path: Path) -> None:
+def test_disabled_unmanaged_entry_and_metadata_only_event_are_preserved_without_review(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     hooks_path = home_dir / ".codex" / "hooks.json"
+    trusted_interpreter = tmp_path / "trusted-python"
+    _write(trusted_interpreter, "fixture interpreter\n")
+    trusted_interpreter.chmod(0o700)
+    monkeypatch.setattr(codex_adapter, "_guard_python_executable", lambda: str(trusted_interpreter))
     _write(
         hooks_path,
         json.dumps(

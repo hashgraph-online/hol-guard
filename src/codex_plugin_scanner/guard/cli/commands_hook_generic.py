@@ -110,6 +110,7 @@ _GENERIC_HOOK_NON_CONTENT_FIELDS = frozenset(
 )
 
 _COPILOT_VERIFIED_BENIGN_PAYLOAD_HINT_REASON = "untrusted_hook_payload_hint_ignored_guard_verified_benign"
+_VERIFIED_BENIGN_DEFAULT_DISPOSITION_REASON = "configured_default_relaxed_guard_verified_benign"
 _UNTRUSTED_DAEMON_PERMISSIVE_REASON = (
     "HOL Guard received an unauthenticated hint that the daemon was unreachable in permissive mode; "
     "the current local policy action was preserved."
@@ -481,9 +482,29 @@ def _run_hook_generic_payload(
         artifact_id,
         publisher,
     )
-    current_config_normalization = normalize_guard_action_result(
+    configured_narrow_override = config.resolve_artifact_or_publisher_action_override(
+        artifact_id,
+        publisher,
+    )
+    configured_policy_normalization = normalize_guard_action_result(
         configured_override if configured_override is not None else config.default_action,
         unknown_action="require-reapproval",
+    )
+    verified_benign_default = (
+        configured_narrow_override is None
+        and configured_policy_normalization.action in {"review", "require-reapproval"}
+        and _hook_event_name(payload_map) == "PreToolUse"
+        and is_explicitly_benign_tool_action_request(
+            payload_map.get("tool_name"),
+            payload_map.get("tool_input", payload_map.get("arguments")),
+            cwd=runtime_workspace,
+            home_dir=home_dir,
+        )
+    )
+    current_config_normalization = (
+        normalize_guard_action_result("warn", unknown_action="require-reapproval")
+        if verified_benign_default
+        else configured_policy_normalization
     )
     cli_action = getattr(args, "policy_action", None)
     cli_action_normalization = (
@@ -673,6 +694,11 @@ def _run_hook_generic_payload(
         approval_reuse_source = "claimed_saved_policy_decision"
     policy_composition = {
         "current_config_action": current_config_normalization.action,
+        "configured_policy_action": configured_policy_normalization.action,
+        "configured_default_disposition": ("relaxed_verified_benign" if verified_benign_default else "applied"),
+        "configured_default_disposition_reason_code": (
+            _VERIFIED_BENIGN_DEFAULT_DISPOSITION_REASON if verified_benign_default else None
+        ),
         "trusted_cli_override": cli_action_normalization.action if cli_action_normalization is not None else None,
         "untrusted_hook_payload_hint": (
             payload_action_normalization.action if payload_action_normalization is not None else None
@@ -707,6 +733,16 @@ def _run_hook_generic_payload(
                 "input_source": "untrusted_hook_payload_hint",
                 "status": "ignored",
                 "reason_code": ignored_payload_action_reason,
+                "classifier": "is_explicitly_benign_tool_action_request",
+            }
+        )
+    if verified_benign_default:
+        scanner_evidence.append(
+            {
+                "source": "configured_default",
+                "input_source": "local_config",
+                "status": "relaxed_verified_benign",
+                "reason_code": _VERIFIED_BENIGN_DEFAULT_DISPOSITION_REASON,
                 "classifier": "is_explicitly_benign_tool_action_request",
             }
         )

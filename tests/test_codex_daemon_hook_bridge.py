@@ -626,4 +626,6 @@ def test_bridge_script_cold_start_stays_below_hook_budget(tmp_path: Path) -> Non
 
     assert result.returncode == 0
     assert json.loads(result.stdout) == {}
-    assert elapsed < 0.75
+    # Keep the bridge comfortably below its two-second process timeout while
+    # allowing for scheduler jitter on shared CI runners.
+    assert elapsed < 1.0

@@ -25,15 +25,7 @@ def _write_bun_workspace(workspace_dir: Path) -> None:
         encoding="utf-8",
     )
     (workspace_dir / "bun.lock").write_text(
-        "\n".join(
-            [
-                "[[package]]",
-                'name = "minimist"',
-                'version = "1.2.8"',
-                'resolved = "npm:minimist@1.2.8"',
-                "dependencies = []",
-            ]
-        ),
+        '{"lockfileVersion":1,"packages":{"minimist":["minimist@1.2.8","",{}]}}\n',
         encoding="utf-8",
     )
 

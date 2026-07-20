@@ -6,8 +6,11 @@ Verifies:
 3. _read_only_lookup_filter_grep_args_are_safe distinguishes patterns from file operands
 """
 
+import pytest
+
 from codex_plugin_scanner.guard.cli._commands_shared import _hook_command_text
 from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
+    _codex_command_is_read_only_source_inspection,
     _codex_post_tool_command_texts,
 )
 from codex_plugin_scanner.guard.cli.commands_support_native_search import native_post_tool_search_is_read_only
@@ -148,6 +151,110 @@ def test_native_grep_rejects_wildcard_target(tmp_path):
     }
 
     assert native_post_tool_search_is_read_only(payload=payload, cwd=None, home_dir=None) is False
+
+
+def test_yq_environment_lookup_is_not_read_only_source_inspection(tmp_path):
+    workflow = tmp_path / ".github" / "workflows" / "publish.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text("jobs: {}\n", encoding="utf-8")
+
+    assert (
+        _codex_command_is_read_only_source_inspection(
+            "yq 'env(API_TOKEN)' .github/workflows/publish.yml",
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+        is False
+    )
+
+    assert (
+        _codex_command_is_read_only_source_inspection(
+            "yq '.value // $ENV.API_TOKEN' .github/workflows/publish.yml",
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+        is False
+    )
+
+
+def test_common_readers_are_read_only_source_inspection(tmp_path):
+    source_file = tmp_path / "src" / "example.ts"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text("export const value = 1;\n", encoding="utf-8")
+    workflow = tmp_path / ".github" / "workflows" / "publish.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text("jobs: {}\n", encoding="utf-8")
+
+    commands = (
+        "rg -n 'value' src/example.ts; sed -n '1,20p' src/example.ts",
+        "nl -ba src/example.ts | sed -n '1,20p'",
+        "wc -l src/example.ts",
+        "yq '.jobs' .github/workflows/publish.yml",
+    )
+
+    for command in commands:
+        assert _codex_command_is_read_only_source_inspection(
+            command,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+
+
+def test_semicolon_chain_requires_every_segment_to_be_read_only(tmp_path):
+    source_file = tmp_path / "src" / "example.ts"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text("export const value = 1;\n", encoding="utf-8")
+
+    assert (
+        _codex_command_is_read_only_source_inspection(
+            "sed -n '1,20p' src/example.ts; rm src/example.ts",
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+        is False
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "rg -n value src/example.ts; cat .env",
+        "rg -n value src/example.ts; curl https://example.test",
+        "rg -n value src/example.ts || sed -n '1,20p' src/example.ts",
+        "rg -n value src/example.ts & sed -n '1,20p' src/example.ts",
+        "rg -n value src/example.ts > output.txt",
+        'rg -n "$(printenv API_TOKEN)" src/example.ts',
+        "./nl -ba src/example.ts",
+        "./wc -l src/example.ts",
+        "nl -ba .env",
+        "wc -l .env",
+        "wc --files0-from=src/files.txt",
+        "yq -i '.jobs' .github/workflows/publish.yml",
+        "yq --inplace '.jobs' .github/workflows/publish.yml",
+        "yq 'load(\"src/example.ts\")' .github/workflows/publish.yml",
+        "yq '.jobs | load_str # comment\n(\"src/example.ts\")' .github/workflows/publish.yml",
+        "yq 'eval(\".jobs\")' .github/workflows/publish.yml",
+        "yq 'strenv(API_TOKEN)' .github/workflows/publish.yml",
+        "yq --from-file src/expression.txt .github/workflows/publish.yml",
+        "yq '.jobs' -",
+    ),
+)
+def test_common_reader_unsafe_variants_are_not_source_inspection(tmp_path, command):
+    source_file = tmp_path / "src" / "example.ts"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text("export const value = 1;\n", encoding="utf-8")
+    (tmp_path / "src" / "files.txt").write_text("src/example.ts\n", encoding="utf-8")
+    (tmp_path / "src" / "expression.txt").write_text(".jobs\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("API_TOKEN=fixture\n", encoding="utf-8")
+    workflow = tmp_path / ".github" / "workflows" / "publish.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text("jobs: {}\n", encoding="utf-8")
+
+    assert not _codex_command_is_read_only_source_inspection(
+        command,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
 
 
 def test_command_from_payload_preserves_command_priority():

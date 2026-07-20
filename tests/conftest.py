@@ -195,10 +195,6 @@ _FAKE_SYSTEM_KEYRING_DISABLED_FILES = {
     "test_guard_store_migrations.py",
 }
 
-_FAKE_SYSTEM_KEYRING_DISABLED_NODEIDS = {
-    "tests/test_guard_cli.py::TestGuardCli::test_guard_status_reports_oauth_key_storage_health",
-}
-
 
 @pytest.fixture(autouse=True)
 def _policy_integrity_keyring_for_selected_tests(
@@ -207,10 +203,7 @@ def _policy_integrity_keyring_for_selected_tests(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    if (
-        request.node.path.name in _FAKE_SYSTEM_KEYRING_DISABLED_FILES
-        or request.node.nodeid in _FAKE_SYSTEM_KEYRING_DISABLED_NODEIDS
-    ):
+    if request.node.path.name in _FAKE_SYSTEM_KEYRING_DISABLED_FILES:
         return
     monkeypatch.setenv("HOL_GUARD_TEST_KEYRING_FILE", str(tmp_path / "fake-system-keyring.json"))
     install_fake_system_keyring()

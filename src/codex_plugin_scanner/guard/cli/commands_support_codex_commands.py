@@ -142,7 +142,7 @@ def _codex_command_parts_are_git_grep(parts: list[str]) -> bool:
     return bool(parts) and Path(parts[0]).name.lower() == "git" and _git_grep_search_args(parts[1:]) is not None
 
 def _codex_command_part_is_local_reader(parts: list[str], index: int, *, cwd: Path | None) -> bool:
-    local_read_commands = {"cat", "grep", "head", "rg", "sed", "tail"}
+    local_read_commands = {"cat", "grep", "head", "nl", "rg", "sed", "tail", "wc", "yq"}
     executable = Path(parts[index]).name.lower()
     if executable not in local_read_commands:
         return False
@@ -209,9 +209,9 @@ def _codex_post_tool_command_texts(payload: dict[str, object]) -> tuple[str, ...
 
 _CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"fd", "rg", "grep", "egrep", "fgrep"})
 
-_CODEX_READ_ONLY_VIEW_COMMANDS = frozenset({"cat", "head", "tail", "sed"})
+_CODEX_READ_ONLY_VIEW_COMMANDS = frozenset({"cat", "head", "nl", "tail", "sed", "wc", "yq"})
 
-_CODEX_READ_ONLY_PIPE_FILTERS = frozenset({"head", "tail", "sed"})
+_CODEX_READ_ONLY_PIPE_FILTERS = frozenset({"head", "nl", "tail", "sed", "wc"})
 
 _CODEX_READ_ONLY_SEARCH_WRAPPERS = frozenset({"bash", "sh", "zsh"})
 

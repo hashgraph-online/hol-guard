@@ -390,6 +390,14 @@ class StoreConnectionSchemaMixin:
             )
             """,
             """
+            create index if not exists idx_guard_events_recent
+            on guard_events (occurred_at desc, event_id desc)
+            """,
+            """
+            create index if not exists idx_guard_events_name_recent
+            on guard_events (event_name, occurred_at desc, event_id desc)
+            """,
+            """
             create table if not exists guard_remote_once_receipts (
               receipt_id text primary key,
               request_id text not null,

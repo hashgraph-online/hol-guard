@@ -1575,6 +1575,107 @@ clearer UX and an implementation plan with technical references.
         assert output["recorded"] is True
         assert "approval_requests" not in output
 
+    @pytest.mark.parametrize(
+        "command",
+        (
+            "rg -n 'SMTP_TOKEN' src/example.ts; sed -n '1,20p' src/example.ts",
+            "nl -ba src/example.ts | sed -n '1,20p'",
+            "wc -l src/example.ts; sed -n '1,20p' src/example.ts",
+            ("yq '.jobs.build.steps[] | select(.name == \"Compute publish version\")' .github/workflows/publish.yml"),
+        ),
+    )
+    def test_codex_post_tool_use_allows_common_read_only_source_inspection(
+        self,
+        command,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(workspace_dir / "src" / "example.ts", "const SMTP_TOKEN = process.env.SMTP_TOKEN;\n")
+        _write_text(
+            workspace_dir / ".github" / "workflows" / "publish.yml",
+            "jobs:\n  build:\n    steps:\n      - name: Compute publish version\n",
+        )
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": "const SMTP_TOKEN = process.env.SMTP_TOKEN;\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recorded"] is True
+        assert "approval_requests" not in output
+
+    @pytest.mark.parametrize(
+        "command",
+        (
+            "sed -n '1,20p' src/example.ts; rm src/example.ts",
+            "nl -ba .env",
+        ),
+    )
+    def test_codex_post_tool_use_keeps_unsafe_source_inspection_guarded(
+        self,
+        command,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(workspace_dir / "src" / "example.ts", "const SMTP_TOKEN = process.env.SMTP_TOKEN;\n")
+        _write_text(workspace_dir / ".github" / "workflows" / "publish.yml", "jobs: {}\n")
+        _write_text(workspace_dir / ".env", "API_TOKEN=fixture-only\n")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": "API_TOKEN=fixture-only\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] in {"block", "require-reapproval"}
+        assert output["approval_requests"]
+
     def test_codex_post_tool_use_allows_absolute_source_view_with_secret_like_output(
         self,
         monkeypatch,
@@ -13391,7 +13492,7 @@ def test_guard_run_headless_redetects_before_persisted_resume(tmp_path, monkeypa
     monkeypatch.setattr(guard_runner_module, "detect_harness", fake_detect)
 
     def resolve_pending() -> None:
-        for _ in range(40):
+        for _ in range(100):
             pending = store.list_approval_requests(limit=10)
             if pending:
                 apply_approval_resolution(
@@ -13408,7 +13509,7 @@ def test_guard_run_headless_redetects_before_persisted_resume(tmp_path, monkeypa
     worker = threading.Thread(target=resolve_pending, daemon=True)
     worker.start()
 
-    config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+    config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=5)
     blocked_resolver = guard_commands_module._headless_approval_resolver(
         args=argparse.Namespace(harness="claude-code"),
         context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
@@ -14976,6 +15077,149 @@ def test_guard_hook_codex_emits_no_native_output_for_safe_requests(tmp_path, cap
     assert output == ""
     assert GuardStore(home_dir).list_receipts(limit=10) == []
     assert pending == []
+
+
+@pytest.mark.parametrize(
+    "strict_config",
+    (
+        'default_action = "require-reapproval"\n',
+        '[harnesses.codex]\ndefault_action = "require-reapproval"\n',
+    ),
+    ids=("global", "harness"),
+)
+def test_guard_hook_codex_strict_default_allows_verified_benign_git_status(
+    strict_config,
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", strict_config)
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status --short"},
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    output = capsys.readouterr().out
+    store = GuardStore(home_dir)
+
+    assert rc == 0
+    assert output == ""
+    assert store.list_approval_requests(limit=10) == []
+    assert store.list_receipts(limit=1) == []
+
+
+@pytest.mark.parametrize("explicit_action", ("block", "require-reapproval"))
+def test_guard_hook_codex_verified_benign_does_not_override_explicit_policy(
+    explicit_action,
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(
+        home_dir / "config.toml",
+        (
+            'default_action = "require-reapproval"\n'
+            "approval_wait_timeout_seconds = 0\n"
+            f'[artifacts."codex:project:Bash"]\naction = "{explicit_action}"\n'
+        ),
+    )
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status --short"},
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize(
+    "strict_config",
+    (
+        'default_action = "require-reapproval"\napproval_wait_timeout_seconds = 0\n',
+        'approval_wait_timeout_seconds = 0\n[harnesses.codex]\ndefault_action = "require-reapproval"\n',
+    ),
+    ids=("global", "harness"),
+)
+def test_guard_hook_codex_strict_default_still_denies_destructive_shell_command(
+    strict_config,
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", strict_config)
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status --short && rm -rf ./build"},
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "destructive shell command" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_guard_hook_codex_emits_no_native_output_for_safe_github_node_review_thread_command(
@@ -23413,10 +23657,22 @@ def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_pat
     assert artifact is None
 
 
-def test_codex_read_only_source_inspection_still_blocks_value_like_secret_output(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "command",
+    (
+        "rg -n \"token\" src | sed -n '1,40p'",
+        "nl -ba src/config.ts | sed -n '1,40p'",
+        "wc -l src/config.ts; sed -n '1,40p' src/config.ts",
+        "yq '.jobs' .github/workflows/publish.yml",
+    ),
+)
+def test_codex_read_only_source_inspection_still_blocks_value_like_secret_output(
+    command: str,
+    tmp_path: Path,
+) -> None:
     workspace_dir = tmp_path / "workspace"
     _write_text(workspace_dir / "src" / "config.ts", "export const label = 'token';\n")
-    command = "rg -n \"token\" src | sed -n '1,40p'"
+    _write_text(workspace_dir / ".github" / "workflows" / "publish.yml", "jobs: {}\n")
 
     artifact = guard_commands_module._codex_post_tool_output_artifact(
         payload={
@@ -24055,7 +24311,7 @@ def test_codex_read_only_source_inspection_rejects_malformed_chains(tmp_path: Pa
         "sed -n '1,10p' src/safe.ts &&",
         "sed -n '1,10p' src/safe.ts && && cat src/safe.ts",
         "sed -n '1,10p' src/safe.ts || cat src/safe.ts",
-        "sed -n '1,10p' src/safe.ts; cat src/safe.ts",
+        "sed -n '1,10p' src/safe.ts;; cat src/safe.ts",
     ]
 
     for command in commands:

@@ -172,10 +172,17 @@ def test_skill_scanner_warns_on_python_314_but_mcp_scanner_checks_dependency(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(cisco_skill_scanner.sys, "version_info", (3, 14, 5))
     (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
 
-    skill_summary = cisco_skill_scanner.run_cisco_skill_scan(tmp_path, mode="on")
+    with monkeypatch.context() as version_patch:
+        version_patch.setattr(cisco_skill_scanner.sys, "version_info", (3, 14, 5))
+        skill_summary = cisco_skill_scanner.run_cisco_skill_scan(tmp_path, mode="on")
+
+    def missing_mcp_scanner(*, blocked_root: Path | None = None) -> dict[str, object]:
+        del blocked_root
+        raise ImportError("cisco-ai-mcp-scanner is not installed")
+
+    monkeypatch.setattr(cisco_mcp_scanner, "_load_mcp_scanner_components", missing_mcp_scanner)
     mcp_summary = cisco_mcp_scanner.run_cisco_mcp_scan(tmp_path, mode="on")
 
     assert skill_summary.status is CiscoIntegrationStatus.UNAVAILABLE
