@@ -643,7 +643,7 @@ def test_cisco_preflight_scans_every_distinct_effective_project(
 
     evidence = runtime_eval_module._runtime_cisco_scanner_evidence(
         action,
-        runtime_workspace=tmp_path,
+        runtime_workspace=project_a,
         raw_shell_cwds=[str(project_a), str(project_b), str(project_a), ""],
     )
 

@@ -206,7 +206,7 @@ def _runtime_cisco_scanner_evidence(
         workspaces.append(runtime_workspace)
 
     primary_workspace = runtime_workspace or next((item for item in workspaces if item is not None), None)
-    approved_scan_roots = tuple(item for item in workspaces if item is not None and item != primary_workspace)
+    approved_scan_roots = tuple(item for item in workspaces if item is not None)
     evidence: list[GuardRiskSignalV3] = []
     for workspace in workspaces:
         for signal in scan_action_for_cisco_evidence(
