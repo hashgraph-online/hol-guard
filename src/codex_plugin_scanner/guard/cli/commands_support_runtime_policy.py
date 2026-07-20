@@ -826,13 +826,20 @@ def _runtime_data_flow_sink_type(signals: tuple[RiskSignalV2, ...]) -> str:
     return "external sink"
 
 def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
+    risk_classes: list[str] = []
+    composite_risk_classes = artifact.metadata.get("risk_classes")
+    if isinstance(composite_risk_classes, list):
+        risk_classes.extend(
+            value.strip() for value in composite_risk_classes if isinstance(value, str) and value.strip()
+        )
     if artifact.artifact_type == "file_read_request":
-        return ["local_secret_read"]
+        risk_classes.append("local_secret_read")
+        return list(dict.fromkeys(risk_classes))
     if artifact.artifact_type == "package_request":
-        return ["package_script"]
+        risk_classes.append("package_script")
+        return list(dict.fromkeys(risk_classes))
     if artifact.artifact_type == "prompt_request":
         prompt_classes = _prompt_request_classes(artifact)
-        risk_classes: list[str] = []
         if "secret_read" in prompt_classes:
             risk_classes.append("local_secret_read")
         if "exfil_intent" in prompt_classes:
@@ -843,18 +850,13 @@ def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
             risk_classes.append("destructive_shell")
         if "prompt_injection_intent" in prompt_classes:
             risk_classes.append("destructive_shell")
-        return risk_classes
+        return list(dict.fromkeys(risk_classes))
     if artifact.artifact_type != "tool_action_request":
-        return []
-    composite_risk_classes = artifact.metadata.get("risk_classes")
-    if isinstance(composite_risk_classes, list):
-        normalized = [value for value in composite_risk_classes if isinstance(value, str) and value.strip()]
-        if normalized:
-            return list(dict.fromkeys(normalized))
+        return list(dict.fromkeys(risk_classes))
     action_class = artifact.metadata.get("action_class")
-    if not isinstance(action_class, str):
-        return []
-    return list(risk_classes_for_command_action(action_class))
+    if isinstance(action_class, str):
+        risk_classes.extend(risk_classes_for_command_action(action_class))
+    return list(dict.fromkeys(risk_classes))
 
 def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
     return {

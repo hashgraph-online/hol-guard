@@ -446,22 +446,42 @@ def _evaluate_runtime_artifact_hook(
     scanner_raised_to_block = (
         policy_action == "block" and _pre_scanner_policy_action != "block" and bool(scanner_evidence)
     )
-    base_decision_signals = data_flow_signals or artifact_risk_signals_v2(runtime_artifact)
+    artifact_decision_signals = artifact_risk_signals_v2(runtime_artifact)
+    base_decision_signals = tuple(
+        {signal.signal_id: signal for signal in (*artifact_decision_signals, *data_flow_signals)}.values()
+    )
     scanner_decision_signals = tuple(cisco_risk_signal_v3_to_v2(signal) for signal in scanner_evidence)
     if scanner_raised_to_block and scanner_decision_signals:
         decision_signals = (*scanner_decision_signals, *base_decision_signals)
     else:
         decision_signals = (*base_decision_signals, *scanner_decision_signals)
+    compound_finding_count = artifact_metadata.get("compound_finding_count")
+    has_compound_findings = isinstance(compound_finding_count, int) and compound_finding_count > 1
     scanner_risk_signals = [signal.plain_language_summary for signal in scanner_evidence]
-    if data_flow_signals:
-        risk_signals = [signal.plain_reason for signal in data_flow_signals]
-        risk_summary = _runtime_data_flow_summary(data_flow_signals)
-    else:
-        risk_signals = list(artifact_risk_signals(runtime_artifact))
-        risk_summary = artifact_risk_summary(runtime_artifact)
-    if package_controls_pre_scanner_summary and package_evaluation is not None:
-        risk_signals = [str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons]
-        risk_summary = package_evaluation.risk_summary
+    risk_signals = list(
+        dict.fromkeys(
+            [
+                *artifact_risk_signals(runtime_artifact),
+                *(signal.plain_reason for signal in data_flow_signals),
+            ]
+        )
+    )
+    risk_summaries = [artifact_risk_summary(runtime_artifact)]
+    if data_flow_signals and not has_compound_findings:
+        risk_summaries.append(_runtime_data_flow_summary(data_flow_signals))
+    if package_evaluation is not None:
+        package_risk_signals = [
+            str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons
+        ]
+        if has_compound_findings and package_controls_pre_scanner_summary:
+            risk_signals = list(dict.fromkeys([*package_risk_signals, *risk_signals]))
+            risk_summaries.insert(0, package_evaluation.risk_summary)
+        elif has_compound_findings:
+            risk_signals = list(dict.fromkeys([*risk_signals, *package_risk_signals]))
+            risk_summaries.append(package_evaluation.risk_summary)
+        elif package_controls_pre_scanner_summary:
+            risk_signals = package_risk_signals
+            risk_summaries = [package_evaluation.risk_summary]
         scanner_evidence_payload.extend(
             {
                 "decision": package_evaluation.decision,
@@ -472,10 +492,15 @@ def _evaluate_runtime_artifact_hook(
             }
             for package in package_evaluation.packages
         )
+    risk_summary = " ".join(dict.fromkeys(summary for summary in risk_summaries if summary))
     if scanner_risk_signals:
-        risk_signals.extend(scanner_risk_signals)
+        risk_signals = list(dict.fromkeys([*risk_signals, *scanner_risk_signals]))
         if scanner_raised_to_block:
-            risk_summary = scanner_risk_signals[0]
+            risk_summary = (
+                " ".join(dict.fromkeys([scanner_risk_signals[0], risk_summary]))
+                if has_compound_findings
+                else scanner_risk_signals[0]
+            )
     current_policy_action = policy_action
     runtime_artifact_hash = _runtime_hook_approval_context_token(
         artifact=runtime_artifact,
@@ -920,11 +945,27 @@ def _evaluate_runtime_artifact_hook(
         action_envelope = action_envelope.with_pre_execution_result(policy_action)
     decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=decision_signals)
     decision_v2_payload = decision_v2.to_dict()
-    if package_evaluation is not None and package_policy_action == policy_action:
+    package_only_decision = not has_compound_findings
+    if package_evaluation is not None and package_policy_action == policy_action and package_only_decision:
         decision_v2_payload["user_title"] = package_evaluation.user_copy.title
         decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
         decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
         decision_v2_payload["dashboard_primary_detail"] = package_evaluation.user_copy.summary
+    if has_compound_findings:
+        action_phrase = {
+            "allow": "allowed",
+            "warn": "allowed with a warning",
+            "sandbox-required": "requires a sandbox for",
+            "review": "paused for one review",
+            "require-reapproval": "paused for one review",
+            "block": "blocked",
+        }[policy_action]
+        compound_detail = f"Guard combined {compound_finding_count} findings for the complete command. {risk_summary}"
+        decision_v2_payload["user_body"] = compound_detail
+        decision_v2_payload["harness_message"] = (
+            f"HOL Guard {action_phrase} this complete command after combining "
+            f"{compound_finding_count} findings. {risk_summary}"
+        )
     incident = build_incident_context(
         harness=args.harness,
         artifact=runtime_artifact,
