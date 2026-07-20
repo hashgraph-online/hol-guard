@@ -41,6 +41,11 @@ def _configure_guard_local_parsers(
         help="Do not initialize desktop notifications",
     )
     init_parser.add_argument(
+        "--skip-tray",
+        action="store_true",
+        help="Do not install the menu bar / tray icon",
+    )
+    init_parser.add_argument(
         "--yes",
         action="store_true",
         help="Approve every init step without prompting. Intended for automation and docs verification.",
@@ -313,6 +318,75 @@ def _configure_guard_local_parsers(
         _add_guard_common_args(policy_parser)
         policy_parser.add_argument("--json", action="store_true")
         policy_parser.set_defaults(policy_action=action)
+
+    tray_parser = guard_subparsers.add_parser(
+        "tray",
+        help="Manage the HOL Guard menu bar / system tray icon",
+    )
+    _add_guard_common_args(tray_parser)
+    tray_parser.add_argument("--json", action="store_true")
+    tray_subparsers = tray_parser.add_subparsers(
+        dest="tray_command",
+        required=True,
+        parser_class=FriendlyArgumentParser,
+    )
+
+    tray_status_parser = tray_subparsers.add_parser(
+        "status",
+        help="Show whether the tray icon is running and supported on this platform",
+    )
+    _add_guard_common_args(tray_status_parser)
+    tray_status_parser.add_argument("--json", action="store_true")
+
+    tray_start_parser = tray_subparsers.add_parser(
+        "start",
+        help="Start the tray icon process",
+    )
+    _add_guard_common_args(tray_start_parser)
+    tray_start_parser.add_argument("--force", action="store_true", help="Stop any existing tray before starting")
+    tray_start_parser.add_argument("--json", action="store_true")
+
+    tray_stop_parser = tray_subparsers.add_parser(
+        "stop",
+        help="Stop the running tray icon process",
+    )
+    _add_guard_common_args(tray_stop_parser)
+    tray_stop_parser.add_argument("--json", action="store_true")
+
+    tray_restart_parser = tray_subparsers.add_parser(
+        "restart",
+        help="Stop and start the tray icon process",
+    )
+    _add_guard_common_args(tray_restart_parser)
+    tray_restart_parser.add_argument("--json", action="store_true")
+
+    tray_repair_parser = tray_subparsers.add_parser(
+        "repair",
+        help="Reset tray state after crashes or corruption",
+    )
+    _add_guard_common_args(tray_repair_parser)
+    tray_repair_parser.add_argument("--json", action="store_true")
+
+    tray_install_parser = tray_subparsers.add_parser(
+        "install",
+        help="Install the tray icon to start automatically at login",
+    )
+    _add_guard_common_args(tray_install_parser)
+    tray_install_parser.add_argument("--no-run-at-login", action="store_true", help="Do not set run-at-login")
+    tray_install_parser.add_argument("--json", action="store_true")
+
+    tray_uninstall_parser = tray_subparsers.add_parser(
+        "uninstall",
+        help="Remove the tray icon from automatic login startup",
+    )
+    _add_guard_common_args(tray_uninstall_parser)
+    tray_uninstall_parser.add_argument("--json", action="store_true")
+
+    tray_run_parser = tray_subparsers.add_parser(
+        "run",
+        help=argparse.SUPPRESS,  # internal: run the tray icon in-process (called by start)
+    )
+    tray_run_parser.add_argument("--guard-home", required=True)
 
 __all__ = [
     "_configure_guard_local_parsers",

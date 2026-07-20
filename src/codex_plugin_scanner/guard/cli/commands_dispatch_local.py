@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
     from .commands_support_connect import _refresh_cloud_policy_bundle, _synced_policy_payload
-    from .commands_support_hook_payload import _open_approval_center
     from .commands_support_interaction import _emit, _run_apps_command, _run_consumer_scan_with_mode
     from .commands_support_runtime_policy import _approval_delivery_payload, _localize_pending_approval_copy
     from .commands_support_workspace import _run_init_command
@@ -292,41 +291,28 @@ def _run_guard_dashboard_command(
         raise RuntimeError("Guard home is required")
     store = _require_guard_store(store)
     config = _require_guard_config(config)
-    try:
-        approval_center_url = ensure_guard_daemon(guard_home)
-    except RuntimeError as error:
-        if getattr(args, "json", False):
-            _emit(
-                "dashboard",
-                {
-                    "generated_at": _now(),
-                    "opened": False,
-                    "error": str(error),
-                },
-                True,
-            )
-        else:
-            print(str(error), file=sys.stderr)
-        return 1
-    open_result = _open_approval_center(
-        approval_center_url,
+    from ..dashboard_launcher import open_dashboard
+
+    result = open_dashboard(
+        guard_home=guard_home,
         store=store,
         config=config,
-        open_key="dashboard",
         force_open=True,
+        open_key="dashboard",
     )
     _emit(
         "dashboard",
         {
             "generated_at": _now(),
-            "approval_center_url": approval_center_url,
-            "browser_url": open_result.get("browser_url"),
-            "opened": bool(open_result.get("opened")),
-            "reason": str(open_result.get("reason") or "unknown"),
+            "approval_center_url": result.approval_center_url,
+            "browser_url": result.browser_url,
+            "opened": result.opened,
+            "reason": result.reason,
+            **({"error": result.error} if result.error else {}),
         },
         getattr(args, "json", False),
     )
-    return 0
+    return 0 if result.opened or result.reason in {"policy-disabled", "already-opened", "live-client"} else 1
 
 def _run_guard_bootstrap_command(
     args: argparse.Namespace,
@@ -451,6 +437,228 @@ def _run_guard_mcp_command(
     server = GuardMCPServer(guard_home=guard_home)
     return server.run_stdio()
 
+
+def _run_guard_tray_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    """Dispatch ``hol-guard tray`` subcommands."""
+    if guard_home is None:
+        raise RuntimeError("Guard home is required")
+    tray_command = str(getattr(args, "tray_command", ""))
+    use_json = bool(getattr(args, "json", False))
+    package_version = _guard_package_version()
+
+    if tray_command == "run":
+        # Internal: run the tray icon in-process.
+        # Platform adapters (LaunchAgent/Run-key/XDG autostart) invoke this
+        # path at login, so it MUST write the locator before entering the
+        # pystray main loop and remove it on exit. Without this, `tray status`
+        # would not see login-started trays.
+        from ..tray.runtime import TrayRuntime, detect_capability
+        from ..tray.state import (
+            build_locator_for_current_process,
+            remove_locator,
+            reset_crash_count,
+            write_locator,
+        )
+
+        run_guard_home_arg = getattr(args, "guard_home", None)
+        run_guard_home = Path(str(run_guard_home_arg)) if run_guard_home_arg is not None else guard_home
+        if run_guard_home is None:
+            print("guard_home is required for tray run", file=sys.stderr)
+            return 1
+
+        capability = detect_capability()
+        if not capability.supported:
+            print(f"Tray not supported: {capability.details}", file=sys.stderr)
+            return 1
+
+        # Write locator before starting so `tray status` sees this process.
+        locator = build_locator_for_current_process(
+            guard_home=run_guard_home,
+            package_version=package_version,
+            backend=capability.backend,
+        )
+        try:
+            write_locator(run_guard_home, locator)
+            reset_crash_count(run_guard_home)
+        except OSError as error:
+            print(f"Failed to write tray locator: {error}", file=sys.stderr)
+            return 1
+
+        runtime = TrayRuntime(
+            guard_home=run_guard_home,
+            store=store or _require_guard_store(store),
+            config=config or _require_guard_config(config),
+            capability=capability,
+        )
+        try:
+            return runtime.run()
+        finally:
+            with suppress(Exception):
+                remove_locator(run_guard_home)
+
+    from ..tray.lifecycle import (
+        get_status,
+        install_registration,
+        remove_registration,
+        repair_tray,
+        start_tray,
+        stop_tray,
+    )
+    from ..tray.platforms import detect_platform_adapter
+
+    if tray_command == "status":
+        state, capability, locator = get_status(guard_home, package_version=package_version)
+        payload: dict[str, object] = {
+            "generated_at": _now(),
+            "state": state.value,
+            "platform": capability.platform.value if capability.platform else None,
+            "backend": capability.backend.value,
+            "supported": capability.supported,
+            "reason": capability.reason.value,
+            "details": capability.details,
+            "locator": locator.to_payload() if locator else None,
+        }
+        _emit("tray-status", payload, use_json)
+        return 0
+
+    if tray_command == "start":
+        result = start_tray(guard_home, package_version=package_version, force=bool(getattr(args, "force", False)))
+        _emit(
+            "tray-start",
+            {
+                "generated_at": _now(),
+                "ok": result.ok,
+                "state": result.state.value,
+                "reason": result.reason.value,
+                "message": result.message,
+                **({"recovery_command": result.recovery_command} if result.recovery_command else {}),
+            },
+            use_json,
+        )
+        return 0 if result.ok else 1
+
+    if tray_command == "stop":
+        result = stop_tray(guard_home)
+        _emit(
+            "tray-stop",
+            {
+                "generated_at": _now(),
+                "ok": result.ok,
+                "state": result.state.value,
+                "reason": result.reason.value,
+                "message": result.message,
+                **({"recovery_command": result.recovery_command} if result.recovery_command else {}),
+            },
+            use_json,
+        )
+        return 0 if result.ok else 1
+
+    if tray_command == "restart":
+        stop_result = stop_tray(guard_home)
+        start_result = start_tray(guard_home, package_version=package_version, force=True)
+        _emit(
+            "tray-restart",
+            {
+                "generated_at": _now(),
+                "ok": start_result.ok,
+                "state": start_result.state.value,
+                "reason": start_result.reason.value,
+                "message": start_result.message,
+                "stop_reason": stop_result.reason.value,
+                **({"recovery_command": start_result.recovery_command} if start_result.recovery_command else {}),
+            },
+            use_json,
+        )
+        return 0 if start_result.ok else 1
+
+    if tray_command == "repair":
+        result = repair_tray(guard_home)
+        _emit(
+            "tray-repair",
+            {
+                "generated_at": _now(),
+                "ok": result.ok,
+                "state": result.state.value,
+                "reason": result.reason.value,
+                "message": result.message,
+            },
+            use_json,
+        )
+        return 0 if result.ok else 1
+
+    if tray_command == "install":
+        adapter = detect_platform_adapter()
+        if adapter is None:
+            _emit(
+                "tray-install",
+                {"generated_at": _now(), "ok": False, "reason": "unsupported_platform"},
+                use_json,
+            )
+            return 1
+        result = install_registration(
+            guard_home,
+            adapter=adapter,
+            run_at_login=not bool(getattr(args, "no_run_at_login", False)),
+        )
+        _emit(
+            "tray-install",
+            {
+                "generated_at": _now(),
+                "ok": result.ok,
+                "state": result.state.value,
+                "reason": result.reason.value,
+                "message": result.message,
+            },
+            use_json,
+        )
+        return 0 if result.ok else 1
+
+    if tray_command == "uninstall":
+        adapter = detect_platform_adapter()
+        if adapter is None:
+            _emit(
+                "tray-uninstall",
+                {"generated_at": _now(), "ok": False, "reason": "unsupported_platform"},
+                use_json,
+            )
+            return 1
+        result = remove_registration(guard_home, adapter=adapter)
+        _emit(
+            "tray-uninstall",
+            {
+                "generated_at": _now(),
+                "ok": result.ok,
+                "state": result.state.value,
+                "reason": result.reason.value,
+                "message": result.message,
+            },
+            use_json,
+        )
+        return 0 if result.ok else 1
+
+    print(f"Unknown tray command: {tray_command}", file=sys.stderr)
+    return 2
+
+
+def _guard_package_version() -> str:
+    """Return the installed guard package version, or empty string."""
+    try:
+        from importlib.metadata import version
+
+        return version("codex-plugin-scanner")
+    except Exception:
+        return ""
+
 __all__ = [
     "_run_guard_apps_command",
     "_run_guard_bootstrap_command",
@@ -465,5 +673,6 @@ __all__ = [
     "_run_guard_scan_command",
     "_run_guard_start_command",
     "_run_guard_status_command",
+    "_run_guard_tray_command",
     "_run_guard_update_command",
 ]

@@ -1,4 +1,4 @@
-/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
+/*! tailwindcss v4.3.1 | MIT License | https://tailwindcss.com */
 @layer properties {
   @supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {
     *, :before, :after, ::backdrop {
@@ -101,6 +101,8 @@
     --color-amber-900: oklch(41.4% .112 45.904);
     --color-amber-950: oklch(27.9% .077 45.635);
     --color-green-50: oklch(98.2% .018 155.826);
+    --color-green-100: oklch(96.2% .044 156.743);
+    --color-green-200: oklch(92.5% .084 155.995);
     --color-green-600: oklch(62.7% .194 149.214);
     --color-green-700: oklch(52.7% .154 150.069);
     --color-emerald-50: oklch(97.9% .021 166.113);
@@ -234,7 +236,7 @@
     -webkit-text-size-adjust: 100%;
     tab-size: 4;
     line-height: 1.5;
-    font-family: var(--default-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");
+    font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");
     font-feature-settings: var(--default-font-feature-settings, normal);
     font-variation-settings: var(--default-font-variation-settings, normal);
     -webkit-tap-highlight-color: transparent;
@@ -300,7 +302,7 @@
     border-collapse: collapse;
   }
 
-  :-moz-focusring:where(:not(iframe)) {
+  :-moz-focusring {
     outline: auto;
   }
 
@@ -1411,7 +1413,7 @@
   }
 
   .translate-x-0 {
-    --tw-translate-x: 0px;
+    --tw-translate-x: 0;
     translate: var(--tw-translate-x) var(--tw-translate-y);
   }
 
@@ -1426,7 +1428,7 @@
   }
 
   .translate-y-0 {
-    --tw-translate-y: 0px;
+    --tw-translate-y: 0;
     translate: var(--tw-translate-x) var(--tw-translate-y);
   }
 
@@ -2197,6 +2199,10 @@
 
   .border-gray-200 {
     border-color: var(--color-gray-200);
+  }
+
+  .border-green-200 {
+    border-color: var(--color-green-200);
   }
 
   .border-purple-200\/40 {
@@ -2981,6 +2987,10 @@
     background-color: var(--color-green-50);
   }
 
+  .bg-green-100 {
+    background-color: var(--color-green-100);
+  }
+
   .bg-orange-50 {
     background-color: var(--color-orange-50);
   }
@@ -2997,6 +3007,10 @@
 
   .bg-purple-500 {
     background-color: var(--color-purple-500);
+  }
+
+  .bg-red-50 {
+    background-color: var(--color-red-50);
   }
 
   .bg-red-50\/40 {

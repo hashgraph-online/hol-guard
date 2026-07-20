@@ -324,6 +324,11 @@ class StoreConnectionSchemaMixin:
               owner text,
               source text not null default 'local',
               expires_at text,
+              policy_document_schema_version text,
+              policy_document_id text,
+              policy_document_digest text,
+              policy_rule_id text,
+              policy_provenance_json text,
               updated_at text not null
             )
             """,
@@ -641,6 +646,11 @@ class StoreConnectionSchemaMixin:
             self._ensure_policy_column(connection, "payload_mac", "text")
             self._ensure_policy_column(connection, "integrity_key_id", "text")
             self._ensure_policy_column(connection, "signed_at", "text")
+            self._ensure_policy_column(connection, "policy_document_schema_version", "text")
+            self._ensure_policy_column(connection, "policy_document_id", "text")
+            self._ensure_policy_column(connection, "policy_document_digest", "text")
+            self._ensure_policy_column(connection, "policy_rule_id", "text")
+            self._ensure_policy_column(connection, "policy_provenance_json", "text")
             for index_statement in _POLICY_INDEX_STATEMENTS:
                 connection.execute(index_statement)
             self._ensure_column(connection, "guard_local_once_approvals", "integrity_version", "integer")

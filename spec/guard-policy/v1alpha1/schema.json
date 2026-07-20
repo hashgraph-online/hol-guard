@@ -1,0 +1,550 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guard.hashgraphonline.com/schema/policy/v1alpha1",
+  "title": "GuardPolicy v1alpha1",
+  "description": "Canonical, portable HOL Guard policy document.",
+  "type": "object",
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "guard.hashgraphonline.com/v1alpha1"
+    },
+    "kind": {
+      "const": "GuardPolicy"
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    },
+    "spec": {
+      "$ref": "#/$defs/spec"
+    }
+  },
+  "patternProperties": {
+    "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+      "$ref": "#/$defs/extensionValue"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "boundedString": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "revision"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "labels": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 256
+          }
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "spec": {
+      "type": "object",
+      "required": [
+        "defaults",
+        "rules"
+      ],
+      "properties": {
+        "defaults": {
+          "$ref": "#/$defs/defaults"
+        },
+        "rolloutState": {
+          "enum": [
+            "draft",
+            "simulated",
+            "pending_approval",
+            "enforcing",
+            "enforced",
+            "rollback_available"
+          ]
+        },
+        "rules": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "$ref": "#/$defs/rule"
+          }
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "defaults": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "observe",
+            "prompt",
+            "enforce"
+          ]
+        },
+        "defaultAction": {
+          "enum": [
+            "allow",
+            "warn",
+            "block"
+          ]
+        },
+        "unknownPublisherAction": {
+          "enum": [
+            "allow",
+            "review",
+            "block"
+          ]
+        },
+        "changedHashAction": {
+          "enum": [
+            "allow",
+            "warn",
+            "require-reapproval",
+            "block"
+          ]
+        },
+        "newNetworkDomainAction": {
+          "enum": [
+            "allow",
+            "warn",
+            "block"
+          ]
+        },
+        "subprocessAction": {
+          "enum": [
+            "allow",
+            "warn",
+            "block"
+          ]
+        },
+        "telemetryEnabled": {
+          "type": "boolean"
+        },
+        "syncEnabled": {
+          "type": "boolean"
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "stringSet": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      }
+    },
+    "match": {
+      "type": "object",
+      "properties": {
+        "operations": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "actors": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "agents": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "artifacts": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "commands": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "devices": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "domains": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "ecosystems": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "environments": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "harnesses": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "locations": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "mcps": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "packages": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "paths": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "publishers": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "repositories": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "secretTypes": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "skills": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "tools": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "workspaces": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "browserIntents": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "browser.navigation",
+              "browser.inspect",
+              "browser.interact",
+              "browser.transfer",
+              "browser.privileged"
+            ]
+          }
+        },
+        "browserOperations": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "browserProfiles": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "isolated",
+              "dedicated",
+              "shared",
+              "remote-debugging",
+              "unknown"
+            ]
+          }
+        },
+        "origins": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "pathPrefixes": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "sensitiveSurfaces": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "cookies",
+              "storage",
+              "auth-headers",
+              "raw-cdp",
+              "script-eval",
+              "network-intercept",
+              "upload",
+              "download",
+              "clipboard",
+              "password-fields"
+            ]
+          }
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "lifetime": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "once",
+            "session",
+            "project",
+            "machine",
+            "workspace",
+            "team",
+            "permanent",
+            "until"
+          ]
+        },
+        "expiresAt": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/utcTimestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "until"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "expiresAt"
+            ],
+            "properties": {
+              "expiresAt": {
+                "$ref": "#/$defs/utcTimestamp"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "expiresAt": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "source",
+        "createdAt"
+      ],
+      "properties": {
+        "source": {
+          "enum": [
+            "suggested-memory",
+            "review-decision",
+            "builder",
+            "import",
+            "legacy",
+            "cloud",
+            "local",
+            "policy-bundle"
+          ]
+        },
+        "receiptIds": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "suggestionId": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "updatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "importSourceDigest": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "previousRuleRevision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "rule": {
+      "type": "object",
+      "required": [
+        "id",
+        "enabled",
+        "effect",
+        "match",
+        "lifetime",
+        "provenance"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "description": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "effect": {
+          "enum": [
+            "allow",
+            "block",
+            "review",
+            "ignore"
+          ]
+        },
+        "match": {
+          "$ref": "#/$defs/match"
+        },
+        "lifetime": {
+          "$ref": "#/$defs/lifetime"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "extensionValue": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "string",
+          "maxLength": 4096
+        },
+        {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/extensionValue"
+          }
+        },
+        {
+          "type": "object",
+          "maxProperties": 256,
+          "propertyNames": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/extensionValue"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "payload": {
+    "contractVersion": "guard-policy-bundle.v1",
+    "bundleVersion": "bundle-7",
+    "issuedAt": "2026-07-15T12:00:00Z",
+    "expiresAt": null,
+    "verifier": {
+      "algorithm": "hmac-sha256",
+      "keyId": "test-key",
+      "signature": "fixture-signature"
+    },
+    "rolloutState": "draft",
+    "policyDefaults": {
+      "mode": "prompt",
+      "defaultAction": "warn"
+    },
+    "rules": [
+      {
+        "id": "rule-1",
+        "action": "block",
+        "matcherFamily": "package-request",
+        "reason": "fixture"
+      }
+    ],
+    "receiptRedactionLevel": "metadata",
+    "workspaceId": "workspace-1",
+    "acknowledgements": [],
+    "minDaemonVersion": "0.1.0"
+  },
+  "bundleHash": "sha256:f8472211770d67339012aa409753ac855328278ae9019996c217299e15a0f16b",
+  "payloadHash": "64c2485090dc77e4084679ee643b3004efce8d51d3576ba871c5102ba60c7ca7",
+  "canonicalSigningPayload": "{\"acknowledgements\":[],\"bundleVersion\":\"bundle-7\",\"contractVersion\":\"guard-policy-bundle.v1\",\"expiresAt\":null,\"issuedAt\":\"2026-07-15T12:00:00Z\",\"minDaemonVersion\":\"0.1.0\",\"policyDefaults\":{\"defaultAction\":\"warn\",\"mode\":\"prompt\"},\"receiptRedactionLevel\":\"metadata\",\"rolloutState\":\"draft\",\"rules\":[{\"action\":\"block\",\"id\":\"rule-1\",\"matcherFamily\":\"package-request\",\"reason\":\"fixture\"}],\"verifier\":{\"algorithm\":\"hmac-sha256\",\"keyId\":\"test-key\",\"signature\":null},\"workspaceId\":\"workspace-1\"}"
+}

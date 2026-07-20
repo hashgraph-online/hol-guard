@@ -53,6 +53,7 @@ _COMMON_HANDLERS = {
     "inventory": "_run_guard_inventory_command",
     "aibom": "_run_guard_aibom_command",
     "abom": "_run_guard_abom_command",
+    "policy": "_run_guard_policy_document_command",
     "policies": "_run_guard_policies_command",
     "trust": "_run_guard_trust_command",
     "settings": "_run_guard_settings_command",
@@ -77,6 +78,7 @@ _COMMON_HANDLERS = {
     "device": "_run_guard_device_command",
     "commands": "_run_guard_commands_command",
     "daemon": "_run_guard_daemon_command",
+    "tray": "_run_guard_tray_command",
     "hook": "_run_guard_hook_command",
 }
 

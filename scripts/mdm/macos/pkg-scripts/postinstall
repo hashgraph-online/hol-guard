@@ -5,11 +5,42 @@ readonly RUNTIME="/Library/Application Support/HOL Guard"
 readonly STATE="/Library/Application Support/HOL Guard State"
 readonly LOGS="/Library/Logs/HOL Guard"
 readonly LAUNCH_AGENT="/Library/LaunchAgents/org.hol.guard.user-activation.plist"
+readonly LAUNCH_DAEMON="/Library/LaunchDaemons/org.hol.guard.machine-health.plist"
+readonly ROLLBACK_PLIST="/private/var/root/org.hol.guard.machine-health.rollback.plist"
+
+rollback_armed=0
+restore_previous_supervisor() {
+  readonly failure_status=$?
+  trap - ZERR EXIT
+  if (( rollback_armed == 1 )); then
+    /bin/launchctl bootout system/org.hol.guard.machine-health >/dev/null 2>&1 || true
+    if [[ -f "${ROLLBACK_PLIST}" && ! -L "${ROLLBACK_PLIST}" ]]; then
+      /usr/bin/install -o root -g wheel -m 0644 "${ROLLBACK_PLIST}" "${LAUNCH_DAEMON}"
+      /bin/launchctl bootstrap system "${LAUNCH_DAEMON}" >/dev/null 2>&1 || true
+      /bin/launchctl enable system/org.hol.guard.machine-health >/dev/null 2>&1 || true
+      /bin/launchctl kickstart -k system/org.hol.guard.machine-health >/dev/null 2>&1 || true
+    fi
+  fi
+  return "${failure_status}"
+}
 
 mkdir -p "${STATE}" "${LOGS}"
 chown -R root:wheel "${RUNTIME}" "${STATE}" "${LOGS}"
 chmod -R go-w "${RUNTIME}" "${STATE}" "${LOGS}"
 chmod 0755 "${RUNTIME}" "${STATE}" "${LOGS}"
-chown root:wheel "${LAUNCH_AGENT}"
-chmod 0644 "${LAUNCH_AGENT}"
+chown root:wheel "${LAUNCH_AGENT}" "${LAUNCH_DAEMON}"
+chmod 0644 "${LAUNCH_AGENT}" "${LAUNCH_DAEMON}"
+# Device identity is journaled independently from supervisor rollback. Deleting it here can
+# destroy an existing enrolled identity during an upgrade; Cloud retires it only after confirmed removal.
+"${RUNTIME}/hol-guard/hol-guard" mdm device-key-provision --json >/dev/null
+"${RUNTIME}/hol-guard/hol-guard" mdm continuity-provision --json >/dev/null
+rollback_armed=1
+trap restore_previous_supervisor ZERR EXIT
+/bin/launchctl bootout system/org.hol.guard.machine-health >/dev/null 2>&1 || true
+/bin/launchctl bootstrap system "${LAUNCH_DAEMON}"
+/bin/launchctl enable system/org.hol.guard.machine-health
+/bin/launchctl kickstart -k system/org.hol.guard.machine-health
+rollback_armed=0
+trap - ZERR EXIT
+/bin/rm -f "${ROLLBACK_PLIST}"
 exit 0

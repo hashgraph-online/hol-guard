@@ -259,6 +259,7 @@ def _resolve_legacy_args(
         "allow",
         "deny",
         "policies",
+        "policy",
         "trust",
         "settings",
         "exceptions",
@@ -284,7 +285,7 @@ def _resolve_legacy_args(
         "cursor-mcp-proxy",
         "hermes-mcp-proxy",
     }
-    if program_mode == "combined" and argv[0] in _guard_subcommands and "--format" not in argv:
+    if program_mode == "combined" and argv[0] in _guard_subcommands and ("--format" not in argv or argv[0] == "policy"):
         return ["guard", *argv]
     if not should_default_to_scan_target(argv[0], known_commands=known_commands):
         return argv
