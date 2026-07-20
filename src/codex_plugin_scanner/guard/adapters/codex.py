@@ -779,8 +779,8 @@ def _codex_hook_artifacts(
 def _payload_has_hooks_feature_enabled(config_payload: Mapping[str, object]) -> bool:
     features = config_payload.get("features")
     if not isinstance(features, Mapping):
-        return False
-    return features.get("hooks") is True or features.get("codex_hooks") is True
+        return True
+    return features.get("hooks") is not False
 
 
 def _line_marker_at(content: bytes, index: int, marker: bytes) -> bool:
@@ -1145,6 +1145,12 @@ class CodexHarnessAdapter(HarnessAdapter):
             config_path: _strict_toml_object(config_path, label="Codex config file")
             for config_path, _hooks_path in self._config_hook_pairs(context)
         }
+        config_snapshots = {
+            config_path: snapshot_regular_file(config_path)
+            for config_path, _hooks_path in self._config_hook_pairs(context)
+        }
+        manifest_path = hook_manifest_path(context.guard_home, hook_config_path)
+        manifest_snapshot = snapshot_regular_file(manifest_path)
         inventory_hook_payloads = deepcopy(hook_payloads)
         inventory_config_payloads = deepcopy(config_payloads)
         original_text = target_config_path.read_text(encoding="utf-8") if target_config_path.is_file() else None
@@ -1256,7 +1262,13 @@ class CodexHarnessAdapter(HarnessAdapter):
             payloads=hook_payloads,
             owned_bindings=owned_bindings,
         )
-        hooks_path = self._remove_json_hook_files(context, payloads=hook_payloads)
+        hooks_path = self._remove_json_hook_files(
+            context,
+            payloads=hook_payloads,
+            config_snapshots=config_snapshots,
+            manifest_path=manifest_path,
+            manifest_snapshot=manifest_snapshot,
+        )
         self._uninstall_shell_guard(context)
         _require_codex_authoritative_shell_hook(context)
         shim_manifest = install_guard_shim(self.harness, context)
@@ -1566,6 +1578,9 @@ class CodexHarnessAdapter(HarnessAdapter):
         context: HarnessContext,
         *,
         payloads: dict[Path, dict[str, object]],
+        config_snapshots: Mapping[Path, bytes | None],
+        manifest_path: Path,
+        manifest_snapshot: bytes | None,
     ) -> Path:
         target_hooks_path = self._hooks_path(context)
         snapshots = {
@@ -1576,9 +1591,23 @@ class CodexHarnessAdapter(HarnessAdapter):
         try:
             for hooks_path in snapshots:
                 hooks_path.unlink()
-        except BaseException:
-            for hooks_path, snapshot in snapshots.items():
-                restore_private_file(hooks_path, snapshot)
+        except BaseException as removal_error:
+            rollback_errors: list[BaseException] = []
+            for path, snapshot in (*config_snapshots.items(), (manifest_path, manifest_snapshot), *snapshots.items()):
+                try:
+                    restore_private_file(path, snapshot)
+                except BaseException as rollback_error:
+                    rollback_errors.append(rollback_error)
+            if manifest_snapshot is None:
+                try:
+                    remove_hook_secret_if_unused(context.guard_home)
+                except BaseException as rollback_error:
+                    rollback_errors.append(rollback_error)
+            if rollback_errors:
+                raise RuntimeError(
+                    "codex_hook_migration_rollback_failed: Guard could not fully restore Codex hook sources after "
+                    "legacy JSON removal failed. Run `hol-guard install codex` to repair the installation."
+                ) from removal_error
             raise
         return target_hooks_path
 
