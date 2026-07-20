@@ -41,6 +41,7 @@ def _command_available(command: str) -> bool:
 
 def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> str:
     """Return a shell-escaped command string appropriate for the target OS."""
+
     is_windows = os.name == "nt" if windows is None else windows
     if is_windows:
         return subprocess.list2cmdline(list(command))
