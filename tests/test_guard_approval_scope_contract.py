@@ -422,6 +422,59 @@ def test_same_resolution_replay_is_idempotent_and_conflict_is_409(tmp_path: Path
     assert conflict["error"] == "already_resolved"
 
 
+@pytest.mark.parametrize(
+    "case",
+    [
+        ("artifact", True, "require-reapproval", "changed", 409, "stale_scope_contract"),
+        ("global", False, "sandbox-required", None, 422, "request_action_not_overridable"),
+    ],
+)
+def test_raced_completed_replay_maps_scope_contract_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: tuple[str, bool, GuardAction, str | None, int, str],
+) -> None:
+    payload_scope, use_contract, third_policy_action, third_hash, expected_status, expected_error = case
+    store = GuardStore(tmp_path / "guard-home")
+    row = _store_request(store, _request("replay-race"))
+    store.resolve_approval_request(
+        "replay-race",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason=None,
+        resolved_at="2026-07-19T00:00:01+00:00",
+    )
+    original_get = store.get_approval_request
+    call_count = 0
+
+    def raced_get(request_id: str) -> dict[str, object] | None:
+        nonlocal call_count
+        call_count += 1
+        current = original_get(request_id)
+        if current is None:
+            return None
+        if call_count == 1:
+            return {**current, "status": "pending"}
+        if call_count >= 3:
+            return {
+                **current,
+                "policy_action": third_policy_action,
+                "artifact_hash": third_hash or current["artifact_hash"],
+            }
+        return current
+
+    monkeypatch.setattr(store, "get_approval_request", raced_get)
+    payload = _v2_selection(row, payload_scope) if use_contract else {"scope": payload_scope}
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, response = _post(daemon, "/v1/requests/replay-race/approve", payload)
+    finally:
+        daemon.stop()
+    assert status == expected_status
+    assert response["error"] == expected_error
+
+
 def test_concurrent_same_resolution_has_one_effect_and_two_successes(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     row = _store_request(store, _request("race"))
@@ -441,6 +494,5 @@ def test_concurrent_same_resolution_has_one_effect_and_two_successes(tmp_path: P
             thread.join(timeout=5)
     finally:
         daemon.stop()
-
     assert sorted(status for status, _ in results) == [200, 200], results
     assert len(store.list_events(event_name="approval.resolved")) == 1

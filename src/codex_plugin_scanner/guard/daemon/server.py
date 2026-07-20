@@ -2122,13 +2122,35 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ApprovalRequestAlreadyResolvedError:
             resolved_request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
             if isinstance(resolved_request, dict):
-                replay_selection = resolve_request_scope_selection(
-                    resolved_request,
-                    action=action,
-                    requested_scope=scope.strip(),
-                    contract_version=scope_contract_version,
-                    contract_digest=scope_contract_digest,
-                )
+                try:
+                    replay_selection = resolve_request_scope_selection(
+                        resolved_request,
+                        action=action,
+                        requested_scope=scope.strip(),
+                        contract_version=scope_contract_version,
+                        contract_digest=scope_contract_digest,
+                    )
+                except StaleApprovalScopeContractError as error:
+                    self._write_json(
+                        {"resolved": False, "error": str(error), **error.contract.to_dict()},
+                        status=409,
+                    )
+                    return
+                except IneligibleApprovalScopeError as error:
+                    self._write_json(
+                        {
+                            "resolved": False,
+                            "error": str(error),
+                            "action": error.action,
+                            "requested_scope": error.requested_scope,
+                            **error.contract.to_dict(),
+                        },
+                        status=422,
+                    )
+                    return
+                except ValueError as error:
+                    self._write_json({"resolved": False, "error": str(error)}, status=400)
+                    return
                 if (
                     resolved_request.get("resolution_action") == action
                     and resolved_request.get("resolution_scope") == replay_selection.applied_scope
