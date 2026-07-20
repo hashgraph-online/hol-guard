@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from .command_contained_routine_candidates import contained_routine_candidate_factor
 from .command_decision_adapter import (
     command_uncertainties,
     decision_factors,
@@ -149,7 +150,10 @@ def evaluate_command(
     if extension_uncertainties(observations):
         minimum_action = "block"
     evidence_batch = extension_evidence_batch(command, observations)
+    contained_routine_candidate = contained_routine_candidate_factor(command)
     verified_read_candidate = verified_read_candidate_factor(command)
+    if contained_routine_candidate is not None:
+        minimum_action = _stronger_floor(minimum_action, "review")
     if verified_read_candidate is not None:
         minimum_action = _stronger_floor(minimum_action, "review")
     decision_plane = evaluate_effect_decision(
@@ -160,6 +164,7 @@ def evaluate_command(
                     compatibility_action_class=compatibility_action_class,
                     compatibility_rule=compatibility_rule,
                 ),
+                *((contained_routine_candidate,) if contained_routine_candidate is not None else ()),
                 *((verified_read_candidate,) if verified_read_candidate is not None else ()),
             ),
             uncertainties=tuple(
