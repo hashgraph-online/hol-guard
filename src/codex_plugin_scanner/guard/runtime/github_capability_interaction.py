@@ -12,7 +12,8 @@ def github_capability_requires_confirmation(assessment: GitHubCommandAssessment)
 def github_capability_action_class(assessment: GitHubCommandAssessment) -> str:
     if not github_capability_requires_confirmation(assessment):
         raise ValueError("read-only GitHub capabilities do not have review action classes")
-    action_class = github_capability_contract(assessment.capability).action_class
+    capability = "admin_merge_remote" if "admin_merge_remote" in assessment.capabilities else assessment.capability
+    action_class = github_capability_contract(capability).action_class
     if action_class is None:
         raise ValueError("reviewed GitHub capability is missing an action class")
     return action_class
