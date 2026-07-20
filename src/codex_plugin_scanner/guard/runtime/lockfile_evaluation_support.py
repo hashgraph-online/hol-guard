@@ -71,9 +71,7 @@ def collect_lockfile_parse_results(
                 )
             )
             continue
-        results.append(
-            parse_text_result(lockfile_path.name, lockfile_text)
-        )
+        results.append(parse_text_result(lockfile_path.name, lockfile_text))
     return tuple(results)
 
 
@@ -119,12 +117,15 @@ def incomplete_lockfile_fallback_target(parse_result: LockfileParseResult) -> di
         "uv-lock": "pypi",
     }.get(parse_result.format, "npm")
     package_manager = {
+        "bun-lock": "bun",
         "bundler-lock": "bundler",
         "cargo-lock": "cargo",
         "composer-lock": "composer",
         "pipenv-lock": "pipenv",
+        "pnpm-lock": "pnpm",
         "poetry-lock": "poetry",
         "uv-lock": "uv",
+        "yarn-lock": "yarn",
     }.get(parse_result.format, "npm")
     return {
         "ecosystem": ecosystem,

@@ -9,6 +9,9 @@ import pytest
 
 import codex_plugin_scanner.guard.runtime.lockfile_parse_result as lockfile_parse_module
 import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
+from codex_plugin_scanner.guard.runtime.lockfile_evaluation_support import (
+    incomplete_lockfile_fallback_target,
+)
 from codex_plugin_scanner.guard.runtime.lockfile_parse_result import LOCKFILE_MAX_BYTES
 from codex_plugin_scanner.guard.runtime.package_manifest_diff import _DeadlineExceededError
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
@@ -21,6 +24,32 @@ from tests.test_guard_js_supply_chain_phase11 import (
     _package,
     _write_text,
 )
+
+
+@pytest.mark.parametrize(
+    ("lockfile_name", "package_manager"),
+    (
+        ("package-lock.json", "npm"),
+        ("pnpm-lock.yaml", "pnpm"),
+        ("yarn.lock", "yarn"),
+        ("bun.lock", "bun"),
+    ),
+)
+def test_incomplete_javascript_lockfile_fallback_preserves_package_manager(
+    lockfile_name: str,
+    package_manager: str,
+) -> None:
+    parse_result = lockfile_parse_module.incomplete_lockfile_result(
+        lockfile_name,
+        b"",
+        error_reason="parse_error",
+        budget_ms=200,
+    )
+
+    target = incomplete_lockfile_fallback_target(parse_result)
+
+    assert target["ecosystem"] == "npm"
+    assert target["package_manager"] == package_manager
 
 
 def test_evaluate_package_request_artifact_preserves_direct_version_when_package_lock_contains_nested_duplicate(

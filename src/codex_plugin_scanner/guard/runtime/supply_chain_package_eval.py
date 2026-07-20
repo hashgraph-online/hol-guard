@@ -2242,9 +2242,7 @@ def _transitive_lockfile_results(
         if not parse_result.complete:
             results.append(
                 _incomplete_lockfile_package_result(
-                    target=(
-                        direct_targets[0] if direct_targets else incomplete_lockfile_fallback_target(parse_result)
-                    ),
+                    target=(direct_targets[0] if direct_targets else incomplete_lockfile_fallback_target(parse_result)),
                     parse_result=parse_result,
                 )
             )
