@@ -122,7 +122,12 @@ from codex_plugin_scanner.guard.daemon.manager import (
 
 payload = json.loads(sys.stdin.read())
 guard_home = Path(payload["guard_home"]).expanduser().resolve()
-home_dir = Path(payload["home_dir"]).expanduser().resolve()
+home_dir_value = payload.get("home_dir")
+home_dir = (
+    Path(home_dir_value).expanduser().resolve()
+    if isinstance(home_dir_value, str) and home_dir_value.strip()
+    else Path.home().resolve()
+)
 state_path = guard_home / "daemon-state.json"
 if not state_path.is_file():
     print(json.dumps({"status": "not_running"}))
@@ -138,12 +143,13 @@ if not guard_daemon_retirement_is_complete(guard_home):
     raise SystemExit(1)
 clear_guard_daemon_state(guard_home)
 repair_approval_center_locator(guard_home)
-daemon_url = ensure_guard_daemon_after_update(
-    guard_home,
-    home_dir=home_dir,
-    preferred_port=preferred_port,
-    allow_windows_job_breakaway=True,
-)
+refresh_parameters = inspect.signature(ensure_guard_daemon_after_update).parameters
+refresh_kwargs = {"preferred_port": preferred_port}
+if "home_dir" in refresh_parameters:
+    refresh_kwargs["home_dir"] = home_dir
+if "allow_windows_job_breakaway" in refresh_parameters:
+    refresh_kwargs["allow_windows_job_breakaway"] = True
+daemon_url = ensure_guard_daemon_after_update(guard_home, **refresh_kwargs)
 print(json.dumps({"status": "restarted", "retired": retired, "daemon_url": daemon_url}))
 """.strip()
 _DAEMON_REFRESH_CLEANUP_SCRIPT = """

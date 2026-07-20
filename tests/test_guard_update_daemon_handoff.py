@@ -31,7 +31,11 @@ def test_refresh_script_adapts_to_new_manager_signature(
     def no_op(_guard_home: Path) -> None:
         return None
 
+    def retirement_complete(_guard_home: Path) -> bool:
+        return True
+
     monkeypatch.setattr(manager, "retire_all_guard_daemons_for_home", retire)
+    monkeypatch.setattr(manager, "guard_daemon_retirement_is_complete", retirement_complete)
     monkeypatch.setattr(manager, "clear_guard_daemon_state", no_op)
     monkeypatch.setattr(manager, "repair_approval_center_locator", no_op)
 
@@ -94,11 +98,15 @@ def test_refresh_script_preserves_legacy_manager_signature(
     def no_op(_guard_home: Path) -> None:
         return None
 
+    def retirement_complete(_guard_home: Path) -> bool:
+        return True
+
     def legacy_parameters(received_guard_home: Path, *, preferred_port: int | None = None) -> str:
         observed.update(guard_home=received_guard_home, preferred_port=preferred_port)
         return "http://127.0.0.1:8124"
 
     monkeypatch.setattr(manager, "retire_all_guard_daemons_for_home", retire)
+    monkeypatch.setattr(manager, "guard_daemon_retirement_is_complete", retirement_complete)
     monkeypatch.setattr(manager, "clear_guard_daemon_state", no_op)
     monkeypatch.setattr(manager, "repair_approval_center_locator", no_op)
     monkeypatch.setattr(manager, "ensure_guard_daemon_after_update", legacy_parameters)
