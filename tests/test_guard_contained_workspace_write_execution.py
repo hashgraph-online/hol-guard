@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import argparse
 import hashlib
-import io
 import os
 import sys
 from collections.abc import Callable
@@ -12,10 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import contained_workspace_write_execution as write_module
-from codex_plugin_scanner.guard.cli import commands_contained_write as cli_module
-from codex_plugin_scanner.guard.cli.commands_parser import add_guard_root_parser
 from codex_plugin_scanner.guard.contained_workspace_write_execution import (
-    ContainedWorkspaceWriteResult,
     ContainedWriteOperation,
     try_execute_contained_workspace_write,
 )
@@ -44,6 +39,9 @@ def _write(path: Path, content: str, *, executable: bool = False) -> None:
     _ = path.write_text(content, encoding="utf-8")
     if executable:
         _ = path.chmod(0o700)
+
+
+write_contained_test_file = _write
 
 
 def _health() -> tuple[ContainmentHealthEvidence, str]:
@@ -139,6 +137,9 @@ def _prepare(
     return workspace, guard_home
 
 
+prepare_contained_write_test = _prepare
+
+
 def test_copy_promotes_one_exact_output_atomically(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     workspace, guard_home = _prepare(tmp_path, monkeypatch, b'{"new":true}\n')
     _write(workspace / "build" / "schema.json", '{"new":true}\n')
@@ -161,6 +162,27 @@ def test_copy_promotes_one_exact_output_atomically(tmp_path: Path, monkeypatch: 
     assert (workspace / "generated" / "schema.json").read_bytes() == b'{"new":true}\n'
     assert (workspace / "generated" / "schema.json").stat().st_mode & 0o777 == 0o640
     assert not tuple((workspace / "generated").glob(".guard-output-*"))
+
+
+def test_atomic_promotion_rejects_zero_length_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    workspace, guard_home = _prepare(tmp_path, monkeypatch, b"new\n")
+    _write(workspace / "build" / "schema.json", "new\n")
+    _write(workspace / "generated" / "schema.json", "old\n")
+
+    def zero_length_write(_descriptor: int, _content: bytes) -> int:
+        return 0
+
+    monkeypatch.setattr(os, "write", zero_length_write)
+    result = try_execute_contained_workspace_write(
+        "copy-generated",
+        workspace=workspace,
+        guard_home=guard_home,
+        source="build/schema.json",
+        target="generated/schema.json",
+    )
+    assert result is None
+    assert (workspace / "generated" / "schema.json").read_bytes() == b"old\n"
+    assert not tuple(workspace.glob("generated/.guard-output-*"))
 
 
 @pytest.mark.parametrize(
@@ -426,63 +448,3 @@ def test_macos_copy_runs_contained_and_promotes_atomically(
     assert result is not None
     assert result.decision.disposition is FinalDisposition.SILENT_CONTAINED
     assert (workspace / "generated" / "schema.json").read_text(encoding="utf-8") == '{"contained":true}\n'
-
-
-def test_cli_parser_and_json_output_expose_no_paths_or_content(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace, guard_home = _prepare(tmp_path, monkeypatch, b"output\n")
-    _write(workspace / "in.json", "input\n")
-    _write(workspace / "out.json", "old\n")
-    result = try_execute_contained_workspace_write(
-        "copy-generated",
-        workspace=workspace,
-        guard_home=guard_home,
-        source="in.json",
-        target="out.json",
-    )
-    assert result is not None
-    result = ContainedWorkspaceWriteResult(
-        result.exit_code,
-        "private-content",
-        result.stderr,
-        result.proof,
-        result.decision,
-        result.operation_id,
-        result.output_digest,
-    )
-    parser = argparse.ArgumentParser()
-    add_guard_root_parser(parser)
-    args = parser.parse_args(
-        ("contained-write", "--workspace", str(workspace), "copy", "in.json", "out.json", "--json")
-    )
-
-    def execute_write(
-        _operation: ContainedWriteOperation,
-        *,
-        workspace: Path,
-        guard_home: Path,
-        source: str,
-        target: str | None = None,
-        environment: dict[str, str] | None = None,
-        timeout_seconds: float = 120.0,
-    ) -> ContainedWorkspaceWriteResult:
-        del workspace, guard_home, source, target, environment, timeout_seconds
-        return result
-
-    monkeypatch.setattr(cli_module, "try_execute_contained_workspace_write", execute_write)
-    output = io.StringIO()
-
-    status = cli_module._run_guard_contained_write_command(
-        args,
-        guard_home=guard_home,
-        workspace=workspace,
-        output_stream=output,
-    )
-
-    assert status == 0
-    payload = output.getvalue()
-    assert "private-content" not in payload
-    assert str(tmp_path) not in payload
-    assert '"decision":"silent-contained"' in payload

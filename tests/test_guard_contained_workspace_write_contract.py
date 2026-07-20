@@ -59,6 +59,15 @@ def test_every_cdx_062_case_retains_exact_review_or_block_floor() -> None:
     assert adversarial_count == 4167
 
 
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    (("ruff format src/module.py", "format-write"), ("cp build/schema.json generated/schema.json", "copy-generated")),
+)
+def test_direct_workspace_writes_use_the_exact_operation_allowlist(command: str, expected: str) -> None:
+    evaluation = evaluate_command(command, cwd=Path("workspace"), home_dir=Path("home"))
+    assert workspace_write_candidate_operation(evaluation.command) == expected
+
+
 def test_capture_rejects_undeclared_change_and_link(tmp_path: Path) -> None:
     workspace = (tmp_path / "workspace").resolve()
     snapshot = (tmp_path / "snapshot").resolve()

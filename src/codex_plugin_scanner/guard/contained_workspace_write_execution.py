@@ -338,7 +338,10 @@ def _promote_output(workspace: Path, target: str, content: bytes, *, expected_di
             os.fchmod(temporary, expected_state[1] if expected_state is not None else 0o600)
             offset = 0
             while offset < len(content):
-                offset += os.write(temporary, content[offset:])
+                written = os.write(temporary, content[offset:])
+                if written == 0:
+                    raise OSError("atomic output promotion made no write progress")
+                offset += written
             os.fsync(temporary)
         finally:
             os.close(temporary)

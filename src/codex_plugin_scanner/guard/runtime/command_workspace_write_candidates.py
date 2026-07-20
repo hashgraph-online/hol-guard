@@ -92,8 +92,6 @@ def workspace_write_candidate_operation(command: CanonicalCommand) -> str | None
         return None
     if len(command.segments) == 1:
         operation = command.segments[0]
-        if _name(operation) != "git":
-            return None
     elif len(command.segments) == 2:
         directory, operation = command.segments
         if _name(directory) != "cd" or len(directory.arguments) != 1 or not _plain_value(directory.arguments[0]):
