@@ -32,6 +32,53 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
 )
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.policy_bundle_signing_helpers import (
+    TEST_POLICY_BUNDLE_WORKSPACE_ID,
+    policy_bundle_test_keyring,
+    sign_policy_bundle,
+)
+
+_SIGNED_POLICY_REFRESHED_AT = "2026-07-17T00:01:00+00:00"
+
+
+def _provision_test_policy_bundle_anchor(store: GuardStore) -> None:
+    store.set_sync_payload(
+        "oauth_local_credentials",
+        {"workspace_id": TEST_POLICY_BUNDLE_WORKSPACE_ID},
+        _SIGNED_POLICY_REFRESHED_AT,
+    )
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID),
+        _SIGNED_POLICY_REFRESHED_AT,
+    )
+
+
+def _activate_signed_block_policy(store: GuardStore) -> None:
+    policy_bundle = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "policy-2026-07-17.post-claim",
+            "issuedAt": _SIGNED_POLICY_REFRESHED_AT,
+            "expiresAt": None,
+            "verifier": {},
+            "rolloutState": "enforcing",
+            "policyDefaults": {
+                "mode": "enforce",
+                "defaultAction": "block",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "require-reapproval",
+                "newNetworkDomainAction": "block",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [],
+            "acknowledgements": [],
+        },
+        workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID,
+    )
+    store.set_sync_payload("policy_bundle", policy_bundle, _SIGNED_POLICY_REFRESHED_AT)
 
 
 def _record_once_allow(
@@ -367,6 +414,7 @@ def test_runtime_hook_reloads_synced_policy_after_atomic_claim(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     store = GuardStore(guard_home)
+    _provision_test_policy_bundle_anchor(store)
     config = GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
@@ -419,11 +467,7 @@ def test_runtime_hook_reloads_synced_policy_after_atomic_claim(
     def claim_then_sync_block(decision: object, *, now: str | None = None) -> bool:
         claimed = original_claim(decision, now=now)
         if claimed:
-            store.set_sync_payload(
-                "policy",
-                {"defaultAction": "block"},
-                "2026-07-17T00:01:00+00:00",
-            )
+            _activate_signed_block_policy(store)
         return claimed
 
     monkeypatch.setattr(store, "claim_approval_reuse_decision", claim_then_sync_block)
@@ -453,6 +497,7 @@ def test_generic_hook_reloads_synced_policy_after_atomic_claim(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     store = GuardStore(guard_home)
+    _provision_test_policy_bundle_anchor(store)
     config = GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
@@ -494,11 +539,7 @@ def test_generic_hook_reloads_synced_policy_after_atomic_claim(
     def claim_then_sync_block(decision: object, *, now: str | None = None) -> bool:
         claimed = original_claim(decision, now=now)
         if claimed:
-            store.set_sync_payload(
-                "policy",
-                {"defaultAction": "block"},
-                "2026-07-17T00:01:00+00:00",
-            )
+            _activate_signed_block_policy(store)
         return claimed
 
     monkeypatch.setattr(store, "claim_approval_reuse_decision", claim_then_sync_block)
@@ -546,6 +587,7 @@ def test_copilot_hook_reloads_synced_policy_after_atomic_claim(
         encoding="utf-8",
     )
     store = GuardStore(guard_home)
+    _provision_test_policy_bundle_anchor(store)
     config = GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
@@ -580,11 +622,7 @@ def test_copilot_hook_reloads_synced_policy_after_atomic_claim(
     def claim_then_sync_block(decision: object, *, now: str | None = None) -> bool:
         claimed = original_claim(decision, now=now)
         if claimed:
-            store.set_sync_payload(
-                "policy",
-                {"defaultAction": "block"},
-                "2026-07-17T00:01:00+00:00",
-            )
+            _activate_signed_block_policy(store)
         return claimed
 
     monkeypatch.setattr(store, "claim_approval_reuse_decision", claim_then_sync_block)
@@ -623,6 +661,7 @@ def test_browser_post_wait_revalidation_reloads_synced_policy(
     secret_file = workspace / ".env"
     secret_file.write_text("TOKEN=test-only\n", encoding="utf-8")
     store = GuardStore(guard_home)
+    _provision_test_policy_bundle_anchor(store)
     config = GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
@@ -641,11 +680,7 @@ def test_browser_post_wait_revalidation_reloads_synced_policy(
     monkeypatch.setattr(hook_command, "_review_runtime_artifact_hook", lambda *_args, **_kwargs: None)
 
     def browser_decision(**kwargs: object) -> str:
-        store.set_sync_payload(
-            "policy",
-            {"defaultAction": "block"},
-            "2026-07-17T00:01:00+00:00",
-        )
+        _activate_signed_block_policy(store)
         provider = cast(object, kwargs["fresh_context_provider"])
         assert callable(provider)
         fresh_context = provider()

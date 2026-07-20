@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import platform
 import plistlib
+import stat
 import urllib.parse
 from collections.abc import Mapping
 from pathlib import Path
@@ -31,6 +33,7 @@ _TOP_LEVEL_KEYS = {
     "settings",
     "lockedSettings",
     "requiredHarnesses",
+    "policyBundleKeyring",
     "network",
     "update",
     "daemonStartup",
@@ -64,6 +67,23 @@ def _validate_settings(value: object) -> dict[str, object]:
     return settings
 
 
+def _validate_policy_bundle_keyring(value: object) -> dict[str, object]:
+    trusted_keys = importlib.import_module("..policy_bundle_trusted_keys", __package__)
+    try:
+        keys = trusted_keys.load_policy_bundle_verification_keys(
+            value,
+            require_keyring_contract=True,
+        )
+    except ValueError as exc:
+        raise ManagedPolicyError("policyBundleKeyring is invalid") from exc
+    if not isinstance(value, dict):  # strict loader guarantees this; retained for type narrowing
+        raise ManagedPolicyError("policyBundleKeyring is invalid")
+    workspace_id = value.get("workspaceId")
+    if not isinstance(workspace_id, str) or not workspace_id.strip():
+        raise ManagedPolicyError("policyBundleKeyring is invalid")
+    return trusted_keys.policy_bundle_keyring_payload(keys, workspace_id=workspace_id.strip())
+
+
 def parse_managed_policy(payload: object) -> ManagedPolicy:
     """Parse a policy object using the stable v1 contract."""
 
@@ -75,6 +95,9 @@ def parse_managed_policy(payload: object) -> ManagedPolicy:
         raise ManagedPolicyError("unsupported managed policy schema")
 
     settings = _validate_settings(root.get("settings", {}))
+    policy_bundle_keyring = (
+        _validate_policy_bundle_keyring(root["policyBundleKeyring"]) if "policyBundleKeyring" in root else None
+    )
     locked_raw = root.get("lockedSettings", [])
     if not isinstance(locked_raw, list) or not all(isinstance(item, str) and item for item in locked_raw):
         raise ManagedPolicyError("lockedSettings must be an array of setting paths")
@@ -137,6 +160,7 @@ def parse_managed_policy(payload: object) -> ManagedPolicy:
         schema_version=MDM_POLICY_SCHEMA_VERSION,
         settings=settings,
         locked_settings=locked,
+        policy_bundle_keyring=policy_bundle_keyring,
         required_harnesses=tuple(sorted(set(cast(list[str], harnesses_raw)))),
         network=network,
         update=update,
@@ -153,6 +177,36 @@ def _read_policy_file(path: Path) -> object:
     if path.suffix.lower() == ".plist":
         return plistlib.loads(data)
     return json.loads(data)
+
+
+def _machine_policy_source_is_trusted(path: Path, system_name: str) -> bool:
+    """Require the native Unix policy and its path to remain machine-owned."""
+
+    if system_name == "Windows":
+        # Windows policy authority is read from HKLM. ProgramData cache paths
+        # are not authority until their owner and DACL can be verified through
+        # native security APIs; POSIX mode bits are not meaningful there.
+        return False
+    if not path.is_absolute():
+        return False
+    current = path
+    while True:
+        try:
+            metadata = current.lstat()
+        except OSError:
+            return False
+        if stat.S_ISLNK(metadata.st_mode):
+            return False
+        if current == path:
+            if not stat.S_ISREG(metadata.st_mode):
+                return False
+        elif not stat.S_ISDIR(metadata.st_mode):
+            return False
+        if metadata.st_uid != 0 or metadata.st_mode & 0o022:
+            return False
+        if current.parent == current:
+            return True
+        current = current.parent
 
 
 def _read_windows_policy() -> tuple[object | None, str]:
@@ -200,14 +254,22 @@ def _write_policy_cache(payload: object, system_name: str) -> None:
 
 
 def _cache_owner_is_trusted(path: Path, system_name: str) -> bool:
+    if system_name == "Windows":
+        return False
     metadata = path.stat()
-    return system_name == "Windows" or (metadata.st_uid == 0 and not metadata.st_mode & 0o022)
+    return metadata.st_uid == 0 and not metadata.st_mode & 0o022
 
 
 def _load_policy_cache(system_name: str) -> ManagedPolicyState | None:
     path = _cache_path(system_name)
-    if not path.is_file():
+    if not os.path.lexists(path):
         return None
+    if system_name == "Windows":
+        # Never promote an unverifiable ProgramData file into policy-signing
+        # authority. Its presence still records a fail-closed managed state.
+        return ManagedPolicyState("tampered", str(path), reason_code="managed_policy_cache_tampered")
+    if not _machine_policy_source_is_trusted(path, system_name):
+        return ManagedPolicyState("tampered", str(path), reason_code="managed_policy_cache_tampered")
     try:
         metadata = path.stat()
         if metadata.st_size > _MAX_POLICY_BYTES:
@@ -244,9 +306,15 @@ def load_managed_policy(*, policy_path: Path | None = None, system_name: str | N
             if native_path is None:
                 return ManagedPolicyState("absent", "native", reason_code="managed_policy_absent")
             source = str(native_path)
-            if not native_path.exists():
+            if not os.path.lexists(native_path):
                 cached = _load_policy_cache(resolved_system)
                 return cached or ManagedPolicyState("absent", source, reason_code="managed_policy_absent")
+            if not _machine_policy_source_is_trusted(native_path, resolved_system):
+                return ManagedPolicyState(
+                    "tampered",
+                    source,
+                    reason_code="managed_policy_source_tampered",
+                )
             payload = _read_policy_file(native_path)
         policy = parse_managed_policy(payload)
         if policy_path is None:

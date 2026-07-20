@@ -35,6 +35,8 @@ from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supp
 from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.shim_execution_helpers import write_fake_manager_script
 from tests.test_guard_protect import _seed_bundle_cache_only, _SyncAndEvaluateHandler
 from tests.test_guard_supply_chain_evaluator import _cloud_response, _EvaluateHandler
@@ -69,9 +71,40 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
         "access_token": token,
         "dpop_key_material": None,
     }
+    if workspace_id is not None:
+        store.set_sync_payload(
+            "policy_bundle_keyring",
+            policy_bundle_test_keyring(workspace_id=workspace_id),
+            now,
+        )
 
 
 WORKSPACE_ID = "workspace-alpha"
+
+
+def _signed_cached_policy_bundle(rules: list[dict[str, object]]) -> dict[str, object]:
+    bundle = build_cloud_exception_policy_bundle(workspace_id=WORKSPACE_ID)
+    bundle["rules"] = rules
+    return sign_policy_bundle(bundle, workspace_id=WORKSPACE_ID)
+
+
+def _cached_policy_rule(
+    rule_id: str,
+    *,
+    matcher_families: list[str],
+    ecosystems: list[str] | None = None,
+    artifact_type: str | None = None,
+) -> dict[str, object]:
+    rule: dict[str, object] = {
+        "ruleId": rule_id,
+        "action": "block",
+        "reason": "Test-only cached package policy.",
+        "matcherFamilies": matcher_families,
+        "scope": {"ecosystems": ecosystems or []},
+    }
+    if artifact_type is not None:
+        rule["artifactType"] = artifact_type
+    return rule
 
 
 def _seed_paid_bundle_entitlement(home_dir: Path) -> None:
@@ -1597,15 +1630,14 @@ def test_guard_protect_ignores_stale_policy_bundle_package_family_block(
         )
         store.set_sync_payload(
             "policy_bundle",
-            {
-                "rules": [
-                    {
-                        "ruleId": "policy-graph-default-high-block",
-                        "matcherFamilies": ["package-request"],
-                        "scope": {"ecosystems": []},
-                    }
+            _signed_cached_policy_bundle(
+                [
+                    _cached_policy_rule(
+                        "policy-graph-default-high-block",
+                        matcher_families=["package-request"],
+                    )
                 ]
-            },
+            ),
             "2026-05-19T00:00:00Z",
         )
         _seed_workspace_sync_credentials(home_dir, sync_url)
@@ -1642,7 +1674,7 @@ def test_guard_protect_ignores_stale_policy_bundle_package_family_block(
     assert "saved package policy" not in payload["supply_chain_evaluation"]["user_copy"]["harness_message"]
 
 
-def test_guard_protect_keeps_active_policy_bundle_package_family_block(
+def test_guard_protect_ignores_ecosystem_scoped_policy_bundle_family_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -1666,7 +1698,7 @@ def test_guard_protect_keeps_active_policy_bundle_package_family_block(
                     artifact_id="family:package-request",
                     source="policy-bundle",
                     owner="npm-block",
-                    reason="Block npm installs.",
+                    reason="Test-only cached package policy.",
                 )
             ],
             "2026-05-19T00:00:00Z",
@@ -1674,15 +1706,9 @@ def test_guard_protect_keeps_active_policy_bundle_package_family_block(
         )
         store.set_sync_payload(
             "policy_bundle",
-            {
-                "rules": [
-                    {
-                        "ruleId": "npm-block",
-                        "matcherFamilies": ["package-request"],
-                        "scope": {"ecosystems": ["npm"]},
-                    }
-                ]
-            },
+            _signed_cached_policy_bundle(
+                [_cached_policy_rule("npm-block", matcher_families=["package-request"], ecosystems=["npm"])]
+            ),
             "2026-05-19T00:00:00Z",
         )
         _seed_workspace_sync_credentials(home_dir, sync_url)
@@ -1707,16 +1733,15 @@ def test_guard_protect_keeps_active_policy_bundle_package_family_block(
 
     payload = json.loads(capsys.readouterr().out)
 
-    assert rc == 2
+    assert rc == 0
+    assert payload["supply_chain_evaluation"]["decision"] == "warn"
     reason_codes = {
         reason["code"]
         for reason in payload["supply_chain_evaluation"]["reasons"]
         if isinstance(reason, dict) and isinstance(reason.get("code"), str)
     }
-    assert "saved_package_block" in reason_codes
-    assert payload["supply_chain_evaluation"]["user_copy"]["next_step"].startswith(
-        "hol-guard policies clear --decision-id"
-    )
+    assert "saved_package_block" not in reason_codes
+    assert "current_package_policy" in reason_codes
 
 
 def test_guard_protect_keeps_matcher_only_policy_bundle_package_family_block(
@@ -1743,7 +1768,7 @@ def test_guard_protect_keeps_matcher_only_policy_bundle_package_family_block(
                     artifact_id="family:package-request",
                     source="policy-bundle",
                     owner="matcher-only-package-block",
-                    reason="Block package installs.",
+                    reason="Test-only cached package policy.",
                 )
             ],
             "2026-05-19T00:00:00Z",
@@ -1751,7 +1776,15 @@ def test_guard_protect_keeps_matcher_only_policy_bundle_package_family_block(
         )
         store.set_sync_payload(
             "policy_bundle",
-            {"rules": [{"ruleId": "matcher-only-package-block", "matcherFamilies": ["package-request"]}]},
+            _signed_cached_policy_bundle(
+                [
+                    _cached_policy_rule(
+                        "matcher-only-package-block",
+                        matcher_families=["package-request"],
+                        artifact_type="package_request",
+                    )
+                ]
+            ),
             "2026-05-19T00:00:00Z",
         )
         _seed_workspace_sync_credentials(home_dir, sync_url)
@@ -1785,7 +1818,7 @@ def test_guard_protect_keeps_matcher_only_policy_bundle_package_family_block(
     assert "saved_package_block" in reason_codes
 
 
-def test_guard_protect_keeps_package_scope_even_when_matcher_list_omits_package_family(
+def test_guard_protect_ignores_package_family_row_when_signed_matcher_omits_package_family(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -1809,7 +1842,7 @@ def test_guard_protect_keeps_package_scope_even_when_matcher_list_omits_package_
                     artifact_id="family:package-request",
                     source="policy-bundle",
                     owner="ecosystem-package-block",
-                    reason="Block npm installs.",
+                    reason="Test-only cached package policy.",
                 )
             ],
             "2026-05-19T00:00:00Z",
@@ -1817,15 +1850,9 @@ def test_guard_protect_keeps_package_scope_even_when_matcher_list_omits_package_
         )
         store.set_sync_payload(
             "policy_bundle",
-            {
-                "rules": [
-                    {
-                        "ruleId": "ecosystem-package-block",
-                        "matcherFamilies": ["tool-action"],
-                        "scope": {"ecosystems": ["npm"]},
-                    }
-                ]
-            },
+            _signed_cached_policy_bundle(
+                [_cached_policy_rule("ecosystem-package-block", matcher_families=["tool-action"], ecosystems=["npm"])]
+            ),
             "2026-05-19T00:00:00Z",
         )
         _seed_workspace_sync_credentials(home_dir, sync_url)
@@ -1850,13 +1877,15 @@ def test_guard_protect_keeps_package_scope_even_when_matcher_list_omits_package_
 
     payload = json.loads(capsys.readouterr().out)
 
-    assert rc == 2
+    assert rc == 0
+    assert payload["supply_chain_evaluation"]["decision"] == "warn"
     reason_codes = {
         reason["code"]
         for reason in payload["supply_chain_evaluation"]["reasons"]
         if isinstance(reason, dict) and isinstance(reason.get("code"), str)
     }
-    assert "saved_package_block" in reason_codes
+    assert "saved_package_block" not in reason_codes
+    assert "current_package_policy" in reason_codes
 
 
 def test_guard_protect_ignores_stale_policy_bundle_package_family_on_cloud_allow(
@@ -1892,15 +1921,14 @@ def test_guard_protect_ignores_stale_policy_bundle_package_family_on_cloud_allow
         )
         store.set_sync_payload(
             "policy_bundle",
-            {
-                "rules": [
-                    {
-                        "ruleId": "policy-graph-default-high-block",
-                        "matcherFamilies": ["package-request"],
-                        "scope": {"ecosystems": []},
-                    }
+            _signed_cached_policy_bundle(
+                [
+                    _cached_policy_rule(
+                        "policy-graph-default-high-block",
+                        matcher_families=["package-request"],
+                    )
                 ]
-            },
+            ),
             "2026-05-19T00:00:00Z",
         )
         _seed_workspace_sync_credentials(home_dir, sync_url)

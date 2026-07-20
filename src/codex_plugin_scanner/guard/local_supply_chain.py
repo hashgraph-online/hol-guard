@@ -333,13 +333,17 @@ def build_local_supply_chain_posture(
     *,
     now: str | None = None,
 ) -> dict[str, object]:
+    from .synced_policy import synced_policy_payload
+
     snapshot_now = _parse_timestamp(now) or datetime.now(timezone.utc)
     workspace_id = store.get_cloud_workspace_id()
     cloud_profile = store.get_cloud_sync_profile()
     summary = _dict_payload(store.get_sync_payload("supply_chain_bundle_summary"))
     entitlement = _dict_payload(store.get_sync_payload("supply_chain_bundle_entitlement"))
-    remote_policy = _dict_payload(store.get_sync_payload("policy"))
-    team_policy_pack = _dict_payload(store.get_sync_payload("team_policy_pack"))
+    remote_policy = _dict_payload(synced_policy_payload(store))
+    # Legacy team-policy siblings are not signed policy-bundle content and
+    # therefore cannot contribute enforcement or managed-policy status.
+    team_policy_pack: dict[str, object] = {}
     cached_bundle = store.get_cached_supply_chain_bundle(workspace_id) if workspace_id else None
     bundle_payload = _dict_payload(cached_bundle.get("bundle")) if isinstance(cached_bundle, dict) else {}
     expires_at_text = _string_value(bundle_payload.get("expiresAt"))
@@ -2290,8 +2294,10 @@ def _stored_package_policy_is_stale_policy_bundle_family(decision: dict[str, obj
     get_sync_payload = getattr(store, "get_sync_payload", None)
     if not callable(get_sync_payload):
         return False
-    bundle = get_sync_payload("policy_bundle")
-    if not isinstance(bundle, dict):
+    from .synced_policy import validated_synced_policy_bundle
+
+    bundle = validated_synced_policy_bundle(store)
+    if bundle is None:
         return False
     rules = bundle.get("rules")
     if not isinstance(rules, list):
@@ -2299,39 +2305,15 @@ def _stored_package_policy_is_stale_policy_bundle_family(decision: dict[str, obj
     matching_rules = [rule for rule in rules if isinstance(rule, dict) and _string_value(rule.get("ruleId")) == owner]
     if not matching_rules:
         return True
-    return not any(_policy_bundle_rule_has_package_scope(rule) for rule in matching_rules)
+    from .policy_bundle_decisions import policy_bundle_rule_saved_decision_families
+
+    return not any("package-request" in policy_bundle_rule_saved_decision_families(rule) for rule in matching_rules)
 
 
 def _stored_package_policy_evaluation_requires_review(evaluation: Any) -> bool:
     policy_action = _string_value(getattr(evaluation, "policy_action", None))
     decision = _string_value(getattr(evaluation, "decision", None))
     return policy_action in {"block", "require-reapproval"} or decision in {"block", "ask"}
-
-
-def _policy_bundle_rule_has_package_scope(rule: dict[str, object]) -> bool:
-    if _string_value(rule.get("artifactType")) == "package_request":
-        return True
-    matcher_families = rule.get("matcherFamilies")
-    scope = rule.get("scope")
-    if _policy_bundle_scope_has_package_scope(scope):
-        return True
-    if isinstance(matcher_families, list) and "package-request" not in matcher_families:
-        return False
-    if not isinstance(scope, dict):
-        return isinstance(matcher_families, list) and "package-request" in matcher_families
-    return False
-
-
-def _policy_bundle_scope_has_package_scope(scope: object) -> bool:
-    if not isinstance(scope, dict):
-        return False
-    for key in ("ecosystems", "packages", "packageNames", "packageManagers", "registries", "sourceUrls"):
-        value = scope.get(key)
-        if isinstance(value, list) and value:
-            return True
-        if _string_value(value) is not None:
-            return True
-    return False
 
 
 def _saved_package_policy_clear_command(

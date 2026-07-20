@@ -28,6 +28,7 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import store as guard_store_module
+from codex_plugin_scanner.guard import synced_policy as synced_policy_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, wait_for_approval_requests
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
@@ -42,7 +43,7 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _runtime_policy_path
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
-from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
+from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, overlay_synced_guard_policy
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import (
@@ -54,7 +55,10 @@ from codex_plugin_scanner.guard.models import (
     PolicyDecision,
 )
 from codex_plugin_scanner.guard.policy import decide_action, decide_action_with_v2
-from codex_plugin_scanner.guard.policy_bundle_parser import validated_policy_bundle_payload
+from codex_plugin_scanner.guard.policy_bundle_parser import (
+    payload_hash_for_policy_bundle,
+    validated_policy_bundle_payload,
+)
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.proxy import stdio as stdio_proxy_module
 from codex_plugin_scanner.guard.receipts import build_receipt
@@ -79,6 +83,12 @@ from codex_plugin_scanner.guard.store import (
     GuardStore,
     _runtime_scoped_exact_match_key,
     runtime_tool_action_exact_match_context,
+)
+from codex_plugin_scanner.guard.synced_policy import synced_policy_payload
+from tests.policy_bundle_signing_helpers import (
+    policy_bundle_test_keyring,
+    policy_bundle_test_verification_key,
+    sign_policy_bundle,
 )
 
 
@@ -143,6 +153,93 @@ def _make_pinnable_harness_executable(
     executable_path.chmod(executable_path.stat().st_mode | 0o755)
     monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
     return executable_path.resolve()
+
+
+def _signed_test_policy_bundle(
+    rules: list[dict[str, object]],
+    *,
+    bundle_version: str = "policy-2026-01-01.1",
+    issued_at: str = "2026-01-01T00:00:00Z",
+    expires_at: str | None = None,
+) -> dict[str, object]:
+    return sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": bundle_version,
+            "issuedAt": issued_at,
+            "expiresAt": expires_at,
+            "verifier": {},
+            "rolloutState": "enforcing",
+            "policyDefaults": {
+                "mode": "enforce",
+                "defaultAction": "block",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "require-reapproval",
+                "newNetworkDomainAction": "block",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": rules,
+            "acknowledgements": [],
+        },
+        workspace_id="workspace-1",
+    )
+
+
+def _signed_test_package_block_bundle(
+    *,
+    bundle_version: str,
+    issued_at: str,
+) -> dict[str, object]:
+    return _signed_test_policy_bundle(
+        [
+            {
+                "ruleId": "signed-package-block",
+                "action": "block",
+                "reason": "Only this signed package rule may be materialized.",
+                "artifactType": "package_request",
+                "matcherFamilies": ["package-request"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": [],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            }
+        ],
+        bundle_version=bundle_version,
+        issued_at=issued_at,
+    )
+
+
+def _cache_signed_test_policy_bundle(
+    store: GuardStore,
+    rules: list[dict[str, object]],
+    *,
+    bundle_version: str = "policy-2026-01-01.1",
+    issued_at: str = "2026-01-01T00:00:00Z",
+    expires_at: str | None = None,
+) -> None:
+    workspace_id = "workspace-1"
+    store.set_sync_payload("oauth_local_credentials", {"workspace_id": workspace_id}, "2026-01-01T00:00:00Z")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id=workspace_id),
+        "2026-01-01T00:00:00Z",
+    )
+    store.set_sync_payload(
+        "policy_bundle",
+        _signed_test_policy_bundle(
+            rules,
+            bundle_version=bundle_version,
+            issued_at=issued_at,
+            expires_at=expires_at,
+        ),
+        "2026-01-01T00:00:00Z",
+    )
 
 
 def _request_header(request: urllib.request.Request, name: str) -> str | None:
@@ -19468,7 +19565,8 @@ def test_sync_receipts_marks_latest_connect_first_sync_succeeded(tmp_path, monke
 
 def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store)
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload("policy_bundle_keyring", policy_bundle_test_keyring(), "2026-04-19T00:00:00Z")
     for index in range(65):
         store.add_receipt(
             GuardReceipt(
@@ -19515,7 +19613,7 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
                     "issuedAt": "2026-04-19T00:00:10+00:00",
                     "expiresAt": None,
                     "verifier": {
-                        "algorithm": "sha256",
+                        "algorithm": "rsa-pss-sha256",
                         "keyId": "guard-policy-bundle-v1",
                         "signature": None,
                     },
@@ -19593,7 +19691,8 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
     sync_payloads_list = list(sync_payloads)
     first_bundle = sync_payloads_list[0]["policyBundle"]
     if isinstance(first_bundle, dict):
-        first_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(first_bundle)
+        first_bundle = sign_policy_bundle(first_bundle)
+        sync_payloads_list[0]["policyBundle"] = first_bundle
     sync_payloads = iter(sync_payloads_list)
 
     class _Response:
@@ -19623,73 +19722,11 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
     assert metadata_calls == [True]
     assert payload["receipts_stored"] == 65
     assert payload["advisories_stored"] == 2
-    assert payload["exceptions_stored"] == 2
-    assert payload["remote_policies_stored"] == 6
-    assert store.get_sync_payload("policy") == {"mode": "enforce"}
-    assert store.get_sync_payload("policy_bundle") == {
-        "contractVersion": "guard-policy-bundle.v1",
-        "bundleVersion": "policy-2026-04-19.1",
-        "bundleHash": guard_runner_module._computed_policy_bundle_hash(
-            {
-                "contractVersion": "guard-policy-bundle.v1",
-                "bundleVersion": "policy-2026-04-19.1",
-                "issuedAt": "2026-04-19T00:00:10+00:00",
-                "expiresAt": None,
-                "verifier": {
-                    "algorithm": "sha256",
-                    "keyId": "guard-policy-bundle-v1",
-                    "signature": None,
-                },
-                "rolloutState": "enforcing",
-                "policyDefaults": {
-                    "mode": "enforce",
-                    "defaultAction": "warn",
-                    "unknownPublisherAction": "review",
-                    "changedHashAction": "require-reapproval",
-                    "newNetworkDomainAction": "warn",
-                    "subprocessAction": "block",
-                    "telemetryEnabled": False,
-                    "syncEnabled": True,
-                },
-                "rules": [],
-                "acknowledgements": [
-                    {
-                        "deviceId": "device-1",
-                        "deviceName": "Guard local daemon",
-                        "acknowledgedAt": "2026-04-19T00:00:11+00:00",
-                        "status": "synced",
-                    }
-                ],
-            }
-        ),
-        "issuedAt": "2026-04-19T00:00:10+00:00",
-        "expiresAt": None,
-        "verifier": {
-            "algorithm": "sha256",
-            "keyId": "guard-policy-bundle-v1",
-            "signature": None,
-        },
-        "rolloutState": "enforcing",
-        "policyDefaults": {
-            "mode": "enforce",
-            "defaultAction": "warn",
-            "unknownPublisherAction": "review",
-            "changedHashAction": "require-reapproval",
-            "newNetworkDomainAction": "warn",
-            "subprocessAction": "block",
-            "telemetryEnabled": False,
-            "syncEnabled": True,
-        },
-        "rules": [],
-        "acknowledgements": [
-            {
-                "deviceId": "device-1",
-                "deviceName": "Guard local daemon",
-                "acknowledgedAt": "2026-04-19T00:00:11+00:00",
-                "status": "synced",
-            }
-        ],
-    }
+    assert payload["exceptions_stored"] == 0
+    assert payload["remote_policies_stored"] == 0
+    assert store.get_sync_payload("policy") == {}
+    assert store.get_sync_payload("team_policy_pack") == {}
+    assert store.get_sync_payload("policy_bundle") == first_bundle
     assert store.get_sync_payload("policy_bundle_ack") == {
         "appliedAt": "2026-04-19T00:00:11+00:00",
         "bundleHash": store.get_sync_payload("policy_bundle")["bundleHash"],
@@ -19699,29 +19736,21 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
         "status": "synced",
     }
     assert {item["artifactId"] for item in store.list_cached_advisories(limit=None)} == {"artifact-a", "artifact-b"}
-    assert {item["artifact_id"] for item in store.list_policy_decisions() if item["artifact_id"]} >= {
-        "allowed-one",
-        "allowed-two",
-        "blocked-one",
-        "blocked-two",
-    }
-    assert {item["publisher"] for item in store.list_policy_decisions() if item["publisher"]} == {
-        "trusted-one",
-        "trusted-two",
-    }
+    assert store.list_policy_decisions() == []
+    assert store.list_cloud_exceptions() == []
     assert len(store.list_events(event_name="premium_advisory")) == 2
-    assert len(store.list_events(event_name="exception_expiring")) == 2
+    assert len(store.list_events(event_name="exception_expiring")) == 0
 
 
 def test_policy_bundle_validation_rejects_tampered_hash():
     bundle = {
         "contractVersion": "guard-policy-bundle.v1",
         "bundleVersion": "policy-2026-04-19.1",
-        "bundleHash": "sha256:tampered",
+        "bundleHash": "",
         "issuedAt": "2026-04-19T00:00:10+00:00",
         "expiresAt": None,
         "verifier": {
-            "algorithm": "sha256",
+            "algorithm": "rsa-pss-sha256",
             "keyId": "guard-policy-bundle-v1",
             "signature": None,
         },
@@ -19755,24 +19784,35 @@ def test_policy_bundle_validation_rejects_tampered_hash():
         "acknowledgements": [],
     }
 
-    validated_bundle, reason = validated_policy_bundle_payload(bundle)
+    signing_key = policy_bundle_test_verification_key()
+    bundle = sign_policy_bundle(bundle, key=signing_key)
+    bundle["bundleHash"] = "sha256:tampered"
+    validated_bundle, reason = validated_policy_bundle_payload(
+        bundle,
+        trusted_verification_keys=(signing_key,),
+        anchored_verification_keys=(signing_key,),
+        expected_workspace_id="workspace-1",
+    )
 
     assert validated_bundle is None
     assert reason == "bundle_hash_mismatch"
 
 
-def test_receipt_sync_context_uploads_policy_bundle_acknowledgement(tmp_path):
+def test_receipt_sync_context_uploads_policy_bundle_acknowledgement(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    _cache_signed_test_policy_bundle(store, [])
+    policy_bundle = store.get_sync_payload("policy_bundle")
+    assert isinstance(policy_bundle, dict)
+    device_id, device_name = guard_runner_module._guard_device_metadata(store)
+    acknowledgement = guard_runner_module._policy_bundle_acknowledgement_payload(
+        device_id=device_id,
+        device_name=device_name,
+        policy_bundle=policy_bundle,
+        synced_at="2026-04-19T00:00:11+00:00",
+    )
     store.set_sync_payload(
         "policy_bundle_ack",
-        {
-            "appliedAt": "2026-04-19T00:00:11+00:00",
-            "bundleHash": "sha256:bundle",
-            "bundleVersion": "policy-2026-04-19.1",
-            "deviceId": "device-1",
-            "deviceName": "MacBook Pro",
-            "status": "synced",
-        },
+        acknowledgement,
         "2026-04-19T00:00:11+00:00",
     )
 
@@ -19781,14 +19821,88 @@ def test_receipt_sync_context_uploads_policy_bundle_acknowledgement(tmp_path):
         local_guard_online_at="2026-04-19T00:01:00+00:00",
     )
 
-    assert context["policyBundleAcknowledgement"] == {
-        "appliedAt": "2026-04-19T00:00:11+00:00",
-        "bundleHash": "sha256:bundle",
-        "bundleVersion": "policy-2026-04-19.1",
-        "deviceId": "device-1",
-        "deviceName": "MacBook Pro",
-        "status": "synced",
+    assert context["policyBundleAcknowledgement"] == acknowledgement
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("bundleHash", "sha256:stale"),
+        ("bundleVersion", "policy-stale"),
+        ("deviceId", "wrong-device-id"),
+        ("deviceName", "Wrong device name"),
+        ("status", "pending"),
+        ("appliedAt", ""),
+        ("appliedAt", "not-a-timestamp"),
+    ],
+)
+def test_receipt_sync_context_omits_invalid_policy_bundle_acknowledgement(
+    tmp_path: Path,
+    field: str,
+    invalid_value: str,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _cache_signed_test_policy_bundle(store, [])
+    policy_bundle = store.get_sync_payload("policy_bundle")
+    assert isinstance(policy_bundle, dict)
+    device_id, device_name = guard_runner_module._guard_device_metadata(store)
+    acknowledgement = guard_runner_module._policy_bundle_acknowledgement_payload(
+        device_id=device_id,
+        device_name=device_name,
+        policy_bundle=policy_bundle,
+        synced_at="2026-04-19T00:00:11+00:00",
+    )
+    acknowledgement[field] = invalid_value
+    store.set_sync_payload(
+        "policy_bundle_ack",
+        acknowledgement,
+        "2026-04-19T00:00:11+00:00",
+    )
+
+    context = guard_runner_module._receipt_sync_context(
+        store,
+        local_guard_online_at="2026-04-19T00:01:00+00:00",
+    )
+
+    assert "policyBundleAcknowledgement" not in context
+
+
+def test_receipt_sync_context_omits_acknowledgement_for_untrusted_cached_bundle(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _cache_signed_test_policy_bundle(store, [])
+    policy_bundle = store.get_sync_payload("policy_bundle")
+    assert isinstance(policy_bundle, dict)
+    device_id, device_name = guard_runner_module._guard_device_metadata(store)
+    acknowledgement = guard_runner_module._policy_bundle_acknowledgement_payload(
+        device_id=device_id,
+        device_name=device_name,
+        policy_bundle=policy_bundle,
+        synced_at="2026-04-19T00:00:11+00:00",
+    )
+    store.set_sync_payload(
+        "policy_bundle_ack",
+        acknowledgement,
+        "2026-04-19T00:00:11+00:00",
+    )
+    policy_defaults = policy_bundle.get("policyDefaults")
+    assert isinstance(policy_defaults, dict)
+    tampered_policy_bundle = dict(policy_bundle)
+    tampered_policy_bundle["policyDefaults"] = {
+        **policy_defaults,
+        "mode": "monitor",
     }
+    store.set_sync_payload(
+        "policy_bundle",
+        tampered_policy_bundle,
+        "2026-04-19T00:00:12+00:00",
+    )
+
+    context = guard_runner_module._receipt_sync_context(
+        store,
+        local_guard_online_at="2026-04-19T00:01:00+00:00",
+    )
+
+    assert "policyBundleAcknowledgement" not in context
 
 
 def test_policy_bundle_validation_rejects_missing_rules_field():
@@ -19799,7 +19913,7 @@ def test_policy_bundle_validation_rejects_missing_rules_field():
         "issuedAt": "2026-04-19T00:00:10+00:00",
         "expiresAt": None,
         "verifier": {
-            "algorithm": "sha256",
+            "algorithm": "rsa-pss-sha256",
             "keyId": "guard-policy-bundle-v1",
             "signature": None,
         },
@@ -19825,7 +19939,8 @@ def test_policy_bundle_validation_rejects_missing_rules_field():
 
 def test_sync_receipts_preserves_last_known_good_policy_bundle_on_invalid_update(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store)
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload("policy_bundle_keyring", policy_bundle_test_keyring(), "2026-04-19T00:00:00Z")
 
     valid_bundle = {
         "contractVersion": "guard-policy-bundle.v1",
@@ -19834,7 +19949,7 @@ def test_sync_receipts_preserves_last_known_good_policy_bundle_on_invalid_update
         "issuedAt": "2026-04-19T00:00:10+00:00",
         "expiresAt": None,
         "verifier": {
-            "algorithm": "sha256",
+            "algorithm": "rsa-pss-sha256",
             "keyId": "guard-policy-bundle-v1",
             "signature": None,
         },
@@ -19854,11 +19969,12 @@ def test_sync_receipts_preserves_last_known_good_policy_bundle_on_invalid_update
                 "ruleId": "pkg-block",
                 "action": "block",
                 "reason": "Block risky package installs before execution.",
+                "artifactType": "package_request",
                 "matcherFamilies": ["package-request"],
                 "scope": {
                     "agents": [],
                     "devices": [],
-                    "ecosystems": ["npm"],
+                    "ecosystems": [],
                     "environments": ["development"],
                     "harnesses": ["codex"],
                     "locations": [],
@@ -19867,11 +19983,24 @@ def test_sync_receipts_preserves_last_known_good_policy_bundle_on_invalid_update
         ],
         "acknowledgements": [],
     }
-    valid_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(valid_bundle)
+    valid_bundle = sign_policy_bundle(valid_bundle)
     invalid_bundle = dict(valid_bundle)
-    invalid_bundle["bundleVersion"] = "policy-2026-04-19.1"
-    invalid_bundle["issuedAt"] = "2026-04-18T23:59:00+00:00"
+    invalid_bundle["bundleVersion"] = "policy-2026-04-19.3"
+    invalid_bundle["issuedAt"] = "2026-04-19T00:00:11+00:00"
+    invalid_bundle["rules"] = [{**valid_bundle["rules"][0], "action": "allow"}]
+    invalid_bundle["verifier"] = {
+        "algorithm": "sha256",
+        "keyId": "attacker-recomputed-digest",
+        "signature": None,
+    }
     invalid_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(invalid_bundle)
+    invalid_bundle["payloadHash"] = payload_hash_for_policy_bundle(invalid_bundle)
+    invalid_bundle["verifier"]["signature"] = invalid_bundle["payloadHash"]
+    inactive_bundle = dict(valid_bundle)
+    inactive_bundle["bundleVersion"] = "policy-2026-04-19.4"
+    inactive_bundle["issuedAt"] = "2026-04-19T00:00:13+00:00"
+    inactive_bundle["rolloutState"] = "simulated"
+    inactive_bundle = sign_policy_bundle(inactive_bundle)
 
     responses = iter(
         [
@@ -19884,6 +20013,11 @@ def test_sync_receipts_preserves_last_known_good_policy_bundle_on_invalid_update
                 "syncedAt": "2026-04-19T00:00:12+00:00",
                 "receiptsStored": 0,
                 "policyBundle": invalid_bundle,
+            },
+            {
+                "syncedAt": "2026-04-19T00:00:13+00:00",
+                "receiptsStored": 0,
+                "policyBundle": inactive_bundle,
             },
         ]
     )
@@ -19914,10 +20048,834 @@ def test_sync_receipts_preserves_last_known_good_policy_bundle_on_invalid_update
     guard_runner_module.sync_receipts(store)
 
     assert first_bundle == store.get_sync_payload("policy_bundle")
-    assert store.get_sync_payload("policy_bundle_last_error") == {
-        "reason": "bundle_version_downgrade",
-    }
+    last_error = store.get_sync_payload("policy_bundle_last_error")
+    assert last_error["reason"] == "unsupported_signature_algorithm"
+    assert "Sync again" in last_error["message"]
     assert store.resolve_policy("codex", "codex:project:package-request:persisted", "hash") == "block"
+
+    guard_runner_module.sync_receipts(store)
+
+    assert first_bundle == store.get_sync_payload("policy_bundle")
+    last_error = store.get_sync_payload("policy_bundle_last_error")
+    assert last_error["reason"] == "inactive_rollout_state"
+    assert "not active for local enforcement" in last_error["message"]
+    assert store.resolve_policy("codex", "codex:project:package-request:persisted", "hash") == "block"
+
+
+def test_invalid_bundle_cannot_fall_back_to_co_delivered_unsigned_policy(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-1"),
+        "2026-04-19T00:00:00Z",
+    )
+    invalid_bundle = _signed_test_policy_bundle(
+        [],
+        bundle_version="policy-2026-04-19.3",
+        issued_at="2026-04-19T00:00:00Z",
+    )
+    invalid_bundle["verifier"] = {
+        "algorithm": "sha256",
+        "keyId": "attacker-recomputed-digest",
+        "signature": None,
+    }
+    invalid_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(invalid_bundle)
+    invalid_bundle["payloadHash"] = payload_hash_for_policy_bundle(invalid_bundle)
+    invalid_bundle["verifier"]["signature"] = invalid_bundle["payloadHash"]
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "syncedAt": "2026-04-19T00:00:01Z",
+                    "receiptsStored": 0,
+                    "policyBundle": invalid_bundle,
+                    "policy": {"mode": "observe", "defaultAction": "allow"},
+                    "teamPolicyPack": {
+                        "name": "Unsigned fallback",
+                        "allowedPublishers": ["attacker.example"],
+                    },
+                    "exceptions": [
+                        {
+                            "scope": "artifact",
+                            "harness": "*",
+                            "artifactId": "attacker-allow",
+                            "reason": "Unsigned fallback allow",
+                            "expiresAt": "2099-01-01T00:00:00Z",
+                        }
+                    ],
+                }
+            ).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return type(
+                "_EventsResponse",
+                (),
+                {
+                    "__enter__": lambda self: self,
+                    "__exit__": lambda self, exc_type, exc, tb: False,
+                    "read": lambda self: b'{"accepted":0,"statuses":[]}',
+                },
+            )()
+        return _Response()
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    summary = guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy") == {}
+    assert store.get_sync_payload("team_policy_pack") == {}
+    assert store.resolve_policy("codex", "attacker-allow", "hash") is None
+    assert store.resolve_policy("codex", "other", "hash", publisher="attacker.example") is None
+    assert store.list_cloud_exceptions() == []
+    assert summary["exceptions_stored"] == 0
+    assert store.get_sync_payload("policy_bundle_last_error")["reason"] == "unsupported_signature_algorithm"
+
+
+def test_valid_signed_empty_bundle_excludes_co_delivered_unsigned_policy_siblings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-1"),
+        "2026-07-17T00:00:00Z",
+    )
+    signed_bundle = _signed_test_policy_bundle(
+        [],
+        bundle_version="policy-2026-07-17.1",
+        issued_at="2026-07-17T00:00:00Z",
+    )
+    response_payload = {
+        "syncedAt": "2026-07-17T00:00:01Z",
+        "receiptsStored": 0,
+        "policyBundle": signed_bundle,
+        "policy": {
+            "mode": "observe",
+            "defaultAction": "allow",
+            "newNetworkDomainAction": "allow",
+            "subprocessAction": "allow",
+        },
+        "teamPolicyPack": {
+            "name": "Unsigned sibling policy",
+            "allowedPublishers": ["unsigned.publisher.example"],
+            "blockedArtifacts": ["unsigned-team-block"],
+        },
+        "exceptions": [
+            {
+                "exceptionId": "unsigned-exception",
+                "scope": "artifact",
+                "harness": "*",
+                "artifactId": "unsigned-exception-artifact",
+                "owner": "attacker@example.com",
+                "reason": "Unsigned sibling allow",
+                "expiresAt": "2099-01-01T00:00:00Z",
+            }
+        ],
+    }
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        return _Response(response_payload)
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    summary = guard_runner_module.sync_receipts(store)
+    effective_config = overlay_synced_guard_policy(
+        GuardConfig(
+            guard_home=store.guard_home,
+            workspace=None,
+            mode="enforce",
+            default_action="block",
+            new_network_domain_action="block",
+            subprocess_action="block",
+        ),
+        synced_policy_payload(store),
+    )
+
+    assert store.get_sync_payload("policy_bundle") == signed_bundle
+    assert store.get_sync_payload("policy") == {}
+    assert store.get_sync_payload("team_policy_pack") == {}
+    assert store.list_policy_decisions() == []
+    assert store.list_cloud_exceptions() == []
+    assert store.resolve_policy("codex", "unsigned-exception-artifact", "hash") is None
+    assert store.resolve_policy("codex", "unsigned-team-block", "hash") is None
+    assert store.resolve_policy("codex", "other", "hash", publisher="unsigned.publisher.example") is None
+    assert summary["exceptions_stored"] == 0
+    assert summary["cloud_exceptions_stored"] == 0
+    assert summary["remote_policies_stored"] == 0
+    assert effective_config.mode == "enforce"
+    assert effective_config.default_action == "block"
+    assert effective_config.new_network_domain_action == "block"
+    assert effective_config.subprocess_action == "block"
+
+
+def test_fresh_mdm_activation_bootstraps_first_signed_policy_sync(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.mdm import lifecycle as mdm_lifecycle
+    from codex_plugin_scanner.guard.mdm import policy as mdm_policy
+    from codex_plugin_scanner.guard.mdm.contracts import (
+        MDM_POLICY_SCHEMA_VERSION,
+        ManagedPolicyState,
+    )
+
+    home = tmp_path / "home"
+    home.mkdir()
+    keyring = policy_bundle_test_keyring(workspace_id="workspace-1")
+    managed_policy = mdm_policy.parse_managed_policy(
+        {
+            "schemaVersion": MDM_POLICY_SCHEMA_VERSION,
+            "settings": {},
+            "policyBundleKeyring": keyring,
+        }
+    )
+    managed_state = ManagedPolicyState(
+        "active",
+        "managed-policy-test",
+        policy=managed_policy,
+    )
+    monkeypatch.setattr(mdm_lifecycle, "load_managed_policy", lambda: managed_state)
+    monkeypatch.setattr(mdm_policy, "load_managed_policy", lambda: managed_state)
+    monkeypatch.setattr(
+        mdm_lifecycle,
+        "apply_managed_install",
+        lambda *_args, **_kwargs: {"managed_installs": []},
+    )
+
+    mdm_lifecycle.activate_user(home, "developer")
+    store = GuardStore(home / ".hol-guard")
+    local_keyring = store.get_sync_payload("policy_bundle_keyring")
+    assert isinstance(local_keyring, dict)
+    assert local_keyring["keys"] == []
+    assert store.get_sync_payload("managed_policy_bundle_keyring_mirror") == keyring
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    signed_bundle = _signed_test_package_block_bundle(
+        bundle_version="policy-2026-07-17.mdm-bootstrap",
+        issued_at="2026-07-17T00:00:00Z",
+    )
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        return _Response(
+            {
+                "syncedAt": "2026-07-17T00:00:01Z",
+                "receiptsStored": 0,
+                "policyBundle": signed_bundle,
+            }
+        )
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    summary = guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy_bundle") == signed_bundle
+    persisted_local_keyring = store.get_sync_payload("policy_bundle_keyring")
+    assert isinstance(persisted_local_keyring, dict)
+    assert persisted_local_keyring["keys"] == []
+    assert store.get_sync_payload("managed_policy_bundle_keyring_mirror") == keyring
+    assert summary["remote_policies_stored"] == 1
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:project:package-request:fresh-managed-device",
+            "hash",
+        )
+        == "block"
+    )
+
+
+def test_cached_bundle_is_not_activated_after_live_anchor_revocation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-1"),
+        "2026-07-17T00:00:00Z",
+    )
+    cached_bundle = _signed_test_package_block_bundle(
+        bundle_version="policy-2026-07-17.anchor-race",
+        issued_at="2026-07-17T00:00:00Z",
+    )
+    store.set_sync_payload("policy_bundle", cached_bundle, "2026-07-17T00:00:00Z")
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        return _Response(
+            {
+                "syncedAt": "2026-07-17T00:00:01Z",
+                "receiptsStored": 0,
+            }
+        )
+
+    real_validate = guard_runner_module.validate_synced_policy_bundle
+    cached_validation_calls = 0
+    final_validation_calls = 0
+
+    def _initial_anchor(*args, **kwargs):
+        nonlocal cached_validation_calls
+        cached_validation_calls += 1
+        return real_validate(*args, **kwargs)
+
+    def _revoked_anchor(*args, **kwargs):
+        nonlocal final_validation_calls
+        final_validation_calls += 1
+        return None, "signing_key_revoked", ()
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "validate_synced_policy_bundle", _revoked_anchor)
+    monkeypatch.setattr(synced_policy_module, "validate_synced_policy_bundle", _initial_anchor)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    summary = guard_runner_module.sync_receipts(store)
+
+    assert cached_validation_calls >= 1
+    assert final_validation_calls == 1
+    assert store.get_sync_payload("policy_bundle") is None
+    assert store.get_sync_payload("policy_bundle_last_error")["reason"] == "signing_key_revoked"
+    assert store.list_policy_decisions() == []
+    assert summary["remote_policies_stored"] == 0
+
+
+def test_omitted_bundle_with_invalid_cached_authority_clears_unsigned_legacy_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-1"),
+        "2026-07-17T00:00:00Z",
+    )
+    expired_current = _signed_test_policy_bundle(
+        [],
+        bundle_version="policy-2020-01-01.1",
+        issued_at="2020-01-01T00:00:00Z",
+        expires_at="2020-01-02T00:00:00Z",
+    )
+    invalid_last_good = _signed_test_policy_bundle(
+        [],
+        bundle_version="policy-2026-07-16.1",
+        issued_at="2026-07-16T00:00:00Z",
+    )
+    invalid_last_good["bundleHash"] = "sha256:tampered-last-good"
+    store.set_sync_payload("policy_bundle", expired_current, "2020-01-01T00:00:00Z")
+    store.set_sync_payload("policy_bundle_last_good", invalid_last_good, "2026-07-16T00:00:00Z")
+    store.set_sync_payload(
+        "policy",
+        {"mode": "observe", "defaultAction": "allow"},
+        "2026-07-16T00:00:00Z",
+    )
+    store.set_sync_payload(
+        "team_policy_pack",
+        {"name": "Stale unsigned policy", "allowedPublishers": ["stale.publisher.example"]},
+        "2026-07-16T00:00:00Z",
+    )
+    store.replace_remote_policies(
+        [
+            PolicyDecision(
+                harness="*",
+                scope="artifact",
+                action="allow",
+                artifact_id="stale-cloud-allow",
+                source="cloud-sync",
+            ),
+            PolicyDecision(
+                harness="*",
+                scope="publisher",
+                action="allow",
+                publisher="stale.publisher.example",
+                source="team-policy",
+            ),
+            PolicyDecision(
+                harness="*",
+                scope="artifact",
+                action="allow",
+                artifact_id="stale-bundle-allow",
+                source="policy-bundle",
+            ),
+        ],
+        "2026-07-16T00:00:00Z",
+        remote_write_authorized=True,
+    )
+    store.set_cloud_exceptions(
+        [
+            {
+                "id": "stored-unsigned-exception",
+                "effect": "allow",
+                "scope": "artifact",
+                "harness": "*",
+                "owner": "attacker@example.com",
+                "expiry": "2099-01-01T00:00:00+00:00",
+                "provenance": "receipt-sync",
+            }
+        ],
+        "2026-07-16T00:00:00Z",
+    )
+    response_payload = {
+        "syncedAt": "2026-07-17T00:00:01Z",
+        "receiptsStored": 0,
+        "policy": {"mode": "observe", "defaultAction": "allow"},
+        "teamPolicyPack": {
+            "name": "New unsigned policy",
+            "allowedPublishers": ["new.publisher.example"],
+        },
+        "exceptions": [
+            {
+                "exceptionId": "new-unsigned-exception",
+                "scope": "artifact",
+                "harness": "*",
+                "artifactId": "new-unsigned-allow",
+                "owner": "attacker@example.com",
+                "expiresAt": "2099-01-01T00:00:00Z",
+            }
+        ],
+    }
+
+    assert {item["source"] for item in store.list_policy_decisions()} == {
+        "cloud-sync",
+        "team-policy",
+        "policy-bundle",
+    }
+    raw_cloud_exceptions = store.get_sync_payload("cloud_exceptions")
+    assert isinstance(raw_cloud_exceptions, list)
+    assert [item["id"] for item in raw_cloud_exceptions if isinstance(item, dict)] == ["stored-unsigned-exception"]
+    # Cached exception rows are never authority without a currently valid,
+    # signed policy bundle, even before the next sync clears the stale cache.
+    assert store.list_cloud_exceptions() == []
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        return _Response(response_payload)
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    summary = guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy") == {}
+    assert store.get_sync_payload("team_policy_pack") == {}
+    assert store.list_policy_decisions() == []
+    assert store.list_cloud_exceptions() == []
+    assert synced_policy_payload(store) is None
+    assert store.resolve_policy("codex", "stale-cloud-allow", "hash") is None
+    assert store.resolve_policy("codex", "stale-bundle-allow", "hash") is None
+    assert store.resolve_policy("codex", "new-unsigned-allow", "hash") is None
+    assert store.resolve_policy("codex", "other", "hash", publisher="stale.publisher.example") is None
+    assert store.resolve_policy("codex", "other", "hash", publisher="new.publisher.example") is None
+    assert summary["exceptions_stored"] == 0
+    assert summary["cloud_exceptions_stored"] == 0
+    assert summary["remote_policies_stored"] == 0
+
+
+@pytest.mark.parametrize(
+    ("malformed_bundle", "cached_authority"),
+    [
+        (None, "current"),
+        ("not-a-policy-bundle", "last-good"),
+        ([], None),
+    ],
+    ids=("null-preserves-current", "string-preserves-last-good", "list-without-fallback"),
+)
+def test_malformed_policy_bundle_field_rejects_unsigned_siblings_and_preserves_signed_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    malformed_bundle: object,
+    cached_authority: str | None,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-1"),
+        "2026-07-17T00:00:00Z",
+    )
+    cached_bundle = _signed_test_package_block_bundle(
+        bundle_version="policy-2026-07-17.2",
+        issued_at="2026-07-17T00:00:00Z",
+    )
+    if cached_authority == "current":
+        store.set_sync_payload("policy_bundle", cached_bundle, "2026-07-17T00:00:00Z")
+    elif cached_authority == "last-good":
+        store.set_sync_payload("policy_bundle_last_good", cached_bundle, "2026-07-17T00:00:00Z")
+
+    response_payload: dict[str, object] = {
+        "syncedAt": "2026-07-17T00:00:01Z",
+        "receiptsStored": 0,
+        "policyBundle": malformed_bundle,
+        "policy": {"mode": "observe", "defaultAction": "allow"},
+        "teamPolicyPack": {
+            "name": "Malformed bundle unsigned sibling",
+            "allowedPublishers": ["malformed.publisher.example"],
+        },
+        "exceptions": [
+            {
+                "exceptionId": "malformed-unsigned-exception",
+                "scope": "artifact",
+                "harness": "*",
+                "artifactId": "malformed-unsigned-allow",
+                "owner": "attacker@example.com",
+                "expiresAt": "2099-01-01T00:00:00Z",
+            }
+        ],
+    }
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        return _Response(response_payload)
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    summary = guard_runner_module.sync_receipts(store)
+
+    expected_current = cached_bundle if cached_authority is not None else None
+    expected_signed_rows = (
+        [("codex", "harness", "family:package-request", "block", "signed-package-block")]
+        if cached_authority is not None
+        else []
+    )
+    assert store.get_sync_payload("policy_bundle") == expected_current
+    if cached_authority == "last-good":
+        assert store.get_sync_payload("policy_bundle_last_good") == cached_bundle
+    assert store.get_sync_payload("policy_bundle_last_error")["reason"] == "invalid_policy_bundle"
+    assert store.get_sync_payload("policy") == {}
+    assert store.get_sync_payload("team_policy_pack") == {}
+    assert [
+        (item["harness"], item["scope"], item["artifact_id"], item["action"], item["owner"])
+        for item in store.list_policy_decisions()
+    ] == expected_signed_rows
+    assert store.list_cloud_exceptions() == []
+    assert store.resolve_policy("codex", "malformed-unsigned-allow", "hash") is None
+    assert store.resolve_policy("codex", "other", "hash", publisher="malformed.publisher.example") is None
+    assert summary["exceptions_stored"] == 0
+    assert summary["cloud_exceptions_stored"] == 0
+    assert summary["remote_policies_stored"] == len(expected_signed_rows)
+    if cached_authority is not None:
+        assert store.resolve_policy("codex", "codex:project:package-request:cached", "hash") == "block"
+
+
+def test_omitted_bundle_rematerializes_only_valid_cached_signed_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-1"),
+        "2026-07-17T00:00:00Z",
+    )
+    cached_bundle = _signed_test_package_block_bundle(
+        bundle_version="policy-2026-07-17.3",
+        issued_at="2026-07-17T00:00:00Z",
+    )
+    store.set_sync_payload("policy_bundle", cached_bundle, "2026-07-17T00:00:00Z")
+    store.set_sync_payload(
+        "policy",
+        {"mode": "observe", "defaultAction": "allow"},
+        "2026-07-17T00:00:00Z",
+    )
+    store.set_sync_payload(
+        "team_policy_pack",
+        {"name": "Stale unsigned policy", "allowedPublishers": ["stale.publisher.example"]},
+        "2026-07-17T00:00:00Z",
+    )
+    store.replace_remote_policies(
+        [
+            PolicyDecision(
+                harness="*",
+                scope="artifact",
+                action="allow",
+                artifact_id="stale-cloud-allow",
+                source="cloud-sync",
+            ),
+            PolicyDecision(
+                harness="*",
+                scope="publisher",
+                action="allow",
+                publisher="stale.publisher.example",
+                source="team-policy",
+            ),
+            PolicyDecision(
+                harness="*",
+                scope="artifact",
+                action="allow",
+                artifact_id="stale-bundle-allow",
+                owner="stale-unsigned-row",
+                source="policy-bundle",
+            ),
+        ],
+        "2026-07-17T00:00:00Z",
+        remote_write_authorized=True,
+    )
+    store.set_cloud_exceptions(
+        [
+            {
+                "id": "stale-receipt-sync-exception",
+                "effect": "allow",
+                "scope": "artifact",
+                "harness": "*",
+                "owner": "attacker@example.com",
+                "expiry": "2099-01-01T00:00:00+00:00",
+                "provenance": "receipt-sync",
+            }
+        ],
+        "2026-07-17T00:00:00Z",
+    )
+    response_payload: dict[str, object] = {
+        "syncedAt": "2026-07-17T00:00:01Z",
+        "receiptsStored": 0,
+        "policy": {"mode": "observe", "defaultAction": "allow"},
+        "teamPolicyPack": {
+            "name": "New unsigned policy",
+            "allowedPublishers": ["new.publisher.example"],
+        },
+        "exceptions": [
+            {
+                "exceptionId": "new-unsigned-exception",
+                "scope": "artifact",
+                "harness": "*",
+                "artifactId": "new-unsigned-allow",
+                "owner": "attacker@example.com",
+                "expiresAt": "2099-01-01T00:00:00Z",
+            }
+        ],
+    }
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        return _Response(response_payload)
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    summary = guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy_bundle") == cached_bundle
+    assert store.get_sync_payload("policy_bundle_last_error") == {}
+    assert store.get_sync_payload("policy") == {}
+    assert store.get_sync_payload("team_policy_pack") == {}
+    assert [
+        (item["harness"], item["scope"], item["artifact_id"], item["action"], item["owner"], item["source"])
+        for item in store.list_policy_decisions()
+    ] == [("codex", "harness", "family:package-request", "block", "signed-package-block", "policy-bundle")]
+    assert store.list_cloud_exceptions() == []
+    assert store.resolve_policy("codex", "codex:project:package-request:cached-current", "hash") == "block"
+    assert store.resolve_policy("codex", "stale-cloud-allow", "hash") is None
+    assert store.resolve_policy("codex", "stale-bundle-allow", "hash") is None
+    assert store.resolve_policy("codex", "new-unsigned-allow", "hash") is None
+    assert store.resolve_policy("codex", "other", "hash", publisher="stale.publisher.example") is None
+    assert store.resolve_policy("codex", "other", "hash", publisher="new.publisher.example") is None
+    assert summary["exceptions_stored"] == 0
+    assert summary["cloud_exceptions_stored"] == 0
+    assert summary["remote_policies_stored"] == 1
+
+
+def test_invalid_refresh_preserves_newer_current_bundle_after_interrupted_last_good_write(
+    tmp_path,
+    monkeypatch,
+):
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-1"),
+        "2026-01-01T00:00:00Z",
+    )
+    old_allow_rule = {
+        "ruleId": "old-package-allow",
+        "action": "allow",
+        "reason": "This superseded rule must not regain authority.",
+        "artifactType": "package_request",
+        "matcherFamilies": ["package-request"],
+        "scope": {
+            "agents": [],
+            "devices": [],
+            "ecosystems": [],
+            "environments": ["development"],
+            "harnesses": ["codex"],
+            "locations": [],
+        },
+    }
+    old_bundle = _signed_test_policy_bundle(
+        [old_allow_rule],
+        bundle_version="policy-2026-01-01.1",
+        issued_at="2026-01-01T00:00:00Z",
+    )
+    newer_current_bundle = _signed_test_policy_bundle(
+        [],
+        bundle_version="policy-2026-01-02.1",
+        issued_at="2026-01-02T00:00:00Z",
+    )
+    invalid_refresh = dict(newer_current_bundle)
+    invalid_refresh["bundleVersion"] = "policy-2026-01-03.1"
+    invalid_refresh["issuedAt"] = "2026-01-03T00:00:00Z"
+    invalid_refresh["verifier"] = {
+        "algorithm": "sha256",
+        "keyId": "attacker-recomputed-digest",
+        "signature": None,
+    }
+    invalid_refresh["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(invalid_refresh)
+    invalid_refresh["payloadHash"] = payload_hash_for_policy_bundle(invalid_refresh)
+    invalid_refresh["verifier"]["signature"] = invalid_refresh["payloadHash"]
+    responses = iter(
+        [
+            {
+                "syncedAt": "2026-01-01T00:00:01Z",
+                "receiptsStored": 0,
+                "policyBundle": old_bundle,
+            },
+            {
+                "syncedAt": "2026-01-03T00:00:01Z",
+                "receiptsStored": 0,
+                "policyBundle": invalid_refresh,
+            },
+        ]
+    )
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        return _Response(next(responses))
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    guard_runner_module.sync_receipts(store)
+    artifact_id = "codex:project:package-request:interrupted"
+    assert store.resolve_policy("codex", artifact_id, "hash") == "allow"
+
+    # Simulate interruption after the newer verified current bundle was stored,
+    # but before last-good and materialized policy rows were updated.
+    store.set_sync_payload("policy_bundle", newer_current_bundle, "2026-01-02T00:00:00Z")
+    assert store.get_sync_payload("policy_bundle_last_good") == old_bundle
+    assert store.resolve_policy("codex", artifact_id, "hash") is None
+
+    guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy_bundle") == newer_current_bundle
+    assert store.get_sync_payload("policy_bundle_last_good") == old_bundle
+    assert store.resolve_policy("codex", artifact_id, "hash") is None
+    assert not any(
+        item["source"] == "policy-bundle" and item["action"] == "allow" for item in store.list_policy_decisions()
+    )
+    assert store.get_sync_payload("policy_bundle_last_error")["reason"] == "unsupported_signature_algorithm"
 
 
 def test_policy_bundle_decisions_map_to_runtime_families(tmp_path):
@@ -19930,11 +20888,12 @@ def test_policy_bundle_decisions_map_to_runtime_families(tmp_path):
                 "ruleId": "pkg-block",
                 "action": "block",
                 "reason": "Block risky package installs.",
+                "artifactType": "package_request",
                 "matcherFamilies": ["package-request"],
                 "scope": {
                     "agents": [],
                     "devices": [],
-                    "ecosystems": ["npm"],
+                    "ecosystems": [],
                     "environments": ["development"],
                     "harnesses": ["codex"],
                     "locations": [],
@@ -19991,6 +20950,7 @@ def test_policy_bundle_decisions_map_to_runtime_families(tmp_path):
         device_name="MacBook Pro",
     )
     store.replace_remote_policies(decisions, "2026-04-19T00:00:11+00:00", remote_write_authorized=True)
+    _cache_signed_test_policy_bundle(store, bundle["rules"])
 
     assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "block"
     assert store.resolve_policy("codex", "codex:project:mcp:shell", "hash") == "review"
@@ -20048,6 +21008,12 @@ def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path)
         device_name="MacBook Pro",
     )
     store.replace_remote_policies(decisions, "2026-06-05T13:31:00+00:00", remote_write_authorized=True)
+    _cache_signed_test_policy_bundle(
+        store,
+        bundle["rules"],
+        bundle_version=str(bundle["bundleVersion"]),
+        expires_at=str(bundle["expiresAt"]),
+    )
 
     assert store.resolve_policy("codex", allow_artifact, "hash", workspace=workspace_a) == "allow"
     assert store.resolve_policy("codex", block_artifact, "hash", workspace=workspace_a) == "block"
@@ -20106,11 +21072,12 @@ def test_simulate_policy_bundle_receipts_replays_recent_receipts_without_enforci
                 "ruleId": "pkg-block",
                 "action": "block",
                 "reason": "Block risky package installs.",
+                "artifactType": "package_request",
                 "matcherFamilies": ["package-request"],
                 "scope": {
                     "agents": [],
                     "devices": [],
-                    "ecosystems": ["npm"],
+                    "ecosystems": [],
                     "environments": ["development"],
                     "harnesses": ["codex"],
                     "locations": [],
@@ -20264,19 +21231,273 @@ def test_policy_bundle_version_persists_after_store_reopen(tmp_path):
     }
 
 
-def test_policy_bundle_downgrade_check_ignores_mixed_timezone_formats():
+def test_cached_policy_bundle_revalidation_rejects_expired_last_known_good(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload("policy_bundle_keyring", policy_bundle_test_keyring(), "2026-04-19T00:00:00Z")
+    expired_bundle = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "policy-2020-01-01.1",
+        "bundleHash": "",
+        "issuedAt": "2020-01-01T00:00:00Z",
+        "expiresAt": "2020-01-02T00:00:00Z",
+        "verifier": {},
+        "rolloutState": "enforcing",
+        "policyDefaults": {
+            "mode": "enforce",
+            "defaultAction": "block",
+            "unknownPublisherAction": "block",
+            "changedHashAction": "block",
+            "newNetworkDomainAction": "block",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": True,
+        },
+        "rules": [],
+        "acknowledgements": [],
+    }
+    expired_bundle = sign_policy_bundle(expired_bundle)
+    store.set_sync_payload("policy_bundle_last_good", expired_bundle, "2020-01-01T00:00:00Z")
+
+    validated, reason = guard_runner_module._validate_cached_policy_bundle(store, expired_bundle)
+
+    assert validated is None
+    assert reason == "bundle_expired"
+
+
+def test_cached_and_last_good_policy_bundle_preserve_signed_empty_optional_fields(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    _cache_signed_test_policy_bundle(store, [])
+    policy_bundle = store.get_sync_payload("policy_bundle")
+    assert isinstance(policy_bundle, dict)
+    policy_bundle["cloudExceptions"] = []
+    policy_bundle["receiptRedactionLevel"] = "partial"
+    policy_bundle = sign_policy_bundle(policy_bundle)
+    store.set_sync_payload("policy_bundle", policy_bundle, "2026-01-01T00:00:00Z")
+    store.set_sync_payload("policy_bundle_last_good", policy_bundle, "2026-01-01T00:00:00Z")
+
+    cached, cached_reason = guard_runner_module._validate_cached_policy_bundle(
+        store,
+        store.get_sync_payload("policy_bundle"),
+    )
+    last_good, last_good_reason = guard_runner_module._validate_cached_policy_bundle(
+        store,
+        store.get_sync_payload("policy_bundle_last_good"),
+    )
+
+    assert cached_reason is None
+    assert cached == policy_bundle
+    assert last_good_reason is None
+    assert last_good == policy_bundle
+
+
+def test_materialized_policy_bundle_decision_requires_current_cached_signature(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload("policy_bundle_keyring", policy_bundle_test_keyring(), "2026-04-19T00:00:00Z")
+    store.replace_remote_policies(
+        [
+            PolicyDecision(
+                harness="codex",
+                scope="harness",
+                action="allow",
+                artifact_id="family:package-request",
+                source="policy-bundle",
+                owner="signed-package-allow",
+                reason="Test-only signed policy decision.",
+            )
+        ],
+        "2026-04-19T00:00:00Z",
+        remote_write_authorized=True,
+    )
+    policy_bundle = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "policy-2026-04-19.1",
+            "issuedAt": "2026-04-19T00:00:00Z",
+            "expiresAt": None,
+            "verifier": {},
+            "rolloutState": "enforcing",
+            "policyDefaults": {
+                "mode": "enforce",
+                "defaultAction": "block",
+                "unknownPublisherAction": "block",
+                "changedHashAction": "block",
+                "newNetworkDomainAction": "block",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [
+                {
+                    "ruleId": "signed-package-allow",
+                    "action": "allow",
+                    "reason": "Test-only signed policy decision.",
+                    "artifactType": "package_request",
+                    "matcherFamilies": ["package-request"],
+                    "scope": {"harnesses": ["codex"], "ecosystems": []},
+                }
+            ],
+            "acknowledgements": [],
+        }
+    )
+    digest_bundle = dict(policy_bundle)
+    digest_bundle["verifier"] = {
+        "algorithm": "sha256",
+        "keyId": "legacy-digest-only",
+        "signature": None,
+    }
+    digest_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(digest_bundle)
+    digest_bundle["payloadHash"] = payload_hash_for_policy_bundle(digest_bundle)
+    digest_bundle["verifier"]["signature"] = digest_bundle["payloadHash"]
+    store.set_sync_payload("policy_bundle", digest_bundle, "2026-04-19T00:00:00Z")
+
+    assert store.resolve_policy("codex", "codex:project:package-request:test", "sha256:test") is None
+
+    store.set_sync_payload("policy_bundle", policy_bundle, "2026-04-19T00:00:01Z")
+
+    assert store.resolve_policy("codex", "codex:project:package-request:test", "sha256:test") == "allow"
+
+
+def test_materialized_policy_bundle_decision_must_exist_in_current_signed_bundle(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    _cache_signed_test_policy_bundle(store, [])
+    store.replace_remote_policies(
+        [
+            PolicyDecision(
+                harness="codex",
+                scope="harness",
+                action="allow",
+                artifact_id="family:package-request",
+                source="policy-bundle",
+                owner="absent-signed-rule",
+                reason="This materialized allow is not present in the signed bundle.",
+            )
+        ],
+        "2026-01-01T00:00:00Z",
+        remote_write_authorized=True,
+    )
+
+    assert store.resolve_policy("codex", "codex:project:package-request:test", "sha256:test") is None
+
+
+def test_policy_bundle_replacement_invalidates_prevalidated_allow_claim(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-1"),
+        "2026-01-01T00:00:00Z",
+    )
+    allow_rule = {
+        "ruleId": "package-allow-before-replacement",
+        "action": "allow",
+        "reason": "Test-only signed package allow.",
+        "artifactType": "package_request",
+        "matcherFamilies": ["package-request"],
+        "scope": {
+            "agents": [],
+            "devices": [],
+            "ecosystems": [],
+            "environments": ["development"],
+            "harnesses": ["codex"],
+            "locations": [],
+        },
+    }
+    authorized_bundle = _signed_test_policy_bundle([allow_rule])
+    store.set_sync_payload("policy_bundle", authorized_bundle, "2026-01-01T00:00:00Z")
+    store.replace_remote_policies(
+        guard_runner_module._build_policy_bundle_decisions(
+            authorized_bundle,
+            device_id=guard_runner_module._guard_device_metadata(store)[0],
+            device_name=guard_runner_module._guard_device_metadata(store)[1],
+        ),
+        "2026-01-01T00:00:00Z",
+        remote_write_authorized=True,
+    )
+    artifact_id = "codex:project:package-request:claim-race"
+    lookup = store.resolve_policy_decision_lookup(
+        "codex",
+        artifact_id,
+        "sha256:claim-race",
+        now="2026-01-01T00:01:00Z",
+        consume_one_shot=False,
+    )
+    selected = lookup["decision"]
+    assert selected is not None
+    assert selected["action"] == "allow"
+    assert store.claim_approval_reuse_decision(
+        selected,
+        now="2026-01-01T00:02:00Z",
+    )
+
+    replacement_bundle = _signed_test_policy_bundle(
+        [],
+        bundle_version="policy-2026-01-02.1",
+        issued_at="2026-01-02T00:00:00Z",
+    )
+    store.set_sync_payload("policy_bundle", replacement_bundle, "2026-01-02T00:00:00Z")
+
+    assert not store.claim_approval_reuse_decision(
+        selected,
+        now="2026-01-02T00:01:00Z",
+    )
+
+
+def test_interrupted_policy_bundle_replacement_cannot_reuse_prior_materialized_allow(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    old_rule = {
+        "ruleId": "old-package-allow",
+        "action": "allow",
+        "reason": "Old signed package allow.",
+        "artifactType": "package_request",
+        "matcherFamilies": ["package-request"],
+        "scope": {"harnesses": ["codex"], "ecosystems": []},
+    }
+    _cache_signed_test_policy_bundle(store, [old_rule])
+    device_metadata = store.get_device_metadata()
+    old_bundle = store.get_sync_payload("policy_bundle")
+    assert isinstance(old_bundle, dict)
+    old_decisions = guard_runner_module._build_policy_bundle_decisions(
+        old_bundle,
+        device_id=device_metadata["installation_id"],
+        device_name=device_metadata["device_label"],
+    )
+    store.replace_remote_policies(
+        old_decisions,
+        "2026-01-01T00:00:00Z",
+        remote_write_authorized=True,
+    )
+    artifact_id = "codex:project:package-request:test"
+    assert store.resolve_policy("codex", artifact_id, "sha256:test") == "allow"
+
+    # Both sync paths persist the newly verified bundle before replacing its
+    # materialized rows. Simulate a process interruption at exactly that point.
+    replacement_bundle = _signed_test_policy_bundle(
+        [],
+        bundle_version="policy-2026-01-02.1",
+        issued_at="2026-01-02T00:00:00Z",
+    )
+    store.set_sync_payload("policy_bundle", replacement_bundle, "2026-01-02T00:00:00Z")
+    store.set_sync_payload("policy_bundle_last_good", replacement_bundle, "2026-01-02T00:00:00Z")
+
+    assert store.resolve_policy("codex", artifact_id, "sha256:test") is None
+
+
+def test_policy_bundle_downgrade_check_normalizes_mixed_timezone_formats():
     assert (
         guard_runner_module._policy_bundle_is_version_downgrade(
             {"issuedAt": "2026-06-05T13:30:00+00:00"},
             {"issuedAt": "2026-06-05T13:29:00"},
         )
-        is False
+        is True
     )
 
 
 def test_sync_receipts_uploads_policy_bundle_acknowledgement(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store)
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload("policy_bundle_keyring", policy_bundle_test_keyring(), "2026-06-05T13:29:00Z")
     requests: list[dict[str, object]] = []
     bundle = {
         "contractVersion": "guard-policy-bundle.v1",
@@ -20285,7 +21506,7 @@ def test_sync_receipts_uploads_policy_bundle_acknowledgement(tmp_path, monkeypat
         "issuedAt": "2026-06-05T13:30:00+00:00",
         "expiresAt": None,
         "verifier": {
-            "algorithm": "sha256",
+            "algorithm": "rsa-pss-sha256",
             "keyId": "guard-policy-bundle-v1",
             "signature": None,
         },
@@ -20303,7 +21524,7 @@ def test_sync_receipts_uploads_policy_bundle_acknowledgement(tmp_path, monkeypat
         "rules": [],
         "acknowledgements": [],
     }
-    bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(bundle)
+    bundle = sign_policy_bundle(bundle)
 
     class _Response:
         def __init__(self, payload: dict[str, object]) -> None:
@@ -20356,7 +21577,7 @@ def test_sync_receipts_uploads_policy_bundle_acknowledgement_to_sync_route(tmp_p
         "issuedAt": "2026-06-05T13:30:00+00:00",
         "expiresAt": None,
         "verifier": {
-            "algorithm": "sha256",
+            "algorithm": "rsa-pss-sha256",
             "keyId": "guard-policy-bundle-v1",
             "signature": None,
         },
@@ -20374,7 +21595,7 @@ def test_sync_receipts_uploads_policy_bundle_acknowledgement_to_sync_route(tmp_p
         "rules": [],
         "acknowledgements": [],
     }
-    bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(bundle)
+    bundle = sign_policy_bundle(bundle)
 
     class _AckSyncHandler(BaseHTTPRequestHandler):
         requests: ClassVar[list[dict[str, object]]] = []
@@ -20405,8 +21626,14 @@ def test_sync_receipts_uploads_policy_bundle_acknowledgement_to_sync_route(tmp_p
     try:
         _seed_guard_cloud(
             store,
+            workspace_id="workspace-1",
             sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
             token="guard-live-token",
+        )
+        store.set_sync_payload(
+            "policy_bundle_keyring",
+            policy_bundle_test_keyring(),
+            "2026-06-05T13:29:00Z",
         )
         monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
@@ -20429,6 +21656,11 @@ def test_sync_receipts_uploads_policy_bundle_acknowledgement_to_sync_route(tmp_p
 def test_sync_receipts_rejects_policy_bundle_for_the_wrong_workspace(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-a")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-a"),
+        "2026-06-05T13:29:00Z",
+    )
     bundle = {
         "contractVersion": "guard-policy-bundle.v1",
         "bundleVersion": "policy-2026-06-05.5",
@@ -20436,7 +21668,7 @@ def test_sync_receipts_rejects_policy_bundle_for_the_wrong_workspace(tmp_path, m
         "issuedAt": "2026-06-05T13:30:00+00:00",
         "expiresAt": None,
         "verifier": {
-            "algorithm": "sha256",
+            "algorithm": "rsa-pss-sha256",
             "keyId": "guard-policy-bundle-v1",
             "signature": None,
         },
@@ -20455,7 +21687,7 @@ def test_sync_receipts_rejects_policy_bundle_for_the_wrong_workspace(tmp_path, m
         "rules": [],
         "acknowledgements": [],
     }
-    bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(bundle)
+    bundle = sign_policy_bundle(bundle, workspace_id="workspace-b")
 
     class _Response:
         def __init__(self, payload: dict[str, object]) -> None:
@@ -20488,7 +21720,10 @@ def test_sync_receipts_rejects_policy_bundle_for_the_wrong_workspace(tmp_path, m
 
     assert store.get_sync_payload("policy_bundle") is None
     assert store.get_sync_payload("policy_bundle_last_good") is None
-    assert store.get_sync_payload("policy_bundle_last_error") == {"reason": "wrong_workspace"}
+    last_error = store.get_sync_payload("policy_bundle_last_error")
+    assert isinstance(last_error, dict)
+    assert last_error["reason"] == "wrong_workspace"
+    assert "Reconnect Guard" in str(last_error["message"])
 
 
 def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, monkeypatch):
@@ -20503,11 +21738,12 @@ def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, mo
                 "ruleId": "pkg-block",
                 "action": "block",
                 "reason": "Block risky package installs before execution.",
+                "artifactType": "package_request",
                 "matcherFamilies": ["package-request"],
                 "scope": {
                     "agents": [],
                     "devices": [],
-                    "ecosystems": ["npm"],
+                    "ecosystems": [],
                     "environments": ["development"],
                     "harnesses": ["codex"],
                     "locations": [],
@@ -20524,6 +21760,7 @@ def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, mo
         "2026-06-05T13:31:00+00:00",
         remote_write_authorized=True,
     )
+    _cache_signed_test_policy_bundle(store, bundle["rules"])
 
     order: list[str] = []
     original_resolve_policy = store.resolve_policy_decision_lookup_with_memory_pattern

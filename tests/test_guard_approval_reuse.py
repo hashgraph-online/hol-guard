@@ -17,6 +17,8 @@ from codex_plugin_scanner.guard.models import (
     GuardArtifact,
     PolicyDecision,
 )
+from codex_plugin_scanner.guard.policy_bundle_decisions import build_policy_bundle_decisions
+from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.runtime.approval_context import build_approval_context_token
 from codex_plugin_scanner.guard.runtime.approval_reuse import (
     APPROVAL_REUSE_ACCEPTED,
@@ -39,6 +41,83 @@ from codex_plugin_scanner.guard.store_policy import (
     _bounded_non_consuming_policy_rows,
     _bounded_policy_approval_reuse_diagnostic_rows,
 )
+from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+
+_POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
+
+
+def _install_signed_exact_policies(
+    store: GuardStore,
+    policies: list[tuple[str, str, str]],
+    *,
+    now: str,
+    bundle_version: str,
+) -> None:
+    rules = [
+        {
+            "ruleId": f"test-rule-{index}",
+            "action": action,
+            "reason": reason,
+            "artifactId": artifact_id,
+            "scope": {
+                "agents": [],
+                "devices": [],
+                "ecosystems": [],
+                "environments": [],
+                "harnesses": ["codex"],
+                "locations": [],
+            },
+        }
+        for index, (artifact_id, action, reason) in enumerate(policies)
+    ]
+    bundle = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": bundle_version,
+            "bundleHash": "",
+            "issuedAt": now,
+            "expiresAt": None,
+            "rolloutState": "enforcing",
+            "policyDefaults": {
+                "mode": "observe",
+                "defaultAction": "allow",
+                "unknownPublisherAction": "allow",
+                "changedHashAction": "allow",
+                "newNetworkDomainAction": "allow",
+                "subprocessAction": "allow",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": rules,
+            "cloudExceptions": [],
+            "acknowledgements": [],
+        },
+        workspace_id=_POLICY_BUNDLE_WORKSPACE_ID,
+    )
+    keyring = policy_bundle_test_keyring(workspace_id=_POLICY_BUNDLE_WORKSPACE_ID)
+    store.set_sync_payload(
+        "oauth_local_credentials",
+        {"workspace_id": _POLICY_BUNDLE_WORKSPACE_ID},
+        now,
+    )
+    device = store.get_device_metadata()
+    decisions = build_policy_bundle_decisions(
+        bundle,
+        device_id=device["installation_id"],
+        device_name=device["device_label"],
+    )
+    assert [(item.artifact_id, item.action, item.reason) for item in decisions] == policies
+    store.apply_policy_bundle_authority(
+        decisions,
+        now,
+        policy_bundle=bundle,
+        policy_bundle_keyring=keyring,
+        cloud_exceptions=[],
+        policy_bundle_ack={"bundleVersion": bundle_version, "status": "applied"},
+        policy_bundle_checkpoint=policy_bundle_acceptance_checkpoint(bundle),
+        update_last_good=True,
+        remote_write_authorized=True,
+    )
 
 
 def _approval_context_token(
@@ -538,19 +617,11 @@ def test_lookup_preserves_stored_block_over_local_once_allow(tmp_path, consume_o
         created_at="2026-07-17T12:00:00+00:00",
         expires_at="2026-07-17T13:00:00+00:00",
     )
-    store.replace_remote_policies(
-        [
-            PolicyDecision(
-                harness="codex",
-                scope="artifact",
-                action="block",
-                artifact_id=artifact_id,
-                artifact_hash=artifact_hash,
-                source="team-policy",
-            )
-        ],
-        "2026-07-17T12:01:00+00:00",
-        remote_write_authorized=True,
+    _install_signed_exact_policies(
+        store,
+        [(artifact_id, "block", "Signed managed block")],
+        now="2026-07-17T12:01:00+00:00",
+        bundle_version="policy-2026-07-17.block-after-approval",
     )
 
     selected = store.resolve_policy_decision(
@@ -564,7 +635,7 @@ def test_lookup_preserves_stored_block_over_local_once_allow(tmp_path, consume_o
 
     assert selected is not None
     assert selected["action"] == "block"
-    assert selected["source"] == "team-policy"
+    assert selected["source"] == "policy-bundle"
     assert store.claim_local_once_approval(approval_id, claimed_at="2026-07-17T12:03:00+00:00") is True
 
 
@@ -583,17 +654,14 @@ def test_non_consuming_runtime_lookup_composes_specific_allow_with_broader_manag
         ),
         "2026-07-17T12:00:00+00:00",
     )
-    store.replace_remote_policies(
-        [
-            PolicyDecision(
-                harness="codex",
-                scope="global",
-                action="block",
-                source="team-policy",
-            )
-        ],
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="global",
+            action="block",
+            source="manual",
+        ),
         "2026-07-17T12:01:00+00:00",
-        remote_write_authorized=True,
     )
 
     runtime_decision = store.resolve_policy_decision(
@@ -612,7 +680,7 @@ def test_non_consuming_runtime_lookup_composes_specific_allow_with_broader_manag
 
     assert runtime_decision is not None
     assert runtime_decision["action"] == "block"
-    assert runtime_decision["source"] == "team-policy"
+    assert runtime_decision["source"] == "manual"
     assert legacy_scope_precedence is not None
     assert legacy_scope_precedence["action"] == "allow"
     assert store.list_events(event_name="policy_integrity_violation") == []
@@ -620,7 +688,7 @@ def test_non_consuming_runtime_lookup_composes_specific_allow_with_broader_manag
 
 
 @pytest.mark.parametrize("scope", ("workspace", "harness", "global"))
-@pytest.mark.parametrize("source", ("local", "team-policy"))
+@pytest.mark.parametrize("source", ("local", "manual"))
 def test_non_consuming_scope_lookup_preserves_specificity_and_stronger_actions(
     tmp_path,
     scope: DecisionScope,
@@ -648,15 +716,8 @@ def test_non_consuming_scope_lookup_preserves_specificity_and_stronger_actions(
 
     def store_with_policies(name: str, decisions: list[PolicyDecision]) -> GuardStore:
         store = GuardStore(tmp_path / name)
-        if source == "team-policy":
-            store.replace_remote_policies(
-                decisions,
-                "2026-07-18T12:03:00Z",
-                remote_write_authorized=True,
-            )
-        else:
-            for minute, decision in enumerate(decisions):
-                store.upsert_policy(decision, f"2026-07-18T12:0{minute}:00Z")
+        for minute, decision in enumerate(decisions):
+            store.upsert_policy(decision, f"2026-07-18T12:0{minute}:00Z")
         return store
 
     exact_store = store_with_policies(
@@ -678,8 +739,7 @@ def test_non_consuming_scope_lookup_preserves_specificity_and_stronger_actions(
 
     assert exact is not None
     assert exact["reason"] == "exact context allow"
-    if source == "local":
-        assert exact["integrity_status"] == "valid"
+    assert exact["integrity_status"] == "valid"
 
     family_store = store_with_policies(
         f"guard-home-{scope}-{source}-family",
@@ -699,8 +759,7 @@ def test_non_consuming_scope_lookup_preserves_specificity_and_stronger_actions(
 
     assert family is not None
     assert family["reason"] == "family-bound allow"
-    if source == "local":
-        assert family["integrity_status"] == "valid"
+    assert family["integrity_status"] == "valid"
 
     stronger_store = store_with_policies(
         f"guard-home-{scope}-{source}-stronger",
@@ -722,8 +781,7 @@ def test_non_consuming_scope_lookup_preserves_specificity_and_stronger_actions(
     assert stronger is not None
     assert stronger["action"] == "block"
     assert stronger["reason"] == "stronger broad block"
-    if source == "local":
-        assert stronger["integrity_status"] == "valid"
+    assert stronger["integrity_status"] == "valid"
 
 
 def test_non_consuming_runtime_lookup_composes_direct_allow_with_exact_command_block(tmp_path) -> None:
@@ -801,41 +859,28 @@ def test_atomic_claim_rejects_changed_expected_local_once_identity_without_consu
 
 def test_claim_rejects_policy_row_replaced_after_non_consuming_lookup(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    allow = PolicyDecision(
-        harness="codex",
-        scope="artifact",
-        action="allow",
-        artifact_id="codex:project:tool-action:remote",
-        artifact_hash="sha256:remote",
-        source="team-policy",
-    )
-    store.replace_remote_policies(
-        [allow],
-        "2026-07-17T12:00:00+00:00",
-        remote_write_authorized=True,
+    artifact_id = "codex:project:tool-action:remote"
+    artifact_hash = "sha256:remote"
+    _install_signed_exact_policies(
+        store,
+        [(artifact_id, "allow", "Signed remote allow")],
+        now="2026-07-17T12:00:00+00:00",
+        bundle_version="policy-2026-07-17.remote-allow",
     )
     selected = store.resolve_policy_decision(
         "codex",
-        allow.artifact_id,
-        allow.artifact_hash,
+        artifact_id,
+        artifact_hash,
         now="2026-07-17T12:01:00+00:00",
         consume_one_shot=False,
     )
     assert selected is not None
 
-    store.replace_remote_policies(
-        [
-            PolicyDecision(
-                harness="codex",
-                scope="artifact",
-                action="block",
-                artifact_id=allow.artifact_id,
-                artifact_hash=allow.artifact_hash,
-                source="team-policy",
-            )
-        ],
-        "2026-07-17T12:02:00+00:00",
-        remote_write_authorized=True,
+    _install_signed_exact_policies(
+        store,
+        [(artifact_id, "block", "Signed remote block")],
+        now="2026-07-17T12:02:00+00:00",
+        bundle_version="policy-2026-07-17.remote-block",
     )
 
     assert store.claim_approval_reuse_decision(selected, now="2026-07-17T12:03:00+00:00") is False
@@ -872,23 +917,18 @@ def test_claim_rejects_policy_integrity_tamper_after_non_consuming_lookup(tmp_pa
 
 def test_claim_accepts_unchanged_persistent_policy_without_consuming_it(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    allow = PolicyDecision(
-        harness="codex",
-        scope="artifact",
-        action="allow",
-        artifact_id="codex:project:tool-action:persistent",
-        artifact_hash="sha256:persistent",
-        source="team-policy",
-    )
-    store.replace_remote_policies(
-        [allow],
-        "2026-07-17T12:00:00+00:00",
-        remote_write_authorized=True,
+    artifact_id = "codex:project:tool-action:persistent"
+    artifact_hash = "sha256:persistent"
+    _install_signed_exact_policies(
+        store,
+        [(artifact_id, "allow", "Signed persistent allow")],
+        now="2026-07-17T12:00:00+00:00",
+        bundle_version="policy-2026-07-17.persistent-allow",
     )
     selected = store.resolve_policy_decision(
         "codex",
-        allow.artifact_id,
-        allow.artifact_hash,
+        artifact_id,
+        artifact_hash,
         now="2026-07-17T12:01:00+00:00",
         consume_one_shot=False,
     )
@@ -898,8 +938,8 @@ def test_claim_accepts_unchanged_persistent_policy_without_consuming_it(tmp_path
     assert (
         store.resolve_policy(
             "codex",
-            allow.artifact_id,
-            allow.artifact_hash,
+            artifact_id,
+            artifact_hash,
             now="2026-07-17T12:03:00+00:00",
             consume_one_shot=False,
         )
