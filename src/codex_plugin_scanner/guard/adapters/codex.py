@@ -779,8 +779,8 @@ def _codex_hook_artifacts(
 def _payload_has_hooks_feature_enabled(config_payload: Mapping[str, object]) -> bool:
     features = config_payload.get("features")
     if not isinstance(features, Mapping):
-        return False
-    return features.get("hooks") is True or features.get("codex_hooks") is True
+        return True
+    return features.get("hooks") is not False
 
 
 def _line_marker_at(content: bytes, index: int, marker: bytes) -> bool:

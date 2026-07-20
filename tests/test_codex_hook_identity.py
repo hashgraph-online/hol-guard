@@ -10,7 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.codex_config import dump_toml
+from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
 from codex_plugin_scanner.guard.codex_hook_inventory import enumerate_codex_hooks
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import (
@@ -195,6 +195,35 @@ def test_detect_inventories_every_toml_event_and_deduplicates_mixed_sources(tmp_
     assert len(hook_artifacts) == 2
     assert future.metadata["source_formats"] == ["json", "toml"]
     assert future.metadata["source_paths"] == sorted([str(config_path), str(hooks_path)])
+
+
+@pytest.mark.parametrize("source_format", ("toml", "json"))
+def test_default_hook_activation_keeps_existing_hooks_active_during_install(
+    tmp_path: Path,
+    source_format: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    config_path = home_dir / ".codex" / "config.toml"
+    hooks_path = home_dir / ".codex" / "hooks.json"
+    hooks = {"FutureAgentEvent": [_group()]}
+    if source_format == "toml":
+        _write(config_path, dump_toml({"hooks": hooks}))
+    else:
+        _write(hooks_path, json.dumps({"hooks": hooks}) + "\n")
+    adapter = codex_adapter.CodexHarnessAdapter()
+    context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=tmp_path / "guard-home")
+
+    detection = adapter.detect(context)
+    artifact = _hook_artifact(detection, "FutureAgentEvent")
+    adapter.install(context)
+    installed_payload = read_toml_payload(config_path)
+    installed_hooks = installed_payload.get("hooks")
+
+    assert artifact.metadata["active"] is True
+    assert isinstance(installed_hooks, Mapping)
+    assert "FutureAgentEvent" in installed_hooks
+    assert installed_payload["features"] == {"hooks": True}
+    assert not hooks_path.exists()
 
 
 def test_authenticated_guard_hooks_do_not_become_consumer_artifacts(tmp_path: Path) -> None:

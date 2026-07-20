@@ -1405,7 +1405,7 @@ def test_guard_uninstall_codex_restores_original_workspace_config(tmp_path, caps
 def test_guard_install_codex_refuses_unmanaged_existing_hook_entries(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    original_config = 'approval_policy = "never"\n'
+    original_config = 'approval_policy = "never"\n\n[features]\nhooks = false\n'
     _write_text(workspace_dir / ".codex" / "config.toml", original_config)
     original_hooks = (
         json.dumps(
@@ -1457,7 +1457,7 @@ def test_guard_install_codex_refuses_unmanaged_existing_hook_entries(tmp_path, c
 def test_guard_install_codex_refuses_unmanaged_future_event_before_enabling_hooks(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    original_config = 'approval_policy = "never"\n'
+    original_config = 'approval_policy = "never"\n\n[features]\nhooks = false\n'
     original_hooks = (
         json.dumps(
             {
@@ -1742,7 +1742,8 @@ def test_guard_install_codex_refuses_ambiguous_stale_python_c_hook(tmp_path, cap
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     stale_worktree = tmp_path / "deleted-worktree"
-    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+    original_config = 'approval_policy = "never"\n\n[features]\nhooks = false\n'
+    _write_text(workspace_dir / ".codex" / "config.toml", original_config)
     stale_command = f"{sys.executable} -c " + shlex.quote(
         "import sys;"
         f"sys.path[:0]=[{str(stale_worktree / 'src')!r}];"
@@ -1811,14 +1812,15 @@ def test_guard_install_codex_refuses_ambiguous_stale_python_c_hook(tmp_path, cap
     assert install_rc == 1
     assert "Guard refused to enable existing Codex hook entries without explicit approval" in captured.err
     assert stale_command in preserved_commands
-    assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == 'approval_policy = "never"\n'
+    assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == original_config
     assert (home_dir / ".codex" / "config.toml").exists() is False
 
 
 def test_guard_install_codex_refuses_ambiguous_legacy_wrapper_script_hook(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+    original_config = 'approval_policy = "never"\n\n[features]\nhooks = false\n'
+    _write_text(workspace_dir / ".codex" / "config.toml", original_config)
     wrapper_command = shlex.join([str(home_dir / ".codex" / "hooks" / "hol-guard-codex-hook.sh"), "--legacy"])
     managed_events = {
         "PreToolUse": {
@@ -1887,7 +1889,7 @@ def test_guard_install_codex_refuses_ambiguous_legacy_wrapper_script_hook(tmp_pa
     assert install_rc == 1
     assert "Guard refused to enable existing Codex hook entries without explicit approval" in captured.err
     assert wrapper_command in (workspace_dir / ".codex" / "hooks.json").read_text(encoding="utf-8")
-    assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == 'approval_policy = "never"\n'
+    assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == original_config
     assert (home_dir / ".codex" / "config.toml").exists() is False
 
 
