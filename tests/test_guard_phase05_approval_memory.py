@@ -529,9 +529,33 @@ def test_gr101_gr102_resolved_allow_and_block_persist_exact_action_policy(
         persist_policy=True,
     )
 
-    assert store.resolve_policy("codex", allow_request.artifact_id, "hash-allow") == "allow"
-    assert store.resolve_policy("codex", block_request.artifact_id, "hash-block") == "block"
-    assert store.resolve_policy("codex", allow_request.artifact_id, "hash-changed") is None
+    assert (
+        store.resolve_policy(
+            "codex",
+            allow_request.artifact_id,
+            "hash-allow",
+            now="2026-05-13T00:02:30+00:00",
+        )
+        == "allow"
+    )
+    assert (
+        store.resolve_policy(
+            "codex",
+            block_request.artifact_id,
+            "hash-block",
+            now="2026-05-13T00:04:00+00:00",
+        )
+        == "block"
+    )
+    assert (
+        store.resolve_policy(
+            "codex",
+            allow_request.artifact_id,
+            "hash-changed",
+            now="2026-05-13T00:03:00+00:00",
+        )
+        is None
+    )
 
 
 def test_codex_prompt_file_retry_reuses_artifact_once_across_context_drift(
@@ -789,7 +813,7 @@ def test_gr116_workspace_policy_uses_stable_non_path_fingerprint(
 
 
 @pytest.mark.parametrize("scope", ["harness", "global"])
-def test_gr117_broad_runtime_scope_applies_only_same_exact_action(
+def test_gr117_legacy_broad_runtime_allow_narrows_without_hash_drift(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     scope: str,
@@ -819,10 +843,44 @@ def test_gr117_broad_runtime_scope_applies_only_same_exact_action(
     assert result["resolved"] is True
     assert store.get_approval_request("req-shell")["status"] == "resolved"
     assert store.get_approval_request("req-shell-other")["status"] == "pending"
-    assert store.resolve_policy("codex", shell_request.artifact_id, "hash-new") == "allow"
-    assert store.resolve_policy("codex", other_shell_request.artifact_id, "hash-new") is None
-    assert store.resolve_policy("codex", "codex:project:mcp-tool:other", "hash-new") is None
-    assert store.resolve_policy("codex", "codex:project:prompt-file:abcdef", "hash-new") is None
+    assert result["applied_scope"] == "artifact"
+    assert result["scope_warning"] == "legacy_scope_narrowed_to_artifact"
+    assert (
+        store.resolve_policy(
+            "codex",
+            shell_request.artifact_id,
+            "hash-new",
+            now="2026-05-13T00:03:00+00:00",
+        )
+        is None
+    )
+    assert (
+        store.resolve_policy(
+            "codex",
+            other_shell_request.artifact_id,
+            "hash-new",
+            now="2026-05-13T00:03:00+00:00",
+        )
+        is None
+    )
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:project:mcp-tool:other",
+            "hash-new",
+            now="2026-05-13T00:03:00+00:00",
+        )
+        is None
+    )
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:project:prompt-file:abcdef",
+            "hash-new",
+            now="2026-05-13T00:03:00+00:00",
+        )
+        is None
+    )
 
 
 def test_artifact_runtime_scope_reuses_approval_for_same_exact_action_retry(
@@ -1270,22 +1328,23 @@ def test_gr119_harness_clear_can_target_null_artifact_identity(tmp_path: Path) -
     assert remaining[0]["artifact_id"] == "family:file-read"
 
 
-def test_gr119_publisher_scope_rejects_blank_publisher_identity(tmp_path: Path) -> None:
+def test_gr119_legacy_publisher_scope_without_identity_narrows_to_artifact(tmp_path: Path) -> None:
     store = _store(tmp_path)
     request = _request("req-no-publisher", publisher="")
     store.add_approval_request(request, "2026-05-13T00:00:00+00:00")
 
-    with pytest.raises(ValueError, match="unsupported_request_scope"):
-        apply_approval_resolution(
-            store=store,
-            request_id="req-no-publisher",
-            action="allow",
-            scope="publisher",
-            workspace=request.workspace,
-            reason="approved without publisher",
-            now="2026-05-13T00:01:00+00:00",
-        )
+    resolved = apply_approval_resolution(
+        store=store,
+        request_id="req-no-publisher",
+        action="allow",
+        scope="publisher",
+        workspace=request.workspace,
+        reason="approved without publisher",
+        now="2026-05-13T00:01:00+00:00",
+    )
 
+    assert resolved["resolution_scope"] == "artifact"
+    assert resolved["scope_warning"] == "legacy_scope_narrowed_to_artifact"
     assert store.list_policy_decisions("codex") == []
 
 

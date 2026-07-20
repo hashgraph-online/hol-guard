@@ -8,7 +8,7 @@ import json
 import re
 import sqlite3
 
-from .approval_scope_support import supported_request_scopes
+from .approval_scope_support import request_scope_contract_payload, supported_request_scopes
 from .models import GuardApprovalRequest
 from .runtime.action_identity import normalize_command_identity
 
@@ -628,7 +628,17 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "created_at": str(row["created_at"]),
         "resolved_at": row["resolved_at"],
     }
+    payload.update(request_scope_contract_payload(payload))
     payload["allowed_scopes"] = list(supported_request_scopes(payload))
+    recommendations = payload["recommended_scope_by_action"]
+    if isinstance(recommendations, dict):
+        payload["recommended_scope"] = recommendations.get("allow")
+    decision_v2 = payload.get("decision_v2_json")
+    if isinstance(decision_v2, dict):
+        payload["decision_v2_json"] = {
+            **decision_v2,
+            "approval_scopes": list(payload["allowed_scopes"]),
+        }
     return payload
 
 

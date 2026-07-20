@@ -5,11 +5,12 @@ from __future__ import annotations
 import threading
 import time
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from functools import wraps
 from pathlib import Path
-from typing import TypeGuard
+from typing import ParamSpec, TypeGuard, TypeVar
 from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
 from .action_lattice import normalize_guard_action_result
@@ -17,9 +18,12 @@ from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
 from .approval_scope_support import (
+    IneligibleApprovalScopeError,
     package_request_portable_workspace_scope,
+    request_scope_contract,
+    request_scope_contract_payload,
+    resolve_request_scope_selection,
     resolve_request_workspace_scope,
-    supported_request_scopes,
 )
 from .cli.connect_flow import (
     connect_retry_refresh_race_from_reason,
@@ -64,6 +68,9 @@ GUARD_INBOX_URL = f"{GUARD_DASHBOARD_URL}/inbox"
 GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/protect"
 GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
 _APPROVAL_ONCE_POLICY_TTL = timedelta(minutes=15)
+_APPROVAL_RESOLUTION_LOCK = threading.RLock()
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES = frozenset(
     {
         "file_read_request",
@@ -76,6 +83,15 @@ _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES = frozenset(
 
 class ApprovalRequestNotFoundError(ValueError):
     """Raised when an approval request ID does not exist."""
+
+
+def _serialize_approval_resolution(function: Callable[_P, _R]) -> Callable[_P, _R]:
+    @wraps(function)
+    def serialized(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+        with _APPROVAL_RESOLUTION_LOCK:
+            return function(*args, **kwargs)
+
+    return serialized
 
 
 class ApprovalRequestAlreadyResolvedError(ValueError):
@@ -501,8 +517,9 @@ def queue_blocked_approvals(
         if created_new_request:
             _record_created_event(store, request, timestamp)
         _notify_pending_approval(store=store, request=request)
-        request_payload = request.to_dict()
-        request_payload["allowed_scopes"] = list(supported_request_scopes(request_payload))
+        request_payload = store.get_approval_request(persisted_request_id)
+        if request_payload is None:
+            raise RuntimeError(f"Persisted approval request not found: {persisted_request_id}")
         queued.append(request_payload)
     return queued
 
@@ -525,6 +542,7 @@ def evaluation_has_terminal_policy_action(evaluation: Mapping[str, object]) -> b
     return False
 
 
+@_serialize_approval_resolution
 def apply_approval_resolution(
     *,
     store: GuardStore,
@@ -540,16 +558,34 @@ def apply_approval_resolution(
     approval_gate_grant: ApprovalGateGrant | None = None,
     approval_gate_subject: str | None = None,
     persist_policy: bool | None = None,
+    scope_contract_version: str | None = None,
+    scope_contract_digest: str | None = None,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
     if request is None:
         raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
     if request["status"] != "pending":
         raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
-    if not _is_decision_scope(scope):
-        raise ValueError(f"Unsupported approval scope: {scope}")
-    if scope not in supported_request_scopes(request):
-        raise ValueError("unsupported_request_scope")
+    selection = resolve_request_scope_selection(
+        request,
+        action=action,
+        requested_scope=scope,
+        contract_version=scope_contract_version,
+        contract_digest=scope_contract_digest,
+    )
+    requested_scope = selection.requested_scope
+    scope = selection.applied_scope
+    if selection.warning is not None:
+        persist_policy = None
+    elif action == "allow" and scope == "artifact" and persist_policy is True:
+        if scope_contract_version is not None:
+            raise IneligibleApprovalScopeError(
+                "saved_allow_scope_ineligible",
+                request_scope_contract(request),
+                action=action,
+                requested_scope=scope,
+            )
+        persist_policy = None
     workspace_artifact_id, workspace_artifact_hash = _workspace_policy_artifact_keys(request, scope)
     request_artifact_id = _string_or_none(request.get("artifact_id"))
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
@@ -692,6 +728,11 @@ def apply_approval_resolution(
             persisted_rule=persisted_rule,
             local_once_fallback=local_once_fallback,
         )
+        result.update(request_scope_contract_payload(request))
+        result["requested_scope"] = requested_scope
+        result["applied_scope"] = scope
+        if selection.warning is not None:
+            result["scope_warning"] = selection.warning
         return result
     resolved_ids: list[str] = []
     if resolve_scope_matches and not exact_context_allow:
@@ -732,6 +773,11 @@ def apply_approval_resolution(
         persisted_rule=persisted_rule,
         local_once_fallback=local_once_fallback,
     )
+    updated.update(request_scope_contract_payload(request))
+    updated["requested_scope"] = requested_scope
+    updated["applied_scope"] = scope
+    if selection.warning is not None:
+        updated["scope_warning"] = selection.warning
     return updated
 
 

@@ -53,6 +53,12 @@ from ..approval_gate import (
 from ..approval_gate import (
     validate_settings_update as validate_approval_gate_settings,
 )
+from ..approval_scope_support import (
+    IneligibleApprovalScopeError,
+    StaleApprovalScopeContractError,
+    request_scope_contract_payload,
+    resolve_request_scope_selection,
+)
 from ..approvals import (
     ApprovalRequestAlreadyResolvedError,
     ApprovalRequestNotFoundError,
@@ -2022,7 +2028,65 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not isinstance(scope, str) or not scope.strip():
             self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
             return
+        scope_contract_version_value = payload.get("scope_contract_version")
+        if scope_contract_version_value is not None and (
+            not isinstance(scope_contract_version_value, str) or not scope_contract_version_value.strip()
+        ):
+            self._write_json({"resolved": False, "error": "invalid_scope_contract_version"}, status=400)
+            return
+        scope_contract_version = (
+            scope_contract_version_value.strip() if isinstance(scope_contract_version_value, str) else None
+        )
+        if scope_contract_version is not None:
+            version_prefix = "guard.approval-scopes.v"
+            if (
+                not scope_contract_version.startswith(version_prefix)
+                or not scope_contract_version.removeprefix(version_prefix).isdigit()
+            ):
+                self._write_json({"resolved": False, "error": "invalid_scope_contract_version"}, status=400)
+                return
+        scope_contract_digest_value = payload.get("scope_contract_digest")
+        if scope_contract_digest_value is not None and (
+            not isinstance(scope_contract_digest_value, str) or not scope_contract_digest_value.strip()
+        ):
+            self._write_json({"resolved": False, "error": "invalid_scope_contract_digest"}, status=400)
+            return
+        scope_contract_digest = (
+            scope_contract_digest_value.strip() if isinstance(scope_contract_digest_value, str) else None
+        )
+        if scope_contract_digest is not None and (
+            len(scope_contract_digest) != 64
+            or any(character not in "0123456789abcdef" for character in scope_contract_digest)
+        ):
+            self._write_json({"resolved": False, "error": "invalid_scope_contract_digest"}, status=400)
+            return
         try:
+            existing_request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
+            if isinstance(existing_request, dict):
+                scope_selection = resolve_request_scope_selection(
+                    existing_request,
+                    action=action,
+                    requested_scope=scope.strip(),
+                    contract_version=scope_contract_version,
+                    contract_digest=scope_contract_digest,
+                )
+                if existing_request.get("status") != "pending":
+                    if (
+                        existing_request.get("resolution_action") == action
+                        and existing_request.get("resolution_scope") == scope_selection.applied_scope
+                    ):
+                        self._write_json(
+                            {
+                                "resolved": True,
+                                "idempotent": True,
+                                "resolved_request": existing_request,
+                                "requested_scope": scope_selection.requested_scope,
+                                "applied_scope": scope_selection.applied_scope,
+                                **request_scope_contract_payload(existing_request),
+                            }
+                        )
+                        return
+                    raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
             persist_policy = self._approval_persist_policy(payload)
             updated = apply_approval_resolution(
                 store=self.server.store,  # type: ignore[attr-defined]
@@ -2035,6 +2099,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 resolve_scope_matches=False,
                 approval_gate_input=approval_gate_input_from_mapping(payload),
                 persist_policy=persist_policy,
+                scope_contract_version=scope_contract_version,
+                scope_contract_digest=scope_contract_digest,
             )
         except ApprovalRequestNotFoundError:
             self._write_json(
@@ -2052,6 +2118,30 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             return
         except ApprovalRequestAlreadyResolvedError:
+            resolved_request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
+            if isinstance(resolved_request, dict):
+                replay_selection = resolve_request_scope_selection(
+                    resolved_request,
+                    action=action,
+                    requested_scope=scope.strip(),
+                    contract_version=scope_contract_version,
+                    contract_digest=scope_contract_digest,
+                )
+                if (
+                    resolved_request.get("resolution_action") == action
+                    and resolved_request.get("resolution_scope") == replay_selection.applied_scope
+                ):
+                    self._write_json(
+                        {
+                            "resolved": True,
+                            "idempotent": True,
+                            "resolved_request": resolved_request,
+                            "requested_scope": replay_selection.requested_scope,
+                            "applied_scope": replay_selection.applied_scope,
+                            **request_scope_contract_payload(resolved_request),
+                        }
+                    )
+                    return
             self._write_json(
                 {
                     "resolved": False,
@@ -2071,6 +2161,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         except ApprovalGateError as error:
             self._write_approval_gate_error(error, resolved=False)
+            return
+        except StaleApprovalScopeContractError as error:
+            self._write_json(
+                {"resolved": False, "error": str(error), **error.contract.to_dict()},
+                status=409,
+            )
+            return
+        except IneligibleApprovalScopeError as error:
+            self._write_json(
+                {
+                    "resolved": False,
+                    "error": str(error),
+                    "action": error.action,
+                    "requested_scope": error.requested_scope,
+                    **error.contract.to_dict(),
+                },
+                status=422,
+            )
             return
         except ValueError as error:
             self._write_json({"resolved": False, "error": str(error)}, status=400)

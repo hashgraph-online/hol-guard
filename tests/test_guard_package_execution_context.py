@@ -438,7 +438,7 @@ def test_context_evidence_never_contains_configuration_values(tmp_path: Path) ->
     assert "registry.example.test" not in serialized
 
 
-def test_package_project_scope_is_offered_only_for_complete_portable_context(tmp_path: Path) -> None:
+def test_package_project_scope_requires_future_bound_v2_proof(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     _write_repository(workspace)
     _write_package_files(workspace)
@@ -451,7 +451,7 @@ def test_package_project_scope_is_offered_only_for_complete_portable_context(tmp
         "scanner_evidence": [portable.to_evidence()],
     }
 
-    assert supported_request_scopes(request) == ("artifact", "workspace")
+    assert supported_request_scopes(request) == ("artifact",)
     nonportable_evidence = {
         **portable.to_evidence(),
         "portable": False,
