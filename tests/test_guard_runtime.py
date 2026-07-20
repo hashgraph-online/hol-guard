@@ -9,6 +9,7 @@ import io
 import json
 import os
 import shlex
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -17,6 +18,7 @@ import urllib.error
 import urllib.request
 from base64 import urlsafe_b64decode
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -27,11 +29,15 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.approvals import apply_approval_resolution
+from codex_plugin_scanner.guard.approvals import apply_approval_resolution, wait_for_approval_requests
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction_module
 from codex_plugin_scanner.guard.cli import render as guard_render_module
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
     _codex_post_tool_output_artifact,
+)
+from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
+    _runtime_hook_approval_context_token,
 )
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _runtime_policy_path
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
@@ -40,6 +46,7 @@ from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import (
+    GuardAction,
     GuardApprovalRequest,
     GuardArtifact,
     GuardReceipt,
@@ -53,6 +60,12 @@ from codex_plugin_scanner.guard.proxy import stdio as stdio_proxy_module
 from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime import secret_file_requests as secret_file_requests_module
+from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
+from codex_plugin_scanner.guard.runtime.approval_context import (
+    APPROVAL_CONTEXT_TOKEN_PREFIX,
+    approval_context_tokens_validation_reason,
+    build_approval_context_token,
+)
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     extract_package_intent_request,
@@ -114,6 +127,22 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _make_pinnable_harness_executable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    executable: str,
+) -> Path:
+    """Install a native no-op executable whose launch identity can be pinned."""
+
+    fake_bin = tmp_path / "pinnable-harness-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    executable_path = fake_bin / executable
+    shutil.copyfile("/usr/bin/true", executable_path)
+    executable_path.chmod(executable_path.stat().st_mode | 0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
+    return executable_path.resolve()
 
 
 def _request_header(request: urllib.request.Request, name: str) -> str | None:
@@ -596,8 +625,10 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] == "require-reapproval"
+        assert output["policy_composition"]["untrusted_hook_payload_hint"] == "allow"
         assert "rm dangerous-marker.json" in output["launch_summary"]
         assert output["trigger_summary"].startswith("HOL Guard paused the native tool action")
 
@@ -4082,7 +4113,7 @@ clearer UX and an implementation plan with technical references.
 
         evaluation = evaluate_detection(detection, store, config, persist=False)
 
-        assert evaluation["blocked"] is False
+        assert evaluation["blocked"] is True
         assert evaluation["artifacts"][0]["policy_action"] == "review"
 
     def test_guard_run_keeps_prior_snapshot_when_reapproval_blocks(self, tmp_path):
@@ -8144,7 +8175,7 @@ def test_guard_hook_emits_claude_native_pretooluse_notice_on_stderr(tmp_path, ca
     assert "HOL Guard prompt" in captured_notice[0]
 
 
-def test_guard_hook_claude_posttooluse_persists_native_approval(tmp_path, capsys, monkeypatch):
+def test_guard_hook_claude_native_approval_does_not_lower_current_reapproval(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -8162,6 +8193,18 @@ def test_guard_hook_claude_posttooluse_persists_native_approval(tmp_path, capsys
         workspace_dir=workspace_dir,
         harness="claude-code",
         event=first_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    prompt_rc, _ = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={
+            **first_event,
+            "hook_event_name": "Notification",
+            "notification_type": "permission_prompt",
+        },
         capsys=capsys,
         monkeypatch=monkeypatch,
     )
@@ -8187,24 +8230,40 @@ def test_guard_hook_claude_posttooluse_persists_native_approval(tmp_path, capsys
         monkeypatch=monkeypatch,
     )
     first_payload = json.loads(first_output)
+    post_payload = json.loads(post_output)
     second_payload = json.loads(second_output)
-    receipts = GuardStore(home_dir).list_receipts(limit=20)
+    store = GuardStore(home_dir)
+    receipts = store.list_receipts(limit=20)
+    policies = store.list_policy_decisions("claude-code")
+    native_receipt = next(receipt for receipt in receipts if receipt["user_override"] == "claude-native-approve")
 
     assert first_rc == 0
     assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert prompt_rc == 0
     assert post_rc == 0
-    assert post_output == ""
+    assert post_payload["decision"] == "block"
+    assert post_payload["continue"] is False
     assert second_rc == 0
-    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
-    assert any(receipt["user_override"] == "claude-native-approve" for receipt in receipts)
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert native_receipt["artifact_hash"].startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
+    assert native_receipt["policy_decision"] == "require-reapproval"
+    assert all(policy["source"] != "claude-native-approval" for policy in policies)
+    assert any(
+        evidence.get("source") == "claude_native_approval"
+        and evidence.get("authoritative_action") == "require-reapproval"
+        and evidence.get("reusable_policy_saved") is False
+        for evidence in native_receipt["scanner_evidence"]
+    )
 
 
 def _load_claude_pending_question_contract(home_dir: Path, session_id: str) -> tuple[str, list[dict[str, str]]]:
     store = GuardStore(home_dir)
     index_payload = store.get_sync_payload(f"claude_pending_permissions:{session_id}")
-    assert isinstance(index_payload, list)
-    assert index_payload
-    pending_payload = store.get_sync_payload(str(index_payload[0]))
+    assert isinstance(index_payload, dict)
+    pending_keys = index_payload.get("pending_keys")
+    assert isinstance(pending_keys, list)
+    assert pending_keys
+    pending_payload = store.get_sync_payload(str(pending_keys[0]))
     assert isinstance(pending_payload, dict)
     question = str(pending_payload["approval_question"])
     options = pending_payload.get("approval_options")
@@ -8213,7 +8272,7 @@ def _load_claude_pending_question_contract(home_dir: Path, session_id: str) -> t
     return question, [{"label": str(option)} for option in options]
 
 
-def test_guard_hook_claude_ask_user_question_allow_persists_approval(tmp_path, capsys, monkeypatch):
+def test_guard_hook_claude_ask_user_question_allow_does_not_lower_current_reapproval(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -8298,11 +8357,11 @@ def test_guard_hook_claude_ask_user_question_allow_persists_approval(tmp_path, c
     assert question_rc == 0
     assert question_output == ""
     assert second_rc == 0
-    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert policies[0]["source"] == "claude-ask-user-question"
 
 
-def test_guard_hook_claude_ask_user_question_docker_retry_uses_exact_action_policy(
+def test_guard_hook_claude_docker_saved_allow_does_not_lower_current_reapproval(
     tmp_path,
     capsys,
     monkeypatch,
@@ -8419,16 +8478,16 @@ def test_guard_hook_claude_ask_user_question_docker_retry_uses_exact_action_poli
     assert question_rc == 0
     assert question_output == ""
     assert second_rc == 0
-    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert other_workspace_rc == 0
     assert other_workspace_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert policy["source"] == "claude-ask-user-question"
-    assert stored_hash.startswith("runtime-exact:")
+    assert stored_hash.startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
     assert stored_hash != _runtime_scoped_exact_match_key(artifact_id)
     assert legacy_context_decision is None
 
 
-def test_guard_hook_claude_notification_only_ask_user_question_persists_approval(tmp_path, capsys, monkeypatch):
+def test_guard_hook_claude_notification_saved_allow_does_not_lower_current_reapproval(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -8519,11 +8578,13 @@ def test_guard_hook_claude_notification_only_ask_user_question_persists_approval
     assert question_rc == 0
     assert question_output == ""
     assert second_rc == 0
-    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert policies[0]["source"] == "claude-ask-user-question"
 
 
-def test_guard_hook_claude_repeated_notifications_keep_bound_question_contract(tmp_path, capsys, monkeypatch):
+def test_guard_hook_claude_repeated_notifications_keep_bound_question_without_lowering_reapproval(
+    tmp_path, capsys, monkeypatch
+):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -8626,7 +8687,7 @@ def test_guard_hook_claude_repeated_notifications_keep_bound_question_contract(t
     assert question_rc == 0
     assert question_output == ""
     assert second_rc == 0
-    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert policies[0]["source"] == "claude-ask-user-question"
 
 
@@ -9041,7 +9102,150 @@ def test_guard_hook_claude_ask_user_question_accepts_dict_selected_answer():
     assert guard_commands_module._claude_guard_approval_answer(payload) == "allow"
 
 
-def test_guard_hook_claude_ask_user_question_legacy_pending_state_still_persists_decision(tmp_path):
+def test_guard_hook_claude_tampered_pending_state_cannot_bootstrap_signed_allow(tmp_path):
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    session_id = "session-claude-tampered-pending"
+    artifact = GuardArtifact(
+        artifact_id="claude-code:runtime:file-read:.env",
+        name="Read",
+        harness="claude-code",
+        artifact_type="file_read_request",
+        source_scope="project",
+        config_path="/workspace/.env",
+    )
+    guard_commands_module._record_claude_permission_notice(
+        store=store,
+        payload={"session_id": session_id, "tool_name": "Read"},
+        reason="HOL Guard intercepted Claude's attempt to read .env.",
+        artifact=artifact,
+        artifact_hash="hash-authentic",
+    )
+    index_payload = store.get_sync_payload(guard_commands_module._claude_pending_permission_index_key(session_id))
+    assert isinstance(index_payload, dict)
+    pending_keys = index_payload.get("pending_keys")
+    assert isinstance(pending_keys, list)
+    assert len(pending_keys) == 1
+    pending_key = str(pending_keys[0])
+    pending = store.get_sync_payload(pending_key)
+    assert isinstance(pending, dict)
+    approval_question = str(pending["approval_question"])
+    approval_options = pending["approval_options"]
+    assert isinstance(approval_options, list)
+    with sqlite3.connect(store.path) as connection:
+        tampered = dict(pending)
+        tampered["artifact_hash"] = "hash-forged"
+        connection.execute(
+            "update sync_state set payload_json = ? where state_key = ?",
+            (json.dumps(tampered), pending_key),
+        )
+
+    persisted = guard_commands_module._persist_claude_guard_question_decision(
+        store,
+        {
+            "session_id": session_id,
+            "hook_event_name": "PostToolUse",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": approval_question,
+                        "options": [{"label": str(option)} for option in approval_options],
+                    }
+                ]
+            },
+            "tool_response": {
+                "answers": {approval_question: "Allow once"},
+            },
+        },
+    )
+
+    assert persisted is False
+    assert store.list_policy_decisions("claude-code") == []
+    assert store.get_sync_payload(pending_key) is None
+    events = store.list_events(event_name="rule.ignored.local_integrity")
+    event_payloads = [event_payload for event in events if isinstance(event_payload := event.get("payload"), dict)]
+    assert any(
+        event_payload.get("source") == "claude-pending-permission"
+        and event_payload.get("integrity_status") == "tampered"
+        for event_payload in event_payloads
+    )
+
+
+def test_guard_hook_claude_signed_unseen_pending_cannot_bootstrap_allow(tmp_path):
+    store = GuardStore(tmp_path / "home")
+    session_id = "session-claude-signed-unseen-pending"
+    artifact = GuardArtifact(
+        artifact_id="claude-code:runtime:file-read:.env",
+        name="Read",
+        harness="claude-code",
+        artifact_type="file_read_request",
+        source_scope="project",
+        config_path="/workspace/.env",
+    )
+    artifact_hash_value = "hash-signed-unseen"
+    guard_commands_module._record_claude_permission_notice(
+        store=store,
+        payload={"session_id": session_id, "tool_name": "Read"},
+        reason="HOL Guard intercepted Claude's attempt to read .env.",
+        artifact=artifact,
+        artifact_hash=artifact_hash_value,
+    )
+
+    observed, saved = guard_commands_module._persist_claude_native_permission_for_runtime_artifact(
+        store=store,
+        payload={"session_id": session_id, "tool_name": "Read"},
+        artifact=artifact,
+        artifact_hash=artifact_hash_value,
+        action="allow",
+        authoritative_action="allow",
+        reason="Forged PostToolUse must not authorize an unseen prompt.",
+    )
+
+    assert observed is False
+    assert saved is False
+    assert store.list_policy_decisions("claude-code") == []
+    pending_pair = guard_commands_module._load_single_claude_pending_permission(
+        store,
+        {"session_id": session_id},
+    )
+    assert pending_pair is not None
+    pending = pending_pair[1]
+    assert pending.get("permission_prompt_seen") is not True
+    approval_question = str(pending["approval_question"])
+    approval_options = pending["approval_options"]
+    assert isinstance(approval_options, list)
+    question_saved = guard_commands_module._persist_claude_guard_question_decision(
+        store,
+        {
+            "session_id": session_id,
+            "hook_event_name": "PostToolUse",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": approval_question,
+                        "options": [{"label": str(option)} for option in approval_options],
+                    }
+                ]
+            },
+            "tool_response": {"answers": {approval_question: "Allow once"}},
+        },
+    )
+    assert question_saved is False
+    assert store.list_policy_decisions("claude-code") == []
+    events = store.list_events(event_name="approval.pending_prompt_unseen")
+    event_payloads = [event_payload for event in events if isinstance(event_payload := event.get("payload"), dict)]
+    assert any(
+        event_payload.get("source") == "claude-pending-permission"
+        and event_payload.get("artifact_id") == artifact.artifact_id
+        for event_payload in event_payloads
+    )
+
+
+def test_guard_hook_claude_ask_user_question_unsigned_legacy_pending_state_cannot_persist_decision(tmp_path):
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
     session_id = "session-claude-legacy-pending"
@@ -9104,11 +9308,12 @@ def test_guard_hook_claude_ask_user_question_legacy_pending_state_still_persists
     )
     policies = store.list_policy_decisions("claude-code")
 
-    assert persisted is True
-    assert len(policies) == 1
-    assert policies[0]["artifact_id"] == artifact_id
-    assert policies[0]["action"] == "allow"
-    assert policies[0]["source"] == "claude-ask-user-question"
+    assert persisted is False
+    assert policies == []
+    assert store.get_sync_payload(guard_commands_module._claude_pending_permission_index_key(session_id)) is None
+    events = store.list_events(event_name="rule.ignored.local_integrity")
+    event_payloads = [event_payload for event in events if isinstance(event_payload := event.get("payload"), dict)]
+    assert any(event_payload.get("integrity_status") == "missing_integrity" for event_payload in event_payloads)
 
 
 def test_guard_hook_claude_native_denial_uses_contextual_tool_action_key(tmp_path):
@@ -9116,31 +9321,34 @@ def test_guard_hook_claude_native_denial_uses_contextual_tool_action_key(tmp_pat
     store = GuardStore(home_dir)
     session_id = "session-claude-deny"
     artifact_id = "claude-code:runtime:tool-action:bash"
-    now = "2026-04-24T00:00:00+00:00"
-    pending_key = guard_commands_module._claude_pending_permission_state_key(session_id, artifact_id)
     wrapper_chain = ["bash", "zsh"]
-    store.set_sync_payload(
-        pending_key,
-        {
-            "saved_at": now,
-            "reason": "HOL Guard intercepted Claude's shell action.",
-            "artifact_id": artifact_id,
-            "artifact_hash": "hash-denied",
-            "artifact_name": "Bash",
-            "artifact_type": "tool_action_request",
-            "tool_name": "Bash",
-            "config_path": "workspace/app/claude-settings.json",
-            "source_scope": "project",
+    artifact = GuardArtifact(
+        artifact_id=artifact_id,
+        name="Bash",
+        harness="claude-code",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="workspace/app/claude-settings.json",
+        command="docker compose up -d postgres",
+        metadata={
             "raw_command_text": "docker compose up -d postgres",
             "wrapper_chain": wrapper_chain,
-            "permission_prompt_seen": True,
         },
-        now,
     )
-    store.set_sync_payload(
-        guard_commands_module._claude_pending_permission_index_key(session_id),
-        [pending_key],
-        now,
+    prompt_payload = {"session_id": session_id, "tool_name": "Bash"}
+    guard_commands_module._record_claude_permission_notice(
+        store=store,
+        payload=prompt_payload,
+        reason="HOL Guard intercepted Claude's shell action.",
+        artifact=artifact,
+        artifact_hash="hash-denied",
+    )
+    notice = guard_commands_module._peek_claude_permission_notice(store, prompt_payload)
+    assert notice is not None
+    guard_commands_module._mark_claude_pending_permission_prompt_seen(
+        store=store,
+        payload=prompt_payload,
+        notice=notice,
     )
 
     denied = guard_commands_module._persist_claude_pending_permission_denials(
@@ -9163,7 +9371,7 @@ def test_guard_hook_claude_native_denial_uses_contextual_tool_action_key(tmp_pat
     assert policies[0]["action"] == "block"
 
 
-def test_guard_hook_claude_ask_user_question_bound_pending_without_prompt_seen_still_persists_decision(tmp_path):
+def test_guard_hook_claude_ask_user_question_unsigned_bound_pending_cannot_persist_decision(tmp_path):
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
     session_id = "session-claude-bound-no-seen"
@@ -9231,11 +9439,8 @@ def test_guard_hook_claude_ask_user_question_bound_pending_without_prompt_seen_s
     )
     policies = store.list_policy_decisions("claude-code")
 
-    assert persisted is True
-    assert len(policies) == 1
-    assert policies[0]["artifact_id"] == artifact_id
-    assert policies[0]["action"] == "allow"
-    assert policies[0]["source"] == "claude-ask-user-question"
+    assert persisted is False
+    assert policies == []
 
 
 def test_guard_hook_claude_native_cancel_does_not_persist_flat_block(tmp_path, capsys, monkeypatch):
@@ -9303,7 +9508,7 @@ def test_guard_hook_claude_native_cancel_does_not_persist_flat_block(tmp_path, c
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
-def test_guard_hook_claude_alias_reuses_native_approval_policy_with_canonical_harness(tmp_path, capsys, monkeypatch):
+def test_guard_hook_claude_alias_saved_allow_does_not_lower_canonical_reapproval(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -9345,15 +9550,17 @@ def test_guard_hook_claude_alias_reuses_native_approval_policy_with_canonical_ha
         monkeypatch=monkeypatch,
     )
     first_payload = json.loads(first_output)
+    post_payload = json.loads(post_output)
     second_payload = json.loads(second_output)
     receipts = GuardStore(home_dir).list_receipts(limit=20)
 
     assert first_rc == 0
     assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert post_rc == 0
-    assert post_output == ""
+    assert post_payload["decision"] == "block"
+    assert post_payload["continue"] is False
     assert second_rc == 0
-    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert any(receipt["harness"] == "claude-code" for receipt in receipts)
 
 
@@ -10396,12 +10603,18 @@ def test_guard_hook_emits_claude_native_permission_request_for_package_notice(
         monkeypatch=monkeypatch,
     )
     permission_payload = json.loads(permission_output)
+    pending_pair = guard_commands_module._load_single_claude_pending_permission(
+        GuardStore(home_dir),
+        {"session_id": "session-claude-package-permission-request"},
+    )
 
     assert pre_tool_rc == 0
     assert json.loads(pre_tool_output)["hookSpecificOutput"]["permissionDecision"] in {"ask", "deny"}
     assert permission_rc == 0
     assert "HOL Guard is reviewing Claude's approval prompt for Bash" in permission_payload["systemMessage"]
     assert "AskUserQuestion" not in json.dumps(permission_payload["hookSpecificOutput"])
+    assert pending_pair is not None
+    assert pending_pair[1]["permission_prompt_seen"] is True
 
 
 def test_guard_hook_emits_claude_permission_request_terminal_notice_stderr(
@@ -10765,7 +10978,7 @@ def test_guard_hook_explains_ignored_remembered_rule_when_local_trust_is_degrade
     assert "remembered local rule was ignored" in output["approval_requests"][0]["decision_v2_json"]["harness_message"]
 
 
-def test_guard_hook_does_not_override_cloud_allow_with_remembered_rule_review_copy(
+def test_guard_hook_cloud_allow_does_not_lower_current_package_reapproval(
     tmp_path,
     capsys,
     monkeypatch,
@@ -10846,12 +11059,12 @@ def test_guard_hook_does_not_override_cloud_allow_with_remembered_rule_review_co
         as_json=True,
     )
 
-    assert rc == 0
-    assert output["policy_action"] == "allow"
+    assert rc == 1
+    assert output["policy_action"] == "require-reapproval"
     assert output["trust_status"]["remembered_rules"] == "disabled_degraded"
     assert output["remembered_rule_rejection"]["integrity_status"] == "degraded_mode"
-    assert "remembered local rule was ignored" not in output["decision_v2_json"]["harness_message"]
-    assert "kept npm install minimist in review" not in output["risk_headline"]
+    assert output["supply_chain_evaluation"]["reasons"][0]["code"] == "approval_reuse_integrity_failure"
+    assert "remembered local rule was ignored" in output["decision_v2_json"]["harness_message"]
 
 
 def test_guard_hook_emits_claude_native_ask_for_sensitive_file_reads(
@@ -11066,9 +11279,11 @@ def test_guard_hook_claude_notification_stale_notice_falls_back_to_generic_conte
     store = GuardStore(home_dir)
     pending_index_key = guard_commands_module._claude_pending_permission_index_key(session_id)
     pending_index = store.get_sync_payload(pending_index_key)
-    assert isinstance(pending_index, list)
-    assert pending_index
-    store.delete_sync_payloads([str(pending_index[0]), pending_index_key])
+    assert isinstance(pending_index, dict)
+    pending_keys = pending_index.get("pending_keys")
+    assert isinstance(pending_keys, list)
+    assert pending_keys
+    store.delete_sync_payloads([str(pending_keys[0]), pending_index_key])
 
     notification_rc, notification_output = _run_guard_hook(
         home_dir=home_dir,
@@ -11278,10 +11493,13 @@ def test_guard_run_returns_structured_error_when_executable_missing(tmp_path, ca
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+    _write_json(home_dir / ".claude" / "settings.json", {})
+    _write_json(workspace_dir / ".mcp.json", {"mcpServers": {}})
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, "claude")
     monkeypatch.setattr(
         guard_runner_module.subprocess,
         "run",
-        lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("codex not found")),
+        lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("claude not found")),
     )
 
     rc = main(
@@ -11303,13 +11521,30 @@ def test_guard_run_returns_structured_error_when_executable_missing(tmp_path, ca
     assert rc == 127
     assert output["launched"] is False
     assert output["return_code"] == 127
-    assert "codex not found" in output["launch_error"]
+    assert "claude not found" in output["launch_error"]
 
 
 def test_guard_run_prompt_allow_once_launches_and_records_override(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
+    global_server = home_dir / "global-server.py"
+    workspace_server = workspace_dir / "workspace-server.py"
+    _write_text(global_server, "print('global server')\n")
+    _write_text(workspace_server, "print('workspace server')\n")
+    _write_text(
+        home_dir / ".codex" / "config.toml",
+        "[mcp_servers.global_tools]\n"
+        f"command = {json.dumps(sys.executable)}\n"
+        f"args = [{json.dumps(str(global_server))}]\n",
+    )
+    _write_text(
+        workspace_dir / ".codex" / "config.toml",
+        "[mcp_servers.workspace_skill]\n"
+        f"command = {json.dumps(sys.executable)}\n"
+        f"args = [{json.dumps(str(workspace_server))}]\n",
+    )
     answers = iter(["1", "1"])
     monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("rich.console.Console.input", lambda self, prompt="": next(answers))
@@ -11335,6 +11570,7 @@ def test_guard_run_prompt_allow_once_launches_and_records_override(tmp_path, cap
 
     assert rc == 0
     assert "Launch allowed" in output
+    assert len(receipts) == 2
     assert any(item.get("user_override") == "allow-once" for item in receipts)
 
 
@@ -11342,6 +11578,23 @@ def test_guard_run_prompt_allow_artifact_persists_for_next_run(tmp_path, capsys,
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
+    global_server = home_dir / "global-server.py"
+    workspace_server = workspace_dir / "workspace-server.py"
+    _write_text(global_server, "print('global server')\n")
+    _write_text(workspace_server, "print('workspace server')\n")
+    _write_text(
+        home_dir / ".codex" / "config.toml",
+        "[mcp_servers.global_tools]\n"
+        f"command = {json.dumps(sys.executable)}\n"
+        f"args = [{json.dumps(str(global_server))}]\n",
+    )
+    _write_text(
+        workspace_dir / ".codex" / "config.toml",
+        "[mcp_servers.workspace_skill]\n"
+        f"command = {json.dumps(sys.executable)}\n"
+        f"args = [{json.dumps(str(workspace_server))}]\n",
+    )
     answers = iter(["2", "2"])
     monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("rich.console.Console.input", lambda self, prompt="": next(answers))
@@ -11383,7 +11636,10 @@ def test_guard_run_prompt_allow_artifact_persists_for_next_run(tmp_path, capsys,
     assert "Launch allowed" in first_output
     assert second_rc == 0
     assert second_output["blocked"] is False
-    assert all(item["policy_action"] == "allow" for item in second_output["artifacts"])
+    assert {item["policy_action"] for item in second_output["artifacts"]} <= {"allow", "warn"}
+    persisted = GuardStore(home_dir).list_policy_decisions("codex")
+    assert len(persisted) == 2
+    assert all(str(item["artifact_hash"]).startswith(APPROVAL_CONTEXT_TOKEN_PREFIX) for item in persisted)
 
 
 def test_guard_run_headless_blocks_with_review_hint_without_opening_browser(tmp_path, capsys, monkeypatch):
@@ -12418,6 +12674,35 @@ def test_guard_run_headless_allow_persists_state_when_approval_center_is_availab
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
+    safe_detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(
+            str(home_dir / ".codex" / "config.toml"),
+            str(workspace_dir / ".codex" / "config.toml"),
+        ),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:global:global_tools",
+                name="global_tools",
+                harness="codex",
+                artifact_type="configuration",
+                source_scope="global",
+                config_path=str(home_dir / ".codex" / "config.toml"),
+            ),
+            GuardArtifact(
+                artifact_id="codex:project:workspace_skill",
+                name="workspace_skill",
+                harness="codex",
+                artifact_type="configuration",
+                source_scope="project",
+                config_path=str(workspace_dir / ".codex" / "config.toml"),
+            ),
+        ),
+    )
+    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: safe_detection)
     monkeypatch.setattr(
         guard_runner_module.subprocess,
         "run",
@@ -12455,7 +12740,16 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
-    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 8\n")
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, "claude")
+    _write_text(workspace_dir / "guard-pre.py", "pass\n")
+    _write_json(
+        workspace_dir / ".mcp.json",
+        {"mcpServers": {"workspace-tools": {"command": sys.executable, "args": ["-c", "pass"]}}},
+    )
+    _write_text(
+        home_dir / "config.toml",
+        'approval_wait_timeout_seconds = 8\ndefault_action = "review"\nchanged_hash_action = "review"\n',
+    )
 
     store = GuardStore(home_dir)
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
@@ -12466,12 +12760,14 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     )
 
     stop_resolver = threading.Event()
+    observed_actions: list[str] = []
 
     def resolve_pending() -> None:
         while not stop_resolver.is_set():
             pending = store.list_approval_requests(limit=10)
             if pending:
                 for request in pending:
+                    observed_actions.append(str(request["policy_action"]))
                     apply_approval_resolution(
                         store=store,
                         request_id=str(request["request_id"]),
@@ -12505,6 +12801,8 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     assert rc == 0
     assert "Launch allowed" in output
     assert "Approval received" in output
+    assert observed_actions
+    assert "review" in observed_actions
 
 
 def test_guard_run_headless_redetects_before_persisted_resume(tmp_path, monkeypatch):
@@ -12625,9 +12923,175 @@ def test_guard_run_headless_redetects_before_persisted_resume(tmp_path, monkeypa
     )
 
     assert result["blocked"] is True
+    assert result["approval_wait"]["resolved"] is True
     assert result["artifacts"][0]["changed_fields"] == ["args"]
     assert result["artifacts"][0]["artifact_hash"] == artifact_hash(detections[-1].artifacts[0])
     assert call_count["detect"] >= 2
+
+
+def test_guard_run_interactive_allow_once_redetects_before_resume(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    artifact_id = "codex:project:interactive-redetect"
+    detections = [
+        HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(str(workspace_dir / ".codex" / "config.toml"),),
+            artifacts=(
+                GuardArtifact(
+                    artifact_id=artifact_id,
+                    name="interactive-redetect",
+                    harness="codex",
+                    artifact_type="tool_action_request",
+                    source_scope="project",
+                    config_path=str(workspace_dir / ".codex" / "config.toml"),
+                    command=sys.executable,
+                    args=("-c", "print('before')"),
+                ),
+            ),
+        ),
+        HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(str(workspace_dir / ".codex" / "config.toml"),),
+            artifacts=(
+                GuardArtifact(
+                    artifact_id=artifact_id,
+                    name="interactive-redetect",
+                    harness="codex",
+                    artifact_type="tool_action_request",
+                    source_scope="project",
+                    config_path=str(workspace_dir / ".codex" / "config.toml"),
+                    command=sys.executable,
+                    args=("-c", "print('after')"),
+                ),
+            ),
+        ),
+    ]
+    call_count = {"detect": 0}
+
+    def fake_detect(_harness: str, _context: HarnessContext) -> HarnessDetection:
+        index = min(call_count["detect"], len(detections) - 1)
+        call_count["detect"] += 1
+        return detections[index]
+
+    def allow_once(_detection: HarnessDetection, evaluation: dict[str, object]) -> dict[str, object]:
+        items = evaluation.get("artifacts")
+        assert isinstance(items, list)
+        item = items[0]
+        assert isinstance(item, dict)
+        item["policy_action"] = "allow"
+        item["user_override"] = "allow-once"
+        evaluation["blocked"] = False
+        return evaluation
+
+    launch_calls: list[object] = []
+    monkeypatch.setattr(guard_runner_module, "detect_harness", fake_detect)
+    monkeypatch.setattr(
+        guard_runner_module.subprocess,
+        "run",
+        lambda *args, **kwargs: launch_calls.append((args, kwargs)),
+    )
+    store = GuardStore(home_dir)
+    result = guard_runner_module.guard_run(
+        "codex",
+        HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+        store,
+        GuardConfig(
+            guard_home=home_dir,
+            workspace=workspace_dir,
+            artifact_actions={artifact_id: "require-reapproval"},
+        ),
+        dry_run=False,
+        passthrough_args=[],
+        interactive_resolver=allow_once,
+    )
+
+    assert result["blocked"] is True
+    assert result["launched"] is False
+    assert result["artifacts"][0]["policy_action"] == "require-reapproval"
+    assert result["artifacts"][0]["trusted_request_override"]["applied"] is False
+    assert call_count["detect"] >= 2
+    assert launch_calls == []
+    receipts = store.list_receipts(limit=10)
+    assert len(receipts) == 1
+    assert receipts[0]["policy_decision"] == "require-reapproval"
+    assert receipts[0]["user_override"] is None
+
+
+@pytest.mark.parametrize("terminal_action", ("sandbox-required", "block"))
+def test_guard_run_interactive_allow_once_cannot_lower_terminal_action(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    terminal_action: GuardAction,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    artifact_id = "codex:project:interactive-terminal"
+    artifact = GuardArtifact(
+        artifact_id=artifact_id,
+        name="interactive-terminal",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(workspace_dir / ".codex" / "config.toml"),
+        command=sys.executable,
+        args=("-c", "pass"),
+    )
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(artifact.config_path,),
+        artifacts=(artifact,),
+    )
+
+    def allow_once(_detection: HarnessDetection, evaluation: dict[str, object]) -> dict[str, object]:
+        items = evaluation.get("artifacts")
+        assert isinstance(items, list)
+        item = items[0]
+        assert isinstance(item, dict)
+        item["policy_action"] = "allow"
+        item["user_override"] = "allow-once"
+        evaluation["blocked"] = False
+        return evaluation
+
+    launch_calls: list[object] = []
+    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(
+        guard_runner_module.subprocess,
+        "run",
+        lambda *args, **kwargs: launch_calls.append((args, kwargs)),
+    )
+    store = GuardStore(home_dir)
+    result = guard_runner_module.guard_run(
+        "codex",
+        HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+        store,
+        GuardConfig(
+            guard_home=home_dir,
+            workspace=workspace_dir,
+            artifact_actions={artifact_id: terminal_action},
+        ),
+        dry_run=False,
+        passthrough_args=[],
+        interactive_resolver=allow_once,
+    )
+
+    assert result["blocked"] is True
+    assert result["launched"] is False
+    assert result["artifacts"][0]["policy_action"] == terminal_action
+    assert result["artifacts"][0]["trusted_request_override"]["applied"] is False
+    assert launch_calls == []
+    receipts = store.list_receipts(limit=10)
+    assert len(receipts) == 1
+    assert receipts[0]["policy_decision"] == terminal_action
+    assert receipts[0]["user_override"] is None
 
 
 def test_guard_headless_blocked_run_persists_receipts_and_diffs(tmp_path, monkeypatch):
@@ -12788,7 +13252,16 @@ def test_guard_run_never_launches_for_unknown_stored_policy_action(tmp_path, mon
     )
     store = GuardStore(home_dir)
     launch_calls: list[object] = []
-    monkeypatch.setattr(store, "resolve_policy", lambda *_args, **_kwargs: "future-action")
+    monkeypatch.setattr(
+        store,
+        "resolve_policy_decision_lookup_with_memory_pattern",
+        lambda *_args, **_kwargs: {
+            "decision": {"action": "future-action"},
+            "ignored_local_integrity": None,
+            "trust_status": {},
+            "authority_revision": 0,
+        },
+    )
     monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
         guard_runner_module.subprocess,
@@ -12867,7 +13340,788 @@ def test_guard_hook_invalid_policy_action_falls_back_to_reapproval(tmp_path, cap
     assert output["policy_action"] == "require-reapproval"
 
 
-def test_guard_hook_blocks_sensitive_runtime_file_read_until_exactly_approved(tmp_path, capsys, monkeypatch):
+def test_runtime_hook_saved_v1_allow_satisfies_exact_unchanged_current_review(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(
+        home_dir / "config.toml",
+        'approval_wait_timeout_seconds = 0\n[risk_actions]\ndestructive_shell = "review"\n',
+    )
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "rm -rf build-cache"},
+        "source_scope": "project",
+    }
+
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+    store = GuardStore(home_dir)
+    first_receipt = store.list_receipts(limit=1)[0]
+    context_token = str(first_receipt["artifact_hash"])
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=str(first_output["artifact_id"]),
+            artifact_hash=context_token,
+            reason="Reviewed exact hook context",
+            source="manual",
+        ),
+        "2026-07-17T12:00:00+00:00",
+    )
+
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    assert first_rc == 1
+    assert first_output["policy_action"] == "review"
+    assert context_token.startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
+    assert second_rc == 0
+    assert second_output["policy_action"] == "allow"
+    assert second_output["approval_reuse"]["status"] == "accepted"
+    assert second_output["approval_reuse"]["reason_code"] == "approval_reuse_accepted"
+
+
+@pytest.mark.parametrize("scope", ("artifact", "workspace", "publisher", "harness", "global"))
+def test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator(tmp_path, scope: str) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    config = GuardConfig(
+        guard_home=home_dir,
+        workspace=workspace_dir,
+        default_action="allow",
+        approval_wait_timeout_seconds=0,
+    )
+    artifact = GuardArtifact(
+        artifact_id="codex:project:tool-action:scope-matrix",
+        name="Codex exact scope matrix action",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(workspace_dir / ".codex" / "config.toml"),
+        command="echo",
+        args=("scope-matrix",),
+        publisher="publisher-a",
+        metadata={"guard_default_action": "review", "action_class": "routine shell command"},
+    )
+    args = argparse.Namespace(harness="codex", policy_action=None, json=True)
+    context = HarnessContext(home_dir=tmp_path, workspace_dir=workspace_dir, guard_home=home_dir)
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo scope-matrix"},
+        "source_scope": "project",
+    }
+
+    first = guard_commands_module._evaluate_runtime_artifact_hook(
+        args,
+        action_envelope=None,
+        config=config,
+        context=context,
+        data_flow_signals=(),
+        guard_home=home_dir,
+        payload=payload,
+        runtime_artifact=artifact,
+        runtime_workspace=workspace_dir,
+        store=store,
+    )
+    assert not isinstance(first, int)
+    assert first.policy_action == "review"
+    token = first.runtime_artifact_hash
+    policy_kwargs: dict[str, object] = {
+        "artifact_id": artifact.artifact_id if scope in {"artifact", "workspace", "harness", "global"} else None,
+        "artifact_hash": token,
+        "workspace": str(workspace_dir) if scope == "workspace" else None,
+        "publisher": artifact.publisher if scope == "publisher" else None,
+    }
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope=scope,
+            action="allow",
+            reason=f"reviewed exact v1 context at {scope} scope",
+            source="manual",
+            **policy_kwargs,  # type: ignore[arg-type]
+        ),
+        "2026-07-17T12:00:00+00:00",
+    )
+
+    second = guard_commands_module._evaluate_runtime_artifact_hook(
+        args,
+        action_envelope=None,
+        config=config,
+        context=context,
+        data_flow_signals=(),
+        guard_home=home_dir,
+        payload=payload,
+        runtime_artifact=artifact,
+        runtime_workspace=workspace_dir,
+        store=store,
+    )
+
+    assert not isinstance(second, int)
+    assert second.runtime_artifact_hash == token
+    assert second.policy_action == "allow"
+    assert second.response_payload["approval_reuse"]["status"] == "accepted"
+
+
+def test_runtime_hook_browser_exact_override_atomically_claims_one_waiter(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    config = GuardConfig(
+        guard_home=home_dir,
+        workspace=workspace_dir,
+        default_action="allow",
+        approval_wait_timeout_seconds=0,
+    )
+    artifact = GuardArtifact(
+        artifact_id="codex:project:tool-action:browser-claim",
+        name="Codex browser claim action",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(workspace_dir / ".codex" / "config.toml"),
+        command="echo",
+        args=("browser-claim",),
+        metadata={
+            "guard_default_action": "require-reapproval",
+            "action_class": "sensitive shell command",
+        },
+    )
+    args = argparse.Namespace(harness="codex", policy_action=None, json=True)
+    context = HarnessContext(home_dir=tmp_path, workspace_dir=workspace_dir, guard_home=home_dir)
+    payload = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo browser-claim"},
+        "source_scope": "project",
+    }
+    initial = guard_commands_module._evaluate_runtime_artifact_hook(
+        args,
+        action_envelope=None,
+        config=config,
+        context=context,
+        data_flow_signals=(),
+        guard_home=home_dir,
+        payload=payload,
+        runtime_artifact=artifact,
+        runtime_workspace=workspace_dir,
+        store=store,
+    )
+    assert not isinstance(initial, int)
+    assert initial.policy_action == "require-reapproval"
+    token = initial.runtime_artifact_hash
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=artifact.artifact_id,
+            artifact_hash=token,
+            reason="exact browser allow",
+            source="approval-gate",
+            expires_at="2099-07-17T12:00:00+00:00",
+        ),
+        "2026-07-17T12:00:00+00:00",
+    )
+
+    first_waiter = guard_commands_module._evaluate_runtime_artifact_hook(
+        args,
+        action_envelope=None,
+        config=config,
+        context=context,
+        data_flow_signals=(),
+        guard_home=home_dir,
+        payload=payload,
+        runtime_artifact=artifact,
+        runtime_workspace=workspace_dir,
+        store=store,
+        trusted_request_override_hash=token,
+    )
+    second_waiter = guard_commands_module._evaluate_runtime_artifact_hook(
+        args,
+        action_envelope=None,
+        config=config,
+        context=context,
+        data_flow_signals=(),
+        guard_home=home_dir,
+        payload=payload,
+        runtime_artifact=artifact,
+        runtime_workspace=workspace_dir,
+        store=store,
+        trusted_request_override_hash=token,
+    )
+
+    assert not isinstance(first_waiter, int)
+    assert not isinstance(second_waiter, int)
+    assert first_waiter.policy_action == "allow"
+    assert first_waiter.response_payload["policy_composition"]["trusted_request_override"] is True
+    assert second_waiter.policy_action == "require-reapproval"
+    assert second_waiter.response_payload["policy_composition"]["trusted_request_override"] is False
+    assert second_waiter.response_payload["policy_composition"]["trusted_request_override_reason"] == (
+        "trusted_request_override_allow_missing"
+    )
+
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="global",
+            action="block",
+            reason="saved block added while browser waits",
+            source="manual",
+        ),
+        "2026-07-17T12:01:00+00:00",
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=artifact.artifact_id,
+            artifact_hash=token,
+            reason="stale exact browser allow",
+            source="approval-gate",
+            expires_at="2099-07-17T12:00:00+00:00",
+        ),
+        "2026-07-17T12:02:00+00:00",
+    )
+    blocked_waiter = guard_commands_module._evaluate_runtime_artifact_hook(
+        args,
+        action_envelope=None,
+        config=config,
+        context=context,
+        data_flow_signals=(),
+        guard_home=home_dir,
+        payload=payload,
+        runtime_artifact=artifact,
+        runtime_workspace=workspace_dir,
+        store=store,
+        trusted_request_override_hash=token,
+    )
+
+    assert not isinstance(blocked_waiter, int)
+    assert blocked_waiter.policy_action == "block"
+    assert blocked_waiter.response_payload["policy_composition"]["trusted_request_override"] is False
+    with sqlite3.connect(store.path) as connection:
+        remaining_browser_allows = connection.execute(
+            "select count(*) from policy_decisions where action = 'allow' and source = 'approval-gate'"
+        ).fetchone()[0]
+    assert remaining_browser_allows == 1
+
+
+def test_runtime_hook_integrity_rejection_outranks_valid_exact_one_shot_allow(tmp_path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    config = GuardConfig(
+        guard_home=home_dir,
+        workspace=workspace_dir,
+        default_action="allow",
+        approval_wait_timeout_seconds=0,
+    )
+    artifact = GuardArtifact(
+        artifact_id="codex:project:tool-action:integrity-collision",
+        name="Codex integrity collision action",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(workspace_dir / ".codex" / "config.toml"),
+        command="echo",
+        args=("integrity-collision",),
+        metadata={"guard_default_action": "review", "action_class": "routine shell command"},
+    )
+    args = argparse.Namespace(harness="codex", policy_action=None, json=True)
+    context = HarnessContext(home_dir=tmp_path, workspace_dir=workspace_dir, guard_home=home_dir)
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo integrity-collision"},
+        "source_scope": "project",
+    }
+    first = guard_commands_module._evaluate_runtime_artifact_hook(
+        args,
+        action_envelope=None,
+        config=config,
+        context=context,
+        data_flow_signals=(),
+        guard_home=home_dir,
+        payload=payload,
+        runtime_artifact=artifact,
+        runtime_workspace=workspace_dir,
+        store=store,
+    )
+    assert not isinstance(first, int)
+    approval_id = store.record_local_once_approval(
+        request_id="request-integrity-collision",
+        harness="codex",
+        artifact_id=artifact.artifact_id,
+        artifact_hash=first.runtime_artifact_hash,
+        workspace=str(workspace_dir),
+        publisher=None,
+        action="allow",
+        created_at="2026-07-17T12:00:00+00:00",
+        expires_at="2027-07-17T13:00:00+00:00",
+    )
+    assert approval_id is not None
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="global",
+            action="block",
+            artifact_id=None,
+            artifact_hash=None,
+            reason="tampered broader block must invalidate reuse",
+            source="manual",
+        ),
+        "2026-07-17T12:01:00+00:00",
+    )
+    broader_block = next(policy for policy in store.list_policy_decisions("codex") if policy["action"] == "block")
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "update policy_decisions set payload_mac = ? where decision_id = ?",
+            ("00", broader_block["decision_id"]),
+        )
+
+    second = guard_commands_module._evaluate_runtime_artifact_hook(
+        args,
+        action_envelope=None,
+        config=config,
+        context=context,
+        data_flow_signals=(),
+        guard_home=home_dir,
+        payload=payload,
+        runtime_artifact=artifact,
+        runtime_workspace=workspace_dir,
+        store=store,
+        trusted_request_override_hash=first.runtime_artifact_hash,
+    )
+    with sqlite3.connect(store.path) as connection:
+        claimed_at = connection.execute(
+            "select claimed_at from guard_local_once_approvals where approval_id = ?",
+            (approval_id,),
+        ).fetchone()[0]
+
+    assert not isinstance(second, int)
+    assert second.policy_action == "require-reapproval"
+    assert second.response_payload["approval_reuse"]["status"] == "rejected"
+    assert second.response_payload["approval_reuse"]["reason_code"] == "approval_reuse_integrity_failure"
+    assert second.response_payload["remembered_rule_rejection"]["integrity_status"] == "tampered"
+    assert second.response_payload["policy_composition"]["trusted_request_override"] is False
+    assert second.response_payload["policy_composition"]["trusted_request_override_reason"] == (
+        "trusted_request_override_integrity_failure"
+    )
+    assert claimed_at is None
+
+
+def test_runtime_hook_saved_allow_invalidates_when_path_resolves_executable_elsewhere(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    first_bin = tmp_path / "bin-a"
+    second_bin = tmp_path / "bin-b"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(
+        home_dir / "config.toml",
+        'approval_wait_timeout_seconds = 0\n[risk_actions]\ndestructive_shell = "review"\n',
+    )
+    execution_markers: list[Path] = []
+    for bin_dir, marker in ((first_bin, "first"), (second_bin, "second")):
+        executable = bin_dir / "rm"
+        execution_marker = tmp_path / f"{marker}-executable-ran"
+        execution_markers.append(execution_marker)
+        _write_text(executable, f"#!/bin/sh\nprintf ran > {shlex.quote(str(execution_marker))}\n")
+        executable.chmod(0o755)
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "rm -rf build-cache"},
+        "source_scope": "project",
+    }
+    original_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", f"{first_bin}{os.pathsep}{original_path}")
+
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+    store = GuardStore(home_dir)
+    first_token = str(store.list_receipts(limit=1)[0]["artifact_hash"])
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=str(first_output["artifact_id"]),
+            artifact_hash=first_token,
+            reason="Reviewed executable from first PATH entry",
+            source="manual",
+        ),
+        "2026-07-17T12:00:00+00:00",
+    )
+    monkeypatch.setenv("PATH", f"{second_bin}{os.pathsep}{original_path}")
+
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    assert first_rc == 1
+    assert first_output["policy_action"] == "review"
+    assert second_rc == 1
+    assert second_output["policy_action"] == "review"
+    assert second_output["approval_reuse"]["status"] == "rejected"
+    assert second_output["approval_reuse"]["reason_code"] == "approval_reuse_identity_changed"
+    assert all(not marker.exists() for marker in execution_markers)
+
+
+@pytest.mark.parametrize(
+    ("changed_dimension", "expected_reason"),
+    (
+        ("workspace", "approval_reuse_identity_changed"),
+        ("content", "approval_reuse_content_changed"),
+        ("capability", "approval_reuse_capability_changed"),
+        ("scanner", "approval_reuse_capability_changed"),
+        ("policy", "approval_reuse_policy_changed"),
+        ("sandbox", "approval_reuse_sandbox_changed"),
+        ("unrelated_ux", None),
+    ),
+)
+def test_runtime_hook_approval_context_invalidates_one_changed_dimension(
+    tmp_path,
+    changed_dimension,
+    expected_reason,
+):
+    workspace = tmp_path / "workspace"
+    artifact = GuardArtifact(
+        artifact_id="codex:project:tool-action:stable",
+        name="Bash destructive shell command",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(workspace / ".codex" / "config.toml"),
+        command="rm -rf build-cache",
+        metadata={"action_class": "destructive shell command", "risk_classes": ["destructive_shell"]},
+    )
+    envelope = GuardActionEnvelope(
+        schema_version=1,
+        action_id="stable-action",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="shell_command",
+        workspace=str(workspace),
+        workspace_hash="workspace-hash",
+        tool_name="Bash",
+        command="rm -rf build-cache",
+        prompt_excerpt=None,
+        prompt_text=None,
+        target_paths=(str(workspace / "build-cache"),),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+    config = GuardConfig(
+        guard_home=tmp_path / "home",
+        workspace=workspace,
+        risk_actions={"destructive_shell": "review"},
+    )
+
+    def _token(
+        *,
+        runtime_workspace=workspace,
+        content_hash="artifact-content-v1",
+        action_envelope=envelope,
+        effective_config=config,
+        scanner_evidence=(),
+    ):
+        return _runtime_hook_approval_context_token(
+            artifact=artifact,
+            content_hash=content_hash,
+            runtime_workspace=runtime_workspace,
+            action_envelope=action_envelope,
+            config=effective_config,
+            current_config_action="review",
+            trusted_cli_action=None,
+            untrusted_payload_action=None,
+            package_action=None,
+            data_flow_action=None,
+            scanner_action=None,
+            current_action="review",
+            data_flow_signals=(),
+            scanner_evidence=scanner_evidence,
+        )
+
+    saved_token = _token()
+    if changed_dimension == "workspace":
+        current_token = _token(runtime_workspace=tmp_path / "other-workspace")
+    elif changed_dimension == "content":
+        current_token = _token(content_hash="artifact-content-v2")
+    elif changed_dimension == "capability":
+        current_token = _token(
+            action_envelope=replace(
+                envelope,
+                target_paths=(*envelope.target_paths, str(workspace / "other-target")),
+            )
+        )
+    elif changed_dimension == "scanner":
+        current_token = _token(scanner_evidence=({"signal_id": "scanner:new-capability"},))
+    elif changed_dimension == "policy":
+        current_token = _token(effective_config=replace(config, new_network_domain_action="block"))
+    elif changed_dimension == "sandbox":
+        current_token = _token(effective_config=replace(config, sandbox_analysis="strict"))
+    else:
+        current_token = _token(
+            effective_config=replace(
+                config,
+                approval_browser_delay_seconds=99,
+                desktop_notifications=not config.desktop_notifications,
+                telemetry=not config.telemetry,
+            )
+        )
+
+    assert approval_context_tokens_validation_reason(saved_token, current_token) == expected_reason
+
+
+def test_runtime_hook_package_without_workspace_rejects_legacy_exact_allow(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+        PackageRequestEvaluation,
+        SupplyChainUserCopy,
+    )
+
+    home_dir = tmp_path / "home"
+    cwd = tmp_path / "inherited-cwd"
+    cwd.mkdir()
+    _write_text(
+        home_dir / "config.toml",
+        'approval_wait_timeout_seconds = 0\n[risk_actions]\npackage_script = "review"\n',
+    )
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "npm install minimist@1.2.8"},
+        "source_scope": "project",
+    }
+    action_envelope = guard_commands_module._hook_action_envelope(
+        harness="codex",
+        payload=event,
+        home_dir=home_dir,
+        workspace=None,
+    )
+    artifact = guard_commands_module._hook_runtime_artifact(
+        harness="codex",
+        payload=event,
+        action_envelope=action_envelope,
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=None,
+    )
+    assert artifact is not None
+    assert artifact.artifact_type == "package_request"
+    GuardStore(home_dir).upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=artifact.artifact_id,
+            artifact_hash=artifact_hash(artifact),
+            reason="legacy exact package allow",
+            source="manual",
+        ),
+        "2026-07-17T12:00:00+00:00",
+    )
+    evaluation = PackageRequestEvaluation(
+        decision="review",
+        policy_action="review",
+        enforcement="policy",
+        entitlement_state="active",
+        cache_status="hit",
+        package_intent_hash="intent-hash",
+        policy_version="policy-v1",
+        bundle_version="bundle-v1",
+        workspace_fingerprint="no-workspace",
+        reasons=({"code": "package_review", "message": "Review package install."},),
+        packages=({"name": "minimist", "decision": "review", "reasons": ()},),
+        risk_summary="Review package install.",
+        user_copy=SupplyChainUserCopy(
+            title="Review package install",
+            summary="Review package install.",
+            next_step="Review the exact request.",
+            dashboard_url=None,
+            harness_message="Review package install.",
+        ),
+    )
+    monkeypatch.chdir(cwd)
+    monkeypatch.setattr(guard_commands_module, "evaluate_package_request_artifact", lambda **_kwargs: evaluation)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--harness",
+            "codex",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    receipt = GuardStore(home_dir).list_receipts(limit=1)[0]
+
+    assert rc == 1
+    assert output["policy_action"] == "review"
+    assert output["approval_reuse"]["status"] == "rejected"
+    assert output["approval_reuse"]["reason_code"] == "approval_reuse_content_changed"
+    assert receipt["artifact_hash"].startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
+    assert receipt["artifact_hash"] != artifact_hash(artifact)
+
+
+def test_runtime_hook_package_without_workspace_invalidates_allow_after_lockfile_mutation(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+        PackageRequestEvaluation,
+        SupplyChainUserCopy,
+    )
+
+    home_dir = tmp_path / "home"
+    cwd = tmp_path / "inherited-cwd"
+    cwd.mkdir()
+    _write_text(cwd / "package.json", '{"dependencies":{"minimist":"1.2.8"}}\n')
+    _write_text(cwd / "package-lock.json", '{"lockfileVersion":3,"packages":{}}\n')
+    _write_text(
+        home_dir / "config.toml",
+        'approval_wait_timeout_seconds = 0\n[risk_actions]\npackage_script = "review"\n',
+    )
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "npm install minimist@1.2.8"},
+        "source_scope": "project",
+    }
+    evaluation = PackageRequestEvaluation(
+        decision="review",
+        policy_action="review",
+        enforcement="policy",
+        entitlement_state="active",
+        cache_status="hit",
+        package_intent_hash="intent-hash",
+        policy_version="policy-v1",
+        bundle_version="bundle-v1",
+        workspace_fingerprint="no-workspace",
+        reasons=({"code": "package_review", "message": "Review package install."},),
+        packages=({"name": "minimist", "decision": "review", "reasons": ()},),
+        risk_summary="Review package install.",
+        user_copy=SupplyChainUserCopy(
+            title="Review package install",
+            summary="Review package install.",
+            next_step="Review the exact request.",
+            dashboard_url=None,
+            harness_message="Review package install.",
+        ),
+    )
+    monkeypatch.chdir(cwd)
+    monkeypatch.setattr(guard_commands_module, "evaluate_package_request_artifact", lambda **_kwargs: evaluation)
+
+    def run_without_workspace() -> tuple[int, dict[str, object]]:
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        return rc, json.loads(capsys.readouterr().out)
+
+    first_rc, first_output = run_without_workspace()
+    store = GuardStore(home_dir)
+    first_token = str(store.list_receipts(limit=1)[0]["artifact_hash"])
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=str(first_output["artifact_id"]),
+            artifact_hash=first_token,
+            reason="Reviewed exact inherited-cwd package context",
+            source="manual",
+        ),
+        "2026-07-17T12:00:00+00:00",
+    )
+
+    unchanged_rc, unchanged_output = run_without_workspace()
+    _write_text(
+        cwd / "package-lock.json",
+        '{"lockfileVersion":3,"packages":{"node_modules/minimist":{"version":"1.2.8"}}}\n',
+    )
+    changed_rc, changed_output = run_without_workspace()
+    changed_token = str(store.list_receipts(limit=1)[0]["artifact_hash"])
+
+    assert first_rc == 1
+    assert first_output["policy_action"] == "review"
+    assert first_token.startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
+    assert unchanged_rc == 0
+    assert unchanged_output["policy_action"] == "allow"
+    assert unchanged_output["supply_chain_evaluation"]["policy_action"] == "allow"
+    assert unchanged_output["approval_reuse"]["status"] == "accepted"
+    assert changed_rc == 1
+    assert changed_output["policy_action"] == "review"
+    assert changed_output["supply_chain_evaluation"]["policy_action"] == "review"
+    assert changed_output["approval_reuse"]["status"] == "rejected"
+    assert changed_output["approval_reuse"]["reason_code"] == "approval_reuse_content_changed"
+    assert changed_token != first_token
+
+
+def test_guard_hook_saved_file_read_allow_does_not_lower_current_reapproval(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -12896,6 +14150,7 @@ def test_guard_hook_blocks_sensitive_runtime_file_read_until_exactly_approved(tm
     )
     first_output = json.loads(capsys.readouterr().out)
     approval_request = first_output["approval_requests"][0]
+    first_receipt = GuardStore(home_dir).list_receipts(limit=1)[0]
 
     approval_rc = main(
         [
@@ -12955,14 +14210,89 @@ def test_guard_hook_blocks_sensitive_runtime_file_read_until_exactly_approved(tm
     assert first_output["artifact_type"] == "file_read_request"
     assert "sensitive local file" in first_output["risk_summary"].lower()
     assert approval_request["recommended_scope"] == "artifact"
+    assert approval_request["artifact_hash"].startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
+    assert approval_request["artifact_hash"] == first_receipt["artifact_hash"]
     assert approval_rc == 0
-    assert second_rc == 0
-    assert second_output["policy_action"] == "allow"
+    assert second_rc == 1
+    assert second_output["policy_action"] == "require-reapproval"
+    assert second_output["approval_reuse"]["reason_code"] == "approval_reuse_reapproval_required"
     assert third_rc == 1
     assert third_output["policy_action"] == "require-reapproval"
 
 
-def test_guard_hook_keeps_artifact_approval_for_same_sensitive_tool_action_retry(tmp_path, capsys, monkeypatch):
+def test_guard_hook_exact_v1_allow_cannot_hide_matching_legacy_block(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    def saved_decision_lookup(
+        _store: GuardStore,
+        _harness: str,
+        _artifact_id: str,
+        *,
+        artifact_hash: str,
+        **kwargs: object,
+    ) -> dict[str, object]:
+        assert kwargs["consume_one_shot"] is False
+        action = "allow" if artifact_hash.startswith(APPROVAL_CONTEXT_TOKEN_PREFIX) else "block"
+        return {
+            "decision": {
+                "action": action,
+                "artifact_hash": artifact_hash,
+                "scope": "artifact",
+                "source": "local",
+            },
+            "ignored_local_integrity": None,
+            "trust_status": {},
+        }
+
+    monkeypatch.setattr(
+        GuardStore,
+        "resolve_policy_decision_lookup_with_memory_pattern",
+        saved_decision_lookup,
+    )
+    monkeypatch.setattr(
+        guard_commands_module,
+        "ensure_guard_daemon",
+        lambda _guard_home: (_ for _ in ()).throw(AssertionError("a saved block must not be queued")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "event": "PreToolUse",
+                    "tool_name": "Read",
+                    "tool_input": {"file_path": ".env.local"},
+                    "source_scope": "project",
+                }
+            )
+        ),
+    )
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert output["policy_action"] == "block"
+    assert output["approval_reuse"]["reason_code"] == "approval_reuse_saved_block"
+    assert GuardStore(home_dir).list_receipts(limit=1)[0]["policy_decision"] == "block"
+
+
+def test_guard_hook_saved_artifact_approval_never_lowers_current_payload_block(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -12992,22 +14322,20 @@ def test_guard_hook_keeps_artifact_approval_for_same_sensitive_tool_action_retry
         ]
     )
     first_output = json.loads(capsys.readouterr().out)
-    approval_request = first_output["approval_requests"][0]
-
-    approval_rc = main(
-        [
-            "guard",
-            "approvals",
-            "approve",
-            str(approval_request["request_id"]),
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--json",
-        ]
+    store = GuardStore(home_dir)
+    first_receipt = store.list_receipts(limit=1)[0]
+    store.upsert_policy(
+        PolicyDecision(
+            harness="copilot",
+            scope="artifact",
+            action="allow",
+            artifact_id=str(first_output["artifact_id"]),
+            artifact_hash=str(first_receipt["artifact_hash"]),
+            reason="Reviewed exact artifact before current policy became terminal.",
+            source="manual",
+        ),
+        "2026-07-17T12:00:00+00:00",
     )
-    json.loads(capsys.readouterr().out)
 
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
     second_rc = main(
@@ -13051,16 +14379,17 @@ def test_guard_hook_keeps_artifact_approval_for_same_sensitive_tool_action_retry
 
     assert first_rc == 1
     assert first_output["policy_action"] == "block"
+    assert first_output["approval_requests"] == []
+    assert first_output["terminal"] is True
     assert first_output["artifact_type"] == "tool_action_request"
     assert "destructive shell command" in first_output["risk_summary"].lower()
-    assert approval_request["recommended_scope"] == "artifact"
-    assert approval_rc == 0
-    assert second_rc == 0
-    assert second_output["policy_action"] == "allow"
-    assert second_output.get("approval_requests") in (None, [])
+    assert second_rc == 1
+    assert second_output["policy_action"] == "block"
+    assert second_output["approval_reuse"]["status"] == "rejected"
+    assert second_output["approval_reuse"]["reason_code"] == "approval_reuse_current_block"
     assert third_rc == 1
     assert third_output["policy_action"] == "block"
-    assert len(third_output["approval_requests"]) == 1
+    assert third_output["approval_requests"] == []
 
 
 def test_guard_hook_codex_emits_native_deny_for_sensitive_bash_command(tmp_path, capsys, monkeypatch):
@@ -13189,7 +14518,7 @@ def test_guard_hook_codex_emits_no_native_output_for_safe_github_node_review_thr
     assert pending == []
 
 
-def test_guard_hook_codex_queues_approval_before_native_deny_output(tmp_path, capsys, monkeypatch):
+def test_guard_hook_codex_current_block_is_terminal_before_native_deny_output(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -13230,13 +14559,12 @@ def test_guard_hook_codex_queues_approval_before_native_deny_output(tmp_path, ca
     assert rc == 0
     assert captured.err == ""
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert len(pending) == 1
-    review_url = str(pending[0]["approval_url"])
+    assert pending == []
     reason = str(payload["hookSpecificOutput"]["permissionDecisionReason"])
-    assert "Open HOL Guard to approve or keep this blocked" in reason
-    assert review_url in reason
+    assert "terminal policy decision" in reason
+    assert "Browser approval cannot override it" in reason
+    assert "/requests/" not in reason
     assert "Approve it in HOL Guard, then retry." not in reason
-    assert pending[0]["artifact_type"] == "tool_action_request"
 
 
 def _install_fake_guard_surface_daemon(
@@ -13287,7 +14615,7 @@ def _install_fake_guard_surface_daemon(
     )
 
 
-def test_guard_hook_codex_pretooluse_browser_approval_resumes_original_tool(
+def test_guard_hook_codex_pretooluse_current_block_is_terminal_without_browser_approval(
     tmp_path,
     capsys,
     monkeypatch,
@@ -13297,9 +14625,13 @@ def test_guard_hook_codex_pretooluse_browser_approval_resumes_original_tool(
     _build_guard_fixture(home_dir, workspace_dir)
     _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
     monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     store = GuardStore(home_dir)
-    _install_fake_guard_surface_daemon(monkeypatch, store)
+
+    def unexpected_browser_approval(*_args, **_kwargs):
+        raise AssertionError("current block must not queue or wait for browser approval")
+
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", unexpected_browser_approval)
+    monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", unexpected_browser_approval)
     blocked_event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
@@ -13309,23 +14641,6 @@ def test_guard_hook_codex_pretooluse_browser_approval_resumes_original_tool(
         "cwd": str(workspace_dir),
     }
 
-    def approve_pending() -> None:
-        for _ in range(40):
-            pending = store.list_approval_requests(limit=10)
-            if pending:
-                apply_approval_resolution(
-                    store=store,
-                    request_id=str(pending[0]["request_id"]),
-                    action="allow",
-                    scope="artifact",
-                    workspace=None,
-                    reason="approved in browser",
-                )
-                return
-            threading.Event().wait(0.05)
-
-    worker = threading.Thread(target=approve_pending, daemon=True)
-    worker.start()
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
 
     rc = main(
@@ -13343,10 +14658,14 @@ def test_guard_hook_codex_pretooluse_browser_approval_resumes_original_tool(
     captured = capsys.readouterr()
 
     payload = json.loads(captured.out)
+    reason = str(payload["hookSpecificOutput"]["permissionDecisionReason"])
     assert rc == 0
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert captured.err == ""
-    assert store.list_approval_requests(limit=10)
+    assert store.list_approval_requests(limit=10) == []
+    assert "terminal policy decision" in reason
+    assert "Browser approval cannot override it" in reason
+    assert "/requests/" not in reason
 
 
 def test_guard_hook_codex_pretooluse_browser_deny_keeps_tool_blocked(
@@ -13454,7 +14773,7 @@ def test_guard_hook_claude_native_block_does_not_queue_approval_center_request(t
     assert pending == []
 
 
-def test_guard_hook_codex_keeps_artifact_approval_for_same_sensitive_tool_action_retry(
+def test_guard_hook_codex_saved_artifact_approval_never_lowers_current_payload_block(
     tmp_path,
     capsys,
     monkeypatch,
@@ -13489,22 +14808,20 @@ def test_guard_hook_codex_keeps_artifact_approval_for_same_sensitive_tool_action
         ]
     )
     first_output = json.loads(capsys.readouterr().out)
-    approval_request = first_output["approval_requests"][0]
-
-    approval_rc = main(
-        [
-            "guard",
-            "approvals",
-            "approve",
-            str(approval_request["request_id"]),
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--json",
-        ]
+    store = GuardStore(home_dir)
+    first_receipt = store.list_receipts(limit=1)[0]
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=str(first_output["artifact_id"]),
+            artifact_hash=str(first_receipt["artifact_hash"]),
+            reason="Reviewed exact artifact before current policy became terminal.",
+            source="manual",
+        ),
+        "2026-07-17T12:00:00+00:00",
     )
-    json.loads(capsys.readouterr().out)
 
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
     second_rc = main(
@@ -13548,16 +14865,17 @@ def test_guard_hook_codex_keeps_artifact_approval_for_same_sensitive_tool_action
 
     assert first_rc == 1
     assert first_output["policy_action"] == "block"
+    assert first_output["approval_requests"] == []
+    assert first_output["terminal"] is True
     assert first_output["artifact_type"] == "tool_action_request"
     assert "destructive shell command" in first_output["risk_summary"].lower()
-    assert approval_request["recommended_scope"] == "artifact"
-    assert approval_rc == 0
-    assert second_rc == 0
-    assert second_output["policy_action"] == "allow"
-    assert second_output.get("approval_requests") in (None, [])
+    assert second_rc == 1
+    assert second_output["policy_action"] == "block"
+    assert second_output["approval_reuse"]["status"] == "rejected"
+    assert second_output["approval_reuse"]["reason_code"] == "approval_reuse_current_block"
     assert third_rc == 1
     assert third_output["policy_action"] == "block"
-    assert len(third_output["approval_requests"]) == 1
+    assert third_output["approval_requests"] == []
 
 
 def test_guard_hook_allows_non_sensitive_read_file_requests(tmp_path, capsys, monkeypatch):
@@ -13906,7 +15224,7 @@ def test_guard_hook_codex_user_prompt_submit_browser_approval_resumes_prompt(
     assert store.list_approval_requests(limit=10) == []
 
 
-def test_guard_hook_codex_user_prompt_submit_reuses_artifact_approval(
+def test_guard_hook_codex_user_prompt_saved_artifact_allow_does_not_lower_reapproval(
     tmp_path,
     capsys,
     monkeypatch,
@@ -13954,10 +15272,10 @@ def test_guard_hook_codex_user_prompt_submit_reuses_artifact_approval(
     assert rc == 0
     payload = json.loads(output)
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert store.list_approval_requests(limit=10) == []
+    assert len(store.list_approval_requests(limit=10)) == 1
 
 
-def test_guard_hook_codex_user_prompt_submit_reuses_workspace_approval_for_same_prompt(
+def test_guard_hook_codex_user_prompt_saved_workspace_allow_does_not_lower_reapproval(
     tmp_path,
     capsys,
     monkeypatch,
@@ -14005,7 +15323,7 @@ def test_guard_hook_codex_user_prompt_submit_reuses_workspace_approval_for_same_
     assert rc == 0
     payload = json.loads(output)
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert store.list_approval_requests(limit=10) == []
+    assert len(store.list_approval_requests(limit=10)) == 1
 
 
 def test_guard_hook_codex_user_prompt_submit_workspace_approval_stays_in_workspace(
@@ -15504,6 +16822,107 @@ def test_guard_runtime_tool_action_policy_does_not_let_warn_default_override_ris
     assert guard_commands_module._runtime_artifact_policy_action(config, artifact, "codex") == "require-reapproval"
 
 
+def test_guard_runtime_artifact_policy_includes_stronger_global_default(tmp_path):
+    artifact = GuardArtifact(
+        artifact_id="codex:test:tool-action:global-default",
+        name="Codex routine tool action",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/dev/null",
+        publisher="trusted-publisher",
+        metadata={"guard_default_action": "allow"},
+    )
+    config = GuardConfig(
+        guard_home=tmp_path,
+        workspace=None,
+        security_level="custom",
+        default_action="block",
+    )
+
+    assert guard_commands_module._runtime_artifact_policy_action(config, artifact, "codex") == "block"
+
+
+def test_guard_runtime_artifact_exact_allow_replaces_stricter_global_default(tmp_path):
+    artifact = GuardArtifact(
+        artifact_id="codex:test:tool-action:exact-allow",
+        name="Codex routine tool action",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/dev/null",
+        metadata={"guard_default_action": "allow"},
+    )
+    config = GuardConfig(
+        guard_home=tmp_path,
+        workspace=None,
+        security_level="custom",
+        default_action="block",
+        artifact_actions={artifact.artifact_id: "allow"},
+    )
+
+    assert guard_commands_module._runtime_artifact_policy_action(config, artifact, "codex") == "allow"
+
+
+def test_guard_runtime_artifact_exact_allow_cannot_lower_independent_risk_block(tmp_path):
+    artifact = GuardArtifact(
+        artifact_id="codex:test:tool-action:exact-allow-risk-block",
+        name="Codex credential exfiltration action",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/dev/null",
+        metadata={
+            "action_class": "credential exfiltration shell command",
+            "guard_default_action": "allow",
+        },
+    )
+    config = GuardConfig(
+        guard_home=tmp_path,
+        workspace=None,
+        security_level="custom",
+        default_action="allow",
+        artifact_actions={artifact.artifact_id: "allow"},
+        risk_actions={"credential_exfiltration": "block"},
+    )
+
+    assert guard_commands_module._runtime_artifact_policy_action(config, artifact, "codex") == "block"
+
+
+@pytest.mark.parametrize(
+    ("override_kwargs", "expected_action"),
+    (
+        ({"artifact_actions": {"codex:test:tool-action:override": "block"}}, "block"),
+        ({"publisher_actions": {"publisher-a": "sandbox-required"}}, "sandbox-required"),
+        ({"harness_actions": {"codex": "block"}}, "block"),
+    ),
+)
+def test_guard_runtime_artifact_policy_composes_exact_current_override(
+    tmp_path,
+    override_kwargs: dict[str, object],
+    expected_action: str,
+) -> None:
+    artifact = GuardArtifact(
+        artifact_id="codex:test:tool-action:override",
+        name="Codex routine tool action",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/dev/null",
+        publisher="publisher-a",
+        metadata={"guard_default_action": "allow"},
+    )
+    config = GuardConfig(
+        guard_home=tmp_path,
+        workspace=None,
+        security_level="custom",
+        default_action="allow",
+        **override_kwargs,  # type: ignore[arg-type]
+    )
+
+    assert guard_commands_module._runtime_artifact_policy_action(config, artifact, "codex") == expected_action
+
+
 def test_guard_hook_codex_user_prompt_submit_guard_bypass_hard_blocks_without_approval_url(
     tmp_path,
     capsys,
@@ -15897,8 +17316,9 @@ def test_guard_hook_codex_post_tool_use_explains_merged_stderr_capture(
     assert rc == 0
     assert payload["continue"] is False
     assert "Combined stdout/stderr looked credential-like before it reached Codex." in payload["stopReason"]
-    assert payload["stopReason"].count("Open HOL Guard to approve or keep this blocked") == 1
-    assert "http://127.0.0.1:4455/requests/" in payload["stopReason"]
+    assert payload["stopReason"].count("terminal policy decision") == 1
+    assert "Browser approval cannot override it" in payload["stopReason"]
+    assert "/requests/" not in payload["stopReason"]
 
 
 def test_codex_post_tool_output_allows_focused_pytest_fake_credential_fixture(tmp_path):
@@ -16062,8 +17482,9 @@ def test_guard_hook_codex_post_tool_use_blocks_focused_pytest_medium_secret_outp
     assert payload["continue"] is False
     assert "Focused pytest emitted credential-looking output before it reached Codex." in payload["stopReason"]
     assert "Pytest can execute repository-controlled code" in payload["stopReason"]
-    assert payload["stopReason"].count("Open HOL Guard to approve or keep this blocked") == 1
-    assert "http://127.0.0.1:4455/requests/" in payload["stopReason"]
+    assert payload["stopReason"].count("terminal policy decision") == 1
+    assert "Browser approval cannot override it" in payload["stopReason"]
+    assert "/requests/" not in payload["stopReason"]
 
 
 def test_guard_hook_codex_post_tool_use_browser_approval_resumes_result(
@@ -16122,21 +17543,110 @@ def test_guard_hook_codex_post_tool_use_browser_approval_resumes_result(
 
     assert rc == 0
     payload = json.loads(captured.out)
+    assert "hookSpecificOutput" in payload, (
+        payload,
+        store.list_receipts(limit=20),
+        store.list_approval_requests(limit=20),
+    )
     assert payload["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
     assert captured.err == ""
     assert store.list_approval_requests(limit=10) == []
 
 
-def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_path):
+def test_guard_hook_codex_browser_allow_rechecks_policy_changed_during_wait(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
+    event = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "cat .authrc"},
+        "tool_response": {"stdout": "HOL_GUARD_FAKE_CREDENTIAL=fixture-only\n"},
+        "source_scope": "project",
+    }
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    store = GuardStore(home_dir)
+    _install_fake_guard_surface_daemon(monkeypatch, store)
+
+    def tighten_policy_then_approve() -> None:
+        for _ in range(40):
+            pending = store.list_approval_requests(limit=10)
+            if pending:
+                _write_text(
+                    home_dir / "config.toml",
+                    ('approval_wait_timeout_seconds = 2\n[harnesses.codex]\ndefault_action = "block"\n'),
+                )
+                apply_approval_resolution(
+                    store=store,
+                    request_id=str(pending[0]["request_id"]),
+                    action="allow",
+                    scope="artifact",
+                    workspace=None,
+                    reason="approved stale browser request",
+                )
+                return
+            threading.Event().wait(0.05)
+
+    worker = threading.Thread(target=tighten_policy_then_approve, daemon=True)
+    worker.start()
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert rc == 0
+    assert payload["decision"] == "block"
+    assert payload["continue"] is False
+    tool_receipts = [
+        receipt
+        for receipt in store.list_receipts(limit=20)
+        if receipt["provenance_summary"] != "Guard approval decision"
+    ]
+    assert len(tool_receipts) == 1
+    assert tool_receipts[0]["policy_decision"] == "block"
+    assert tool_receipts[0]["approval_source"] == "browser"
+
+
+def _codex_browser_approval_context_token(*, current_action: str) -> str:
+    return build_approval_context_token(
+        identity={"artifact_id": "artifact-1", "harness": "codex"},
+        content={"command": "bash ./guard-canary.sh"},
+        capabilities={"action_type": "shell_command"},
+        policy={"current_action": current_action},
+        sandbox={"mode": "host"},
+    )
+
+
+def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_path, monkeypatch):
+    monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
+    context_token = _codex_browser_approval_context_token(current_action="review")
     request = GuardApprovalRequest(
         request_id="request-1",
         harness="codex",
         artifact_id="artifact-1",
         artifact_name="Bash request",
-        artifact_hash="hash-1",
-        policy_action="block",
+        artifact_hash=context_token,
+        policy_action="review",
         recommended_scope="artifact",
         changed_fields=("command",),
         source_scope="project",
@@ -16161,34 +17671,48 @@ def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_pat
             statuses.append(dict(kwargs))
 
     payload: dict[str, object] = {
+        "artifact_id": "artifact-1",
+        "artifact_hash": context_token,
         "operation_id": "operation-1",
-        "approval_requests": [{"request_id": "request-1"}],
+        "operation": {"operation_id": "operation-1", "status": "waiting_on_approval"},
+        "approval_requests": [request.to_dict()],
     }
 
     decision = guard_commands_module._codex_browser_approval_decision(
         args=argparse.Namespace(harness="codex", json=False),
         event_name="PostToolUse",
-        policy_action="block",
+        policy_action="review",
         response_payload=payload,
         store=store,
         config=GuardConfig(home_dir, None, approval_wait_timeout_seconds=1),
         daemon_client=_FakeDaemonClient(),
+        expected_artifact_hash=context_token,
+        fresh_context_provider=lambda: {
+            "artifact_id": "artifact-1",
+            "artifact_hash": context_token,
+            "current_action": "review",
+            "authoritative_action": "allow",
+        },
     )
 
     assert decision == "allow"
     assert statuses == [{"operation_id": "operation-1", "status": "completed"}]
+    assert payload["operation"]["status"] == "completed"
+    assert payload["continuation"]["resolution_action"] == "allow"
 
 
-def test_codex_browser_block_decision_updates_daemon_operation_status(tmp_path):
+def test_codex_browser_block_decision_updates_daemon_operation_status(tmp_path, monkeypatch):
+    monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
+    context_token = _codex_browser_approval_context_token(current_action="require-reapproval")
     request = GuardApprovalRequest(
         request_id="request-1",
         harness="codex",
         artifact_id="artifact-1",
         artifact_name="Bash request",
-        artifact_hash="hash-1",
-        policy_action="block",
+        artifact_hash=context_token,
+        policy_action="require-reapproval",
         recommended_scope="artifact",
         changed_fields=("command",),
         source_scope="project",
@@ -16213,22 +17737,28 @@ def test_codex_browser_block_decision_updates_daemon_operation_status(tmp_path):
             statuses.append(dict(kwargs))
 
     payload: dict[str, object] = {
+        "artifact_id": "artifact-1",
+        "artifact_hash": context_token,
         "operation_id": "operation-1",
-        "approval_requests": [{"request_id": "request-1"}],
+        "operation": {"operation_id": "operation-1", "status": "waiting_on_approval"},
+        "approval_requests": [request.to_dict()],
     }
 
     decision = guard_commands_module._codex_browser_approval_decision(
         args=argparse.Namespace(harness="codex", json=False),
         event_name="PostToolUse",
-        policy_action="block",
+        policy_action="require-reapproval",
         response_payload=payload,
         store=store,
         config=GuardConfig(home_dir, None, approval_wait_timeout_seconds=1),
         daemon_client=_FakeDaemonClient(),
+        expected_artifact_hash=context_token,
     )
 
     assert decision == "block"
     assert statuses == [{"operation_id": "operation-1", "status": "blocked"}]
+    assert payload["operation"]["status"] == "blocked"
+    assert payload["continuation"]["resolution_action"] == "block"
 
 
 def test_codex_browser_approval_uses_configured_wait_timeout(tmp_path, monkeypatch):
@@ -17286,7 +18816,9 @@ def test_guard_hook_strict_profile_blocks_data_flow_exfiltration_path(tmp_path, 
     assert rc == 1
     assert isinstance(output, dict)
     assert output["policy_action"] == "block"
-    assert output["approval_requests"][0]["decision_v2_json"]["action"] == "block"
+    assert output["decision_v2_json"]["action"] == "block"
+    assert output["approval_requests"] == []
+    assert output["terminal"] is True
 
 
 def test_guard_hook_flags_shell_variable_data_flow_without_legacy_runtime_artifact(tmp_path, capsys, monkeypatch):
@@ -17352,7 +18884,9 @@ def test_guard_hook_data_flow_policy_overrides_weaker_requested_action(tmp_path,
     assert rc == 1
     assert isinstance(output, dict)
     assert output["policy_action"] == "block"
-    assert output["approval_requests"][0]["decision_v2_json"]["action"] == "block"
+    assert output["decision_v2_json"]["action"] == "block"
+    assert output["approval_requests"] == []
+    assert output["terminal"] is True
 
 
 def test_runtime_data_flow_summary_names_non_network_sink() -> None:
@@ -18526,8 +20060,8 @@ def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path)
     assert next(iter(stored_workspaces)).startswith("workspace:")
     assert {item["artifact_id"] for item in exact_decisions} == {allow_artifact, block_artifact}
     assert {item["expires_at"] for item in exact_decisions} == {
-        "2026-12-01T00:00:00+00:00",
-        "2026-10-01T00:00:00+00:00",
+        "2026-12-01T00:00:00.000000+00:00",
+        "2026-10-01T00:00:00.000000+00:00",
     }
 
 
@@ -18992,18 +20526,19 @@ def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, mo
     )
 
     order: list[str] = []
-    original_resolve_policy = store.resolve_policy
+    original_resolve_policy = store.resolve_policy_decision_lookup_with_memory_pattern
     original_add_receipt = store.add_receipt
 
     def tracked_resolve_policy(*args, **kwargs):
-        order.append("resolve_policy")
+        assert kwargs.get("consume_one_shot") is False
+        order.append("resolve_policy_non_consuming")
         return original_resolve_policy(*args, **kwargs)
 
     def tracked_add_receipt(receipt):
         order.append("add_receipt")
         return original_add_receipt(receipt)
 
-    monkeypatch.setattr(store, "resolve_policy", tracked_resolve_policy)
+    monkeypatch.setattr(store, "resolve_policy_decision_lookup_with_memory_pattern", tracked_resolve_policy)
     monkeypatch.setattr(store, "add_receipt", tracked_add_receipt)
 
     detection = HarnessDetection(
@@ -19028,7 +20563,7 @@ def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, mo
     result = evaluate_detection(detection, store, config, persist=True)
 
     assert result["artifacts"][0]["policy_action"] == "block"
-    assert order.index("resolve_policy") < order.index("add_receipt")
+    assert order.index("resolve_policy_non_consuming") < order.index("add_receipt")
 
 
 def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):

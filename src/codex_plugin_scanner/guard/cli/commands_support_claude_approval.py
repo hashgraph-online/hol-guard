@@ -10,10 +10,10 @@ if TYPE_CHECKING:
     from ._commands_shared import _CLAUDE_GUARD_APPROVAL_HEADER, _CLAUDE_GUARD_APPROVAL_OPTIONS, _now
     from .commands_support_hook_state import (
         _claude_guard_approval_question_text,
-        _claude_pending_permission_index_key,
+        _load_claude_pending_permission_index,
         _load_single_claude_pending_permission,
+        _load_verified_claude_pending_permission,
         _remove_claude_pending_permission,
-        _sync_payload_list_from_row,
     )
     from .commands_support_permission_store import _persist_claude_native_permission_policy
     from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
@@ -35,22 +35,16 @@ def _persist_claude_pending_permission_denials(store: GuardStore, payload: dict[
     session_id = _optional_string(payload.get("session_id"))
     if session_id is None:
         return 0
-    index_key = _claude_pending_permission_index_key(session_id)
-    try:
-        index_payload = store.get_sync_payload(index_key)
-    except (OSError, sqlite3.Error):
-        return 0
-    if not isinstance(index_payload, list):
-        return 0
-    pending_keys = [str(item) for item in index_payload]
+    pending_keys = _load_claude_pending_permission_index(store, session_id=session_id)
     processed_keys: list[str] = []
     denied = 0
     for pending_key in pending_keys:
-        try:
-            pending = store.get_sync_payload(pending_key)
-        except (OSError, sqlite3.Error):
-            continue
-        if not isinstance(pending, dict):
+        pending = _load_verified_claude_pending_permission(
+            store,
+            session_id=session_id,
+            pending_key=pending_key,
+        )
+        if pending is None:
             continue
         if pending.get("permission_prompt_seen") is not True:
             continue
@@ -82,34 +76,8 @@ def _persist_claude_pending_permission_denials(store: GuardStore, payload: dict[
             continue
         processed_keys.append(pending_key)
         denied += 1
-    if processed_keys:
-        processed_set = set(processed_keys)
-        try:
-            with store._connect() as connection:
-                connection.execute("begin immediate")
-                for pending_key in processed_keys:
-                    connection.execute("delete from sync_state where state_key = ?", (pending_key,))
-                row = connection.execute(
-                    "select payload_json from sync_state where state_key = ?",
-                    (index_key,),
-                ).fetchone()
-                current_keys = _sync_payload_list_from_row(row)
-                remaining_keys = [pending_key for pending_key in current_keys if pending_key not in processed_set]
-                if remaining_keys:
-                    connection.execute(
-                        """
-                        insert into sync_state (state_key, payload_json, updated_at)
-                        values (?, ?, ?)
-                        on conflict(state_key) do update set
-                          payload_json = excluded.payload_json,
-                          updated_at = excluded.updated_at
-                        """,
-                        (index_key, json.dumps(remaining_keys), _now()),
-                    )
-                else:
-                    connection.execute("delete from sync_state where state_key = ?", (index_key,))
-        except (OSError, sqlite3.Error):
-            return denied
+    for pending_key in processed_keys:
+        _remove_claude_pending_permission(store, session_id=session_id, pending_key=pending_key)
     return denied
 
 
@@ -312,8 +280,19 @@ def _persist_claude_guard_question_decision(store: GuardStore, payload: dict[str
     if pending_pair is None:
         return False
     pending_key, pending = pending_pair
-    approval_code = _optional_string(pending.get("approval_code"))
-    if approval_code is None and pending.get("permission_prompt_seen") is not True:
+    if pending.get("permission_prompt_seen") is not True:
+        with suppress(OSError, sqlite3.Error):
+            store.add_event(
+                "approval.pending_prompt_unseen",
+                {
+                    "harness": "claude-code",
+                    "source": "claude-pending-permission",
+                    "session_id": payload.get("session_id"),
+                    "artifact_id": pending.get("artifact_id"),
+                    "artifact_hash": pending.get("artifact_hash"),
+                },
+                _now(),
+            )
         return False
     if not _is_claude_guard_approval_question(payload, pending):
         return False

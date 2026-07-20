@@ -37,7 +37,11 @@ if TYPE_CHECKING:
         _runtime_artifact_native_reason,
     )
     from .commands_support_runtime_artifacts import _optional_string
-    from .commands_support_runtime_policy import _approval_delivery_payload, _localize_pending_approval_copy
+    from .commands_support_runtime_policy import (
+        _approval_delivery_payload,
+        _localize_pending_approval_copy,
+        _terminalize_runtime_action_copy,
+    )
     from .commands_support_runtime_resolution import (
         _canonical_harness_name,
         _runtime_detection,
@@ -46,7 +50,10 @@ if TYPE_CHECKING:
 
 
 from ._commands_shared import *
-from .commands_hook_runtime_state import RuntimeArtifactHookState
+from .commands_hook_runtime_state import (
+    RuntimeArtifactHookState,
+    record_runtime_artifact_hook_receipt,
+)
 from .commands_parser_helpers import *
 
 
@@ -87,9 +94,35 @@ def _review_runtime_artifact_hook(
         guard_payload=response_payload,
     )
     observe_mode = config.mode == "observe"
-    if policy_action in {"block", "sandbox-required", "require-reapproval"} or cursor_native_queue:
+    terminal_action = policy_action in {
+        "block",
+        "sandbox-required",
+    }
+    policy_composition = response_payload.get("policy_composition")
+    post_claim_revalidated = (
+        isinstance(policy_composition, Mapping)
+        and isinstance(policy_composition.get("approval_reuse_source"), str)
+        and str(policy_composition["approval_reuse_source"]).startswith("claimed_")
+    )
+    post_claim_failure = post_claim_revalidated and policy_action not in {"allow", "warn"}
+    if terminal_action:
+        response_payload["approval_requests"] = []
+        response_payload["terminal_action"] = policy_action
+        _terminalize_runtime_action_copy(response_payload)
         if observe_mode:
-            should_queue_approval_center = not (policy_action == "block" and stored_policy_action == "block")
+            response_payload["observed_terminal_action"] = policy_action
+        else:
+            response_payload["operation_status"] = "blocked"
+            response_payload["terminal"] = True
+            response_payload["review_hint"] = (
+                "HOL Guard blocked this action with a terminal policy decision. Browser approval cannot override it."
+            )
+    if policy_action in {"review", "require-reapproval", "sandbox-required", "block"} or cursor_native_queue:
+        saved_policy_blocks = policy_action == "block" and stored_policy_action == "block"
+        if observe_mode and not saved_policy_blocks and not post_claim_failure:
+            should_queue_approval_center = not terminal_action and not (
+                policy_action == "block" and stored_policy_action == "block"
+            )
             if should_queue_approval_center:
                 approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
                 approval_center_url = ensure_guard_daemon(guard_home)
@@ -231,7 +264,7 @@ def _review_runtime_artifact_hook(
         if (
             _canonical_harness_name(args.harness) == "claude-code"
             and event_name == "PreToolUse"
-            and policy_action == "require-reapproval"
+            and policy_action in {"review", "require-reapproval"}
         ):
             _record_claude_permission_notice(
                 store=store,
@@ -241,6 +274,7 @@ def _review_runtime_artifact_hook(
                 artifact_hash=runtime_artifact_hash,
             )
         if _should_emit_copilot_hook_response(args):
+            record_runtime_artifact_hook_receipt(state, store)
             _record_harness_usage_for_hook(
                 store=store,
                 action_envelope=action_envelope,
@@ -283,6 +317,7 @@ def _review_runtime_artifact_hook(
                 additional_context=additional_context,
                 output_stream=output_stream,
             )
+            record_runtime_artifact_hook_receipt(state, store)
             _record_harness_usage_for_hook(
                 store=store,
                 action_envelope=action_envelope,
@@ -290,7 +325,9 @@ def _review_runtime_artifact_hook(
                 policy_action=policy_action,
             )
             return 0
-        should_queue_approval_center = not (policy_action == "block" and stored_policy_action == "block")
+        should_queue_approval_center = not terminal_action and not (
+            policy_action == "block" and stored_policy_action == "block"
+        )
         if not _prompt_requires_hard_block(runtime_artifact) and should_queue_approval_center:
             approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
             approval_center_url = ensure_guard_daemon(guard_home)

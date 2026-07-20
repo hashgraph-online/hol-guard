@@ -90,6 +90,8 @@ def _queue_local_protect_approvals(
 def _should_queue_local_protect_approval(response_payload: dict[str, object]) -> bool:
     if os.environ.get(SHIM_PROBE_ENV_VAR) == SHIM_PROBE_ENV_VALUE:
         return False
+    if _protect_policy_action(response_payload) not in {"review", "require-reapproval"}:
+        return False
     if _protect_has_reason_code(response_payload, "saved_package_block"):
         return False
     return not (

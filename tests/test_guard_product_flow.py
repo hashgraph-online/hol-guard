@@ -35,8 +35,8 @@ def _build_guard_fixture(home_dir: Path, workspace_dir: Path) -> None:
         home_dir / ".codex" / "config.toml",
         """
 [mcp_servers.global_tools]
-command = "python"
-args = ["-m", "http.server", "9000"]
+command = "node"
+args = ["global-tool.js"]
 """.strip()
         + "\n",
     )
@@ -858,9 +858,25 @@ args = ["workspace-skill.js", "--changed"]
         env = os.environ.copy()
         env["PATH"] = f"{fake_bin}:{env['PATH']}"
 
-        result = subprocess.run([str(shim_path), "--help"], capture_output=True, text=True, env=env, check=False)
+        try:
+            result = subprocess.run(
+                [str(shim_path), "--help"],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+                timeout=15,
+            )
+        except subprocess.TimeoutExpired as exc:
+            pytest.fail(
+                "guard-codex --help timed out after 15 seconds\n"
+                f"stdout:\n{exc.stdout or ''}\n"
+                f"stderr:\n{exc.stderr or ''}"
+            )
 
-        assert result.returncode == 0
+        assert result.returncode == 0, (
+            f"guard-codex --help exited with {result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
         assert args_file.read_text(encoding="utf-8").strip() == "--help"
 
     def test_guard_shim_keeps_pythonpath_for_source_checkout_launches(self, tmp_path, capsys, monkeypatch):
@@ -905,18 +921,28 @@ args = ["workspace-skill.js", "--changed"]
         )
         install_output = json.loads(capsys.readouterr().out)
         shim_path = Path(install_output["managed_install"]["manifest"]["shim_path"])
-        result = subprocess.run(
-            [str(shim_path), "--help"],
-            capture_output=True,
-            text=True,
-            env={
-                "PATH": f"{fake_bin}:{os.environ['PATH']}",
-                "HOME": str(home_dir),
-                "PYTHONPATH": str(runtime_pythonpath),
-            },
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                [str(shim_path), "--help"],
+                capture_output=True,
+                text=True,
+                env={
+                    "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                    "HOME": str(home_dir),
+                    "PYTHONPATH": str(runtime_pythonpath),
+                },
+                check=False,
+                timeout=15,
+            )
+        except subprocess.TimeoutExpired as exc:
+            pytest.fail(
+                "guard-codex --help timed out after 15 seconds\n"
+                f"stdout:\n{exc.stdout or ''}\n"
+                f"stderr:\n{exc.stderr or ''}"
+            )
 
-        assert result.returncode == 0
+        assert result.returncode == 0, (
+            f"guard-codex --help exited with {result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
         assert args_file.read_text(encoding="utf-8").strip() == "--help"
         assert env_file.read_text(encoding="utf-8") == os.pathsep.join((str(runtime_pythonpath), str(source_root)))

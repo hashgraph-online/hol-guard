@@ -245,7 +245,7 @@ def test_queue_blocked_approvals_includes_risk_summary_and_signals(tmp_path):
                 "artifact_id": artifact.artifact_id,
                 "artifact_name": artifact.name,
                 "artifact_hash": "hash-1",
-                "policy_action": "block",
+                "policy_action": "require-reapproval",
                 "changed_fields": ["first_seen"],
             }
         ]
@@ -2458,7 +2458,7 @@ def test_tool_action_request_classifier_rejects_graphql_workflow_with_repo_copil
 def test_tool_action_request_classifier_rejects_graphql_workflow_with_symlink_target(tmp_path):
     link_path = tmp_path / "link"
     try:
-        link_path.symlink_to(Path.cwd(), target_is_directory=True)
+        link_path.symlink_to(Path.home(), target_is_directory=True)
     except OSError:
         pytest.skip("symlinks are not supported in this environment")
     query_path = link_path / "pr-threads-query.graphql"

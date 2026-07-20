@@ -16,20 +16,25 @@ if TYPE_CHECKING:
         _claude_pending_permission_state_key,
         _cursor_after_shell_observed,
         _cursor_conversation_id,
-        _cursor_pending_shell_index_key,
         _cursor_pending_shell_is_fresh,
         _cursor_pending_shell_state_key,
         _cursor_shell_command_fingerprint,
         _cursor_shell_command_from_payload,
         _load_claude_pending_permission,
+        _load_claude_pending_permission_index,
+        _load_cursor_pending_shell_index,
+        _load_verified_cursor_pending_shell_state,
         _record_cursor_native_shell_allow_state,
         _remove_claude_pending_permission,
-        _sync_payload_list_from_row,
+        _store_cursor_pending_shell_index,
+        _store_cursor_pending_shell_state,
     )
     from .commands_support_runtime_artifacts import _hook_runtime_artifact, _optional_string, _string_list
     from .commands_support_runtime_resolution import _runtime_capabilities_summary
 
 
+from ..models import GuardAction
+from ..runtime.approval_context import parse_approval_context_token
 from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -110,13 +115,22 @@ def _record_cursor_pending_shell_permission(
     }
     pending_key = _cursor_pending_shell_state_key(conversation_id, command)
     try:
-        store.set_sync_payload(pending_key, notice_payload, saved_at)
-        _append_cursor_pending_shell_key(
+        pending_saved = _store_cursor_pending_shell_state(
+            store,
+            conversation_id=conversation_id,
+            command=command,
+            payload=notice_payload,
+            now=saved_at,
+        )
+        indexed = pending_saved and _append_cursor_pending_shell_key(
             store,
             conversation_id=conversation_id,
             pending_key=pending_key,
             now=saved_at,
         )
+        if not indexed:
+            store.delete_sync_payload(pending_key)
+            return
         write_cursor_shell_binding_file(
             guard_home,
             conversation_id=conversation_id,
@@ -143,11 +157,13 @@ def _attach_cursor_pending_approval_request_ids(
     if conversation_id is None or command is None:
         return
     pending_key = _cursor_pending_shell_state_key(conversation_id, command)
-    try:
-        pending = store.get_sync_payload(pending_key)
-    except (OSError, sqlite3.Error):
-        return
-    if not isinstance(pending, dict):
+    pending = _load_verified_cursor_pending_shell_state(
+        store,
+        conversation_id=conversation_id,
+        command=command,
+        state_key=pending_key,
+    )
+    if pending is None:
         return
     request_ids: list[str] = []
     approval_requests = response_payload.get("approval_requests")
@@ -164,10 +180,13 @@ def _attach_cursor_pending_approval_request_ids(
         return
     updated = dict(pending)
     updated["approval_request_ids"] = request_ids
-    try:
-        store.set_sync_payload(pending_key, updated, _now())
-    except (OSError, sqlite3.Error):
-        return
+    _store_cursor_pending_shell_state(
+        store,
+        conversation_id=conversation_id,
+        command=command,
+        payload=updated,
+        now=_now(),
+    )
 
 
 def _load_cursor_pending_shell_permission(
@@ -177,27 +196,26 @@ def _load_cursor_pending_shell_permission(
     command: str,
 ) -> dict[str, object] | None:
     pending_key = _cursor_pending_shell_state_key(conversation_id, command)
-    try:
-        pending = store.get_sync_payload(pending_key)
-    except (OSError, sqlite3.Error):
-        pending = None
-    if isinstance(pending, dict):
+    now = _now()
+    pending = _load_verified_cursor_pending_shell_state(
+        store,
+        conversation_id=conversation_id,
+        command=command,
+        state_key=pending_key,
+        now=now,
+    )
+    if pending is not None:
         return pending
     target_fingerprint = _cursor_shell_command_fingerprint(command)
-    try:
-        index_payload = store.get_sync_payload(_cursor_pending_shell_index_key(conversation_id))
-    except (OSError, sqlite3.Error):
-        return None
-    if not isinstance(index_payload, list):
-        return None
-    for indexed_key in index_payload:
-        if not isinstance(indexed_key, str):
-            continue
-        try:
-            candidate = store.get_sync_payload(indexed_key)
-        except (OSError, sqlite3.Error):
-            continue
-        if not isinstance(candidate, dict):
+    for indexed_key in _load_cursor_pending_shell_index(store, conversation_id=conversation_id, now=now):
+        candidate = _load_verified_cursor_pending_shell_state(
+            store,
+            conversation_id=conversation_id,
+            command=command,
+            state_key=indexed_key,
+            now=now,
+        )
+        if candidate is None:
             continue
         stored_command = _optional_string(candidate.get("command"))
         if stored_command is None:
@@ -213,31 +231,20 @@ def _remove_cursor_pending_shell_permission(
     conversation_id: str,
     pending_key: str,
 ) -> None:
-    try:
-        index_key = _cursor_pending_shell_index_key(conversation_id)
-        with store._connect() as connection:
-            connection.execute("begin immediate")
-            connection.execute("delete from sync_state where state_key = ?", (pending_key,))
-            row = connection.execute(
-                "select payload_json from sync_state where state_key = ?",
-                (index_key,),
-            ).fetchone()
-            remaining = [key for key in _sync_payload_list_from_row(row) if key != pending_key]
-            if remaining:
-                connection.execute(
-                    """
-                    insert into sync_state (state_key, payload_json, updated_at)
-                    values (?, ?, ?)
-                    on conflict(state_key) do update set
-                      payload_json = excluded.payload_json,
-                      updated_at = excluded.updated_at
-                    """,
-                    (index_key, json.dumps(remaining), _now()),
-                )
-            else:
-                connection.execute("delete from sync_state where state_key = ?", (index_key,))
-    except (OSError, sqlite3.Error):
-        return
+    now = _now()
+    with suppress(OSError, sqlite3.Error):
+        store.delete_sync_payload(pending_key)
+    remaining = [
+        key
+        for key in _load_cursor_pending_shell_index(store, conversation_id=conversation_id, now=now)
+        if key != pending_key
+    ]
+    _store_cursor_pending_shell_index(
+        store,
+        conversation_id=conversation_id,
+        pending_keys=remaining,
+        now=now,
+    )
 
 
 def _persist_cursor_native_permission_policy(
@@ -441,7 +448,14 @@ def _persist_claude_native_permission_policy(
         if artifact_type == "tool_action_request"
         else None
     )
-    stored_artifact_hash = exact_artifact_hash or artifact_hash
+    # V1 approval-context tokens already bind the full tool identity and are
+    # the only values that may authorize P44 approval reuse.  Keep the legacy
+    # exact-command key only for legacy callers/blocks.
+    stored_artifact_hash = (
+        artifact_hash
+        if parse_approval_context_token(artifact_hash) is not None
+        else exact_artifact_hash or artifact_hash
+    )
     try:
         if artifact_type == "tool_action_request" and exact_artifact_hash is None:
             store.add_event(
@@ -487,12 +501,35 @@ def _persist_claude_native_permission_for_runtime_artifact(
     artifact: GuardArtifact,
     artifact_hash: str,
     action: str,
+    authoritative_action: GuardAction,
     reason: str,
-) -> bool:
-    pending = _load_claude_pending_permission(store, payload, artifact)
+) -> tuple[bool, bool]:
+    """Record a Claude-native answer without overriding current authority.
+
+    The first result reports whether a matching pending native prompt was
+    observed; the second reports whether a reusable allow policy was saved.
+    Stronger recomputed actions remain authoritative and are recorded only as
+    evidence/inventory, never as a contradictory effective allow.
+    """
+
+    pending = _load_claude_pending_permission(store, payload, artifact, artifact_hash)
     if pending is None:
-        return False
+        return False, False
     now = _now()
+    if pending.get("permission_prompt_seen") is not True:
+        with suppress(OSError, sqlite3.Error):
+            store.add_event(
+                "approval.pending_prompt_unseen",
+                {
+                    "harness": "claude-code",
+                    "source": "claude-pending-permission",
+                    "session_id": payload.get("session_id"),
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_hash": artifact_hash,
+                },
+                now,
+            )
+        return False, False
     raw_command_text_value = artifact.metadata.get("raw_command_text")
     raw_command_text = raw_command_text_value if isinstance(raw_command_text_value, str) else None
     wrapper_chain_value = artifact.metadata.get("wrapper_chain")
@@ -501,32 +538,46 @@ def _persist_claude_native_permission_for_runtime_artifact(
         if isinstance(wrapper_chain_value, Sequence) and not isinstance(wrapper_chain_value, str)
         else None
     )
-    saved_policy = _persist_claude_native_permission_policy(
-        store=store,
-        artifact_id=artifact.artifact_id,
-        artifact_hash=artifact_hash,
-        artifact_type=artifact.artifact_type,
-        config_path=artifact.config_path,
-        source_scope=artifact.source_scope,
-        raw_command_text=raw_command_text,
-        wrapper_chain=wrapper_chain,
-        action=action,
-        reason=reason,
-        now=now,
-    )
-    if not saved_policy:
-        return False
+    saved_policy = False
+    if authoritative_action == "allow":
+        saved_policy = _persist_claude_native_permission_policy(
+            store=store,
+            artifact_id=artifact.artifact_id,
+            artifact_hash=artifact_hash,
+            artifact_type=artifact.artifact_type,
+            config_path=artifact.config_path,
+            source_scope=artifact.source_scope,
+            raw_command_text=raw_command_text,
+            wrapper_chain=wrapper_chain,
+            action=action,
+            reason=reason,
+            now=now,
+        )
+        if not saved_policy:
+            return True, False
+    else:
+        with suppress(OSError, sqlite3.Error):
+            store.add_event(
+                "claude/native_permission_current_policy_retained",
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_hash": artifact_hash,
+                    "native_action": action,
+                    "authoritative_action": authoritative_action,
+                },
+                now,
+            )
     try:
         store.record_inventory_artifact(
             artifact=artifact,
             artifact_hash=artifact_hash,
-            policy_action="allow" if action == "allow" else "block",
+            policy_action=authoritative_action,
             changed=False,
             now=now,
-            approved=action == "allow",
+            approved=authoritative_action == "allow",
         )
     except (OSError, sqlite3.Error):
-        return False
+        return True, saved_policy
     session_id = _optional_string(payload.get("session_id"))
     if session_id is not None:
         _remove_claude_pending_permission(
@@ -534,7 +585,7 @@ def _persist_claude_native_permission_for_runtime_artifact(
             session_id=session_id,
             pending_key=_claude_pending_permission_state_key(session_id, artifact.artifact_id),
         )
-    return True
+    return True, saved_policy
 
 
 def _discard_claude_pending_permissions(store: GuardStore, payload: dict[str, object]) -> int:
@@ -542,13 +593,7 @@ def _discard_claude_pending_permissions(store: GuardStore, payload: dict[str, ob
     if session_id is None:
         return 0
     index_key = _claude_pending_permission_index_key(session_id)
-    try:
-        index_payload = store.get_sync_payload(index_key)
-    except (OSError, sqlite3.Error):
-        return 0
-    if not isinstance(index_payload, list):
-        return 0
-    pending_keys = [str(item) for item in index_payload]
+    pending_keys = _load_claude_pending_permission_index(store, session_id=session_id)
     if not pending_keys:
         return 0
     try:

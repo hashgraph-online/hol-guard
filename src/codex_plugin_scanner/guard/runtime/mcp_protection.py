@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import PurePath
 
+from .approval_context import build_configured_environment_hash
+
 
 @dataclass(frozen=True, slots=True)
 class McpServerIdentity:
@@ -19,6 +21,7 @@ class McpServerIdentity:
     package_version: str | None
     transport: str
     env_keys: tuple[str, ...]
+    env_values_hash: str
     identity_hash: str
 
 
@@ -42,21 +45,28 @@ def build_mcp_server_identity(
     env: dict[str, str] | None = None,
     env_keys: tuple[str, ...] = (),
 ) -> McpServerIdentity:
-    """Build a stable server identity using env key names only."""
+    """Build a stable server identity with secret-safe configured env binding."""
 
     package_name, package_version = _package_identity(command, args)
     env_key_set = {key.strip() for key in env_keys if key.strip()}
     if env is not None:
         env_key_set.update(key.strip() for key in env if key.strip())
     env_keys = tuple(sorted(env_key_set))
+    env_values_hash = build_configured_environment_hash(env, configured_keys=env_keys)
     args_hash = _stable_digest(list(args))
     payload = {
         "command": _command_name(command),
+        # The display-oriented command name is intentionally lossy (for a URL
+        # it is only the final path segment).  Bind the complete configured
+        # command separately so host, scheme, path, and executable-path drift
+        # cannot inherit a saved server/tool approval.
+        "command_hash": _stable_digest(command),
         "args_hash": args_hash,
         "package_name": package_name,
         "package_version": package_version,
         "transport": transport,
         "env_keys": list(env_keys),
+        "env_values_hash": env_values_hash,
     }
     return McpServerIdentity(
         config_path=config_path,
@@ -66,6 +76,7 @@ def build_mcp_server_identity(
         package_version=package_version,
         transport=transport,
         env_keys=env_keys,
+        env_values_hash=env_values_hash,
         identity_hash=_stable_digest(payload),
     )
 
@@ -107,6 +118,7 @@ def mcp_server_identity_metadata(identity: McpServerIdentity) -> dict[str, objec
         "package_version": identity.package_version,
         "transport": identity.transport,
         "env_keys": list(identity.env_keys),
+        "env_values_hash": identity.env_values_hash,
         "identity_hash": identity.identity_hash,
     }
 

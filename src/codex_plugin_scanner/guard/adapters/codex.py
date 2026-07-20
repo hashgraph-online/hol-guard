@@ -8,6 +8,7 @@ import json
 import re
 import shlex
 import sys
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -24,7 +25,12 @@ from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available, _warnings_include_setup_failure
-from .codex_remote_control import codex_remote_launch_environment, guarded_codex_launch_command
+from .codex_remote_control import (
+    codex_remote_launch_environment,
+    guarded_codex_launch_command,
+    guarded_codex_launch_command_candidates,
+    guarded_codex_launch_command_from_prefix,
+)
 from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
@@ -36,7 +42,7 @@ from .mcp_servers import (
 
 tomllib: Any
 try:  # pragma: no cover - Python 3.11+
-    import tomllib as tomllib  # type: ignore[attr-defined]
+    import tomllib as tomllib  # pyright: ignore[reportMissingImports]
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     tomllib = importlib.import_module("tomli")
 
@@ -59,6 +65,7 @@ def _artifact_from_guard_proxy_args(
     fallback_scope: str,
     fallback_config_path: Path,
     harness: str,
+    environment: object = None,
 ) -> GuardArtifact | None:
     """Expose the wrapped server for status/review without re-wrapping it."""
 
@@ -80,6 +87,20 @@ def _artifact_from_guard_proxy_args(
     server_args = server_args_value if isinstance(server_args_value, tuple) else ()
     env_keys_value = parsed.get("server-env-key")
     env_keys = tuple(sorted(env_keys_value)) if isinstance(env_keys_value, tuple) else ()
+    raw_environment = environment if isinstance(environment, dict) else {}
+    configured_environment = {key: value for key in env_keys if isinstance((value := raw_environment.get(key)), str)}
+    metadata = enrich_mcp_server_metadata(
+        {
+            "env": configured_environment,
+            "env_keys": list(env_keys),
+            "guard_managed_proxy": True,
+            "name": name,
+        },
+        command=command,
+        args=server_args,
+        url=None,
+        transport=transport,
+    )
     return GuardArtifact(
         artifact_id=f"codex:{source_scope}:{name}",
         name=name,
@@ -90,11 +111,7 @@ def _artifact_from_guard_proxy_args(
         command=command,
         args=server_args,
         transport=transport,
-        metadata={
-            "env": {},
-            "env_keys": list(env_keys),
-            "guard_managed_proxy": True,
-        },
+        metadata=metadata,
     )
 
 
@@ -784,6 +801,35 @@ class CodexHarnessAdapter(HarnessAdapter):
             passthrough_args=passthrough_args,
         )
 
+    def preview_launch_commands(
+        self,
+        context: HarnessContext,
+        passthrough_args: list[str],
+    ) -> tuple[list[str], ...]:
+        return guarded_codex_launch_command_candidates(
+            executable=self.resolved_executable(context) or self.executable,
+            home_dir=context.home_dir,
+            passthrough_args=passthrough_args,
+        )
+
+    def launch_command_from_authorized_plan(
+        self,
+        context: HarnessContext,
+        passthrough_args: list[str],
+        *,
+        authorized_executable_prefixes: Sequence[Sequence[str]],
+        launch_environment: Mapping[str, str],
+    ) -> list[str]:
+        prefixes = {tuple(prefix) for prefix in authorized_executable_prefixes if prefix}
+        if len(prefixes) != 1:
+            raise ValueError("Codex launch candidates do not share one authorized executable prefix.")
+        return guarded_codex_launch_command_from_prefix(
+            executable_prefix=prefixes.pop(),
+            home_dir=context.home_dir,
+            passthrough_args=passthrough_args,
+            environ=launch_environment,
+        )
+
     def launch_environment(self, context: HarnessContext) -> dict[str, str]:
         return codex_remote_launch_environment(context.home_dir)
 
@@ -842,25 +888,29 @@ class CodexHarnessAdapter(HarnessAdapter):
                             fallback_scope=scope,
                             fallback_config_path=config_path,
                             harness=self.harness,
+                            environment=server_config.get("env"),
                         )
                         if proxy_artifact is not None:
                             artifacts.append(proxy_artifact)
                         continue
                     url = server_config.get("url")
                     env = server_config.get("env")
+                    environment = (
+                        {
+                            key.strip(): value
+                            for key, value in env.items()
+                            if isinstance(key, str) and key.strip() and isinstance(value, str)
+                        }
+                        if isinstance(env, dict)
+                        else {}
+                    )
                     enabled = server_config.get("enabled", True) is not False
                     mcp_metadata = enrich_mcp_server_metadata(
                         {
                             "name": name,
                             "enabled": enabled,
-                            "env": {
-                                str(key): str(value)
-                                for key, value in env.items()
-                                if isinstance(key, str) and isinstance(value, str)
-                            }
-                            if isinstance(env, dict)
-                            else {},
-                            "env_keys": sorted(env.keys()) if isinstance(env, dict) else [],
+                            "env": environment,
+                            "env_keys": sorted(environment),
                         },
                         command=command if isinstance(command, str) else None,
                         args=args,

@@ -20,7 +20,7 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
 from codex_plugin_scanner.guard.local_supply_chain import package_request_policy_hash
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
-from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
+from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.proxy.runtime_mcp import CodexMcpGuardProxy, RuntimeMcpGuardProxy
@@ -241,8 +241,13 @@ def _package_policy_key(
     context: HarnessContext,
     store: GuardStore,
     artifact: GuardArtifact,
+    config: GuardConfig | None = None,
 ) -> tuple[str, str]:
     assert context.workspace_dir is not None
+    effective_config = config or GuardConfig(
+        guard_home=context.guard_home,
+        workspace=context.workspace_dir,
+    )
     evaluation = evaluate_package_request_artifact(
         artifact=artifact,
         store=store,
@@ -258,6 +263,7 @@ def _package_policy_key(
         workspace_dir=context.workspace_dir,
         evaluation=evaluation,
         execution_context=execution_context,
+        config=effective_config,
     )
     workspace = package_request_runtime_workspace_scope(
         artifact_id=artifact.artifact_id,
@@ -282,8 +288,110 @@ def _allow_mcp_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _runtime_package_artifact(context: HarnessContext) -> GuardArtifact:
+    intent = extract_package_intent_request(
+        "run_terminal_command",
+        {"command": "npm install minimist@1.2.8"},
+        action_envelope_command="npm install minimist@1.2.8",
+        workspace=context.workspace_dir,
+    )
+    assert intent is not None
+    assert context.workspace_dir is not None
+    return build_package_request_artifact(
+        harness="cursor",
+        intent=intent,
+        config_path=str(context.workspace_dir / ".cursor" / "mcp.json"),
+        source_scope="project",
+    )
+
+
+def _runtime_package_policy_config(
+    *,
+    context: HarnessContext,
+    package_action: GuardAction = "review",
+    harness_action: GuardAction | None = None,
+    artifact_id: str | None = None,
+    artifact_action: GuardAction | None = None,
+) -> GuardConfig:
+    return GuardConfig(
+        guard_home=context.guard_home,
+        workspace=context.workspace_dir,
+        security_level="custom",
+        risk_actions={"package_script": package_action},
+        harness_actions={"cursor": harness_action} if harness_action is not None else None,
+        artifact_actions={artifact_id: artifact_action}
+        if artifact_id is not None and artifact_action is not None
+        else None,
+    )
+
+
+def _seed_runtime_package_review_allow(
+    *,
+    context: HarnessContext,
+    store: GuardStore,
+    artifact: GuardArtifact,
+    config: GuardConfig,
+) -> None:
+    package_digest, policy_workspace = _package_policy_key(
+        context=context,
+        store=store,
+        artifact=artifact,
+        config=config,
+    )
+    store.ensure_policy_integrity_ready_for_write(now="2026-05-19T00:00:00Z")
+    store.upsert_policy(
+        PolicyDecision(
+            harness="cursor",
+            scope="artifact",
+            action="allow",
+            artifact_id=artifact.artifact_id,
+            artifact_hash=package_digest,
+            workspace=policy_workspace,
+            publisher=artifact.publisher,
+            source="approval-gate",
+            reason="reviewed exact package request",
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+
+def _run_runtime_package_call(
+    *,
+    context: HarnessContext,
+    store: GuardStore,
+    config: GuardConfig,
+    marker_path: Path,
+) -> dict[str, object]:
+    proxy = RuntimeMcpGuardProxy(
+        harness="cursor",
+        server_name="workspace-tools",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        current_config_provider=lambda: config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".cursor" / "mcp.json"),
+    )
+    return proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "run_terminal_command",
+                    "arguments": {"command": "npm install minimist@1.2.8"},
+                },
+            },
+        ]
+    )
+
+
 @pytest.mark.parametrize("harness", ["cursor", "opencode", "hermes", "openclaw"])
-def test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call(
+def test_phase14_runtime_mcp_proxy_terminally_blocks_package_request_not_generic_tool_call(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     harness: str,
@@ -303,6 +411,7 @@ def test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call(
         context=context,
         store=store,
         config=config,
+        current_config_provider=lambda: config,
         source_scope="project",
         config_path=str(context.workspace_dir / f"{harness}.json"),
     )
@@ -328,13 +437,16 @@ def test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call(
         ]
     )
 
-    request = store.list_approval_requests(limit=5)[0]
-
     assert marker_path.exists() is False
-    assert result["responses"][2]["error"]["code"] == -32001
-    assert request["artifact_type"] == "package_request"
-    assert request["decision_v2_json"]["signals"]
-    assert "minimist" in str(request["risk_summary"]).lower()
+    response = result["responses"][2]
+    assert response["error"]["code"] == -32001
+    assert response["error"]["data"]["guardPolicyAction"] == "block"
+    assert response["error"]["data"]["approvalRequests"] == []
+    assert store.list_approval_requests(limit=5) == []
+    receipts = store.list_receipts(limit=10)
+    assert len(receipts) == 1
+    assert receipts[0]["artifact_id"].startswith(f"{harness}:project:package-request:")
+    assert receipts[0]["policy_decision"] == "block"
 
 
 def test_phase14_runtime_mcp_proxy_forwards_allowed_package_call(
@@ -379,6 +491,95 @@ def test_phase14_runtime_mcp_proxy_forwards_allowed_package_call(
     assert marker_path.exists() is True
     assert "error" not in result["responses"][2]
     assert store.list_approval_requests(limit=5) == []
+    receipts = store.list_receipts(limit=10)
+    assert len(receipts) == 1
+    assert receipts[0]["artifact_id"].startswith("cursor:project:package-request:")
+    assert receipts[0]["policy_decision"] == "warn"
+
+
+def test_runtime_mcp_reuses_unchanged_exact_package_review_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _allow_mcp_tool_calls(monkeypatch)
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="allow"), "2026-05-19T00:00:00Z")
+    artifact = _runtime_package_artifact(context)
+    config = _runtime_package_policy_config(context=context)
+    _seed_runtime_package_review_allow(context=context, store=store, artifact=artifact, config=config)
+    marker_path = tmp_path / "cursor-mcp-unchanged-review.json"
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+
+    result = _run_runtime_package_call(
+        context=context,
+        store=store,
+        config=config,
+        marker_path=marker_path,
+    )
+
+    assert marker_path.exists() is True
+    assert "error" not in result["responses"][2]
+    assert store.list_approval_requests(limit=5) == []
+    package_events = [event for event in result["events"] if str(event.get("decision", "")).startswith("package-")]
+    assert package_events
+    assert package_events[-1]["decision"] == "package-allow"
+    receipts = store.list_receipts(limit=10)
+    assert len(receipts) == 1
+    assert receipts[0]["artifact_id"] == artifact.artifact_id
+    assert receipts[0]["policy_decision"] == "allow"
+
+
+@pytest.mark.parametrize("blocking_policy", ["package_script", "harness", "package_artifact"])
+def test_runtime_mcp_old_package_review_approval_cannot_lower_current_config_block(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    blocking_policy: str,
+) -> None:
+    _allow_mcp_tool_calls(monkeypatch)
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="allow"), "2026-05-19T00:00:00Z")
+    artifact = _runtime_package_artifact(context)
+    base_config = _runtime_package_policy_config(context=context)
+    _seed_runtime_package_review_allow(context=context, store=store, artifact=artifact, config=base_config)
+    changed_config = _runtime_package_policy_config(
+        context=context,
+        package_action="block" if blocking_policy == "package_script" else "review",
+        harness_action="block" if blocking_policy == "harness" else None,
+        artifact_id=artifact.artifact_id if blocking_policy == "package_artifact" else None,
+        artifact_action="block" if blocking_policy == "package_artifact" else None,
+    )
+    marker_path = tmp_path / f"cursor-mcp-current-{blocking_policy}-block.json"
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+
+    result = _run_runtime_package_call(
+        context=context,
+        store=store,
+        config=changed_config,
+        marker_path=marker_path,
+    )
+
+    assert marker_path.exists() is False
+    response = result["responses"][2]
+    assert response["error"]["code"] == -32001
+    assert "block" in json.dumps(response).lower()
+    assert response["error"]["data"]["guardPolicyAction"] == "block"
+    assert response["error"]["data"]["approvalRequests"] == []
+    assert store.list_approval_requests(limit=1) == []
+    receipt = store.list_receipts(limit=1)[0]
+    assert receipt["policy_decision"] == "block"
+    assert (
+        receipt["artifact_hash"]
+        != _package_policy_key(
+            context=context,
+            store=store,
+            artifact=artifact,
+            config=base_config,
+        )[0]
+    )
 
 
 def test_phase14_runtime_mcp_proxy_rejects_stored_allow_when_current_package_blocks(
@@ -453,16 +654,37 @@ def test_phase14_runtime_mcp_proxy_rejects_stored_allow_when_current_package_blo
 
     assert marker_path.exists() is False
     assert result["responses"][2]["error"]["code"] == -32001
-    assert store.list_approval_requests(limit=5)
+    assert result["responses"][2]["error"]["data"]["guardPolicyAction"] == "block"
+    assert store.list_approval_requests(limit=5) == []
 
 
 def test_phase14_runtime_mcp_proxy_rejects_stored_allow_without_workspace_when_current_package_blocks(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _allow_mcp_tool_calls(monkeypatch)
     context = _context_without_workspace(tmp_path)
     store = GuardStore(context.guard_home)
+    tool_claims: list[object] = []
+    monkeypatch.setattr(
+        runtime_mcp_module,
+        "evaluate_tool_call",
+        lambda **_kwargs: ToolCallDecision(
+            action="allow",
+            source="policy",
+            signals=("tool review",),
+            summary="provisionally accepted saved tool approval",
+            approval_reuse_status="accepted",
+            approval_reuse_reason_code="approval_reuse_accepted",
+            current_action="review",
+            saved_action="allow",
+            pending_approval_reuse_decision={"action": "allow", "decision_id": 999},
+        ),
+    )
+    monkeypatch.setattr(
+        store,
+        "claim_approval_reuse_decisions",
+        lambda decisions, **_kwargs: tool_claims.extend(decisions) is None,
+    )
     _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="block"), "2026-05-19T00:00:00Z")
     intent = extract_package_intent_request(
@@ -523,7 +745,9 @@ def test_phase14_runtime_mcp_proxy_rejects_stored_allow_without_workspace_when_c
 
     assert marker_path.exists() is False
     assert result["responses"][2]["error"]["code"] == -32001
-    assert store.list_approval_requests(limit=5)
+    assert result["responses"][2]["error"]["data"]["guardPolicyAction"] == "block"
+    assert store.list_approval_requests(limit=5) == []
+    assert tool_claims == []
 
 
 def test_phase14_runtime_mcp_proxy_skips_requeue_for_stored_package_block(
@@ -649,11 +873,15 @@ def test_phase14_runtime_mcp_proxy_preserves_tool_policy_for_package_calls(
         ]
     )
 
-    request = store.list_approval_requests(limit=5)[0]
-
     assert marker_path.exists() is False
-    assert result["responses"][2]["error"]["code"] == -32001
-    assert request["artifact_type"] == "tool_call"
+    response = result["responses"][2]
+    assert response["error"]["code"] == -32001
+    assert response["error"]["data"]["guardPolicyAction"] == "block"
+    assert response["error"]["data"]["approvalRequests"] == []
+    assert store.list_approval_requests(limit=5) == []
+    receipt = store.list_receipts(limit=1)[0]
+    assert receipt["policy_decision"] == "block"
+    assert ":runtime:" in receipt["artifact_id"]
 
 
 def test_phase14_runtime_mcp_proxy_enforces_tool_policy_review_before_package_routing(
@@ -779,6 +1007,7 @@ def test_phase14_codex_package_inline_approval_is_remembered(
         context=context,
         store=store,
         config=config,
+        current_config_provider=lambda: config,
         source_scope="project",
         config_path=str(context.workspace_dir / ".codex" / "config.toml"),
     )
@@ -852,6 +1081,10 @@ def test_phase14_codex_package_inline_approval_is_remembered(
         )
         == "allow"
     )
+    receipts = store.list_receipts(limit=10)
+    assert len(receipts) == 2
+    assert {receipt["artifact_id"] for receipt in receipts} == {package_artifact.artifact_id}
+    assert {receipt["policy_decision"] for receipt in receipts} == {"warn"}
 
 
 def test_phase14_runtime_mcp_proxy_normalizes_stored_review_for_package_approval(

@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from ..aibom_detection import enrich_mcp_server_metadata
 from ..inventory_cisco import run_cisco_inventory_scans
 from ..inventory_contract import GuardAgentInventorySnapshot, inventory_snapshot_from_detection
 from ..models import GuardArtifact, HarnessDetection
@@ -707,11 +708,22 @@ class HermesHarnessAdapter(HarnessAdapter):
 
             # Filter env keys to strings before sorting.
             env_str_keys = sorted(k for k in env if isinstance(k, str))
+            configured_environment = {
+                key.strip(): value
+                for key, value in env.items()
+                if isinstance(key, str) and key.strip() and isinstance(value, str)
+            }
+            configured_headers = {
+                key.strip(): value
+                for key, value in headers.items()
+                if isinstance(key, str) and key.strip() and isinstance(value, str)
+            }
 
             metadata: dict[str, object] = {
                 "source": source,
                 "env_keys": env_str_keys,
                 "header_keys": sorted(header_keys),
+                "headers_keys": sorted(header_keys),
                 "auth_header_keys": sorted(auth_header_keys),
                 "sampling_enabled": sampling_enabled,
                 "sampling_model": sampling_model,
@@ -730,6 +742,16 @@ class HermesHarnessAdapter(HarnessAdapter):
             ]
             if header_value_hints:
                 metadata["header_value_secret_keys"] = sorted(header_value_hints)
+
+            metadata = enrich_mcp_server_metadata(
+                metadata,
+                command=command if isinstance(command, str) else None,
+                args=args_tuple,
+                url=url if isinstance(url, str) else None,
+                transport=transport,
+                configured_environment=configured_environment,
+                configured_headers=configured_headers,
+            )
 
             # Include source in artifact_id to prevent collisions when the
             # same server name appears in both config.yaml and mcp_servers.json.

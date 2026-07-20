@@ -16,7 +16,7 @@ def pi_hook_response_from_guard(
 ) -> dict[str, object]:
     """Translate a Guard policy action into the Pi extension bridge response."""
 
-    if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+    if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
         cleaned_reason = reason.strip() if isinstance(reason, str) else ""
         response: dict[str, object] = {
             "decision": "deny",
