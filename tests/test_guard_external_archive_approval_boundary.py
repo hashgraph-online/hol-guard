@@ -155,7 +155,7 @@ def test_npm_url_like_https_specs_are_rejected_before_approval_or_network(
     )
 
     assert result.decision == "block"
-    assert any(reason["code"] == "external_archive_destination_rejected" for reason in result.reasons)
+    assert any(reason["code"] == "npm_source_host_missing" for reason in result.reasons)
 
 
 @pytest.mark.parametrize("named", (False, True))
@@ -214,7 +214,7 @@ def test_npm_https_at_sign_is_not_mistaken_for_package_source_separator(
             workspace_dir=workspace,
         )
         assert result.decision == "block"
-        assert any(reason["code"] == "external_archive_destination_rejected" for reason in result.reasons)
+        assert any(reason["code"] == "npm_source_ambiguous_userinfo" for reason in result.reasons)
 
 
 def test_external_archive_request_caps_target_count_before_network(

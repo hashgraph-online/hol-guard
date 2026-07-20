@@ -267,6 +267,123 @@ def test_evaluate_package_request_artifact_applies_js_source_heuristics(
     assert result.packages[0]["reasons"][0]["code"] == expected_code
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        "git+https://github.com/hashgraph-online/hol-guard.git#main",
+        "git+ssh://git@github.com/hashgraph-online/hol-guard.git#main",
+        "git://github.com/hashgraph-online/hol-guard.git#main",
+        "ssh://git@github.com/hashgraph-online/hol-guard.git#main",
+        "git@github.com:hashgraph-online/hol-guard.git#main",
+        "github:hashgraph-online/hol-guard#main",
+        "gitlab:hashgraph-online/hol-guard#main",
+        "bitbucket:hashgraph-online/hol-guard#main",
+        "hashgraph-online/hol-guard#main",
+        "https://github.com/hashgraph-online/hol-guard.git#main",
+    ],
+)
+def test_every_npm_git_source_form_requires_local_review_before_registry_or_cloud(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    store = GuardStore(home_dir)
+
+    def fail_cloud_lookup() -> str:
+        raise AssertionError("Git source must not reach registry/cloud evaluation")
+
+    monkeypatch.setattr(store, "get_cloud_workspace_id", fail_cloud_lookup)
+
+    artifact = _artifact_from_command(f"npm install {source}", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "ask"
+    assert result.packages[0]["reasons"][0]["code"] == "git_dependency_source"
+    assert result.packages[0]["sourceIdentity"].startswith("git:")
+    assert result.packages[0]["sourceRevisionKind"] == "mutable_ref"
+
+
+def test_hosted_git_archive_requires_git_review_without_archive_download(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(
+        supply_chain_package_eval_module,
+        "_scan_external_tarball",
+        lambda *_args, **_kwargs: pytest.fail("hosted Git archives must not enter generic archive download"),
+    )
+
+    artifact = _artifact_from_command(
+        "npm install https://github.com/hashgraph-online/hol-guard/archive/refs/heads/main.tar.gz?token=secret",
+        workspace=workspace_dir,
+    )
+    result = evaluate_package_request_artifact(
+        artifact=artifact,
+        store=store,
+        workspace_dir=workspace_dir,
+        external_archive_network_authorized=True,
+    )
+
+    assert result.decision == "ask"
+    assert result.packages[0]["reasons"][0]["code"] == "git_dependency_source"
+    assert result.packages[0]["sourceRepository"] == "git:github.com/hashgraph-online/hol-guard"
+    assert result.external_archive_downloads == ()
+
+
+def test_npm_git_source_cannot_hide_registry_targets_in_one_request(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    artifact = _artifact_from_command(
+        "npm install minimist@1.2.8 github:hashgraph-online/hol-guard#main",
+        workspace=workspace_dir,
+    )
+
+    result = evaluate_package_request_artifact(
+        artifact=artifact,
+        store=GuardStore(tmp_path / "home"),
+        workspace_dir=workspace_dir,
+    )
+
+    assert result.decision == "block"
+    assert result.packages[0]["reasons"][0]["code"] == "npm_source_mixed_request_unsupported"
+
+
+def test_invalid_npm_source_blocks_before_cloud_and_redacts_credentials(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    store = GuardStore(tmp_path / "home")
+    monkeypatch.setattr(
+        store,
+        "get_cloud_workspace_id",
+        lambda: pytest.fail("invalid source must not reach cloud evaluation"),
+    )
+
+    artifact = _artifact_from_command(
+        "npm install https://user:VERY_SECRET@github.com/hashgraph-online/hol-guard.git#main",
+        workspace=workspace_dir,
+    )
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["reasons"][0]["code"] == "npm_source_ambiguous_userinfo"
+    assert "VERY_SECRET" not in json.dumps(artifact.metadata)
+    assert "VERY_SECRET" not in json.dumps(result.to_cache_dict())
+
+
 def test_evaluate_package_request_artifact_uses_source_specific_risk_summary_for_reviewed_tarballs(
     tmp_path: Path,
 ) -> None:
