@@ -39,6 +39,7 @@ from .effect_decision import (
     PositiveProof,
     evaluate_effect_decision,
 )
+from .verified_read_common import verified_read_digest
 from .verified_read_execution import VERIFIED_READ_POLICY_VERSION
 
 VERIFIED_GITHUB_READ_VERSION: Final = "guard.verified-github-read.v1"
@@ -253,7 +254,7 @@ def _proof(
     pull_payload: dict[str, object],
     stdout: str,
 ) -> PositiveProof:
-    target = _digest(
+    target = verified_read_digest(
         {
             "host": "github.com",
             "owner": owner.casefold(),
@@ -274,15 +275,15 @@ def _proof(
         "redirect_mode": "rejected",
         "executor_source": source_digest,
         "ca_bundle": ca_bundle_digest,
-        "tls_runtime": _digest(ssl.OPENSSL_VERSION),
-        "repository_response": _digest(repository_payload),
-        "pull_response": _digest(pull_payload),
-        "output": _digest(stdout),
+        "tls_runtime": verified_read_digest(ssl.OPENSSL_VERSION),
+        "repository_response": verified_read_digest(repository_payload),
+        "pull_response": verified_read_digest(pull_payload),
+        "output": verified_read_digest(stdout),
         "parser": "structured-github-public-read-v1",
         "io_flow": "public-get/repository-preflight/pull-request-get/stdout-bounded",
         "expected_effects": ["network-read", "remote-state-read"],
     }
-    return PositiveProof(ProofRoute.VERIFIED, _digest(material), _REQUIREMENTS)
+    return PositiveProof(ProofRoute.VERIFIED, verified_read_digest(material), _REQUIREMENTS)
 
 
 def _decision(proof: PositiveProof) -> EffectDecision:
@@ -351,11 +352,6 @@ def _bounded_identity_file(path: Path) -> tuple[bytes, str]:
         return payload, hashlib.sha256(payload).hexdigest()
     finally:
         os.close(descriptor)
-
-
-def _digest(value: object) -> str:
-    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
-    return hashlib.sha256(len(payload).to_bytes(8, "big") + payload).hexdigest()
 
 
 __all__ = (

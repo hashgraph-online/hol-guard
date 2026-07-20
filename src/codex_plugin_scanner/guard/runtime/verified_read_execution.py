@@ -33,6 +33,7 @@ from .effect_decision import (
     evaluate_effect_decision,
 )
 from .secret_sensitivity import classify_secret_path
+from .verified_read_common import verified_read_digest
 
 VERIFIED_READ_EXECUTION_VERSION: Final = "guard.verified-read-execution.v1"
 VERIFIED_READ_POLICY_VERSION: Final = "guard.verified-read-policy.v1"
@@ -60,7 +61,6 @@ class VerifiedReadResult:
     exit_code: int
     stdout: str
     stderr: str
-    output_truncated: bool
     proof: PositiveProof
     decision: EffectDecision
     operation_id: str
@@ -98,7 +98,7 @@ def try_execute_verified_local_read(argv: tuple[str, ...]) -> VerifiedReadResult
         return None
     if decision.disposition is not FinalDisposition.SILENT_VERIFIED:
         return None
-    return VerifiedReadResult(0, output.stdout, "", False, proof, decision, output.operation_id)
+    return VerifiedReadResult(0, output.stdout, "", proof, decision, output.operation_id)
 
 
 def _current_workspace_context() -> _WorkspaceContext:
@@ -118,7 +118,7 @@ def _current_workspace_context() -> _WorkspaceContext:
     if repository is None or git_identity is None:
         raise ValueError("verified reads require a regular Git checkout")
     repository_stat = repository.stat(follow_symlinks=False)
-    identity = _digest(
+    identity = verified_read_digest(
         {
             "repository": _path_identity(repository_stat),
             "git": git_identity,
@@ -236,7 +236,7 @@ class _OpenTarget:
         self._stream = os.fdopen(descriptor, "rb")
         self._identity = _stable_file_identity(metadata)
         self.target = {
-            "path": _digest(self._path.relative_to(self._repository).as_posix()),
+            "path": verified_read_digest(self._path.relative_to(self._repository).as_posix()),
             "identity": _path_identity(metadata),
         }
         return self._stream, self.target
@@ -333,7 +333,7 @@ def _directory_target(path: Path, *, context: _WorkspaceContext) -> dict[str, ob
     except ValueError as exc:
         raise ValueError("working directory escapes the repository") from exc
     metadata = path.stat(follow_symlinks=False)
-    return {"path": _digest(relative.as_posix()), "identity": _path_identity(metadata)}
+    return {"path": verified_read_digest(relative.as_posix()), "identity": _path_identity(metadata)}
 
 
 def _optional_regular_file_digest(path: Path) -> str:
@@ -341,7 +341,7 @@ def _optional_regular_file_digest(path: Path) -> str:
         with _OpenRegularFile(path) as stream:
             return hashlib.sha256(stream.read(_MAX_FILE_BYTES + 1)).hexdigest()
     except FileNotFoundError:
-        return _digest("missing")
+        return verified_read_digest("missing")
 
 
 def _regular_file_digest(path: Path, *, max_bytes: int) -> str:
@@ -404,14 +404,14 @@ def _proof(
         "repository": context.identity,
         "working_directory": _directory_target(context.cwd, context=context),
         "targets": output.targets,
-        "request": _digest(argv),
+        "request": verified_read_digest(argv),
         "executor_source": source_digest,
         "parser": "guard-internal-direct-argv-v1",
         "io_flow": "guard-file-descriptor-to-bounded-output",
         "expected_effects": ["workspace-or-public-read"],
-        "stdout": _digest(output.stdout),
+        "stdout": verified_read_digest(output.stdout),
     }
-    return PositiveProof(ProofRoute.VERIFIED, _digest(material), _REQUIREMENTS)
+    return PositiveProof(ProofRoute.VERIFIED, verified_read_digest(material), _REQUIREMENTS)
 
 
 def _decision(proof: PositiveProof, *, operation_id: str) -> EffectDecision:
@@ -453,13 +453,6 @@ def _stable_file_identity(metadata: os.stat_result) -> tuple[int, int, int, int]
 
 def _dynamic(value: str) -> bool:
     return any(marker in value for marker in ("$", "`", "<", ">", "|", ";", "&", "*", "?", "[", "\x00"))
-
-
-def _digest(value: object) -> str:
-    import json
-
-    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
-    return hashlib.sha256(len(payload).to_bytes(8, "big") + payload).hexdigest()
 
 
 def _source_digest() -> str:

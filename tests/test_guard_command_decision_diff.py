@@ -51,6 +51,7 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
         "src/codex_plugin_scanner/guard/runtime/command_verified_read_candidates.py",
         "src/codex_plugin_scanner/guard/runtime/verified_github_reads.py",
         "src/codex_plugin_scanner/guard/runtime/verified_read_execution.py",
+        "src/codex_plugin_scanner/guard/runtime/verified_read_common.py",
         "src/codex_plugin_scanner/guard/cli/commands_verified_read.py",
         "src/codex_plugin_scanner/guard/cli/commands_parser_local.py",
         "src/codex_plugin_scanner/guard/cli/commands_router.py",

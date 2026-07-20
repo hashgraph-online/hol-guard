@@ -95,7 +95,6 @@ def test_owned_direct_local_execution_returns_silent_verified(
     assert result is not None
     assert result.exit_code == 0
     assert result.stdout.strip() == str(cwd)
-    assert result.output_truncated is False
     assert result.proof.route is ProofRoute.VERIFIED
     assert result.decision.action == "allow"
     assert result.decision.disposition is FinalDisposition.SILENT_VERIFIED
