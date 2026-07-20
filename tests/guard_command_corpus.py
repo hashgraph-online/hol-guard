@@ -42,7 +42,8 @@ def stable_case_id(source_id: str, variant: int) -> str:
     return f"c-{digest[:24]}"
 
 
-def iter_benign_corpus() -> Iterator[CommandCorpusCase]:
+def iter_benign_corpus(*, shard_index: int = 0, shard_count: int = 1) -> Iterator[CommandCorpusCase]:
+    _validate_shard(shard_index, shard_count)
     manifest = load_seed_manifest()
     variants = _integer(manifest.get("benign_variants_per_seed"), "benign_variants_per_seed")
     cases: list[CommandCorpusCase] = []
@@ -62,14 +63,15 @@ def iter_benign_corpus() -> Iterator[CommandCorpusCase]:
                     .replace("{pr_number}", str(4289 + variant))
                 )
                 cases.append(CommandCorpusCase(case_id=stable_case_id(source_id, variant), command=command))
-    yield from sorted(cases, key=lambda case: case.case_id)
+    yield from sorted(cases, key=lambda case: case.case_id)[shard_index::shard_count]
 
 
-def iter_adversarial_corpus() -> Iterator[CommandCorpusCase]:
+def iter_adversarial_corpus(*, shard_index: int = 0, shard_count: int = 1) -> Iterator[CommandCorpusCase]:
+    _validate_shard(shard_index, shard_count)
     manifest = load_seed_manifest()
     categories = _list(manifest.get("adversarial_categories"), "adversarial_categories")
     target_count = _integer(manifest.get("adversarial_target_count"), "adversarial_target_count")
-    for position in range(target_count):
+    for position in range(shard_index, target_count, shard_count):
         index = (position * 7919 + 22020) % target_count
         seed = _list(categories[index % len(categories)], "adversarial category")
         if len(seed) != 3:
@@ -80,6 +82,11 @@ def iter_adversarial_corpus() -> Iterator[CommandCorpusCase]:
             case_id=stable_case_id(f"adversarial:{technique}", variant),
             command=_render_adversarial(template, variant=variant),
         )
+
+
+def _validate_shard(shard_index: int, shard_count: int) -> None:
+    if shard_count < 1 or shard_index < 0 or shard_index >= shard_count:
+        raise ValueError("corpus shard must satisfy 0 <= shard_index < shard_count")
 
 
 def _render_adversarial(template: str, *, variant: int) -> str:

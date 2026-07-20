@@ -62,7 +62,7 @@ from tests.guard_command_corpus_oracle_types import OracleRecord
 from tests.guard_command_corpus_runner import peak_rss_mib
 
 EVALUATION_SHARD_COUNT: Final = 4
-MAX_CONCURRENT_WORKERS: Final = 2
+MAX_CONCURRENT_WORKERS: Final = 4
 SYNTHETIC_CWD: Final = REPO_ROOT / "workspace"
 SYNTHETIC_HOME: Final = REPO_ROOT / "home"
 
@@ -98,9 +98,7 @@ def _evaluate_shard(worker_index: int) -> DecisionDiffShard:
     disposition_changed_count = 0
     total = 0
 
-    for position, (case, oracle) in enumerate(_case_oracle_pairs()):
-        if position % EVALUATION_SHARD_COUNT != worker_index:
-            continue
+    for case, oracle in _case_oracle_pairs(worker_index):
         total += 1
         evaluation = evaluate_command(case.command, cwd=SYNTHETIC_CWD, home_dir=SYNTHETIC_HOME)
         current = evaluation.decision_plane
@@ -139,10 +137,18 @@ def _evaluate_shard(worker_index: int) -> DecisionDiffShard:
     )
 
 
-def _case_oracle_pairs() -> Iterator[tuple[CommandCorpusCase, OracleRecord]]:
+def _case_oracle_pairs(worker_index: int) -> Iterator[tuple[CommandCorpusCase, OracleRecord]]:
     yield from chain(
-        zip(iter_benign_corpus(), iter_benign_oracle(), strict=True),
-        zip(iter_adversarial_corpus(), iter_adversarial_oracle(), strict=True),
+        zip(
+            iter_benign_corpus(shard_index=worker_index, shard_count=EVALUATION_SHARD_COUNT),
+            iter_benign_oracle(shard_index=worker_index, shard_count=EVALUATION_SHARD_COUNT),
+            strict=True,
+        ),
+        zip(
+            iter_adversarial_corpus(shard_index=worker_index, shard_count=EVALUATION_SHARD_COUNT),
+            iter_adversarial_oracle(shard_index=worker_index, shard_count=EVALUATION_SHARD_COUNT),
+            strict=True,
+        ),
     )
 
 

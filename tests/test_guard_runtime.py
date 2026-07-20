@@ -13619,7 +13619,7 @@ def test_runtime_hook_saved_v1_allow_satisfies_exact_unchanged_current_review(tm
     event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
-        "tool_input": {"command": "rm -rf build-cache"},
+        "tool_input": {"command": "rm -rf build"},
         "source_scope": "project",
     }
 
@@ -14027,7 +14027,7 @@ def test_runtime_hook_saved_allow_invalidates_when_path_resolves_executable_else
     event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
-        "tool_input": {"command": "rm -rf build-cache"},
+        "tool_input": {"command": "rm -rf build"},
         "source_scope": "project",
     }
     original_path = os.environ.get("PATH", "")
@@ -14884,7 +14884,7 @@ def test_guard_hook_codex_strict_default_still_denies_destructive_shell_command(
     assert "destructive shell command" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
-def test_guard_hook_codex_reviews_github_token_substitution_command(
+def test_guard_hook_codex_blocks_github_token_substitution_command(
     tmp_path,
     capsys,
     monkeypatch,
@@ -14928,7 +14928,7 @@ def test_guard_hook_codex_reviews_github_token_substitution_command(
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "GitHub secret mutation command" in payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert len(GuardStore(home_dir).list_receipts(limit=10)) == 1
-    assert len(pending) == 1
+    assert pending == []
 
 
 def test_guard_hook_codex_current_block_is_terminal_before_native_deny_output(tmp_path, capsys, monkeypatch):

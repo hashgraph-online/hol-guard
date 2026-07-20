@@ -7,10 +7,11 @@ import re
 import shlex
 import subprocess
 import sys
+from collections.abc import Iterator
 from difflib import SequenceMatcher
 from itertools import chain
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
 import pytest
 
@@ -28,6 +29,7 @@ from tests.guard_command_corpus import (
     KNOWN_GAPS_PATH,
     MANIFEST_PATH,
     PAIRS_PATH,
+    CommandCorpusCase,
     corpus_digest,
     iter_adversarial_corpus,
     iter_benign_corpus,
@@ -60,6 +62,14 @@ _WORKFLOW_FAMILIES = {
 }
 
 
+class _CorpusFactory(Protocol):
+    def __call__(self, *, shard_index: int = 0, shard_count: int = 1) -> Iterator[CommandCorpusCase]: ...
+
+
+class _OracleFactory(Protocol):
+    def __call__(self, *, shard_index: int = 0, shard_count: int = 1) -> Iterator[OracleRecord]: ...
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -79,6 +89,35 @@ def _floor_rank(value: object) -> int:
         return guard_action_severity("warn")
     assert is_guard_action(value)
     return guard_action_severity(value)
+
+
+@pytest.mark.parametrize(
+    ("corpus_factory", "oracle_factory"),
+    (
+        (iter_benign_corpus, iter_benign_oracle),
+        (iter_adversarial_corpus, iter_adversarial_oracle),
+    ),
+)
+def test_deterministic_shards_partition_the_default_corpus(
+    corpus_factory: _CorpusFactory,
+    oracle_factory: _OracleFactory,
+) -> None:
+    expected_ids = [case.case_id for case in corpus_factory()]
+    observed_ids: list[str] = []
+    for shard_index in range(4):
+        cases = list(corpus_factory(shard_index=shard_index, shard_count=4))
+        oracle = list(oracle_factory(shard_index=shard_index, shard_count=4))
+        assert [case.case_id for case in cases] == [record.case_id for record in oracle]
+        observed_ids.extend(case.case_id for case in cases)
+    assert sorted(observed_ids) == sorted(expected_ids)
+    assert len(set(observed_ids)) == len(expected_ids)
+
+
+def test_invalid_corpus_shards_fail_closed() -> None:
+    with pytest.raises(ValueError, match="shard"):
+        _ = list(iter_adversarial_corpus(shard_index=1, shard_count=1))
+    with pytest.raises(ValueError, match="shard"):
+        _ = list(iter_adversarial_oracle(shard_index=-1, shard_count=4))
 
 
 def _oracle_digest(records: tuple[OracleRecord, ...]) -> str:
