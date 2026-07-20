@@ -134,8 +134,8 @@ def _result(request: ContainmentRequest, exit_code: int = 0) -> ContainmentExecu
     )
 
 
-@pytest.mark.skipif(sys.platform not in {"darwin", "linux"}, reason="requires a supported containment backend")
-def test_platform_backend_runs_path_pinned_node_from_snapshot(tmp_path: Path) -> None:
+@pytest.mark.skipif(sys.platform not in {"darwin", "linux"}, reason="requires a supported containment platform")
+def test_platform_backend_runs_path_pinned_node_or_fails_closed(tmp_path: Path) -> None:
     node = shutil.which("node")
     if node is None:
         pytest.skip("Node executable unavailable")
@@ -157,6 +157,11 @@ def test_platform_backend_runs_path_pinned_node_from_snapshot(tmp_path: Path) ->
 
     result = execute_contained(request)
 
+    if sys.platform == "linux" and result.attestation.failure is ContainmentFailure.UNSUPPORTED_PLATFORM:
+        assert result.enforced is False
+        assert result.exit_code is None
+        assert result.stderr == "unsupported-platform"
+        return
     if sys.platform == "darwin" and not canonical_node.startswith(("/System/", "/usr/", "/bin/", "/sbin/")):
         assert result.enforced is False
         assert result.attestation.failure is ContainmentFailure.APPLY_FAILED
