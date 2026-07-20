@@ -208,7 +208,12 @@ home_dir = Path(payload["home_dir"]).resolve()
 guard_home = Path(payload["guard_home"]).resolve()
 workspace_value = payload.get("workspace_dir")
 workspace_dir = Path(workspace_value).resolve() if isinstance(workspace_value, str) else None
-context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
+context = HarnessContext(
+    home_dir=home_dir,
+    workspace_dir=workspace_dir,
+    guard_home=guard_home,
+    home_override_explicit=bool(payload.get("home_override_explicit")),
+)
 store = GuardStore(guard_home)
 managed_installs, notes = _repair_supported_harnesses_in_process(
     context=context,
@@ -1922,6 +1927,7 @@ def _repair_supported_harnesses(
         "home_dir": str(context.home_dir),
         "workspace_dir": str(context.workspace_dir) if context.workspace_dir is not None else workspace,
         "guard_home": str(context.guard_home),
+        "home_override_explicit": context.home_override_explicit,
         "now": now,
     }
     try:
@@ -2021,10 +2027,19 @@ def _repair_context_from_managed_install(
                 home_dir=context.home_dir,
                 workspace_dir=workspace_path,
                 guard_home=context.guard_home,
+                home_override_explicit=context.home_override_explicit,
             ),
             str(workspace_path),
         )
-    return HarnessContext(context.home_dir, None, context.guard_home), None
+    return (
+        HarnessContext(
+            home_dir=context.home_dir,
+            workspace_dir=None,
+            guard_home=context.guard_home,
+            home_override_explicit=context.home_override_explicit,
+        ),
+        None,
+    )
 
 
 def _repair_codex_install(
@@ -2042,7 +2057,11 @@ def _repair_codex_install(
         hook_state = codex_native_hook_state(repair_context)
     except (OSError, RuntimeError) as error:
         return None, f"Could not inspect Codex protection during update: {error}"
-    if bool(hook_state["protection_active"]) and hook_state.get("integrity_status") == "valid":
+    if (
+        bool(hook_state["protection_active"])
+        and hook_state.get("integrity_status") == "valid"
+        and bool(hook_state["shell_protection_active"])
+    ):
         return None, None
     try:
         payload = apply_managed_install(

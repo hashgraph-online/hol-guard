@@ -30,6 +30,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard import synced_policy as synced_policy_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, wait_for_approval_requests
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction_module
@@ -43,6 +44,7 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _runtime_policy_path
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
+from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, overlay_synced_guard_policy
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -137,6 +139,24 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _install_codex_native_hooks(home_dir: Path, workspace_dir: Path) -> None:
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        guard_home=home_dir,
+        home_override_explicit=True,
+    )
+    config_path = home_dir / ".codex" / "config.toml"
+    payload = read_toml_payload(config_path)
+    CodexHarnessAdapter._install_config_hooks(payload, context)
+    CodexHarnessAdapter._write_authenticated_hook_config(
+        context,
+        config_path=config_path,
+        payload=payload,
+        previous_manifest=None,
+    )
 
 
 def _make_pinnable_harness_executable(
@@ -11695,6 +11715,7 @@ def test_guard_run_prompt_allow_once_launches_and_records_override(tmp_path, cap
         f"command = {json.dumps(sys.executable)}\n"
         f"args = [{json.dumps(str(workspace_server))}]\n",
     )
+    _install_codex_native_hooks(home_dir, workspace_dir)
     answers = iter(["1", "1"])
     monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("rich.console.Console.input", lambda self, prompt="": next(answers))
@@ -11745,6 +11766,7 @@ def test_guard_run_prompt_allow_artifact_persists_for_next_run(tmp_path, capsys,
         f"command = {json.dumps(sys.executable)}\n"
         f"args = [{json.dumps(str(workspace_server))}]\n",
     )
+    _install_codex_native_hooks(home_dir, workspace_dir)
     answers = iter(["2", "2"])
     monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("rich.console.Console.input", lambda self, prompt="": next(answers))
@@ -12860,6 +12882,7 @@ def test_guard_run_headless_allow_persists_state_when_approval_center_is_availab
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
     _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
+    _install_codex_native_hooks(home_dir, workspace_dir)
     safe_detection = HarnessDetection(
         harness="codex",
         installed=True,

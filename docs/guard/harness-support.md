@@ -8,9 +8,11 @@ Current Guard support in this repo:
 
 - `codex`
   - detects global and project `config.toml`
-  - detects Guard-managed `.codex/hooks.json` Bash hook entries
+  - detects Guard-managed native hook entries in `.codex/config.toml` and migrates legacy `.codex/hooks.json` entries
   - parses configured MCP servers
-  - installs Guard-owned Codex `PreToolUse` Bash hooks so native shell commands can be denied before execution even when Codex itself is running in YOLO mode
+  - installs Guard-owned Codex `PreToolUse` and `PermissionRequest` hooks as the authoritative complete-command boundary, so native shell commands can be denied before execution even when Codex itself is running in YOLO mode
+  - does not install Bash DEBUG traps, zsh debug traps, fish preexec handlers, `BASH_ENV`, or shell profile blocks; install and repair remove previously managed copies without changing unrelated profile bytes
+  - refuses wrapper-mode launch when the authoritative native hooks are missing or disabled
   - serializes package-manager shell intent, package metadata, and the final pre-execution Guard result into the shared runtime envelope before Guard queues or blocks the action
   - supports wrapper-mode `guard run codex`
   - wrapper prompt screening now suppresses copied debug and incident context while still escalating risky prompt intent

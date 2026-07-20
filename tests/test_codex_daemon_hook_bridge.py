@@ -229,7 +229,13 @@ def test_main_posts_to_authenticated_daemon(
     monkeypatch.setenv("http_proxy", f"http://127.0.0.1:{proxy.server_address[1]}")
     monkeypatch.delenv("NO_PROXY", raising=False)
     monkeypatch.delenv("no_proxy", raising=False)
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
+    complete_command = "trap - DEBUG; { cat .env; } > /dev/null\ncat <<'EOF'\nharmless\nEOF"
+    hook_payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": complete_command},
+    }
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(hook_payload)))
 
     try:
         exit_code = bridge.main(**_bridge_config(guard_home, port))
@@ -242,7 +248,8 @@ def test_main_posts_to_authenticated_daemon(
     assert exit_code == 0
     assert _DaemonHandler.captured_challenge_guard_token is None
     assert _DaemonHandler.captured_guard_token == "fixture-token"
-    assert json.loads(str(_DaemonHandler.captured_hook_body))["hook_event_name"] == "PreToolUse"
+    assert json.loads(str(_DaemonHandler.captured_hook_body)) == hook_payload
+    assert json.loads(str(_DaemonHandler.captured_hook_body))["tool_input"]["command"] == complete_command
     assert _ProxyHandler.captured_paths == []
     assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
 
