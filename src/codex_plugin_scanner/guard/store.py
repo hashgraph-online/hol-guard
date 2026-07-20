@@ -32,6 +32,10 @@ from .store_secret_policy_integrity import (
     _POLICY_INTEGRITY_LOOKUP_UNSET,
 )
 from .store_sessions import StoreSessionsMixin
+from .store_workflow_capabilities import StoreWorkflowCapabilitiesMixin
+from .store_workflow_capability_lookup import StoreWorkflowCapabilityLookupMixin
+from .store_workflow_capability_receipt_lookup import StoreWorkflowCapabilityReceiptLookupMixin
+from .store_workflow_capability_revocation import StoreWorkflowCapabilityRevocationMixin
 
 
 class GuardStore(
@@ -54,6 +58,10 @@ class GuardStore(
     StoreSessionsMixin,
     StoreEvidenceMixin,
     StoreReadStateMixin,
+    StoreWorkflowCapabilitiesMixin,
+    StoreWorkflowCapabilityLookupMixin,
+    StoreWorkflowCapabilityReceiptLookupMixin,
+    StoreWorkflowCapabilityRevocationMixin,
 ):
     """Local SQLite store for Guard state."""
 

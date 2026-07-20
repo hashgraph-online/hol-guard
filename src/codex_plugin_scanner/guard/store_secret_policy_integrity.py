@@ -452,6 +452,24 @@ class StoreSecretPolicyIntegrityMixin:
     def _finalize_policy_integrity_control_state(self, payload: Mapping[str, object]) -> None:
         self._store_policy_integrity_control_state(payload)
 
+    def _load_workflow_capability_control(self) -> str | None:
+        secret_store = self._policy_integrity_secret_store
+        if secret_store is None or self._should_skip_policy_integrity_keychain_access(secret_store):
+            return None
+        reference = self._build_scoped_secret_ref("guard-workflow-capability-control")
+        return self._get_policy_integrity_secret_from_store(reference)
+
+    def _store_workflow_capability_control(self, encoded: str) -> bool:
+        secret_store = self._policy_integrity_secret_store
+        if secret_store is None or self._should_skip_policy_integrity_keychain_access(secret_store):
+            return False
+        reference = self._build_scoped_secret_ref("guard-workflow-capability-control")
+        try:
+            secret_store.set_secret(reference, encoded)
+        except Exception:
+            return False
+        return self._get_policy_integrity_secret_from_store(reference) == encoded
+
     def _policy_integrity_path_warnings(self) -> list[str]:
         warnings: list[str] = []
         if self.guard_home.is_symlink():
