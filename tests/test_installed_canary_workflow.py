@@ -130,21 +130,32 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "uv pip install" not in workflow_text
 
 
-def test_slice_manifest_binds_the_two_pull_request_batch_and_repo_relative_ownership() -> None:
+def test_slice_manifest_binds_the_release_correction_chain_and_repo_relative_ownership() -> None:
     manifest = _mapping(cast(object, json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))))
 
     assert manifest["schema_version"] == "hol-guard.release-slice-manifest.v2"
     assert manifest["target_branch"] == "release/2.2"
     pull_requests = [_mapping(item) for item in _sequence(manifest["pull_requests"])]
-    assert [item["number"] for item in pull_requests] == [1761, 1763]
-    assert pull_requests[0]["depends_on"] == []
-    assert pull_requests[1]["depends_on"] == [1761]
-    assert pull_requests[1]["final_base_requirement"] == "the release/2.2 commit produced by pull request 1761"
+    assert [item["number"] for item in pull_requests] == [1746, 1761, 1764, 1767, 1763]
+    by_number = {cast(int, item["number"]): item for item in pull_requests}
+    assert by_number[1746]["depends_on"] == []
+    assert by_number[1761]["depends_on"] == [1746]
+    assert by_number[1761]["corrected_by"] == [1764, 1767]
+    assert by_number[1764]["depends_on"] == [1761]
+    assert by_number[1767]["depends_on"] == [1761, 1764]
+    assert by_number[1763]["depends_on"] == [1746, 1761, 1764, 1767]
+    assert by_number[1763]["final_base_sha"] == "3c895a4104698a63ce0b3d8c5a25710ae5ffaa6a"
+    assert by_number[1763]["final_base_requirement"] == "the release/2.2 commit produced by pull request 1767"
 
     slices = [_mapping(item) for item in _sequence(manifest["slices"])]
     assert [item["id"] for item in slices] == [f"CDX-{number:03d}" for number in range(63, 75)]
     assert "at most 10 exact repeated uses" in _text(slices[0]["acceptance"])
-    ownership: set[Path] = set()
+    overlap_exceptions = {
+        Path(_text(item["path"])): (_text(item["original_slice"]), _text(item["final_slice"]))
+        for item in (_mapping(value) for value in _sequence(manifest["ownership_overlap_exceptions"]))
+    }
+    observed_overlaps: set[Path] = set()
+    ownership: dict[Path, str] = {}
     ownership_counts = {1761: 0, 1763: 0}
     tracked_paths = set(
         subprocess.run(
@@ -165,10 +176,14 @@ def test_slice_manifest_binds_the_two_pull_request_batch_and_repo_relative_owner
             assert path.as_posix() in tracked_paths, f"manifest path is not tracked: {path}"
         for path_value in _sequence(item["deliverables"]):
             path = Path(_text(path_value))
-            assert path not in ownership
-            ownership.add(path)
+            if path in ownership:
+                assert overlap_exceptions[path] == (ownership[path], _text(item["id"]))
+                observed_overlaps.add(path)
+            else:
+                ownership[path] = _text(item["id"])
             ownership_counts[cast(int, item["pull_request"])] += 1
-    assert ownership_counts == {1761: 38, 1763: 20}
+    assert observed_overlaps == overlap_exceptions.keys()
+    assert ownership_counts == {1761: 38, 1763: 26}
 
     gates = _mapping(manifest["gates"])
     review = _mapping(gates["review"])
@@ -176,6 +191,9 @@ def test_slice_manifest_binds_the_two_pull_request_batch_and_repo_relative_owner
         "required_independent_exact_diff_verdict": "SHIP",
         "required_unresolved_non_outdated_thread_count": 0,
         "required_quiet_window_seconds": 310,
+        "recorded_exception": (
+            "pull request 1761 was corrected by pull requests 1764 and 1767 after its premature merge"
+        ),
     }
     verification = [_text(value) for value in _sequence(manifest["verification"])]
     assert all("pnpm" not in command for command in verification)

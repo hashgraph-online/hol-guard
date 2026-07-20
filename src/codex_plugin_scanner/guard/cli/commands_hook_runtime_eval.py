@@ -890,6 +890,7 @@ def _evaluate_runtime_artifact_hook(
         runtime_artifact_hash=runtime_artifact_hash,
         scanner_evidence_payload=scanner_evidence_payload,
         stored_policy_action=stored_policy_action,
+        workflow_authorization_claimed=workflow_state.authorization_claimed,
     )
 
 

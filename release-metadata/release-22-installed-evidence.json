@@ -14,12 +14,46 @@
   },
   "pull_requests": [
     {
+      "number": 1746,
+      "role": "contained-command-prerequisites",
+      "tasks": ["CDX-052", "CDX-062"],
+      "base_branch": "release/2.2",
+      "initial_base_sha": "98a9129c1181a4d2fe0ca8abefba94d114d17206",
+      "head_sha": "499a506d07fc05b7457a2c0f350105f75ae219a3",
+      "merge_sha": "97aa1dd142d7e65d6ba2a0a52e7dc78b06a4547e",
+      "depends_on": []
+    },
+    {
       "number": 1761,
       "role": "command-authorization-security",
       "tasks": ["CDX-063", "CDX-064", "CDX-065", "CDX-066", "CDX-067"],
       "base_branch": "release/2.2",
       "initial_base_sha": "97aa1dd142d7e65d6ba2a0a52e7dc78b06a4547e",
-      "depends_on": []
+      "head_sha": "9bf7034f152049fd0d1947491eaa81616a1618ea",
+      "merge_sha": "8016373713f276ddeb0078645173a3996f8216c7",
+      "depends_on": [1746],
+      "review_loop_status": "prematurely merged before the required checks and quiet window completed",
+      "corrected_by": [1764, 1767]
+    },
+    {
+      "number": 1764,
+      "role": "authorization-security-correction",
+      "tasks": ["CDX-063", "CDX-064", "CDX-065", "CDX-066"],
+      "base_branch": "release/2.2",
+      "initial_base_sha": "b2514654cacd8ef8c23ab724c87166ff312c0eae",
+      "head_sha": "57047e71017e3b6dccfa7790b63fc0a912d255d2",
+      "merge_sha": "c9d757ee7e672b4d4c592dcf82528b49653db655",
+      "depends_on": [1761]
+    },
+    {
+      "number": 1767,
+      "role": "authorization-and-migration-correction",
+      "tasks": ["CDX-063", "CDX-064", "CDX-065", "CDX-066", "CDX-067"],
+      "base_branch": "release/2.2",
+      "initial_base_sha": "c9d757ee7e672b4d4c592dcf82528b49653db655",
+      "head_sha": "f770cb9a85ae9ee70b1598dc7dc7636ed361435e",
+      "merge_sha": "3c895a4104698a63ce0b3d8c5a25710ae5ffaa6a",
+      "depends_on": [1761, 1764]
     },
     {
       "number": 1763,
@@ -27,9 +61,18 @@
       "tasks": ["CDX-068", "CDX-069", "CDX-070", "CDX-071", "CDX-072", "CDX-073", "CDX-074"],
       "base_branch": "release/2.2",
       "initial_base_sha": "97aa1dd142d7e65d6ba2a0a52e7dc78b06a4547e",
-      "depends_on": [1761],
-      "final_base_requirement": "the release/2.2 commit produced by pull request 1761",
+      "final_base_sha": "3c895a4104698a63ce0b3d8c5a25710ae5ffaa6a",
+      "depends_on": [1746, 1761, 1764, 1767],
+      "final_base_requirement": "the release/2.2 commit produced by pull request 1767",
       "post_rebase_requirement": "regenerate and verify every corpus, oracle, fixture, source, and decision-report binding"
+    }
+  ],
+  "ownership_overlap_exceptions": [
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_eval.py",
+      "original_slice": "CDX-063",
+      "final_slice": "CDX-068",
+      "reason": "the installed evidence slice propagates the trusted claimed-authorization fact into command activity"
     }
   ],
   "slices": [
@@ -132,8 +175,14 @@
       "id": "CDX-068",
       "pull_request": 1763,
       "deliverables": [
+        "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_eval.py",
+        "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_state.py",
+        "src/codex_plugin_scanner/guard/cli/commands_support_command_activity.py",
+        "src/codex_plugin_scanner/guard/runtime/command_activity_contract.py",
+        "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
         "tests/dockerlabs/command-extension-analytics/Dockerfile",
         "tests/dockerlabs/command-extension-analytics/Dockerfile.dockerignore",
+        "tests/dockerlabs/command-extension-analytics/github-cli-fixture.sh",
         "tests/dockerlabs/command-extension-analytics/installed_server.py",
         "tests/dockerlabs/command-extension-analytics/lab-process.ts",
         "tests/dockerlabs/command-extension-analytics/package.json",
@@ -143,6 +192,9 @@
       "acceptance": "the Bun Dockerlab exercises prompt-free, contained, workflow, review, block, persistence, and privacy paths through an installed wheel",
       "evidence_paths": [
         ".github/workflows/publish.yml",
+        "tests/test_guard_command_activity_capability.py",
+        "tests/test_guard_command_activity_hook_integration.py",
+        "tests/test_guard_command_activity_lifecycle.py",
         "tests/dockerlabs/command-extension-analytics/runner.test.ts"
       ]
     },
@@ -193,7 +245,7 @@
       "deliverables": [
         "release-metadata/release-22-installed-evidence.json"
       ],
-      "acceptance": "both pull requests have explicit release bases, dependency order, non-overlapping file ownership, and scoped verification gates",
+      "acceptance": "the release slice records explicit bases, dependency order, scoped ownership, corrective overlap, and verification gates",
       "evidence_paths": [
         "release-metadata/release-22-installed-evidence.json",
         "tests/test_installed_canary_workflow.py"
@@ -235,7 +287,23 @@
       "lowered_decision_count": 0,
       "disposition_change_count": 0,
       "exact_testpypi_canary": true,
-      "installed_origin_proof": true
+      "installed_origin_proof": true,
+      "review_loop_completed": false,
+      "corrected_by": [1764, 1767]
+    },
+    "pull_request_1764": {
+      "required_workflows": ["CI", "Security Gates", "CodeQL Analysis", "Publish to PyPI"],
+      "authorization_security_correction": true,
+      "preserved_retry_reuse_suite": true
+    },
+    "pull_request_1767": {
+      "required_workflows": ["CI", "Security Gates", "CodeQL Analysis", "Publish to PyPI"],
+      "exact_testpypi_canary": "2.0.1117.dev30002190658126",
+      "installed_origin_proof": true,
+      "host_schema_migration_proof": true,
+      "independent_exact_diff_verdict": "SHIP",
+      "unresolved_non_outdated_thread_count": 0,
+      "quiet_window_seconds": 310
     },
     "pull_request_1763": {
       "required_workflows": ["CI", "Security Gates", "CodeQL Analysis", "Publish to PyPI"],
@@ -250,7 +318,8 @@
     "review": {
       "required_independent_exact_diff_verdict": "SHIP",
       "required_unresolved_non_outdated_thread_count": 0,
-      "required_quiet_window_seconds": 310
+      "required_quiet_window_seconds": 310,
+      "recorded_exception": "pull request 1761 was corrected by pull requests 1764 and 1767 after its premature merge"
     }
   },
   "verification": [
