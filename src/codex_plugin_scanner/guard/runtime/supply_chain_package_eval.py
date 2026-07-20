@@ -32,12 +32,14 @@ from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from .js_semver import highest_js_version_for_selector, version_matches_js_selector
-from .lockfile_parse_result import (
-    LOCKFILE_PARSER_VERSION,
-    LockfileParseResult,
-    incomplete_lockfile_result,
-    parse_lockfile_text,
+from .lockfile_evaluation_support import (
+    collect_lockfile_parse_results,
+    incomplete_lockfile_fallback_target,
+    incomplete_lockfile_metadata,
+    package_has_incomplete_lockfile,
+    parse_lockfile_with_budget,
 )
+from .lockfile_parse_result import LOCKFILE_PARSER_VERSION, LockfileParseResult, parse_lockfile_text
 from .manifest_dependency_targets import evaluation_targets as _manifest_evaluation_targets
 from .npm_policy_range import (
     bind_resolved_npm_policy_result,
@@ -315,7 +317,7 @@ def evaluate_package_request_artifact(
         return _finalize_incomplete_lockfile_evaluation(
             artifact=artifact,
             store=store,
-            target=targets[0] if targets else _incomplete_lockfile_fallback_target(incomplete_lockfile),
+            target=targets[0] if targets else incomplete_lockfile_fallback_target(incomplete_lockfile),
             workspace_dir=workspace_dir,
             parse_result=incomplete_lockfile,
             package_intent_hash=package_intent_hash,
@@ -1563,7 +1565,7 @@ def _evaluate_with_bundle(
             workspace_dir=workspace_dir,
             now_timestamp=now_timestamp,
         )
-        if _is_incomplete_lockfile_package(package) or _result_package_identity(package) not in direct_identities
+        if package_has_incomplete_lockfile(package) or _result_package_identity(package) not in direct_identities
     )
     if not packages:
         return None
@@ -2006,65 +2008,19 @@ def _lockfile_parse_results(
     workspace_dir: Path | None,
     artifact: GuardArtifact,
 ) -> tuple[LockfileParseResult, ...]:
-    if workspace_dir is None:
-        return ()
-    lockfile_paths = artifact.metadata.get("lockfile_paths")
-    if not isinstance(lockfile_paths, list):
-        return ()
-    budget_ms = _LOCKFILE_PARSE_BUDGET_SECONDS * 1000
-    results: list[LockfileParseResult] = []
-    for relative_path_value in lockfile_paths:
-        relative_path = str(relative_path_value)
-        lockfile_path = resolve_path_within_workspace(workspace_dir, relative_path)
-        if lockfile_path is None:
-            results.append(
-                incomplete_lockfile_result(
-                    relative_path,
-                    b"",
-                    error_reason="traversal_error",
-                    budget_ms=budget_ms,
-                )
-            )
-            continue
-        if not lockfile_path.exists():
-            continue
-        if lockfile_path.name.lower() == "bun.lockb":
-            # Bun's binary lockfile has its own explicit review-only fallback.
-            continue
-        lockfile_bytes = read_bytes_within_workspace(workspace_dir, relative_path)
-        if lockfile_bytes is None:
-            results.append(
-                incomplete_lockfile_result(
-                    lockfile_path.name,
-                    b"",
-                    error_reason="read_error",
-                    budget_ms=budget_ms,
-                )
-            )
-            continue
-        try:
-            lockfile_text = lockfile_bytes.decode("utf-8")
-        except UnicodeDecodeError:
-            results.append(
-                incomplete_lockfile_result(
-                    lockfile_path.name,
-                    lockfile_bytes,
-                    error_reason="decode_error",
-                    budget_ms=budget_ms,
-                )
-            )
-            continue
-        results.append(_parse_lockfile_text_result(lockfile_path.name, lockfile_text))
-    return tuple(results)
+    return collect_lockfile_parse_results(
+        workspace_dir,
+        artifact.metadata.get("lockfile_paths"),
+        budget_ms=_LOCKFILE_PARSE_BUDGET_SECONDS * 1000,
+        parse_text_result=_parse_lockfile_text_result,
+    )
 
 
 def _parse_lockfile_text_result(path: str, text: str) -> LockfileParseResult:
-    budget_ms = _LOCKFILE_PARSE_BUDGET_SECONDS * 1000
-    return parse_lockfile_text(
+    return parse_lockfile_with_budget(
         path,
         text,
-        deadline=time.monotonic() + _LOCKFILE_PARSE_BUDGET_SECONDS,
-        budget_ms=budget_ms,
+        budget_seconds=_LOCKFILE_PARSE_BUDGET_SECONDS,
         dependency_parser=_dependency_map_for_path,
         package_lock_parser=_package_lock_entries,
     )
@@ -2140,50 +2096,12 @@ def _incomplete_lockfile_package_result(
         ),
         severity="high",
     )
-    metadata: dict[str, object] = {
-        "lockfileHash": parse_result.source_hash,
-        "lockfileParserVersion": parse_result.parser_version,
-        "lockfileFormat": parse_result.format,
-        "lockfileParseComplete": False,
-        "lockfileParseError": error_reason,
-        "lockfileParseElapsedMs": round(parse_result.elapsed_ms, 3),
-        "lockfileParseBudgetMs": parse_result.budget_ms,
-        "lockfileParseWarnings": list(parse_result.warnings),
-    }
+    metadata = incomplete_lockfile_metadata(parse_result)
     package.update(metadata)
     first_reason = _first_dict_item(package.get("reasons"))
     if first_reason is not None:
         package["reasons"] = ({**first_reason, **metadata},)
     return package
-
-
-def _incomplete_lockfile_fallback_target(parse_result: LockfileParseResult) -> dict[str, object]:
-    ecosystem = {
-        "bundler-lock": "rubygems",
-        "cargo-lock": "cargo",
-        "composer-lock": "composer",
-        "pipenv-lock": "pypi",
-        "poetry-lock": "pypi",
-        "uv-lock": "pypi",
-    }.get(parse_result.format, "npm")
-    package_manager = {
-        "bundler-lock": "bundler",
-        "cargo-lock": "cargo",
-        "composer-lock": "composer",
-        "pipenv-lock": "pipenv",
-        "poetry-lock": "poetry",
-        "uv-lock": "uv",
-    }.get(parse_result.format, "npm")
-    return {
-        "ecosystem": ecosystem,
-        "name": "unresolved-lockfile",
-        "namespace": None,
-        "package_manager": package_manager,
-        "range": None,
-        "version": None,
-        "redacted_command": None,
-        "alias": None,
-    }
 
 
 def _workspace_fingerprint(
@@ -2325,7 +2243,7 @@ def _transitive_lockfile_results(
             results.append(
                 _incomplete_lockfile_package_result(
                     target=(
-                        direct_targets[0] if direct_targets else _incomplete_lockfile_fallback_target(parse_result)
+                        direct_targets[0] if direct_targets else incomplete_lockfile_fallback_target(parse_result)
                     ),
                     parse_result=parse_result,
                 )
@@ -4670,12 +4588,6 @@ def _result_package_identity(package: dict[str, object]) -> tuple[str, str, str,
         json.dumps(package, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     )
     return ("opaque", ecosystem or "", namespace or "", name, version or "", opaque_sha256)
-
-
-def _is_incomplete_lockfile_package(package: dict[str, object]) -> bool:
-    if package.get("lockfileParseComplete") is False:
-        return True
-    return any(reason.get("code") == "lockfile_parse_incomplete" for reason in _dict_items(package.get("reasons")))
 
 
 def _with_additional_reason(
