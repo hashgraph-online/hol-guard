@@ -62,7 +62,16 @@ def build_authenticated_hook_manifest(spec: CodexHookManifestSpec) -> dict[str, 
         identity.get("role"): identity for identity in packaged_files if isinstance(identity.get("role"), str)
     }
     bridge = packaged_by_role.get("bridge")
-    if not isinstance(bridge, dict) or len(packaged_by_role) != len(spec.packaged_file_paths):
+    bridge_runtime = packaged_by_role.get("bridge_runtime")
+    launch_runtime = packaged_by_role.get("launch_runtime")
+    runtime_trust = packaged_by_role.get("runtime_trust")
+    if (
+        not isinstance(bridge, dict)
+        or not isinstance(bridge_runtime, dict)
+        or not isinstance(launch_runtime, dict)
+        or not isinstance(runtime_trust, dict)
+        or len(packaged_by_role) != len(spec.packaged_file_paths)
+    ):
         raise CodexHookIntegrityError(
             "codex_hook_manifest_packaged_files_invalid",
             "Guard cannot authenticate an incomplete Codex hook package identity.",
@@ -89,7 +98,13 @@ def build_authenticated_hook_manifest(spec: CodexHookManifestSpec) -> dict[str, 
         "package_version": spec.package_version,
         "packaged_files": packaged_files,
         "schema_version": HOOK_MANIFEST_SCHEMA_VERSION,
-        "transport": {"bridge": bridge, "wrapper": None},
+        "transport": {
+            "bridge": bridge,
+            "bridge_runtime": bridge_runtime,
+            "launch_runtime": launch_runtime,
+            "runtime_trust": runtime_trust,
+            "wrapper": None,
+        },
     }
     return sign_hook_manifest(unsigned_manifest, secret)
 
@@ -357,6 +372,9 @@ def _verify_launch_identities(
         not isinstance(transport, dict)
         or transport.get("wrapper") is not None
         or transport.get("bridge") != packaged_by_role.get("bridge")
+        or transport.get("bridge_runtime") != packaged_by_role.get("bridge_runtime")
+        or transport.get("launch_runtime") != packaged_by_role.get("launch_runtime")
+        or transport.get("runtime_trust") != packaged_by_role.get("runtime_trust")
     ):
         _raise_manifest_failure(
             "codex_hook_manifest_transport_invalid",

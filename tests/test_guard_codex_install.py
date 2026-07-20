@@ -166,17 +166,20 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
         )
     )
     tokens = shlex.split(command)
-    bridge_config = json.loads(tokens[2])
+    bridge_config = json.loads(tokens[3])
 
-    assert Path(tokens[1]).name == "codex_daemon_hook_bridge.py"
+    assert tokens[1] == "-I"
+    assert Path(tokens[2]).name == "codex_daemon_hook_bridge.py"
     assert bridge_config["state_path"] == str(guard_home / "daemon-state.json")
+    assert bridge_config["manifest_path"].startswith(str(guard_home / "managed" / "codex"))
     assert bridge_config["query"].startswith("guard-home=")
     assert bridge_config["fallback_command"][:3] == [
         str(Path(sys.executable).absolute()),
-        "-m",
-        "codex_plugin_scanner.cli",
+        "-I",
+        "-c",
     ]
-    assert bridge_config["start_command"][0] == str(Path(sys.executable).absolute())
+    assert bridge_config["fallback_command"][4:8] == ["guard", "hook", "--harness", "codex"]
+    assert bridge_config["start_command"][:3] == [str(Path(sys.executable).absolute()), "-I", "-c"]
     assert bridge_config["hook_timeouts"]["PreToolUse"] > bridge_config["hook_timeouts"]["UserPromptSubmit"]
 
 
@@ -922,7 +925,7 @@ def test_guard_install_and_repair_codex_preserve_ambiguous_legacy_post_tool_hook
     command_tokens = [shlex.split(command) for command in commands]
     current_bridge_path = Path(codex_adapter.__file__).with_name("codex_daemon_hook_bridge.py").resolve()
     authenticated_bridge_commands = [
-        tokens for tokens in command_tokens if len(tokens) > 1 and Path(tokens[1]).resolve() == current_bridge_path
+        tokens for tokens in command_tokens if len(tokens) > 2 and Path(tokens[2]).resolve() == current_bridge_path
     ]
     final_state = codex_adapter.codex_native_hook_state(
         HarnessContext(

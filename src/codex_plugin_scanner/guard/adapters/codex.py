@@ -40,6 +40,7 @@ from ..codex_hook_inventory import (
     canonical_codex_hook_group_identity,
     enumerate_codex_hooks,
 )
+from ..codex_hook_launch_runtime import isolated_daemon_start_command, isolated_guard_cli_command
 from ..codex_hook_manifest import (
     CodexHookManifestSpec,
     build_authenticated_hook_manifest,
@@ -243,7 +244,8 @@ def _local_hook_command_parts_for_home_mode(
             guard_args.extend(["--guard-home", str(context.guard_home)])
     if context.workspace_dir is not None:
         guard_args.extend(["--workspace", str(context.workspace_dir)])
-    return (python_executable, "-m", "codex_plugin_scanner.cli", *guard_args)
+    package_root = Path(__file__).resolve().parents[3]
+    return isolated_guard_cli_command(python_executable, package_root, guard_args)
 
 
 def _guard_python_executable() -> str:
@@ -270,14 +272,7 @@ def _local_hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
 
 def _daemon_start_command(guard_home: Path, *, python_executable: str = sys.executable) -> tuple[str, ...]:
     package_root = Path(__file__).resolve().parents[3]
-    code = (
-        "import sys;"
-        f"sys.path.insert(0, {str(package_root)!r});"
-        "from pathlib import Path;"
-        "from codex_plugin_scanner.guard.daemon import ensure_guard_daemon;"
-        f"ensure_guard_daemon(Path({str(guard_home)!r}))"
-    )
-    return (python_executable, "-c", code)
+    return isolated_daemon_start_command(python_executable, package_root, guard_home)
 
 
 def _hook_command_parts_for_home_mode(
@@ -295,6 +290,12 @@ def _hook_command_parts_for_home_mode(
     long_timeout = _post_tool_hook_timeout_seconds(context)
     config = {
         "state_path": str(guard_home / "daemon-state.json"),
+        "manifest_path": str(
+            hook_manifest_path(
+                guard_home,
+                CodexHarnessAdapter._hook_config_path(context),
+            )
+        ),
         "fallback_command": list(
             _local_hook_command_parts_for_home_mode(
                 context,
@@ -312,7 +313,7 @@ def _hook_command_parts_for_home_mode(
         },
     }
     bridge_path = Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()
-    return (python_executable, str(bridge_path), json.dumps(config, separators=(",", ":")))
+    return (python_executable, "-I", str(bridge_path), json.dumps(config, separators=(",", ":")))
 
 
 def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
@@ -429,12 +430,16 @@ def _manifest_event_bindings(context: HarnessContext) -> list[dict[str, object]]
 
 def _hook_packaged_file_paths() -> tuple[tuple[str, Path], ...]:
     scanner_root = Path(__file__).resolve().parents[2]
+    guard_root = Path(__file__).resolve().parents[1]
     daemon_root = Path(__file__).resolve().parents[1] / "daemon"
     return (
         ("bridge", Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()),
+        ("bridge_runtime", guard_root / "codex_hook_bridge_runtime.py"),
         ("fallback_entrypoint", scanner_root / "cli.py"),
         ("daemon_entrypoint", daemon_root / "__init__.py"),
         ("daemon_manager", daemon_root / "manager.py"),
+        ("launch_runtime", guard_root / "codex_hook_launch_runtime.py"),
+        ("runtime_trust", guard_root / "codex_hook_runtime_trust.py"),
     )
 
 
