@@ -195,6 +195,35 @@ def test_multiple_test_roots_search_from_their_common_ancestor(tmp_path: Path) -
     assert match.pytest_config_sources == ("tests/pytest.ini",)
 
 
+def test_selected_test_file_searches_for_config_from_parent_directory(tmp_path: Path) -> None:
+    _write(tmp_path / "tests" / "test_sample.py", "def test_sample():\n    pass\n")
+    _write(tmp_path / "tests" / "pytest.ini", "[pytest]\naddopts = -p evil\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest tests/test_sample.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+    assert match.pytest_config_sources == ("tests/pytest.ini",)
+
+
+def test_selected_test_file_without_config_does_not_fail_as_not_a_directory(tmp_path: Path) -> None:
+    _write(tmp_path / "tests" / "test_sample.py", "def test_sample():\n    pass\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest tests/test_sample.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "pytest repository-code execution"
+    assert match.pytest_config_sources == ()
+
+
 def test_non_applicable_pyproject_does_not_hide_later_tox_config(tmp_path: Path) -> None:
     _write(tmp_path / "pyproject.toml", '[build-system]\nrequires = ["fixture"]\n')
     _write(tmp_path / "tox.ini", "[pytest]\naddopts = -p evil\n")

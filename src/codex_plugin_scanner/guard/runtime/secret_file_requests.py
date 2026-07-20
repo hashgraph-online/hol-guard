@@ -8001,7 +8001,10 @@ def _pytest_config_search_dirs(module_args: list[str], *, cwd: Path) -> tuple[st
             return None
         if selected_path == "":
             continue
-        selected_paths.append(selected_path)
+        config_root = Path(selected_path)
+        if not (cwd / config_root).is_dir():
+            config_root = config_root.parent
+        selected_paths.append("" if str(config_root) == "." else config_root.as_posix())
     if not selected_paths:
         return ("",)
     try:
