@@ -386,9 +386,13 @@ def _decode_layers_uncached(
         return result
 
     current = content
-    result.eval_signals.extend(_detect_eval_signals(current))
-    result.exec_signals.extend(_detect_exec_signals(current))
-    result.marshal_signals.extend(_detect_marshal_signals(current))
+
+    def record_signals(text: str) -> None:
+        result.eval_signals.extend(_detect_eval_signals(text))
+        result.exec_signals.extend(_detect_exec_signals(text))
+        result.marshal_signals.extend(_detect_marshal_signals(text))
+
+    record_signals(current)
 
     depth = -1
     _depth_limited = False
@@ -447,9 +451,7 @@ def _decode_layers_uncached(
             )
         )
         current = decoded
-        result.eval_signals.extend(_detect_eval_signals(current))
-        result.exec_signals.extend(_detect_exec_signals(current))
-        result.marshal_signals.extend(_detect_marshal_signals(current))
+        record_signals(current)
 
         if result.size_exceeded:
             break
