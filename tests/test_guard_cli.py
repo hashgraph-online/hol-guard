@@ -7496,8 +7496,8 @@ url = http://127.0.0.1:8787/guard-canary
         assert status_output["oauth_storage_health"] == {
             "configured": True,
             "state": "healthy",
-            "backend": "encrypted-file",
-            "fallback_backend": None,
+            "backend": "system-keyring",
+            "fallback_backend": "encrypted-file",
             "issuer": "https://hol.org",
             "client_id": "guard-local-daemon",
             "grant_id": "grant-123",

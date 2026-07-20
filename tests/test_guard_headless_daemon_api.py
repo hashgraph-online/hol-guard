@@ -583,7 +583,9 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         assert status == 200
         assert running["connect_flow"]["state"] == "running"
         assert running["connect_flow"]["authorize_url"] == "https://hol.org/mock-authorize"
-        for _ in range(20):
+        deadline = time.monotonic() + 10.0
+        refreshed: dict[str, object] = {}
+        while time.monotonic() < deadline:
             status, refreshed = _read_json_response(
                 _request(
                     daemon.port,
@@ -597,9 +599,14 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
                 assert refreshed["entitlement"]["reason"] == "paid_oauth_entitlement_active"
                 assert refreshed["connect_flow"] is None
                 break
+            connect_flow = refreshed.get("connect_flow")
+            if isinstance(connect_flow, dict) and connect_flow.get("state") == "failed":
+                pytest.fail(f"Guard Cloud connect failed: {connect_flow.get('detail', 'unknown error')}")
             time.sleep(0.1)
         else:
-            raise AssertionError("package firewall status never unlocked after local connect repair")
+            raise AssertionError(
+                f"package firewall status never unlocked after local connect repair: last response={refreshed!r}"
+            )
     finally:
         daemon.stop()
 

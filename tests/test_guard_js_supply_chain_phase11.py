@@ -525,13 +525,7 @@ __metadata:
         (
             "bun add minimist@^1.2.0",
             "bun.lock",
-            """
-[[package]]
-name = "minimist"
-version = "1.2.8"
-resolved = "npm:minimist@1.2.8"
-dependencies = []
-""",
+            '{"lockfileVersion":1,"packages":{"minimist":["minimist@1.2.8","",{}]}}',
         ),
     ],
 )

@@ -66,7 +66,7 @@ def test_every_known_and_future_executable_event_blocks_preactivation(
     workspace_dir = tmp_path / "workspace"
     config_path = workspace_dir / ".codex" / "config.toml"
     hooks_path = workspace_dir / ".codex" / "hooks.json"
-    original_config = 'approval_policy = "never"\n'
+    original_config = 'approval_policy = "never"\n\n[features]\nhooks = false\n'
     original_hooks = json.dumps({"hooks": {event_name: [_command_group()]}}, indent=2) + "\n"
     _write(config_path, original_config)
     _write(hooks_path, original_hooks)

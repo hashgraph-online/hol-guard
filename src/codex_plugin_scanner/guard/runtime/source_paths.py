@@ -50,6 +50,17 @@ _EXTERNAL_SOURCE_SENSITIVE_PARTS = _SENSITIVE_SEARCH_BASENAMES | frozenset(
 )
 _SOURCE_SEARCH_PREFIXES = tuple(f"{part}/" for part in sorted(SOURCE_INSPECTION_PARTS))
 _SOURCE_SEARCH_EXTENSIONS = SOURCE_INSPECTION_EXTENSIONS
+_WORKFLOW_SOURCE_PREFIX = (".github", "workflows")
+
+
+def _hidden_parts_are_allowed_source(parts: list[str]) -> bool:
+    hidden_parts = [part for part in parts if part.startswith(".")]
+    if not hidden_parts:
+        return True
+    if all(part in _BENIGN_SOURCE_DOTFILES for part in hidden_parts):
+        return True
+    has_workflow_prefix = any(tuple(parts[index : index + 2]) == _WORKFLOW_SOURCE_PREFIX for index in range(len(parts)))
+    return has_workflow_prefix and hidden_parts == [".github"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,8 +265,7 @@ def source_path_is_allowed(
                 _external_source_filename_is_sensitive(candidate)
             ):
                 return SourcePathDecision(allowed=False, reason_code="sensitive_basename")
-            hidden_parts = [part for part in lowered_parts if part.startswith(".")]
-            if hidden_parts and not all(part in _BENIGN_SOURCE_DOTFILES for part in hidden_parts):
+            if not _hidden_parts_are_allowed_source(lowered_parts):
                 return SourcePathDecision(allowed=False, reason_code="unsafe_hidden_dir")
             normalized = "/".join(parts)
             if not (
@@ -301,8 +311,7 @@ def source_path_is_allowed(
     if any(part in _SENSITIVE_SEARCH_BASENAMES for part in lowered_parts):
         return SourcePathDecision(allowed=False, reason_code="sensitive_basename")
 
-    hidden_parts = [part for part in lowered_parts if part.startswith(".")]
-    if hidden_parts and not all(part in _BENIGN_SOURCE_DOTFILES for part in hidden_parts):
+    if not _hidden_parts_are_allowed_source(lowered_parts):
         return SourcePathDecision(allowed=False, reason_code="unsafe_hidden_dir")
 
     normalized = "/".join(parts)
@@ -362,8 +371,7 @@ def absolute_source_target_is_source_like(target_path: Path) -> bool:
     lowered_parts = [part.lower() for part in parts]
     if any(part in _SENSITIVE_SEARCH_BASENAMES for part in lowered_parts):
         return False
-    hidden_parts = [part for part in lowered_parts if part.startswith(".")]
-    if hidden_parts and not all(part in _BENIGN_SOURCE_DOTFILES for part in hidden_parts):
+    if not _hidden_parts_are_allowed_source(lowered_parts):
         return False
     normalized = "/".join(parts)
     if any(f"/{prefix}" in f"/{normalized}" for prefix in _SOURCE_SEARCH_PREFIXES):
