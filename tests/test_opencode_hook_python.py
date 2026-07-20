@@ -1,15 +1,13 @@
-"""Tests for stable OpenCode hook Python and PYTHONPATH resolution."""
+"""Tests for attested OpenCode hook-interpreter resolution."""
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-
-import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.hook_python import (
     _guard_hook_python_candidates,
+    attest_guard_hook_python,
     filter_worktree_path_entries,
     resolve_guard_hook_python,
 )
@@ -53,19 +51,16 @@ def test_guard_hook_python_candidates_skip_worktree_venv(tmp_path: Path) -> None
     assert venv_python.resolve() not in candidates
 
 
-def test_pretool_plugin_source_omits_worktree_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.opencode_pretool.resolve_guard_hook_python",
-        lambda _context: Path(sys.executable).resolve(),
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.opencode_pretool.package_root_from_python",
-        lambda _python: "/Users/me/.local/pipx/venvs/hol-guard/lib/python3.12/site-packages",
-    )
-    source = pretool_plugin_source(_ctx(tmp_path))
-    assert "hol-guard-wt" not in source
-    assert ".worktrees" not in source
-    assert "/worktrees/" not in source
+def test_pretool_plugin_source_uses_parent_attested_import_roots(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    attestation = attest_guard_hook_python(context)
+
+    source = pretool_plugin_source(context)
+
+    assert str(attestation.package_root) in source
+    assert str(attestation.cryptography_distribution_root) in source
+    assert str(attestation.identity.target_path) in source
+    assert attestation.identity.target_sha256 in source
 
 
 def test_resolve_guard_hook_python_finds_current_interpreter(tmp_path: Path) -> None:
