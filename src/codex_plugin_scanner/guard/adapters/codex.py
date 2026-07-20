@@ -32,8 +32,12 @@ from ..codex_hook_integrity import (
     write_hook_manifest,
 )
 from ..codex_hook_inventory import (
+    CODEX_HOOK_IDENTITY_SCHEMA,
     CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE,
     CodexHookInventory,
+    CodexHookInventoryRecord,
+    canonical_codex_hook_conflict_keys,
+    canonical_codex_hook_group_identity,
     enumerate_codex_hooks,
 )
 from ..codex_hook_manifest import (
@@ -470,13 +474,72 @@ def _current_install_legacy_bindings(context: HarnessContext, hooks: dict[str, o
     )
 
 
-def _append_unique_hook_groups(existing_groups: object, incoming_groups: object) -> list[object]:
+_CODEX_HOOK_MIGRATION_CONFLICT = "codex_hook_migration_conflict"
+_CODEX_HOOK_MIGRATION_READBACK_MISMATCH = "codex_hook_migration_readback_mismatch"
+
+
+def _append_unique_hook_groups(
+    existing_groups: object,
+    incoming_groups: object,
+    *,
+    event_name: str,
+    source_scope: str,
+    source_hooks_enabled: bool,
+) -> list[object]:
     merged = list(existing_groups) if isinstance(existing_groups, list) else []
     if not isinstance(incoming_groups, list):
         return merged
+    identities = {
+        canonical_codex_hook_group_identity(
+            source_scope=source_scope,
+            source_hooks_enabled=source_hooks_enabled,
+            event_name=event_name,
+            group=group,
+        )
+        for group in merged
+        if isinstance(group, Mapping)
+    }
+    conflict_keys = {
+        key
+        for group in merged
+        if isinstance(group, Mapping)
+        for key in canonical_codex_hook_conflict_keys(
+            source_scope=source_scope,
+            source_hooks_enabled=source_hooks_enabled,
+            event_name=event_name,
+            group=group,
+        )
+    }
     for group in incoming_groups:
-        if group not in merged:
-            merged.append(group)
+        if not isinstance(group, Mapping):
+            if group not in merged:
+                merged.append(group)
+            continue
+        identity = canonical_codex_hook_group_identity(
+            source_scope=source_scope,
+            source_hooks_enabled=source_hooks_enabled,
+            event_name=event_name,
+            group=group,
+        )
+        if identity in identities:
+            continue
+        incoming_conflicts = set(
+            canonical_codex_hook_conflict_keys(
+                source_scope=source_scope,
+                source_hooks_enabled=source_hooks_enabled,
+                event_name=event_name,
+                group=group,
+            )
+        )
+        if incoming_conflicts & conflict_keys:
+            raise RuntimeError(
+                f"{_CODEX_HOOK_MIGRATION_CONFLICT}: Codex hook sources define the same {event_name!r} "
+                "matcher and command with different execution-affecting fields. Reconcile the definitions before "
+                "retrying migration."
+            )
+        merged.append(deepcopy(group))
+        identities.add(identity)
+        conflict_keys.update(incoming_conflicts)
     return merged
 
 
@@ -485,6 +548,7 @@ def _migrate_hooks_json_into_config(
     hooks_payload: dict[str, object],
     *,
     context: HarnessContext,
+    source_scope: str,
     owned_bindings: Sequence[Mapping[str, object]] = (),
 ) -> bool:
     json_hooks = hooks_payload.get("hooks")
@@ -496,15 +560,127 @@ def _migrate_hooks_json_into_config(
     cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(json_hooks, owned_bindings)
     legacy_bindings = _current_install_legacy_bindings(context, cleaned_json_hooks)
     cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(cleaned_json_hooks, legacy_bindings)
+    source_hooks_enabled = _payload_has_hooks_feature_enabled(config_payload)
     changed = False
     for event_name, groups in cleaned_json_hooks.items():
-        merged_groups = _append_unique_hook_groups(config_hooks.get(event_name), groups)
+        if not isinstance(event_name, str):
+            continue
+        merged_groups = _append_unique_hook_groups(
+            config_hooks.get(event_name),
+            groups,
+            event_name=event_name,
+            source_scope=source_scope,
+            source_hooks_enabled=source_hooks_enabled,
+        )
         if merged_groups != config_hooks.get(event_name):
             changed = True
         config_hooks[event_name] = merged_groups
     if config_hooks:
         config_payload["hooks"] = config_hooks
     return changed
+
+
+def _canonical_hook_semantics(
+    payload: Mapping[str, object],
+    *,
+    source_scope: str,
+) -> dict[str, tuple[str, ...]]:
+    hooks = payload.get("hooks")
+    if not isinstance(hooks, Mapping):
+        return {}
+    source_hooks_enabled = _payload_has_hooks_feature_enabled(payload)
+    semantics: dict[str, tuple[str, ...]] = {}
+    for event_name, groups in hooks.items():
+        if not isinstance(event_name, str) or not isinstance(groups, list):
+            continue
+        semantics[event_name] = tuple(
+            canonical_codex_hook_group_identity(
+                source_scope=source_scope,
+                source_hooks_enabled=source_hooks_enabled,
+                event_name=event_name,
+                group=group,
+            )
+            for group in groups
+            if isinstance(group, Mapping)
+        )
+    return semantics
+
+
+def _require_hook_semantics_readback(
+    expected: Mapping[str, object],
+    actual: Mapping[str, object],
+    *,
+    source_scope: str,
+    source_path: Path,
+) -> None:
+    if _canonical_hook_semantics(expected, source_scope=source_scope) != _canonical_hook_semantics(
+        actual,
+        source_scope=source_scope,
+    ):
+        raise RuntimeError(
+            f"{_CODEX_HOOK_MIGRATION_READBACK_MISMATCH}: Rendered Codex hooks at {source_path} did not preserve "
+            "their canonical event, matcher, handler, environment, timeout, status, and command semantics. The "
+            "legacy source was retained; repair the config and retry migration."
+        )
+
+
+def _migration_group_identities(
+    payload: Mapping[str, object],
+    *,
+    source_scope: str,
+    source_hooks_enabled: bool,
+) -> set[str]:
+    hooks = payload.get("hooks")
+    if not isinstance(hooks, Mapping):
+        return set()
+    return {
+        canonical_codex_hook_group_identity(
+            source_scope=source_scope,
+            source_hooks_enabled=source_hooks_enabled,
+            event_name=event_name,
+            group=group,
+        )
+        for event_name, groups in hooks.items()
+        if isinstance(event_name, str) and isinstance(groups, list)
+        for group in groups
+        if isinstance(group, Mapping)
+    }
+
+
+def _unmanaged_migration_payload(
+    hooks_payload: Mapping[str, object],
+    *,
+    context: HarnessContext,
+    owned_bindings: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    hooks = hooks_payload.get("hooks")
+    if not isinstance(hooks, dict):
+        return {}
+    cleaned_hooks, _ = _remove_manifest_bound_hook_events(hooks, owned_bindings)
+    legacy_bindings = _current_install_legacy_bindings(context, cleaned_hooks)
+    cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, legacy_bindings)
+    return {"hooks": cleaned_hooks} if cleaned_hooks else {}
+
+
+def _write_hook_migration_backup(
+    context: HarnessContext,
+    *,
+    config_path: Path,
+) -> Path:
+    resolved_path = str(config_path.resolve())
+    digest = hashlib.sha256(resolved_path.encode("utf-8")).hexdigest()[:16]
+    backup_path = context.guard_home / "managed" / "codex" / "migration-backups" / f"{digest}.json"
+    if backup_path.exists():
+        return backup_path
+    content = config_path.read_text(encoding="utf-8") if config_path.is_file() else ""
+    backup_payload = {
+        "schema": "codex-hook-migration-backup-v1",
+        "config_path": resolved_path,
+        "existed": config_path.is_file(),
+        "content": content,
+    }
+    atomic_write_text(backup_path, json.dumps(backup_payload, sort_keys=True, indent=2) + "\n", mode=0o600)
+    return backup_path
 
 
 def _codex_hook_inventory(
@@ -544,9 +720,65 @@ def _require_complete_preactivation_inventory(inventory: CodexHookInventory) -> 
         )
 
 
-def _payload_has_hooks_feature_enabled(config_payload: dict[str, object]) -> bool:
+def _codex_hook_artifacts(
+    records: Sequence[CodexHookInventoryRecord],
+    *,
+    harness: str,
+) -> tuple[GuardArtifact, ...]:
+    by_identity: dict[str, list[CodexHookInventoryRecord]] = {}
+    for record in records:
+        if record.ownership != "unmanaged":
+            continue
+        by_identity.setdefault(record.canonical_identity, []).append(record)
+    artifacts: list[GuardArtifact] = []
+    for identity, matching_records in sorted(by_identity.items()):
+        ordered = sorted(
+            matching_records,
+            key=lambda record: (record.source_path, record.source_format, record.coordinate),
+        )
+        primary = ordered[0]
+        provenance = [
+            {
+                "path": record.source_path,
+                "format": record.source_format,
+                "coordinate": record.coordinate,
+            }
+            for record in ordered
+        ]
+        metadata: dict[str, object] = {
+            "codex_hook_identity_schema": CODEX_HOOK_IDENTITY_SCHEMA,
+            "codex_hook_identity": identity,
+            "event": primary.event_name,
+            "matcher": primary.matcher if isinstance(primary.matcher, str | type(None)) else None,
+            "handler_type": primary.handler_type,
+            "timeout": primary.timeout,
+            "env_keys": list(primary.environment_keys),
+            "command_argv": list(primary.command_argv) if primary.command_argv is not None else None,
+            "active": primary.active and primary.source_hooks_enabled,
+            "executable": primary.executable,
+            "ownership": sorted({record.ownership for record in ordered}),
+            "source_provenance": provenance,
+            "source_formats": sorted({record.source_format for record in ordered}),
+            "source_paths": sorted({record.source_path for record in ordered}),
+        }
+        artifacts.append(
+            GuardArtifact(
+                artifact_id=f"codex:{primary.source_scope}:hook:{identity}",
+                name=primary.event_name,
+                harness=harness,
+                artifact_type="hook",
+                source_scope=primary.source_scope,
+                config_path=primary.source_path,
+                command=primary.command,
+                metadata=metadata,
+            )
+        )
+    return tuple(artifacts)
+
+
+def _payload_has_hooks_feature_enabled(config_payload: Mapping[str, object]) -> bool:
     features = config_payload.get("features")
-    if not isinstance(features, dict):
+    if not isinstance(features, Mapping):
         return False
     return features.get("hooks") is True or features.get("codex_hooks") is True
 
@@ -773,17 +1005,35 @@ class CodexHarnessAdapter(HarnessAdapter):
         return tuple(pairs)
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
-        config_paths = [context.home_dir / ".codex" / "config.toml"]
-        if context.workspace_dir is not None:
-            config_paths.append(context.workspace_dir / ".codex" / "config.toml")
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []
-        for config_path in config_paths:
+        hook_records: list[CodexHookInventoryRecord] = []
+        warnings: list[str] = []
+        config_payloads: dict[Path, dict[str, object]] = {}
+        authenticated_manifest = load_hook_manifest_baseline(_hook_manifest_spec(context))
+        authenticated_bindings = _manifest_bindings(authenticated_manifest)
+        hook_config_path = self._hook_config_path(context)
+        for config_path, _hooks_path in self._config_hook_pairs(context):
             payload = _read_toml(config_path)
+            config_payloads[config_path] = payload
             if not payload:
                 continue
             found_paths.append(str(config_path))
             scope = self._scope_for(context, config_path)
+            inventory = _codex_hook_inventory(
+                payload,
+                source_path=config_path,
+                source_scope=scope,
+                source_format="toml",
+                source_hooks_enabled=_payload_has_hooks_feature_enabled(payload),
+                context=context,
+                authenticated_bindings=authenticated_bindings if config_path == hook_config_path else (),
+            )
+            hook_records.extend(inventory.records)
+            warnings.extend(
+                f"{issue.reason_code}: {issue.coordinate} in {issue.source_path}. {issue.message}"
+                for issue in inventory.issues
+            )
             mcp_servers = payload.get("mcp_servers")
             if isinstance(mcp_servers, dict):
                 for name, server_config in mcp_servers.items():
@@ -842,47 +1092,34 @@ class CodexHarnessAdapter(HarnessAdapter):
                             metadata=mcp_metadata,
                         )
                     )
-        hooks_paths = [context.home_dir / ".codex" / "hooks.json"]
-        if context.workspace_dir is not None:
-            hooks_paths.append(context.workspace_dir / ".codex" / "hooks.json")
-        for hooks_path in hooks_paths:
+        for config_path, hooks_path in self._config_hook_pairs(context):
             hooks_payload = _json_object(hooks_path)
-            hooks = hooks_payload.get("hooks")
-            if not isinstance(hooks, dict):
+            if not hooks_path.is_file():
                 continue
             found_paths.append(str(hooks_path))
             scope = self._scope_for(context, hooks_path)
-            hook_groups = hooks.get("PreToolUse")
-            if not isinstance(hook_groups, list):
-                continue
-            for group_index, group in enumerate(hook_groups):
-                if not isinstance(group, dict):
-                    continue
-                handlers = group.get("hooks")
-                if not isinstance(handlers, list):
-                    continue
-                for handler_index, handler in enumerate(handlers):
-                    if not isinstance(handler, dict):
-                        continue
-                    command = handler.get("command")
-                    artifacts.append(
-                        GuardArtifact(
-                            artifact_id=f"codex:{scope}:pretooluse:{group_index}:{handler_index}",
-                            name="PreToolUse",
-                            harness=self.harness,
-                            artifact_type="hook",
-                            source_scope=scope,
-                            config_path=str(hooks_path),
-                            command=command if isinstance(command, str) else None,
-                        )
-                    )
+            config_payload = config_payloads.get(config_path, {})
+            inventory = _codex_hook_inventory(
+                hooks_payload,
+                source_path=hooks_path,
+                source_scope=scope,
+                source_format="json",
+                source_hooks_enabled=_payload_has_hooks_feature_enabled(config_payload),
+                context=context,
+            )
+            hook_records.extend(inventory.records)
+            warnings.extend(
+                f"{issue.reason_code}: {issue.coordinate} in {issue.source_path}. {issue.message}"
+                for issue in inventory.issues
+            )
+        artifacts.extend(_codex_hook_artifacts(hook_records, harness=self.harness))
         detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),
             command_available=_command_available(self.executable),
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
-            warnings=(),
+            warnings=tuple(warnings),
         )
         extended = extend_detection_with_workspace_aibom(
             detection,
@@ -952,8 +1189,11 @@ class CodexHarnessAdapter(HarnessAdapter):
             hook_payload,
             target_hook_payload,
             context=context,
+            source_scope=self._scope_for(context, hook_config_path),
             owned_bindings=owned_bindings,
         )
+        if target_hooks_migrated:
+            _write_hook_migration_backup(context, config_path=hook_config_path)
         backup_path = self._backup_path(context)
         if not backup_path.exists():
             backup_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1010,6 +1250,11 @@ class CodexHarnessAdapter(HarnessAdapter):
             context,
             managed_servers=managed_servers,
             skip_config_path=target_config_path,
+        )
+        self._verify_json_hook_migrations(
+            context,
+            payloads=hook_payloads,
+            owned_bindings=owned_bindings,
         )
         hooks_path = self._remove_json_hook_files(context, payloads=hook_payloads)
         self._uninstall_shell_guard(context)
@@ -1175,11 +1420,28 @@ class CodexHarnessAdapter(HarnessAdapter):
                     config_payload,
                     hooks_payload,
                     context=context,
+                    source_scope=self._scope_for(context, config_path),
                     owned_bindings=owned_bindings,
                 )
                 and config_payload
             ):
-                atomic_write_text(config_path, dump_toml(config_payload), mode=0o600)
+                _write_hook_migration_backup(context, config_path=config_path)
+                original_text = config_path.read_text(encoding="utf-8") if config_path.is_file() else None
+                try:
+                    atomic_write_text(config_path, dump_toml(config_payload), mode=0o600)
+                    written_payload = _strict_toml_object(config_path, label="rendered Codex config file")
+                    _require_hook_semantics_readback(
+                        config_payload,
+                        written_payload,
+                        source_scope=self._scope_for(context, config_path),
+                        source_path=config_path,
+                    )
+                except BaseException:
+                    if original_text is None:
+                        config_path.unlink(missing_ok=True)
+                    else:
+                        atomic_write_text(config_path, original_text, mode=0o600)
+                    raise
 
     def _remove_managed_hooks_from_alternate_configs(
         self,
@@ -1260,6 +1522,45 @@ class CodexHarnessAdapter(HarnessAdapter):
                 config_payload.pop("mcp_servers", None)
             write_toml_payload(config_path, config_payload)
 
+    def _verify_json_hook_migrations(
+        self,
+        context: HarnessContext,
+        *,
+        payloads: Mapping[Path, Mapping[str, object]],
+        owned_bindings: Sequence[Mapping[str, object]],
+    ) -> None:
+        hook_config_path = self._hook_config_path(context)
+        for config_path, hooks_path in self._config_hook_pairs(context):
+            hooks_payload = payloads.get(hooks_path)
+            if not hooks_payload:
+                continue
+            source_scope = self._scope_for(context, config_path)
+            expected_payload = _unmanaged_migration_payload(
+                hooks_payload,
+                context=context,
+                owned_bindings=owned_bindings if config_path == hook_config_path else (),
+            )
+            written_payload = _strict_toml_object(config_path, label="migrated Codex config file")
+            source_hooks_enabled = _payload_has_hooks_feature_enabled(written_payload)
+            expected = _migration_group_identities(
+                expected_payload,
+                source_scope=source_scope,
+                source_hooks_enabled=source_hooks_enabled,
+            )
+            if not expected:
+                continue
+            actual = _migration_group_identities(
+                written_payload,
+                source_scope=source_scope,
+                source_hooks_enabled=source_hooks_enabled,
+            )
+            if not expected.issubset(actual):
+                raise RuntimeError(
+                    f"{_CODEX_HOOK_MIGRATION_READBACK_MISMATCH}: {config_path} does not contain every canonical "
+                    f"hook migrated from {hooks_path}. The legacy JSON source was retained; repair the config and "
+                    "retry migration."
+                )
+
     def _remove_json_hook_files(
         self,
         context: HarnessContext,
@@ -1267,9 +1568,18 @@ class CodexHarnessAdapter(HarnessAdapter):
         payloads: dict[Path, dict[str, object]],
     ) -> Path:
         target_hooks_path = self._hooks_path(context)
-        for hooks_path in self._all_hook_paths(context):
-            if hooks_path in payloads and hooks_path.is_file():
+        snapshots = {
+            hooks_path: snapshot_regular_file(hooks_path)
+            for hooks_path in self._all_hook_paths(context)
+            if hooks_path in payloads and hooks_path.is_file()
+        }
+        try:
+            for hooks_path in snapshots:
                 hooks_path.unlink()
+        except BaseException:
+            for hooks_path, snapshot in snapshots.items():
+                restore_private_file(hooks_path, snapshot)
+            raise
         return target_hooks_path
 
     def _install_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
@@ -1342,6 +1652,13 @@ class CodexHarnessAdapter(HarnessAdapter):
             _assert_package_reauthentication_is_safe(previous_manifest, manifest)
             write_hook_manifest(context.guard_home, config_path, manifest)
             atomic_write_text(config_path, dump_toml(payload), mode=0o600)
+            written_payload = _strict_toml_object(config_path, label="rendered Codex config file")
+            _require_hook_semantics_readback(
+                payload,
+                written_payload,
+                source_scope=CodexHarnessAdapter._scope_for(context, config_path),
+                source_path=config_path,
+            )
             state = codex_native_hook_state(context)
             if not bool(state.get("protection_active")):
                 reason = str(state.get("integrity_reason") or "codex_hook_integrity_readback_failed")

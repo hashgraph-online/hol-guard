@@ -8,6 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from .codex_hook_identity import (
+    CODEX_HOOK_IDENTITY_SCHEMA,
+    canonical_codex_command_argv,
+    canonical_codex_hook_conflict_keys,
+    canonical_codex_hook_group_identity,
+    canonical_codex_hook_identity,
+)
+
 CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE = "codex_hook_inventory_unmanaged_executable"
 CODEX_HOOK_INVENTORY_UNSUPPORTED_EVENT = "codex_hook_inventory_unsupported_event_shape"
 CODEX_HOOK_INVENTORY_MALFORMED_GROUP = "codex_hook_inventory_malformed_group"
@@ -17,7 +25,6 @@ CODEX_HOOK_INVENTORY_SOURCE_DUPLICATE = "codex_hook_inventory_source_duplicate_k
 CODEX_HOOK_INVENTORY_SOURCE_MALFORMED = "codex_hook_inventory_source_malformed"
 CODEX_HOOK_INVENTORY_SOURCE_UNREADABLE = "codex_hook_inventory_source_unreadable"
 CODEX_HOOK_INVENTORY_SOURCE_CHANGED = "codex_hook_inventory_source_changed"
-
 HookSourceFormat = Literal["json", "toml"]
 HookOwnership = Literal["authenticated_manifest", "exact_legacy_adoption", "unmanaged"]
 
@@ -36,11 +43,13 @@ class CodexHookInventoryRecord:
     handler_index: int
     handler_type: str | None
     command: str | None
+    command_argv: tuple[str, ...] | None
     timeout: int | float | None
     environment_keys: tuple[str, ...]
     active: bool
     executable: bool
     ownership: HookOwnership
+    canonical_identity: str
 
     @property
     def coordinate(self) -> str:
@@ -287,6 +296,14 @@ def _handler_record(
         authenticated_bindings=authenticated_bindings,
         legacy_bindings=legacy_bindings,
     )
+    command_argv = canonical_codex_command_argv(command)
+    canonical_identity = canonical_codex_hook_identity(
+        source_scope=source_scope,
+        source_hooks_enabled=source_hooks_enabled,
+        event_name=event_name,
+        group=group,
+        handler=handler,
+    )
     record = CodexHookInventoryRecord(
         source_path=str(source_path),
         source_scope=source_scope,
@@ -298,11 +315,13 @@ def _handler_record(
         handler_index=handler_index,
         handler_type=handler_type,
         command=command,
+        command_argv=command_argv,
         timeout=timeout,
         environment_keys=environment_keys,
         active=group_active and _entry_is_active(handler),
         executable=executable,
         ownership=ownership,
+        canonical_identity=canonical_identity,
     )
     return record, tuple(issues)
 
@@ -386,6 +405,7 @@ def _bindings_contain_handler(
 
 
 __all__ = [
+    "CODEX_HOOK_IDENTITY_SCHEMA",
     "CODEX_HOOK_INVENTORY_MALFORMED_GROUP",
     "CODEX_HOOK_INVENTORY_MALFORMED_HANDLER",
     "CODEX_HOOK_INVENTORY_SOURCE_CHANGED",
@@ -398,5 +418,9 @@ __all__ = [
     "CodexHookInventory",
     "CodexHookInventoryIssue",
     "CodexHookInventoryRecord",
+    "canonical_codex_command_argv",
+    "canonical_codex_hook_conflict_keys",
+    "canonical_codex_hook_group_identity",
+    "canonical_codex_hook_identity",
     "enumerate_codex_hooks",
 ]
