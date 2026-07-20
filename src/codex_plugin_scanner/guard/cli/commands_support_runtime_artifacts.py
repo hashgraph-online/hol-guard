@@ -63,6 +63,7 @@ from .commands_support_codex_commands import (
     _codex_shell_split,
     _codex_source_inspection_can_skip_secret_output,
 )
+from .commands_support_codex_git import _codex_git_diff_selection_identity
 from .commands_support_codex_reads import _split_codex_safe_read_only_pipeline
 from .commands_support_codex_tool_output import (
     _codex_command_captures_combined_shell_output,
@@ -382,6 +383,46 @@ _CODEX_TOOL_RESPONSE_TEXT_LIMIT = 5 * 1024 * 1024
 _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH = 24
 
 
+def _direct_codex_git_pathspec_identity(command_text: str, *, cwd: Path | None) -> str | None:
+    pipeline = _split_codex_safe_read_only_pipeline(command_text)
+    git_segment = pipeline[0] if pipeline else command_text
+    try:
+        parts = shlex.split(git_segment)
+    except ValueError:
+        return None
+    if not parts or Path(parts[0]).name != "git":
+        return None
+    return _codex_git_diff_selection_identity(parts[1:], cwd=cwd)
+
+
+def _codex_git_pathspec_identity_for_command(command_text: str, *, cwd: Path | None) -> str | None:
+    execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
+    if not execution_context.directory_change_present:
+        return _direct_codex_git_pathspec_identity(command_text, cwd=cwd)
+    if not execution_context.complete:
+        return None
+    identities: list[tuple[int, str]] = []
+    for segment in execution_context.segments:
+        if segment.directory_operation is not None:
+            continue
+        segment_cwd, reason = validate_shell_execution_segment(execution_context, segment)
+        if segment_cwd is None or reason is not None:
+            return None
+        identity = _direct_codex_git_pathspec_identity(segment.command_text, cwd=segment_cwd)
+        if identity is not None:
+            identities.append((segment.segment_index, identity))
+    if not identities:
+        return None
+    if len(identities) == 1:
+        return identities[0][1]
+    canonical = json.dumps(
+        {"schema": "codex-git-pathspec-context-v1", "identities": identities},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def _codex_post_tool_output_artifact(
     *,
     harness: str = "codex",
@@ -461,6 +502,7 @@ def _codex_post_tool_output_artifact(
     merged_output_capture = _codex_command_captures_combined_shell_output(command_text)
     focused_pytest = _codex_command_is_focused_pytest_verification(command_text)
     execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
+    git_pathspec_selection_identity = _codex_git_pathspec_identity_for_command(normalized_command, cwd=cwd)
     fingerprint = hashlib.sha256(
         json.dumps(
             {
@@ -470,6 +512,7 @@ def _codex_post_tool_output_artifact(
                 "shell_execution_context_hash": (
                     execution_context.context_hash if execution_context.directory_change_present else None
                 ),
+                "git_pathspec_selection_identity": git_pathspec_selection_identity,
             },
             sort_keys=True,
         ).encode("utf-8")
@@ -530,6 +573,8 @@ def _codex_post_tool_output_artifact(
     }
     if execution_context.directory_change_present:
         metadata.update(shell_execution_context_metadata(execution_context))
+    if git_pathspec_selection_identity is not None:
+        metadata["git_pathspec_selection_identity"] = git_pathspec_selection_identity
     if merged_output_capture:
         metadata["output_capture_mode"] = "merged-stderr"
     if local_secret_source is not None:

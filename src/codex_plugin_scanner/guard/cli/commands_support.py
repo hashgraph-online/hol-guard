@@ -22,6 +22,7 @@ from . import commands_support_hook_payload as _commands_support_hook_payload
 from . import commands_support_runtime_artifacts as _commands_support_runtime_artifacts
 from . import commands_support_codex_commands as _commands_support_codex_commands
 from . import commands_support_codex_reads as _commands_support_codex_reads
+from . import commands_support_codex_git_config as _commands_support_codex_git_config
 from . import commands_support_codex_git as _commands_support_codex_git
 from . import commands_support_codex_paths as _commands_support_codex_paths
 from . import commands_support_runtime_resolution as _commands_support_runtime_resolution
@@ -57,6 +58,7 @@ _SOURCE_MODULES: tuple[ModuleType, ...] = (
     _commands_support_runtime_artifacts,
     _commands_support_codex_commands,
     _commands_support_codex_reads,
+    _commands_support_codex_git_config,
     _commands_support_codex_git,
     _commands_support_codex_paths,
     _commands_support_runtime_resolution,
