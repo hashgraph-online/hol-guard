@@ -97,9 +97,7 @@ def _managed_hooks_payload(payload: dict[str, object]) -> dict[str, object]:
         }
         return normalized
     normalized["hooks"] = {
-        str(name): list(entries)
-        for name, entries in payload.items()
-        if name != "version" and name not in _MANAGED_HOOK_EVENTS and isinstance(entries, list)
+        str(name): list(entries) for name, entries in payload.items() if name != "version" and isinstance(entries, list)
     }
     return normalized
 

@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor_hooks import (
     _MANAGED_HOOK_EVENTS,
     _MANAGED_HOOK_TIMEOUT_SECONDS,
+    HOOK_SCRIPT_NAME,
     _hook_script_mode_is_executable,
     _strip_managed_hook_entries,
     cursor_hook_response_from_guard,
@@ -592,6 +593,32 @@ def test_install_cursor_hooks_strips_legacy_pretooluse_entry(tmp_path: Path, mon
     for event_name in _MANAGED_HOOK_EVENTS:
         entry = installed["hooks"][event_name][-1]
         assert entry["timeout"] == _MANAGED_HOOK_TIMEOUT_SECONDS
+
+
+def test_install_cursor_hooks_preserves_top_level_event_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    hooks_path = home / ".cursor" / "hooks.json"
+    hooks_path.parent.mkdir(parents=True)
+    existing_entries = {event_name: [{"command": f"user-{event_name}"}] for event_name in _MANAGED_HOOK_EVENTS}
+    hooks_path.write_text(json.dumps({"version": 1, **existing_entries}) + "\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+        lambda _context: ["hol-guard"],
+    )
+
+    install_cursor_hooks(HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace))
+    installed = json.loads(hooks_path.read_text(encoding="utf-8"))
+
+    for event_name in _MANAGED_HOOK_EVENTS:
+        entries = installed["hooks"][event_name]
+        assert entries[0] == existing_entries[event_name][0]
+        assert entries[-1]["command"].endswith(HOOK_SCRIPT_NAME)
 
 
 def test_prepare_cursor_hook_payload_maps_before_mcp_execution() -> None:
