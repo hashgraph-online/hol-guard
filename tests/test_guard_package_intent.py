@@ -131,6 +131,42 @@ def test_parse_package_intent_detects_package_command_after_control_operator() -
     assert parse_package_intent("echo safe && grep foo src/file.ts") is None
 
 
+def test_local_execution_context_hash_contains_no_raw_command_or_secret() -> None:
+    first = package_intent_parser._execution_context_hash(("and", "end"), 1)
+    repeated = package_intent_parser._execution_context_hash(("and", "end"), 1)
+    different_operator = package_intent_parser._execution_context_hash(("sequence", "end"), 1)
+    different_segment = package_intent_parser._execution_context_hash(("and", "end"), 0)
+
+    assert first == repeated
+    assert first.startswith("sha256:")
+    assert first != different_operator
+    assert first != different_segment
+
+
+def test_unresolved_context_uses_process_ephemeral_keyed_identity() -> None:
+    first = package_intent_parser._opaque_unresolved_context_binding(
+        ["PATH=$FIRST_UNKNOWN", "bunx", "--no-install", "vitest"],
+        path_source="inline_unresolved",
+        cwd_source="workspace",
+    )
+    repeated = package_intent_parser._opaque_unresolved_context_binding(
+        ["PATH=$FIRST_UNKNOWN", "bunx", "--no-install", "vitest"],
+        path_source="inline_unresolved",
+        cwd_source="workspace",
+    )
+    second = package_intent_parser._opaque_unresolved_context_binding(
+        ["PATH=$SECOND_UNKNOWN", "bunx", "--no-install", "vitest"],
+        path_source="inline_unresolved",
+        cwd_source="workspace",
+    )
+
+    assert first == repeated
+    assert first is not None
+    assert second is not None
+    assert first != second
+    assert "FIRST_UNKNOWN" not in first
+
+
 def test_parse_package_intent_reviews_declared_local_test_runner_execution(tmp_path: Path) -> None:
     _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n')
     _write_text(tmp_path / "bun.lock", '"vitest": "4.1.8"\n')

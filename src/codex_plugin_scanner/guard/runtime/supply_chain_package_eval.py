@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
-import io
 import json
-import posixpath
 import re
 import sys
-import tarfile
 import time
 import urllib.error
 import urllib.parse
@@ -29,7 +27,6 @@ from packaging.version import InvalidVersion, Version
 
 from ..action_lattice import normalize_guard_action_result
 from ..config import load_guard_config, resolve_risk_action
-from ..mdm.network import managed_urlopen
 from ..models import GuardAction, GuardArtifact
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
@@ -42,11 +39,20 @@ from .npm_policy_range import (
     policy_selector_matches_target,
     target_for_resolved_npm_policy_match,
 )
+from .offline_archive_inspection import inspect_archive_offline
 from .package_intent_common import split_python_extras
 from .package_manifest_diff import (
     _DeadlineExceededError,
     _dependency_map_for_path,
     parse_manifest_dependencies,
+)
+from .restricted_archive_download import (
+    RestrictedArchiveDownload,
+    RestrictedArchiveDownloadResult,
+    RestrictedArchiveFailure,
+    canonical_external_https_archive_source,
+    download_restricted_archive,
+    is_external_https_archive_source,
 )
 from .runner import (
     GuardSyncAuthorizationExpiredError,
@@ -91,6 +97,10 @@ _LOCAL_APPROVAL_INSTRUCTION_RE = re.compile(
     re.IGNORECASE,
 )
 _LOCAL_APPROVAL_REQUEST_URL_RE = re.compile(r"https?://[^\s]+/requests(?:/[^\s]*)?", re.IGNORECASE)
+_NAMED_SOURCE_SEPARATOR_RE = re.compile(
+    r"@(?=(?:https?|git\+|github|gitlab|bitbucket|file):)",
+    re.IGNORECASE,
+)
 _LOCKFILE_PARSE_BUDGET_SECONDS = 0.2
 _TRANSITIVE_BLOCK_CONFIDENCE_THRESHOLD = 900
 _NPM_REGISTRY_METADATA_BASE_URL = "https://registry.npmjs.org"
@@ -99,6 +109,9 @@ _TARBALL_SCAN_TIMEOUT_SECONDS = 2
 _TARBALL_SCAN_MAX_BYTES = 6 * 1024 * 1024
 _TARBALL_SCAN_MAX_FILES = 500
 _TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES = 256 * 1024
+_EXTERNAL_ARCHIVE_MAX_TARGETS = 4
+_EXTERNAL_ARCHIVE_MAX_AGGREGATE_BYTES = 12 * 1024 * 1024
+_EXTERNAL_ARCHIVE_REQUEST_TIMEOUT_SECONDS = 8.0
 _CLOUD_VALIDATION_ERROR_CACHE_TTL_SECONDS = 15 * 60
 _REGISTRY_DEFAULT_RANGES = {
     "npm": "latest",
@@ -152,6 +165,8 @@ class PackageRequestEvaluation:
     refresh_required: bool = False
     record_monitor_evidence: bool = False
     evidence_ids: tuple[str, ...] = ()
+    external_archive_downloads: tuple[RestrictedArchiveDownload, ...] = ()
+    external_archive_source_hashes: tuple[str, ...] = ()
 
     def to_cache_dict(self) -> dict[str, object]:
         return {
@@ -167,6 +182,7 @@ class PackageRequestEvaluation:
             "exception_id": self.exception_id,
             "risk_summary": self.risk_summary,
             "record_monitor_evidence": self.record_monitor_evidence,
+            "external_archive_source_hashes": list(self.external_archive_source_hashes),
             "user_copy": self.user_copy.to_dict(),
         }
 
@@ -178,6 +194,16 @@ class PackageRequestEvaluation:
         payload["workspace_fingerprint"] = self.workspace_fingerprint
         payload["refresh_required"] = self.refresh_required
         payload["evidence_ids"] = list(self.evidence_ids)
+        if self.external_archive_downloads:
+            payload["external_archive_inspection"] = [
+                {
+                    "sha256": download.sha256,
+                    "size": download.size,
+                    "source_url_hash": stable_digest_hex(download.source_url.encode("utf-8")),
+                    "final_url_hash": stable_digest_hex(download.final_url.encode("utf-8")),
+                }
+                for download in self.external_archive_downloads
+            ]
         return payload
 
     @classmethod
@@ -220,6 +246,16 @@ class PackageRequestEvaluation:
             ),
             policy_action=policy_action,
         )
+        raw_external_archive_source_hashes = payload.get("external_archive_source_hashes")
+        external_archive_source_hashes = (
+            tuple(
+                item
+                for item in raw_external_archive_source_hashes
+                if isinstance(item, str) and re.fullmatch(r"[0-9a-f]{64}", item)
+            )
+            if isinstance(raw_external_archive_source_hashes, (list, tuple))
+            else ()
+        )
         return cls(
             decision=str(payload.get("decision") or "monitor"),
             policy_action=policy_action,
@@ -238,6 +274,7 @@ class PackageRequestEvaluation:
             exception_id=_optional_string(payload.get("exception_id")),
             refresh_required=bool(payload.get("refresh_required")),
             record_monitor_evidence=bool(payload.get("record_monitor_evidence")),
+            external_archive_source_hashes=external_archive_source_hashes,
         )
 
 
@@ -247,11 +284,131 @@ def evaluate_package_request_artifact(
     store: GuardStore,
     workspace_dir: Path | None,
     now: str | None = None,
+    external_archive_network_authorized: bool = False,
+    retain_external_archive_blob: bool = False,
 ) -> PackageRequestEvaluation:
     now_value = now or datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     now_timestamp = _parse_evaluation_timestamp(now_value)
     targets = _evaluation_targets(artifact, workspace_dir)
     package_intent_hash = artifact.artifact_id.rsplit(":", 1)[-1]
+    external_archive_targets = tuple(target for target in targets if _target_is_external_https_archive(target))
+    external_archive_source_hashes = tuple(
+        stable_digest_hex(source_url.encode("utf-8"))
+        for target in external_archive_targets
+        if (source_url := _optional_string(target.get("source_url"))) is not None
+    )
+    if external_archive_targets:
+        # External archives use a deliberately local two-phase evaluation.  In
+        # particular, neither cloud evaluation nor archive DNS may run before
+        # the exact request has crossed the approval boundary.
+        if len(external_archive_targets) > _EXTERNAL_ARCHIVE_MAX_TARGETS:
+            limit_package = _heuristic_package_result(
+                target=external_archive_targets[0],
+                decision="block",
+                code="external_archive_target_limit",
+                message="External archive request exceeded Guard's per-command target limit.",
+                severity="high",
+            )
+            external_archive_draft = _EvaluationDraft(
+                decision="block",
+                enforcement="free_local",
+                entitlement_state="free",
+                cache_status="miss",
+                packages=(limit_package,),
+                reasons=tuple(_dict_items(limit_package.get("reasons"))),
+                matched_rule_id=None,
+                exception_id=None,
+                refresh_required=False,
+                record_monitor_evidence=False,
+                bundle_version=None,
+                policy_version="local:none",
+                external_archive_source_hashes=external_archive_source_hashes,
+            )
+        elif len(external_archive_targets) != len(targets):
+            mixed_package = _heuristic_package_result(
+                target=external_archive_targets[0],
+                decision="block",
+                code="external_archive_mixed_request_unsupported",
+                message=(
+                    "External archives must be installed in a separate command so Guard can preserve "
+                    "registry advisory evaluation and bind the inspected blob to execution."
+                ),
+                severity="high",
+            )
+            external_archive_draft = _EvaluationDraft(
+                decision="block",
+                enforcement="free_local",
+                entitlement_state="free",
+                cache_status="miss",
+                packages=(mixed_package,),
+                reasons=tuple(_dict_items(mixed_package.get("reasons"))),
+                matched_rule_id=None,
+                exception_id=None,
+                refresh_required=False,
+                record_monitor_evidence=False,
+                bundle_version=None,
+                policy_version="local:none",
+                external_archive_source_hashes=external_archive_source_hashes,
+            )
+        else:
+            external_archive_draft = _heuristic_result(
+                artifact=artifact,
+                store=store,
+                targets=targets,
+                workspace_dir=workspace_dir,
+                external_archive_network_authorized=external_archive_network_authorized,
+                retain_external_archive_blob=retain_external_archive_blob,
+                external_archive_request_deadline=(
+                    time.monotonic() + _EXTERNAL_ARCHIVE_REQUEST_TIMEOUT_SECONDS
+                    if external_archive_network_authorized
+                    else None
+                ),
+            )
+        if external_archive_draft is None:
+            external_archive_draft = _EvaluationDraft(
+                decision="block",
+                enforcement="free_local",
+                entitlement_state="free",
+                cache_status="miss",
+                packages=(),
+                reasons=(
+                    {
+                        "code": "external_archive_inspection_incomplete",
+                        "message": "Guard could not establish an external archive evaluation.",
+                        "severity": "high",
+                        "source": "guard-local",
+                    },
+                ),
+                matched_rule_id=None,
+                exception_id=None,
+                refresh_required=False,
+                record_monitor_evidence=False,
+                bundle_version=None,
+                policy_version="local:none",
+                external_archive_source_hashes=external_archive_source_hashes,
+            )
+        if not external_archive_draft.external_archive_source_hashes:
+            external_archive_draft = replace(
+                external_archive_draft,
+                external_archive_source_hashes=external_archive_source_hashes,
+            )
+        try:
+            external_archive_result = _finalize_evaluation(
+                external_archive_draft,
+                package_intent_hash=package_intent_hash,
+                workspace_fingerprint=None,
+            )
+            _persist_evidence(
+                store=store,
+                artifact=artifact,
+                evaluation=external_archive_result,
+                now=now_value,
+            )
+            return external_archive_result
+        except BaseException:
+            for download in external_archive_draft.external_archive_downloads:
+                download.cleanup()
+            raise
     workspace_id = store.get_cloud_workspace_id()
     bundle_payload = store.get_cached_supply_chain_bundle(workspace_id) if workspace_id is not None else None
     bundle_response: SupplyChainBundleResponse | None = None
@@ -352,6 +509,8 @@ def evaluate_package_request_artifact(
                 store=store,
                 targets=targets,
                 workspace_dir=workspace_dir,
+                external_archive_network_authorized=external_archive_network_authorized,
+                retain_external_archive_blob=retain_external_archive_blob,
             )
             if heuristic is not None and _decision_rank(heuristic.decision) > _decision_rank(cloud_result.decision):
                 upgraded = _finalize_evaluation(
@@ -452,6 +611,8 @@ def evaluate_package_request_artifact(
         store=store,
         targets=targets,
         workspace_dir=workspace_dir,
+        external_archive_network_authorized=external_archive_network_authorized,
+        retain_external_archive_blob=retain_external_archive_blob,
     )
     if heuristic is None:
         fail_closed_unidentified = _unidentified_packages_fail_closed(store=store, workspace_dir=workspace_dir)
@@ -682,6 +843,8 @@ class _EvaluationDraft:
     record_monitor_evidence: bool
     bundle_version: str | None
     policy_version: str
+    external_archive_downloads: tuple[RestrictedArchiveDownload, ...] = ()
+    external_archive_source_hashes: tuple[str, ...] = ()
 
 
 def _finalize_evaluation(
@@ -711,6 +874,11 @@ def _finalize_evaluation(
     }[draft.decision]
     reason_message = _optional_string(draft.reasons[0].get("message")) if draft.reasons else None
     reason_code = _optional_string(draft.reasons[0].get("code")) if draft.reasons else None
+    policy_action: GuardAction = (
+        "review"
+        if draft.decision == "ask" and reason_code == "external_tarball_source"
+        else _DECISION_TO_GUARD_ACTION[draft.decision]
+    )
     source_risk_summaries = {
         "insecure_source_url": "from insecure HTTP source before install.",
         "external_tarball_source": "from external tarball source before install.",
@@ -753,11 +921,11 @@ def _finalize_evaluation(
             dashboard_url=None,
             harness_message=" ".join(part.strip() for part in harness_parts if part.strip()),
         ),
-        policy_action=_DECISION_TO_GUARD_ACTION[draft.decision],
+        policy_action=policy_action,
     )
     return PackageRequestEvaluation(
         decision=draft.decision,
-        policy_action=_DECISION_TO_GUARD_ACTION[draft.decision],
+        policy_action=policy_action,
         enforcement=draft.enforcement,
         entitlement_state=draft.entitlement_state,
         cache_status=draft.cache_status,
@@ -778,6 +946,8 @@ def _finalize_evaluation(
             for item in draft.packages
             if _should_record_package(item, draft.decision)
         ),
+        external_archive_downloads=draft.external_archive_downloads,
+        external_archive_source_hashes=draft.external_archive_source_hashes,
     )
 
 
@@ -1202,13 +1372,6 @@ def _cloud_fallback_requires_reconnect_copy(reason: dict[str, object]) -> bool:
     return _optional_string(reason.get("code")) == "cloud_auth_error"
 
 
-def _external_tarball_scan_failure_decision(*, store: GuardStore, workspace_dir: Path | None) -> str:
-    config = load_guard_config(store.guard_home, workspace=workspace_dir)
-    if config.security_level in {"strict", "paranoid"}:
-        return "block"
-    return "ask"
-
-
 def _cloud_fail_closed_decision(*, store: GuardStore, workspace_dir: Path | None) -> str:
     config = load_guard_config(store.guard_home, workspace=workspace_dir)
     cloud_action = resolve_risk_action(config, "cloud_advisory", harness=None)
@@ -1463,9 +1626,86 @@ def _heuristic_result(
     store: GuardStore,
     targets: tuple[dict[str, object], ...],
     workspace_dir: Path | None,
+    external_archive_network_authorized: bool,
+    retain_external_archive_blob: bool,
+    external_archive_request_deadline: float | None = None,
 ) -> _EvaluationDraft | None:
     packages: list[dict[str, object]] = []
+    external_archive_downloads: list[RestrictedArchiveDownload] = []
+    external_archive_source_hashes = [
+        stable_digest_hex(source_url.encode("utf-8"))
+        for target in targets
+        if (source_url := _optional_string(target.get("source_url"))) is not None
+        and _target_is_external_https_archive(target)
+    ]
+    retained_archive_bytes = 0
     for target in targets:
+        source_url = _optional_string(target.get("source_url"))
+        if target.get("external_archive_source_integrity_invalid") is True:
+            packages.append(
+                _heuristic_package_result(
+                    target=target,
+                    decision="block",
+                    code="external_archive_source_integrity_invalid",
+                    message="Package source private data no longer matches its approved public identity.",
+                    severity="high",
+                )
+            )
+            continue
+        if source_url is not None and _target_is_external_https_archive(target):
+            try:
+                package_result, external_archive_download = _external_tarball_dependency_result(
+                    target,
+                    network_authorized=external_archive_network_authorized,
+                    retain_download=retain_external_archive_blob,
+                    request_deadline=external_archive_request_deadline,
+                )
+            except BaseException:
+                for retained_archive in external_archive_downloads:
+                    retained_archive.cleanup()
+                raise
+            if external_archive_download is not None:
+                retained_archive_bytes += external_archive_download.size
+                if retained_archive_bytes > _EXTERNAL_ARCHIVE_MAX_AGGREGATE_BYTES:
+                    external_archive_download.cleanup()
+                    for retained_archive in external_archive_downloads:
+                        retained_archive.cleanup()
+                    external_archive_downloads.clear()
+                    packages.append(
+                        _heuristic_package_result(
+                            target=target,
+                            decision="block",
+                            code="external_archive_aggregate_size_limit",
+                            message="External archives exceeded Guard's aggregate retained-byte limit.",
+                            severity="high",
+                        )
+                    )
+                    break
+                external_archive_downloads.append(external_archive_download)
+            if target.get("manifest_unsynced") is True:
+                package_result = _with_package_reason(
+                    package_result,
+                    {
+                        "code": "manifest_lockfile_unsynced",
+                        "message": (
+                            f"{target['package_name']} is declared in the project manifest but is not pinned "
+                            "in the existing lockfile yet, so Guard requires review before install."
+                        ),
+                        "severity": "high",
+                        "source": "guard-local",
+                    },
+                )
+            lockfile_parse_warning = _lockfile_parse_warning_result(
+                target=target,
+                artifact=artifact,
+                workspace_dir=workspace_dir,
+            )
+            if lockfile_parse_warning is not None:
+                first_reason = _first_dict_item(lockfile_parse_warning.get("reasons"))
+                if first_reason is not None:
+                    package_result = _with_package_reason(package_result, first_reason)
+            packages.append(package_result)
+            continue
         if target.get("manifest_unsynced") is True:
             packages.append(
                 _heuristic_package_result(
@@ -1512,8 +1752,7 @@ def _heuristic_result(
             local_source_result = _local_source_dependency_result(target)
             if local_source_result is not None:
                 package_result = local_source_result
-        source_url = _optional_string(target.get("source_url"))
-        if package_result is None and source_url is not None and source_url.lower().startswith("http://"):
+        if package_result is None and source_url is not None and source_url.lower().startswith("http:"):
             package_result = _heuristic_package_result(
                 target=target,
                 decision="block",
@@ -1529,12 +1768,6 @@ def _heuristic_result(
                 message="Git package source requires review before install.",
                 severity="high",
             )
-        if package_result is None and source_url is not None and _is_external_https_tarball_source(source_url):
-            package_result = _external_tarball_dependency_result(
-                target,
-                store=store,
-                workspace_dir=workspace_dir,
-            )
         if package_result is None:
             if lockfile_parse_warning is not None:
                 packages.append(lockfile_parse_warning)
@@ -1548,6 +1781,10 @@ def _heuristic_result(
         return None
     packages.sort(key=lambda item: _decision_rank(str(item.get("decision") or "monitor")), reverse=True)
     decision = str(packages[0].get("decision") or "monitor")
+    if decision == "block":
+        for retained_archive in external_archive_downloads:
+            retained_archive.cleanup()
+        external_archive_downloads.clear()
     return _EvaluationDraft(
         decision=decision,
         enforcement="free_local",
@@ -1561,6 +1798,8 @@ def _heuristic_result(
         record_monitor_evidence=decision == "monitor",
         bundle_version=None,
         policy_version="local:none",
+        external_archive_downloads=tuple(external_archive_downloads),
+        external_archive_source_hashes=tuple(external_archive_source_hashes),
     )
 
 
@@ -1619,9 +1858,17 @@ def _evaluation_targets(
 
 
 def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], ...]:
-    raw_targets = artifact.metadata.get("targets")
-    if not isinstance(raw_targets, list):
+    public_targets = artifact.metadata.get("targets")
+    if not isinstance(public_targets, list):
         return ()
+    private_targets = artifact.runtime_private_metadata.get("package_targets")
+    private_integrity_invalid = False
+    if isinstance(private_targets, list):
+        private_integrity_invalid = not _private_package_targets_match_public(private_targets, public_targets)
+        raw_targets = public_targets if private_integrity_invalid else private_targets
+    else:
+        raw_targets = public_targets
+        private_integrity_invalid = not _public_package_targets_are_self_consistent(public_targets)
     parsed: list[dict[str, object]] = []
     package_manager = str(artifact.metadata.get("package_manager") or "npm")
     redacted_command = _optional_string(artifact.metadata.get("redacted_command"))
@@ -1664,9 +1911,72 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
                 "editable": bool(item.get("editable")),
                 "package_manager": package_manager,
                 "redacted_command": redacted_command,
+                "external_archive_source_integrity_invalid": private_integrity_invalid,
             }
         )
     return tuple(parsed)
+
+
+def _private_package_targets_match_public(
+    private_targets: list[object],
+    public_targets: list[object],
+) -> bool:
+    if len(private_targets) != len(public_targets):
+        return False
+    structural_fields = (
+        "ecosystem",
+        "package_name",
+        "requested_specifier",
+        "alias",
+        "dependency_group",
+        "extras",
+        "editable",
+    )
+    for private_target, public_target in zip(private_targets, public_targets, strict=True):
+        if not isinstance(private_target, dict) or not isinstance(public_target, dict):
+            return False
+        if any(private_target.get(field) != public_target.get(field) for field in structural_fields):
+            return False
+        private_raw_spec = _optional_string(private_target.get("raw_spec"))
+        expected_raw_spec_hash = _optional_string(public_target.get("raw_spec_hash"))
+        if (
+            private_raw_spec is None
+            or expected_raw_spec_hash is None
+            or hashlib.sha256(private_raw_spec.encode("utf-8")).hexdigest() != expected_raw_spec_hash
+        ):
+            return False
+        private_source_url = _optional_string(private_target.get("source_url"))
+        expected_source_hash = _optional_string(public_target.get("source_url_hash"))
+        if private_source_url is None:
+            if expected_source_hash is not None:
+                return False
+        elif (
+            expected_source_hash is None
+            or hashlib.sha256(private_source_url.encode("utf-8")).hexdigest() != expected_source_hash
+        ):
+            return False
+    return True
+
+
+def _public_package_targets_are_self_consistent(public_targets: list[object]) -> bool:
+    """Permit serialized targets only when no exact value was redacted away."""
+
+    for target in public_targets:
+        if not isinstance(target, dict):
+            return False
+        raw_spec = _optional_string(target.get("raw_spec"))
+        raw_spec_hash = _optional_string(target.get("raw_spec_hash"))
+        if raw_spec_hash is not None and (
+            raw_spec is None or hashlib.sha256(raw_spec.encode("utf-8")).hexdigest() != raw_spec_hash
+        ):
+            return False
+        source_url = _optional_string(target.get("source_url"))
+        source_url_hash = _optional_string(target.get("source_url_hash"))
+        if source_url_hash is not None and (
+            source_url is None or hashlib.sha256(source_url.encode("utf-8")).hexdigest() != source_url_hash
+        ):
+            return False
+    return True
 
 
 def _bundle_meta(bundle_payload: dict[str, object]) -> dict[str, str]:
@@ -2740,182 +3050,184 @@ def _is_git_source_url(source_url: str) -> bool:
 
 
 def _is_external_https_tarball_source(source_url: str) -> bool:
-    parsed = urllib.parse.urlsplit(source_url)
-    normalized_path = parsed.path.lower()
-    hostname = parsed.hostname.lower() if parsed.hostname is not None else ""
-    return (
-        parsed.scheme.lower() == "https"
-        and normalized_path.endswith((".tgz", ".tar.gz", ".tar"))
-        and hostname != "registry.npmjs.org"
+    return is_external_https_archive_source(source_url)
+
+
+def _target_is_external_https_archive(target: dict[str, object]) -> bool:
+    ecosystem = (_optional_string(target.get("ecosystem")) or "").lower()
+    source_url = _optional_string(target.get("source_url"))
+    return bool(
+        ecosystem in {"npm", "pypi"} and source_url is not None and _is_external_https_tarball_source(source_url)
     )
 
 
 def _external_tarball_dependency_result(
     target: dict[str, object],
     *,
-    store: GuardStore,
-    workspace_dir: Path | None,
-) -> dict[str, object]:
+    network_authorized: bool,
+    retain_download: bool,
+    request_deadline: float | None = None,
+) -> tuple[dict[str, object], RestrictedArchiveDownload | None]:
     source_url = _optional_string(target.get("source_url"))
     if source_url is None:
-        return _heuristic_package_result(
-            target=target,
-            decision="ask",
-            code="external_tarball_source",
-            message="External tarball source requires review before install.",
-            severity="medium",
-        )
-    scan = _scan_external_tarball(source_url)
-    if scan is None:
-        fail_closed_decision = _external_tarball_scan_failure_decision(store=store, workspace_dir=workspace_dir)
-        if fail_closed_decision != "block":
-            return _heuristic_package_result(
+        return (
+            _heuristic_package_result(
                 target=target,
                 decision="ask",
                 code="external_tarball_source",
                 message="External tarball source requires review before install.",
                 severity="medium",
-            )
-        return _heuristic_package_result(
-            target=target,
-            decision="block",
-            code="external_tarball_scan_unavailable",
-            message="Guard could not scan the external tarball source, so strict mode blocked the install.",
-            severity="high",
+            ),
+            None,
         )
-    return _heuristic_package_result(
-        target=target,
-        decision=scan["decision"],
-        code=scan["code"],
-        message=scan["message"],
-        severity=scan["severity"],
+    if target.get("external_archive_source_integrity_invalid") is True:
+        return (
+            _heuristic_package_result(
+                target=target,
+                decision="block",
+                code="external_archive_source_integrity_invalid",
+                message="External archive private source no longer matches its approved public identity.",
+                severity="high",
+            ),
+            None,
+        )
+    if canonical_external_https_archive_source(source_url) is None:
+        return (
+            _heuristic_package_result(
+                target=target,
+                decision="block",
+                code="external_archive_destination_rejected",
+                message="External archive source is not a canonical public HTTPS URL.",
+                severity="high",
+            ),
+            None,
+        )
+    if not network_authorized:
+        return (
+            _heuristic_package_result(
+                target=target,
+                decision="ask",
+                code="external_tarball_source",
+                message="External tarball source requires review before any archive download.",
+                severity="medium",
+            ),
+            None,
+        )
+    scan, retained_download = _scan_external_tarball(
+        source_url,
+        retain_download=retain_download,
+        request_deadline=request_deadline,
+    )
+    if scan is None:
+        return (
+            _heuristic_package_result(
+                target=target,
+                decision="block",
+                code="external_archive_inspection_incomplete",
+                message="Guard could not complete restricted download and offline archive inspection.",
+                severity="high",
+            ),
+            None,
+        )
+    return (
+        _heuristic_package_result(
+            target=target,
+            decision=scan["decision"],
+            code=scan["code"],
+            message=scan["message"],
+            severity=scan["severity"],
+        ),
+        retained_download,
     )
 
 
-def _scan_external_tarball(source_url: str) -> dict[str, str] | None:
-    archive_bytes = _download_external_tarball(source_url)
-    if archive_bytes is None:
-        return None
-    if len(archive_bytes) > _TARBALL_SCAN_MAX_BYTES:
-        return {
-            "decision": "block",
-            "code": "tarball_size_limit",
-            "message": "External tarball exceeded Guard scan size limits.",
-            "severity": "high",
-        }
-    return _scan_tarball_archive_bytes(archive_bytes)
-
-
-def _download_external_tarball(source_url: str) -> bytes | None:
-    request = urllib.request.Request(source_url, method="GET")
+def _scan_external_tarball(
+    source_url: str,
+    *,
+    retain_download: bool = False,
+    request_deadline: float | None = None,
+) -> tuple[dict[str, str] | None, RestrictedArchiveDownload | None]:
+    download_timeout = _TARBALL_SCAN_TIMEOUT_SECONDS
+    if request_deadline is not None:
+        remaining = request_deadline - time.monotonic()
+        if remaining <= 0:
+            return _external_archive_request_timeout_result(), None
+        download_timeout = min(download_timeout, remaining)
+    downloaded = _download_external_tarball(source_url, timeout_seconds=download_timeout)
+    if isinstance(downloaded, RestrictedArchiveFailure):
+        return (
+            {
+                "decision": "block",
+                "code": downloaded.code,
+                "message": downloaded.message,
+                "severity": "high",
+            },
+            None,
+        )
+    if not isinstance(downloaded, RestrictedArchiveDownload):
+        return None, None
+    retain_blob = False
     try:
-        with managed_urlopen(request, timeout=_TARBALL_SCAN_TIMEOUT_SECONDS) as response:
-            payload = response.read(_TARBALL_SCAN_MAX_BYTES + 1)
-    except OSError:
-        return None
-    return payload
-
-
-def _scan_tarball_archive_bytes(archive_bytes: bytes) -> dict[str, str] | None:
-    try:
-        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:*") as archive:
-            member_count = 0
-            for member in archive:
-                if member_count >= _TARBALL_SCAN_MAX_FILES:
-                    return {
-                        "decision": "block",
-                        "code": "tarball_file_count_limit",
-                        "message": "External tarball exceeded Guard file-count limits.",
-                        "severity": "high",
-                    }
-                member_count += 1
-                if _tarball_member_is_unsafe(member):
-                    return {
-                        "decision": "block",
-                        "code": "tarball_zip_slip",
-                        "message": "External tarball contains unsafe archive paths.",
-                        "severity": "high",
-                    }
-                if not member.isfile():
-                    continue
-                if not member.name.endswith("package.json"):
-                    continue
-                extracted = archive.extractfile(member)
-                if extracted is None:
-                    continue
-                package_json = extracted.read(_TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES + 1)
-                if len(package_json) > _TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES:
-                    return {
-                        "decision": "block",
-                        "code": "tarball_package_json_limit",
-                        "message": "External tarball package manifest exceeded Guard scan limits.",
-                        "severity": "high",
-                    }
-                install_script_risk = _package_json_install_script_risk(package_json)
-                if install_script_risk is not None:
-                    return {
-                        "decision": "block",
-                        "code": install_script_risk["code"],
-                        "message": install_script_risk["message"],
-                        "severity": "high",
-                    }
-    except (tarfile.TarError, OSError, UnicodeDecodeError, ValueError):
-        return None
-    return None
-
-
-def _tarball_member_is_unsafe(member: tarfile.TarInfo) -> bool:
-    normalized_name = posixpath.normpath(member.name)
-    if member.name.startswith(("/", "\\")):
-        return True
-    if normalized_name in {"..", "."} or normalized_name.startswith("../"):
-        return True
-    if ":" in normalized_name.split("/", 1)[0]:
-        return True
-    if member.issym() or member.islnk():
-        link_target = posixpath.normpath(member.linkname or "")
-        if link_target.startswith("/") or link_target.startswith("../") or link_target == "..":
-            return True
-    return False
-
-
-def _package_json_install_script_risk(payload: bytes) -> dict[str, str] | None:
-    try:
-        parsed = json.loads(payload.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    scripts = parsed.get("scripts")
-    if not isinstance(scripts, dict):
-        return None
-    for key in ("preinstall", "install", "postinstall", "prepare"):
-        value = scripts.get(key)
-        if isinstance(value, str) and value.strip():
-            normalized = value.lower()
-            touches_credentials = bool(
-                re.search(
-                    r"\b(?:npm_token|node_auth_token|_authtoken|pypi_token)\b|\.npmrc|\.pypirc",
-                    normalized,
-                )
+        inspection_timeout = _TARBALL_SCAN_TIMEOUT_SECONDS
+        if request_deadline is not None:
+            # The inspector parent reserves a 0.5s termination grace after its
+            # child's own deadline; include that grace in the request budget.
+            remaining = request_deadline - time.monotonic() - 0.5
+            if remaining <= 0:
+                return _external_archive_request_timeout_result(), None
+            inspection_timeout = min(inspection_timeout, remaining)
+        inspection = inspect_archive_offline(
+            downloaded.path,
+            expected_sha256=downloaded.sha256,
+            timeout_seconds=inspection_timeout,
+            max_archive_bytes=_TARBALL_SCAN_MAX_BYTES,
+            max_files=_TARBALL_SCAN_MAX_FILES,
+            max_package_json_bytes=_TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES,
+        )
+        if inspection.status != "clean":
+            return (
+                {
+                    "decision": "block",
+                    "code": inspection.code,
+                    "message": inspection.message,
+                    "severity": inspection.severity,
+                },
+                None,
             )
-            exfiltrates = bool(
-                re.search(
-                    r"\b(?:curl|wget|axios|urllib)\b|\bhttps?\.request\b|\bfetch\s*\(|\brequests\.",
-                    normalized,
-                )
-            )
-            if touches_credentials and exfiltrates:
-                return {
-                    "code": "credential_theft_install_script",
-                    "message": (
-                        "External tarball install script attempts to read local package-manager credentials "
-                        "and exfiltrate them."
-                    ),
-                }
-            return {
-                "code": "tarball_install_script",
-                "message": "External tarball declares install-time scripts and was blocked.",
-            }
-    return None
+        retain_blob = retain_download
+        return (
+            {
+                "decision": "ask",
+                "code": "external_tarball_source",
+                "message": "External tarball source requires review before any archive download.",
+                "severity": "medium",
+            },
+            downloaded if retain_blob else None,
+        )
+    finally:
+        if not retain_blob:
+            downloaded.cleanup()
+
+
+def _external_archive_request_timeout_result() -> dict[str, str]:
+    return {
+        "decision": "block",
+        "code": "external_archive_request_timeout",
+        "message": "External archive request exceeded Guard's aggregate time limit.",
+        "severity": "high",
+    }
+
+
+def _download_external_tarball(
+    source_url: str,
+    *,
+    timeout_seconds: float = _TARBALL_SCAN_TIMEOUT_SECONDS,
+) -> RestrictedArchiveDownloadResult:
+    return download_restricted_archive(
+        source_url,
+        max_bytes=_TARBALL_SCAN_MAX_BYTES,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def _lockfile_dependency_versions(
@@ -3709,24 +4021,21 @@ def _recommended_fix_allow_package_result(
 def _source_url_from_specifier(specifier: str | None) -> str | None:
     if specifier is None:
         return None
-    if "://" in specifier or specifier.startswith(("git+", "github:", "gitlab:", "bitbucket:", "file:")):
+    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", specifier) is not None or specifier.lower().startswith(
+        ("http:", "https:", "git+", "github:", "gitlab:", "bitbucket:", "file:")
+    ):
         return specifier
     return None
 
 
 def _source_url_from_raw_spec(raw_spec: str) -> str | None:
-    if raw_spec.startswith("@") and "@" in raw_spec[1:]:
-        candidate = raw_spec.rsplit("@", 1)[-1]
-    elif (
-        "@" in raw_spec
-        and not raw_spec.startswith("http://")
-        and not raw_spec.startswith("https://")
-        and not raw_spec.startswith("git+")
+    if _source_url_from_specifier(raw_spec) is not None:
+        return raw_spec
+    separator = _NAMED_SOURCE_SEPARATOR_RE.search(raw_spec)
+    candidate = raw_spec[separator.end() :] if separator is not None else raw_spec
+    if "://" in candidate or candidate.lower().startswith(
+        ("http:", "https:", "git+", "github:", "gitlab:", "bitbucket:", "file:")
     ):
-        candidate = raw_spec.split("@", 1)[1]
-    else:
-        candidate = raw_spec
-    if "://" in candidate or candidate.startswith(("git+", "github:", "gitlab:", "bitbucket:", "file:")):
         return candidate
     return None
 

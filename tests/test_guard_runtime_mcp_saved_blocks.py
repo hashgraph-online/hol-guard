@@ -840,7 +840,12 @@ def test_package_retry_validates_context_and_retained_authority_before_forward(
     )
     claim_completed = False
 
-    def resolve_package_policy(*, artifact: GuardArtifact) -> object:
+    def resolve_package_policy(
+        *,
+        artifact: GuardArtifact,
+        external_archive_network_authorized: bool = False,
+    ) -> object:
+        del external_archive_network_authorized
         assert artifact.artifact_id == package_artifact.artifact_id
         return postclaim_resolution if claim_completed else preclaim_resolution
 

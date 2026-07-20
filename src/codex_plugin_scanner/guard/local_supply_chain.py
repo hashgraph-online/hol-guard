@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import inspect
 import json
 import os
 import shlex
 import socket
+import stat
 import subprocess
 import threading
 import time
@@ -57,9 +59,11 @@ from .runtime.package_intent_common import (
     existing_relative_paths,
     js_target,
     python_target,
+    redact_package_request_token,
     version_target,
 )
 from .runtime.package_manifest_diff import parse_manifest_dependencies, parse_manifest_dependency_changes
+from .runtime.restricted_archive_download import RestrictedArchiveDownload
 from .runtime.supply_chain_support import ecosystem_support_matrix
 from .runtime.workspace_path_guard import (
     read_bytes_within_workspace,
@@ -1255,6 +1259,110 @@ class _PackageProtectProjection:
     risk_signals: tuple[str, ...]
 
 
+def _external_archive_downloads(evaluation: object) -> tuple[RestrictedArchiveDownload, ...]:
+    value = getattr(evaluation, "external_archive_downloads", ())
+    if not isinstance(value, tuple):
+        return ()
+    return tuple(item for item in value if isinstance(item, RestrictedArchiveDownload))
+
+
+def _cleanup_external_archive_downloads(evaluation: object) -> None:
+    for download in _external_archive_downloads(evaluation):
+        download.cleanup()
+
+
+def _package_evaluation_requires_external_archive_binding(evaluation: object) -> bool:
+    source_hashes = getattr(evaluation, "external_archive_source_hashes", ())
+    if isinstance(source_hashes, (list, tuple)) and any(
+        isinstance(item, str) and len(item) == 64 for item in source_hashes
+    ):
+        return True
+    reasons = getattr(evaluation, "reasons", ())
+    if isinstance(reasons, (list, tuple)) and any(
+        isinstance(reason, Mapping) and reason.get("code") == "external_tarball_source" for reason in reasons
+    ):
+        return True
+    packages = getattr(evaluation, "packages", ())
+    if not isinstance(packages, (list, tuple)):
+        return False
+    return any(
+        isinstance(package, Mapping)
+        and isinstance(package_reasons := package.get("reasons"), (list, tuple))
+        and any(
+            isinstance(reason, Mapping) and reason.get("code") == "external_tarball_source"
+            for reason in package_reasons
+        )
+        for package in packages
+    )
+
+
+def _verified_external_archive_replacements(evaluation: object) -> dict[str, str] | None:
+    replacements: dict[str, str] = {}
+    for download in _external_archive_downloads(evaluation):
+        descriptor = -1
+        try:
+            path_stat = download.path.lstat()
+            descriptor = os.open(
+                download.path,
+                os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0),
+            )
+            file_stat = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(path_stat.st_mode)
+                or not stat.S_ISREG(file_stat.st_mode)
+                or path_stat.st_dev != file_stat.st_dev
+                or path_stat.st_ino != file_stat.st_ino
+                or file_stat.st_nlink != 1
+                or file_stat.st_size != download.size
+                or stat.S_IMODE(file_stat.st_mode) & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
+            ):
+                return None
+            digest = hashlib.sha256()
+            size = 0
+            with os.fdopen(descriptor, "rb", closefd=True) as archive_file:
+                descriptor = -1
+                while True:
+                    chunk = archive_file.read(min(64 * 1024, download.size - size + 1))
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > download.size:
+                        return None
+                    digest.update(chunk)
+        except OSError:
+            return None
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+        if size != download.size or digest.hexdigest() != download.sha256:
+            return None
+        replacements[download.source_url] = str(download.path)
+    return replacements
+
+
+def _bound_external_archive_launch_command(
+    launch_command: Sequence[str],
+    *,
+    evaluation: object,
+) -> list[str] | None:
+    replacements = _verified_external_archive_replacements(evaluation)
+    if replacements is None:
+        return None
+    if not replacements:
+        return None if _package_evaluation_requires_external_archive_binding(evaluation) else list(launch_command)
+    bound_command = [str(item) for item in launch_command]
+    for source_url, replacement in replacements.items():
+        replacement_count = 0
+        for index, argument in enumerate(bound_command):
+            if source_url not in argument:
+                continue
+            bound_command[index] = argument.replace(source_url, replacement)
+            replacement_count += 1
+        if replacement_count == 0:
+            return None
+    return bound_command
+
+
 def _build_package_protect_authority(
     *,
     command: Sequence[str],
@@ -1264,6 +1372,7 @@ def _build_package_protect_authority(
     config: GuardConfig | None,
     additional_current_action: object | None,
     additional_policy_context: dict[str, object] | None,
+    external_archive_network_authorized: bool = False,
 ) -> _PackageProtectAuthority | None:
     try:
         launch_cwd = workspace_dir.expanduser().resolve(strict=True)
@@ -1287,63 +1396,69 @@ def _build_package_protect_authority(
         store=store,
         workspace_dir=launch_cwd,
         now=now,
+        external_archive_network_authorized=external_archive_network_authorized,
+        retain_external_archive_blob=external_archive_network_authorized,
     )
-    current_action = compose_current_package_policy_action(
-        artifact=artifact,
-        evaluation=evaluation,
-        config=config,
-        additional_current_action=additional_current_action,
-    )
-    executable = sanitized_intent.command_tokens[0] if sanitized_intent.command_tokens else None
-    executable_args = sanitized_intent.command_tokens[1:] if executable is not None else ()
-    if sanitized_intent.command_tokens and ";" in sanitized_intent.command_tokens:
-        executable = None
-        executable_args = ()
-    execution_context = build_package_execution_context(
-        workspace_dir=launch_cwd,
-        artifact=artifact,
-        executable=executable,
-        executable_args=executable_args,
-        environment=launch_environment,
-    )
-    launch_identity = build_runtime_launch_identity(
-        str(command[0]) if command else None,
-        args=tuple(str(item) for item in command[1:]),
-        structured_command=True,
-        direct_executable=True,
-        cwd=launch_cwd,
-        launch_env=launch_environment,
-    )
-    if command and executable is not None and str(command[0]) != executable:
-        launch_identity["wrapper_resolution"] = {
-            "reason": "package_command_wrapper_unresolved",
-            "reuse_nonce": uuid4().hex,
-            "status": "unproven",
-        }
-    artifact_hash = _package_request_artifact_hash(
-        artifact,
-        workspace_dir=launch_cwd,
-        store=store,
-        evaluation=evaluation,
-        execution_context=execution_context,
-        launch_identity=launch_identity,
-        config=config,
-        additional_current_action=additional_current_action,
-        additional_policy_context=additional_policy_context,
-    )
-    return _PackageProtectAuthority(
-        intent=sanitized_intent,
-        artifact=artifact,
-        evaluation=evaluation,
-        current_action=current_action,
-        execution_context=execution_context,
-        artifact_hash=artifact_hash,
-        launch_identity=launch_identity,
-        launch_cwd=launch_cwd,
-        launch_environment=launch_environment,
-        additional_current_action=additional_current_action,
-        additional_policy_context=additional_policy_context,
-    )
+    try:
+        current_action = compose_current_package_policy_action(
+            artifact=artifact,
+            evaluation=evaluation,
+            config=config,
+            additional_current_action=additional_current_action,
+        )
+        executable = sanitized_intent.command_tokens[0] if sanitized_intent.command_tokens else None
+        executable_args = sanitized_intent.command_tokens[1:] if executable is not None else ()
+        if sanitized_intent.command_tokens and ";" in sanitized_intent.command_tokens:
+            executable = None
+            executable_args = ()
+        execution_context = build_package_execution_context(
+            workspace_dir=launch_cwd,
+            artifact=artifact,
+            executable=executable,
+            executable_args=executable_args,
+            environment=launch_environment,
+        )
+        launch_identity = build_runtime_launch_identity(
+            str(command[0]) if command else None,
+            args=tuple(str(item) for item in command[1:]),
+            structured_command=True,
+            direct_executable=True,
+            cwd=launch_cwd,
+            launch_env=launch_environment,
+        )
+        if command and executable is not None and str(command[0]) != executable:
+            launch_identity["wrapper_resolution"] = {
+                "reason": "package_command_wrapper_unresolved",
+                "reuse_nonce": uuid4().hex,
+                "status": "unproven",
+            }
+        artifact_hash = _package_request_artifact_hash(
+            artifact,
+            workspace_dir=launch_cwd,
+            store=store,
+            evaluation=evaluation,
+            execution_context=execution_context,
+            launch_identity=launch_identity,
+            config=config,
+            additional_current_action=additional_current_action,
+            additional_policy_context=additional_policy_context,
+        )
+        return _PackageProtectAuthority(
+            intent=sanitized_intent,
+            artifact=artifact,
+            evaluation=evaluation,
+            current_action=current_action,
+            execution_context=execution_context,
+            artifact_hash=artifact_hash,
+            launch_identity=launch_identity,
+            launch_cwd=launch_cwd,
+            launch_environment=launch_environment,
+            additional_current_action=additional_current_action,
+            additional_policy_context=additional_policy_context,
+        )
+    except BaseException:
+        _cleanup_external_archive_downloads(evaluation)
+        raise
 
 
 def _final_package_protect_authority(
@@ -1404,6 +1519,7 @@ def _final_package_protect_authority(
         config=current_config,
         additional_current_action=additional_action,
         additional_policy_context=additional_context,
+        external_archive_network_authorized=saved_approval_claimed,
     )
     if current is None:
         reuse = evaluate_approval_reuse(
@@ -1531,6 +1647,7 @@ def _apply_package_protect_projection(
     """Project one authority/evaluation pair into every user and audit surface."""
 
     intent = authority.intent
+    public_targets = [target.to_dict() for target in intent.targets]
     artifact = authority.artifact
     artifact_hash = authority.artifact_hash
     verdict_action = _protect_action_for_policy_action(evaluation.policy_action)
@@ -1540,7 +1657,7 @@ def _apply_package_protect_projection(
         "matched_rule_id": evaluation.matched_rule_id,
         "package_execution_context": authority.execution_context.to_evidence(),
         "package_manager": intent.package_manager,
-        "package_targets": [target.raw_spec for target in intent.targets],
+        "package_targets": [str(target.get("raw_spec") or "") for target in public_targets],
         "policy_action": verdict_action,
         "policy_version": evaluation.policy_version,
         "redacted_command": intent.redacted_command,
@@ -1557,7 +1674,10 @@ def _apply_package_protect_projection(
         artifact_hash=artifact_hash,
         policy_decision=verdict_action,
         capabilities_summary=evaluation.user_copy.summary,
-        changed_capabilities=[target.package_name or target.raw_spec for target in intent.targets],
+        changed_capabilities=[
+            target.package_name or str(public_target.get("raw_spec") or "")
+            for target, public_target in zip(intent.targets, public_targets, strict=True)
+        ],
         provenance_summary=evaluation.user_copy.harness_message,
         artifact_name=artifact.name,
         source_scope=artifact.source_scope,
@@ -1565,13 +1685,13 @@ def _apply_package_protect_projection(
     )
     matched_advisories = _matched_advisories(evaluation)
     payload["request"] = {
-        "command": list(redacted_command_tokens(command)),
+        "command": shlex.split(intent.redacted_command),
         "redacted_command": intent.redacted_command,
         "install_kind": intent.intent_kind,
         "executor": str(command[0]) if command else _LOCAL_SUPPLY_CHAIN_HARNESS,
         "package_manager": intent.package_manager,
         "harness": _LOCAL_SUPPLY_CHAIN_HARNESS,
-        "targets": [target.to_dict() for target in intent.targets],
+        "targets": public_targets,
         "manifest_paths": list(intent.manifest_paths),
         "lockfile_paths": list(intent.lockfile_paths),
         "package_execution_context": authority.execution_context.to_evidence(),
@@ -1761,7 +1881,7 @@ def build_package_protect_payload(
         additional_authority_provider=additional_authority_provider,
     )
     if not is_execution_permitted(final_evaluation.policy_action):
-        return _package_protect_denied_after_final_boundary(
+        denied = _package_protect_denied_after_final_boundary(
             payload=payload,
             authority=final_authority,
             evaluation=final_evaluation,
@@ -1769,6 +1889,8 @@ def build_package_protect_payload(
             store=store,
             now=now,
         )
+        _cleanup_external_archive_downloads(final_evaluation)
+        return denied
     launch_command = resolved_runtime_launch_argv(
         final_authority.launch_identity,
         args=tuple(str(item) for item in command[1:]),
@@ -1781,7 +1903,7 @@ def build_package_protect_payload(
             validation_reason="approval_reuse_identity_changed",
         )
         denied_evaluation = _package_evaluation_with_rejected_reuse(final_authority.evaluation, reuse)
-        return _package_protect_denied_after_final_boundary(
+        denied = _package_protect_denied_after_final_boundary(
             payload=payload,
             authority=final_authority,
             evaluation=denied_evaluation,
@@ -1789,6 +1911,33 @@ def build_package_protect_payload(
             store=store,
             now=now,
         )
+        _cleanup_external_archive_downloads(final_evaluation)
+        return denied
+    bound_launch_command = _bound_external_archive_launch_command(
+        launch_command,
+        evaluation=final_evaluation,
+    )
+    if bound_launch_command is None:
+        denied_evaluation = _package_policy_override_evaluation(
+            final_evaluation,
+            decision="block",
+            policy_action="block",
+            title="External archive blocked",
+            summary="The inspected external archive could not be bound to the installer launch.",
+            harness_message="HOL Guard blocked an external archive whose digest-bound blob was unavailable.",
+            reason_code="external_archive_digest_mismatch",
+            reason_message="The inspected external archive changed or was not present in the installer command.",
+        )
+        denied = _package_protect_denied_after_final_boundary(
+            payload=payload,
+            authority=final_authority,
+            evaluation=denied_evaluation,
+            command=command,
+            store=store,
+            now=now,
+        )
+        _cleanup_external_archive_downloads(final_evaluation)
+        return denied
     authority = final_authority
     sanitized_intent = authority.intent
     artifact = authority.artifact
@@ -1805,7 +1954,7 @@ def build_package_protect_payload(
     risk_signals = final_projection.risk_signals
     try:
         execution = subprocess.run(
-            list(launch_command),
+            bound_launch_command,
             cwd=authority.launch_cwd,
             env=authority.launch_environment,
             capture_output=True,
@@ -1833,6 +1982,7 @@ def build_package_protect_payload(
             },
             now,
         )
+        _cleanup_external_archive_downloads(final_evaluation)
         return (payload, 1)
     payload["execution"] = _build_command_execution_payload(
         stdout=execution.stdout,
@@ -1872,6 +2022,7 @@ def build_package_protect_payload(
             },
             now,
         )
+    _cleanup_external_archive_downloads(final_evaluation)
     return (payload, int(execution.returncode))
 
 
@@ -2652,8 +2803,10 @@ def _package_approval_identity(
                 "ecosystem": _string_value(target.get("ecosystem")),
                 "package_name": _string_value(target.get("package_name")),
                 "raw_spec": _string_value(target.get("raw_spec")),
+                "raw_spec_hash": _string_value(target.get("raw_spec_hash")),
                 "requested_specifier": _string_value(target.get("requested_specifier")),
-                "source_url_hash": (
+                "source_url_hash": _string_value(target.get("source_url_hash"))
+                or (
                     stable_digest_hex(source_url.encode("utf-8"))
                     if (source_url := _string_value(target.get("source_url"))) is not None
                     else None
@@ -4048,21 +4201,25 @@ def _matched_advisories(evaluation: object) -> list[dict[str, object]]:
 
 
 def _protect_target_payload(target: PackageIntentTarget) -> dict[str, object]:
+    public_target = target.to_dict()
+    raw_spec = str(public_target.get("raw_spec") or "")
+    source_url = _string_value(public_target.get("source_url"))
     return {
-        "artifact_id": f"{target.ecosystem}:{target.package_name or target.raw_spec}",
-        "artifact_name": target.package_name or target.raw_spec,
+        "artifact_id": f"{target.ecosystem}:{target.package_name or raw_spec}",
+        "artifact_name": target.package_name or raw_spec,
         "artifact_type": "package_request",
         "ecosystem": target.ecosystem,
         "package_name": target.package_name,
         "package_url": None,
-        "raw_spec": target.raw_spec,
+        "raw_spec": raw_spec,
         "version": target.requested_specifier,
-        "source_url": target.source_url,
+        "source_url": source_url,
         "harness": _LOCAL_SUPPLY_CHAIN_HARNESS,
     }
 
 
 def _redact_command_token(token: str) -> str:
+    token = redact_package_request_token(token)
     if "=" in token:
         key, _, _ = token.partition("=")
         if any(fragment in key.lower() for fragment in ("token", "secret", "api_key", "api-key", "password")):
