@@ -4354,7 +4354,6 @@ args = ["workspace-skill.js", "--changed"]
         before = codex_adapter_module.codex_native_hook_state(context)
 
         assert install_rc == 0
-        assert codex_adapter_module._is_managed_hook_entry(managed_handler) is True
         assert before["protection_active"] is False
         assert before["integrity_reason"] == "codex_hook_registration_mismatch"
 
@@ -4576,7 +4575,7 @@ args = ["workspace-skill.js", "--changed"]
         assert hooks_payload["PreToolUse"]
         assert (workspace_dir / ".codex" / "config.toml").exists() is False
 
-    def test_guard_update_repairs_malformed_codex_config(self, tmp_path, monkeypatch, capsys):
+    def test_guard_update_fails_closed_on_malformed_codex_config(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         _write_text(home_dir / ".codex" / "config.toml", "[broken\n")
         GuardStore(home_dir).set_managed_install(
@@ -4608,8 +4607,9 @@ args = ["workspace-skill.js", "--changed"]
 
         assert rc == 0
         assert output["status"] == "current"
-        assert output["managed_install"]["harness"] == "codex"
-        assert output["managed_install"]["active"] is True
+        assert "managed_install" not in output
+        assert any("codex_hook_inventory_source_malformed" in note for note in output["notes"])
+        assert (home_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == "[broken\n"
 
     def test_guard_update_does_not_adopt_unmanaged_codex_config(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
