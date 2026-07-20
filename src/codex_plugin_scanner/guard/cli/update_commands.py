@@ -26,6 +26,7 @@ from packaging.version import InvalidVersion, Version
 
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
+from ..adapters.cursor_hooks import cursor_native_hook_state
 from ..adapters.opencode_pretool import (
     global_plugin_path,
     install_pretool_plugin,
@@ -1971,10 +1972,63 @@ def _repair_supported_harnesses_in_process(
     )
     repaired_installs = [repaired_codex] if repaired_codex is not None else []
     repair_notes = [codex_warning] if codex_warning is not None else []
+    repaired_cursor, cursor_warning = _repair_cursor_install(
+        context=context,
+        store=store,
+        workspace=workspace,
+        now=now,
+    )
+    if repaired_cursor is not None:
+        repaired_installs.append(repaired_cursor)
+    if cursor_warning is not None:
+        repair_notes.append(cursor_warning)
     opencode_note = _refresh_opencode_pretool_plugin(context=context, store=store)
     if opencode_note is not None:
         repair_notes.append(opencode_note)
     return repaired_installs, repair_notes
+
+
+def _repair_cursor_install(
+    *,
+    context: HarnessContext,
+    store: GuardStore,
+    workspace: str | None,
+    now: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    try:
+        managed_install = store.get_managed_install("cursor")
+    except (json.JSONDecodeError, sqlite3.Error):
+        return None, None
+    if managed_install is None or not bool(managed_install.get("active")):
+        return None, None
+    manifest = managed_install.get("manifest")
+    if not isinstance(manifest, dict):
+        return None, "Could not inspect Cursor protection during update: managed manifest is invalid"
+    surface_value = manifest.get("surface")
+    surface = surface_value if surface_value in {"editor", "all"} else None
+    if surface is None:
+        return None, None
+    repair_context, repair_workspace = _repair_context_from_managed_install(context, managed_install)
+    hook_state = cursor_native_hook_state(repair_context)
+    if hook_state["protection_active"] is True:
+        return None, None
+    try:
+        payload = apply_managed_install(
+            "install",
+            "cursor",
+            False,
+            repair_context,
+            store,
+            repair_workspace or workspace,
+            now,
+            surface=surface,
+        )
+    except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
+        return None, f"Could not repair Cursor protection during update: {error}"
+    repaired = payload.get("managed_install")
+    if not isinstance(repaired, dict):
+        return None, "Could not repair Cursor protection during update: managed install was not recorded"
+    return repaired, None
 
 
 def _refresh_opencode_pretool_plugin(
