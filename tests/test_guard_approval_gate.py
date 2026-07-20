@@ -1925,8 +1925,7 @@ def test_approval_gate_allow_once_requires_password_prompt(tmp_path: Path, monke
     artifact_payload = resolved["artifacts"][0]
     assert artifact_payload["policy_action"] == "allow"
     assert artifact_payload["user_override"] == "allow-once"
-    receipts = store.list_receipts(limit=5)
-    assert any(item.get("user_override") == "allow-once" for item in receipts)
+    assert store.list_receipts(limit=5) == []
 
 
 def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashing(

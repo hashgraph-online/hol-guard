@@ -161,6 +161,18 @@ def test_pi_hook_response_includes_resume_poll_metadata_for_pending_approval() -
     }
 
 
+def test_pi_hook_response_denies_unsatisfied_review() -> None:
+    payload = pi_hook_response_from_guard(
+        policy_action="review",
+        reason="Review in HOL Guard.",
+    )
+
+    assert payload == {
+        "decision": "deny",
+        "reason": "Review in HOL Guard.",
+    }
+
+
 class TestSafeResumeMetadata:
     """3 tests: union normalization, unsafe/blank dropping, merge precedence."""
 

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from ..runtime.hook_review_types import HookOutputSummary, HookSourceFileRef
     from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
     from .commands_support_claude_approval import _persist_claude_guard_question_decision
+    from .commands_support_connect import _synced_policy_payload
     from .commands_support_hook_payload import _hook_action_envelope, _load_hook_payload, _normalize_hook_payload
     from .commands_support_interaction import _emit
     from .commands_support_permission_store import (
@@ -144,11 +145,30 @@ def _run_guard_hook_command(
             payload=payload,
             home_dir=context.home_dir,
             workspace=runtime_workspace,
+            config=config,
             preferred_workspace_config="ide" if workspace_was_explicit else "cli",
         )
         if args.harness == "copilot"
         else None
     )
+
+    def fresh_copilot_tool_call_authority():
+        fresh_config = overlay_synced_guard_policy(
+            load_guard_config(guard_home, workspace=runtime_workspace),
+            _synced_policy_payload(store),
+        )
+        fresh_tool_call = _copilot_runtime_tool_call(
+            payload=payload,
+            home_dir=context.home_dir,
+            workspace=runtime_workspace,
+            config=fresh_config,
+            preferred_workspace_config="ide" if workspace_was_explicit else "cli",
+        )
+        if fresh_tool_call is None:
+            return None
+        fresh_artifact, fresh_artifact_hash, fresh_arguments = fresh_tool_call
+        return fresh_config, fresh_artifact, fresh_artifact_hash, fresh_arguments
+
     result = _run_hook_copilot_pretool(
         args,
         action_envelope=action_envelope,
@@ -160,6 +180,7 @@ def _run_guard_hook_command(
         payload=payload,
         runtime_workspace=runtime_workspace,
         store=store,
+        fresh_tool_call_authority_provider=fresh_copilot_tool_call_authority,
     )
     if result is not None:
         return result
@@ -168,6 +189,7 @@ def _run_guard_hook_command(
             payload=payload,
             home_dir=context.home_dir,
             workspace=runtime_workspace,
+            config=config,
             preferred_workspace_config="ide" if workspace_was_explicit else "cli",
         )
         if args.harness == "copilot" and _is_copilot_permission_request(payload)
@@ -185,6 +207,7 @@ def _run_guard_hook_command(
         payload=payload,
         runtime_workspace=runtime_workspace,
         store=store,
+        fresh_tool_call_authority_provider=fresh_copilot_tool_call_authority,
     )
     if result is not None:
         return result
@@ -233,6 +256,65 @@ def _run_guard_hook_command(
     ):
         return 0
     if runtime_artifact is not None:
+
+        def evaluate_fresh_runtime_artifact(
+            *,
+            claimed_saved_allow_hash: str | None = None,
+            claimed_trusted_request_override: bool = False,
+            trusted_request_override_hash: str | None = None,
+        ):
+            fresh_config = overlay_synced_guard_policy(
+                load_guard_config(guard_home, workspace=runtime_workspace),
+                _synced_policy_payload(store),
+            )
+            fresh_action_envelope = _hook_action_envelope(
+                harness=args.harness,
+                payload=payload,
+                home_dir=context.home_dir,
+                workspace=runtime_workspace,
+            )
+            fresh_data_flow_signals = _runtime_action_data_flow_signals(
+                fresh_action_envelope,
+                workspace=runtime_workspace,
+            )
+            fresh_runtime_artifact = _hook_runtime_artifact(
+                harness=args.harness,
+                payload=payload,
+                action_envelope=fresh_action_envelope,
+                data_flow_signals=fresh_data_flow_signals,
+                home_dir=context.home_dir,
+                guard_home=context.guard_home,
+                workspace=runtime_workspace,
+            )
+            if fresh_runtime_artifact is None:
+                return None
+            return _evaluate_runtime_artifact_hook(
+                args,
+                action_envelope=fresh_action_envelope,
+                config=fresh_config,
+                context=context,
+                data_flow_signals=fresh_data_flow_signals,
+                guard_home=guard_home,
+                payload=payload,
+                runtime_artifact=fresh_runtime_artifact,
+                runtime_workspace=runtime_workspace,
+                store=store,
+                trusted_request_override_hash=trusted_request_override_hash,
+                post_claim_revalidator=(revalidate_runtime_after_claim if claimed_saved_allow_hash is None else None),
+                _claimed_saved_allow_hash=claimed_saved_allow_hash,
+                _claimed_trusted_request_override=claimed_trusted_request_override,
+                _claim_saved_approval=claimed_saved_allow_hash is None,
+            )
+
+        def revalidate_runtime_after_claim(
+            claimed_artifact_hash: str,
+            trusted_request_override: bool,
+        ):
+            return evaluate_fresh_runtime_artifact(
+                claimed_saved_allow_hash=claimed_artifact_hash,
+                claimed_trusted_request_override=trusted_request_override,
+            )
+
         evaluated = _evaluate_runtime_artifact_hook(
             args,
             action_envelope=action_envelope,
@@ -244,6 +326,7 @@ def _run_guard_hook_command(
             runtime_artifact=runtime_artifact,
             runtime_workspace=runtime_workspace,
             store=store,
+            post_claim_revalidator=revalidate_runtime_after_claim,
         )
         if isinstance(evaluated, int):
             return evaluated
@@ -261,6 +344,13 @@ def _run_guard_hook_command(
         )
         if result is not None:
             return result
+
+        def revalidate_after_browser_wait():
+            fresh_evaluation = evaluate_fresh_runtime_artifact(
+                trusted_request_override_hash=evaluated.runtime_artifact_hash,
+            )
+            return fresh_evaluation if not isinstance(fresh_evaluation, int) else None
+
         return _finalize_runtime_artifact_hook(
             evaluated,
             args,
@@ -268,7 +358,33 @@ def _run_guard_hook_command(
             output_stream=output_stream,
             payload=payload,
             store=store,
+            post_wait_revalidator=revalidate_after_browser_wait,
         )
+
+    def revalidate_generic_after_claim(claimed_artifact_hash: str) -> int:
+        fresh_config = overlay_synced_guard_policy(
+            load_guard_config(guard_home, workspace=runtime_workspace),
+            _synced_policy_payload(store),
+        )
+        fresh_action_envelope = _hook_action_envelope(
+            harness=args.harness,
+            payload=payload,
+            home_dir=context.home_dir,
+            workspace=runtime_workspace,
+        )
+        return _run_hook_generic_payload(
+            args,
+            action_envelope=fresh_action_envelope,
+            config=fresh_config,
+            home_dir=context.home_dir,
+            output_stream=output_stream,
+            payload=payload,
+            runtime_workspace=runtime_workspace,
+            store=store,
+            _claimed_saved_allow_hash=claimed_artifact_hash,
+            _claim_saved_approval=False,
+        )
+
     return _run_hook_generic_payload(
         args,
         action_envelope=action_envelope,
@@ -278,6 +394,7 @@ def _run_guard_hook_command(
         payload=payload,
         runtime_workspace=runtime_workspace,
         store=store,
+        post_claim_revalidator=revalidate_generic_after_claim,
     )
 
 

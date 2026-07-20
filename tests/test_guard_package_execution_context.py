@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from codex_plugin_scanner.guard.approval_scope_support import (
@@ -267,6 +268,105 @@ def test_lockfile_executable_and_proxy_environment_each_rekey_context(tmp_path: 
         proxy_changed,
         "environment_policy",
     )
+
+
+def test_script_backed_manager_binds_env_selected_interpreter_content_and_path(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    manager_bin = tmp_path / "manager-bin"
+    first_runtime_bin = tmp_path / "first-runtime"
+    second_runtime_bin = tmp_path / "second-runtime"
+    for directory in (manager_bin, first_runtime_bin, second_runtime_bin):
+        directory.mkdir()
+    manager = manager_bin / "pnpm"
+    manager.write_text("#!/usr/bin/env node\n// package manager\n", encoding="utf-8")
+    manager.chmod(0o755)
+    first_node = first_runtime_bin / "node"
+    second_node = second_runtime_bin / "node"
+    first_node.write_bytes(b"node-runtime-v1\n")
+    second_node.write_bytes(b"node-runtime-v1\n")
+    first_node.chmod(0o755)
+    second_node.chmod(0o755)
+    home = tmp_path / "home"
+    home.mkdir()
+    artifact = _artifact()
+    first_environment = {
+        "PATH": os.pathsep.join((str(manager_bin), str(first_runtime_bin))),
+        "HOME": str(home),
+    }
+    second_environment = {
+        "PATH": os.pathsep.join((str(manager_bin), str(second_runtime_bin))),
+        "HOME": str(home),
+    }
+
+    first = _context(workspace, artifact, first_environment)
+    unchanged = _context(workspace, artifact, first_environment)
+    path_changed = _context(workspace, artifact, second_environment)
+    first_node.write_bytes(b"node-runtime-v2\n")
+    first_node.chmod(0o755)
+    content_changed = _context(workspace, artifact, first_environment)
+
+    assert first.portable is True
+    assert first.digest == unchanged.digest
+    component = "package_manager_executable"
+    assert _component_digest(first, component) != _component_digest(path_changed, component)
+    assert _component_digest(first, component) != _component_digest(content_changed, component)
+
+
+def test_script_backed_manager_binds_nested_python_module_loaded_by_shebang(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    runtime_bin = tmp_path / "runtime-bin"
+    runtime_bin.mkdir()
+    manager = runtime_bin / "pnpm"
+    manager.write_text("#!/usr/bin/env -S python -m bootstrap\n", encoding="utf-8")
+    manager.chmod(0o755)
+    python = runtime_bin / "python"
+    python.write_bytes(b"native-python-runtime\n")
+    python.chmod(0o755)
+    bootstrap = workspace / "bootstrap.py"
+    bootstrap.write_text("print('v1')\n", encoding="utf-8")
+    home = tmp_path / "home"
+    home.mkdir()
+    environment = {"PATH": str(runtime_bin), "HOME": str(home)}
+
+    before = _context(workspace, _artifact(), environment)
+    bootstrap.write_text("print('v2')\n", encoding="utf-8")
+    after = _context(workspace, _artifact(), environment)
+
+    assert before.portable is True
+    assert after.portable is True
+    assert _component_digest(before, "package_manager_executable") != _component_digest(
+        after,
+        "package_manager_executable",
+    )
+
+
+def test_unbound_nested_node_preload_in_shebang_disables_package_approval_reuse(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    runtime_bin = tmp_path / "runtime-bin"
+    runtime_bin.mkdir()
+    manager = runtime_bin / "pnpm"
+    manager.write_text("#!/usr/bin/env -S node --require ./preload.js\n", encoding="utf-8")
+    manager.chmod(0o755)
+    node = runtime_bin / "node"
+    node.write_bytes(b"native-node-runtime\n")
+    node.chmod(0o755)
+    (workspace / "preload.js").write_text("module.exports = {};\n", encoding="utf-8")
+    home = tmp_path / "home"
+    home.mkdir()
+    environment = {"PATH": str(runtime_bin), "HOME": str(home)}
+
+    first = _context(workspace, _artifact(), environment)
+    second = _context(workspace, _artifact(), environment)
+
+    assert first.portable is False
+    assert first.non_portable_reason == "package_manager_launch_identity_unavailable"
+    assert first.digest != second.digest
 
 
 def test_oversized_or_dynamic_configuration_is_not_portable(tmp_path: Path) -> None:

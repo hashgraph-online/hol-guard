@@ -79,6 +79,13 @@ _TIMEOUT_SECONDS = 1
 _RETRY_TIMEOUT_SECONDS = 1
 _CLOUD_INBOX_URL_RE = re.compile(r"https?://[^\s]+/guard/inbox/?", re.IGNORECASE)
 _LOCAL_REVIEW_INSTRUCTION = "Review this request in HOL Guard, then retry."
+_LOCAL_REVIEW_INSTRUCTION_RE = re.compile(re.escape(_LOCAL_REVIEW_INSTRUCTION), re.IGNORECASE)
+_LOCAL_APPROVAL_INSTRUCTION_RE = re.compile(
+    r"\s*Open HOL Guard to approve or keep this blocked:\s*https?://\S+"
+    r"(?:\s+After you choose,\s+retry the same .*? action\.)?",
+    re.IGNORECASE,
+)
+_LOCAL_APPROVAL_REQUEST_URL_RE = re.compile(r"https?://[^\s]+/requests(?:/[^\s]*)?", re.IGNORECASE)
 _LOCKFILE_PARSE_BUDGET_SECONDS = 0.2
 _TRANSITIVE_BLOCK_CONFIDENCE_THRESHOLD = 900
 _NPM_REGISTRY_METADATA_BASE_URL = "https://registry.npmjs.org"
@@ -631,19 +638,25 @@ def _cached_cloud_validation_error_has_saved_policy(
         )
     except (ImportError, TypeError, ValueError, OSError):
         return False
-    decision = store.resolve_policy_decision(
+    lookup = store.resolve_policy_decision_lookup(
         artifact.harness,
         artifact.artifact_id,
         artifact_hash,
         str(workspace_dir),
         artifact.publisher,
         now,
+        consume_one_shot=False,
     )
+    decision = lookup["decision"]
     if not isinstance(decision, dict):
         return False
     if _stored_package_policy_is_stale_policy_bundle_family(decision, store=store):
         return False
-    return decision.get("action") in {"allow", "block"}
+    # This cache-error probe does not have the current Guard/sandbox context,
+    # so it cannot establish exact v1 approval reuse. A stored block remains a
+    # conservative reason to keep the cached block; an allow must proceed to a
+    # full uncached evaluation and the normal current-context launch gate.
+    return decision.get("action") == "block"
 
 
 def _evaluation_has_reason_code(evaluation: PackageRequestEvaluation, code: str) -> bool:
@@ -1026,7 +1039,14 @@ def _normalize_package_user_copy(user_copy: SupplyChainUserCopy, *, policy_actio
     harness_message = _CLOUD_INBOX_URL_RE.sub("", user_copy.harness_message or "").strip()
     harness_message = " ".join(harness_message.split())
     harness_message = _strip_review_evidence_tail(harness_message)
-    needs_local_review = policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
+    terminal_action = policy_action in {"sandbox-required", "block"}
+    if terminal_action:
+        dashboard_url = None
+        harness_message = _LOCAL_APPROVAL_INSTRUCTION_RE.sub("", harness_message)
+        harness_message = _LOCAL_APPROVAL_REQUEST_URL_RE.sub("", harness_message)
+        harness_message = _LOCAL_REVIEW_INSTRUCTION_RE.sub("", harness_message)
+        harness_message = " ".join(harness_message.split()).strip()
+    needs_local_review = policy_action in {"review", "require-reapproval"}
     if needs_local_review and _LOCAL_REVIEW_INSTRUCTION.lower() not in harness_message.lower():
         harness_message = f"{harness_message} {_LOCAL_REVIEW_INSTRUCTION}".strip()
     return replace(user_copy, dashboard_url=dashboard_url, harness_message=harness_message)
@@ -3815,7 +3835,7 @@ def _matching_policy_rule(
                     continue
             except ValueError:
                 pass
-        if rule.harness_selector is not None and rule.harness_selector != harness:
+        if rule.harness_selector not in {None, "*", harness}:
             continue
         if rule.ecosystem_selector is not None and rule.ecosystem_selector != target["ecosystem"]:
             continue

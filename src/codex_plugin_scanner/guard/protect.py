@@ -7,6 +7,7 @@ import json
 import os
 import shlex
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -116,6 +117,7 @@ def build_protect_payload(
     dry_run: bool,
     now: str,
     config: GuardConfig | None = None,
+    current_config_provider: Callable[[], GuardConfig] | None = None,
     unsafe_raw_output: bool = False,
 ) -> tuple[dict[str, object], int]:
     """Evaluate and optionally execute an install command."""
@@ -126,7 +128,12 @@ def build_protect_payload(
     advisories = store.list_cached_advisories(limit=None)
     cached_verdict = evaluate_protect_request(request, advisories)
     cached_gate = cached_verdict.blocking
+    cached_policy_context = _cached_advisory_policy_context(cached_verdict)
     from .local_supply_chain import build_package_protect_payload
+
+    def current_cached_advisory_authority() -> tuple[object | None, dict[str, object] | None]:
+        current_verdict = evaluate_protect_request(request, store.list_cached_advisories(limit=None))
+        return current_verdict.action, _cached_advisory_policy_context(current_verdict)
 
     package_payload = build_package_protect_payload(
         command=command,
@@ -138,18 +145,21 @@ def build_protect_payload(
         config=config,
         unsafe_raw_output=unsafe_raw_output,
         timeout_seconds=_protect_command_timeout_seconds(),
+        additional_current_action=cached_verdict.action,
+        additional_policy_context=cached_policy_context,
+        current_config_provider=current_config_provider,
+        additional_authority_provider=current_cached_advisory_authority,
     )
     if package_payload is not None:
-        if cached_gate and not _package_saved_approval_covers_current_gate(
-            package_payload[0],
-            store=store,
-            workspace_dir=workspace_dir,
-            command=command,
-            now=now,
+        current_cached_verdict = evaluate_protect_request(request, store.list_cached_advisories(limit=None))
+        if (
+            current_cached_verdict.blocking
+            and package_payload[0].get("executed") is False
+            and not _package_payload_uses_saved_approval(package_payload[0])
         ):
             return _merge_cached_advisory_into_package_payload(
                 package_payload,
-                cached_verdict=cached_verdict,
+                cached_verdict=current_cached_verdict,
                 requested_dry_run=dry_run,
                 store=store,
                 now=now,
@@ -232,31 +242,16 @@ def build_protect_payload(
     return (payload, int(execution.returncode))
 
 
-def _package_saved_approval_covers_current_gate(
-    payload: dict[str, object],
-    *,
-    store: Any,
-    workspace_dir: Path,
-    command: list[str],
-    now: str,
-) -> bool:
-    if not _package_payload_uses_saved_approval(payload):
-        return False
-    receipt = payload.get("receipt")
-    if not isinstance(receipt, dict):
-        return False
-    stored_hash = receipt.get("artifact_hash")
-    if not isinstance(stored_hash, str) or not stored_hash:
-        return False
-    from .local_supply_chain import recompute_package_protect_artifact_hash
+def _cached_advisory_policy_context(verdict: ProtectVerdict) -> dict[str, object]:
+    """Return the complete cached-advisory authority bound to package approval reuse."""
 
-    current_hash = recompute_package_protect_artifact_hash(
-        command,
-        store=store,
-        workspace_dir=workspace_dir,
-        now=now,
-    )
-    return current_hash == stored_hash
+    return {
+        "action": verdict.action,
+        "matched_advisories": [dict(advisory) for advisory in verdict.matched_advisories],
+        "reason": verdict.reason,
+        "risk_signals": list(verdict.risk_signals),
+        "version": 1,
+    }
 
 
 def _package_payload_uses_saved_approval(payload: dict[str, object]) -> bool:
@@ -340,6 +335,7 @@ def _merge_cached_advisory_into_package_payload(
             receipt_id = updated_receipt.get("receipt_id")
             if isinstance(receipt_id, str) and receipt_id:
                 store.update_receipt_policy_decision(receipt_id, merged_action)
+        if action_changed:
             request = payload.get("request")
             executor = request.get("executor") if isinstance(request, dict) else None
             install_kind = request.get("install_kind") if isinstance(request, dict) else None

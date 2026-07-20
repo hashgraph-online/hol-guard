@@ -47,6 +47,7 @@ from .models import (
 from .package_execution_context import package_execution_context_from_scanner_evidence
 from .redaction import redact_text
 from .risk import artifact_risk_signals, artifact_risk_summary
+from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
 from .store import (
     GuardStore,
@@ -408,11 +409,7 @@ def queue_blocked_approvals(
             unknown_action="require-reapproval",
         )
         policy_action = normalization.action
-        if policy_action not in {
-            "block",
-            "sandbox-required",
-            "require-reapproval",
-        }:
+        if policy_action not in {"require-reapproval", "review"}:
             continue
         scanner_evidence = _item_scanner_evidence(item)
         if not normalization.recognized:
@@ -429,6 +426,13 @@ def queue_blocked_approvals(
         artifact_id = str(item.get("artifact_id") or "")
         if not artifact_id:
             continue
+        approval_context_hash = item.get("approval_context_hash")
+        request_artifact_hash = (
+            approval_context_hash
+            if isinstance(approval_context_hash, str)
+            and parse_approval_context_token(approval_context_hash) is not None
+            else str(item.get("artifact_hash") or "unknown")
+        )
         artifact = artifacts_by_id.get(artifact_id)
         request_id = uuid.uuid4().hex
         risk_summary = _item_risk_summary(item, artifact)
@@ -458,7 +462,7 @@ def queue_blocked_approvals(
             artifact_id=artifact_id,
             artifact_name=_artifact_name(item, artifact_id),
             artifact_type=artifact.artifact_type if artifact is not None else "artifact",
-            artifact_hash=str(item.get("artifact_hash") or "unknown"),
+            artifact_hash=request_artifact_hash,
             policy_action=policy_action,
             recommended_scope="publisher" if artifact is not None and artifact.publisher else "artifact",
             changed_fields=tuple(_string_list(item.get("changed_fields"))),
@@ -501,6 +505,24 @@ def queue_blocked_approvals(
     return queued
 
 
+def evaluation_has_terminal_policy_action(evaluation: Mapping[str, object]) -> bool:
+    """Return whether an evaluation contains a non-overridable policy action."""
+
+    artifacts = evaluation.get("artifacts")
+    if not isinstance(artifacts, list):
+        return False
+    for item in artifacts:
+        if not isinstance(item, Mapping):
+            continue
+        action = normalize_guard_action_result(
+            item.get("policy_action"),
+            unknown_action="require-reapproval",
+        ).action
+        if action in {"block", "sandbox-required"}:
+            return True
+    return False
+
+
 def apply_approval_resolution(
     *,
     store: GuardStore,
@@ -529,6 +551,10 @@ def apply_approval_resolution(
     workspace_artifact_id, workspace_artifact_hash = _workspace_policy_artifact_keys(request, scope)
     request_artifact_id = _string_or_none(request.get("artifact_id"))
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
+    approval_context_token = (
+        request_artifact_hash if parse_approval_context_token(request_artifact_hash) is not None else None
+    )
+    exact_context_allow = action == "allow" and approval_context_token is not None
     request_publisher = _string_or_none(request.get("publisher"))
     resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
     portable_package_workspace = package_request_portable_workspace_scope(
@@ -541,15 +567,23 @@ def apply_approval_resolution(
         resolved_workspace = portable_package_workspace
     scoped_artifact_id = request_artifact_id if scope in {"artifact", "harness", "global"} else workspace_artifact_id
     scoped_artifact_hash = request_artifact_hash if scope == "artifact" else workspace_artifact_hash
-    artifact_runtime_exact_match_key = _artifact_scope_runtime_exact_match_key(request, scope)
-    if artifact_runtime_exact_match_key is not None:
-        scoped_artifact_hash = artifact_runtime_exact_match_key
-    broad_runtime_exact_match_key = _broad_runtime_exact_match_key(request, scope)
-    if broad_runtime_exact_match_key is not None:
-        scoped_artifact_hash = broad_runtime_exact_match_key
-    browser_mcp_exact_key = _browser_mcp_exact_match_key(request, scope)
-    if browser_mcp_exact_key is not None:
-        scoped_artifact_hash = browser_mcp_exact_key
+    if exact_context_allow:
+        # The token already binds the exact request across every security
+        # dimension. Broad scopes remain match selectors; they do not discard
+        # this exact approval identity or turn it into a broad permission.
+        scoped_artifact_hash = approval_context_token
+        if scope in {"artifact", "workspace", "harness", "global"}:
+            scoped_artifact_id = request_artifact_id
+    else:
+        artifact_runtime_exact_match_key = _artifact_scope_runtime_exact_match_key(request, scope)
+        if artifact_runtime_exact_match_key is not None:
+            scoped_artifact_hash = artifact_runtime_exact_match_key
+        broad_runtime_exact_match_key = _broad_runtime_exact_match_key(request, scope)
+        if broad_runtime_exact_match_key is not None:
+            scoped_artifact_hash = broad_runtime_exact_match_key
+        browser_mcp_exact_key = _browser_mcp_exact_match_key(request, scope)
+        if browser_mcp_exact_key is not None:
+            scoped_artifact_hash = browser_mcp_exact_key
     decision = PolicyDecision(
         harness="*" if scope == "global" else str(request["harness"]),
         scope=scope,
@@ -628,7 +662,7 @@ def apply_approval_resolution(
                 raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
             if error == "not_found":
                 raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
-        if resolve_scope_matches:
+        if resolve_scope_matches and not exact_context_allow:
             resolved_scope_ids = store.resolve_matching_approval_requests(
                 harness=resolution_harness,
                 scope=scope,
@@ -658,7 +692,7 @@ def apply_approval_resolution(
         )
         return result
     resolved_ids: list[str] = []
-    if resolve_scope_matches:
+    if resolve_scope_matches and not exact_context_allow:
         resolved_ids = store.resolve_matching_approval_requests(
             harness=resolution_harness,
             scope=scope,
@@ -1199,6 +1233,13 @@ def wait_for_approval_requests(
     timeout_seconds: int,
     poll_interval: float = 0.01,
 ) -> dict[str, object]:
+    if not request_ids:
+        return {
+            "resolved": False,
+            "pending_request_ids": [],
+            "items": [],
+            "reason": "no_approval_requests",
+        }
     deadline = time.monotonic() + max(timeout_seconds, 0)
     while True:
         items = [store.get_approval_request(request_id) for request_id in request_ids]
@@ -1259,6 +1300,9 @@ def _artifact_type(item: dict[str, object]) -> str:
 
 
 def _workspace_scope_target(item: dict[str, object], artifact) -> str | None:
+    effective_workspace = item.get("effective_workspace")
+    if isinstance(effective_workspace, str) and effective_workspace.strip():
+        return effective_workspace.strip()
     config_path = _config_path(item, artifact)
     if not config_path:
         return None

@@ -679,6 +679,33 @@ args = ["workspace-skill.js"]
     _write_text(workspace_dir / ".opencode" / "commands" / "triage.md", "# triage\n")
 
 
+def _build_stable_guard_fixture(home_dir: Path, workspace_dir: Path) -> None:
+    """Build the broad fixture with deterministic, non-network Codex servers."""
+
+    _build_guard_fixture(home_dir, workspace_dir)
+    global_server = home_dir / "guard-test-servers" / "global_tools.py"
+    workspace_server = workspace_dir / "guard-test-servers" / "workspace_skill.py"
+    _write_text(global_server, "raise SystemExit(0)\n")
+    _write_text(workspace_server, "raise SystemExit(0)\n")
+    _write_text(
+        home_dir / ".codex" / "config.toml",
+        (
+            'approval_policy = "never"\n\n'
+            "[mcp_servers.global_tools]\n"
+            f"command = {json.dumps(sys.executable)}\n"
+            f"args = [{json.dumps(str(global_server))}]\n"
+        ),
+    )
+    _write_text(
+        workspace_dir / ".codex" / "config.toml",
+        (
+            "[mcp_servers.workspace_skill]\n"
+            f"command = {json.dumps(sys.executable)}\n"
+            f"args = [{json.dumps(str(workspace_server))}]\n"
+        ),
+    )
+
+
 class _SyncRequestHandler(BaseHTTPRequestHandler):
     response_code = 200
     captured_headers: ClassVar[dict[str, str]] = {}
@@ -1850,7 +1877,7 @@ args = ["workspace-skill.js"]
     def test_guard_run_persists_receipts_and_policy(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
+        _build_stable_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
 
         rc = main(
@@ -1934,7 +1961,7 @@ args = ["workspace-skill.js"]
     def test_guard_run_blocked_human_output_lists_review_commands(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
+        _build_stable_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
 
         first_run = main(
@@ -2229,7 +2256,7 @@ args = ["workspace-skill.js", "--changed"]
     def test_guard_inventory_and_abom_export_local_artifacts(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
+        _build_stable_guard_fixture(home_dir, workspace_dir)
 
         run_rc = main(
             [
@@ -2286,7 +2313,7 @@ args = ["workspace-skill.js", "--changed"]
     def test_guard_explain_uses_tracked_artifact_context(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
+        _build_stable_guard_fixture(home_dir, workspace_dir)
 
         run_rc = main(
             [
@@ -2326,7 +2353,7 @@ args = ["workspace-skill.js", "--changed"]
     def test_guard_explain_human_output_renders_tracked_artifact_context(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
+        _build_stable_guard_fixture(home_dir, workspace_dir)
 
         run_rc = main(
             [
@@ -2424,7 +2451,7 @@ args = ["workspace-skill.js", "--changed"]
     def test_guard_diff_reports_config_changes(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
+        _build_stable_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
 
         first_run = main(
@@ -2530,6 +2557,55 @@ args = ["workspace-skill.js", "--changed"]
 
         assert output["return_code"] == 7
         assert rc == 7
+
+    def test_guard_run_current_config_provider_reloads_local_and_synced_policy(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        captured: dict[str, GuardConfig] = {}
+
+        def fake_guard_run(*_args, **kwargs):
+            store = kwargs["store"]
+            current_config_provider = kwargs["current_config_provider"]
+            _write_text(store.guard_home / "config.toml", 'default_action = "warn"\n')
+            store.set_sync_payload(
+                "policy",
+                {"defaultAction": "block"},
+                "2026-07-17T00:00:00+00:00",
+            )
+            captured["config"] = current_config_provider()
+            return {
+                "harness": "codex",
+                "artifacts": [],
+                "blocked": False,
+                "receipts_recorded": 0,
+                "launched": False,
+            }
+
+        monkeypatch.setattr(guard_commands_module, "guard_run", fake_guard_run)
+
+        rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert captured["config"].default_action == "block"
+        assert captured["config"].workspace == workspace_dir.resolve()
 
     def test_guard_allow_requires_publisher_for_publisher_scope(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -6638,7 +6714,7 @@ url = http://127.0.0.1:8787/guard-canary
     def test_guard_login_and_sync_posts_receipts(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
+        _build_stable_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
         _SyncRequestHandler.response_payload = {
             "syncedAt": "2026-04-09T00:00:00Z",
@@ -6815,7 +6891,7 @@ url = http://127.0.0.1:8787/guard-canary
     def test_guard_connect_uses_browser_oauth_flow_without_pairing(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
+        _build_stable_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
         store = GuardStore(home_dir)
 
@@ -8591,7 +8667,7 @@ url = http://127.0.0.1:8787/guard-canary
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
+        _build_stable_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
         _SyncRequestHandler.response_payload = {
             "syncedAt": "2026-04-09T00:00:00Z",

@@ -7,7 +7,7 @@ import os
 import shlex
 import shutil
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
@@ -184,6 +184,41 @@ class HarnessAdapter:
         if context.workspace_dir is not None and self.harness in {"opencode", "claude-code"}:
             command.append(str(context.workspace_dir))
         return [*command, *passthrough_args]
+
+    def preview_launch_commands(
+        self,
+        context: HarnessContext,
+        passthrough_args: list[str],
+    ) -> tuple[list[str], ...]:
+        """Return every command the next launch preparation may select.
+
+        Implementations must be side-effect free. Adapters whose
+        ``launch_command`` is a pure argv constructor can inherit this default;
+        adapters that perform setup while selecting an argv must override it.
+        """
+
+        return (self.launch_command(context, passthrough_args),)
+
+    def launch_command_from_authorized_plan(
+        self,
+        context: HarnessContext,
+        passthrough_args: list[str],
+        *,
+        authorized_executable_prefixes: Sequence[Sequence[str]],
+        launch_environment: Mapping[str, str],
+    ) -> list[str]:
+        """Finalize a command only after its preview plans were authorized.
+
+        The default is suitable for adapters whose launch selection has no
+        setup-time subprocess side effects. Adapters that execute their
+        harness while preparing a launch must use the supplied canonical,
+        content-bound executable prefix instead of resolving the executable
+        again. ``launch_environment`` is the exact prepared environment whose
+        digest participated in the authority comparison.
+        """
+
+        del authorized_executable_prefixes, launch_environment
+        return self.launch_command(context, passthrough_args)
 
     def policy_path(self, context: HarnessContext) -> Path:
         if context.workspace_dir is not None:

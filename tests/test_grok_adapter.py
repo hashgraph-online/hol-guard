@@ -190,6 +190,10 @@ class TestGrokHookResponses:
         payload = grok_hook_response_from_guard(policy_action="block", reason="Blocked by HOL Guard.")
         assert payload == {"decision": "deny", "reason": "Blocked by HOL Guard."}
 
+    def test_unsatisfied_review_response_is_denied(self) -> None:
+        payload = grok_hook_response_from_guard(policy_action="review", reason="Review in HOL Guard.")
+        assert payload == {"decision": "deny", "reason": "Review in HOL Guard."}
+
     def test_emit_grok_hook_response_writes_json_line(self) -> None:
         stream = io.StringIO()
         emit_grok_hook_response(policy_action="allow", reason="", output_stream=stream)

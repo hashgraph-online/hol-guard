@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
+from ..synced_policy import synced_policy_payload as _synced_policy_payload
 
 
 def _connect_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
@@ -102,26 +103,6 @@ def _guard_doctor_latest_connect_state_payload(latest_state: dict[str, object]) 
     if isinstance(poll_after_ms, int):
         payload["poll_after_ms"] = poll_after_ms
     return payload
-
-def _synced_policy_payload(store: GuardStore) -> dict[str, object] | None:
-    policy_bundle = store.get_sync_payload("policy_bundle")
-    if isinstance(policy_bundle, dict):
-        policy_defaults = policy_bundle.get("policyDefaults")
-        if isinstance(policy_defaults, dict):
-            payload = dict(policy_defaults)
-            issued_at = _optional_string(policy_bundle.get("issuedAt"))
-            bundle_hash = _optional_string(policy_bundle.get("bundleHash"))
-            bundle_version = _optional_string(policy_bundle.get("bundleVersion"))
-            if issued_at is not None:
-                payload["updatedAt"] = issued_at
-            if bundle_hash is not None:
-                payload["bundleHash"] = bundle_hash
-            if bundle_version is not None:
-                payload["bundleVersion"] = bundle_version
-            return payload
-    payload = store.get_sync_payload("policy")
-    return payload if isinstance(payload, dict) else None
-
 
 _PERSISTED_POLICY_BUNDLE_REJECTION_REASONS = frozenset(
     {

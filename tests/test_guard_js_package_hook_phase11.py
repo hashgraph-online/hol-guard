@@ -17,6 +17,7 @@ from codex_plugin_scanner import install_integrity
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as package_eval_module
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -76,7 +77,9 @@ def _fingerprint(public_key_pem: bytes) -> str:
     return hashlib.sha256(public_key_pem.decode("utf-8").strip().encode("utf-8")).hexdigest()
 
 
-def _bundle_response(*, package_name: str, version: str, namespace: str | None = None) -> dict[str, object]:
+def _bundle_response(
+    *, package_name: str, version: str, namespace: str | None = None, action: str = "block"
+) -> dict[str, object]:
     generated_at = datetime(2026, 5, 19, tzinfo=timezone.utc)
     expires_at = generated_at + timedelta(hours=12)
     purl_name = f"{namespace}/{package_name}" if namespace is not None else package_name
@@ -104,7 +107,7 @@ def _bundle_response(*, package_name: str, version: str, namespace: str | None =
         "packages": [
             {
                 "confidence": 990,
-                "defaultAction": "block",
+                "defaultAction": action,
                 "ecosystem": "npm",
                 "exploitLevel": "active",
                 "knownExploited": True,
@@ -257,7 +260,10 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
     (workspace_dir / "package.json").write_text(
         '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n', encoding="utf-8"
     )
-    (workspace_dir / "bun.lock").write_text('"vitest": "4.1.8"\n', encoding="utf-8")
+    (workspace_dir / "bun.lock").write_text(
+        '[[package]]\nname = "vitest"\nversion = "4.1.8"\nresolved = "npm:vitest@4.1.8"\ndependencies = []\n',
+        encoding="utf-8",
+    )
     runner = workspace_dir / "node_modules" / ".bin" / "vitest"
     runner.parent.mkdir(parents=True)
     runner.write_text("#!/bin/sh\n", encoding="utf-8")
@@ -267,6 +273,32 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
     _write_codex_pre_tool_payload(payload_path, workspace_dir, command)
     store = GuardStore(home_dir)
     _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(package_name="vitest", version="4.1.8", action="allow"),
+        "2026-05-19T00:00:00Z",
+    )
+    (home_dir / "config.toml").write_text(
+        '[risk_actions]\npackage_script = "review"\n',
+        encoding="utf-8",
+    )
+
+    def raise_auth_expired(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+        raise guard_commands_module.GuardSyncAuthorizationExpiredError(
+            "Guard authorization expired. Run `hol-guard connect` to sign in again."
+        )
+
+    evaluate_package_request = guard_commands_module.evaluate_package_request_artifact
+    monkeypatch.setattr(
+        package_eval_module,
+        "_resolve_guard_sync_auth_context",
+        raise_auth_expired,
+    )
+    monkeypatch.setattr(
+        guard_commands_module,
+        "evaluate_package_request_artifact",
+        lambda **kwargs: evaluate_package_request(**kwargs, now="2026-05-19T01:00:00Z"),
+    )
     monkeypatch.setattr(install_integrity, "warn_if_shadowed", lambda: None)
 
     rc = main(
@@ -287,13 +319,19 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
 
     payload = json.loads(captured.out)
     assert rc == 0
-    assert "waiting for approval" in captured.err
+    assert captured.err == ""
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "review" in payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
-    assert store.list_approval_requests(limit=5)
+    decision_reason = payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert "needs your approval" in decision_reason
+    assert "open hol guard to approve" in decision_reason
+    approval_requests = store.list_approval_requests(limit=5)
+    assert approval_requests
+    assert approval_requests[0]["policy_action"] == "review"
     evidence = store.list_evidence()
     assert evidence
     assert evidence[0]["category"] == "supply-chain"
+    assert evidence[0]["details"]["decision"] == "monitor"
+    assert any(reason["code"] == "cloud_auth_error" for reason in evidence[0]["details"]["reasons"])
 
     request_id = str(store.list_approval_requests(limit=5)[0]["request_id"])
     apply_approval_resolution(
@@ -346,5 +384,8 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
 
     assert changed_rc == 0
     assert changed_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "waiting for approval" in changed_capture.err
-    assert len(store.list_approval_requests(status="pending", limit=5)) == 1
+    assert changed_capture.err == ""
+    assert "open hol guard to approve" in changed_payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    changed_requests = store.list_approval_requests(status="pending", limit=5)
+    assert len(changed_requests) == 1
+    assert changed_requests[0]["policy_action"] == "review"

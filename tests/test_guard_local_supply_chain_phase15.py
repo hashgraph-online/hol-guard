@@ -335,6 +335,14 @@ def test_guard_protect_receipt_keeps_matched_policy_rule_metadata(tmp_path: Path
     assert payload["supply_chain_evaluation"]["matched_rule_id"] == "policy-rule-1"
     action_envelope = dict(payload["receipt"]["action_envelope_json"])
     package_context = action_envelope.pop("package_execution_context")
+    assert action_envelope.pop("policy_action") == "warn"
+    assert action_envelope.pop("additional_policy_context") == {
+        "action": "allow",
+        "matched_advisories": [],
+        "reason": "Guard found no blocking advisory or risky install signal for this request.",
+        "risk_signals": [],
+        "version": 1,
+    }
     assert action_envelope == {
         "bundle_version": "1747612800000-deadbeef",
         "matched_rule_id": "policy-rule-1",

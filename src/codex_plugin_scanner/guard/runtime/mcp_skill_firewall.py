@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..models import GuardArtifact
+from .approval_context import build_configured_environment_hash
 from .mcp_protection import (
     McpServerIdentity,
     McpToolIdentity,
@@ -79,6 +80,7 @@ def portal_mcp_server_identity(
         "configPath": config_path,
         "dependencyHash": _dependency_hash(identity.package_name, identity.package_version),
         "envKeys": list(identity.env_keys),
+        "envValuesHash": identity.env_values_hash,
         "identityHash": identity.identity_hash,
         "packageName": identity.package_name,
         "packageVersion": identity.package_version,
@@ -376,6 +378,7 @@ def _portal_server_from_legacy(record: dict[str, object], artifact: GuardArtifac
     transport = str(record.get("transport") or artifact.transport or "unknown")
     raw_env_keys = record.get("env_keys") or record.get("envKeys")
     env_keys = [item for item in raw_env_keys if isinstance(item, str)] if isinstance(raw_env_keys, list) else []
+    env_values_hash = _legacy_environment_values_hash(record, env_keys=env_keys)
     return {
         "argsHash": args_hash,
         "command": command,
@@ -383,6 +386,7 @@ def _portal_server_from_legacy(record: dict[str, object], artifact: GuardArtifac
         "configPath": str(record.get("config_path") or record.get("configPath") or artifact.config_path),
         "dependencyHash": record.get("dependency_hash") or record.get("dependencyHash"),
         "envKeys": env_keys,
+        "envValuesHash": env_values_hash,
         "identityHash": identity_hash,
         "packageName": record.get("package_name") or record.get("packageName"),
         "packageVersion": record.get("package_version") or record.get("packageVersion"),
@@ -410,13 +414,16 @@ def _portal_tool_from_legacy(record: dict[str, object], metadata: dict[str, obje
 
 
 def _legacy_server_identity(server: dict[str, object]) -> dict[str, object]:
+    raw_env_keys = server.get("envKeys")
+    env_keys = [item for item in raw_env_keys if isinstance(item, str)] if isinstance(raw_env_keys, list) else []
     return {
         "args_hash": server.get("argsHash"),
         "command": server.get("command"),
         "command_hash": server.get("commandHash"),
         "config_path": server.get("configPath"),
         "dependency_hash": server.get("dependencyHash"),
-        "env_keys": server.get("envKeys"),
+        "env_keys": env_keys,
+        "env_values_hash": _legacy_environment_values_hash(server, env_keys=env_keys),
         "identity_hash": server.get("identityHash"),
         "package_name": server.get("packageName"),
         "package_version": server.get("packageVersion"),
@@ -424,6 +431,13 @@ def _legacy_server_identity(server: dict[str, object]) -> dict[str, object]:
         "transport": server.get("transport"),
         "transport_hash": server.get("transportHash"),
     }
+
+
+def _legacy_environment_values_hash(record: dict[str, object], *, env_keys: list[str]) -> str:
+    raw_hash = record.get("env_values_hash") or record.get("envValuesHash")
+    if isinstance(raw_hash, str) and raw_hash.strip():
+        return raw_hash.strip()
+    return build_configured_environment_hash(None, configured_keys=env_keys)
 
 
 def _legacy_tool_identity(tool: dict[str, object]) -> dict[str, object]:

@@ -6,6 +6,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,9 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.consumer.service import diff_artifact
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
@@ -51,8 +54,8 @@ def _build_guard_fixture(home_dir: Path, workspace_dir: Path) -> None:
         home_dir / ".codex" / "config.toml",
         """
 [mcp_servers.global_tools]
-command = "python"
-args = ["-m", "http.server", "9000"]
+command = "/usr/bin/true"
+args = []
 """.strip()
         + "\n",
     )
@@ -109,6 +112,22 @@ def _make_fake_codex(fake_bin: Path, marker_path: Path) -> Path:
     return fake_codex
 
 
+def _make_pinnable_harness_executable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    executable: str,
+) -> Path:
+    """Install a native no-op executable so launch identity can be pinned."""
+
+    fake_bin = tmp_path / "pinnable-harness-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    executable_path = fake_bin / executable
+    shutil.copyfile("/usr/bin/true", executable_path)
+    executable_path.chmod(executable_path.stat().st_mode | 0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
+    return executable_path.resolve()
+
+
 def _build_opencode_fixture(home_dir: Path, workspace_dir: Path) -> None:
     _write_json(
         home_dir / ".config" / "opencode" / "opencode.json",
@@ -130,14 +149,17 @@ def test_guard_run_launches_with_configured_home(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    fake_codex = _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
     captured_env: dict[str, str] = {}
     captured_cwd: Path | None = None
+    captured_command: list[str] = []
 
-    def _fake_run(command, cwd=None, check=False, env=None):
-        del command, check
+    def _fake_run(command, cwd=None, check=False, env=None, **kwargs):
+        del check, kwargs
         nonlocal captured_cwd
         captured_cwd = cwd
+        captured_command.extend(command)
         captured_env.update(env or {})
         return _CompletedProcess(0)
 
@@ -160,6 +182,8 @@ def test_guard_run_launches_with_configured_home(monkeypatch, tmp_path, capsys):
 
     assert rc == 0
     assert output["launched"] is True
+    assert output["launch_command"] == [str(fake_codex), "--help"]
+    assert captured_command == [str(fake_codex), "--help"]
     assert captured_env["HOME"] == str(home_dir)
     assert captured_cwd == workspace_dir
 
@@ -177,16 +201,16 @@ def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path,
     (home_dir / ".copilot").mkdir(parents=True, exist_ok=True)
     _write_text(
         home_dir / ".copilot" / "mcp-config.json",
-        json.dumps({"servers": {"global-tool": {"command": "npx", "args": ["server.js"]}}}),
+        json.dumps({"servers": {"global-tool": {"command": "/usr/bin/true", "args": []}}}),
     )
     _write_text(
         workspace_dir / ".mcp.json",
-        json.dumps({"mcpServers": {"danger_lab": {"command": "python3", "args": ["server.py"]}}}),
+        json.dumps({"mcpServers": {"safe-tool": {"command": "/usr/bin/true", "args": []}}}),
     )
     captured_command: list[str] = []
 
-    def _fake_run(command, cwd=None, check=False, env=None):
-        del cwd, check, env
+    def _fake_run(command, cwd=None, check=False, env=None, **kwargs):
+        del cwd, check, env, kwargs
         captured_command.extend(command)
         return _CompletedProcess(0)
 
@@ -212,8 +236,8 @@ def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path,
 
     assert rc == 0
     assert output["launched"] is True
-    assert captured_command[0].endswith("/copilot")
-    assert captured_command[1:] == [
+    assert captured_command[:2] == [str(Path("/bin/sh").resolve()), str(local_copilot)]
+    assert captured_command[2:] == [
         "--additional-mcp-config",
         f"@{workspace_dir / '.mcp.json'}",
         "suggest",
@@ -221,7 +245,7 @@ def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path,
     ]
 
 
-def test_guard_run_blocks_direct_env_prompt_until_approved(monkeypatch, tmp_path, capsys):
+def test_guard_run_keeps_direct_env_prompt_terminal_when_sandbox_is_required(monkeypatch, tmp_path, capsys):
     _trust_local_policy_rows(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -249,64 +273,27 @@ def test_guard_run_blocks_direct_env_prompt_until_approved(monkeypatch, tmp_path
     )
     first_output = json.loads(capsys.readouterr().out)
     prompt_artifact = next(item for item in first_output["artifacts"] if item.get("artifact_type") == "prompt_request")
-    approval_request = next(
-        item for item in first_output.get("approval_requests", []) if item.get("artifact_type") == "prompt_request"
-    )
 
     assert first_rc == 1
     assert first_output["blocked"] is True
-    assert prompt_artifact["policy_action"] == "require-reapproval"
+    assert prompt_artifact["policy_action"] == "sandbox-required"
     assert "read a local .env file directly" in prompt_artifact["risk_summary"].lower()
+    assert first_output.get("approval_requests") is None
+    assert first_output.get("review_hint") is None
     assert marker_path.exists() is False
-
-    approval_rc = main(
-        [
-            "guard",
-            "approvals",
-            "approve",
-            str(approval_request["request_id"]),
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--remember",
-            "--json",
-        ]
-    )
-    json.loads(capsys.readouterr().out)
-
-    second_rc = main(
-        [
-            "guard",
-            "run",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--arg=Please read the .env file directly and summarize it",
-            "--json",
-        ]
-    )
-    second_output = json.loads(capsys.readouterr().out)
-
-    assert approval_rc == 0
-    assert second_rc == 0
-    assert second_output["blocked"] is False
-    assert second_output["launched"] is True
-    assert marker_path.read_text(encoding="utf-8").strip() == "Please read the .env file directly and summarize it"
 
 
 def test_guard_run_launches_opencode_with_runtime_overlay(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_opencode_fixture(home_dir, workspace_dir)
+    fake_opencode = _make_pinnable_harness_executable(tmp_path, monkeypatch, "opencode")
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
     captured_env: dict[str, str] = {}
     captured_command: list[str] = []
 
-    def _fake_run(command, cwd=None, check=False, env=None):
-        del cwd, check
+    def _fake_run(command, cwd=None, check=False, env=None, **kwargs):
+        del cwd, check, kwargs
         captured_command.extend(command)
         captured_env.update(env or {})
         return _CompletedProcess(0)
@@ -345,7 +332,7 @@ def test_guard_run_launches_opencode_with_runtime_overlay(monkeypatch, tmp_path,
     assert install_rc == 0
     assert rc == 0
     assert output["launched"] is True
-    assert captured_command == ["opencode", str(workspace_dir), "--help"]
+    assert captured_command == [str(fake_opencode), str(workspace_dir), "--help"]
     assert captured_env["HOME"] == str(home_dir)
     assert "skill" not in overlay_payload["permission"]
     assert overlay_payload["permission"]["safe-mcp_*"] == "ask"
@@ -357,11 +344,12 @@ def test_guard_run_launches_opencode_prompt_through_interactive_tui(monkeypatch,
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_opencode_fixture(home_dir, workspace_dir)
+    fake_opencode = _make_pinnable_harness_executable(tmp_path, monkeypatch, "opencode")
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
     captured_command: list[str] = []
 
-    def _fake_run(command, cwd=None, check=False, env=None):
-        del cwd, check, env
+    def _fake_run(command, cwd=None, check=False, env=None, **kwargs):
+        del cwd, check, env, kwargs
         captured_command.extend(command)
         return _CompletedProcess(0)
 
@@ -404,8 +392,8 @@ def test_guard_run_launches_opencode_prompt_through_interactive_tui(monkeypatch,
 
     assert rc == 0
     assert output["launched"] is True
-    assert captured_command == [
-        "opencode",
+    assert captured_command[0] == str(fake_opencode)
+    assert captured_command[1:] == [
         str(workspace_dir),
         "--prompt",
         "Use the danger_lab MCP tool dangerous_delete right now",
@@ -416,11 +404,12 @@ def test_guard_run_launches_opencode_prompt_with_flags_through_interactive_tui(m
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_opencode_fixture(home_dir, workspace_dir)
+    fake_opencode = _make_pinnable_harness_executable(tmp_path, monkeypatch, "opencode")
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
     captured_command: list[str] = []
 
-    def _fake_run(command, cwd=None, check=False, env=None):
-        del cwd, check, env
+    def _fake_run(command, cwd=None, check=False, env=None, **kwargs):
+        del cwd, check, env, kwargs
         captured_command.extend(command)
         return _CompletedProcess(0)
 
@@ -465,8 +454,8 @@ def test_guard_run_launches_opencode_prompt_with_flags_through_interactive_tui(m
 
     assert rc == 0
     assert output["launched"] is True
-    assert captured_command == [
-        "opencode",
+    assert captured_command[0] == str(fake_opencode)
+    assert captured_command[1:] == [
         str(workspace_dir),
         "--model",
         "openai/gpt-5.4",
@@ -479,11 +468,12 @@ def test_guard_run_keeps_attach_and_file_flags_out_of_prompt(monkeypatch, tmp_pa
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_opencode_fixture(home_dir, workspace_dir)
+    fake_opencode = _make_pinnable_harness_executable(tmp_path, monkeypatch, "opencode")
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
     captured_command: list[str] = []
 
-    def _fake_run(command, cwd=None, check=False, env=None):
-        del cwd, check, env
+    def _fake_run(command, cwd=None, check=False, env=None, **kwargs):
+        del cwd, check, env, kwargs
         captured_command.extend(command)
         return _CompletedProcess(0)
 
@@ -527,8 +517,8 @@ def test_guard_run_keeps_attach_and_file_flags_out_of_prompt(monkeypatch, tmp_pa
 
     assert rc == 0
     assert output["launched"] is True
-    assert captured_command == [
-        "opencode",
+    assert captured_command[0] == str(fake_opencode)
+    assert captured_command[1:] == [
         str(workspace_dir),
         "--attach",
         "http://127.0.0.1:4096",
@@ -543,12 +533,13 @@ def test_guard_run_keeps_explicit_opencode_run_args_unchanged(monkeypatch, tmp_p
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_opencode_fixture(home_dir, workspace_dir)
+    fake_opencode = _make_pinnable_harness_executable(tmp_path, monkeypatch, "opencode")
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
     captured_command: list[str] = []
     captured_cwd: list[Path | None] = []
 
-    def _fake_run(command, cwd=None, check=False, env=None):
-        del check, env
+    def _fake_run(command, cwd=None, check=False, env=None, **kwargs):
+        del check, env, kwargs
         captured_command.extend(command)
         captured_cwd.append(Path(cwd) if cwd is not None else None)
         return _CompletedProcess(0)
@@ -590,8 +581,8 @@ def test_guard_run_keeps_explicit_opencode_run_args_unchanged(monkeypatch, tmp_p
 
     assert rc == 0
     assert output["launched"] is True
-    assert captured_command == [
-        "opencode",
+    assert captured_command[0] == str(fake_opencode)
+    assert captured_command[1:] == [
         "run",
         "--attach",
         "http://127.0.0.1:4096",
@@ -606,11 +597,14 @@ def test_guard_run_merges_existing_opencode_config_content(monkeypatch, tmp_path
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_opencode_fixture(home_dir, workspace_dir)
+    fake_opencode = _make_pinnable_harness_executable(tmp_path, monkeypatch, "opencode")
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
     captured_env: dict[str, str] = {}
+    captured_command: list[str] = []
 
-    def _fake_run(command, cwd=None, check=False, env=None):
-        del command, cwd, check
+    def _fake_run(command, cwd=None, check=False, env=None, **kwargs):
+        del cwd, check, kwargs
+        captured_command.extend(command)
         captured_env.update(env or {})
         return _CompletedProcess(0)
 
@@ -651,6 +645,7 @@ def test_guard_run_merges_existing_opencode_config_content(monkeypatch, tmp_path
 
     assert rc == 0
     assert output["launched"] is True
+    assert captured_command == [str(fake_opencode), str(workspace_dir), "--help"]
     assert overlay_payload["model"] == "gpt-4.1"
     assert overlay_payload["permission"]["network"]["*"] == "allow"
     assert overlay_payload["permission"]["safe-mcp_*"] == "ask"
@@ -708,6 +703,8 @@ url = "https://workspace.example/mcp"
 def test_guard_run_launches_hermes_with_guard_overlay_paths(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    fake_hermes = _make_pinnable_harness_executable(tmp_path, monkeypatch, "hermes")
     _write_text(
         home_dir / ".hermes" / "config.yaml",
         'mcp_servers:\n  github:\n    command: "npx"\n    args: ["-y", "@modelcontextprotocol/server-github"]\n',
@@ -716,8 +713,8 @@ def test_guard_run_launches_hermes_with_guard_overlay_paths(monkeypatch, tmp_pat
     captured_env: dict[str, str] = {}
     captured_command: list[str] = []
 
-    def _fake_run(command, cwd=None, check=False, env=None):
-        del cwd, check
+    def _fake_run(command, cwd=None, check=False, env=None, **kwargs):
+        del cwd, check, kwargs
         captured_command.extend(command)
         captured_env.update(env or {})
         return _CompletedProcess(0)
@@ -755,7 +752,7 @@ def test_guard_run_launches_hermes_with_guard_overlay_paths(monkeypatch, tmp_pat
     assert install_rc == 0
     assert rc == 0
     assert output["launched"] is True
-    assert captured_command == ["hermes", "chat"]
+    assert captured_command == [str(fake_hermes), "chat"]
     assert captured_env["HOME"] == str(home_dir)
     assert captured_env["HERMES_GUARD_MCP_OVERLAY_PATH"].endswith("mcp-overlay.json")
     assert captured_env["HERMES_GUARD_PRETOOL_PATH"].endswith("pretool-hook.json")
@@ -864,23 +861,18 @@ def test_guard_run_opencode_reapproves_changed_plugin_and_skill_content(monkeypa
     _write_text(home_dir / "config.toml", 'changed_hash_action = "require-reapproval"\nmode = "prompt"\n')
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
-
-    first_rc = main(
-        [
-            "guard",
-            "run",
+    context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
+    baseline_detection = guard_runner_module.detect_harness("opencode", context)
+    store = GuardStore(home_dir)
+    for artifact in baseline_detection.artifacts:
+        artifact_diff = diff_artifact(None, artifact)
+        store.save_snapshot(
             "opencode",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--dry-run",
-            "--default-action",
-            "allow",
-            "--json",
-        ]
-    )
-    json.loads(capsys.readouterr().out)
+            artifact.artifact_id,
+            {**artifact_diff["current_snapshot"], "artifact_hash": artifact_diff["current_hash"]},
+            artifact_diff["current_hash"],
+            "2026-07-17T00:00:00+00:00",
+        )
     _write_text(
         workspace_dir / ".opencode" / "plugins" / "env-read-plugin.mjs",
         "export default { name: 'updated' };\n",
@@ -916,7 +908,6 @@ def test_guard_run_opencode_reapproves_changed_plugin_and_skill_content(monkeypa
         if item["artifact_id"] == "opencode:project:skill:opencode:skills/review-skill"
     )
 
-    assert first_rc == 0
     assert second_rc == 1
     assert second_output["blocked"] is True
     assert plugin_artifact["policy_action"] == "require-reapproval"
@@ -1046,7 +1037,7 @@ def test_guard_run_still_blocks_when_prompt_contains_negation_elsewhere(monkeypa
 
     assert rc == 1
     assert output["blocked"] is True
-    assert prompt_artifact["policy_action"] == "require-reapproval"
+    assert prompt_artifact["policy_action"] == "sandbox-required"
     assert marker_path.exists() is False
 
 
@@ -1080,11 +1071,11 @@ def test_guard_run_blocks_env_content_request_without_read_verb(monkeypatch, tmp
 
     assert rc == 1
     assert output["blocked"] is True
-    assert prompt_artifact["policy_action"] == "require-reapproval"
+    assert prompt_artifact["policy_action"] == "sandbox-required"
     assert marker_path.exists() is False
 
 
-def test_guard_prompt_artifact_workspace_scope_approval_targets_workspace(monkeypatch, tmp_path, capsys):
+def test_guard_prompt_artifact_terminal_sandbox_block_is_not_queued(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     fake_bin = tmp_path / "fake-bin"
@@ -1109,14 +1100,13 @@ def test_guard_prompt_artifact_workspace_scope_approval_targets_workspace(monkey
         ]
     )
     output = json.loads(capsys.readouterr().out)
-    approval_request = next(
-        item for item in output.get("approval_requests", []) if item.get("artifact_type") == "prompt_request"
-    )
+    prompt_artifact = next(item for item in output["artifacts"] if item.get("artifact_type") == "prompt_request")
 
-    assert approval_request["workspace"] == str(workspace_dir)
-    assert approval_request["approval_url"].startswith("http://127.0.0.1:4455/requests/")
-    assert approval_request["review_command"].startswith("hol-guard approvals approve ")
-    assert "http://127.0.0.1:4455" in output["review_hint"]
+    assert output["blocked"] is True
+    assert prompt_artifact["policy_action"] == "sandbox-required"
+    assert prompt_artifact["effective_workspace"] == str(workspace_dir)
+    assert output.get("approval_requests") is None
+    assert output.get("review_hint") is None
 
 
 def test_claude_prompt_hook_shows_hol_guard_branding(tmp_path, capsys):
@@ -1262,6 +1252,7 @@ def test_guard_run_allows_debug_prompt_for_wrapper_harnesses(
 ):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, executable)
     _build_guard_fixture(home_dir, workspace_dir)
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\nmode = "prompt"\n')
     captured = _capture_launch(monkeypatch)

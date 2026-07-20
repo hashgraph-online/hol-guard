@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from ..mcp_tool_calls import ToolCallDecision
@@ -28,8 +28,51 @@ if TYPE_CHECKING:
     from .commands_support_runtime_resolution import _canonical_harness_name, _runtime_detection
 
 
+from ..models import GuardAction
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+
+def _copilot_tool_decision_scanner_evidence(
+    decision: ToolCallDecision,
+) -> tuple[dict[str, object], ...]:
+    evidence: list[dict[str, object]] = []
+    if decision.normalization_reason_code is not None:
+        evidence.append(
+            {
+                "source": "guard_action_normalizer",
+                "input_source": "stored_tool_policy",
+                "reason_code": decision.normalization_reason_code,
+                "original_action": decision.original_action,
+                "normalized_action": decision.action,
+            }
+        )
+    if decision.approval_reuse_reason_code is not None:
+        evidence.append(
+            {
+                "source": "approval_reuse",
+                "status": decision.approval_reuse_status,
+                "reason_code": decision.approval_reuse_reason_code,
+                "current_action": decision.current_action,
+                "saved_action": decision.saved_action,
+                "effective_action": decision.action,
+            }
+        )
+    return tuple(evidence)
+
+
+def _copilot_approval_reuse_evidence(
+    decision: ToolCallDecision,
+) -> dict[str, object] | None:
+    if decision.approval_reuse_reason_code is None:
+        return None
+    return {
+        "status": decision.approval_reuse_status,
+        "reason_code": decision.approval_reuse_reason_code,
+        "current_action": decision.current_action,
+        "saved_action": decision.saved_action,
+        "effective_action": decision.action,
+    }
 
 
 def _queue_observed_copilot_approval(
@@ -66,6 +109,7 @@ def _queue_observed_copilot_approval(
                 if runtime_arguments is not None
                 else artifact.command,
                 "action_envelope_json": _action_envelope_json(action_envelope),
+                "scanner_evidence": list(_copilot_tool_decision_scanner_evidence(decision)),
             }
         ]
     }
@@ -137,6 +181,9 @@ def _run_hook_copilot_pretool(
     payload: Mapping[str, object],
     runtime_workspace: Path | None,
     store: GuardStore,
+    fresh_tool_call_authority_provider: (
+        Callable[[], tuple[GuardConfig, GuardArtifact, str, object] | None] | None
+    ) = None,
 ) -> int | None:
     if copilot_runtime_tool_call is None or copilot_hook_stage != "pretooluse":
         return None
@@ -147,33 +194,48 @@ def _run_hook_copilot_pretool(
         artifact=runtime_artifact,
         artifact_hash=runtime_artifact_hash,
         arguments=runtime_arguments,
+        fresh_authority_provider=fresh_tool_call_authority_provider,
     )
-    policy_action = {
-        "allow": "allow",
-        "warn": "allow",
-        "review": "require-reapproval",
-        "block": "block",
-        "sandbox-required": "sandbox-required",
-        "require-reapproval": "require-reapproval",
-    }.get(decision.action, "require-reapproval")
+    if decision.post_claim_authority is not None:
+        config = decision.post_claim_authority.config
+        runtime_artifact = decision.post_claim_authority.artifact
+        runtime_artifact_hash = decision.post_claim_authority.artifact_hash
+        runtime_arguments = decision.post_claim_authority.arguments
+    policy_action = cast(
+        GuardAction,
+        {
+            "allow": "allow",
+            "warn": "allow",
+            "review": "require-reapproval",
+            "block": "block",
+            "sandbox-required": "sandbox-required",
+            "require-reapproval": "require-reapproval",
+        }.get(decision.action, "require-reapproval"),
+    )
+    approval_reuse = _copilot_approval_reuse_evidence(decision)
+    decision_scanner_evidence = _copilot_tool_decision_scanner_evidence(decision)
+    saved_policy_blocks = decision.saved_action == "block"
+    post_claim_failure = decision.post_claim_revalidated and policy_action != "allow"
+    terminal_action = policy_action in {"block", "sandbox-required"}
     now = _now()
-    if config.mode == "observe" and policy_action != "allow":
-        _queue_observed_copilot_approval(
-            artifact=runtime_artifact,
-            artifact_hash=runtime_artifact_hash,
-            artifact_name=runtime_artifact.name,
-            args=args,
-            action_envelope=action_envelope,
-            config=config,
-            context=context,
-            decision=decision,
-            guard_home=context.guard_home,
-            managed_install=None,
-            payload=payload,
-            runtime_arguments=runtime_arguments,
-            runtime_workspace=runtime_workspace,
-            store=store,
-        )
+    if config.mode == "observe" and policy_action != "allow" and not saved_policy_blocks and not post_claim_failure:
+        if not terminal_action:
+            _queue_observed_copilot_approval(
+                artifact=runtime_artifact,
+                artifact_hash=runtime_artifact_hash,
+                artifact_name=runtime_artifact.name,
+                args=args,
+                action_envelope=action_envelope,
+                config=config,
+                context=context,
+                decision=decision,
+                guard_home=context.guard_home,
+                managed_install=None,
+                payload=payload,
+                runtime_arguments=runtime_arguments,
+                runtime_workspace=runtime_workspace,
+                store=store,
+            )
         policy_action = "allow"
     if policy_action == "allow":
         allow_tool_call(
@@ -186,6 +248,7 @@ def _run_hook_copilot_pretool(
             risk_categories=decision.risk_categories,
             remember=False,
             arguments=runtime_arguments,
+            additional_scanner_evidence=decision_scanner_evidence,
         )
         if _should_emit_copilot_hook_response(args):
             _record_harness_usage_for_hook(
@@ -194,7 +257,13 @@ def _run_hook_copilot_pretool(
                 payload=payload,
                 policy_action=policy_action,
             )
-            _emit_copilot_hook_response(policy_action="allow", reason="", output_stream=output_stream)
+            _emit_copilot_hook_response(
+                policy_action="allow",
+                reason="",
+                approval_reuse=approval_reuse,
+                scanner_evidence=decision_scanner_evidence,
+                output_stream=output_stream,
+            )
             return 0
     else:
         if policy_action in {"block", "sandbox-required"}:
@@ -207,6 +276,8 @@ def _run_hook_copilot_pretool(
                 signals=decision.signals,
                 risk_categories=decision.risk_categories,
                 arguments=runtime_arguments,
+                additional_scanner_evidence=decision_scanner_evidence,
+                policy_action=policy_action,
             )
         if _should_emit_copilot_hook_response(args):
             _record_harness_usage_for_hook(
@@ -217,7 +288,13 @@ def _run_hook_copilot_pretool(
             )
             _emit_copilot_hook_response(
                 policy_action=policy_action,
-                reason=_copilot_hook_reason(decision.summary, runtime_artifact.name),
+                reason=(
+                    f"HOL Guard blocked {runtime_artifact.name}. {decision.summary}"
+                    if saved_policy_blocks
+                    else _copilot_hook_reason(decision.summary, runtime_artifact.name)
+                ),
+                approval_reuse=approval_reuse,
+                scanner_evidence=decision_scanner_evidence,
                 output_stream=output_stream,
             )
             return 0
@@ -236,27 +313,44 @@ def _run_hook_copilot_permission_request(
     payload: Mapping[str, object],
     runtime_workspace: Path | None,
     store: GuardStore,
+    fresh_tool_call_authority_provider: (
+        Callable[[], tuple[GuardConfig, GuardArtifact, str, object] | None] | None
+    ) = None,
 ) -> int | None:
     if copilot_permission_request is None:
         return None
     runtime_artifact, runtime_artifact_hash, runtime_arguments = copilot_permission_request
-    artifact_id = runtime_artifact.artifact_id
-    artifact_name = runtime_artifact.name
     decision = evaluate_tool_call(
         store=store,
         config=config,
         artifact=runtime_artifact,
         artifact_hash=runtime_artifact_hash,
         arguments=runtime_arguments,
+        fresh_authority_provider=fresh_tool_call_authority_provider,
     )
-    policy_action = {
-        "allow": "allow",
-        "warn": "allow",
-        "review": "require-reapproval",
-        "block": "block",
-        "sandbox-required": "sandbox-required",
-        "require-reapproval": "require-reapproval",
-    }.get(decision.action, "require-reapproval")
+    if decision.post_claim_authority is not None:
+        config = decision.post_claim_authority.config
+        runtime_artifact = decision.post_claim_authority.artifact
+        runtime_artifact_hash = decision.post_claim_authority.artifact_hash
+        runtime_arguments = decision.post_claim_authority.arguments
+    artifact_id = runtime_artifact.artifact_id
+    artifact_name = runtime_artifact.name
+    policy_action = cast(
+        GuardAction,
+        {
+            "allow": "allow",
+            "warn": "allow",
+            "review": "require-reapproval",
+            "block": "block",
+            "sandbox-required": "sandbox-required",
+            "require-reapproval": "require-reapproval",
+        }.get(decision.action, "require-reapproval"),
+    )
+    approval_reuse = _copilot_approval_reuse_evidence(decision)
+    decision_scanner_evidence = _copilot_tool_decision_scanner_evidence(decision)
+    saved_policy_blocks = decision.saved_action == "block"
+    post_claim_failure = decision.post_claim_revalidated and policy_action != "allow"
+    terminal_action = policy_action in {"block", "sandbox-required"}
     runtime_detection = _runtime_detection(args.harness, runtime_artifact)
     evaluation_payload: dict[str, object] = {
         "artifacts": [
@@ -273,6 +367,7 @@ def _run_hook_copilot_permission_request(
                 if runtime_arguments is not None
                 else runtime_artifact.command,
                 "action_envelope_json": _action_envelope_json(action_envelope),
+                "scanner_evidence": list(decision_scanner_evidence),
             }
         ]
     }
@@ -290,24 +385,34 @@ def _run_hook_copilot_permission_request(
         if runtime_arguments is not None
         else runtime_artifact.command,
     }
-    if config.mode == "observe" and policy_action != "allow":
-        queued = _queue_observed_copilot_approval(
-            artifact=runtime_artifact,
-            artifact_hash=runtime_artifact_hash,
-            artifact_name=artifact_name,
-            args=args,
-            action_envelope=action_envelope,
-            config=config,
-            context=context,
-            decision=decision,
-            guard_home=guard_home,
-            managed_install=managed_install,
-            payload=payload,
-            runtime_arguments=runtime_arguments,
-            runtime_workspace=runtime_workspace,
-            store=store,
+    if approval_reuse is not None:
+        response_payload["approval_reuse"] = approval_reuse
+    if decision_scanner_evidence:
+        response_payload["scanner_evidence"] = list(decision_scanner_evidence)
+    if config.mode == "observe" and policy_action != "allow" and not saved_policy_blocks and not post_claim_failure:
+        queued = (
+            []
+            if terminal_action
+            else _queue_observed_copilot_approval(
+                artifact=runtime_artifact,
+                artifact_hash=runtime_artifact_hash,
+                artifact_name=artifact_name,
+                args=args,
+                action_envelope=action_envelope,
+                config=config,
+                context=context,
+                decision=decision,
+                guard_home=guard_home,
+                managed_install=managed_install,
+                payload=payload,
+                runtime_arguments=runtime_arguments,
+                runtime_workspace=runtime_workspace,
+                store=store,
+            )
         )
         response_payload["approval_requests"] = queued
+        if terminal_action:
+            response_payload["observed_terminal_action"] = policy_action
         policy_action = "allow"
         response_payload["policy_action"] = "allow"
     if policy_action == "allow":
@@ -321,6 +426,7 @@ def _run_hook_copilot_permission_request(
             risk_categories=decision.risk_categories,
             remember=False,
             arguments=runtime_arguments,
+            additional_scanner_evidence=decision_scanner_evidence,
         )
         if _should_emit_copilot_hook_response(args):
             _record_harness_usage_for_hook(
@@ -329,7 +435,12 @@ def _run_hook_copilot_permission_request(
                 payload=payload,
                 policy_action=policy_action,
             )
-            _emit_copilot_permission_request_response(behavior="allow", output_stream=output_stream)
+            _emit_copilot_permission_request_response(
+                behavior="allow",
+                approval_reuse=approval_reuse,
+                scanner_evidence=decision_scanner_evidence,
+                output_stream=output_stream,
+            )
             return 0
         _record_harness_usage_for_hook(
             store=store,
@@ -348,7 +459,31 @@ def _run_hook_copilot_permission_request(
         signals=decision.signals,
         risk_categories=decision.risk_categories,
         arguments=runtime_arguments,
+        additional_scanner_evidence=decision_scanner_evidence,
+        policy_action=policy_action,
     )
+    if terminal_action:
+        response_payload["approval_requests"] = []
+        response_payload["terminal"] = True
+        response_payload["terminal_action"] = policy_action
+        _record_harness_usage_for_hook(
+            store=store,
+            action_envelope=action_envelope,
+            payload=payload,
+            policy_action=policy_action,
+        )
+        if _should_emit_copilot_hook_response(args):
+            _emit_copilot_permission_request_response(
+                behavior="deny",
+                message=f"HOL Guard blocked {artifact_name}. {decision.summary}",
+                interrupt=True,
+                approval_reuse=approval_reuse,
+                scanner_evidence=decision_scanner_evidence,
+                output_stream=output_stream,
+            )
+            return 0
+        _emit("hook", response_payload, getattr(args, "json", False))
+        return 1
     approval_center_url = ensure_guard_daemon(guard_home)
     approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
     try:
@@ -446,6 +581,8 @@ def _run_hook_copilot_permission_request(
                 review_context,
             ),
             interrupt=True,
+            approval_reuse=approval_reuse,
+            scanner_evidence=decision_scanner_evidence,
             output_stream=output_stream,
         )
         return 0

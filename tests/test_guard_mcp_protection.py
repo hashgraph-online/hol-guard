@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import PurePosixPath
+
+import pytest
 
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.config import GuardConfig
@@ -11,12 +14,17 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     _resolve_local_schema_ref,
     _schema_property_key_names,
     build_tool_call_artifact,
+    build_tool_call_hash,
     evaluate_tool_call,
     tool_call_risk_categories,
     tool_call_risk_signals,
 )
-from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
-from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity, build_mcp_tool_identity
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.runtime.mcp_protection import (
+    build_mcp_server_identity,
+    build_mcp_tool_identity,
+    mcp_server_identity_metadata,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -36,6 +44,41 @@ def test_mcp_server_identity_hashes_args_and_sorts_env_keys() -> None:
     assert identity.package_name == "@modelcontextprotocol/server-filesystem"
     assert identity.package_version == "1.2.3"
     assert len(identity.args_hash) == 64
+    assert len(identity.env_values_hash) == 64
+
+
+def test_mcp_server_identity_binds_configured_env_values_without_exposing_them() -> None:
+    secret_v1 = "mcp-secret-value-one"
+    secret_v2 = "mcp-secret-value-two"
+    first = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="node",
+        args=("server.js",),
+        transport="stdio",
+        env={"TOKEN": secret_v1, "MODE": "safe"},
+    )
+    reordered = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="node",
+        args=("server.js",),
+        transport="stdio",
+        env={"MODE": "safe", "TOKEN": secret_v1},
+    )
+    changed = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="node",
+        args=("server.js",),
+        transport="stdio",
+        env={"TOKEN": secret_v2, "MODE": "safe"},
+    )
+
+    assert first == reordered
+    assert first.env_values_hash != changed.env_values_hash
+    assert first.identity_hash != changed.identity_hash
+    serialized = str(mcp_server_identity_metadata(first))
+    assert secret_v1 not in serialized
+    assert secret_v2 not in serialized
+    assert mcp_server_identity_metadata(first)["env_values_hash"] == first.env_values_hash
 
 
 def test_managed_stdio_servers_emit_server_identity() -> None:
@@ -311,7 +354,15 @@ def test_evaluate_tool_call_unknown_stored_action_requires_review(
         transport="stdio",
     )
     store = GuardStore(tmp_path / "guard-home")
-    monkeypatch.setattr(store, "resolve_policy", lambda *_args, **_kwargs: "future-action")
+    monkeypatch.setattr(
+        store,
+        "resolve_policy_decision_lookup_with_memory_pattern",
+        lambda *_args, **_kwargs: {
+            "decision": {"action": "future-action"},
+            "ignored_local_integrity": None,
+            "trust_status": {},
+        },
+    )
 
     decision = evaluate_tool_call(
         store=store,
@@ -326,6 +377,263 @@ def test_evaluate_tool_call_unknown_stored_action_requires_review(
     assert "unknown policy action" in decision.summary
     assert decision.normalization_reason_code == "guard_action_unknown"
     assert decision.original_action == "future-action"
+
+
+def test_evaluate_tool_call_reuses_exact_allow_only_for_current_review(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="shell",
+        tool_name="shell_exec",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    arguments = {"command": "rm /tmp/guard-proof"}
+    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace, mode="prompt")
+    digest = build_tool_call_hash(artifact, arguments, workspace=workspace, config=config)
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=artifact.artifact_id,
+            artifact_hash=digest,
+            reason="reviewed exact call",
+            source="approval-gate",
+        ),
+        "2026-07-17T00:00:00Z",
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=config,
+        artifact=artifact,
+        artifact_hash=digest,
+        arguments=arguments,
+    )
+
+    assert decision.current_action == "review"
+    assert decision.action == "allow"
+    assert decision.approval_reuse_status == "accepted"
+    assert decision.approval_reuse_reason_code == "approval_reuse_accepted"
+    assert decision.signals
+
+
+@pytest.mark.parametrize("current_action", ["require-reapproval", "sandbox-required", "block"])
+def test_evaluate_tool_call_saved_allow_never_lowers_stronger_current_action(
+    tmp_path,
+    current_action,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="shell",
+        tool_name="shell_exec",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    arguments = {"command": "rm /tmp/guard-proof"}
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=workspace,
+        security_level="custom",
+        risk_actions={"mcp_dangerous_tool": current_action},
+    )
+    digest = build_tool_call_hash(artifact, arguments, workspace=workspace, config=config)
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=artifact.artifact_id,
+            artifact_hash=digest,
+            reason="old approval",
+            source="approval-gate",
+        ),
+        "2026-07-17T00:00:00Z",
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=config,
+        artifact=artifact,
+        artifact_hash=digest,
+        arguments=arguments,
+    )
+
+    assert decision.current_action == current_action
+    assert decision.action == current_action
+    assert decision.approval_reuse_status == "rejected"
+    assert decision.approval_reuse_reason_code in {
+        "approval_reuse_reapproval_required",
+        "approval_reuse_sandbox_required",
+        "approval_reuse_current_block",
+    }
+
+
+def test_evaluate_tool_call_preserves_saved_block_over_safe_current_call(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="metadata",
+        tool_name="read_metadata",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="block",
+            artifact_id=artifact.artifact_id,
+            artifact_hash="exact-tool-hash",
+            reason="blocked by operator",
+            source="approval-gate",
+        ),
+        "2026-07-17T00:00:00Z",
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace),
+        artifact=artifact,
+        artifact_hash="exact-tool-hash",
+        arguments={"key": "public"},
+    )
+
+    assert decision.current_action == "warn"
+    assert decision.action == "block"
+    assert decision.approval_reuse_reason_code == "approval_reuse_saved_block"
+
+
+def test_evaluate_tool_call_old_allow_cannot_lower_new_default_block(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="metadata",
+        tool_name="read_metadata",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    arguments = {"key": "public"}
+    review_config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=workspace,
+        default_action="review",
+    )
+    reviewed_hash = build_tool_call_hash(
+        artifact,
+        arguments,
+        workspace=workspace,
+        config=review_config,
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=artifact.artifact_id,
+            artifact_hash=reviewed_hash,
+            reason="old default review approval",
+            source="approval-gate",
+        ),
+        "2026-07-17T00:00:00Z",
+    )
+    block_config = replace(review_config, default_action="block")
+    blocked_hash = build_tool_call_hash(
+        artifact,
+        arguments,
+        workspace=workspace,
+        config=block_config,
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=block_config,
+        artifact=artifact,
+        artifact_hash=blocked_hash,
+        arguments=arguments,
+    )
+
+    assert reviewed_hash != blocked_hash
+    assert decision.current_action == "block"
+    assert decision.action == "block"
+    assert decision.approval_reuse_status == "rejected"
+    assert decision.approval_reuse_reason_code == "approval_reuse_policy_changed"
+
+
+def test_evaluate_tool_call_exact_allow_replaces_stricter_global_default(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="metadata",
+        tool_name="read_metadata",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=workspace,
+        default_action="block",
+        artifact_actions={artifact.artifact_id: "allow"},
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=config,
+        artifact=artifact,
+        artifact_hash="exact-tool-hash",
+        arguments={"key": "public"},
+    )
+
+    assert decision.action == "allow"
+
+
+def test_evaluate_tool_call_exact_allow_cannot_lower_independent_risk_block(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="shell",
+        tool_name="execute_command",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=workspace,
+        default_action="allow",
+        artifact_actions={artifact.artifact_id: "allow"},
+        security_level="custom",
+        risk_actions={"mcp_dangerous_tool": "block"},
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=config,
+        artifact=artifact,
+        artifact_hash="exact-tool-hash",
+        arguments={"command": "rm -rf ./fixture"},
+    )
+
+    assert decision.action == "block"
 
 
 def test_mcp_server_identity_reads_pnpm_package_selector_flag() -> None:
