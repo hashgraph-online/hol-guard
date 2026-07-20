@@ -106,7 +106,7 @@ def validate_codex_hook_launch(
         manifest,
         interpreter=interpreter,
         packaged_by_role=packaged_by_role,
-        runtime_guard_home=state.parent,
+        runtime_guard_home=guard_home,
         fallback_command=fallback_command,
         start_command=start_command,
     )

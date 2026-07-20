@@ -199,10 +199,16 @@ def run_isolated_hook_process(
         returncode = process.wait()
     writer.join(timeout=1)
     for thread in readers:
-        thread.join(timeout=1)
+        thread.join(timeout=0.05)
+    if any(thread.is_alive() for thread in readers):
+        _kill_hook_process_group(process)
+        for thread in readers:
+            thread.join(timeout=1)
+    with output_lock:
+        stdout_decoded = stdout_bytes.decode("utf-8", errors="replace")
     return BoundedHookProcessResult(
         returncode=returncode,
-        stdout=stdout_bytes.decode("utf-8", errors="replace"),
+        stdout=stdout_decoded,
         output_limit_exceeded=output_limit_exceeded.is_set(),
         timed_out=timed_out,
     )
@@ -213,11 +219,23 @@ def _kill_hook_process(process: subprocess.Popen[bytes]) -> None:
         return
     try:
         if os.name != "nt":
-            os.killpg(process.pid, signal.SIGKILL)
+            _kill_hook_process_group(process)
         else:
             process.kill()
     except (OSError, ProcessLookupError):
         process.kill()
+
+
+def _kill_hook_process_group(process: subprocess.Popen[bytes]) -> None:
+    if os.name == "nt":
+        if process.poll() is None:
+            process.kill()
+        return
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (OSError, ProcessLookupError):
+        if process.poll() is None:
+            process.kill()
 
 
 __all__ = [

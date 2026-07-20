@@ -232,6 +232,7 @@ def _local_hook_command_parts_for_home_mode(
     home_is_current: bool,
     python_executable: str,
 ) -> tuple[str, ...]:
+    runtime_guard_home = (resolve_guard_home() if home_is_current else context.guard_home).resolve(strict=False)
     guard_args = [
         "guard",
         "hook",
@@ -240,8 +241,8 @@ def _local_hook_command_parts_for_home_mode(
     ]
     if not home_is_current:
         guard_args.extend(["--home", str(context.home_dir)])
-        if context.guard_home.resolve() != context.home_dir.resolve():
-            guard_args.extend(["--guard-home", str(context.guard_home)])
+        if runtime_guard_home != context.home_dir.resolve():
+            guard_args.extend(["--guard-home", str(runtime_guard_home)])
     if context.workspace_dir is not None:
         guard_args.extend(["--workspace", str(context.workspace_dir)])
     package_root = Path(__file__).resolve().parents[3]
@@ -259,7 +260,8 @@ def _home_is_current(context: HarnessContext) -> bool:
 
 
 def _runtime_guard_home(context: HarnessContext) -> Path:
-    return resolve_guard_home() if _home_is_current(context) else context.guard_home
+    guard_home = resolve_guard_home() if _home_is_current(context) else context.guard_home
+    return guard_home.resolve(strict=False)
 
 
 def _local_hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
@@ -281,7 +283,7 @@ def _hook_command_parts_for_home_mode(
     home_is_current: bool,
     python_executable: str,
 ) -> tuple[str, ...]:
-    guard_home = resolve_guard_home() if home_is_current else context.guard_home
+    guard_home = (resolve_guard_home() if home_is_current else context.guard_home).resolve(strict=False)
     query = {"guard-home": str(guard_home)}
     if not home_is_current:
         query["home"] = str(context.home_dir)

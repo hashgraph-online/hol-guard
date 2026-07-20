@@ -186,6 +186,32 @@ def test_runtime_rejects_a_manifest_changed_after_install(tmp_path: Path) -> Non
 
 
 @pytest.mark.skipif(os.name == "nt", reason="symlink replacement semantics differ on Windows")
+def test_signed_runtime_guard_home_is_canonical_across_directory_aliases(tmp_path: Path) -> None:
+    real_root = tmp_path / "real"
+    real_root.mkdir()
+    alias_root = tmp_path / "alias"
+    alias_root.symlink_to(real_root, target_is_directory=True)
+    workspace = alias_root / "workspace"
+    workspace.mkdir()
+    context = HarnessContext(
+        home_dir=alias_root / "home",
+        workspace_dir=workspace,
+        guard_home=alias_root / "guard-home",
+        home_override_explicit=True,
+    )
+
+    CodexHarnessAdapter().install(context)
+    bridge_command = codex_adapter._hook_command_parts(context)
+    config = json.loads(bridge_command[3])
+    trusted = _trusted_launch(bridge_command, config)
+    canonical_guard_home = context.guard_home.resolve(strict=True)
+
+    assert Path(str(config["state_path"])).parent == canonical_guard_home
+    assert str(canonical_guard_home) in _config_command(config, "start_command")[3]
+    assert trusted.cwd == canonical_guard_home / "managed" / "codex"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink replacement semantics differ on Windows")
 def test_runtime_rejects_interpreter_symlink_swap(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -255,6 +281,30 @@ def test_isolated_process_timeout_kills_descendants(tmp_path: Path) -> None:
     time.sleep(0.6)
 
     assert result.timed_out is True
+    assert not marker.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX descendant-held pipe assertion")
+def test_isolated_process_closes_descendant_held_pipes_after_parent_exit(tmp_path: Path) -> None:
+    cwd = tmp_path / "neutral"
+    cwd.mkdir(mode=0o700)
+    marker = tmp_path / "escaped-after-parent-exit.marker"
+    child = f"import time;from pathlib import Path;time.sleep(0.5);Path({str(marker)!r}).write_text('escaped')"
+    parent = f"import subprocess,sys;subprocess.Popen([sys.executable,'-I','-c',{child!r}])"
+
+    started_at = time.monotonic()
+    result = run_isolated_hook_process(
+        [sys.executable, "-I", "-c", parent],
+        input_text="",
+        cwd=cwd,
+        environment=isolated_hook_environment(),
+        timeout_seconds=2,
+    )
+    elapsed = time.monotonic() - started_at
+    time.sleep(0.6)
+
+    assert result.returncode == 0
+    assert elapsed < 1
     assert not marker.exists()
 
 
