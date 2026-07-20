@@ -55,6 +55,10 @@ _STRIPE_GLOBAL_VALUE_OPTIONS = frozenset(
     }
 )
 _STRIPE_GLOBAL_BOOLEAN_OPTIONS = frozenset({"--help", "--live", "--show-headers", "--version"})
+_ENV_LONG_BOOLEAN_OPTIONS = frozenset({"--debug", "--ignore-environment", "--list-signal-handling", "--null"})
+_ENV_LONG_VALUE_OPTIONS = frozenset({"--argv0", "--chdir", "--unset"})
+_ENV_SHORT_BOOLEAN_OPTIONS = frozenset({"0", "i", "v"})
+_ENV_SHORT_VALUE_OPTIONS = frozenset({"C", "P", "a", "u"})
 _WINDOWS_EXECUTABLES = frozenset(
     {
         "aws",
@@ -297,17 +301,74 @@ def _destructive_timeout_shell(arguments: tuple[str, ...]) -> bool:
 
 
 def _expand_env_split_string(arguments: tuple[str, ...]) -> tuple[str, ...]:
-    for index, argument in enumerate(arguments[:-2]):
+    for index, argument in enumerate(arguments[:-1]):
         if argument.replace("\\", "/").rsplit("/", 1)[-1].lower() != "env":
             continue
-        if arguments[index + 1] not in {"-S", "-s", "--split-string"}:
-            continue
+        parsed = _env_split_string(arguments, index + 1)
+        if parsed is None:
+            return arguments
+        split_string, consumed = parsed
         try:
-            split = tuple(shlex.split(arguments[index + 2], posix=True))
+            split = tuple(shlex.split(split_string, posix=True))
         except ValueError:
             return arguments
-        return (*arguments[: index + 1], *split, *arguments[index + 3 :])
+        if not split:
+            return arguments
+        return (*arguments[: index + 1], *split, *arguments[consumed:])
     return arguments
+
+
+def _env_split_string(arguments: tuple[str, ...], start: int) -> tuple[str, int] | None:
+    index = start
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument in _ENV_LONG_BOOLEAN_OPTIONS:
+            index += 1
+            continue
+        option, separator, value = argument.partition("=")
+        if option in _ENV_LONG_VALUE_OPTIONS:
+            if separator:
+                if not value:
+                    return None
+                index += 1
+                continue
+            if index + 1 >= len(arguments) or not arguments[index + 1]:
+                return None
+            index += 2
+            continue
+        if option == "--split-string":
+            if separator:
+                return (value, index + 1) if value else None
+            if index + 1 >= len(arguments) or not arguments[index + 1]:
+                return None
+            return arguments[index + 1], index + 2
+        if argument.startswith("--") or not argument.startswith("-") or argument == "-":
+            return None
+        cursor = 1
+        while cursor < len(argument):
+            short_option = argument[cursor]
+            if short_option in _ENV_SHORT_BOOLEAN_OPTIONS:
+                cursor += 1
+                continue
+            if short_option == "S":
+                attached = argument[cursor + 1 :]
+                if attached:
+                    return attached, index + 1
+                if index + 1 >= len(arguments) or not arguments[index + 1]:
+                    return None
+                return arguments[index + 1], index + 2
+            if short_option not in _ENV_SHORT_VALUE_OPTIONS:
+                return None
+            if cursor + 1 < len(argument):
+                index += 1
+            elif index + 1 < len(arguments) and arguments[index + 1]:
+                index += 2
+            else:
+                return None
+            break
+        else:
+            index += 1
+    return None
 
 
 def _shell_command_text(arguments: tuple[str, ...]) -> str | None:
