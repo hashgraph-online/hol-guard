@@ -110,7 +110,7 @@ def _worker_report(worker_index: int, worker_count: int) -> WorkerReport:
     for position, (case, oracle) in enumerate(streams):
         if position % worker_count != worker_index:
             continue
-        observed = evaluate_command(case.command, cwd=SYNTHETIC_CWD, home_dir=SYNTHETIC_HOME).minimum_action
+        observed = evaluate_command(case.command, cwd=SYNTHETIC_CWD, home_dir=SYNTHETIC_HOME).decision_plane.action
         if ranks[observed] == ranks[oracle.minimum_floor]:
             continue
         kind = "underclassified" if ranks[observed] < ranks[oracle.minimum_floor] else "overclassified"

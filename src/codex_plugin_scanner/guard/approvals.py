@@ -57,6 +57,10 @@ from .risk import artifact_risk_signals, artifact_risk_summary
 from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
 from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT, authoritative_decision_from_artifact
+from .runtime.github_workflow_runtime import (
+    github_workflow_requires_local_once,
+    issue_github_workflow_capability_for_resolution,
+)
 from .runtime.protection_health_runtime import build_runtime_protection_health
 from .store import (
     GuardStore,
@@ -760,6 +764,7 @@ def apply_approval_resolution(
             persisted_rule=persisted_rule,
             local_once_fallback=local_once_fallback,
         )
+        issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
         result.update(request_scope_contract_payload(request))
         result["requested_scope"] = requested_scope
         result["applied_scope"] = scope
@@ -805,6 +810,7 @@ def apply_approval_resolution(
         persisted_rule=persisted_rule,
         local_once_fallback=local_once_fallback,
     )
+    issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
     updated.update(request_scope_contract_payload(request))
     updated["requested_scope"] = requested_scope
     updated["applied_scope"] = scope
@@ -1462,6 +1468,8 @@ def _approval_once_policy_expires_at(resolved_at: str) -> str:
 
 
 def _should_record_local_once_replay(request: Mapping[str, object]) -> bool:
+    if github_workflow_requires_local_once(request):
+        return True
     artifact_type = request.get("artifact_type")
     if artifact_type == "package_request":
         return True

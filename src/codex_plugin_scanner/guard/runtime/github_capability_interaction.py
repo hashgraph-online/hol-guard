@@ -6,8 +6,10 @@ from typing import Final
 
 from .github_capability_contract import GitHubCommandAssessment, GitHubCommandCapability
 
+GITHUB_MAINTENANCE_ACTION_CLASS: Final = "GitHub bounded maintenance command"
+
 _ACTION_CLASSES: Final[dict[GitHubCommandCapability, str]] = {
-    "maintain_remote": "GitHub bounded maintenance command",
+    "maintain_remote": GITHUB_MAINTENANCE_ACTION_CLASS,
     "content_remote": "GitHub content mutation command",
     "merge_remote": "GitHub merge command",
     "publish_remote": "GitHub release publication command",

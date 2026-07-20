@@ -49,6 +49,11 @@ from ..runtime.approval_reuse import (
     evaluate_approval_reuse,
 )
 from ._commands_shared import *
+from .commands_hook_github_workflow import (
+    claimed_approval_request_id,
+    github_workflow_approval_evidence,
+    prepare_github_workflow_hook_state,
+)
 from .commands_hook_runtime_state import RuntimeArtifactHookState
 from .commands_parser_helpers import *
 from .commands_support_hook_state import _load_cursor_native_shell_allowance
@@ -104,23 +109,38 @@ def _evaluate_runtime_artifact_hook(
     runtime_workspace: Path | None,
     store: GuardStore,
     trusted_request_override_hash: str | None = None,
-    post_claim_revalidator: (Callable[[str, bool], int | RuntimeArtifactHookState | None] | None) = None,
+    post_claim_revalidator: (Callable[[str, bool, str | None], int | RuntimeArtifactHookState | None] | None) = None,
     _claimed_saved_allow_hash: str | None = None,
     _claimed_trusted_request_override: bool = False,
+    _claimed_approval_request_id: str | None = None,
     _claim_saved_approval: bool = True,
     _post_claim_refresh_failed: bool = False,
 ) -> int | RuntimeArtifactHookState:
     payload_map = dict(payload)
 
+    workflow_state = prepare_github_workflow_hook_state(
+        runtime_artifact,
+        workspace=runtime_workspace,
+        config=config,
+        store=store,
+        approval_request_id=_claimed_approval_request_id,
+    )
+    runtime_artifact = workflow_state.artifact
+
     def revalidate_claimed_allow(
         claimed_hash: str,
         *,
         trusted_request_override: bool,
+        approval_request_id: str | None = None,
     ) -> int | RuntimeArtifactHookState:
         refresh_failed = False
         if post_claim_revalidator is not None:
             try:
-                refreshed_result = post_claim_revalidator(claimed_hash, trusted_request_override)
+                refreshed_result = post_claim_revalidator(
+                    claimed_hash,
+                    trusted_request_override,
+                    approval_request_id,
+                )
             except Exception:
                 refreshed_result = None
             if refreshed_result is not None:
@@ -140,6 +160,7 @@ def _evaluate_runtime_artifact_hook(
             post_claim_revalidator=None,
             _claimed_saved_allow_hash=claimed_hash,
             _claimed_trusted_request_override=trusted_request_override,
+            _claimed_approval_request_id=approval_request_id,
             _claim_saved_approval=False,
             _post_claim_refresh_failed=refresh_failed,
         )
@@ -210,6 +231,8 @@ def _evaluate_runtime_artifact_hook(
         else ()
     )
     scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
+    if workflow_state.approval_record is not None:
+        scanner_evidence_payload.append(github_workflow_approval_evidence(workflow_state.approval_record))
     for input_source, normalization in (
         ("trusted_cli_override", cli_action_normalization),
         ("untrusted_hook_payload_hint", payload_action_normalization),
@@ -586,6 +609,7 @@ def _evaluate_runtime_artifact_hook(
                 return revalidate_claimed_allow(
                     runtime_artifact_hash,
                     trusted_request_override=False,
+                    approval_request_id=claimed_approval_request_id(stored_policy_decision),
                 )
         policy_action = approval_reuse.action
         if approval_reuse_source is not None:
@@ -633,6 +657,7 @@ def _evaluate_runtime_artifact_hook(
                     return revalidate_claimed_allow(
                         runtime_artifact_hash,
                         trusted_request_override=True,
+                        approval_request_id=claimed_approval_request_id(stored_policy_decision),
                     )
                 else:
                     trusted_request_override_reason = "trusted_request_override_claim_failed"
@@ -659,6 +684,8 @@ def _evaluate_runtime_artifact_hook(
         if remembered_rule_rejection is not None or (
             approval_reuse is not None and approval_reuse.reason_code == "approval_reuse_integrity_failure"
         ):
+            claimed_validation_reason = "approval_reuse_integrity_failure"
+        if workflow_state.capability_required and not workflow_state.authorization_claimed:
             claimed_validation_reason = "approval_reuse_integrity_failure"
 
         post_claim_current_action = policy_action

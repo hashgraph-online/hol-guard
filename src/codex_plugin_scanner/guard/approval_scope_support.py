@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 from .models import DECISION_SCOPE_VALUES, DecisionScope
 from .package_execution_context import (
     PACKAGE_EXECUTION_CONTEXT_VERSION,
     PackageExecutionContext,
 )
+from .runtime.github_workflow_runtime import approval_record_from_approval_request
 
 _SCOPED_APPROVAL_FAMILIES = frozenset(
     {
@@ -29,12 +30,14 @@ _SCOPED_APPROVAL_FAMILIES = frozenset(
 )
 
 APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX: Final = "guard.approval-scopes.v"
-APPROVAL_SCOPE_CONTRACT_VERSION: Final = f"{APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX}2"
+APPROVAL_SCOPE_CONTRACT_VERSION: Final = f"{APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX}3"
 ResolutionAction = Literal["allow", "block"]
 
 
 class StaleApprovalScopeContractError(ValueError):
     """Raised when a client resolves against a superseded scope contract."""
+
+    contract: ApprovalScopeContract
 
     def __init__(self, contract: ApprovalScopeContract) -> None:
         super().__init__("stale_scope_contract")
@@ -43,6 +46,10 @@ class StaleApprovalScopeContractError(ValueError):
 
 class IneligibleApprovalScopeError(ValueError):
     """Raised when a V2 client selects a current but ineligible scope."""
+
+    contract: ApprovalScopeContract
+    action: ResolutionAction
+    requested_scope: str
 
     def __init__(
         self,
@@ -74,6 +81,7 @@ class ApprovalScopeContract:
     restrictions: tuple[str, ...]
     digest: str
     task_capability_eligible: bool = False
+    task_capability_reason_codes: tuple[str, ...] = ("task_capability_not_enabled",)
     version: str = APPROVAL_SCOPE_CONTRACT_VERSION
 
     def to_dict(self) -> dict[str, object]:
@@ -91,7 +99,7 @@ class ApprovalScopeContract:
             "scope_restrictions": list(self.restrictions),
             "task_capability_eligibility": {
                 "eligible": self.task_capability_eligible,
-                "reason_codes": ["task_capability_not_enabled"],
+                "reason_codes": list(self.task_capability_reason_codes),
             },
         }
 
@@ -99,9 +107,10 @@ class ApprovalScopeContract:
 def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContract:
     """Derive the current action-aware scope contract from trusted request fields.
 
-    This slice intentionally consumes no positive-proof assertion. Broad allow
-    scopes stay unavailable until a later producer binds complete proof to the
-    request. Deny breadth is limited to selectors Guard can derive canonically.
+    A validated workflow descriptor marks a request as a task-capability
+    candidate, but it is not positive proof. Broad allow scopes stay unavailable;
+    issuance and atomic claim bind complete proof later. Deny breadth remains
+    limited to selectors Guard can derive canonically.
     """
 
     artifact_available = _string_or_none(request.get("artifact_id")) is not None
@@ -109,13 +118,20 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
     allow_scopes = () if _allow_is_non_overridable(request) else artifact_scopes
     block_scopes: list[DecisionScope] = list(artifact_scopes)
     trusted_family = _request_scoped_family_key(request)
+    task_capability_eligible = _github_workflow_task_capability_eligible(request)
+    task_capability_reason_codes = (
+        ("exact_github_workflow_record",) if task_capability_eligible else ("task_capability_not_enabled",)
+    )
     if trusted_family is not None:
         if _derived_workspace_scope_target(request) is not None:
             block_scopes.append("workspace")
         if _string_or_none(request.get("publisher")) is not None:
             block_scopes.append("publisher")
         block_scopes.extend(("harness", "global"))
-    restrictions = ["broad_allow_requires_positive_proof", "task_capability_not_enabled"]
+    restrictions = ["broad_allow_requires_positive_proof"]
+    restrictions.append(
+        "task_capability_exact_operation_only" if task_capability_eligible else "task_capability_not_enabled"
+    )
     if _allow_is_non_overridable(request):
         restrictions.append("current_action_not_overridable")
     if _derived_workspace_scope_target(request) is not None:
@@ -131,6 +147,8 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
         allow_scopes=allow_scopes,
         block_scopes=block_scope_tuple,
         restrictions=restrictions_tuple,
+        task_capability_eligible=task_capability_eligible,
+        task_capability_reason_codes=task_capability_reason_codes,
     )
     return ApprovalScopeContract(
         allow_scopes=allow_scopes,
@@ -139,6 +157,8 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
         recommended_block_scope="artifact" if "artifact" in block_scopes else None,
         restrictions=restrictions_tuple,
         digest=digest,
+        task_capability_eligible=task_capability_eligible,
+        task_capability_reason_codes=task_capability_reason_codes,
     )
 
 
@@ -325,12 +345,16 @@ def _scope_contract_digest(
     allow_scopes: tuple[DecisionScope, ...],
     block_scopes: tuple[DecisionScope, ...],
     restrictions: tuple[str, ...],
+    task_capability_eligible: bool = False,
+    task_capability_reason_codes: tuple[str, ...] = ("task_capability_not_enabled",),
 ) -> str:
     material = {
         "version": APPROVAL_SCOPE_CONTRACT_VERSION,
         "allow_scopes": allow_scopes,
         "block_scopes": block_scopes,
         "restrictions": restrictions,
+        "task_capability_eligible": task_capability_eligible,
+        "task_capability_reason_codes": task_capability_reason_codes,
         "request": {
             key: _json_boundary_value(request.get(key))
             for key in (
@@ -359,15 +383,23 @@ def _scope_contract_digest(
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _github_workflow_task_capability_eligible(request: Mapping[str, object]) -> bool:
+    try:
+        return approval_record_from_approval_request(request) is not None
+    except (TypeError, ValueError):
+        return False
+
+
 def _json_boundary_value(value: object) -> object:
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
     if isinstance(value, Mapping):
+        mapping = cast(Mapping[object, object], value)
         return {
-            str(key): _json_boundary_value(item) for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            str(key): _json_boundary_value(item) for key, item in sorted(mapping.items(), key=lambda pair: str(pair[0]))
         }
     if isinstance(value, (list, tuple)):
-        return [_json_boundary_value(item) for item in value]
+        return [_json_boundary_value(item) for item in cast(Sequence[object], value)]
     return {"invalid_type": type(value).__name__}
 
 
@@ -377,7 +409,7 @@ def _allow_is_non_overridable(request: Mapping[str, object]) -> bool:
     envelope = request.get("action_envelope_json")
     if not isinstance(envelope, Mapping):
         return False
-    action_type = _string_or_none(envelope.get("action_type"))
+    action_type = _string_or_none(cast(Mapping[object, object], envelope).get("action_type"))
     return action_type in {
         "guard_control",
         "guard-control",

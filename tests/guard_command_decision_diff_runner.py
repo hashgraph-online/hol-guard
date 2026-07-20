@@ -38,6 +38,7 @@ _install_evaluator_packages()
 
 from codex_plugin_scanner.guard.action_lattice import guard_action_severity
 from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.runtime.command_critical_floors import command_critical_floor_factors
 from codex_plugin_scanner.guard.runtime.command_decision_adapter import (
     command_uncertainties,
     decision_factors,
@@ -117,15 +118,13 @@ def _evaluate_shard(worker_index: int) -> DecisionDiffShard:
         reconciliation_ids[
             "|".join((reconciliation, legacy_action, current.action, oracle.minimum_floor, oracle.owner))
         ].append(case.case_id)
-        if guard_action_severity(legacy_action) != guard_action_severity(oracle.minimum_floor):
+        if guard_action_severity(current.action) != guard_action_severity(oracle.minimum_floor):
             kind = (
                 "underclassified"
-                if guard_action_severity(legacy_action) < guard_action_severity(oracle.minimum_floor)
+                if guard_action_severity(current.action) < guard_action_severity(oracle.minimum_floor)
                 else "overclassified"
             )
-            actual_gap_ids["|".join((oracle.owner, kind, oracle.minimum_floor, evaluation.minimum_action))].append(
-                case.case_id
-            )
+            actual_gap_ids["|".join((oracle.owner, kind, oracle.minimum_floor, current.action))].append(case.case_id)
 
     return DecisionDiffShard(
         transition_ids=dict(transition_ids),
@@ -169,6 +168,7 @@ def _baseline_proposal(evaluation: CompositeCommandEvaluation) -> EffectDecision
             factors=(
                 *decision_factors(evidence, compatibility_action_class=None, compatibility_rule=None),
                 *workspace_write_candidate_factors(command),
+                *command_critical_floor_factors(command),
             ),
             uncertainties=uncertainties,
         )

@@ -279,7 +279,7 @@ def test_full_guard_evaluation_matches_exact_non_widening_known_gap_baseline() -
     assert known_payload["schema_version"] == "1.0.0"
     assert known_payload["introduced_in_corpus"] == "1.0.0"
     assert known_payload["expires_by"] == "release/2.2-runtime-gate"
-    assert known_payload["status"] == "known-unresolved"
+    assert known_payload["status"] == "resolved"
     gaps_value = known_payload["gaps"]
     assert isinstance(gaps_value, list)
     expected: dict[tuple[str, str, str, str], tuple[int, str]] = {}
