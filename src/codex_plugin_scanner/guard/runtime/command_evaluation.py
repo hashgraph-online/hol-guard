@@ -21,6 +21,7 @@ from .command_extensions import (
 )
 from .command_model import CanonicalCommand, parse_shell_command
 from .command_rules import CommandRuleMatch, CommandRuleMode, CommandSafetyRule
+from .command_verified_read_candidates import verified_read_candidate_factor
 from .effect_decision import EffectDecision, EffectDecisionRequest, evaluate_effect_decision
 
 CommandDecisionFloor = Literal["allow", "monitor", "review", "block"]
@@ -148,12 +149,18 @@ def evaluate_command(
     if extension_uncertainties(observations):
         minimum_action = "block"
     evidence_batch = extension_evidence_batch(command, observations)
+    verified_read_candidate = verified_read_candidate_factor(command)
+    if verified_read_candidate is not None:
+        minimum_action = _stronger_floor(minimum_action, "review")
     decision_plane = evaluate_effect_decision(
         EffectDecisionRequest(
-            factors=decision_factors(
-                evidence_batch,
-                compatibility_action_class=compatibility_action_class,
-                compatibility_rule=compatibility_rule,
+            factors=(
+                *decision_factors(
+                    evidence_batch,
+                    compatibility_action_class=compatibility_action_class,
+                    compatibility_rule=compatibility_rule,
+                ),
+                *((verified_read_candidate,) if verified_read_candidate is not None else ()),
             ),
             uncertainties=tuple(
                 sorted(

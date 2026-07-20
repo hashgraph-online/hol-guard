@@ -14,7 +14,7 @@
       "baseline_floor": "review",
       "variant_floor": "require-reapproval",
       "owner": "CDX-060",
-      "observed_floors": ["allow", "allow"]
+      "observed_floors": ["review", "review"]
     },
     {
       "pair_id": "p-source-boundary",
@@ -29,7 +29,7 @@
       "baseline_floor": "review",
       "variant_floor": "require-reapproval",
       "owner": "CDX-060",
-      "observed_floors": ["allow", "allow"]
+      "observed_floors": ["review", "allow"]
     },
     {
       "pair_id": "p-typescript-source",
@@ -58,7 +58,7 @@
       "baseline_floor": "review",
       "variant_floor": "block",
       "owner": "CDX-064",
-      "observed_floors": ["allow", "review"]
+      "observed_floors": ["review", "review"]
     },
     {
       "pair_id": "p-github-mutation-impact",

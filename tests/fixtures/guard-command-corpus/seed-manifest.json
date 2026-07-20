@@ -14,8 +14,8 @@
     "guard_command_corpus_oracle_adversarial.py": "cbe6761e3ae7e6f646947d212998a26846742ccd702f2d6b237c72f83b8d23c5",
     "guard_command_corpus_oracle_loader.py": "22e766e8fe437c675ac38256433b2a47dfe122ad06c5d3d60f88eaccdefeec48"
   },
-  "pairs_sha256": "73da046da2c4d9f0c45b6dc70e3db3e2045199c7aa5e58e2516086d490fe9c11",
-  "known_gaps_sha256": "c728febfbc8852913826a3fbf11ed654c044c5412cf1b55d07e64b8b20e1c5a2",
+  "pairs_sha256": "f3997c3bf90c031d6935eb30f0834afe5e01f2908dfeea55d1d66b18e81014be",
+  "known_gaps_sha256": "5176ad770851122c4af4861b16756862a6c496888be6154402b394cdb9958bc2",
   "reproducible_command": "uv run --no-sync pytest -q tests/test_guard_command_corpus.py",
   "evaluation_budget_seconds": 30,
   "evaluation_rss_budget_mib": 512,
