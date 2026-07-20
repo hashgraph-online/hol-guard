@@ -8515,16 +8515,18 @@ def _python_interpreter_trust(
         return "unknown"
     launch_path = Path(raw_launch_path)
     canonical = Path(canonical_path)
-    if _interpreter_path_is_within(launch_path, workspace_root):
-        return "workspace_local"
     try:
         guard_launch = Path(sys.executable).expanduser().absolute()
         guard_canonical = guard_launch.resolve(strict=True)
     except (OSError, RuntimeError):
         guard_launch = Path(sys.executable).expanduser().absolute()
         guard_canonical = guard_launch
-    if canonical == guard_canonical and launch_path in {guard_launch, guard_canonical}:
+    if canonical == guard_canonical and (
+        launch_path in {guard_launch, guard_canonical} or launch_path.parent == guard_launch.parent
+    ):
         return "trusted_guard"
+    if _interpreter_path_is_within(launch_path, workspace_root):
+        return "workspace_local"
     if home_dir is not None and _interpreter_path_is_within(launch_path, home_dir):
         return "user_controlled"
     if os.name == "nt":

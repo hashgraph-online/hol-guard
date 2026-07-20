@@ -164,6 +164,35 @@ def test_exact_guard_interpreter_keeps_read_only_commands_prompt_free(tmp_path: 
         )
 
 
+def test_same_directory_guard_interpreter_alias_is_trusted_but_workspace_alias_is_not(tmp_path: Path) -> None:
+    guard_canonical = Path(sys.executable).resolve(strict=True)
+    alias = next(
+        (
+            candidate
+            for candidate in Path(sys.executable).parent.glob("python*")
+            if candidate != Path(sys.executable)
+            and candidate.is_file()
+            and candidate.resolve(strict=True) == guard_canonical
+        ),
+        None,
+    )
+    if alias is None:
+        pytest.skip("the Guard interpreter directory has no sibling Python alias")
+    guard_workspace = Path(sys.executable).parent.parent
+    guard_alias_command = f"{shlex.quote(str(alias))} -c \"print('fixture')\""
+
+    assert _request(guard_alias_command, cwd=guard_workspace) is None
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    workspace_alias = workspace / "python3"
+    workspace_alias.symlink_to(guard_canonical)
+    evidence = _interpreter_evidence("./python3 -c 'print(1)'", cwd=workspace)
+
+    assert evidence["executable"]["path"] == str(guard_canonical)
+    assert evidence["trust"] == "workspace_local"
+
+
 @pytest.mark.skipif(not Path("/usr/bin/python3").is_file(), reason="trusted system Python is unavailable")
 def test_verified_system_interpreter_keeps_normal_read_only_path_prompt_free(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
