@@ -262,6 +262,25 @@ def test_incomplete_lockfile_evidence_contains_hash_and_reason_without_contents(
     assert malformed_lockfile not in evidence_payload
 
 
+def test_incomplete_lockfile_without_direct_package_target_still_fails_closed(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package-lock.json", '{"lockfileVersion":3,"packages":')
+    store = GuardStore(tmp_path / "home")
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_from_command("npm install", workspace=workspace_dir),
+        store=store,
+        workspace_dir=workspace_dir,
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert result.packages[0]["name"] == "unresolved-lockfile"
+    assert result.packages[0]["lockfileParseComplete"] is False
+    assert any(reason["code"] == "lockfile_parse_incomplete" for reason in result.reasons)
+
+
 def test_incomplete_lockfile_blocks_in_strict_mode(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

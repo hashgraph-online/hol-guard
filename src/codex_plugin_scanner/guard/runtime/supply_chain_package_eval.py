@@ -311,11 +311,11 @@ def evaluate_package_request_artifact(
         if (source_url := _optional_string(target.get("source_url"))) is not None
     )
     incomplete_lockfile = _first_incomplete_lockfile_result(workspace_dir, artifact)
-    if incomplete_lockfile is not None and targets:
+    if incomplete_lockfile is not None:
         return _finalize_incomplete_lockfile_evaluation(
             artifact=artifact,
             store=store,
-            target=targets[0],
+            target=targets[0] if targets else _incomplete_lockfile_fallback_target(incomplete_lockfile),
             workspace_dir=workspace_dir,
             parse_result=incomplete_lockfile,
             package_intent_hash=package_intent_hash,
@@ -2157,6 +2157,35 @@ def _incomplete_lockfile_package_result(
     return package
 
 
+def _incomplete_lockfile_fallback_target(parse_result: LockfileParseResult) -> dict[str, object]:
+    ecosystem = {
+        "bundler-lock": "rubygems",
+        "cargo-lock": "cargo",
+        "composer-lock": "composer",
+        "pipenv-lock": "pypi",
+        "poetry-lock": "pypi",
+        "uv-lock": "pypi",
+    }.get(parse_result.format, "npm")
+    package_manager = {
+        "bundler-lock": "bundler",
+        "cargo-lock": "cargo",
+        "composer-lock": "composer",
+        "pipenv-lock": "pipenv",
+        "poetry-lock": "poetry",
+        "uv-lock": "uv",
+    }.get(parse_result.format, "npm")
+    return {
+        "ecosystem": ecosystem,
+        "name": "unresolved-lockfile",
+        "namespace": None,
+        "package_manager": package_manager,
+        "range": None,
+        "version": None,
+        "redacted_command": None,
+        "alias": None,
+    }
+
+
 def _workspace_fingerprint(
     workspace_id: str,
     *,
@@ -2293,13 +2322,14 @@ def _transitive_lockfile_results(
         dependency_entries: list[tuple[str, str, str, bool]] = []
         parse_result = _parse_lockfile_text_result(lockfile_path.name, lockfile_text)
         if not parse_result.complete:
-            if direct_targets:
-                results.append(
-                    _incomplete_lockfile_package_result(
-                        target=direct_targets[0],
-                        parse_result=parse_result,
-                    )
+            results.append(
+                _incomplete_lockfile_package_result(
+                    target=(
+                        direct_targets[0] if direct_targets else _incomplete_lockfile_fallback_target(parse_result)
+                    ),
+                    parse_result=parse_result,
                 )
+            )
             continue
         for entry in parse_result.entries:
             normalized_dependency_path = entry.dependency_path.strip("/")
