@@ -343,6 +343,10 @@ def test_partial_unlink_failure_restores_every_legacy_source_and_keeps_toml_back
 
     assert home_hooks.read_text(encoding="utf-8") == original_home_hooks
     assert workspace_hooks.read_text(encoding="utf-8") == original_workspace_hooks
+    assert home_config.read_text(encoding="utf-8") == original_home_config
+    assert workspace_config.read_text(encoding="utf-8") == original_workspace_config
+    assert not codex_adapter.hook_manifest_path(guard_home, home_config).exists()
+    assert not codex_adapter.hook_secret_path(guard_home).exists()
     backup_payloads = [
         json.loads(path.read_text(encoding="utf-8"))
         for path in (guard_home / "managed" / "codex" / "migration-backups").glob("*.json")
