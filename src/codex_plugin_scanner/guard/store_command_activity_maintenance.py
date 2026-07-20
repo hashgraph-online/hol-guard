@@ -155,6 +155,14 @@ def _delete_retained_detail_batch(
         activity_ids,
     ).fetchone()
     correlations = int(correlation_row[0]) if correlation_row is not None else 0
+    connection.execute(
+        f"delete from command_activity_shadow_cohorts where activity_id in ({placeholders})",
+        activity_ids,
+    )
+    connection.execute(
+        f"delete from command_activity_shadow_evaluations where activity_id in ({placeholders})",
+        activity_ids,
+    )
     result = connection.execute(
         f"delete from command_activity where activity_id in ({placeholders})",
         activity_ids,

@@ -26,7 +26,13 @@ from ..runtime.command_activity_lifecycle import (
     build_pre_hook_evidence,
     build_unpaired_post_evidence,
 )
-from ..runtime.command_evaluation import evaluate_command
+from ..runtime.command_evaluation import CompositeCommandEvaluation, evaluate_command
+from ..runtime.command_shadow_evaluation import (
+    CommandShadowObservation,
+    baseline_command_shadow_proposal,
+    build_command_shadow_observation,
+    load_command_shadow_control,
+)
 from ..runtime.secret_file_requests import extract_sensitive_tool_action_request
 from ..store import GuardStore
 
@@ -71,6 +77,8 @@ def record_pre_hook_command_activity_best_effort(
             payload=payload,
             key=key,
         )
+        activity_id = _activity_id()
+        occurred_at = _utc_now()
         evidence = build_pre_hook_evidence(
             evaluation,
             CommandActivityDecisionFacts(
@@ -84,19 +92,28 @@ def record_pre_hook_command_activity_best_effort(
                 approval_reuse_status=approval_reuse_status,
                 receipt_id=receipt_id,
             ),
-            activity_id=_activity_id(),
-            occurred_at=_utc_now(),
+            activity_id=activity_id,
+            occurred_at=occurred_at,
             harness=harness,
             request_correlation=correlation,
         )
         if correlation is not None and store.is_exact_command_activity_pre_replay(evidence):
             return False
+        shadow, shadow_failed = _build_shadow_best_effort(
+            evaluation=evaluation,
+            policy_action=policy_action,
+            activity_id=activity_id,
+            occurred_at=occurred_at,
+        )
         try:
-            return store.record_command_activity(evidence)
+            recorded = store.record_command_activity(evidence, shadow=shadow)
         except Exception:
             if correlation is not None and store.is_exact_command_activity_pre_replay(evidence):
                 return False
             raise
+        if shadow_failed:
+            _record_persistence_failure(store, "shadow_evaluation_failed")
+        return recorded
     except Exception:
         _record_persistence_failure(store, "pre_record_failed")
         return False
@@ -190,6 +207,30 @@ def record_command_activity_failure_best_effort(store: GuardStore, error_code: s
     """Count an analytics-boundary failure without affecting hook enforcement."""
 
     _record_persistence_failure(store, error_code)
+
+
+def _build_shadow_best_effort(
+    *,
+    evaluation: CompositeCommandEvaluation,
+    policy_action: GuardAction,
+    activity_id: str,
+    occurred_at: datetime,
+) -> tuple[CommandShadowObservation | None, bool]:
+    try:
+        proposal = baseline_command_shadow_proposal(evaluation)
+        return (
+            build_command_shadow_observation(
+                evaluation,
+                authoritative_action=policy_action,
+                proposal=proposal,
+                activity_id=activity_id,
+                occurred_at=occurred_at,
+                control=load_command_shadow_control(),
+            ),
+            False,
+        )
+    except Exception:
+        return None, True
 
 
 def _evaluate_payload_command(

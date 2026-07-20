@@ -15,6 +15,7 @@ from .runtime.command_activity_contract import (
     CommandProofLevel,
 )
 from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from .runtime.command_shadow_evaluation import COMMAND_SHADOW_SCHEMA_VERSION
 from .store_command_activity_health_schema import COMMAND_ACTIVITY_HEALTH_SCHEMA_VERSION
 from .store_command_activity_maintenance_schema import COMMAND_ACTIVITY_MAINTENANCE_SCHEMA_VERSION
 
@@ -32,6 +33,7 @@ _ALLOWED_ERROR_CLASSES: Final = frozenset(
         "maintenance_failed",
         "post_record_failed",
         "pre_record_failed",
+        "shadow_evaluation_failed",
     }
 )
 _COUNT_TABLES: Final = (
@@ -45,8 +47,12 @@ _COUNT_TABLES: Final = (
     ("rollup_pending", "command_activity_rollup_pending"),
     ("feedback", "command_activity_feedback"),
     ("invalidations", "command_activity_invalidations"),
+    ("shadow_evaluations", "command_activity_shadow_evaluations"),
+    ("shadow_cohorts", "command_activity_shadow_cohorts"),
 )
 _DELETE_TABLES: Final = (
+    "command_activity_shadow_cohorts",
+    "command_activity_shadow_evaluations",
     "command_activity_feedback",
     "command_activity",
     "command_activity_match_effects",
@@ -163,6 +169,7 @@ class StoreCommandActivityPrivacyMixin:
                 "api": COMMAND_ACTIVITY_API_SCHEMA_VERSION,
                 "health": COMMAND_ACTIVITY_HEALTH_SCHEMA_VERSION,
                 "maintenance": COMMAND_ACTIVITY_MAINTENANCE_SCHEMA_VERSION,
+                "shadow": COMMAND_SHADOW_SCHEMA_VERSION,
             },
             "counts": counts,
             "proof_coverage": [
