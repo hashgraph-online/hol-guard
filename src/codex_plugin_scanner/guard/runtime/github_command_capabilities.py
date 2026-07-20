@@ -8,6 +8,7 @@ status merely because it is followed by an output formatter in a shell pipeline.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Literal
 
 from .github_capability_contract import (
     GitHubCommandAssessment,
@@ -183,13 +184,26 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
                 "The command deletes GitHub-hosted state.",
             )
         if top_level == "pr" and subcommand == "merge":
-            capabilities: tuple[GitHubCommandCapability, ...] = ("merge_remote",)
+            admin_state = _boolean_option_state(tail, "--admin")
+            if admin_state == "invalid":
+                return _assessment(
+                    "unknown",
+                    "github.command.invalid-admin-option",
+                    "The administrator merge option has an invalid Boolean value.",
+                )
+            admin_merge = admin_state == "true"
+            merge_capability: GitHubCommandCapability = "admin_merge_remote" if admin_merge else "merge_remote"
+            capabilities: tuple[GitHubCommandCapability, ...] = (merge_capability,)
             if _has_option(tail, "--delete-branch"):
-                capabilities = ("merge_remote", "delete_remote")
+                capabilities = (*capabilities, "delete_remote")
             return _assessment(
                 capabilities,
-                "github.command.pr-merge",
-                "The command merges a pull request and may also delete its branch.",
+                "github.command.pr-admin-merge" if admin_merge else "github.command.pr-merge",
+                (
+                    "The command uses administrator privileges to merge a pull request."
+                    if admin_merge
+                    else "The command merges a pull request and may also delete its branch."
+                ),
             )
         if top_level == "release" and subcommand in _PUBLISH_SUBCOMMANDS:
             return _assessment(
@@ -277,6 +291,30 @@ def _strip_global_options(args: list[str]) -> list[str]:
             return []
         index += 2
     return args[index:]
+
+
+def _boolean_option_state(
+    args: Sequence[str],
+    option: str,
+) -> Literal["absent", "true", "false", "invalid"]:
+    state: Literal["absent", "true", "false", "invalid"] = "absent"
+    for token in args:
+        if token == "--":
+            break
+        if token == option:
+            state = "true"
+            continue
+        prefix = f"{option}="
+        if not token.startswith(prefix):
+            continue
+        value = token.removeprefix(prefix)
+        if value in {"1", "t", "T", "TRUE", "true", "True"}:
+            state = "true"
+        elif value in {"0", "f", "F", "FALSE", "false", "False"}:
+            state = "false"
+        else:
+            return "invalid"
+    return state
 
 
 def _group_subcommand(args: Sequence[str]) -> str | None:

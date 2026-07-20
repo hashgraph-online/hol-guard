@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
+from types import MappingProxyType
 from typing import Literal, final
 
-from .command_builtin_extension_catalog import DIRECT_COMMAND_EXTENSION_VALUES
-from .command_builtin_rules import COMMAND_ACTION_RISK_CLASSES, rules_for_extension
+from .command_builtin_extension_registry import BUILT_IN_COMMAND_EXTENSION_VALUES
+from .command_builtin_rules import COMMAND_ACTION_RISK_CLASSES
 from .command_extension_observations import CommandExtensionObservation, observe_command_extensions
 from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand
-from .command_package_extensions import PACKAGE_COMMAND_EXTENSION_SPECS, PackageCommandExtensionSpec
+from .command_permission_catalog import (
+    CommandPermissionCatalog,
+    CommandPermissionSpec,
+    delegated_permission,
+    permissions_for_action_classes,
+    permissions_for_rules,
+)
 from .command_rules import CommandSafetyRule, matcher_index_hints
 
 COMMAND_EXTENSION_SCHEMA_VERSION = 2
@@ -53,6 +62,37 @@ class CommandSafetyExtension:
     executables: tuple[str, ...] = ()
     project_markers: tuple[str, ...] = ()
     reference_urls: tuple[str, ...] = ()
+    permissions: tuple[CommandPermissionSpec, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.permissions:
+            return
+        if self.rules:
+            permissions = permissions_for_rules(
+                self.extension_id,
+                self.version,
+                self.rules,
+                configurable=not self.required,
+            )
+        elif self.delegated_protection is not None:
+            permissions = (
+                delegated_permission(
+                    self.extension_id,
+                    self.version,
+                    self.name,
+                    self.description,
+                    self.safer_alternatives,
+                ),
+            )
+        else:
+            permissions = permissions_for_action_classes(
+                self.extension_id,
+                self.version,
+                self.action_classes,
+                self.safer_alternatives,
+                configurable=not self.required,
+            )
+        object.__setattr__(self, "permissions", permissions)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -77,6 +117,8 @@ class CommandSafetyExtension:
             "safer_alternatives": list(self.safer_alternatives),
             "rule_count": len(self.rules),
             "rules": [rule.to_dict() for rule in self.rules],
+            "permission_count": len(self.permissions),
+            "permissions": [permission.to_dict() for permission in self.permissions],
         }
 
 
@@ -164,20 +206,67 @@ class CommandSafetyExtensionRegistry:
                         f"Command safety extension {extension.extension_id} rules must own every action class"
                     )
         _validate_registry_relationships(ordered, by_id=by_id, aliases=aliases)
+        permissions = tuple(permission for extension in ordered for permission in extension.permissions)
+        permission_catalog = CommandPermissionCatalog(permissions)
+        for extension in ordered:
+            extension_permissions = tuple(
+                permission
+                for permission in permission_catalog.permissions
+                if permission.extension_id == extension.extension_id
+            )
+            if extension_permissions != tuple(sorted(extension.permissions, key=lambda item: item.permission_id)):
+                raise ValueError(f"Permission catalog ownership mismatch for {extension.extension_id}")
+            permission_rule_ids = {rule_id for permission in extension.permissions for rule_id in permission.rule_ids}
+            if permission_rule_ids != {rule.rule_id for rule in extension.rules}:
+                raise ValueError(f"Permission catalog must map every rule for {extension.extension_id}")
+            permission_action_classes = {
+                action_class for permission in extension.permissions for action_class in permission.action_classes
+            }
+            if permission_action_classes != set(extension.action_classes):
+                raise ValueError(f"Permission catalog must map every action class for {extension.extension_id}")
+        catalog_payload = json.dumps(
+            [extension.to_dict() for extension in ordered],
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode()
+        catalog_digest = hashlib.sha256(catalog_payload).hexdigest()
         self._extensions = ordered
-        self._by_id = by_id
-        self._aliases = aliases
-        self._by_action_class = by_action_class
-        self._by_action_rule = by_action_rule
-        self._by_rule_id = by_rule_id
+        self._by_id = MappingProxyType(by_id)
+        self._aliases = MappingProxyType(aliases)
+        self._by_action_class = MappingProxyType(by_action_class)
+        self._by_action_rule = MappingProxyType(by_action_rule)
+        self._by_rule_id = MappingProxyType(by_rule_id)
         self._rule_records = tuple(rule_records)
-        self._executable_index = {key: frozenset(value) for key, value in executable_index.items()}
-        self._keyword_index = {key: frozenset(value) for key, value in keyword_index.items()}
+        self._executable_index = MappingProxyType({key: frozenset(value) for key, value in executable_index.items()})
+        self._keyword_index = MappingProxyType({key: frozenset(value) for key, value in keyword_index.items()})
         self._unindexed_rule_ids = frozenset(unindexed_rule_ids)
+        self._permission_catalog = permission_catalog
+        self._catalog_digest = catalog_digest
 
     @property
     def extensions(self) -> tuple[CommandSafetyExtension, ...]:
         return self._extensions
+
+    @property
+    def permissions(self) -> tuple[CommandPermissionSpec, ...]:
+        return self._permission_catalog.permissions
+
+    @property
+    def catalog_digest(self) -> str:
+        return self._catalog_digest
+
+    def permission(self, permission_id: str) -> CommandPermissionSpec | None:
+        return self._permission_catalog.get(permission_id.strip().lower())
+
+    def permission_for_rule_id(self, rule_id: str) -> CommandPermissionSpec | None:
+        return self._permission_catalog.for_rule_id(rule_id.strip().lower())
+
+    def permission_for_action_class(self, action_class: str) -> CommandPermissionSpec | None:
+        return self._permission_catalog.for_action_class(action_class)
+
+    def permission_for_typed_capability(self, capability: str) -> CommandPermissionSpec | None:
+        return self._permission_catalog.for_typed_capability(capability.strip().lower())
 
     def get(self, extension_id: str) -> CommandSafetyExtension | None:
         normalized = extension_id.strip().lower()
@@ -308,8 +397,9 @@ def _validate_registry_relationships(
                     f"Command safety extension {extension.extension_id} has unknown dependency {dependency}"
                 )
         for conflict in extension.conflicts:
-            if conflict == extension.extension_id or conflict in by_id:
-                raise ValueError(f"Command safety extension {extension.extension_id} conflicts with {conflict}")
+            if conflict not in by_id:
+                raise ValueError(f"Command safety extension {extension.extension_id} has unknown conflict {conflict}")
+            raise ValueError(f"Command safety extension {extension.extension_id} conflicts with {conflict}")
 
     visiting: set[str] = set()
     visited: set[str] = set()
@@ -329,163 +419,6 @@ def _validate_registry_relationships(
         visit(extension.extension_id)
 
 
-def _package_command_extension(spec: PackageCommandExtensionSpec) -> CommandSafetyExtension:
-    return CommandSafetyExtension(
-        extension_id=spec.extension_id,
-        version="1.0.0",
-        name=spec.name,
-        description=spec.description,
-        action_classes=(),
-        risk_classes=("supply_chain",),
-        safer_alternatives=(
-            "Use the existing project manifest and lockfile instead of an unpinned package source.",
-            "Review package provenance and advisory evidence before installation or one-shot execution.",
-        ),
-        delegated_protection="package-firewall",
-        ecosystem_ids=spec.ecosystem_ids,
-        executables=spec.executables,
-        project_markers=spec.project_markers,
-        reference_urls=spec.reference_urls,
-    )
-
-
-_BUILT_IN_EXTENSIONS = (
-    CommandSafetyExtension(
-        extension_id="command.filesystem",
-        version="1.0.0",
-        name="Filesystem protection",
-        description="Reviews recursive deletion and access-control changes across filesystem trees.",
-        action_classes=("filesystem destructive command",),
-        risk_classes=("destructive_shell",),
-        safer_alternatives=(
-            "List and review exact target paths before recursive mutation.",
-            "Limit permission and ownership changes to the narrowest path.",
-        ),
-        rules=rules_for_extension("command.filesystem"),
-        required=True,
-    ),
-    CommandSafetyExtension(
-        extension_id="command.git",
-        version="1.0.0",
-        name="Git protection",
-        description="Reviews local and remote Git operations that can discard work or replace history.",
-        action_classes=("git destructive command",),
-        risk_classes=("destructive_shell",),
-        safer_alternatives=(
-            "Preview affected files and refs before destructive repository operations.",
-            "Create a temporary branch or stash before discarding local work.",
-        ),
-        rules=rules_for_extension("command.git"),
-        required=True,
-    ),
-    CommandSafetyExtension(
-        extension_id="command.system",
-        version="1.0.0",
-        name="System protection",
-        description="Reviews storage formatting and operating-system power-state mutations.",
-        action_classes=("system destructive command",),
-        risk_classes=("destructive_shell",),
-        safer_alternatives=("Inspect the exact device or host state with a read-only command first.",),
-        rules=rules_for_extension("command.system"),
-        required=True,
-    ),
-    CommandSafetyExtension(
-        extension_id="command.windows",
-        version="1.0.0",
-        name="Windows protection",
-        description="Reviews destructive Windows storage and operating-system commands.",
-        action_classes=("windows destructive command",),
-        risk_classes=("destructive_shell",),
-        safer_alternatives=("Use read-only PowerShell inventory commands to verify exact targets first.",),
-        rules=rules_for_extension("command.windows"),
-        required=True,
-    ),
-    CommandSafetyExtension(
-        extension_id="command.container-runtime",
-        version="1.0.0",
-        name="Container runtime protection",
-        description="Reviews container operations that can expose credentials, publish data, or mutate host state.",
-        action_classes=("docker-sensitive command", "Docker client config access"),
-        risk_classes=("network_egress", "destructive_shell", "local_secret_read"),
-        safer_alternatives=(
-            "Use a pinned image and a read-only container filesystem where possible.",
-            "Pass only the specific secret or file required by the container.",
-        ),
-        rules=rules_for_extension("command.container-runtime"),
-        reference_urls=(
-            "https://docs.docker.com/reference/cli/docker/system/prune/",
-            "https://docs.docker.com/reference/cli/docker/container/rm/",
-            "https://docs.docker.com/reference/cli/docker/container/run/",
-        ),
-    ),
-    CommandSafetyExtension(
-        extension_id="command.data-protection",
-        version="1.0.0",
-        name="Command data protection",
-        description="Detects shell flows that can send credentials or local file contents to a network destination.",
-        action_classes=("credential exfiltration shell command", "shell file upload command"),
-        risk_classes=("data_flow_exfiltration", "credential_exfiltration", "network_egress"),
-        safer_alternatives=(
-            "Send an explicit non-secret value instead of piping local files or environment output.",
-            "Use a destination allowlist and review the exact payload before transmission.",
-        ),
-        rules=rules_for_extension("command.data-protection"),
-    ),
-    CommandSafetyExtension(
-        extension_id="command.encoded-execution",
-        version="1.0.0",
-        name="Encoded execution protection",
-        description=(
-            "Reviews decode-and-execute flows whose effective program is hidden from normal command inspection."
-        ),
-        action_classes=("encoded or encrypted shell command",),
-        risk_classes=("encoded_execution",),
-        safer_alternatives=("Decode the payload to a file, inspect it, then invoke the reviewed file directly.",),
-        rules=rules_for_extension("command.encoded-execution"),
-    ),
-    CommandSafetyExtension(
-        extension_id="command.guard-self-protection",
-        version="1.0.0",
-        name="Guard self-protection",
-        description="Prevents commands from authorizing their own Guard approval or weakening protected Guard state.",
-        action_classes=("Guard approval self-authorization command",),
-        risk_classes=("policy_bypass",),
-        safer_alternatives=("Approve the pending request through Guard's authenticated approval surface.",),
-        rules=rules_for_extension("command.guard-self-protection"),
-        required=True,
-    ),
-    CommandSafetyExtension(
-        extension_id="command.kubernetes-secrets",
-        version="1.0.0",
-        name="Kubernetes secret protection",
-        description="Reviews Kubernetes CLI operations that can reveal cluster or application secrets.",
-        action_classes=("Kubernetes secret read command",),
-        risk_classes=("local_secret_read",),
-        safer_alternatives=("Request only the required non-secret field or metadata instead of the Secret payload.",),
-        rules=rules_for_extension("command.kubernetes-secrets"),
-        reference_urls=("https://kubernetes.io/docs/reference/kubectl/generated/kubectl_get/",),
-    ),
-    CommandSafetyExtension(
-        extension_id="command.shell-mutations",
-        version="1.0.0",
-        name="Shell, Git, and filesystem protection",
-        description="Reviews destructive shell, Git, filesystem, redirection, and protected configuration mutations.",
-        action_classes=(
-            "destructive shell command",
-            "guard-managed config write",
-            "sensitive local file write",
-            "GitHub PR body shell substitution",
-        ),
-        risk_classes=("destructive_shell", "local_secret_read", "execution"),
-        safer_alternatives=(
-            "Use a dry run or preview mode before a destructive operation.",
-            "Narrow the target path or Git ref and avoid recursive or forced mutation.",
-            "Use a literal body file instead of shell substitution in command arguments.",
-        ),
-        rules=rules_for_extension("command.shell-mutations"),
-    ),
-    *(CommandSafetyExtension(**values) for values in DIRECT_COMMAND_EXTENSION_VALUES),
-    *(_package_command_extension(spec) for spec in PACKAGE_COMMAND_EXTENSION_SPECS),
-)
+_BUILT_IN_EXTENSIONS = tuple(CommandSafetyExtension(**values) for values in BUILT_IN_COMMAND_EXTENSION_VALUES)
 
 BUILT_IN_COMMAND_EXTENSION_REGISTRY = CommandSafetyExtensionRegistry(_BUILT_IN_EXTENSIONS)

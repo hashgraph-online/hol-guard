@@ -10,6 +10,7 @@ from typing import Final, Literal
 from codex_plugin_scanner.guard.action_lattice import guard_action_severity
 
 from ..models import GuardAction
+from .command_permission_catalog import COMMAND_PERMISSION_SCHEMA_VERSION, CommandPermissionSpec, PermissionRiskTier
 
 GitHubCommandCapability = Literal[
     "read_local",
@@ -18,6 +19,7 @@ GitHubCommandCapability = Literal[
     "maintain_remote",
     "content_remote",
     "merge_remote",
+    "admin_merge_remote",
     "publish_remote",
     "workflow_remote",
     "force_remote",
@@ -28,11 +30,23 @@ GitHubCommandCapability = Literal[
     "unknown",
 ]
 
+_REMOTE_MUTATION_RISKS: Final = ("destructive_shell", "network_egress")
+_LOCAL_WRITE_RISKS: Final = ("destructive_shell",)
+
 
 @dataclass(frozen=True, slots=True)
 class GitHubCapabilityContract:
+    capability: GitHubCommandCapability
+    permission_id: str
     action_floor: GuardAction
     workflow_authorizable: bool
+    action_class: str | None
+    rule_id: str | None
+    title: str
+    description: str
+    risk_tier: PermissionRiskTier
+    risk_classes: tuple[str, ...]
+    safer_alternatives: tuple[str, ...]
 
 
 _CAPABILITY_ORDER: Final[tuple[GitHubCommandCapability, ...]] = (
@@ -42,6 +56,7 @@ _CAPABILITY_ORDER: Final[tuple[GitHubCommandCapability, ...]] = (
     "maintain_remote",
     "content_remote",
     "merge_remote",
+    "admin_merge_remote",
     "publish_remote",
     "workflow_remote",
     "force_remote",
@@ -52,22 +67,136 @@ _CAPABILITY_ORDER: Final[tuple[GitHubCommandCapability, ...]] = (
     "unknown",
 )
 _CAPABILITY_RANK: Final = MappingProxyType({capability: rank for rank, capability in enumerate(_CAPABILITY_ORDER)})
+_CAPABILITY_FLOOR: Final = MappingProxyType(
+    {
+        "read_local": "allow",
+        "read_remote": "allow",
+        "write_local": "review",
+        "maintain_remote": "review",
+        "content_remote": "review",
+        "merge_remote": "require-reapproval",
+        "admin_merge_remote": "require-reapproval",
+        "publish_remote": "require-reapproval",
+        "workflow_remote": "require-reapproval",
+        "force_remote": "block",
+        "delete_remote": "require-reapproval",
+        "secret_remote": "block",
+        "access_remote": "require-reapproval",
+        "mutate_remote": "require-reapproval",
+        "unknown": "require-reapproval",
+    }
+)
+
+
+def _contract(
+    capability: GitHubCommandCapability,
+    permission_suffix: str,
+    action_class: str | None,
+    rule_suffix: str | None,
+    title: str,
+    *,
+    local: bool = False,
+) -> GitHubCapabilityContract:
+    read_only = rule_suffix is None
+    description = (
+        f"Reads {title.lower()} without changing state."
+        if read_only
+        else (
+            "Identifies GitHub CLI operations that change local repository configuration."
+            if local
+            else f"Identifies {title.lower()} operations that change or may change GitHub-hosted state."
+        )
+    )
+    return GitHubCapabilityContract(
+        capability=capability,
+        permission_id=f"command.github.permission.{permission_suffix}",
+        action_floor=_CAPABILITY_FLOOR[capability],
+        workflow_authorizable=capability == "maintain_remote",
+        action_class=action_class,
+        rule_id=None if rule_suffix is None else f"command.github.{rule_suffix}",
+        title=title,
+        description=description,
+        risk_tier="low" if read_only else "high",
+        risk_classes=() if read_only else (_LOCAL_WRITE_RISKS if local else _REMOTE_MUTATION_RISKS),
+        safer_alternatives=(
+            "Keep the operation read-only."
+            if read_only
+            else "Inspect the exact repository, resource, and operation before confirming it.",
+        ),
+    )
+
+
 _CONTRACTS: Final = MappingProxyType(
     {
-        "read_local": GitHubCapabilityContract("allow", False),
-        "read_remote": GitHubCapabilityContract("allow", False),
-        "write_local": GitHubCapabilityContract("review", False),
-        "maintain_remote": GitHubCapabilityContract("review", True),
-        "content_remote": GitHubCapabilityContract("review", False),
-        "merge_remote": GitHubCapabilityContract("require-reapproval", False),
-        "publish_remote": GitHubCapabilityContract("require-reapproval", False),
-        "workflow_remote": GitHubCapabilityContract("require-reapproval", False),
-        "force_remote": GitHubCapabilityContract("block", False),
-        "delete_remote": GitHubCapabilityContract("require-reapproval", False),
-        "secret_remote": GitHubCapabilityContract("block", False),
-        "access_remote": GitHubCapabilityContract("require-reapproval", False),
-        "mutate_remote": GitHubCapabilityContract("require-reapproval", False),
-        "unknown": GitHubCapabilityContract("require-reapproval", False),
+        contract.capability: contract
+        for contract in (
+            _contract("read_local", "read-local", None, None, "local GitHub state"),
+            _contract("read_remote", "read-remote", None, None, "remote GitHub state"),
+            _contract(
+                "write_local",
+                "write-local",
+                "GitHub local configuration write",
+                "local-write",
+                "GitHub local configuration write",
+                local=True,
+            ),
+            _contract(
+                "maintain_remote",
+                "maintain-remote",
+                "GitHub bounded maintenance command",
+                "maintenance",
+                "Bounded GitHub maintenance",
+            ),
+            _contract(
+                "content_remote",
+                "content-remote",
+                "GitHub content mutation command",
+                "content",
+                "GitHub content mutation",
+            ),
+            _contract("merge_remote", "merge-remote", "GitHub merge command", "merge", "GitHub pull-request merge"),
+            _contract(
+                "admin_merge_remote",
+                "merge-admin",
+                "GitHub administrator pull-request merge command",
+                "admin-merge",
+                "GitHub administrator pull-request merge",
+            ),
+            _contract(
+                "publish_remote",
+                "publish-remote",
+                "GitHub release publication command",
+                "publish",
+                "GitHub release publication",
+            ),
+            _contract(
+                "workflow_remote",
+                "workflow-remote",
+                "GitHub workflow mutation command",
+                "workflow",
+                "GitHub workflow mutation",
+            ),
+            _contract(
+                "force_remote", "force-remote", "GitHub force mutation command", "force", "Forced GitHub mutation"
+            ),
+            _contract("delete_remote", "delete-remote", "GitHub delete command", "delete", "GitHub deletion"),
+            _contract(
+                "secret_remote", "secret-remote", "GitHub secret mutation command", "secret", "GitHub secret mutation"
+            ),
+            _contract(
+                "access_remote", "access-remote", "GitHub access mutation command", "access", "GitHub access mutation"
+            ),
+            _contract(
+                "mutate_remote", "mutate-remote", "GitHub remote mutation command", "mutation", "GitHub remote mutation"
+            ),
+            _contract(
+                "unknown",
+                "unknown",
+                "Unverified GitHub command capability",
+                "unknown",
+                "Unverified GitHub command capability",
+            ),
+        )
     }
 )
 
@@ -98,7 +227,7 @@ class GitHubCommandAssessment:
     def action_floor(self) -> GuardAction:
         return max(
             (github_capability_contract(item).action_floor for item in self.capabilities),
-            key=_action_rank,
+            key=guard_action_severity,
         )
 
     @property
@@ -110,6 +239,10 @@ class GitHubCommandAssessment:
 
 def github_capability_contract(capability: GitHubCommandCapability) -> GitHubCapabilityContract:
     return _CONTRACTS[capability]
+
+
+def github_capability_contracts() -> tuple[GitHubCapabilityContract, ...]:
+    return tuple(_CONTRACTS[capability] for capability in _CAPABILITY_ORDER)
 
 
 def strongest_github_capability(capabilities: tuple[GitHubCommandCapability, ...]) -> GitHubCommandCapability:
@@ -136,8 +269,6 @@ def github_assessment(
 def combine_github_assessments(
     assessments: Iterable[GitHubCommandAssessment],
 ) -> GitHubCommandAssessment | None:
-    """Combine shell-composed GitHub operations without losing weaker effects."""
-
     classified = tuple(assessments)
     if not classified:
         return None
@@ -153,5 +284,30 @@ def combine_github_assessments(
     )
 
 
-def _action_rank(action: GuardAction) -> int:
-    return guard_action_severity(action)
+def github_permission_specs(implementation_version: str) -> tuple[CommandPermissionSpec, ...]:
+    return tuple(
+        CommandPermissionSpec(
+            permission_id=contract.permission_id,
+            schema_version=COMMAND_PERMISSION_SCHEMA_VERSION,
+            extension_id="command.github",
+            implementation_version=implementation_version,
+            label=contract.title,
+            description=contract.description,
+            risk_tier=contract.risk_tier,
+            baseline_floor=contract.action_floor,
+            default_enabled=True,
+            configurable=True,
+            fixed_reason=None,
+            typed_capabilities=(contract.capability,),
+            action_classes=() if contract.action_class is None else (contract.action_class,),
+            rule_ids=() if contract.rule_id is None else (contract.rule_id,),
+            dependencies=(),
+            conflicts=(),
+            implied_permissions=(),
+            introduced_version="2.2.0",
+            deprecated=False,
+            replacement_permission_id=None,
+            safer_guidance=contract.safer_alternatives,
+        )
+        for contract in github_capability_contracts()
+    )

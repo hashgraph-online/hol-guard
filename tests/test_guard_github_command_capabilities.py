@@ -55,7 +55,7 @@ def _text(*parts: str) -> str:
             "github.graphql.maintain",
         ),
         (("pr", "merge", "17", "--squash", "--delete-branch"), "delete_remote", "github.command.pr-merge"),
-        (("pr", "merge", "17", "--admin"), "merge_remote", "github.command.pr-merge"),
+        (("pr", "merge", "17", "--admin"), "admin_merge_remote", "github.command.pr-admin-merge"),
         (("pr", "edit", "17", "--title", "updated"), "content_remote", "github.command.content-mutation"),
         (("issue", "close", "17"), "content_remote", "github.command.content-mutation"),
         (("issue", "delete", "17"), "delete_remote", "github.command.delete-mutation"),
@@ -240,6 +240,31 @@ def test_classify_github_cli_capabilities(
 
 
 @pytest.mark.parametrize(
+    ("args", "expected_capabilities"),
+    (
+        (("pr", "merge", "123", "--squash"), ("merge_remote",)),
+        (("pr", "merge", "123", "--admin"), ("admin_merge_remote",)),
+        (
+            ("pr", "merge", "123", "--admin", "--delete-branch"),
+            ("admin_merge_remote", "delete_remote"),
+        ),
+        (("pr", "merge", "123", "--admin=true"), ("admin_merge_remote",)),
+        (("pr", "merge", "123", "--admin=1"), ("admin_merge_remote",)),
+        (("pr", "merge", "123", "--admin=false"), ("merge_remote",)),
+        (("pr", "merge", "123", "--admin=0"), ("merge_remote",)),
+        (("pr", "merge", "123", "--admin=maybe"), ("unknown",)),
+        (("pr", "merge", "123", "--adminx"), ("merge_remote",)),
+        (("pr", "merge", "123", "--", "--admin"), ("merge_remote",)),
+    ),
+)
+def test_pr_merge_admin_capability_matches_github_boolean_option_semantics(
+    args: tuple[str, ...],
+    expected_capabilities: tuple[GitHubCommandCapability, ...],
+) -> None:
+    assert classify_github_cli(args).capabilities == expected_capabilities
+
+
+@pytest.mark.parametrize(
     "args",
     (
         ("api", "graphql", "-f", "query=query A { viewer { login } } query B { viewer { login } }"),
@@ -318,7 +343,7 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
         ("gh release create v1.2.3 --notes 'release notes'", "GitHub release publication command"),
         ("gh api repos/example/project/issues/17/comments -f body='looks good'", "GitHub content mutation command"),
         ("gh pr merge 17 --repo example/project --squash --delete-branch", "GitHub delete command"),
-        ("gh pr merge 17 --admin", "GitHub merge command"),
+        ("gh pr merge 17 --admin", "GitHub administrator pull-request merge command"),
         ("gh workflow run ci.yml", "GitHub workflow mutation command"),
         ("gh repo sync --force", "GitHub force mutation command"),
         ("gh repo delete example/project --yes", "GitHub delete command"),

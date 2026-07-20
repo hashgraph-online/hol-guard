@@ -100,6 +100,27 @@ def test_command_extension_registry_validates_relationships_and_aliases() -> Non
     )
     with pytest.raises(ValueError, match="conflicts with"):
         CommandSafetyExtensionRegistry((base, conflict))
+    unknown_conflict = _test_extension(
+        "command.unknown-conflict",
+        rule=_test_rule("command.unknown-conflict.rule", executable="unknown-conflict-tool"),
+        conflicts=("command.missing",),
+    )
+    with pytest.raises(ValueError, match="unknown conflict"):
+        CommandSafetyExtensionRegistry((unknown_conflict,))
+
+
+def test_command_extension_registry_indexes_are_immutable() -> None:
+    base = _test_extension(
+        "command.base",
+        rule=_test_rule("command.base.rule", executable="base-tool"),
+    )
+    registry = CommandSafetyExtensionRegistry((base,))
+    registry_state = vars(registry)
+
+    with pytest.raises(TypeError):
+        registry_state["_by_id"]["command.injected"] = base
+    with pytest.raises(TypeError):
+        registry_state["_executable_index"]["injected"] = frozenset({"command.base.rule"})
 
 
 def test_command_extension_registry_rejects_dependency_cycles_and_untrusted_required_sources() -> None:
