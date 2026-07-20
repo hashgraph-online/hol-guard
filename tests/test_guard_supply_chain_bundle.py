@@ -120,6 +120,29 @@ def _bundle_dict(
     }
 
 
+def _package_record(
+    *,
+    ecosystem: str = "npm",
+    name: str,
+    namespace: str | None,
+    version: str = "1.2.3",
+    default_action: str = "block",
+) -> dict[str, object]:
+    record = dict(_bundle_dict()["packages"][0])  # type: ignore[index]
+    qualified_name = f"{namespace}/{name}" if namespace is not None else name
+    record.update(
+        {
+            "defaultAction": default_action,
+            "ecosystem": ecosystem,
+            "name": name,
+            "namespace": namespace,
+            "purl": f"pkg:{ecosystem}/{qualified_name}@{version}",
+            "version": version,
+        }
+    )
+    return record
+
+
 def _sign_bundle_response(
     bundle: dict[str, object],
     *,
@@ -327,6 +350,138 @@ def test_supply_chain_bundle_rejects_expired_and_malformed_payloads() -> None:
 
     with pytest.raises(SupplyChainBundleMalformedError):
         load_supply_chain_bundle_response(json.dumps(malformed_payload))
+
+
+def test_supply_chain_bundle_deduplicates_identical_canonical_package_records() -> None:
+    private_key, _public_key = _generate_key_pair()
+    bundle = _bundle_dict()
+    package = _package_record(name="pkg", namespace="@scope")
+    bundle["packages"] = [package, dict(package)]
+
+    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
+
+    assert response.bundle.packages == (response.bundle.packages[0],)
+    assert response.bundle.packages[0].namespace == "@scope"
+
+
+def test_supply_chain_bundle_normalizes_legacy_qualified_packagist_name() -> None:
+    private_key, _public_key = _generate_key_pair()
+    bundle = _bundle_dict()
+    bundle["packages"] = [
+        _package_record(
+            ecosystem="packagist",
+            name="Laravel/Framework",
+            namespace=None,
+            version="11.1.0",
+        )
+    ]
+
+    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
+
+    package = response.bundle.packages[0]
+    assert package.ecosystem == "packagist"
+    assert package.namespace == "laravel"
+    assert package.name == "framework"
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        (
+            _package_record(name="pkg", namespace="@scope", default_action="block"),
+            _package_record(name="pkg", namespace="@scope", default_action="warn"),
+        ),
+        (
+            _package_record(name="Pkg", namespace="@Scope", default_action="block"),
+            _package_record(name="pkg", namespace="@scope", default_action="warn"),
+        ),
+    ],
+)
+def test_supply_chain_bundle_rejects_conflicting_canonical_package_records(
+    first: dict[str, object],
+    second: dict[str, object],
+) -> None:
+    private_key, _public_key = _generate_key_pair()
+    bundle = _bundle_dict()
+    bundle["packages"] = [first, second]
+
+    with pytest.raises(SupplyChainBundleMalformedError, match=r"Conflicting package records.*npm:@scope/pkg@1\.2\.3"):
+        load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
+
+
+@pytest.mark.parametrize(
+    "package",
+    [
+        _package_record(name="pkg", namespace="scope"),
+        _package_record(name="@scope/pkg", namespace=None),
+        _package_record(ecosystem="pypi", name="org/pkg", namespace=None),
+        _package_record(ecosystem="packagist", name="pkg", namespace=None),
+    ],
+)
+def test_supply_chain_bundle_rejects_malformed_ecosystem_identity_fields(
+    package: dict[str, object],
+) -> None:
+    private_key, _public_key = _generate_key_pair()
+    bundle = _bundle_dict()
+    bundle["packages"] = [package]
+
+    with pytest.raises(SupplyChainBundleMalformedError, match="Invalid package identity"):
+        load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
+
+
+def test_supply_chain_bundle_uses_ecosystem_specific_case_normalization() -> None:
+    private_key, _public_key = _generate_key_pair()
+    bundle = _bundle_dict()
+    bundle["packages"] = [
+        _package_record(name="Pkg", namespace="@Scope"),
+        _package_record(ecosystem="pypi", name="Foo_Bar", namespace=None),
+        _package_record(ecosystem="go", name="Example.com/Org/Repo", namespace=None),
+    ]
+    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
+
+    npm = evaluate_cached_supply_chain_bundle(
+        response, package_name="@scope/pkg", package_version="1.2.3", ecosystem="npm"
+    )
+    pypi = evaluate_cached_supply_chain_bundle(
+        response, package_name="foo-bar", package_version="1.2.3", ecosystem="pypi"
+    )
+    exact_go = evaluate_cached_supply_chain_bundle(
+        response, package_name="Example.com/Org/Repo", package_version="1.2.3", ecosystem="go"
+    )
+    wrong_case_go = evaluate_cached_supply_chain_bundle(
+        response, package_name="example.com/org/repo", package_version="1.2.3", ecosystem="go"
+    )
+
+    assert npm.action == "block"
+    assert pypi.action == "block"
+    assert exact_go.action == "block"
+    assert wrong_case_go.reason == "no_cached_match"
+
+
+def test_supply_chain_bundle_keeps_multiple_scopes_and_unscoped_leaf_distinct() -> None:
+    private_key, _public_key = _generate_key_pair()
+    bundle = _bundle_dict()
+    bundle["packages"] = [
+        _package_record(name="pkg", namespace=None, default_action="monitor"),
+        _package_record(name="pkg", namespace="@one", default_action="block"),
+        _package_record(name="pkg", namespace="@two", default_action="warn"),
+    ]
+    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
+    now = response.bundle.generated_at_timestamp + 1
+
+    unscoped = evaluate_cached_supply_chain_bundle(
+        response, package_name="pkg", package_version="1.2.3", ecosystem="npm", now=now
+    )
+    first_scope = evaluate_cached_supply_chain_bundle(
+        response, package_name="@one/pkg", package_version="1.2.3", ecosystem="npm", now=now
+    )
+    second_scope = evaluate_cached_supply_chain_bundle(
+        response, package_name="@two/pkg", package_version="1.2.3", ecosystem="npm", now=now
+    )
+
+    assert unscoped.action == "monitor"
+    assert first_scope.action == "block"
+    assert second_scope.action == "warn"
 
 
 def test_supply_chain_bundle_offline_evaluation_blocks_high_confidence_and_monitors_stale_low_risk() -> None:

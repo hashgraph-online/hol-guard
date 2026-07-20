@@ -77,6 +77,14 @@ from .supply_chain_bundle_models import (
     SupplyChainBundleResponse,
 )
 from .supply_chain_bundle_runtime import _is_high_confidence_block
+from .supply_chain_package_identity import (
+    CanonicalPackageIdentity,
+    PackageIdentityError,
+    canonical_package_identity,
+    normalize_ecosystem,
+    normalize_qualified_package_name,
+    parse_package_identity,
+)
 from .supply_chain_support import ecosystem_support_metadata
 from .workspace_path_guard import (
     read_bytes_within_workspace,
@@ -1530,14 +1538,7 @@ def _evaluate_with_bundle(
             resolved_version=resolved_version,
         )
         packages.append(package)
-    direct_identities = {
-        (
-            _optional_string(package.get("namespace")),
-            str(package.get("name") or ""),
-            _optional_string(package.get("resolvedVersion")),
-        )
-        for package in packages
-    }
+    direct_identities = {_result_package_identity(package) for package in packages}
     packages.extend(
         package
         for package in _transitive_lockfile_results(
@@ -1546,12 +1547,7 @@ def _evaluate_with_bundle(
             workspace_dir=workspace_dir,
             now_timestamp=now_timestamp,
         )
-        if (
-            _optional_string(package.get("namespace")),
-            str(package.get("name") or ""),
-            _optional_string(package.get("resolvedVersion")),
-        )
-        not in direct_identities
+        if _result_package_identity(package) not in direct_identities
     )
     if not packages:
         return None
@@ -1879,7 +1875,7 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
         package_name = _optional_string(item.get("package_name"))
         if package_name is None:
             continue
-        namespace, name = _split_namespace_name(package_name)
+        namespace, name = _split_namespace_name(package_name, ecosystem=ecosystem)
         requested = _optional_string(item.get("requested_specifier"))
         raw_spec = _optional_string(item.get("raw_spec")) or package_name
         source_url = _optional_string(item.get("source_url"))
@@ -2219,6 +2215,7 @@ def _transitive_lockfile_results(
             downgraded_low_confidence = (
                 decision == "warn" and _normalize_bundle_action(package_match.default_action) == "block"
             )
+            package_label = _bundle_package_label(package_match, version=version)
             results.append(
                 {
                     "decision": decision,
@@ -2240,11 +2237,14 @@ def _transitive_lockfile_results(
                             else "transitive_lockfile_match",
                             "message": (
                                 (
-                                    "Existing lockfile includes transitive dependency path "
+                                    f"Existing lockfile includes {package_label} at transitive dependency path "
                                     f"{dependency_path} with lower-confidence risk signals."
                                 )
                                 if downgraded_low_confidence
-                                else f"Existing lockfile already includes vulnerable dependency path {dependency_path}."
+                                else (
+                                    f"Existing lockfile already includes vulnerable {package_label} "
+                                    f"at dependency path {dependency_path}."
+                                )
                             ),
                             "severity": package_match.normalized_severity,
                             "source": "lockfile",
@@ -2278,19 +2278,29 @@ def _is_bundle_stale(bundle_response: SupplyChainBundleResponse, *, now_timestam
 
 def _bundle_package_index(
     bundle_response: SupplyChainBundleResponse,
-) -> dict[tuple[str, str, str], SupplyChainBundlePackage]:
-    index: dict[tuple[str, str, str], SupplyChainBundlePackage] = {}
+) -> dict[CanonicalPackageIdentity, SupplyChainBundlePackage]:
+    index: dict[CanonicalPackageIdentity, SupplyChainBundlePackage] = {}
     for package in bundle_response.bundle.packages:
-        normalized_name = _normalize_package_name(package.ecosystem, package.name)
-        index[(package.ecosystem, normalized_name, package.version)] = package
-        if package.namespace is not None:
-            qualified_name = _normalize_package_name(package.ecosystem, f"{package.namespace}/{package.name}")
-            index[(package.ecosystem, qualified_name, package.version)] = package
+        try:
+            identity = canonical_package_identity(
+                ecosystem=package.ecosystem,
+                namespace=package.namespace,
+                name=package.name,
+                version=package.version,
+            )
+        except PackageIdentityError as error:
+            raise SupplyChainBundleMalformedError(f"Invalid package identity: {error}") from error
+        existing = index.get(identity)
+        if existing is not None and existing != package:
+            raise SupplyChainBundleMalformedError(
+                f"Conflicting package records for canonical identity {identity.display}"
+            )
+        index.setdefault(identity, package)
     return index
 
 
 def _bundle_package_from_index(
-    index: dict[tuple[str, str, str], SupplyChainBundlePackage],
+    index: dict[CanonicalPackageIdentity, SupplyChainBundlePackage],
     *,
     package_name: str,
     package_version: str,
@@ -2298,8 +2308,15 @@ def _bundle_package_from_index(
 ) -> SupplyChainBundlePackage | None:
     if ecosystem is None:
         return None
-    normalized_name = _normalize_package_name(ecosystem, package_name)
-    return index.get((ecosystem, normalized_name, package_version))
+    try:
+        identity = parse_package_identity(
+            ecosystem=ecosystem,
+            package_name=package_name,
+            version=package_version,
+        )
+    except PackageIdentityError:
+        return None
+    return index.get(identity)
 
 
 def _transitive_lockfile_timeout_warning(
@@ -2684,7 +2701,10 @@ def _local_package_manifest_result(
     manifest_target = dict(target)
     manifest_package_name = _manifest_package_name(manifest_text)
     if manifest_package_name is not None:
-        namespace, name = _split_namespace_name(manifest_package_name)
+        namespace, name = _split_namespace_name(
+            manifest_package_name,
+            ecosystem=_optional_string(target.get("ecosystem")) or "npm",
+        )
         manifest_target["namespace"] = namespace
         manifest_target["name"] = name
     if _artifact_has_flag(artifact, "--ignore-scripts"):
@@ -3960,20 +3980,24 @@ def _bundle_package_versions(bundle_response: SupplyChainBundleResponse, target:
 
 def _bundle_package_name_matches(package: SupplyChainBundlePackage, target: dict[str, object]) -> bool:
     target_ecosystem = _optional_string(target.get("ecosystem"))
-    if target_ecosystem is not None and package.ecosystem != target_ecosystem:
+    if target_ecosystem is not None and package.ecosystem != normalize_ecosystem(target_ecosystem):
         return False
-    full_name = (
-        _normalize_package_name(package.ecosystem, f"{package.namespace}/{package.name}")
-        if package.namespace is not None
-        else _normalize_package_name(package.ecosystem, package.name)
-    )
-    target_name = str(target["normalized_name"])
-    target_namespace = _optional_string(target.get("namespace"))
-    if target_namespace is not None:
-        return target_name == full_name
-    if package.namespace is not None:
+    try:
+        package_identity = canonical_package_identity(
+            ecosystem=package.ecosystem,
+            namespace=package.namespace,
+            name=package.name,
+            version="*",
+        )
+        target_identity = canonical_package_identity(
+            ecosystem=target_ecosystem or package.ecosystem,
+            namespace=_optional_string(target.get("namespace")),
+            name=str(target["name"]),
+            version="*",
+        )
+    except PackageIdentityError:
         return False
-    return target_name == _normalize_package_name(package.ecosystem, package.name)
+    return package_identity == target_identity
 
 
 def _recommended_fix_allow_package_result(
@@ -4271,11 +4295,12 @@ def _string_tuple(value: object) -> tuple[str, ...]:
     return tuple(item for item in value if isinstance(item, str))
 
 
-def _split_namespace_name(value: str) -> tuple[str | None, str]:
-    if value.startswith("@") and "/" in value:
-        namespace, name = value.split("/", 1)
-        return namespace, name
-    return None, value
+def _split_namespace_name(value: str, *, ecosystem: str) -> tuple[str | None, str]:
+    try:
+        identity = parse_package_identity(ecosystem=ecosystem, package_name=value, version="*")
+    except PackageIdentityError:
+        return None, value
+    return identity.namespace, identity.name
 
 
 def _exact_version(value: str | None) -> str | None:
@@ -4366,10 +4391,10 @@ def _package_display_name(package: dict[str, object]) -> str:
 
 
 def _normalize_package_name(ecosystem: str, package_name: str) -> str:
-    normalized = package_name.strip().lower()
-    if ecosystem == "pypi":
-        return re.sub(r"[-_.]+", "-", normalized)
-    return normalized
+    try:
+        return normalize_qualified_package_name(ecosystem, package_name)
+    except PackageIdentityError:
+        return package_name.strip()
 
 
 def _target_candidate_names(target: dict[str, object]) -> tuple[str, ...]:
@@ -4429,13 +4454,30 @@ def _should_record_package(package: dict[str, object], decision: str) -> bool:
 
 def _evidence_id(package_intent_hash: str, package: dict[str, object]) -> str:
     package_name = _package_display_name(package)
+    ecosystem = _optional_string(package.get("ecosystem")) or "unknown"
     decision = str(package.get("decision") or "monitor")
     resolved_version = _optional_string(package.get("resolvedVersion")) or _optional_string(
         package.get("requestedVersion")
     )
     dependency_path = _optional_string(package.get("dependencyPath")) or "direct"
-    identity = f"{package_intent_hash}:{package_name}:{resolved_version}:{dependency_path}:{decision}"
+    identity = f"{package_intent_hash}:{ecosystem}:{package_name}:{resolved_version}:{dependency_path}:{decision}"
     return f"evidence-{stable_digest_hex(identity.encode(), length=16)}"
+
+
+def _result_package_identity(package: dict[str, object]) -> object:
+    ecosystem = _optional_string(package.get("ecosystem")) or "unknown"
+    name = _optional_string(package.get("name")) or "package"
+    namespace = _optional_string(package.get("namespace"))
+    version = _optional_string(package.get("resolvedVersion")) or _optional_string(package.get("requestedVersion"))
+    try:
+        return canonical_package_identity(
+            ecosystem=ecosystem,
+            namespace=namespace,
+            name=name,
+            version=version or "*",
+        )
+    except PackageIdentityError:
+        return (ecosystem, namespace, name, version)
 
 
 def _with_additional_reason(
@@ -4511,7 +4553,7 @@ def _bundle_reason_message(
     reason: str,
     stale: bool,
 ) -> str:
-    package_label = f"{package.name}@{package.version}"
+    package_label = _bundle_package_label(package)
     if stale:
         if decision == "block":
             return f"Cached bundle is stale, but Guard still blocked {package_label} from advisory intelligence."
@@ -4525,3 +4567,8 @@ def _bundle_reason_message(
     if reason == "maintainer_compromise":
         return f"Cached bundle flagged {package_label} for probable maintainer compromise."
     return f"Cached bundle matched {package_label}."
+
+
+def _bundle_package_label(package: SupplyChainBundlePackage, *, version: str | None = None) -> str:
+    package_name = f"{package.namespace}/{package.name}" if package.namespace is not None else package.name
+    return f"{package_name}@{version or package.version}"

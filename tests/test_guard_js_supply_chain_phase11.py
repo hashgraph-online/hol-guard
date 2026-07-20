@@ -783,3 +783,123 @@ def test_evaluate_package_request_artifact_avoids_scoped_package_name_collisions
 
     assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "no_cached_match"
+
+
+@pytest.mark.parametrize("reverse_bundle_order", [False, True])
+def test_transitive_scoped_and_unscoped_packages_keep_distinct_bundle_actions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reverse_bundle_order: bool,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    _write_text(
+        workspace_dir / "package-lock.json",
+        json.dumps(
+            {
+                "lockfileVersion": 3,
+                "packages": {
+                    "": {"name": "demo"},
+                    "node_modules/pkg": {"name": "pkg", "version": "1.2.3"},
+                    "node_modules/@scope/pkg": {"name": "@scope/pkg", "version": "1.2.3"},
+                },
+            }
+        ),
+    )
+    packages = [
+        _package(name="pkg", version="1.2.3", default_action="warn", recommended_fix_version=None),
+        _package(
+            name="pkg",
+            namespace="@scope",
+            version="1.2.3",
+            default_action="block",
+            recommended_fix_version=None,
+        ),
+    ]
+    if reverse_bundle_order:
+        packages.reverse()
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(packages=packages),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("npm audit fix --package-lock-only", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+    decisions = {
+        (package["namespace"], package["name"]): package["decision"] for package in result.packages
+    }
+
+    assert decisions[(None, "pkg")] == "warn"
+    assert decisions[("@scope", "pkg")] == "block"
+    scoped = next(package for package in result.packages if package["namespace"] == "@scope")
+    assert "@scope/pkg@1.2.3" in scoped["reasons"][0]["message"]
+
+
+def test_scoped_package_evidence_ids_are_collision_free() -> None:
+    common = {
+        "decision": "block",
+        "ecosystem": "npm",
+        "name": "pkg",
+        "requestedVersion": "1.2.3",
+        "resolvedVersion": "1.2.3",
+        "dependencyPath": None,
+    }
+    unscoped = supply_chain_package_eval_module._evidence_id(
+        "same-intent", {**common, "namespace": None}
+    )
+    scoped = supply_chain_package_eval_module._evidence_id(
+        "same-intent", {**common, "namespace": "@scope"}
+    )
+    other_scope = supply_chain_package_eval_module._evidence_id(
+        "same-intent", {**common, "namespace": "@other"}
+    )
+    other_ecosystem = supply_chain_package_eval_module._evidence_id(
+        "same-intent", {**common, "ecosystem": "go", "namespace": None}
+    )
+
+    assert len({unscoped, scoped, other_scope, other_ecosystem}) == 4
+
+
+def test_scoped_recommended_fix_does_not_use_unscoped_record(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            packages=[
+                _package(
+                    name="pkg",
+                    version="1.2.3",
+                    default_action="block",
+                    recommended_fix_version="9.9.9",
+                ),
+                _package(
+                    name="pkg",
+                    namespace="@scope",
+                    version="1.2.3",
+                    default_action="block",
+                    recommended_fix_version="1.2.4",
+                ),
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("npm install @scope/pkg@1.2.4", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "allow"
+    assert result.packages[0]["namespace"] == "@scope"
+    assert result.packages[0]["name"] == "pkg"
