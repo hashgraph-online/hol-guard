@@ -66,6 +66,9 @@ def test_every_cdx_062_case_retains_exact_review_or_block_floor() -> None:
 def test_direct_workspace_writes_use_the_exact_operation_allowlist(command: str, expected: str) -> None:
     evaluation = evaluate_command(command, cwd=Path("workspace"), home_dir=Path("home"))
     assert workspace_write_candidate_operation(evaluation.command) == expected
+    assert evaluation.minimum_action == "review"
+    assert evaluation.decision_plane.action == "review"
+    assert evaluation.decision_plane.proof_routes == frozenset()
 
 
 def test_capture_rejects_undeclared_change_and_link(tmp_path: Path) -> None:
