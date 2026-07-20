@@ -195,6 +195,41 @@ def test_migration_rejects_unknown_near_legacy_schema_without_changes(tmp_path: 
     assert [tuple(version) for version in versions] == [(shadow_schema.COMMAND_SHADOW_LEGACY_MIGRATION_VERSION,)]
 
 
+def _assert_extra_owned_object_is_rejected(connection: sqlite3.Connection, statement: str, name: str) -> None:
+    connection.execute(statement)
+    names = frozenset(shadow_schema._expected_schema(shadow_schema._LEGACY_SCHEMA_STATEMENTS)) | frozenset(
+        shadow_schema._expected_schema(shadow_schema._SCHEMA_STATEMENTS)
+    )
+    before = shadow_schema._read_schema(connection, names)
+    assert name in before
+
+    with pytest.raises(RuntimeError, match="incompatible command shadow schema objects"):
+        shadow_schema.ensure_command_shadow_schema(connection, applied_at=_OCCURRED_AT.isoformat())
+
+    assert shadow_schema._read_schema(connection, names) == before
+    versions = connection.execute("select version from schema_migrations order by version").fetchall()
+    assert [tuple(version) for version in versions] == [(shadow_schema.COMMAND_SHADOW_LEGACY_MIGRATION_VERSION,)]
+
+
+def test_migration_rejects_extra_trigger_on_owned_table_without_changes(tmp_path: Path) -> None:
+    with _legacy_shadow_database(tmp_path / "legacy-extra-trigger.db") as connection:
+        _assert_extra_owned_object_is_rejected(
+            connection,
+            """create trigger trg_command_activity_shadow_extra
+            before insert on command_activity_shadow_evaluations begin select 1; end""",
+            "trg_command_activity_shadow_extra",
+        )
+
+
+def test_migration_rejects_extra_index_on_owned_table_without_changes(tmp_path: Path) -> None:
+    with _legacy_shadow_database(tmp_path / "legacy-extra-index.db") as connection:
+        _assert_extra_owned_object_is_rejected(
+            connection,
+            "create index idx_command_activity_shadow_extra on command_activity_shadow_cohorts (ordinal)",
+            "idx_command_activity_shadow_extra",
+        )
+
+
 def test_migration_rolls_back_objects_and_version_on_validation_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

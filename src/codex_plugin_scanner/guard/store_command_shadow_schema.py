@@ -22,6 +22,14 @@ _COHORTS: Final = (
     "'cdx-064-remote-mutation-floors', 'cdx-065-package-provenance-floors', "
     "'cdx-066-critical-block-floors'"
 )
+_OWNED_TABLES: Final = (
+    "command_activity_shadow_evaluations",
+    "command_activity_shadow_cohorts",
+)
+_OWNED_IDENTIFIER_PATTERN: Final = re.compile(
+    r"(?<![a-z0-9_])(?:" + "|".join(re.escape(table) for table in _OWNED_TABLES) + r")(?![a-z0-9_])",
+    re.IGNORECASE,
+)
 
 _SCHEMA_STATEMENTS: Final = (
     f"""create table if not exists command_activity_shadow_evaluations (
@@ -185,6 +193,8 @@ def ensure_command_shadow_schema(connection: sqlite3.Connection, *, applied_at: 
         current = _expected_schema(_SCHEMA_STATEMENTS)
         legacy = _expected_schema(_LEGACY_SCHEMA_STATEMENTS)
         actual = _read_schema(connection, frozenset(current) | frozenset(legacy))
+        _reject_external_foreign_keys(connection)
+        _reject_external_sql_dependencies(connection, (current, legacy))
         if actual == legacy:
             _upgrade_legacy_schema(connection)
         elif actual and actual != current:
@@ -295,14 +305,76 @@ def _schema_object_identities(statements: tuple[str, ...]) -> tuple[tuple[str, s
 
 def _read_schema(connection: sqlite3.Connection, names: frozenset[str]) -> dict[str, str]:
     placeholders = ", ".join("?" for _ in names)
+    owned_placeholders = ", ".join("?" for _ in _OWNED_TABLES)
     rows = cast(
         list[sqlite3.Row],
         connection.execute(
-            f"select name, sql from sqlite_master where name in ({placeholders})",
-            tuple(sorted(names)),
+            f"""select name, sql from sqlite_master
+            where name in ({placeholders})
+               or (
+                 type in ('index', 'trigger')
+                 and tbl_name in ({owned_placeholders})
+                 and sql is not null
+               )""",
+            (*sorted(names), *_OWNED_TABLES),
         ).fetchall(),
     )
     return {str(row["name"]): _canonical_sql(str(row["sql"])) for row in rows}
+
+
+def _reject_external_foreign_keys(connection: sqlite3.Connection) -> None:
+    rows = cast(
+        list[sqlite3.Row],
+        connection.execute(
+            "select name from sqlite_master where type = 'table' and name not in (?, ?) order by name",
+            _OWNED_TABLES,
+        ).fetchall(),
+    )
+    for row in rows:
+        table = str(row["name"])
+        foreign_keys = connection.execute(
+            'select "table" from pragma_foreign_key_list(?)',
+            (table,),
+        ).fetchall()
+        if any(str(foreign_key[0]).casefold() in _OWNED_TABLES for foreign_key in foreign_keys):
+            raise RuntimeError("incompatible command shadow external foreign key")
+
+
+def _reject_external_sql_dependencies(
+    connection: sqlite3.Connection,
+    allowed_schemas: tuple[dict[str, str], ...],
+) -> None:
+    rows = cast(
+        list[sqlite3.Row],
+        connection.execute(
+            """select type, name, tbl_name, sql from sqlite_master
+            where sql is not null
+              and (
+                type = 'view'
+                or (type = 'trigger' and lower(tbl_name) not in (?, ?))
+                or (
+                  type = 'table'
+                  and (
+                    instr(lower(sql), 'create virtual table') > 0
+                    or name in (
+                      select name from pragma_table_list
+                      where schema = 'main' and type = 'virtual'
+                    )
+                  )
+                )
+              )
+            order by type, name""",
+            _OWNED_TABLES,
+        ).fetchall(),
+    )
+    for row in rows:
+        name = str(row["name"])
+        sql = _canonical_sql(str(row["sql"]))
+        if _OWNED_IDENTIFIER_PATTERN.search(sql) is None:
+            continue
+        if any(schema.get(name) == sql for schema in allowed_schemas):
+            continue
+        raise RuntimeError("incompatible command shadow external schema dependency")
 
 
 def _canonical_sql(value: str) -> str:
