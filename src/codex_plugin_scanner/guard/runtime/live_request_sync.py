@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+from ..mdm.user_health import run_user_health_cadence, user_health_report_due
 from ..review_contracts import (
     GuardReviewContractError,
     GuardReviewOAuthMetadata,
@@ -706,8 +707,6 @@ def _cloud_sync_sync_loop(
         try:
             auth_context = _resolve_live_request_sync_auth_context(store)
             result = sync_live_requests_once(store, auth_context)
-            from ..mdm.user_health import run_user_health_cadence, user_health_report_due
-
             with suppress(OSError, PermissionError, RuntimeError, ValueError):
                 if user_health_report_due(store.guard_home):
                     run_user_health_cadence(store.guard_home)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import json
 import os
@@ -186,16 +187,15 @@ def _validate_state(state: UserHealthState) -> None:
     try:
         private_key = serialization.load_pem_private_key(state.private_key_pem.encode(), password=None)
         public_der = base64.b64decode(state.public_key_spki, validate=True)
-    except (TypeError, UnsupportedAlgorithm, ValueError) as exc:
+        key_digest = base64.b64decode(f"{state.key_id}=", altchars=b"-_", validate=True)
+    except (binascii.Error, TypeError, UnsupportedAlgorithm, ValueError) as exc:
         raise ValueError("user_health_state_invalid") from exc
     if not isinstance(private_key, ec.EllipticCurvePrivateKey) or not isinstance(private_key.curve, ec.SECP256R1):
         raise ValueError("user_health_state_invalid")
     expected_der = private_key.public_key().public_bytes(
         serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
     )
-    if expected_der != public_der or hashlib.sha256(public_der).digest() != base64.urlsafe_b64decode(
-        f"{state.key_id}="
-    ):
+    if expected_der != public_der or hashlib.sha256(public_der).digest() != key_digest:
         raise ValueError("user_health_state_invalid")
 
 
@@ -423,39 +423,55 @@ def run_user_health_cadence(
                 updated_at=resolved_now.isoformat(),
             )
             _write_state(guard_home, state)
-        resolved_transport = transport or GuardCloudMachineHealthTransport(guard_home)
-        if state.sequence == 0:
-            resolved_transport.register_key(_registration(state, resolved_now))
-        ack = resolved_transport.deliver_lease(outbox)
-        claims = outbox.lease.claims
-        expected = (
-            state.workspace_id,
-            state.device_id,
-            state.machine_installation_id,
-            state.installation_generation,
-            claims.sequence,
-            outbox.lease.digest,
+    resolved_transport = transport or GuardCloudMachineHealthTransport(guard_home)
+    if state.sequence == 0:
+        resolved_transport.register_key(_registration(state, resolved_now))
+    ack = resolved_transport.deliver_lease(outbox)
+    claims = outbox.lease.claims
+    expected = (
+        state.workspace_id,
+        state.device_id,
+        state.machine_installation_id,
+        state.installation_generation,
+        claims.sequence,
+        outbox.lease.digest,
+    )
+    actual = (
+        ack.workspace_id,
+        ack.device_id,
+        ack.machine_installation_id,
+        ack.installation_generation,
+        ack.sequence,
+        ack.lease_digest,
+    )
+    if actual != expected:
+        raise OSError("health_lease_ack_conflict")
+    with _state_lock(guard_home):
+        current = _read_state(guard_home)
+        if current is None:
+            raise OSError("health_lease_state_conflict")
+        already_committed = (
+            current.pending_outbox is None
+            and current.sequence == claims.sequence
+            and current.last_lease_digest == outbox.lease.digest
         )
-        actual = (
-            ack.workspace_id,
-            ack.device_id,
-            ack.machine_installation_id,
-            ack.installation_generation,
-            ack.sequence,
-            ack.lease_digest,
-        )
-        if actual != expected:
-            raise OSError("health_lease_ack_conflict")
-        _write_state(
-            guard_home,
-            replace(
-                state,
-                sequence=claims.sequence,
-                last_lease_digest=outbox.lease.digest,
-                pending_outbox=None,
-                updated_at=ack.received_datetime.isoformat(),
-            ),
-        )
+        if not already_committed:
+            if (
+                current.pending_outbox != encoded_outbox
+                or current.sequence != state.sequence
+                or current.last_lease_digest != state.last_lease_digest
+            ):
+                raise OSError("health_lease_state_conflict")
+            _write_state(
+                guard_home,
+                replace(
+                    current,
+                    sequence=claims.sequence,
+                    last_lease_digest=outbox.lease.digest,
+                    pending_outbox=None,
+                    updated_at=ack.received_datetime.isoformat(),
+                ),
+            )
     return {
         "schemaVersion": "hol-guard-user-health-report.v1",
         "delivered": True,

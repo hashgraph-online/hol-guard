@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
@@ -48,6 +49,27 @@ class FailingTransport(Transport):
     def deliver_lease(self, outbox: HealthLeaseOutbox) -> HealthLeaseAck:
         self.outboxes.append(outbox)
         raise ConnectionError("offline")
+
+
+class ConcurrentTransport(Transport):
+    def __init__(self) -> None:
+        super().__init__()
+        self.barrier = threading.Barrier(2)
+
+    def deliver_lease(self, outbox: HealthLeaseOutbox) -> HealthLeaseAck:
+        self.outboxes.append(outbox)
+        self.barrier.wait(timeout=5)
+        claims = outbox.lease.claims
+        return HealthLeaseAck(
+            "accepted",
+            claims.workspace_id,
+            claims.device_id,
+            claims.machine_installation_id,
+            claims.installation_generation,
+            claims.sequence,
+            outbox.lease.digest,
+            "2026-07-19T14:00:01.000Z",
+        )
 
 
 @pytest.fixture
@@ -110,7 +132,7 @@ def test_user_health_registers_and_delivers_signed_monotonic_leases(guard_home: 
 
 def test_user_health_serializes_concurrent_cadence_runs(guard_home: Path) -> None:
     user_health.configure_user_health_leases(guard_home, enabled=True, now=NOW)
-    transport = Transport()
+    transport = ConcurrentTransport()
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         reports = list(
@@ -124,9 +146,9 @@ def test_user_health_serializes_concurrent_cadence_runs(guard_home: Path) -> Non
             )
         )
 
-    assert {report["sequence"] for report in reports} == {1, 2}
-    ordered = sorted(transport.outboxes, key=lambda outbox: outbox.lease.claims.sequence)
-    assert ordered[1].lease.claims.previous_lease_digest == ordered[0].lease.digest
+    assert {report["sequence"] for report in reports} == {1}
+    assert len({outbox.lease.digest for outbox in transport.outboxes}) == 1
+    assert user_health.user_health_status(guard_home)["sequence"] == 1
 
 
 def test_user_health_disable_preserves_continuity_but_stops_delivery(guard_home: Path) -> None:
