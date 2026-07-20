@@ -37,6 +37,11 @@ from ..store_evidence import EvidenceRecord
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from .js_semver import highest_js_version_for_selector, version_matches_js_selector
 from .manifest_dependency_targets import evaluation_targets as _manifest_evaluation_targets
+from .npm_policy_range import (
+    bind_resolved_npm_policy_result,
+    policy_selector_matches_target,
+    target_for_resolved_npm_policy_match,
+)
 from .package_intent_common import split_python_extras
 from .package_manifest_diff import (
     _DeadlineExceededError,
@@ -1274,15 +1279,22 @@ def _evaluate_with_bundle(
             if resolved_version is not None
             else None
         )
+        resolved_npm_version = (
+            resolved_version if (_optional_string(target.get("ecosystem")) or "npm") == "npm" else None
+        )
+        policy_target = target_for_resolved_npm_policy_match(target, resolved_version=resolved_npm_version)
         matched_rule = _matching_policy_rule(
             bundle_response.bundle.policy_rules,
-            target=target,
+            target=policy_target,
             harness=artifact.harness,
             package_severity=package_match.normalized_severity if package_match is not None else None,
         )
         if matched_rule is not None:
             decision = _normalize_bundle_action(matched_rule.action)
-            package = _policy_package_result(target, decision=decision, rule_id=matched_rule.rule_id)
+            package = bind_resolved_npm_policy_result(
+                _policy_package_result(target, decision=decision, rule_id=matched_rule.rule_id),
+                resolved_version=resolved_npm_version,
+            )
             packages.append(package)
             continue
         confusion_result = _dependency_confusion_policy_package_result(
@@ -3851,8 +3863,9 @@ def _matching_policy_rule(
             }
             if selector not in candidates:
                 continue
-        if rule.version_range_selector is not None and not _selector_matches_version(
-            rule.version_range_selector, target
+        if rule.version_range_selector is not None and not policy_selector_matches_target(
+            rule.version_range_selector,
+            target,
         ):
             continue
         if rule.severity_threshold is not None:
@@ -3862,24 +3875,6 @@ def _matching_policy_rule(
                 continue
         return rule
     return None
-
-
-def _selector_matches_version(selector: str, target: dict[str, object]) -> bool:
-    version = _optional_string(target.get("version"))
-    requested_range = _optional_string(target.get("range"))
-    if requested_range is not None and requested_range == selector:
-        return True
-    ecosystem = _optional_string(target.get("ecosystem")) or "npm"
-    if version is None:
-        return False
-    if selector in {version, f"={version}", f"=={version}"}:
-        return True
-    if ecosystem == "npm" and version_matches_js_selector(version, selector):
-        return True
-    try:
-        return Version(version) in SpecifierSet(selector)
-    except (InvalidSpecifier, InvalidVersion):
-        return False
 
 
 def _bundle_package(
