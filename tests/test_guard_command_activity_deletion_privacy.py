@@ -27,6 +27,7 @@ from codex_plugin_scanner.guard.runtime.command_activity_contract import (
     COMMAND_ACTIVITY_SCHEMA_VERSION,
     CommandProofLevel,
 )
+from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import COMMAND_SHADOW_SCHEMA_VERSION
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_command_activity_health_schema import (
     COMMAND_ACTIVITY_HEALTH_SCHEMA_VERSION,
@@ -51,6 +52,8 @@ _COMMAND_TABLES = (
     "command_activity_rollup_pending",
     "command_activity_feedback",
     "command_activity_invalidations",
+    "command_activity_shadow_evaluations",
+    "command_activity_shadow_cohorts",
 )
 
 
@@ -93,6 +96,25 @@ def _seed_clear_state(store: GuardStore) -> None:
         occurred_at=datetime(2026, 7, 18, 22, 1, tzinfo=timezone.utc),
     )
     with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            """
+            insert into command_activity_shadow_evaluations (
+              activity_id, occurred_at, authoritative_action, current_action, current_disposition,
+              proposed_action, proposed_disposition, comparison, proposal_version,
+              evaluator_schema_version, control_generation, sample_basis_points, schema_version
+            ) values (
+              'activity:01', '2026-07-18T20:00:00+00:00', 'allow', 'review', 'review',
+              'review', 'review', 'unchanged', 'proposal.test.v1',
+              '1.0.0', 1, 10000, 'guard.command-shadow.v1'
+            )
+            """
+        )
+        connection.execute(
+            """
+            insert into command_activity_shadow_cohorts (activity_id, ordinal, cohort)
+            values ('activity:01', 0, 'baseline')
+            """
+        )
         connection.execute(
             """
             insert into command_activity_correlations (activity_id, kind, harness, key_id, digest)
@@ -157,6 +179,7 @@ def test_diagnostics_has_an_exact_bounded_allowlist(tmp_path: Path) -> None:
         "api": COMMAND_ACTIVITY_API_SCHEMA_VERSION,
         "health": COMMAND_ACTIVITY_HEALTH_SCHEMA_VERSION,
         "maintenance": COMMAND_ACTIVITY_MAINTENANCE_SCHEMA_VERSION,
+        "shadow": COMMAND_SHADOW_SCHEMA_VERSION,
     }
     assert diagnostics["counts"] == {
         "activities": 3,
@@ -169,6 +192,8 @@ def test_diagnostics_has_an_exact_bounded_allowlist(tmp_path: Path) -> None:
         "rollup_pending": 0,
         "feedback": 0,
         "invalidations": 3,
+        "shadow_evaluations": 0,
+        "shadow_cohorts": 0,
         "dropped_events": 1,
         "persistence_errors": 1,
     }

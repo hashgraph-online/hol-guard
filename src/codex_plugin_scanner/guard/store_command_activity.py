@@ -15,7 +15,9 @@ from .runtime.command_activity_contract import (
     CommandActivityMatch,
     CorrelationHandle,
 )
+from .runtime.command_shadow_evaluation import CommandShadowObservation
 from .store_command_activity_rollups import record_command_activity_rollups
+from .store_command_shadow import record_command_shadow_observation
 
 
 class _ConnectionOwner(Protocol):
@@ -23,11 +25,23 @@ class _ConnectionOwner(Protocol):
 
 
 class StoreCommandActivityMixin:
-    def record_command_activity(self: _ConnectionOwner, evidence: CommandActivityEvidence) -> bool:
+    def record_command_activity(
+        self: _ConnectionOwner,
+        evidence: CommandActivityEvidence,
+        *,
+        shadow: CommandShadowObservation | None = None,
+    ) -> bool:
         """Persist one logical command and its rule hits; return false for an exact replay."""
 
         if not isinstance(cast(object, evidence), CommandActivityEvidence):
             raise ValueError("evidence must be a CommandActivityEvidence")
+        if shadow is not None:
+            if not isinstance(cast(object, shadow), CommandShadowObservation):
+                raise ValueError("shadow must be a CommandShadowObservation")
+            if shadow.activity_id != evidence.activity.activity_id:
+                raise ValueError("shadow activity_id must match command evidence")
+            if shadow.occurred_at != evidence.activity.occurred_at:
+                raise ValueError("shadow occurred_at must match command evidence")
         with self._connect() as connection:
             connection.execute("begin immediate")
             existing = cast(
@@ -39,6 +53,16 @@ class StoreCommandActivityMixin:
             )
             if existing is not None:
                 _require_exact_replay(connection, evidence, existing)
+                if shadow is not None:
+                    if (
+                        connection.execute(
+                            "select 1 from command_activity_shadow_evaluations where activity_id = ?",
+                            (shadow.activity_id,),
+                        ).fetchone()
+                        is None
+                    ):
+                        raise ValueError("command shadow replay is missing persisted evidence")
+                    record_command_shadow_observation(connection, shadow)
                 return False
             if (
                 connection.execute(
@@ -86,6 +110,8 @@ class StoreCommandActivityMixin:
                 """,
                 _correlation_values(evidence.activity),
             )
+            if shadow is not None:
+                record_command_shadow_observation(connection, shadow)
             record_command_activity_rollups(connection, evidence)
             return True
 
