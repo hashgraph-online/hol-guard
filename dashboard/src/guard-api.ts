@@ -88,9 +88,29 @@ const RUNTIME_HEARTBEAT_FUTURE_TOLERANCE_MS = 5_000;
 let guardTokenOverride: string | null = null;
 let guardTokenLocationKey: string | null = null;
 
-type RawGuardApprovalRequest = Omit<GuardApprovalRequest, "action_envelope_json" | "decision_v2_json"> & {
+type RawGuardApprovalRequest = Omit<
+  GuardApprovalRequest,
+  | "action_envelope_json"
+  | "decision_v2_json"
+  | "recommended_scope"
+  | "allowed_scopes"
+  | "scope_contract_version"
+  | "scope_contract_digest"
+  | "allowed_scopes_by_action"
+  | "recommended_scope_by_action"
+  | "scope_restrictions"
+  | "task_capability_eligibility"
+> & {
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
+  recommended_scope?: unknown;
+  allowed_scopes?: unknown;
+  scope_contract_version?: unknown;
+  scope_contract_digest?: unknown;
+  allowed_scopes_by_action?: unknown;
+  recommended_scope_by_action?: unknown;
+  scope_restrictions?: unknown;
+  task_capability_eligibility?: unknown;
 };
 
 type ApprovalRequestListPayload = {
@@ -806,9 +826,92 @@ export function parseDecisionV2(raw: unknown): GuardDecisionV2 | null {
   };
 }
 
+const DECISION_SCOPE_VALUES: ReadonlySet<string> = new Set([
+  "artifact",
+  "workspace",
+  "publisher",
+  "harness",
+  "global",
+]);
+
+function isDecisionScope(value: unknown): value is DecisionScope {
+  return typeof value === "string" && DECISION_SCOPE_VALUES.has(value);
+}
+
+function parseDecisionScopeList(value: unknown): DecisionScope[] | null {
+  if (!Array.isArray(value) || !value.every(isDecisionScope)) {
+    return null;
+  }
+  return [...new Set(value)];
+}
+
+function parseStringList(value: unknown): string[] | null {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+    return null;
+  }
+  return [...new Set(value)];
+}
+
+function parseOptionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
 export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardApprovalRequest {
+  const hasScopeContract =
+    item.scope_contract_version !== undefined ||
+    item.scope_contract_digest !== undefined ||
+    item.allowed_scopes_by_action !== undefined ||
+    item.recommended_scope_by_action !== undefined ||
+    item.scope_restrictions !== undefined ||
+    item.task_capability_eligibility !== undefined;
+  const scopeContractVersion = parseOptionalString(item.scope_contract_version);
+  const scopeContractDigest = parseOptionalString(item.scope_contract_digest);
+  const hasCompleteScopeContract = scopeContractVersion !== null && scopeContractDigest !== null;
+  const rawAllowedByAction = isRecord(item.allowed_scopes_by_action)
+    ? item.allowed_scopes_by_action
+    : {};
+  const rawRecommendedByAction = isRecord(item.recommended_scope_by_action)
+    ? item.recommended_scope_by_action
+    : {};
+  const rawTaskEligibility = isRecord(item.task_capability_eligibility)
+    ? item.task_capability_eligibility
+    : null;
+  const taskReasonCodes = parseStringList(rawTaskEligibility?.reason_codes);
+  const taskCapabilityEligibility =
+    typeof rawTaskEligibility?.eligible === "boolean" && taskReasonCodes !== null
+      ? {
+          eligible: rawTaskEligibility.eligible,
+          reason_codes: taskReasonCodes,
+        }
+      : undefined;
+  const allowedScopes = parseDecisionScopeList(item.allowed_scopes);
+  const scopeRestrictions = parseStringList(item.scope_restrictions);
   return {
     ...item,
+    recommended_scope: isDecisionScope(item.recommended_scope) ? item.recommended_scope : null,
+    allowed_scopes: allowedScopes ?? undefined,
+    scope_contract_version: hasScopeContract ? scopeContractVersion : undefined,
+    scope_contract_digest: hasScopeContract ? scopeContractDigest : undefined,
+    allowed_scopes_by_action: hasScopeContract
+      ? {
+          allow: hasCompleteScopeContract ? parseDecisionScopeList(rawAllowedByAction.allow) ?? [] : [],
+          block: hasCompleteScopeContract ? parseDecisionScopeList(rawAllowedByAction.block) ?? [] : [],
+        }
+      : undefined,
+    recommended_scope_by_action: hasScopeContract
+      ? {
+          allow:
+            hasCompleteScopeContract && isDecisionScope(rawRecommendedByAction.allow)
+              ? rawRecommendedByAction.allow
+              : null,
+          block:
+            hasCompleteScopeContract && isDecisionScope(rawRecommendedByAction.block)
+              ? rawRecommendedByAction.block
+              : null,
+        }
+      : undefined,
+    scope_restrictions: hasScopeContract ? scopeRestrictions ?? [] : undefined,
+    task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : undefined,
     action_envelope_json: parseActionEnvelope(item.action_envelope_json),
     decision_v2_json: parseDecisionV2(item.decision_v2_json)
   };
@@ -2094,6 +2197,8 @@ export async function resolveRequest(input: {
   scope: DecisionScope;
   workspace?: string;
   reason: string;
+  scope_contract_version?: string;
+  scope_contract_digest?: string;
 }): Promise<void> {
   await resolveRequestWithQueueResult(input);
 }
@@ -2214,6 +2319,8 @@ export async function resolveRequestWithQueueResult(input: {
   approval_password?: string;
   approval_totp_code?: string;
   approval_gate_use_cooldown?: boolean;
+  scope_contract_version?: string;
+  scope_contract_digest?: string;
 }): Promise<GuardQueueResolutionResult> {
   if (isGuardDemoMode()) {
     return {
@@ -2243,6 +2350,12 @@ export async function resolveRequestWithQueueResult(input: {
       scope: input.scope,
       workspace: input.workspace || undefined,
       reason: input.reason || undefined,
+      ...(input.scope_contract_version !== undefined
+        ? { scope_contract_version: input.scope_contract_version }
+        : {}),
+      ...(input.scope_contract_digest !== undefined
+        ? { scope_contract_digest: input.scope_contract_digest }
+        : {}),
       ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
       ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
       ...(input.approval_gate_use_cooldown !== undefined ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {})

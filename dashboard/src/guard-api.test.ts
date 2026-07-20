@@ -19,7 +19,8 @@ import {
 	  runAuditRemediation,
 	  resolveRequestWithQueueResult,
 	  retryResume,
-	} from "./guard-api";
+} from "./guard-api";
+import { recommendedScopeForAction } from "./approval-scopes";
 import { resolveCloudSyncHealthCopy } from "./runtime-overview";
 import {
   resolveDecisionV2Detail,
@@ -419,6 +420,77 @@ const normalizedMalformedRequest = normalizeApprovalRequest({
 assert(
   normalizedMalformedRequest.action_envelope_json === null,
   "T071: detail-route approval payloads normalize malformed envelopes before rendering"
+);
+
+const normalizedScopeContract = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  scope_contract_version: "guard.approval-scopes.v2",
+  scope_contract_digest: "scope-digest",
+  allowed_scopes_by_action: {
+    allow: ["artifact"],
+    block: ["artifact", "global"],
+  },
+  recommended_scope_by_action: { allow: "artifact", block: "artifact" },
+  scope_restrictions: ["broad_allow_requires_positive_proof"],
+  task_capability_eligibility: {
+    eligible: false,
+    reason_codes: ["task_capability_not_enabled"],
+  },
+});
+assert(
+  normalizedScopeContract.allowed_scopes_by_action?.allow.join(",") === "artifact" &&
+    normalizedScopeContract.allowed_scopes_by_action?.block.join(",") === "artifact,global",
+  "T071a: approval scope contracts normalize action-specific scope lists",
+);
+assert(
+  normalizedScopeContract.task_capability_eligibility?.eligible === false,
+  "T071a: task capability eligibility is preserved",
+);
+
+const malformedScopeContract = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  scope_contract_version: "guard.approval-scopes.v2",
+  scope_contract_digest: "scope-digest",
+  allowed_scopes_by_action: {
+    allow: ["artifact", "invented"],
+    block: "global",
+  },
+  recommended_scope_by_action: { allow: "global", block: "invented" },
+});
+assert(
+  malformedScopeContract.allowed_scopes_by_action?.allow.length === 0 &&
+    malformedScopeContract.allowed_scopes_by_action?.block.length === 0,
+  "T071b: malformed action scope lists fail closed",
+);
+assert(
+  malformedScopeContract.recommended_scope_by_action?.allow === "global" &&
+    malformedScopeContract.recommended_scope_by_action?.block === null,
+  "T071b: malformed recommendations normalize without inventing values",
+);
+assert(
+  recommendedScopeForAction(malformedScopeContract, "allow") === null,
+  "T071b: a recommendation outside the action allow-list stays inert",
+);
+
+const incompleteScopeContract = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  scope_contract_version: "guard.approval-scopes.v2",
+  scope_contract_digest: null,
+  allowed_scopes_by_action: {
+    allow: ["artifact", "global"],
+    block: ["artifact", "global"],
+  },
+  recommended_scope_by_action: { allow: "global", block: "global" },
+});
+assert(
+  incompleteScopeContract.allowed_scopes_by_action?.allow.length === 0 &&
+    incompleteScopeContract.allowed_scopes_by_action?.block.length === 0,
+  "T071c: incomplete scope contract bindings expose no action scopes",
+);
+assert(
+  incompleteScopeContract.recommended_scope_by_action?.allow === null &&
+    incompleteScopeContract.recommended_scope_by_action?.block === null,
+  "T071c: incomplete scope contract bindings expose no recommendations",
 );
 
 const BASE_DECISION_V2: GuardDecisionV2 = {
@@ -1189,7 +1261,9 @@ const resolution = await resolveRequestWithQueueResult({
   action: "allow",
   scope: "artifact",
   workspace: "/workspace",
-  reason: "reviewed"
+  reason: "reviewed",
+  scope_contract_version: "guard.approval-scopes.v2",
+  scope_contract_digest: "scope-digest",
 });
 const resolveBody = JSON.parse(String(fetchResolveCalls[0].init?.body)) as Record<string, unknown>;
 
@@ -1201,6 +1275,11 @@ assert(
 assert(resolveBody["scope"] === "artifact", "L077: resolveRequestWithQueueResult sends scope");
 assert(resolveBody["workspace"] === "/workspace", "L077: resolveRequestWithQueueResult sends workspace");
 assert(resolveBody["reason"] === "reviewed", "L077: resolveRequestWithQueueResult sends reason");
+assert(
+  resolveBody["scope_contract_version"] === "guard.approval-scopes.v2" &&
+    resolveBody["scope_contract_digest"] === "scope-digest",
+  "L077: resolveRequestWithQueueResult binds the displayed scope contract",
+);
 assert(resolution.remaining_pending_count === 1, "L077: resolveRequestWithQueueResult returns remaining count");
 assert(resolution.next_selectable_request_id === "req-next", "L077: resolveRequestWithQueueResult returns next selectable id");
 assert(resolution.remaining_pending_summaries[0].request_id === "req-next", "L077: resolveRequestWithQueueResult normalizes remaining summaries");

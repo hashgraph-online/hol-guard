@@ -1,5 +1,6 @@
 import { useRef, useCallback } from "react";
 import type { GuardApprovalRequest, GuardProtectionState, GuardQueueResolutionResult } from "./guard-types";
+import { requestSupportsScope } from "./approval-scopes";
 
 export type QueueSortDirection = "newest" | "oldest" | "category" | "highest_risk";
 
@@ -407,7 +408,10 @@ export function bulkApprovalRiskTier(group: QueueGroup): BulkApprovalTier {
 }
 
 export function isBulkApprovableGroup(group: QueueGroup): boolean {
-  return bulkApprovalRiskTier(group) !== "blocked";
+  return (
+    bulkApprovalRiskTier(group) !== "blocked" &&
+    requestSupportsScope(group.primary, "allow", "artifact")
+  );
 }
 
 export function countSensitiveFileReadGroups(groups: QueueGroup[]): number {

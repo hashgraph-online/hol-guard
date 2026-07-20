@@ -52,8 +52,11 @@ import { ScannerEvidenceSection } from "./scanner-evidence-badge";
 import {
   advancedScopeChoicesForRequest,
   buildDecisionPayload,
-  normalizeDecisionScope,
+  recommendedScopeForAction,
+  scopeChoicesForRequest,
   standardScopeChoicesForRequest,
+  taskCapabilityExplanation,
+  type ApprovalScopeChoice,
 } from "./approval-scopes";
 import { ConsolidatedEvidenceAlert, type EvidenceItem } from "./consolidated-evidence-alert";
 import { protectionHealthFor, unavailableProtectionHealth } from "./protection-health";
@@ -152,38 +155,12 @@ type ReviewWorkspaceProps = {
     approval_password?: string;
     approval_totp_code?: string;
     approval_gate_use_cooldown?: boolean;
+    scope_contract_version?: string;
+    scope_contract_digest?: string;
   }) => Promise<void> | void;
   onGoHome: () => void;
   onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
 };
-
-const scopeChoices = [
-  {
-    value: "artifact" as DecisionScope,
-    label: "Just this time",
-    description: "Allow only this exact action. Guard will ask again for anything different.",
-  },
-  {
-    value: "workspace" as DecisionScope,
-    label: "This project",
-    description: "Allow this action in the current workspace only.",
-  },
-  {
-    value: "publisher" as DecisionScope,
-    label: "This source",
-    description: "Allow actions from the same source or publisher.",
-  },
-  {
-    value: "harness" as DecisionScope,
-    label: "This app",
-    description: "Allow similar actions from this AI app everywhere.",
-  },
-  {
-    value: "global" as DecisionScope,
-    label: "Everywhere",
-    description: "Allow this action across all your projects. Use with care.",
-  },
-];
 
 const QUEUE_PAGE_SIZE = 10;
 const commonScopeValues = new Set<DecisionScope>(["artifact"]);
@@ -1089,7 +1066,8 @@ function ReviewDecisionCard(props: {
 }) {
   const detail = props.detail;
   const item = detail?.item ?? null;
-  const [scope, setScope] = useState<DecisionScope>(item?.recommended_scope ?? "artifact");
+  const [allowScope, setAllowScope] = useState<DecisionScope>("artifact");
+  const [blockScope, setBlockScope] = useState<DecisionScope>("artifact");
   const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
   const [resolved, setResolved] = useState<"allow" | "block" | null>(null);
   const [showConsequences, setShowConsequences] = useState(false);
@@ -1100,10 +1078,11 @@ function ReviewDecisionCard(props: {
   const [approvalTotpCode, setApprovalTotpCode] = useState("");
   const [useCooldown, setUseCooldown] = useState(false);
   const [pendingAction, setPendingAction] = useState<"allow" | "block" | null>(null);
+  const [pendingContractKey, setPendingContractKey] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allowButtonRef = useRef<HTMLButtonElement>(null);
   const availableScopeChoices = useMemo(
-    () => (item ? standardScopeChoicesForRequest(item) : scopeChoices.filter((choice) => choice.value !== "global")),
+    () => (item ? standardScopeChoicesForRequest(item, "allow") : []),
     [item]
   );
   const commonScopeOptions = useMemo(
@@ -1115,22 +1094,23 @@ function ReviewDecisionCard(props: {
     [availableScopeChoices]
   );
   const advancedScopeOptions = useMemo(
-    () => (item ? advancedScopeChoicesForRequest(item) : scopeChoices.filter((choice) => choice.value === "global")),
+    () => (item ? advancedScopeChoicesForRequest(item, "allow") : []),
     [item]
   );
-
-  const gateRequiresPassword = useMemo(() => {
-    const gate = props.approvalGate;
-    return (
-      gate?.enabled === true &&
-      gate?.configured === true &&
-      requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope)
-    );
-  }, [props.approvalGate, scope]);
+  const blockScopeOptions = useMemo(
+    () => (item ? scopeChoicesForRequest(item, "block") : []),
+    [item],
+  );
+  const taskCapabilityCopy = item ? taskCapabilityExplanation(item) : null;
+  const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
+  const decisionContractKey = item
+    ? `${item.request_id}:${item.scope_contract_version ?? "legacy"}:${item.scope_contract_digest ?? "legacy"}`
+    : null;
 
   useEffect(() => {
     if (item) {
-      setScope(normalizeDecisionScope(item, item.recommended_scope));
+      setAllowScope(recommendedScopeForAction(item, "allow") ?? "artifact");
+      setBlockScope(recommendedScopeForAction(item, "block") ?? "artifact");
       setResolved(null);
       setSubmitting(null);
       setLastAction(null);
@@ -1139,14 +1119,107 @@ function ReviewDecisionCard(props: {
       setApprovalTotpCode("");
       setUseCooldown(false);
       setPendingAction(null);
+      setPendingContractKey(null);
     }
-  }, [item?.request_id]);
+  }, [item?.request_id, item?.scope_contract_version, item?.scope_contract_digest]);
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, []);
+
+  const handleResolve = useCallback(
+    async (action: "allow" | "block") => {
+      if (!item) return;
+      setSubmitting(action);
+      setErrorMessage(null);
+      try {
+        const requestedScope = action === "allow" ? allowScope : blockScope;
+        const gate = props.approvalGate;
+        const needsPassword = approvalProofRequiresPassword(gate);
+        const includeGateFields =
+          gate?.enabled === true &&
+          gate?.configured === true &&
+          requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, requestedScope);
+        await props.onResolve({
+          ...buildDecisionPayload({
+            item,
+            action,
+            scope: requestedScope,
+            reason: action === "allow" ? "approved in review" : "blocked in review",
+          }),
+          ...(includeGateFields && needsPassword ? { approval_password: approvalPassword } : {}),
+          ...(includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {}),
+          ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),
+        });
+        setResolved(action);
+        setApprovalPassword("");
+        setApprovalTotpCode("");
+        setUseCooldown(false);
+        setPendingAction(null);
+        setPendingContractKey(null);
+        timerRef.current = setTimeout(() => setResolved(null), 2000);
+      } catch (err) {
+        setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
+      } finally {
+        setSubmitting(null);
+      }
+    },
+    [
+      item,
+      allowScope,
+      blockScope,
+      props.onResolve,
+      props.approvalGate,
+      approvalPassword,
+      approvalTotpCode,
+      useCooldown,
+    ]
+  );
+
+  const handleRequestResolve = useCallback(
+    (action: "allow" | "block") => {
+      if (action === "allow" && !hasAllowScope) {
+        setErrorMessage("This action has no eligible approval scope.");
+        return;
+      }
+      if (action === "block" && blockScopeOptions.length === 0) {
+        setErrorMessage("This action has no eligible block scope.");
+        return;
+      }
+      setLastAction(action);
+      const requestedScope = action === "allow" ? allowScope : blockScope;
+      const gate = props.approvalGate;
+      const gateRequiresPassword =
+        gate?.enabled === true &&
+        gate?.configured === true &&
+        requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, requestedScope);
+      if (gateRequiresPassword) {
+        setPendingAction(action);
+        setPendingContractKey(decisionContractKey);
+        setErrorMessage(null);
+        return;
+      }
+      void handleResolve(action);
+    },
+    [
+      allowScope,
+      blockScope,
+      blockScopeOptions.length,
+      decisionContractKey,
+      handleResolve,
+      hasAllowScope,
+      props.approvalGate,
+    ]
+  );
+
+  const handleAllow = useCallback(() => {
+    handleRequestResolve("allow");
+  }, [handleRequestResolve]);
+  const handleBlock = useCallback(() => {
+    handleRequestResolve("block");
+  }, [handleRequestResolve]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -1165,79 +1238,29 @@ function ReviewDecisionCard(props: {
       const scopeIndex = parseInt(event.key, 10);
       if (scopeIndex >= 1 && scopeIndex <= availableScopeChoices.length) {
         event.preventDefault();
-        setScope(availableScopeChoices[scopeIndex - 1].value);
+        setAllowScope(availableScopeChoices[scopeIndex - 1].value);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [submitting, pendingAction, scope, item?.request_id, availableScopeChoices]);
-
-  const handleResolve = useCallback(
-    async (action: "allow" | "block") => {
-      if (!item) return;
-      setSubmitting(action);
-      setErrorMessage(null);
-      try {
-        const gate = props.approvalGate;
-        const needsPassword = approvalProofRequiresPassword(gate);
-        const includeGateFields =
-          gate?.enabled === true &&
-          gate?.configured === true &&
-          requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
-        await props.onResolve({
-          ...buildDecisionPayload({
-            item,
-            action,
-            scope,
-            reason: action === "allow" ? "approved in review" : "blocked in review",
-          }),
-          ...(includeGateFields && needsPassword ? { approval_password: approvalPassword } : {}),
-          ...(includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {}),
-          ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),
-        });
-        setResolved(action);
-        setApprovalPassword("");
-        setApprovalTotpCode("");
-        setUseCooldown(false);
-        setPendingAction(null);
-        timerRef.current = setTimeout(() => setResolved(null), 2000);
-      } catch (err) {
-        setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
-      } finally {
-        setSubmitting(null);
-      }
-    },
-    [item, scope, props.onResolve, props.approvalGate, approvalPassword, approvalTotpCode, useCooldown]
-  );
-
-  const handleRequestResolve = useCallback(
-    (action: "allow" | "block") => {
-      setLastAction(action);
-      if (gateRequiresPassword) {
-        setPendingAction(action);
-        setErrorMessage(null);
-        return;
-      }
-      void handleResolve(action);
-    },
-    [handleResolve, gateRequiresPassword]
-  );
-
-  const handleAllow = useCallback(() => {
-    handleRequestResolve("allow");
-  }, [handleRequestResolve]);
-  const handleBlock = useCallback(() => {
-    handleRequestResolve("block");
-  }, [handleRequestResolve]);
+  }, [availableScopeChoices, handleRequestResolve, pendingAction, submitting]);
 
   const handleModalSubmit = useCallback(() => {
-    if (pendingAction !== null) {
-      void handleResolve(pendingAction);
+    if (pendingAction === null) {
+      return;
     }
-  }, [pendingAction, handleResolve]);
+    if (pendingContractKey !== decisionContractKey) {
+      setPendingAction(null);
+      setPendingContractKey(null);
+      setErrorMessage("This request changed while you were reviewing it. Review the current scopes and try again.");
+      return;
+    }
+    void handleResolve(pendingAction);
+  }, [decisionContractKey, handleResolve, pendingAction, pendingContractKey]);
 
   const handleModalCancel = useCallback(() => {
     setPendingAction(null);
+    setPendingContractKey(null);
     setApprovalPassword("");
     setApprovalTotpCode("");
     setUseCooldown(false);
@@ -1427,14 +1450,19 @@ function ReviewDecisionCard(props: {
         )}
 
         <div className="mt-6 space-y-2">
-          <SectionLabel>How long should this choice last?</SectionLabel>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Scope selection">
+          <SectionLabel>Approval scope</SectionLabel>
+          {!hasAllowScope && (
+            <p className="text-sm text-brand-attention" role="status">
+              This action cannot be approved under its current Guard policy.
+            </p>
+          )}
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Allow scope selection">
             {commonScopeOptions.map((choice) => (
               <ScopeChoiceButton
                 key={choice.value}
                 choice={choice}
-                checked={scope === choice.value}
-                onScopeChange={setScope}
+                checked={allowScope === choice.value}
+                onScopeChange={setAllowScope}
               />
             ))}
           </div>
@@ -1451,8 +1479,8 @@ function ReviewDecisionCard(props: {
                   <ScopeChoiceButton
                     key={choice.value}
                     choice={choice}
-                    checked={scope === choice.value}
-                    onScopeChange={setScope}
+                    checked={allowScope === choice.value}
+                    onScopeChange={setAllowScope}
                   />
                 ))}
               </div>
@@ -1471,8 +1499,34 @@ function ReviewDecisionCard(props: {
                   <ScopeChoiceButton
                     key={choice.value}
                     choice={choice}
-                    checked={scope === choice.value}
-                    onScopeChange={setScope}
+                    checked={allowScope === choice.value}
+                    onScopeChange={setAllowScope}
+                  />
+                ))}
+              </div>
+            </details>
+          )}
+          {taskCapabilityCopy !== null && (
+            <div className="flex items-start gap-2 pt-1 text-xs text-brand-dark/70">
+              <HiMiniKey className="mt-0.5 h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
+              <p>{taskCapabilityCopy}</p>
+            </div>
+          )}
+          {blockScopeOptions.length > 0 && (
+            <details className="rounded-xl border border-slate-200/70 bg-slate-50/60 p-3">
+              <summary className="cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-dark">
+                Block matching actions
+              </summary>
+              <p className="mt-2 text-xs text-brand-dark/70">
+                Blocking can cover a wider trusted selector without granting permission to run anything.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Block scope selection">
+                {blockScopeOptions.map((choice) => (
+                  <ScopeChoiceButton
+                    key={choice.value}
+                    choice={choice}
+                    checked={blockScope === choice.value}
+                    onScopeChange={setBlockScope}
                   />
                 ))}
               </div>
@@ -1503,7 +1557,7 @@ function ReviewDecisionCard(props: {
             ref={allowButtonRef}
             variant="success"
             onClick={handleAllow}
-            disabled={submitting !== null || pendingAction !== null}
+            disabled={!hasAllowScope || submitting !== null || pendingAction !== null}
           >
             {submitting === "allow" ? (
               <span className="flex items-center gap-2">
@@ -1513,14 +1567,14 @@ function ReviewDecisionCard(props: {
             ) : (
               <span className="flex items-center gap-2">
                 <HiMiniCheckCircle className="h-4 w-4" aria-hidden="true" />
-                {allowButtonLabel(scope)}
+                {allowButtonLabel(allowScope)}
               </span>
             )}
           </ActionButton>
           <ActionButton
             variant="outline"
             onClick={handleBlock}
-            disabled={submitting !== null || pendingAction !== null}
+            disabled={blockScopeOptions.length === 0 || submitting !== null || pendingAction !== null}
           >
             {submitting === "block" ? (
               <span className="flex items-center gap-2">
@@ -1530,7 +1584,7 @@ function ReviewDecisionCard(props: {
             ) : (
               <span className="flex items-center gap-2">
                 <HiMiniNoSymbol className="h-4 w-4" aria-hidden="true" />
-                Keep blocked
+                {blockButtonLabel(blockScope)}
               </span>
             )}
           </ActionButton>
@@ -1595,7 +1649,7 @@ function ReviewDecisionCard(props: {
           onUseCooldownChange={handleUseCooldownChange}
           onSubmit={handleModalSubmit}
           onCancel={handleModalCancel}
-          submitLabel={pendingAction === "allow" ? allowButtonLabel(scope) : "Keep blocked"}
+          submitLabel={pendingAction === "allow" ? allowButtonLabel(allowScope) : blockButtonLabel(blockScope)}
         />
       )}
     </div>
@@ -1603,7 +1657,7 @@ function ReviewDecisionCard(props: {
 }
 
 function ScopeChoiceButton(props: {
-  choice: (typeof scopeChoices)[number];
+  choice: ApprovalScopeChoice;
   checked: boolean;
   onScopeChange: (scope: DecisionScope) => void;
 }) {
@@ -1635,6 +1689,16 @@ function allowButtonLabel(scope: DecisionScope): string {
     return "Remember for project";
   }
   return "Approve and remember";
+}
+
+function blockButtonLabel(scope: DecisionScope): string {
+  if (scope === "artifact") {
+    return "Keep blocked";
+  }
+  if (scope === "workspace") {
+    return "Block in project";
+  }
+  return "Block matching actions";
 }
 
 type ReviewCodexResumePanelProps = {

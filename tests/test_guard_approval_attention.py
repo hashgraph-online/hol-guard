@@ -183,7 +183,7 @@ def test_attention_policy_opens_critical_request_without_delay(tmp_path: Path) -
     assert opened_urls == ["http://127.0.0.1:5474/requests/pending"]
 
 
-def test_attention_policy_retries_critical_request_after_open_burst(tmp_path: Path) -> None:
+def test_attention_policy_does_not_reopen_same_critical_request(tmp_path: Path) -> None:
     store, runtime, result = _queue_operation(tmp_path, harness="pi", severity="critical")
     now = [100.0]
     opened_urls: list[str] = []
@@ -204,10 +204,13 @@ def test_attention_policy_retries_critical_request_after_open_burst(tmp_path: Pa
 
     now[0] += 5
     coordinator.process_due()
-    assert opened_urls == [
-        "http://127.0.0.1:5474/requests/pending",
-        "http://127.0.0.1:5474/requests/critical",
-    ]
+    assert opened_urls == ["http://127.0.0.1:5474/requests/pending"]
+    request = requests[0]
+    assert isinstance(request, dict)
+    assert runtime.has_surface_opened(
+        "approval-center",
+        f"approval-request:{request['request_id']}",
+    )
 
 
 def test_attention_severity_uses_structured_signals() -> None:

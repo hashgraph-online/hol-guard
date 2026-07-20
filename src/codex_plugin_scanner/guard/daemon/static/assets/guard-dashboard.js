@@ -1,17 +1,12 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
-  if (relList && relList.supports && relList.supports("modulepreload"))
-    return;
-  for (const link of document.querySelectorAll('link[rel="modulepreload"]'))
-    processPreload(link);
+  if (relList && relList.supports && relList.supports("modulepreload")) return;
+  for (const link of document.querySelectorAll('link[rel="modulepreload"]')) processPreload(link);
   new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      if (mutation.type !== "childList")
-        continue;
-      for (const node of mutation.addedNodes)
-        if (node.tagName === "LINK" && node.rel === "modulepreload")
-          processPreload(node);
+      if (mutation.type !== "childList") continue;
+      for (const node of mutation.addedNodes) if (node.tagName === "LINK" && node.rel === "modulepreload") processPreload(node);
     }
   }).observe(document, {
     childList: true,
@@ -19,21 +14,15 @@ const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-das
   });
   function getFetchOpts(link) {
     const fetchOpts = {};
-    if (link.integrity)
-      fetchOpts.integrity = link.integrity;
-    if (link.referrerPolicy)
-      fetchOpts.referrerPolicy = link.referrerPolicy;
-    if (link.crossOrigin === "use-credentials")
-      fetchOpts.credentials = "include";
-    else if (link.crossOrigin === "anonymous")
-      fetchOpts.credentials = "omit";
-    else
-      fetchOpts.credentials = "same-origin";
+    if (link.integrity) fetchOpts.integrity = link.integrity;
+    if (link.referrerPolicy) fetchOpts.referrerPolicy = link.referrerPolicy;
+    if (link.crossOrigin === "use-credentials") fetchOpts.credentials = "include";
+    else if (link.crossOrigin === "anonymous") fetchOpts.credentials = "omit";
+    else fetchOpts.credentials = "same-origin";
     return fetchOpts;
   }
   function processPreload(link) {
-    if (link.ep)
-      return;
+    if (link.ep) return;
     link.ep = true;
     const fetchOpts = getFetchOpts(link);
     fetch(link.href, fetchOpts);
@@ -12512,42 +12501,37 @@ const __vitePreload = function preload(baseModule, deps, importerUrl) {
       }))));
     };
     document.getElementsByTagName("link");
-    const cspNonceMeta = document.querySelector("meta[property=csp-nonce]"), cspNonce = cspNonceMeta?.nonce || cspNonceMeta?.getAttribute("nonce");
+    const cspNonceMeta = document.querySelector("meta[property=csp-nonce]");
+    const cspNonce = cspNonceMeta?.nonce || cspNonceMeta?.getAttribute("nonce");
     promise = allSettled(deps.map((dep) => {
       dep = assetsURL(dep);
-      if (dep in seen)
-        return;
+      if (dep in seen) return;
       seen[dep] = true;
-      const isCss = dep.endsWith(".css"), cssSelector = isCss ? '[rel="stylesheet"]' : "";
-      if (document.querySelector(`link[href="${dep}"]${cssSelector}`))
-        return;
+      const isCss = dep.endsWith(".css");
+      const cssSelector = isCss ? '[rel="stylesheet"]' : "";
+      if (document.querySelector(`link[href="${dep}"]${cssSelector}`)) return;
       const link = document.createElement("link");
       link.rel = isCss ? "stylesheet" : scriptRel;
-      if (!isCss)
-        link.as = "script";
+      if (!isCss) link.as = "script";
       link.crossOrigin = "";
       link.href = dep;
-      if (cspNonce)
-        link.setAttribute("nonce", cspNonce);
+      if (cspNonce) link.setAttribute("nonce", cspNonce);
       document.head.appendChild(link);
-      if (isCss)
-        return new Promise((res, rej) => {
-          link.addEventListener("load", res);
-          link.addEventListener("error", () => rej(Error(`Unable to preload CSS for ${dep}`)));
-        });
+      if (isCss) return new Promise((res, rej) => {
+        link.addEventListener("load", res);
+        link.addEventListener("error", () => rej(/* @__PURE__ */ new Error(`Unable to preload CSS for ${dep}`)));
+      });
     }));
   }
   function handlePreloadError(err$2) {
     const e$1 = new Event("vite:preloadError", { cancelable: true });
     e$1.payload = err$2;
     window.dispatchEvent(e$1);
-    if (!e$1.defaultPrevented)
-      throw err$2;
+    if (!e$1.defaultPrevented) throw err$2;
   }
   return promise.then((res) => {
     for (const item of res || []) {
-      if (item.status !== "rejected")
-        continue;
+      if (item.status !== "rejected") continue;
       handlePreloadError(item.reason);
     }
     return baseModule().catch(handlePreloadError);
@@ -13130,6 +13114,163 @@ function groupByCategory(receipts) {
   }
   return map;
 }
+const DEFAULT_SCOPE_CHOICES = [
+  {
+    value: "artifact",
+    label: "Approve once",
+    description: "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved."
+  },
+  {
+    value: "workspace",
+    label: "Remember for project",
+    description: "Save this decision for the current project. Future matching actions skip review here without asking again."
+  },
+  {
+    value: "publisher",
+    label: "This source",
+    description: "Save this decision for all actions from the same source. Matching actions skip review in any project."
+  },
+  {
+    value: "harness",
+    label: "This app",
+    description: "Save this decision for this AI app everywhere. Matching actions from this app skip review in all your projects."
+  },
+  {
+    value: "global",
+    label: "Everywhere",
+    description: "Save this decision across all your projects on this machine. All matching actions skip review. Use only if you fully trust this."
+  }
+];
+const BLOCK_SCOPE_CHOICES = [
+  {
+    value: "artifact",
+    label: "Block this action",
+    description: "Block only this exact action. Other actions still follow their current Guard policy."
+  },
+  {
+    value: "workspace",
+    label: "Block in project",
+    description: "Block matching actions in the current project."
+  },
+  {
+    value: "publisher",
+    label: "Block this source",
+    description: "Block matching actions from this source."
+  },
+  {
+    value: "harness",
+    label: "Block in this app",
+    description: "Block matching actions from this AI app."
+  },
+  {
+    value: "global",
+    label: "Block everywhere",
+    description: "Block matching actions across every project and AI app on this machine."
+  }
+];
+function hasScopeContractMetadata(item) {
+  return item.scope_contract_version !== void 0 || item.scope_contract_digest !== void 0 || item.allowed_scopes_by_action !== void 0 || item.recommended_scope_by_action !== void 0 || item.scope_restrictions !== void 0 || item.task_capability_eligibility !== void 0;
+}
+function hasCompleteScopeContractBinding(item) {
+  return typeof item.scope_contract_version === "string" && item.scope_contract_version.length > 0 && typeof item.scope_contract_digest === "string" && item.scope_contract_digest.length > 0;
+}
+function declaredScopesForAction(item, action) {
+  if (hasScopeContractMetadata(item) && !hasCompleteScopeContractBinding(item)) {
+    return [];
+  }
+  const actionScopes = item.allowed_scopes_by_action?.[action];
+  if (Array.isArray(actionScopes)) {
+    return actionScopes;
+  }
+  if (action === "allow" && Array.isArray(item.allowed_scopes)) {
+    return item.allowed_scopes;
+  }
+  return null;
+}
+function requestSupportsScope(item, action, scope) {
+  const declaredScopes = declaredScopesForAction(item, action);
+  if (declaredScopes !== null) {
+    return declaredScopes.includes(scope);
+  }
+  return scope === "artifact";
+}
+function filterScopeChoicesForRequest(item, action, choices) {
+  return choices.filter((choice) => requestSupportsScope(item, action, choice.value));
+}
+function scopeChoicesForRequest(item, action = "allow") {
+  return filterScopeChoicesForRequest(
+    item,
+    action,
+    action === "allow" ? DEFAULT_SCOPE_CHOICES : BLOCK_SCOPE_CHOICES
+  );
+}
+const ADVANCED_SCOPE_VALUES = /* @__PURE__ */ new Set(["global"]);
+function advancedScopeChoicesForRequest(item, action = "allow") {
+  return scopeChoicesForRequest(item, action).filter(
+    (choice) => ADVANCED_SCOPE_VALUES.has(choice.value)
+  );
+}
+function standardScopeChoicesForRequest(item, action = "allow") {
+  return scopeChoicesForRequest(item, action).filter(
+    (choice) => !ADVANCED_SCOPE_VALUES.has(choice.value)
+  );
+}
+function recommendedScopeForAction(item, action) {
+  const actionRecommendation = item.recommended_scope_by_action?.[action] ?? null;
+  if (actionRecommendation !== null && requestSupportsScope(item, action, actionRecommendation)) {
+    return actionRecommendation;
+  }
+  if (action === "allow" && item.recommended_scope !== null && requestSupportsScope(item, action, item.recommended_scope)) {
+    return item.recommended_scope;
+  }
+  return scopeChoicesForRequest(item, action)[0]?.value ?? null;
+}
+function normalizeDecisionScope(item, action, scope) {
+  if (requestSupportsScope(item, action, scope)) {
+    return scope;
+  }
+  return recommendedScopeForAction(item, action);
+}
+function taskCapabilityExplanation(item) {
+  const eligibility = item.task_capability_eligibility;
+  if (eligibility === void 0) {
+    return null;
+  }
+  if (eligibility.eligible) {
+    return "Task access can cover only the approved operations and expires automatically.";
+  }
+  if (eligibility.reason_codes.includes("current_action_not_overridable") || item.scope_restrictions?.includes("current_action_not_overridable") === true) {
+    return "Task access cannot override this blocked or protected Guard action.";
+  }
+  if (eligibility.reason_codes.includes("task_capability_not_enabled")) {
+    return "Task access is not available for this action. Guard will ask again after this one-time approval.";
+  }
+  return "Task access is unavailable because this request does not include complete reusable proof.";
+}
+function buildDecisionPayload(input) {
+  const contractVersion = input.item.scope_contract_version;
+  const contractDigest = input.item.scope_contract_digest;
+  const hasCompleteBinding = typeof contractVersion === "string" && contractVersion.length > 0 && typeof contractDigest === "string" && contractDigest.length > 0;
+  if (hasScopeContractMetadata(input.item) && !hasCompleteBinding) {
+    throw new Error("The approval scope contract is incomplete. Refresh this request before deciding.");
+  }
+  const normalizedScope = normalizeDecisionScope(input.item, input.action, input.scope);
+  if (normalizedScope === null) {
+    throw new Error(`No eligible ${input.action} scope is available for this request.`);
+  }
+  const workspace = normalizedScope === "workspace" && typeof input.item.workspace === "string" ? input.item.workspace : void 0;
+  return {
+    requestId: input.item.request_id,
+    action: input.action,
+    scope: normalizedScope,
+    workspace,
+    reason: input.reason,
+    ...hasCompleteBinding ? {
+      scope_contract_version: contractVersion,
+      scope_contract_digest: contractDigest
+    } : {}
+  };
+}
 const REVIEW_SEMANTIC_GROUPS = [
   { id: "all", label: "All", matches: [] },
   {
@@ -13413,7 +13554,7 @@ function bulkApprovalRiskTier(group) {
   return "elevated";
 }
 function isBulkApprovableGroup(group) {
-  return bulkApprovalRiskTier(group) !== "blocked";
+  return bulkApprovalRiskTier(group) !== "blocked" && requestSupportsScope(group.primary, "allow", "artifact");
 }
 function countSensitiveFileReadGroups(groups) {
   return groups.filter((g) => {
@@ -15753,9 +15894,62 @@ function parseDecisionV2(raw) {
     confidence
   };
 }
+const DECISION_SCOPE_VALUES = /* @__PURE__ */ new Set([
+  "artifact",
+  "workspace",
+  "publisher",
+  "harness",
+  "global"
+]);
+function isDecisionScope(value) {
+  return typeof value === "string" && DECISION_SCOPE_VALUES.has(value);
+}
+function parseDecisionScopeList(value) {
+  if (!Array.isArray(value) || !value.every(isDecisionScope)) {
+    return null;
+  }
+  return [...new Set(value)];
+}
+function parseStringList(value) {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+    return null;
+  }
+  return [...new Set(value)];
+}
+function parseOptionalString(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
 function normalizeApprovalRequest(item) {
+  const hasScopeContract = item.scope_contract_version !== void 0 || item.scope_contract_digest !== void 0 || item.allowed_scopes_by_action !== void 0 || item.recommended_scope_by_action !== void 0 || item.scope_restrictions !== void 0 || item.task_capability_eligibility !== void 0;
+  const scopeContractVersion = parseOptionalString(item.scope_contract_version);
+  const scopeContractDigest = parseOptionalString(item.scope_contract_digest);
+  const hasCompleteScopeContract = scopeContractVersion !== null && scopeContractDigest !== null;
+  const rawAllowedByAction = isRecord$1(item.allowed_scopes_by_action) ? item.allowed_scopes_by_action : {};
+  const rawRecommendedByAction = isRecord$1(item.recommended_scope_by_action) ? item.recommended_scope_by_action : {};
+  const rawTaskEligibility = isRecord$1(item.task_capability_eligibility) ? item.task_capability_eligibility : null;
+  const taskReasonCodes = parseStringList(rawTaskEligibility?.reason_codes);
+  const taskCapabilityEligibility = typeof rawTaskEligibility?.eligible === "boolean" && taskReasonCodes !== null ? {
+    eligible: rawTaskEligibility.eligible,
+    reason_codes: taskReasonCodes
+  } : void 0;
+  const allowedScopes = parseDecisionScopeList(item.allowed_scopes);
+  const scopeRestrictions = parseStringList(item.scope_restrictions);
   return {
     ...item,
+    recommended_scope: isDecisionScope(item.recommended_scope) ? item.recommended_scope : null,
+    allowed_scopes: allowedScopes ?? void 0,
+    scope_contract_version: hasScopeContract ? scopeContractVersion : void 0,
+    scope_contract_digest: hasScopeContract ? scopeContractDigest : void 0,
+    allowed_scopes_by_action: hasScopeContract ? {
+      allow: hasCompleteScopeContract ? parseDecisionScopeList(rawAllowedByAction.allow) ?? [] : [],
+      block: hasCompleteScopeContract ? parseDecisionScopeList(rawAllowedByAction.block) ?? [] : []
+    } : void 0,
+    recommended_scope_by_action: hasScopeContract ? {
+      allow: hasCompleteScopeContract && isDecisionScope(rawRecommendedByAction.allow) ? rawRecommendedByAction.allow : null,
+      block: hasCompleteScopeContract && isDecisionScope(rawRecommendedByAction.block) ? rawRecommendedByAction.block : null
+    } : void 0,
+    scope_restrictions: hasScopeContract ? scopeRestrictions ?? [] : void 0,
+    task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : void 0,
     action_envelope_json: parseActionEnvelope(item.action_envelope_json),
     decision_v2_json: parseDecisionV2(item.decision_v2_json)
   };
@@ -16868,6 +17062,8 @@ async function resolveRequestWithQueueResult(input) {
       scope: input.scope,
       workspace: input.workspace || void 0,
       reason: input.reason || void 0,
+      ...input.scope_contract_version !== void 0 ? { scope_contract_version: input.scope_contract_version } : {},
+      ...input.scope_contract_digest !== void 0 ? { scope_contract_digest: input.scope_contract_digest } : {},
       ...input.approval_password !== void 0 ? { approval_password: input.approval_password } : {},
       ...input.approval_totp_code !== void 0 ? { approval_totp_code: input.approval_totp_code } : {},
       ...input.approval_gate_use_cooldown !== void 0 ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {}
@@ -25118,79 +25314,6 @@ function ScannerEvidenceSection(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scannerSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerSignalRow, { signal }, signal.signal_id)) })
   ] });
 }
-const DEFAULT_SCOPE_CHOICES = [
-  {
-    value: "artifact",
-    label: "Approve once",
-    description: "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved."
-  },
-  {
-    value: "workspace",
-    label: "Remember for project",
-    description: "Save this decision for the current project. Future matching actions skip review here without asking again."
-  },
-  {
-    value: "publisher",
-    label: "This source",
-    description: "Save this decision for all actions from the same source. Matching actions skip review in any project."
-  },
-  {
-    value: "harness",
-    label: "This app",
-    description: "Save this decision for this AI app everywhere. Matching actions from this app skip review in all your projects."
-  },
-  {
-    value: "global",
-    label: "Everywhere",
-    description: "Save this decision across all your projects on this machine. All matching actions skip review. Use only if you fully trust this."
-  }
-];
-function requestSupportsScope(item, scope) {
-  if (Array.isArray(item.allowed_scopes)) {
-    return item.allowed_scopes.includes(scope);
-  }
-  if (scope === "workspace") {
-    return typeof item.workspace === "string" && item.workspace.trim().length > 0;
-  }
-  if (scope === "publisher") {
-    return typeof item.publisher === "string" && item.publisher.trim().length > 0;
-  }
-  return true;
-}
-function filterScopeChoicesForRequest(item, choices) {
-  return choices.filter((choice) => requestSupportsScope(item, choice.value));
-}
-const ADVANCED_SCOPE_VALUES = /* @__PURE__ */ new Set(["global"]);
-function advancedScopeChoicesForRequest(item) {
-  return filterScopeChoicesForRequest(item, DEFAULT_SCOPE_CHOICES).filter(
-    (choice) => ADVANCED_SCOPE_VALUES.has(choice.value)
-  );
-}
-function standardScopeChoicesForRequest(item) {
-  return filterScopeChoicesForRequest(item, DEFAULT_SCOPE_CHOICES).filter(
-    (choice) => !ADVANCED_SCOPE_VALUES.has(choice.value)
-  );
-}
-function normalizeDecisionScope(item, scope) {
-  if (requestSupportsScope(item, scope)) {
-    return scope;
-  }
-  if (requestSupportsScope(item, item.recommended_scope)) {
-    return item.recommended_scope;
-  }
-  return "artifact";
-}
-function buildDecisionPayload(input) {
-  const normalizedScope = normalizeDecisionScope(input.item, input.scope);
-  const workspace = normalizedScope === "workspace" && typeof input.item.workspace === "string" ? input.item.workspace : void 0;
-  return {
-    requestId: input.item.request_id,
-    action: input.action,
-    scope: normalizedScope,
-    workspace,
-    reason: input.reason
-  };
-}
 function ConsolidatedEvidenceAlert({ items }) {
   const [index, setIndex] = reactExports.useState(0);
   reactExports.useEffect(() => {
@@ -26429,33 +26552,6 @@ const PROTECTION_APPEARANCE = {
     iconClass: "bg-brand-attention/10 text-brand-attention"
   }
 };
-const scopeChoices = [
-  {
-    value: "artifact",
-    label: "Just this time",
-    description: "Allow only this exact action. Guard will ask again for anything different."
-  },
-  {
-    value: "workspace",
-    label: "This project",
-    description: "Allow this action in the current workspace only."
-  },
-  {
-    value: "publisher",
-    label: "This source",
-    description: "Allow actions from the same source or publisher."
-  },
-  {
-    value: "harness",
-    label: "This app",
-    description: "Allow similar actions from this AI app everywhere."
-  },
-  {
-    value: "global",
-    label: "Everywhere",
-    description: "Allow this action across all your projects. Use with care."
-  }
-];
 const QUEUE_PAGE_SIZE = 10;
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact"]);
 function ReviewWorkspace(props) {
@@ -27218,7 +27314,8 @@ function queueItemPreview(item) {
 function ReviewDecisionCard(props) {
   const detail = props.detail;
   const item = detail?.item ?? null;
-  const [scope, setScope] = reactExports.useState(item?.recommended_scope ?? "artifact");
+  const [allowScope, setAllowScope] = reactExports.useState("artifact");
+  const [blockScope, setBlockScope] = reactExports.useState("artifact");
   const [submitting, setSubmitting] = reactExports.useState(null);
   const [resolved, setResolved] = reactExports.useState(null);
   const [showConsequences, setShowConsequences] = reactExports.useState(false);
@@ -27229,10 +27326,11 @@ function ReviewDecisionCard(props) {
   const [approvalTotpCode, setApprovalTotpCode] = reactExports.useState("");
   const [useCooldown, setUseCooldown] = reactExports.useState(false);
   const [pendingAction, setPendingAction] = reactExports.useState(null);
+  const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
   const timerRef = reactExports.useRef(null);
   const allowButtonRef = reactExports.useRef(null);
   const availableScopeChoices = reactExports.useMemo(
-    () => item ? standardScopeChoicesForRequest(item) : scopeChoices.filter((choice) => choice.value !== "global"),
+    () => item ? standardScopeChoicesForRequest(item, "allow") : [],
     [item]
   );
   const commonScopeOptions = reactExports.useMemo(
@@ -27244,16 +27342,20 @@ function ReviewDecisionCard(props) {
     [availableScopeChoices]
   );
   const advancedScopeOptions = reactExports.useMemo(
-    () => item ? advancedScopeChoicesForRequest(item) : scopeChoices.filter((choice) => choice.value === "global"),
+    () => item ? advancedScopeChoicesForRequest(item, "allow") : [],
     [item]
   );
-  const gateRequiresPassword = reactExports.useMemo(() => {
-    const gate = props.approvalGate;
-    return gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
-  }, [props.approvalGate, scope]);
+  const blockScopeOptions = reactExports.useMemo(
+    () => item ? scopeChoicesForRequest(item, "block") : [],
+    [item]
+  );
+  const taskCapabilityCopy = item ? taskCapabilityExplanation(item) : null;
+  const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
+  const decisionContractKey = item ? `${item.request_id}:${item.scope_contract_version ?? "legacy"}:${item.scope_contract_digest ?? "legacy"}` : null;
   reactExports.useEffect(() => {
     if (item) {
-      setScope(normalizeDecisionScope(item, item.recommended_scope));
+      setAllowScope(recommendedScopeForAction(item, "allow") ?? "artifact");
+      setBlockScope(recommendedScopeForAction(item, "block") ?? "artifact");
       setResolved(null);
       setSubmitting(null);
       setLastAction(null);
@@ -27262,13 +27364,97 @@ function ReviewDecisionCard(props) {
       setApprovalTotpCode("");
       setUseCooldown(false);
       setPendingAction(null);
+      setPendingContractKey(null);
     }
-  }, [item?.request_id]);
+  }, [item?.request_id, item?.scope_contract_version, item?.scope_contract_digest]);
   reactExports.useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, []);
+  const handleResolve = reactExports.useCallback(
+    async (action) => {
+      if (!item) return;
+      setSubmitting(action);
+      setErrorMessage(null);
+      try {
+        const requestedScope = action === "allow" ? allowScope : blockScope;
+        const gate = props.approvalGate;
+        const needsPassword = approvalProofRequiresPassword(gate);
+        const includeGateFields = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, requestedScope);
+        await props.onResolve({
+          ...buildDecisionPayload({
+            item,
+            action,
+            scope: requestedScope,
+            reason: action === "allow" ? "approved in review" : "blocked in review"
+          }),
+          ...includeGateFields && needsPassword ? { approval_password: approvalPassword } : {},
+          ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
+          ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
+        });
+        setResolved(action);
+        setApprovalPassword("");
+        setApprovalTotpCode("");
+        setUseCooldown(false);
+        setPendingAction(null);
+        setPendingContractKey(null);
+        timerRef.current = setTimeout(() => setResolved(null), 2e3);
+      } catch (err) {
+        setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
+      } finally {
+        setSubmitting(null);
+      }
+    },
+    [
+      item,
+      allowScope,
+      blockScope,
+      props.onResolve,
+      props.approvalGate,
+      approvalPassword,
+      approvalTotpCode,
+      useCooldown
+    ]
+  );
+  const handleRequestResolve = reactExports.useCallback(
+    (action) => {
+      if (action === "allow" && !hasAllowScope) {
+        setErrorMessage("This action has no eligible approval scope.");
+        return;
+      }
+      if (action === "block" && blockScopeOptions.length === 0) {
+        setErrorMessage("This action has no eligible block scope.");
+        return;
+      }
+      setLastAction(action);
+      const requestedScope = action === "allow" ? allowScope : blockScope;
+      const gate = props.approvalGate;
+      const gateRequiresPassword = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, requestedScope);
+      if (gateRequiresPassword) {
+        setPendingAction(action);
+        setPendingContractKey(decisionContractKey);
+        setErrorMessage(null);
+        return;
+      }
+      void handleResolve(action);
+    },
+    [
+      allowScope,
+      blockScope,
+      blockScopeOptions.length,
+      decisionContractKey,
+      handleResolve,
+      hasAllowScope,
+      props.approvalGate
+    ]
+  );
+  const handleAllow = reactExports.useCallback(() => {
+    handleRequestResolve("allow");
+  }, [handleRequestResolve]);
+  const handleBlock = reactExports.useCallback(() => {
+    handleRequestResolve("block");
+  }, [handleRequestResolve]);
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
       if (submitting !== null || pendingAction !== null) return;
@@ -27285,71 +27471,27 @@ function ReviewDecisionCard(props) {
       const scopeIndex = parseInt(event.key, 10);
       if (scopeIndex >= 1 && scopeIndex <= availableScopeChoices.length) {
         event.preventDefault();
-        setScope(availableScopeChoices[scopeIndex - 1].value);
+        setAllowScope(availableScopeChoices[scopeIndex - 1].value);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [submitting, pendingAction, scope, item?.request_id, availableScopeChoices]);
-  const handleResolve = reactExports.useCallback(
-    async (action) => {
-      if (!item) return;
-      setSubmitting(action);
-      setErrorMessage(null);
-      try {
-        const gate = props.approvalGate;
-        const needsPassword = approvalProofRequiresPassword(gate);
-        const includeGateFields = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
-        await props.onResolve({
-          ...buildDecisionPayload({
-            item,
-            action,
-            scope,
-            reason: action === "allow" ? "approved in review" : "blocked in review"
-          }),
-          ...includeGateFields && needsPassword ? { approval_password: approvalPassword } : {},
-          ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
-          ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
-        });
-        setResolved(action);
-        setApprovalPassword("");
-        setApprovalTotpCode("");
-        setUseCooldown(false);
-        setPendingAction(null);
-        timerRef.current = setTimeout(() => setResolved(null), 2e3);
-      } catch (err) {
-        setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
-      } finally {
-        setSubmitting(null);
-      }
-    },
-    [item, scope, props.onResolve, props.approvalGate, approvalPassword, approvalTotpCode, useCooldown]
-  );
-  const handleRequestResolve = reactExports.useCallback(
-    (action) => {
-      setLastAction(action);
-      if (gateRequiresPassword) {
-        setPendingAction(action);
-        setErrorMessage(null);
-        return;
-      }
-      void handleResolve(action);
-    },
-    [handleResolve, gateRequiresPassword]
-  );
-  const handleAllow = reactExports.useCallback(() => {
-    handleRequestResolve("allow");
-  }, [handleRequestResolve]);
-  const handleBlock = reactExports.useCallback(() => {
-    handleRequestResolve("block");
-  }, [handleRequestResolve]);
+  }, [availableScopeChoices, handleRequestResolve, pendingAction, submitting]);
   const handleModalSubmit = reactExports.useCallback(() => {
-    if (pendingAction !== null) {
-      void handleResolve(pendingAction);
+    if (pendingAction === null) {
+      return;
     }
-  }, [pendingAction, handleResolve]);
+    if (pendingContractKey !== decisionContractKey) {
+      setPendingAction(null);
+      setPendingContractKey(null);
+      setErrorMessage("This request changed while you were reviewing it. Review the current scopes and try again.");
+      return;
+    }
+    void handleResolve(pendingAction);
+  }, [decisionContractKey, handleResolve, pendingAction, pendingContractKey]);
   const handleModalCancel = reactExports.useCallback(() => {
     setPendingAction(null);
+    setPendingContractKey(null);
     setApprovalPassword("");
     setApprovalTotpCode("");
     setUseCooldown(false);
@@ -27511,13 +27653,14 @@ function ReviewDecisionCard(props) {
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "How long should this choice last?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Scope selection", children: commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval scope" }),
+        !hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "status", children: "This action cannot be approved under its current Guard policy." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Allow scope selection", children: commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           ScopeChoiceButton,
           {
             choice,
-            checked: scope === choice.value,
-            onScopeChange: setScope
+            checked: allowScope === choice.value,
+            onScopeChange: setAllowScope
           },
           choice.value
         )) }),
@@ -27528,8 +27671,8 @@ function ReviewDecisionCard(props) {
             ScopeChoiceButton,
             {
               choice,
-              checked: scope === choice.value,
-              onScopeChange: setScope
+              checked: allowScope === choice.value,
+              onScopeChange: setAllowScope
             },
             choice.value
           )) })
@@ -27541,8 +27684,25 @@ function ReviewDecisionCard(props) {
             ScopeChoiceButton,
             {
               choice,
-              checked: scope === choice.value,
-              onScopeChange: setScope
+              checked: allowScope === choice.value,
+              onScopeChange: setAllowScope
+            },
+            choice.value
+          )) })
+        ] }),
+        taskCapabilityCopy !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 pt-1 text-xs text-brand-dark/70", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: taskCapabilityCopy })
+        ] }),
+        blockScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-slate-200/70 bg-slate-50/60 p-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-dark", children: "Block matching actions" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "Blocking can cover a wider trusted selector without granting permission to run anything." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Block scope selection", children: blockScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ScopeChoiceButton,
+            {
+              choice,
+              checked: blockScope === choice.value,
+              onScopeChange: setBlockScope
             },
             choice.value
           )) })
@@ -27570,13 +27730,13 @@ function ReviewDecisionCard(props) {
             ref: allowButtonRef,
             variant: "success",
             onClick: handleAllow,
-            disabled: submitting !== null || pendingAction !== null,
+            disabled: !hasAllowScope || submitting !== null || pendingAction !== null,
             children: submitting === "allow" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
               "Approving..."
             ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4", "aria-hidden": "true" }),
-              allowButtonLabel(scope)
+              allowButtonLabel(allowScope)
             ] })
           }
         ),
@@ -27585,13 +27745,13 @@ function ReviewDecisionCard(props) {
           {
             variant: "outline",
             onClick: handleBlock,
-            disabled: submitting !== null || pendingAction !== null,
+            disabled: blockScopeOptions.length === 0 || submitting !== null || pendingAction !== null,
             children: submitting === "block" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
               "Blocking..."
             ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-4 w-4", "aria-hidden": "true" }),
-              "Keep blocked"
+              blockButtonLabel(blockScope)
             ] })
           }
         )
@@ -27643,7 +27803,7 @@ function ReviewDecisionCard(props) {
         onUseCooldownChange: handleUseCooldownChange,
         onSubmit: handleModalSubmit,
         onCancel: handleModalCancel,
-        submitLabel: pendingAction === "allow" ? allowButtonLabel(scope) : "Keep blocked"
+        submitLabel: pendingAction === "allow" ? allowButtonLabel(allowScope) : blockButtonLabel(blockScope)
       }
     )
   ] });
@@ -27675,6 +27835,15 @@ function allowButtonLabel(scope) {
     return "Remember for project";
   }
   return "Approve and remember";
+}
+function blockButtonLabel(scope) {
+  if (scope === "artifact") {
+    return "Keep blocked";
+  }
+  if (scope === "workspace") {
+    return "Block in project";
+  }
+  return "Block matching actions";
 }
 function ReviewCodexResumePanel({ resume, onRetry }) {
   const ux = buildCodexResumeUx(resume);

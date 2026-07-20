@@ -16,6 +16,7 @@ import {
   isDuplicateGroup,
   filterQueueByDateRange,
   formatQueueRequestDate,
+  isBulkApprovableGroup,
 } from "./queue-state";
 
 function assert(condition: boolean, message: string): void {
@@ -608,6 +609,23 @@ const fileReadTypeGroup = groupDuplicates([fileReadTypeItem])[0];
 assert(
   isReadOnlyQueueGroup(fileReadTypeGroup),
   "T-QS-54: isReadOnlyQueueGroup returns true for artifact_type file_read_request even without action_envelope"
+);
+
+const noAllowScopeGroup = groupDuplicates([
+  {
+    ...readOnlySingle,
+    request_id: "req-no-allow-scope",
+    allowed_scopes_by_action: { allow: [], block: ["artifact"] },
+    recommended_scope_by_action: { allow: null, block: "artifact" },
+  },
+])[0];
+assert(
+  !isBulkApprovableGroup(noAllowScopeGroup),
+  "T-QS-54a: batch selection excludes requests without an eligible artifact allow",
+);
+assert(
+  isBulkApprovableGroup(singleReadOnlyGroup),
+  "T-QS-54b: legacy requests retain conservative artifact-once batch eligibility",
 );
 
 const mixedGroups = groupDuplicates([readOnlySingle, readOnlyWithDup1, readOnlyWithDup2]);

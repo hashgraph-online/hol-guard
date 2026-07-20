@@ -1,4 +1,8 @@
-import type { DecisionScope, GuardApprovalRequest } from "./guard-types";
+import type {
+  ApprovalResolutionAction,
+  DecisionScope,
+  GuardApprovalRequest,
+} from "./guard-types";
 
 export type ApprovalScopeChoice = {
   value: DecisionScope;
@@ -39,28 +43,100 @@ export const DEFAULT_SCOPE_CHOICES: ApprovalScopeChoice[] = [
   },
 ];
 
-export function requestSupportsScope(item: GuardApprovalRequest, scope: DecisionScope): boolean {
-  if (Array.isArray(item.allowed_scopes)) {
-    return item.allowed_scopes.includes(scope);
+export const BLOCK_SCOPE_CHOICES: ApprovalScopeChoice[] = [
+  {
+    value: "artifact",
+    label: "Block this action",
+    description: "Block only this exact action. Other actions still follow their current Guard policy.",
+  },
+  {
+    value: "workspace",
+    label: "Block in project",
+    description: "Block matching actions in the current project.",
+  },
+  {
+    value: "publisher",
+    label: "Block this source",
+    description: "Block matching actions from this source.",
+  },
+  {
+    value: "harness",
+    label: "Block in this app",
+    description: "Block matching actions from this AI app.",
+  },
+  {
+    value: "global",
+    label: "Block everywhere",
+    description: "Block matching actions across every project and AI app on this machine.",
+  },
+];
+
+function hasScopeContractMetadata(item: GuardApprovalRequest): boolean {
+  return (
+    item.scope_contract_version !== undefined ||
+    item.scope_contract_digest !== undefined ||
+    item.allowed_scopes_by_action !== undefined ||
+    item.recommended_scope_by_action !== undefined ||
+    item.scope_restrictions !== undefined ||
+    item.task_capability_eligibility !== undefined
+  );
+}
+
+function hasCompleteScopeContractBinding(item: GuardApprovalRequest): boolean {
+  return (
+    typeof item.scope_contract_version === "string" &&
+    item.scope_contract_version.length > 0 &&
+    typeof item.scope_contract_digest === "string" &&
+    item.scope_contract_digest.length > 0
+  );
+}
+
+function declaredScopesForAction(
+  item: GuardApprovalRequest,
+  action: ApprovalResolutionAction,
+): DecisionScope[] | null {
+  if (hasScopeContractMetadata(item) && !hasCompleteScopeContractBinding(item)) {
+    return [];
   }
-  if (scope === "workspace") {
-    return typeof item.workspace === "string" && item.workspace.trim().length > 0;
+  const actionScopes = item.allowed_scopes_by_action?.[action];
+  if (Array.isArray(actionScopes)) {
+    return actionScopes;
   }
-  if (scope === "publisher") {
-    return typeof item.publisher === "string" && item.publisher.trim().length > 0;
+  if (action === "allow" && Array.isArray(item.allowed_scopes)) {
+    return item.allowed_scopes;
   }
-  return true;
+  return null;
+}
+
+export function requestSupportsScope(
+  item: GuardApprovalRequest,
+  action: ApprovalResolutionAction,
+  scope: DecisionScope,
+): boolean {
+  const declaredScopes = declaredScopesForAction(item, action);
+  if (declaredScopes !== null) {
+    return declaredScopes.includes(scope);
+  }
+  return scope === "artifact";
 }
 
 export function filterScopeChoicesForRequest<T extends { value: DecisionScope }>(
   item: GuardApprovalRequest,
+  action: ApprovalResolutionAction,
   choices: readonly T[],
 ): T[] {
-  return choices.filter((choice) => requestSupportsScope(item, choice.value));
+  return choices.filter((choice) => requestSupportsScope(item, action, choice.value));
 }
 
-export function scopeChoicesForRequest(item: GuardApprovalRequest): ApprovalScopeChoice[] {
-  return filterScopeChoicesForRequest(item, DEFAULT_SCOPE_CHOICES);
+export function scopeChoicesForRequest(
+  item: GuardApprovalRequest,
+  action: ApprovalResolutionAction = "allow",
+): ApprovalScopeChoice[] {
+  return filterScopeChoicesForRequest(
+    item,
+    action,
+    action === "allow" ? DEFAULT_SCOPE_CHOICES : BLOCK_SCOPE_CHOICES,
+  );
 }
 
 export const ADVANCED_SCOPE_VALUES = new Set<DecisionScope>(["global"]);
@@ -69,26 +145,71 @@ export function isAdvancedScope(scope: DecisionScope): boolean {
   return ADVANCED_SCOPE_VALUES.has(scope);
 }
 
-export function advancedScopeChoicesForRequest(item: GuardApprovalRequest): ApprovalScopeChoice[] {
-  return filterScopeChoicesForRequest(item, DEFAULT_SCOPE_CHOICES).filter((choice) =>
+export function advancedScopeChoicesForRequest(
+  item: GuardApprovalRequest,
+  action: ApprovalResolutionAction = "allow",
+): ApprovalScopeChoice[] {
+  return scopeChoicesForRequest(item, action).filter((choice) =>
     ADVANCED_SCOPE_VALUES.has(choice.value)
   );
 }
 
-export function standardScopeChoicesForRequest(item: GuardApprovalRequest): ApprovalScopeChoice[] {
-  return filterScopeChoicesForRequest(item, DEFAULT_SCOPE_CHOICES).filter((choice) =>
+export function standardScopeChoicesForRequest(
+  item: GuardApprovalRequest,
+  action: ApprovalResolutionAction = "allow",
+): ApprovalScopeChoice[] {
+  return scopeChoicesForRequest(item, action).filter((choice) =>
     !ADVANCED_SCOPE_VALUES.has(choice.value)
   );
 }
 
-export function normalizeDecisionScope(item: GuardApprovalRequest, scope: DecisionScope): DecisionScope {
-  if (requestSupportsScope(item, scope)) {
-    return scope;
+export function recommendedScopeForAction(
+  item: GuardApprovalRequest,
+  action: ApprovalResolutionAction,
+): DecisionScope | null {
+  const actionRecommendation = item.recommended_scope_by_action?.[action] ?? null;
+  if (actionRecommendation !== null && requestSupportsScope(item, action, actionRecommendation)) {
+    return actionRecommendation;
   }
-  if (requestSupportsScope(item, item.recommended_scope)) {
+  if (
+    action === "allow" &&
+    item.recommended_scope !== null &&
+    requestSupportsScope(item, action, item.recommended_scope)
+  ) {
     return item.recommended_scope;
   }
-  return "artifact";
+  return scopeChoicesForRequest(item, action)[0]?.value ?? null;
+}
+
+export function normalizeDecisionScope(
+  item: GuardApprovalRequest,
+  action: ApprovalResolutionAction,
+  scope: DecisionScope,
+): DecisionScope | null {
+  if (requestSupportsScope(item, action, scope)) {
+    return scope;
+  }
+  return recommendedScopeForAction(item, action);
+}
+
+export function taskCapabilityExplanation(item: GuardApprovalRequest): string | null {
+  const eligibility = item.task_capability_eligibility;
+  if (eligibility === undefined) {
+    return null;
+  }
+  if (eligibility.eligible) {
+    return "Task access can cover only the approved operations and expires automatically.";
+  }
+  if (
+    eligibility.reason_codes.includes("current_action_not_overridable") ||
+    item.scope_restrictions?.includes("current_action_not_overridable") === true
+  ) {
+    return "Task access cannot override this blocked or protected Guard action.";
+  }
+  if (eligibility.reason_codes.includes("task_capability_not_enabled")) {
+    return "Task access is not available for this action. Guard will ask again after this one-time approval.";
+  }
+  return "Task access is unavailable because this request does not include complete reusable proof.";
 }
 
 export function buildDecisionPayload(input: {
@@ -102,8 +223,23 @@ export function buildDecisionPayload(input: {
   scope: DecisionScope;
   workspace?: string;
   reason: string;
+  scope_contract_version?: string;
+  scope_contract_digest?: string;
 } {
-  const normalizedScope = normalizeDecisionScope(input.item, input.scope);
+  const contractVersion = input.item.scope_contract_version;
+  const contractDigest = input.item.scope_contract_digest;
+  const hasCompleteBinding =
+    typeof contractVersion === "string" &&
+    contractVersion.length > 0 &&
+    typeof contractDigest === "string" &&
+    contractDigest.length > 0;
+  if (hasScopeContractMetadata(input.item) && !hasCompleteBinding) {
+    throw new Error("The approval scope contract is incomplete. Refresh this request before deciding.");
+  }
+  const normalizedScope = normalizeDecisionScope(input.item, input.action, input.scope);
+  if (normalizedScope === null) {
+    throw new Error(`No eligible ${input.action} scope is available for this request.`);
+  }
   const workspace =
     normalizedScope === "workspace" && typeof input.item.workspace === "string"
       ? input.item.workspace
@@ -114,5 +250,11 @@ export function buildDecisionPayload(input: {
     scope: normalizedScope,
     workspace,
     reason: input.reason,
+    ...(hasCompleteBinding
+      ? {
+          scope_contract_version: contractVersion,
+          scope_contract_digest: contractDigest,
+        }
+      : {}),
   };
 }
