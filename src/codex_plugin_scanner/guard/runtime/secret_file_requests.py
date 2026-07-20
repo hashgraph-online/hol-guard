@@ -36,6 +36,13 @@ from .false_positive_rules import (
 from .github_command_capabilities import GitHubCommandAssessment, classify_github_cli
 from .interpreter_options import shell_interpreter_command_payload as _shell_interpreter_command_payload
 from .kubernetes_commands import kubernetes_secret_read_source
+from .pytest_config import (
+    PYTEST_CONFIG_PATH_INVALID,
+    PytestConfigAssessment,
+    assess_pytest_configs,
+    assess_selected_pytest_config,
+    combine_pytest_config_assessments,
+)
 from .restricted_pytest import PYTEST_RESTRICTED_PROFILE_VERSION
 from .secret_sensitivity import SecretPathMatch as SensitivePathMatch
 from .secret_sensitivity import classify_secret_path
@@ -236,19 +243,17 @@ _SAFE_PYTHON_MODULE_SHADOW_PATHS = {
         "ruff/__main__.pyc",
     ),
 }
-_PYTEST_OPTION_CONFIG_PATHS = ("pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml")
-_PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS = (
-    "--basetemp",
-    "--cache-clear",
-    "--debug",
-    "--junitxml",
-    "--junit-xml",
-    "--log-file",
-    "-p",
+_PYTEST_OPTION_CONFIG_PATHS = (
+    "pytest.toml",
+    ".pytest.toml",
+    "pytest.ini",
+    ".pytest.ini",
+    "pyproject.toml",
+    "tox.ini",
+    "setup.cfg",
 )
 _PYTEST_UNSAFE_ENV_KEYS = frozenset({"PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE"})
 _SHELL_STARTUP_ENV_KEYS = frozenset({"BASH_ENV", "ENV", "ZDOTDIR"})
-_MAX_PYTEST_CONFIG_FILE_BYTES = 1_000_000
 _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
 _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES = frozenset({"--check-hash-based-pycs", "-W", "-X"})
@@ -679,6 +684,9 @@ class ToolActionRequestMatch:
     guard_default_action: str | None = None
     reason_code: str | None = None
     restricted_profile_version: str | None = None
+    pytest_config_identity_sha256: str | None = None
+    pytest_config_sources: tuple[str, ...] = ()
+    pytest_config_reason_codes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -1209,6 +1217,16 @@ def _destructive_shell_tool_action_request(
     )
     detection_command_text = command_text
     pytest_execution_requested = _shell_command_targets_pytest(detection_command_text)
+    pytest_config_assessment = (
+        _pytest_config_assessment_for_command(
+            detection_command_text,
+            cwd=cwd,
+            execution_context=execution_context,
+        )
+        if pytest_execution_requested
+        else PytestConfigAssessment((), True, False, (), None)
+    )
+    pytest_config_sources = tuple(result.source_path for result in pytest_config_assessment.results)
     if is_guard_approval_mutation_command(detection_command_text):
         return ToolActionRequestMatch(
             tool_name=tool_name,
@@ -1301,6 +1319,9 @@ def _destructive_shell_tool_action_request(
             guard_default_action="sandbox-required" if pytest_execution_requested else None,
             reason_code="pytest_restricted_profile_required" if pytest_execution_requested else None,
             restricted_profile_version=PYTEST_RESTRICTED_PROFILE_VERSION if pytest_execution_requested else None,
+            pytest_config_identity_sha256=pytest_config_assessment.identity_sha256,
+            pytest_config_sources=pytest_config_sources,
+            pytest_config_reason_codes=pytest_config_assessment.reason_codes,
         )
     detection_command_is_destructive = _looks_destructive_shell_command(
         detection_command_text,
@@ -1321,15 +1342,22 @@ def _destructive_shell_tool_action_request(
     if detection_command_is_destructive or raw_command_is_destructive:
         matched_execution_context = raw_execution_context if raw_command_is_destructive else execution_context
         matched_execution_context = matched_execution_context or execution_context
+        destructive_reason = (
+            "Guard found execution-affecting pytest configuration or could not inspect the selected pytest "
+            "configuration completely. Keep plugin/output/config overrides inside the restricted pytest profile; "
+            "repair or remove malformed, missing, unreadable, oversized, or unsafe config inputs before retrying."
+            if pytest_execution_requested and pytest_config_assessment.unsafe
+            else (
+                "Guard treats destructive shell writes and delete operations as sensitive because they can mutate "
+                "the local machine before the user confirms the action."
+            )
+        )
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
             action_class="destructive shell command",
-            reason=(
-                "Guard treats destructive shell writes and delete operations as sensitive because they can mutate "
-                "the local machine before the user confirms the action."
-            ),
+            reason=destructive_reason,
             canonical_command=canonical_command,
             shell_execution_context_hash=(
                 matched_execution_context.context_hash if matched_execution_context.directory_change_present else None
@@ -1343,6 +1371,9 @@ def _destructive_shell_tool_action_request(
             guard_default_action="sandbox-required" if pytest_execution_requested else None,
             reason_code="pytest_restricted_profile_required" if pytest_execution_requested else None,
             restricted_profile_version=PYTEST_RESTRICTED_PROFILE_VERSION if pytest_execution_requested else None,
+            pytest_config_identity_sha256=pytest_config_assessment.identity_sha256,
+            pytest_config_sources=pytest_config_sources,
+            pytest_config_reason_codes=pytest_config_assessment.reason_codes,
         )
     if pytest_execution_requested:
         return ToolActionRequestMatch(
@@ -1360,6 +1391,9 @@ def _destructive_shell_tool_action_request(
             guard_default_action="sandbox-required",
             reason_code="pytest_restricted_profile_required",
             restricted_profile_version=PYTEST_RESTRICTED_PROFILE_VERSION,
+            pytest_config_identity_sha256=pytest_config_assessment.identity_sha256,
+            pytest_config_sources=pytest_config_sources,
+            pytest_config_reason_codes=pytest_config_assessment.reason_codes,
         )
     github_assessment = _github_shell_capability_assessment(
         detection_command_text,
@@ -4045,6 +4079,8 @@ def build_tool_action_request_artifact(
     }
     if request.restricted_profile_version is not None:
         fingerprint_payload["restricted_profile_version"] = request.restricted_profile_version
+    if request.pytest_config_identity_sha256 is not None:
+        fingerprint_payload["pytest_config_identity_sha256"] = request.pytest_config_identity_sha256
     fingerprint = hashlib.sha256(json.dumps(fingerprint_payload, sort_keys=True).encode("utf-8")).hexdigest()
     request_summary = f"Requested `{request.tool_name}` action `{request.command_text}` ({request.action_class})."
     if wrapper_chain:
@@ -4101,6 +4137,16 @@ def build_tool_action_request_artifact(
             **({"reason_code": request.reason_code} if request.reason_code is not None else {}),
             **(
                 {
+                    "pytest_config_identity_sha256": request.pytest_config_identity_sha256,
+                    "pytest_config_sources": list(request.pytest_config_sources),
+                    "pytest_config_complete": not request.pytest_config_reason_codes,
+                    "pytest_config_reason_codes": list(request.pytest_config_reason_codes),
+                }
+                if request.pytest_config_identity_sha256 is not None
+                else {}
+            ),
+            **(
+                {
                     "restricted_profile_version": request.restricted_profile_version,
                     "restricted_capabilities": {
                         "workspace": "read-write",
@@ -4140,6 +4186,9 @@ def _request_with_wrapper_context(
         guard_default_action=request.guard_default_action,
         reason_code=request.reason_code,
         restricted_profile_version=request.restricted_profile_version,
+        pytest_config_identity_sha256=request.pytest_config_identity_sha256,
+        pytest_config_sources=request.pytest_config_sources,
+        pytest_config_reason_codes=request.pytest_config_reason_codes,
     )
 
 
@@ -7840,32 +7889,122 @@ def _pytest_local_entry_point_metadata_exists(cwd: Path) -> bool:
 def _pytest_config_may_add_unsafe_options(cwd: Path | None, module_args: list[str]) -> bool:
     if cwd is None:
         return True
+    return _pytest_config_assessment(cwd, module_args).unsafe
+
+
+def _pytest_config_assessment(cwd: Path, module_args: list[str]) -> PytestConfigAssessment:
+    explicit_config_paths = _pytest_explicit_config_paths(module_args, cwd=cwd)
+    if explicit_config_paths is None:
+        return assess_pytest_configs(cwd, ("../invalid-pytest-config-search",))
+    if explicit_config_paths:
+        return assess_pytest_configs(cwd, explicit_config_paths, require_present=True)
     config_dirs = _pytest_config_search_dirs(module_args, cwd=cwd)
     if config_dirs is None:
-        return True
-    for config_dir in config_dirs:
-        for config_path in _PYTEST_OPTION_CONFIG_PATHS:
-            if _pytest_config_file_has_unsafe_addopts(cwd, config_dir, config_path):
-                return True
-    return False
+        return assess_pytest_configs(cwd, ("../invalid-pytest-config-search",))
+    candidates = tuple(
+        (Path(config_dir) / config_path).as_posix()
+        for config_dir in config_dirs
+        for config_path in _PYTEST_OPTION_CONFIG_PATHS
+    )
+    return assess_selected_pytest_config(cwd, candidates)
+
+
+def _pytest_explicit_config_paths(module_args: list[str], *, cwd: Path) -> tuple[str, ...] | None:
+    paths: list[str] = []
+    index = 0
+    while index < len(module_args):
+        token = module_args[index]
+        path_text: str | None = None
+        if token in {"-c", "--config-file"}:
+            if index + 1 >= len(module_args):
+                return None
+            path_text = module_args[index + 1]
+            index += 2
+        elif token.startswith("--config-file="):
+            path_text = token.split("=", 1)[1]
+            index += 1
+        elif token.startswith("-c="):
+            path_text = token[3:]
+            index += 1
+        elif token.startswith("-c") and len(token) > 2:
+            path_text = token[2:]
+            index += 1
+        else:
+            index += 1
+            continue
+        selected_path = _pytest_selected_relative_path(path_text, cwd=cwd)
+        if selected_path is None or not selected_path:
+            return None
+        paths.append(selected_path)
+    return (paths[-1],) if paths else ()
+
+
+def _pytest_config_assessment_for_command(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    execution_context: ShellExecutionContext,
+) -> PytestConfigAssessment:
+    if cwd is None:
+        return PytestConfigAssessment((), False, True, (PYTEST_CONFIG_PATH_INVALID,), None)
+    assessments: list[PytestConfigAssessment] = []
+    for context_segment in execution_context.segments:
+        if context_segment.directory_operation is not None:
+            continue
+        segment = list(context_segment.tokens)
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            continue
+        if not _segment_targets_pytest(segment, command_name, command_index):
+            continue
+        segment_cwd, reason_code = validate_shell_execution_segment(execution_context, context_segment)
+        if segment_cwd is None or reason_code is not None:
+            assessments.append(
+                PytestConfigAssessment((), False, True, (reason_code or PYTEST_CONFIG_PATH_INVALID,), None)
+            )
+            continue
+        assessments.append(_pytest_config_assessment(segment_cwd, _pytest_args_from_segment(segment, command_index)))
+    if not assessments and _shell_command_targets_pytest(command_text):
+        assessments.append(_pytest_config_assessment(cwd, []))
+    return combine_pytest_config_assessments(assessments)
+
+
+def _pytest_args_from_segment(segment: list[str], command_index: int) -> list[str]:
+    command_name = _normalized_shell_command_name(segment[command_index])
+    command_args = segment[command_index + 1 :]
+    if command_name == "pytest":
+        return command_args
+    if not _is_pytest_python_interpreter_command(command_name):
+        return []
+    index = 0
+    while index < len(command_args):
+        token = command_args[index]
+        if token == "-m" and index + 1 < len(command_args):
+            return command_args[index + 2 :] if command_args[index + 1].split(".", 1)[0] == "pytest" else []
+        if token.startswith("-m") and len(token) > 2:
+            return command_args[index + 1 :] if token[2:].split(".", 1)[0] == "pytest" else []
+        if token in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
+            index += 2
+            continue
+        index += 1
+    return []
 
 
 def _pytest_config_search_dirs(module_args: list[str], *, cwd: Path) -> tuple[str, ...] | None:
-    config_dirs: list[str] = [""]
-    for module_arg in _pytest_positional_args(module_args):
+    positional_args = _pytest_positional_args(module_args)
+    config_dirs: list[str] = []
+    if not positional_args:
+        return ("",)
+    for module_arg in positional_args:
         selected_path = _pytest_selected_relative_path(module_arg, cwd=cwd)
         if selected_path is None:
             return None
         if selected_path == "":
             continue
         selected_root = Path(selected_path)
-        roots = [selected_root]
-        if selected_root.suffix != "":
-            roots.append(selected_root.parent)
-        for root in roots:
-            for candidate in _pytest_config_ancestor_dirs(root):
-                if candidate not in config_dirs:
-                    config_dirs.append(candidate)
+        for candidate in _pytest_config_ancestor_dirs(selected_root):
+            if candidate not in config_dirs:
+                config_dirs.append(candidate)
     return tuple(config_dirs)
 
 
@@ -7900,6 +8039,7 @@ def _pytest_config_ancestor_dirs(root: Path) -> tuple[str, ...]:
     while str(current) not in {"", "."}:
         dirs.append(current.as_posix())
         current = current.parent
+    dirs.append("")
     return tuple(dirs)
 
 
@@ -7916,6 +8056,9 @@ def _pytest_positional_args(module_args: list[str]) -> tuple[str, ...]:
         if arg in _PYTEST_SAFE_FLAGS_WITH_VALUES:
             index += 2
             continue
+        if arg in {"-c", "--config-file"}:
+            index += 2
+            continue
         if any(arg.startswith(f"{flag}=") for flag in _PYTEST_SAFE_FLAGS_WITH_VALUES):
             index += 1
             continue
@@ -7923,74 +8066,6 @@ def _pytest_positional_args(module_args: list[str]) -> tuple[str, ...]:
             positional_args.append(arg)
         index += 1
     return tuple(positional_args)
-
-
-def _pytest_config_file_has_unsafe_addopts(cwd: Path, config_dir: str, config_path: str) -> bool:
-    if Path(config_dir).is_absolute() or ".." in Path(config_dir).parts:
-        return True
-    dir_fd: int | None = None
-    file_handle: int | None = None
-    try:
-        # codeql[py/path-injection] config_dir is relative-only and config_path is from a fixed allowlist.
-        dir_fd = os.open(cwd / config_dir, os.O_RDONLY)
-        file_stat = os.stat(config_path, dir_fd=dir_fd)
-        if not stat.S_ISREG(file_stat.st_mode):
-            return False
-        if file_stat.st_size > _MAX_PYTEST_CONFIG_FILE_BYTES:
-            return True
-        file_handle = os.open(config_path, os.O_RDONLY, dir_fd=dir_fd)
-        with os.fdopen(file_handle, encoding="utf-8", errors="ignore") as config_file:
-            file_handle = None
-            config_text = config_file.read().lower()
-        if "addopts" not in config_text and "log_file" not in config_text:
-            return False
-        return _pytest_config_text_has_unsafe_addopts(config_text)
-    except (FileNotFoundError, NotADirectoryError):
-        return False
-    except OSError:
-        return True
-    finally:
-        if file_handle is not None:
-            os.close(file_handle)
-        if dir_fd is not None:
-            os.close(dir_fd)
-
-
-def _pytest_config_text_has_unsafe_addopts(config_text: str) -> bool:
-    in_addopts = False
-    for raw_line in config_text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith(("#", ";")):
-            continue
-        if re.match(r"^log_file\s*=", line):
-            return True
-        addopts_match = re.match(r"^addopts\s*=(.*)$", line)
-        if addopts_match is not None:
-            in_addopts = True
-            if _pytest_addopts_text_has_unsafe_marker(addopts_match.group(1)):
-                return True
-            continue
-        if in_addopts and (line.startswith("[") or re.match(r"^[a-z0-9_.-]+\s*=", line)):
-            in_addopts = False
-        if in_addopts and _pytest_addopts_text_has_unsafe_marker(line):
-            return True
-    return False
-
-
-def _pytest_addopts_text_has_unsafe_marker(addopts_text: str) -> bool:
-    try:
-        tokens = shlex.split(addopts_text, comments=True, posix=True)
-    except ValueError:
-        tokens = addopts_text.split()
-    for raw_token in tokens:
-        token = raw_token.strip("[],")
-        if token in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS:
-            return True
-        if any(marker != "-p" and token.startswith(f"{marker}=") for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS):
-            return True
-        if token.startswith("-p") and not token.startswith("--"):
-            return True
-    return False
 
 
 def _pytest_module_args_are_safe(module_args: list[str]) -> bool:
