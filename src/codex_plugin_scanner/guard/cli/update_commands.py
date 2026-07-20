@@ -2008,8 +2008,11 @@ def _repair_cursor_install(
     surface = surface_value if surface_value in {"editor", "all"} else None
     if surface is None:
         return None, None
-    repair_context, repair_workspace = _repair_context_from_managed_install(context, managed_install)
-    hook_state = cursor_native_hook_state(repair_context)
+    try:
+        repair_context, repair_workspace = _repair_context_from_managed_install(context, managed_install)
+        hook_state = cursor_native_hook_state(repair_context)
+    except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
+        return None, f"Could not inspect Cursor protection during update: {error}"
     if hook_state["protection_active"] is True:
         return None, None
     try:

@@ -467,6 +467,40 @@ def test_cursor_update_repairs_stale_attested_cli_identity(tmp_path: Path) -> No
     assert cursor_native_hook_state(context)["protection_active"] is True
 
 
+def test_cursor_update_reports_context_resolution_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=None)
+    store = GuardStore(context.guard_home)
+    store.set_managed_install(
+        "cursor",
+        True,
+        str(tmp_path / "workspace"),
+        {"surface": "editor"},
+        "2026-07-20T00:00:00+00:00",
+    )
+
+    def _fail_context_resolution(*_args: object, **_kwargs: object) -> tuple[HarnessContext, str | None]:
+        raise RuntimeError("invalid repair context")
+
+    monkeypatch.setattr(
+        guard_update_commands_module,
+        "_repair_context_from_managed_install",
+        _fail_context_resolution,
+    )
+
+    repaired, warning = guard_update_commands_module._repair_cursor_install(
+        context=context,
+        store=store,
+        workspace=None,
+        now="2026-07-20T00:01:00+00:00",
+    )
+
+    assert repaired is None
+    assert warning == "Could not inspect Cursor protection during update: invalid repair context"
+
+
 def test_cursor_install_is_idempotent_across_path_changes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
