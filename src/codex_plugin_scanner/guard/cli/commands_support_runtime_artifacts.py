@@ -44,6 +44,8 @@ if TYPE_CHECKING:
     ) -> Path: ...
 
 
+from ..runtime.command_extensions import risk_classes_for_command_action
+from ..runtime.command_model import parse_shell_command
 from ..runtime.kubernetes_commands import kubernetes_secret_read_source
 from ..runtime.shell_command_wrappers import normalize_transparent_shell_command
 from ..runtime.shell_execution_context import (
@@ -131,6 +133,38 @@ def _string_list(value: object | None) -> list[str]:
     return [str(item) for item in value if isinstance(item, str) and item.strip()]
 
 
+def _runtime_hook_tool_name(payload: Mapping[str, object]) -> object:
+    return payload.get("tool_name", payload.get("toolName"))
+
+
+def _runtime_hook_tool_arguments(payload: Mapping[str, object]) -> object:
+    value = payload.get("tool_input")
+    if value is None:
+        value = payload.get("arguments")
+    if value is None:
+        value = payload.get("tool_args", payload.get("toolArgs"))
+    if not isinstance(value, str):
+        return value
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        return {"command": value}
+    return decoded
+
+
+def _runtime_hook_raw_command_text(
+    payload: Mapping[str, object],
+    action_envelope: GuardActionEnvelope | None,
+) -> str | None:
+    command_text = command_text_from_tool_payload(
+        _runtime_hook_tool_name(payload),
+        _runtime_hook_tool_arguments(payload),
+    )
+    if command_text is not None:
+        return command_text
+    return action_envelope.command if action_envelope is not None else None
+
+
 def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]) -> GuardArtifact:
     if len(artifacts) == 1:
         return artifacts[0]
@@ -174,6 +208,200 @@ def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]
             "request_summary": request_summary,
             "runtime_request_summary": request_summary,
         },
+    )
+
+
+def _runtime_artifact_declared_risk_classes(artifact: GuardArtifact) -> list[str]:
+    risk_classes: list[str] = []
+    if artifact.artifact_type == "package_request":
+        risk_classes.append("package_script")
+    elif artifact.artifact_type == "file_read_request":
+        risk_classes.append("local_secret_read")
+    metadata_classes = artifact.metadata.get("risk_classes")
+    if isinstance(metadata_classes, list):
+        risk_classes.extend(value.strip() for value in metadata_classes if isinstance(value, str) and value.strip())
+    action_class = artifact.metadata.get("action_class")
+    if artifact.artifact_type == "tool_action_request" and isinstance(action_class, str):
+        risk_classes.extend(risk_classes_for_command_action(action_class))
+    return list(dict.fromkeys(risk_classes))
+
+
+def _unmodeled_shell_runtime_artifact(
+    *,
+    harness: str,
+    command_text: str,
+    config_path: str,
+    source_scope: str,
+    workspace: Path | None,
+    home_dir: Path,
+) -> GuardArtifact | None:
+    canonical_command = parse_shell_command(command_text, cwd=workspace, home_dir=home_dir)
+    execution_context = model_shell_execution_context(command_text, cwd=workspace, workspace_root=workspace)
+    if canonical_command.confidence == "exact" and execution_context.complete:
+        return None
+    context_metadata = shell_execution_context_metadata(execution_context)
+    reason_code = canonical_command.uncertainty_reason
+    if reason_code is None:
+        reason_code = _optional_string(context_metadata.get("shell_execution_context_reason_code"))
+    if reason_code is None:
+        raw_reason_codes = context_metadata.get("shell_execution_context_reason_codes")
+        if isinstance(raw_reason_codes, list):
+            reason_code = next((value for value in raw_reason_codes if isinstance(value, str) and value), None)
+    reason_code = reason_code or "compound_command_incomplete"
+    identity_payload = {
+        "version": 1,
+        "command_security_identity": canonical_command.security_identity,
+        "shell_execution_context_hash": execution_context.context_hash,
+        "reason_code": reason_code,
+    }
+    fingerprint = hashlib.sha256(
+        json.dumps(identity_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return GuardArtifact(
+        artifact_id=f"{harness}:{source_scope}:unmodeled-shell:{fingerprint}",
+        name="unmodeled compound shell command",
+        harness=harness,
+        artifact_type="tool_action_request",
+        source_scope=source_scope,
+        config_path=config_path,
+        metadata={
+            "action_class": "unmodeled shell command",
+            "guard_default_action": "require-reapproval",
+            "risk_classes": ["execution"],
+            "request_summary": "Requested a shell command that Guard could not model completely.",
+            "runtime_request_signals": [f"cannot completely model the shell command: {reason_code}"],
+            "runtime_request_summary": "Guard requires one review because part of this shell command is unresolved.",
+            "runtime_request_reason": (
+                "Guard could not prove the complete compound command structure, so it kept the whole command in "
+                "one fail-closed review."
+            ),
+            "command_security_identity": canonical_command.security_identity,
+            "command_parse_confidence": canonical_command.confidence,
+            "command_uncertainty_reason": reason_code,
+            **context_metadata,
+        },
+    )
+
+
+def _compound_runtime_artifact(
+    *,
+    artifacts: list[GuardArtifact],
+    command_text: str | None,
+    workspace: Path | None,
+    home_dir: Path,
+) -> GuardArtifact | None:
+    if not artifacts:
+        return None
+    primary = next((artifact for artifact in artifacts if artifact.artifact_type == "package_request"), artifacts[0])
+    canonical_command = (
+        parse_shell_command(command_text, cwd=workspace, home_dir=home_dir) if command_text is not None else None
+    )
+    requires_full_command_binding = len(artifacts) > 1
+    if canonical_command is not None:
+        requires_full_command_binding = requires_full_command_binding or bool(
+            len(canonical_command.segments) > 1
+            or canonical_command.redirects
+            or canonical_command.embedded_commands
+            or canonical_command.wrapper_chain
+            or canonical_command.confidence != "exact"
+        )
+    if not requires_full_command_binding:
+        return primary
+
+    signals: list[str] = []
+    summaries: list[str] = []
+    reasons: list[str] = []
+    risk_classes: list[str] = []
+    rule_matches: list[dict[str, object]] = []
+    findings: list[dict[str, object]] = []
+    for artifact in artifacts:
+        artifact_risk_classes = _runtime_artifact_declared_risk_classes(artifact)
+        risk_classes.extend(artifact_risk_classes)
+        signals.extend(_string_list(artifact.metadata.get("runtime_request_signals")))
+        summary = _optional_string(artifact.metadata.get("runtime_request_summary"))
+        if summary is not None:
+            summaries.append(summary)
+        reason = _optional_string(artifact.metadata.get("runtime_request_reason"))
+        if reason is not None:
+            reasons.append(reason)
+        raw_rule_matches = artifact.metadata.get("command_rule_matches")
+        if isinstance(raw_rule_matches, list):
+            rule_matches.extend(item for item in raw_rule_matches if isinstance(item, dict))
+        findings.append(
+            {
+                "artifact_id": artifact.artifact_id,
+                "artifact_type": artifact.artifact_type,
+                "risk_classes": artifact_risk_classes,
+                "summary": summary or artifact.name,
+            }
+        )
+
+    deduped_signals = list(dict.fromkeys(signals))
+    deduped_summaries = list(dict.fromkeys(summaries))
+    deduped_reasons = list(dict.fromkeys(reasons))
+    deduped_risk_classes = list(dict.fromkeys(risk_classes))
+    deduped_rule_matches = list(
+        {json.dumps(match, sort_keys=True, separators=(",", ":")): match for match in rule_matches}.values()
+    )
+    segment_coordinates = (
+        [
+            {
+                "index": index,
+                "execution_context": segment.execution_context,
+                "pipeline_index": segment.pipeline_index,
+                "executable": segment.executable,
+                "span": {"source": "normalized", "start": segment.start, "end": segment.end},
+            }
+            for index, segment in enumerate(canonical_command.segments)
+        ]
+        if canonical_command is not None
+        else []
+    )
+    compound_summary = "Compound command findings: " + " ".join(deduped_summaries)
+    metadata = dict(primary.metadata)
+    metadata.update(
+        {
+            "compound_complete": canonical_command is not None and canonical_command.confidence == "exact",
+            "compound_findings": findings,
+            "compound_finding_count": len(findings),
+            "compound_segments": segment_coordinates,
+            "compound_segment_count": len(canonical_command.segments) if canonical_command is not None else 0,
+            "risk_classes": deduped_risk_classes,
+            "request_summary": compound_summary,
+            "runtime_request_signals": deduped_signals,
+            "runtime_request_summary": compound_summary,
+            "runtime_request_reason": " ".join(deduped_reasons),
+            "command_rule_matches": deduped_rule_matches,
+            "command_security_identity": (
+                canonical_command.security_identity if canonical_command is not None else "command-security-unavailable"
+            ),
+            "command_parse_confidence": canonical_command.confidence if canonical_command is not None else "uncertain",
+            "command_uncertainty_reason": (
+                canonical_command.uncertainty_reason if canonical_command is not None else "command_text_unavailable"
+            ),
+        }
+    )
+    if command_text is not None:
+        execution_context = model_shell_execution_context(command_text, cwd=workspace, workspace_root=workspace)
+        metadata.update(shell_execution_context_metadata(execution_context))
+        metadata["compound_complete"] = metadata["compound_complete"] is True and execution_context.complete
+    if metadata["compound_complete"] is not True or metadata.get("shell_execution_context_complete") is False:
+        metadata["guard_default_action"] = "require-reapproval"
+    identity_payload = {
+        "version": 1,
+        "primary_artifact_id": primary.artifact_id,
+        "finding_artifact_ids": [artifact.artifact_id for artifact in artifacts],
+        "command_security_identity": metadata["command_security_identity"],
+    }
+    fingerprint = hashlib.sha256(
+        json.dumps(identity_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    artifact_id_prefix = primary.artifact_id.rsplit(":", 1)[0]
+    return replace(
+        primary,
+        artifact_id=f"{artifact_id_prefix}:{fingerprint}",
+        name=f"compound {primary.name}",
+        metadata=metadata,
     )
 
 
@@ -239,9 +467,12 @@ def _hook_runtime_artifact(
             )
             if prompt_file_artifact is not None:
                 return prompt_file_artifact
+    tool_name = _runtime_hook_tool_name(payload)
+    tool_arguments = _runtime_hook_tool_arguments(payload)
+    raw_command_text = _runtime_hook_raw_command_text(payload, action_envelope)
     request = extract_sensitive_file_read_request(
-        payload.get("tool_name"),
-        payload.get("tool_input", payload.get("arguments")),
+        tool_name,
+        tool_arguments,
         cwd=workspace,
         home_dir=home_dir,
     )
@@ -261,8 +492,8 @@ def _hook_runtime_artifact(
             source_scope=source_scope,
         )
     file_write_request = extract_sensitive_file_write_request(
-        payload.get("tool_name"),
-        payload.get("tool_input", payload.get("arguments")),
+        tool_name,
+        tool_arguments,
         cwd=workspace,
         home_dir=home_dir,
         protected_paths=_runtime_protected_file_write_paths(
@@ -281,39 +512,62 @@ def _hook_runtime_artifact(
     package_intent = None
     if not _post_tool_package_request_was_already_evaluated(payload=payload, action_envelope=action_envelope):
         package_intent = extract_package_intent_request(
-            payload.get("tool_name"),
-            payload.get("tool_input", payload.get("arguments")),
-            action_envelope_command=action_envelope.command if action_envelope is not None else None,
+            tool_name,
+            tool_arguments,
+            action_envelope_command=action_envelope.command if action_envelope is not None else raw_command_text,
             workspace=workspace,
         )
+    runtime_artifacts: list[GuardArtifact] = []
     if package_intent is not None:
-        return build_package_request_artifact(
-            harness=harness,
-            intent=package_intent,
-            config_path=config_path,
-            source_scope=source_scope,
+        runtime_artifacts.append(
+            build_package_request_artifact(
+                harness=harness,
+                intent=package_intent,
+                config_path=config_path,
+                source_scope=source_scope,
+            )
         )
     tool_request = extract_sensitive_tool_action_request(
-        payload.get("tool_name"),
-        payload.get("tool_input", payload.get("arguments")),
+        tool_name,
+        tool_arguments,
         cwd=workspace,
         home_dir=home_dir,
     )
-    if tool_request is None:
-        if action_envelope is None or not data_flow_signals:
-            return None
-        return _runtime_data_flow_artifact(
+    if tool_request is not None:
+        runtime_artifacts.append(
+            build_tool_action_request_artifact(
+                harness=harness,
+                request=tool_request,
+                config_path=config_path,
+                source_scope=source_scope,
+            )
+        )
+    if raw_command_text is not None:
+        unmodeled_artifact = _unmodeled_shell_runtime_artifact(
             harness=harness,
-            action_envelope=action_envelope,
-            data_flow_signals=data_flow_signals,
+            command_text=raw_command_text,
             config_path=config_path,
             source_scope=source_scope,
+            workspace=workspace,
+            home_dir=home_dir,
         )
-    return build_tool_action_request_artifact(
-        harness=harness,
-        request=tool_request,
-        config_path=config_path,
-        source_scope=source_scope,
+        if unmodeled_artifact is not None:
+            runtime_artifacts.append(unmodeled_artifact)
+    if action_envelope is not None and data_flow_signals:
+        runtime_artifacts.append(
+            _runtime_data_flow_artifact(
+                harness=harness,
+                action_envelope=action_envelope,
+                data_flow_signals=data_flow_signals,
+                config_path=config_path,
+                source_scope=source_scope,
+            )
+        )
+    return _compound_runtime_artifact(
+        artifacts=runtime_artifacts,
+        command_text=raw_command_text,
+        workspace=workspace,
+        home_dir=home_dir,
     )
 
 
@@ -364,6 +618,7 @@ def _runtime_data_flow_artifact(
             "action_class": "credential exfiltration shell command",
             "command_text": command_text,
             "guard_default_action": "require-reapproval",
+            "risk_classes": ["data_flow_exfiltration"],
             "request_summary": _runtime_data_flow_summary(data_flow_signals),
             "runtime_request_signals": [signal.plain_reason for signal in data_flow_signals],
             "runtime_request_summary": _runtime_data_flow_summary(data_flow_signals),
