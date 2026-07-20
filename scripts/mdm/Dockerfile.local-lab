@@ -8,6 +8,10 @@ COPY scripts/mdm ./scripts/mdm
 
 RUN uv sync --extra dev --frozen
 
+RUN useradd --create-home --uid 10001 guard && chown -R guard:guard /hol-guard
+
 ENV PATH="/hol-guard/.venv/bin:${PATH}"
+
+USER 10001:10001
 
 ENTRYPOINT ["python", "scripts/mdm/run-local-lab.py", "--json"]

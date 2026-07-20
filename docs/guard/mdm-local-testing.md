@@ -12,9 +12,11 @@ Use `--suite <name>` to run one or more focused suites. The report contains comm
 summaries, output digests, covered capabilities, and an explicit native-certification section.
 Portable results never claim Apple or Windows certification.
 
-The `MDM local conformance lab` workflow runs the same evidence generator on free public-repository
-Ubuntu, macOS, and Windows GitHub runners and retains each JSON report. `--output <path>` writes the
-canonical report for any attached self-hosted native runner.
+The `MDM local conformance lab` workflow runs the complete evidence generator on free
+public-repository Ubuntu and macOS runners. Windows runs the portable signed-adapter and enterprise
+network suites; Windows-native lifecycle behavior remains a certification gate until an attached
+runner is available. Every job retains its JSON report. `--output <path>` writes the canonical
+report for any attached self-hosted native runner.
 
 The lab intentionally leaves these gates unevaluated until a native host is attached: Apple APNs
 enrollment and supervision, signing/notarization, Windows CSP enrollment and SYSTEM context,
