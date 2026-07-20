@@ -4455,15 +4455,16 @@ def _should_record_package(package: dict[str, object], decision: str) -> bool:
 
 
 def _evidence_id(package_intent_hash: str, package: dict[str, object]) -> str:
-    package_name = _package_display_name(package)
-    ecosystem = _optional_string(package.get("ecosystem")) or "unknown"
     decision = str(package.get("decision") or "monitor")
-    resolved_version = _optional_string(package.get("resolvedVersion")) or _optional_string(
-        package.get("requestedVersion")
-    )
     dependency_path = _optional_string(package.get("dependencyPath")) or "direct"
-    identity = f"{package_intent_hash}:{ecosystem}:{package_name}:{resolved_version}:{dependency_path}:{decision}"
-    return f"evidence-{stable_digest_hex(identity.encode(), length=16)}"
+    identity_payload = {
+        "decision": decision,
+        "dependency_path": dependency_path,
+        "package_identity": _result_package_identity(package),
+        "package_intent_hash": package_intent_hash,
+    }
+    encoded = json.dumps(identity_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return f"evidence-{stable_digest_hex(encoded, length=16)}"
 
 
 def _result_package_identity(package: dict[str, object]) -> tuple[str, str, str, str, str, str]:

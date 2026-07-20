@@ -876,6 +876,12 @@ def test_malformed_result_identities_remain_opaque_and_collision_free() -> None:
     assert direct_identity != transitive_identity
     assert direct_identity != explicit_unknown_identity
 
+    direct_evidence = supply_chain_package_eval_module._evidence_id("same-intent", direct)
+    transitive_evidence = supply_chain_package_eval_module._evidence_id("same-intent", transitive)
+    explicit_unknown_evidence = supply_chain_package_eval_module._evidence_id("same-intent", explicit_unknown)
+
+    assert len({direct_evidence, transitive_evidence, explicit_unknown_evidence}) == 3
+
 
 def test_scoped_recommended_fix_does_not_use_unscoped_record(
     tmp_path: Path,
