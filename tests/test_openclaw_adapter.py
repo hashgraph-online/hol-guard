@@ -291,6 +291,29 @@ def test_openclaw_inventories_unique_servers_from_every_supported_map(tmp_path: 
     assert _mcp_artifact(detection, "top_compat").metadata["source_scope"] == "mcpServers"
 
 
+def test_openclaw_preserves_explicit_mcp_transport(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    _write(
+        context.home_dir / ".openclaw" / "openclaw.json",
+        json.dumps(
+            {
+                "mcp": {
+                    "servers": {
+                        "events": {
+                            "url": "https://events.example/sse",
+                            "transport": "SSE",
+                        }
+                    }
+                }
+            }
+        ),
+    )
+
+    events = _mcp_artifact(OpenClawHarnessAdapter().detect(context), "events")
+
+    assert events.transport == "sse"
+
+
 def test_openclaw_duplicate_active_names_use_canonical_precedence_and_retain_conflicts(tmp_path: Path) -> None:
     context = _ctx(tmp_path)
     _write(
