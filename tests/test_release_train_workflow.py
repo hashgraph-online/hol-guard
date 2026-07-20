@@ -198,7 +198,7 @@ def test_publish_jobs_use_registered_protected_environments() -> None:
 
     assert jobs["publish-testpypi"]["environment"] == "testpypi"
     assert jobs["publish-alpha-testpypi"]["environment"] == "testpypi"
-    assert jobs["publish-alpha-pypi"]["environment"] == "pypi-alpha"
+    assert jobs["publish-alpha-pypi"]["environment"] == "pypi"
     assert jobs["publish-main-testpypi"]["environment"] == "testpypi"
     assert jobs["publish-main-pypi"]["environment"] == "pypi"
     assert jobs["publish-testpypi"]["permissions"] == {"id-token": "write"}
