@@ -35,6 +35,7 @@ from .supply_chain_bundle_models import (
 from .supply_chain_package_identity import (
     PackageIdentityError,
     canonical_package_identity,
+    normalize_ecosystem,
     parse_package_identity,
 )
 
@@ -287,10 +288,14 @@ def evaluate_cached_supply_chain_bundle(
         check_supply_chain_bundle_freshness(response.bundle, now=now)
     except SupplyChainBundleExpiredError:
         stale = True
+    try:
+        normalized_ecosystem = normalize_ecosystem(ecosystem) if ecosystem is not None else None
+    except PackageIdentityError:
+        normalized_ecosystem = ""
     deny_entries = _matching_emergency_deny_entries(
         response.bundle,
         package_name=package_name,
-        ecosystem=ecosystem,
+        ecosystem=normalized_ecosystem,
     )
     if deny_entries:
         deny_entry = deny_entries[0]
@@ -306,7 +311,8 @@ def evaluate_cached_supply_chain_bundle(
     matches = [
         item
         for item in response.bundle.packages
-        if (ecosystem is None or item.ecosystem == ecosystem) and _package_matches(item, package_name, package_version)
+        if (normalized_ecosystem is None or item.ecosystem == normalized_ecosystem)
+        and _package_matches(item, package_name, package_version)
     ]
     if not matches:
         return OfflineSupplyChainDecision(

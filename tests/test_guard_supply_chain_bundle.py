@@ -446,6 +446,9 @@ def test_supply_chain_bundle_uses_ecosystem_specific_case_normalization() -> Non
     pypi = evaluate_cached_supply_chain_bundle(
         response, package_name="foo-bar", package_version="1.2.3", ecosystem="pypi"
     )
+    uppercase_npm = evaluate_cached_supply_chain_bundle(
+        response, package_name="@scope/pkg", package_version="1.2.3", ecosystem="NPM"
+    )
     exact_go = evaluate_cached_supply_chain_bundle(
         response, package_name="Example.com/Org/Repo", package_version="1.2.3", ecosystem="go"
     )
@@ -455,6 +458,7 @@ def test_supply_chain_bundle_uses_ecosystem_specific_case_normalization() -> Non
 
     assert npm.action == "block"
     assert pypi.action == "block"
+    assert uppercase_npm.action == "block"
     assert exact_go.action == "block"
     assert wrong_case_go.reason == "no_cached_match"
 
@@ -570,7 +574,7 @@ def test_supply_chain_bundle_offline_evaluation_enforces_emergency_deny_without_
         response,
         package_name="minimist",
         package_version="1.2.8",
-        ecosystem="npm",
+        ecosystem="NPM",
         now=response.bundle.generated_at_timestamp + 60,
     )
 
