@@ -1433,8 +1433,11 @@ def _effective_execution_context(
         if "$" in parsed_env.option_effects.chdir or "\x00" in parsed_env.option_effects.chdir:
             cwd_source = "env_chdir_unresolved"
         elif parsed_env.effective_cwd is not None:
-            effective_cwd = parsed_env.effective_cwd.resolve()
-            cwd_source = "env_chdir"
+            try:
+                effective_cwd = parsed_env.effective_cwd.resolve()
+                cwd_source = "env_chdir"
+            except (OSError, RuntimeError):
+                cwd_source = "env_chdir_unresolved"
     return _path_for_resolution(effective_path, effective_cwd), path_source, effective_cwd, cwd_source
 
 

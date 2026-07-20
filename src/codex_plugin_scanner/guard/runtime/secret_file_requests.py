@@ -6061,11 +6061,12 @@ def _shell_segment_primary_command(segment: list[str]) -> tuple[str | None, int 
         command_name = _normalized_shell_command_name(normalized_token)
         if command_name == "env":
             parsed = parse_env_wrapper(segment[index + 1 :])
-            if parsed.complete and parsed.command_index is None:
+            command_index = parsed.command_index
+            if parsed.complete and command_index is None:
                 return command_name, index
-            if not parsed.complete or parsed.split_expansions:
+            if not parsed.complete or parsed.split_expansions or command_index is None:
                 return None, None
-            index += parsed.command_index + 1
+            index += command_index + 1
             continue
         if command_name in _SHELL_COMMAND_WRAPPERS:
             index += 1

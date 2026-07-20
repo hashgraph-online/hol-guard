@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.env_wrapper import parse_env_wrapper
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 from codex_plugin_scanner.guard.runtime.shell_command_wrappers import normalize_transparent_shell_command
 
@@ -181,3 +182,24 @@ def test_option_like_unset_operand_does_not_hide_sensitive_docker_context(tmp_pa
 
     assert match is not None
     assert match.action_class == "docker-sensitive command"
+
+
+def test_env_chdir_resolution_failure_is_bound_as_unresolved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    blocked = tmp_path / "blocked"
+    original_resolve = Path.resolve
+
+    def _resolve(path: Path, strict: bool = False) -> Path:
+        if path == blocked:
+            raise RuntimeError("simulated symlink loop")
+        return original_resolve(path, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", _resolve)
+
+    intent = parse_package_intent("env -C blocked npm install example", workspace=tmp_path)
+
+    assert intent is not None
+    assert intent.execution_context_cwds == (str(tmp_path),)
+    assert intent.execution_context_hashes

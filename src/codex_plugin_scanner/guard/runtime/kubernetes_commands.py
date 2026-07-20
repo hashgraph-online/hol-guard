@@ -195,14 +195,15 @@ def _unwrap_command_start(tokens: tuple[str, ...]) -> int:
             return index
         if command_name == "env":
             parsed = parse_env_wrapper(tokens[index + 1 :])
+            command_index = parsed.command_index
             if parsed.complete and (
-                parsed.command_index is None
+                command_index is None
                 or (parsed.executable_argv and parsed.executable_argv[0] in {"&&", "||", ";", "|", "|&", "&"})
             ):
                 return index
-            if not parsed.complete or parsed.split_expansions:
+            if not parsed.complete or parsed.split_expansions or command_index is None:
                 return len(tokens)
-            index += parsed.command_index + 1
+            index += command_index + 1
             continue
         index += 1
         while index < len(tokens):
