@@ -397,9 +397,15 @@ def _validate_registry_relationships(
                     f"Command safety extension {extension.extension_id} has unknown dependency {dependency}"
                 )
         for conflict in extension.conflicts:
+            if conflict == extension.extension_id:
+                raise ValueError(f"Command safety extension {extension.extension_id} conflicts with itself")
             if conflict not in by_id:
                 raise ValueError(f"Command safety extension {extension.extension_id} has unknown conflict {conflict}")
-            raise ValueError(f"Command safety extension {extension.extension_id} conflicts with {conflict}")
+            conflicting_extension = by_id[conflict]
+            if extension.extension_id not in conflicting_extension.conflicts:
+                raise ValueError(
+                    f"Command safety extension {extension.extension_id} has non-reciprocal conflict {conflict}"
+                )
 
     visiting: set[str] = set()
     visited: set[str] = set()

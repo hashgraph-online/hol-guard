@@ -97,6 +97,13 @@ def test_github_permission_catalog_is_exhaustive_and_admin_merge_is_distinct() -
     assert admin.rule_ids == ("command.github.admin-merge",)
     assert admin.action_classes == ("GitHub administrator pull-request merge command",)
     assert registry.permission_for_action_class("  github ADMINISTRATOR pull-request MERGE command  ") is admin
+    assert registry.permission_for_rule_id("COMMAND.GITHUB.ADMIN-MERGE") is admin
+    assert registry.permission_for_typed_capability(" ADMIN_MERGE_REMOTE ") is admin
+    catalog = CommandPermissionCatalog(registry.permissions)
+    assert catalog.get(" COMMAND.GITHUB.PERMISSION.MERGE-ADMIN ") is admin
+    assert catalog.for_rule_id(" COMMAND.GITHUB.ADMIN-MERGE ") is admin
+    assert catalog.for_action_class(" github administrator pull-request merge command ") is admin
+    assert catalog.for_typed_capability(" ADMIN_MERGE_REMOTE ") is admin
     assert admin.baseline_floor == "require-reapproval"
     assert ordinary.permission_id == "command.github.permission.merge-remote"
     assert ordinary.rule_ids == ("command.github.merge",)
@@ -182,6 +189,32 @@ def test_permission_catalog_rejects_duplicate_mappings_cycles_and_invalid_refere
                     typed_capabilities=("test_normalized_collision",),
                     action_classes=(" TEST BASE ACTION ",),
                     rule_ids=("command.test.normalized-collision",),
+                ),
+            )
+        )
+    with pytest.raises(ValueError, match=r"rule .* mapped by multiple permissions"):
+        CommandPermissionCatalog(
+            (
+                base,
+                replace(
+                    base,
+                    permission_id="command.test.permission.rule-collision",
+                    typed_capabilities=("test_rule_collision",),
+                    action_classes=("test rule collision action",),
+                    rule_ids=(" COMMAND.TEST.BASE ",),
+                ),
+            )
+        )
+    with pytest.raises(ValueError, match=r"typed capability .* mapped by multiple permissions"):
+        CommandPermissionCatalog(
+            (
+                base,
+                replace(
+                    base,
+                    permission_id="command.test.permission.capability-collision",
+                    typed_capabilities=(" TEST_BASE ",),
+                    action_classes=("test capability collision action",),
+                    rule_ids=("command.test.capability-collision",),
                 ),
             )
         )

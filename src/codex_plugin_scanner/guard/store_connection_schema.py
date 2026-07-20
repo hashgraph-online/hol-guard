@@ -13,6 +13,7 @@ from .store_command_activity_health_schema import ensure_command_activity_health
 from .store_command_activity_maintenance_schema import ensure_command_activity_maintenance_schema
 from .store_command_activity_schema import ensure_command_activity_schema
 from .store_command_shadow_schema import ensure_command_shadow_schema
+from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
 from .store_live_request_outbox import ensure_live_request_outbox_schema, seed_live_request_outbox
 from .store_secret_policy_integrity import _POLICY_INTEGRITY_LOOKUP_UNSET
 from .store_workflow_capabilities_schema import ensure_workflow_capability_schema
@@ -646,6 +647,7 @@ class StoreConnectionSchemaMixin:
             ensure_command_activity_maintenance_schema(connection, applied_at=_now())
             ensure_command_activity_api_schema(connection, applied_at=_now())
             ensure_evidence_schema(connection)
+            ensure_extension_control_authority_schema(connection)
             ensure_workflow_capability_schema(connection, applied_at=_now())
             ensure_command_shadow_schema(connection, applied_at=_now())
             if not self._schema_version_applied(connection, version=4):
