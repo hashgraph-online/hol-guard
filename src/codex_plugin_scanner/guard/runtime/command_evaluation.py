@@ -23,6 +23,7 @@ from .command_extensions import (
 from .command_model import CanonicalCommand, parse_shell_command
 from .command_rules import CommandRuleMatch, CommandRuleMode, CommandSafetyRule
 from .command_verified_read_candidates import verified_read_candidate_factor
+from .command_workspace_write_candidates import workspace_write_candidate_factors
 from .effect_decision import EffectDecision, EffectDecisionRequest, evaluate_effect_decision
 
 CommandDecisionFloor = Literal["allow", "monitor", "review", "block"]
@@ -152,10 +153,14 @@ def evaluate_command(
     evidence_batch = extension_evidence_batch(command, observations)
     contained_routine_candidate = contained_routine_candidate_factor(command)
     verified_read_candidate = verified_read_candidate_factor(command)
+    workspace_write_candidates = workspace_write_candidate_factors(command)
     if contained_routine_candidate is not None:
         minimum_action = _stronger_floor(minimum_action, "review")
     if verified_read_candidate is not None:
         minimum_action = _stronger_floor(minimum_action, "review")
+    for candidate in workspace_write_candidates:
+        candidate_floor: CommandDecisionFloor = "block" if candidate.basis.action_floor == "block" else "review"
+        minimum_action = _stronger_floor(minimum_action, candidate_floor)
     decision_plane = evaluate_effect_decision(
         EffectDecisionRequest(
             factors=(
@@ -166,6 +171,7 @@ def evaluate_command(
                 ),
                 *((contained_routine_candidate,) if contained_routine_candidate is not None else ()),
                 *((verified_read_candidate,) if verified_read_candidate is not None else ()),
+                *workspace_write_candidates,
             ),
             uncertainties=tuple(
                 sorted(

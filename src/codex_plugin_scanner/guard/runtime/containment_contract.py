@@ -42,6 +42,7 @@ class ContainmentFailure(str, Enum):
     LAUNCH_MISMATCH = "launch-mismatch"
     APPLY_FAILED = "apply-failed"
     ATTESTATION_INVALID = "attestation-invalid"
+    OUTPUT_BOUNDARY_VIOLATION = "output-boundary-violation"
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +118,7 @@ class ContainmentRequest:
     launch_digest: str
     executable_digest: str
     operation_id: str
+    declared_outputs: tuple[str, ...] = ()
     schema_version: str = CONTAINMENT_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -140,10 +142,16 @@ class ContainmentRequest:
             raise ValueError("operation_id must be a stable identifier")
         environment = _validated_environment(self.environment)
         inputs = _validated_inputs(self.inputs, workspace=self.policy.workspace)
+        declared_outputs = _validated_output_paths(
+            self.declared_outputs,
+            workspace=self.policy.workspace,
+            allowed_write_paths=self.policy.allowed_write_paths,
+        )
         object.__setattr__(self, "argv", (executable, *self.argv[1:]))
         object.__setattr__(self, "cwd", cwd)
         object.__setattr__(self, "environment", environment)
         object.__setattr__(self, "inputs", inputs)
+        object.__setattr__(self, "declared_outputs", declared_outputs)
 
     @property
     def binding_digest(self) -> str:
@@ -162,6 +170,7 @@ class ContainmentRequest:
                     }
                     for item in self.inputs
                 ],
+                "declared_outputs": list(self.declared_outputs),
                 "policy_digest": self.policy.digest,
                 "launch_digest": self.launch_digest,
                 "executable_digest": self.executable_digest,
@@ -340,6 +349,34 @@ def _validated_inputs(values: object, *, workspace: str) -> tuple[ContainmentInp
     if len(destinations) != len(set(destinations)):
         raise ValueError("containment snapshot paths cannot repeat")
     return tuple(sorted(typed, key=lambda item: item.snapshot_path))
+
+
+def _validated_output_paths(
+    values: object,
+    *,
+    workspace: str,
+    allowed_write_paths: tuple[str, ...],
+) -> tuple[str, ...]:
+    if not isinstance(values, tuple):
+        raise ValueError("declared_outputs must be an immutable tuple")
+    outputs: list[str] = []
+    for value in cast(tuple[object, ...], values):
+        if not isinstance(value, str) or not value or "\x00" in value:
+            raise ValueError("declared outputs must be non-empty paths")
+        relative = PurePosixPath(value)
+        if (
+            relative.is_absolute()
+            or any(part in {"", ".", ".."} for part in relative.parts)
+            or any(part.lower() in _PROTECTED_PARTS or part.lower().startswith(".env") for part in relative.parts)
+        ):
+            raise ValueError("declared outputs must be safe relative workspace paths")
+        target = Path(workspace).joinpath(*relative.parts)
+        if not any(target.is_relative_to(root) for root in allowed_write_paths):
+            raise ValueError("declared outputs must remain inside an allowed write directory")
+        outputs.append(relative.as_posix())
+    if len(outputs) != len(set(outputs)):
+        raise ValueError("declared outputs cannot contain duplicates")
+    return tuple(sorted(outputs))
 
 
 def _is_protected(path: str, *, workspace: str) -> bool:

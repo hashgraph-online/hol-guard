@@ -71,7 +71,9 @@ _EVIDENCE_SOURCE_PATHS: Final = (
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_router.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_support.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_verified_read.py",
+    REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_contained_write.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "contained_package_script_execution.py",
+    REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "contained_workspace_write_execution.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "package_shim_gate.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "shims.py",
     *(REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "runtime").glob("*.py"),
@@ -80,6 +82,8 @@ _EVIDENCE_SOURCE_PATHS: Final = (
     REPO_ROOT / "tests" / "test_guard_command_corpus.py",
     REPO_ROOT / "tests" / "test_guard_command_decision_diff.py",
     REPO_ROOT / "tests" / "test_guard_contained_package_script_execution.py",
+    REPO_ROOT / "tests" / "test_guard_contained_workspace_write_contract.py",
+    REPO_ROOT / "tests" / "test_guard_contained_workspace_write_execution.py",
     REPO_ROOT / "tests" / "test_guard_package_shims.py",
     REPO_ROOT / "tests" / "test_guard_verified_reads.py",
 )

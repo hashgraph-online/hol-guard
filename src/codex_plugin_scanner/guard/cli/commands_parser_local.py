@@ -200,6 +200,32 @@ def _configure_guard_local_parsers(
     )
     github_read_parser.add_argument("--json", action="store_true")
 
+    contained_write_parser = guard_subparsers.add_parser(
+        "contained-write",
+        help="Run one bounded workspace write through Guard-owned containment",
+    )
+    _add_guard_common_args(contained_write_parser)
+    contained_write_subparsers = contained_write_parser.add_subparsers(
+        dest="contained_write_command",
+        required=True,
+        metavar="{patch-check,patch-apply,format,copy}",
+    )
+    patch_check_parser = contained_write_subparsers.add_parser("patch-check")
+    patch_check_parser.add_argument("source")
+    patch_check_parser.add_argument("--json", action="store_true")
+    patch_apply_parser = contained_write_subparsers.add_parser("patch-apply")
+    patch_apply_parser.add_argument("source")
+    patch_apply_parser.add_argument("target")
+    patch_apply_parser.add_argument("--json", action="store_true")
+    format_parser = contained_write_subparsers.add_parser("format")
+    format_parser.add_argument("source")
+    format_parser.add_argument("target", nargs="?", default=None)
+    format_parser.add_argument("--json", action="store_true")
+    copy_parser = contained_write_subparsers.add_parser("copy")
+    copy_parser.add_argument("source")
+    copy_parser.add_argument("target")
+    copy_parser.add_argument("--json", action="store_true")
+
     command_parser = guard_subparsers.add_parser(
         "command",
         help="Inspect commands and built-in command safety extensions without executing anything",

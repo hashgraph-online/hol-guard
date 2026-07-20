@@ -20,6 +20,7 @@ from .containment_contract import (
     ContainmentFailure,
     ContainmentRequest,
 )
+from .containment_outputs import ContainmentCapturedOutput, OutputBoundaryError, capture_declared_outputs
 
 _OUTPUT_LIMIT: Final = 64 * 1024
 _MAX_EXECUTABLE_BYTES: Final = 256 * 1024 * 1024
@@ -34,6 +35,7 @@ class ContainmentExecutionResult:
     stderr: str
     timed_out: bool
     attestation: ContainmentAttestation
+    outputs: tuple[ContainmentCapturedOutput, ...] = ()
 
     @property
     def enforced(self) -> bool:
@@ -117,6 +119,24 @@ def execute_contained(
                 timeout_seconds=float(timeout_seconds),
                 temp_root=root,
             )
+            outputs = (
+                capture_declared_outputs(request, root / "workspace")
+                if exit_code == 0 and request.declared_outputs
+                else ()
+            )
+    except OutputBoundaryError as exc:
+        return ContainmentExecutionResult(
+            exit_code=None,
+            stdout="",
+            stderr=_bounded_text(str(exc)),
+            timed_out=False,
+            attestation=_failed_attestation(
+                request,
+                backend.kind,
+                backend.digest,
+                ContainmentFailure.OUTPUT_BOUNDARY_VIOLATION,
+            ),
+        )
     except (OSError, ValueError) as exc:
         return ContainmentExecutionResult(
             exit_code=None,
@@ -131,6 +151,7 @@ def execute_contained(
         stderr=stderr,
         timed_out=timed_out,
         attestation=_success_attestation(request, backend),
+        outputs=outputs,
     )
 
 
@@ -211,6 +232,14 @@ def _snapshot_inputs(request: ContainmentRequest, temp_root: Path) -> Path:
     for write_path in request.policy.allowed_write_paths:
         relative = Path(write_path).relative_to(request.policy.workspace)
         (snapshot / relative).mkdir(mode=0o700, parents=True, exist_ok=True)
+    for output_path in request.declared_outputs:
+        output = snapshot.joinpath(*output_path.split("/"))
+        output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if output.exists():
+            metadata = output.stat(follow_symlinks=False)
+            if output.is_symlink() or not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                raise ValueError("declared containment output must be a singly linked regular file")
+            output.chmod(0o600)
     return snapshot_cwd
 
 
@@ -406,4 +435,8 @@ def _read_bounded(path: Path) -> str:
         return stream.read(_OUTPUT_LIMIT).decode("utf-8", errors="replace")
 
 
-__all__ = ("ContainmentExecutionResult", "execute_contained", "file_sha256")
+__all__ = (
+    "ContainmentExecutionResult",
+    "execute_contained",
+    "file_sha256",
+)

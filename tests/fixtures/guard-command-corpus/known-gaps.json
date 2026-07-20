@@ -4,8 +4,6 @@
   "expires_by": "release/2.2-runtime-gate",
   "status": "known-unresolved",
   "gaps": [
-    {"gap_id":"CDX-062-block-allow","owner":"CDX-062","kind":"underclassified","oracle_floor":"block","observed_floor":"allow","count":4167,"case_ids_digest":"25b21fd7c4aaa89c3a34c6e06071f33b602331b94118451ff4511305a20e33a1"},
-    {"gap_id":"CDX-062-review-allow","owner":"CDX-062","kind":"underclassified","oracle_floor":"review","observed_floor":"allow","count":100,"case_ids_digest":"9dd79a932e0e22e773f0886088c7e681d6766cf64257e8865b49c20179ee79d9"},
     {"gap_id":"CDX-063-review-allow","owner":"CDX-063","kind":"underclassified","oracle_floor":"review","observed_floor":"allow","count":25,"case_ids_digest":"185ae6f2f8e1278e3a53f710a1b2e142ecce3d922baadd16a62e755f5c898fcb"},
     {"gap_id":"CDX-064-block-allow","owner":"CDX-064","kind":"underclassified","oracle_floor":"block","observed_floor":"allow","count":4166,"case_ids_digest":"848963c2d0806c4e6777a726a3364a310d313577cba7abab6ae3ec6f1ae14102"},
     {"gap_id":"CDX-064-block-review","owner":"CDX-064","kind":"underclassified","oracle_floor":"block","observed_floor":"review","count":12501,"case_ids_digest":"00fff9d744b652b813b4f7cb20f973ce7e2fb583bd7999423fb1f074b672519a"},

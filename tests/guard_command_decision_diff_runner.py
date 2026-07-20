@@ -49,6 +49,7 @@ from codex_plugin_scanner.guard.runtime.command_evaluation import (
     CompositeCommandEvaluation,
     evaluate_command,
 )
+from codex_plugin_scanner.guard.runtime.command_workspace_write_candidates import workspace_write_candidate_factors
 from codex_plugin_scanner.guard.runtime.effect_decision import (
     EffectDecision,
     EffectDecisionRequest,
@@ -165,7 +166,10 @@ def _baseline_proposal(evaluation: CompositeCommandEvaluation) -> EffectDecision
     )
     return evaluate_effect_decision(
         EffectDecisionRequest(
-            factors=decision_factors(evidence, compatibility_action_class=None, compatibility_rule=None),
+            factors=(
+                *decision_factors(evidence, compatibility_action_class=None, compatibility_rule=None),
+                *workspace_write_candidate_factors(command),
+            ),
             uncertainties=uncertainties,
         )
     )
