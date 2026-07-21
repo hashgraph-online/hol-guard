@@ -66,7 +66,7 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
     if operation == "fetch":
         return len(args) == 2 and args[0] == "origin" and _safe_ref(args[1])
     if operation == "log":
-        return len(args) == 3 and set(args[1:]) == {"-1", "--oneline"} and _safe_ref(args[0])
+        return _safe_bounded_log_args(args)
     if operation == "status":
         return bool(args) and all(arg in {"--short", "--branch", "--porcelain", "--porcelain=v1"} for arg in args)
     if operation == "branch":
@@ -83,6 +83,16 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
             arg in {"--stat", "--oneline", "--name-only", "--name-status", "HEAD"} or _safe_ref(arg) for arg in args
         )
     return False
+
+
+def _safe_bounded_log_args(args: tuple[str, ...]) -> bool:
+    if "--oneline" not in args or args.count("--oneline") != 1:
+        return False
+    bounds = [arg for arg in args if arg.startswith("-") and arg[1:].isdigit()]
+    if len(bounds) != 1 or not 1 <= int(bounds[0][1:]) <= 100:
+        return False
+    refs = [arg for arg in args if arg not in {"--oneline", bounds[0]}]
+    return len(refs) <= 1 and all(_safe_ref(ref) for ref in refs)
 
 
 def _safe_repository_path(value: str) -> bool:

@@ -1892,6 +1892,9 @@ def low_risk_compound_developer_execution_context(
             continue
         if command_name in _SAFE_STATIC_SHELL_COMMANDS and _static_shell_segment_is_safe(args):
             continue
+        if _shell_syntax_check_segment_is_safe(command_name, args):
+            saw_inspection = True
+            continue
         if _is_read_only_observer_interpreter_command(command_name):
             scripts = list(_script_interpreter_texts(list(segment.tokens)))
             if scripts and all(_script_is_read_only_observer(script) for script in scripts):
@@ -1899,6 +1902,15 @@ def low_risk_compound_developer_execution_context(
                 continue
         return None
     return context if saw_inspection else None
+
+
+def _shell_syntax_check_segment_is_safe(command_name: str, args: list[str]) -> bool:
+    if command_name not in _SHELL_COMMAND_STRING_INTERPRETERS or len(args) != 2 or args[0] != "-n":
+        return False
+    target = Path(args[1].strip("'\""))
+    return target.suffix == ".sh" and all(
+        part not in {"", ".", ".."} and not part.startswith(".") for part in target.parts if part != target.anchor
+    )
 
 
 def _shell_token_escapes_root(token: str, *, cwd: Path, root: Path) -> bool:
