@@ -38,6 +38,7 @@ class AuthorityPhase(str, Enum):
 
 
 class AuthorityHealth(str, Enum):
+    UNENROLLED = "unenrolled"
     PROTECTED = "protected"
     DEGRADED_UNACKNOWLEDGED = "degraded-unacknowledged"
     DEGRADED_ACKNOWLEDGED = "degraded-acknowledged"

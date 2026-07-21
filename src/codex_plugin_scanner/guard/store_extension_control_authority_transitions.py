@@ -137,7 +137,7 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
                 AuthorityAnchor(revision, _row_str(row, "snapshot_digest"), AuthorityPhase.COMMITTED),
                 key=key,
             )
-            resumed = self._read_extension_control_authority_locked(catalog_digest, bootstrap=False)
+            resumed = self._read_extension_control_authority_locked(catalog_digest)
             if resumed.health is not AuthorityHealth.PROTECTED or resumed.revision != revision:
                 raise ExtensionControlAuthorityError("idempotent transition recovery failed")
             return resumed
