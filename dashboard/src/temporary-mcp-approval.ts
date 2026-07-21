@@ -69,6 +69,18 @@ export function defaultTemporaryMcpDuration(options: TemporaryMcpApprovalOptions
   return options.allowed_durations[0];
 }
 
+export function validTemporaryMcpSelection(
+  options: TemporaryMcpApprovalOptions | null,
+  target: GuardTemporaryMcpGrantTarget,
+  duration: GuardTemporaryMcpGrantDuration,
+): { target: GuardTemporaryMcpGrantTarget; duration: GuardTemporaryMcpGrantDuration } {
+  if (options === null) return { target: "exact", duration: "once" };
+  return {
+    target: options.allowed_targets.includes(target) ? target : defaultTemporaryMcpTarget(options),
+    duration: options.allowed_durations.includes(duration) ? duration : defaultTemporaryMcpDuration(options),
+  };
+}
+
 export function temporaryMcpTargetLabel(
   target: GuardTemporaryMcpGrantTarget,
   options: TemporaryMcpApprovalOptions,

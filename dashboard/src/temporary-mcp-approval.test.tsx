@@ -9,6 +9,7 @@ import {
   temporaryMcpApprovalOptions,
   temporaryMcpExpiryLabel,
   temporaryMcpSummary,
+  validTemporaryMcpSelection,
 } from "./temporary-mcp-approval";
 
 function assert(condition: boolean, message: string): void {
@@ -52,6 +53,14 @@ assert(
   Object.keys(buildTemporaryMcpResolutionFields(options, "category", "once")).length === 0,
   "one-time approval uses the existing exact one-shot path",
 );
+const refreshedOptions = {
+  ...options,
+  allowed_targets: ["exact"] as const,
+  allowed_durations: ["15m"] as const,
+};
+const refreshedSelection = validTemporaryMcpSelection(refreshedOptions, "server", "5h");
+assert(refreshedSelection.target === "exact", "refreshed options replace a stale target");
+assert(refreshedSelection.duration === "15m", "refreshed options replace a stale duration");
 
 const malformed = {
   ...request,

@@ -46,6 +46,7 @@ import {
   buildTemporaryMcpResolutionFields,
   temporaryMcpAllowButtonLabel,
   temporaryMcpApprovalOptions,
+  validTemporaryMcpSelection,
 } from "./temporary-mcp-approval";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact"]);
@@ -135,6 +136,12 @@ export function ReviewDecisionCard(props: {
       }
     }
   }, [item?.request_id, item?.scope_contract_version, item?.scope_contract_digest]);
+
+  useEffect(() => {
+    const selection = validTemporaryMcpSelection(temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration);
+    if (selection.target !== mcpGrantTarget) setMcpGrantTarget(selection.target);
+    if (selection.duration !== mcpGrantDuration) setMcpGrantDuration(selection.duration);
+  }, [temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration]);
 
   useEffect(() => {
     return () => {

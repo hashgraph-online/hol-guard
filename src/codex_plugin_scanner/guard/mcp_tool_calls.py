@@ -765,6 +765,7 @@ def _evaluate_current_tool_call(
 
     signals = tool_call_risk_signals(artifact, arguments)
     risk_categories = tool_call_risk_categories(artifact, arguments)
+    explicit_risk_action = _configured_risk_action(config, "mcp_dangerous_tool", harness=artifact.harness)
 
     if len(signals) == 0:
         return with_current_config(
@@ -776,7 +777,7 @@ def _evaluate_current_tool_call(
                 risk_categories=(),
             )
         )
-    if _routine_browser_call_is_safe_by_default(risk_categories):
+    if explicit_risk_action is None and _routine_browser_call_is_safe_by_default(risk_categories):
         return with_current_config(
             ToolCallDecision(
                 action="allow",
@@ -786,7 +787,6 @@ def _evaluate_current_tool_call(
                 risk_categories=risk_categories,
             )
         )
-    explicit_risk_action = _configured_risk_action(config, "mcp_dangerous_tool", harness=artifact.harness)
     configured_risk_action = explicit_risk_action or resolve_risk_action(
         config,
         "mcp_dangerous_tool",

@@ -15381,6 +15381,13 @@ function defaultTemporaryMcpDuration(options) {
   if (options.allowed_durations.includes("1h")) return "1h";
   return options.allowed_durations[0];
 }
+function validTemporaryMcpSelection(options, target, duration) {
+  if (options === null) return { target: "exact", duration: "once" };
+  return {
+    target: options.allowed_targets.includes(target) ? target : defaultTemporaryMcpTarget(options),
+    duration: options.allowed_durations.includes(duration) ? duration : defaultTemporaryMcpDuration(options)
+  };
+}
 function temporaryMcpTargetLabel(target, options) {
   if (target === "exact") return "This exact call";
   if (target === "category") return "This browser capability";
@@ -27377,6 +27384,11 @@ function ReviewDecisionCard(props) {
       }
     }
   }, [item?.request_id, item?.scope_contract_version, item?.scope_contract_digest]);
+  reactExports.useEffect(() => {
+    const selection = validTemporaryMcpSelection(temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration);
+    if (selection.target !== mcpGrantTarget) setMcpGrantTarget(selection.target);
+    if (selection.duration !== mcpGrantDuration) setMcpGrantDuration(selection.duration);
+  }, [temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration]);
   reactExports.useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);

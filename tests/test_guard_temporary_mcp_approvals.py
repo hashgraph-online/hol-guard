@@ -91,6 +91,37 @@ def test_navigation_url_schema_is_routine_without_false_mismatch(tmp_path) -> No
     assert _evaluate(tmp_path, GuardStore(tmp_path / "guard-home"), artifact, arguments).action != "review"
 
 
+def test_explicit_dangerous_tool_review_policy_overrides_routine_browser_default(tmp_path) -> None:
+    artifact = _artifact(
+        tool_name="new_page",
+        schema={"type": "object", "properties": {"url": {"type": "string"}}},
+    )
+    arguments = {"url": "https://hol.org"}
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+        mode="prompt",
+        risk_actions={"mcp_dangerous_tool": "review"},
+    )
+
+    decision = evaluate_tool_call(
+        store=GuardStore(config.guard_home),
+        config=config,
+        artifact=artifact,
+        artifact_hash=build_tool_call_hash(
+            artifact,
+            arguments,
+            workspace=config.workspace,
+            config=config,
+        ),
+        arguments=arguments,
+        claim_saved_approval=False,
+    )
+
+    assert decision.action == "review"
+    assert decision.source == "policy"
+
+
 def test_interaction_request_exposes_bounded_grant_contract() -> None:
     artifact = _artifact(tool_name="click")
     payload = temporary_mcp_approval_payload(_browser_request(artifact, ("browser_interaction",)))
