@@ -69,6 +69,7 @@ from .self_approval import (
 )
 from .shell_command_wrappers import is_trusted_absolute_command_path, normalize_transparent_shell_command
 from .shell_execution_context import (
+    SHELL_CWD_WORKSPACE_ESCAPE,
     ShellExecutionContext,
     model_shell_execution_context,
     validate_shell_execution_segment,
@@ -1128,12 +1129,14 @@ def extract_sensitive_tool_action_request(
             command_text,
             cwd=cwd,
             workspace_root=cwd,
+            home_dir=home_dir,
         )
         raw_destructive_execution_context = (
             model_shell_execution_context(
                 raw_command_text,
                 cwd=cwd,
                 workspace_root=cwd,
+                home_dir=home_dir,
             )
             if raw_command_text != command_text
             else destructive_execution_context
@@ -1453,6 +1456,7 @@ def _destructive_shell_tool_action_request(
         command_text,
         cwd=cwd,
         workspace_root=cwd,
+        home_dir=home_dir,
     )
     detection_command_text = command_text
     pytest_execution_requested = _shell_command_targets_pytest(detection_command_text)
@@ -1556,6 +1560,45 @@ def _destructive_shell_tool_action_request(
             canonical_command=canonical_command,
             interpreter_executable_identities=interpreter_executable_identities,
         )
+    github_assessment = classify_github_shell_capabilities(
+        raw_command_text or detection_command_text,
+        home_dir=home_dir,
+    )
+    if (
+        github_assessment is not None
+        and not github_capability_requires_confirmation(github_assessment)
+        and execution_context.reason_code == SHELL_CWD_WORKSPACE_ESCAPE
+        and home_dir is not None
+    ):
+        home_execution_context = model_shell_execution_context(
+            detection_command_text,
+            cwd=cwd,
+            workspace_root=home_dir,
+            home_dir=home_dir,
+        )
+        raw_home_execution_context = (
+            model_shell_execution_context(
+                raw_command_text,
+                cwd=cwd,
+                workspace_root=home_dir,
+                home_dir=home_dir,
+            )
+            if raw_command_text is not None and raw_command_text != detection_command_text
+            else home_execution_context
+        )
+        if home_execution_context.complete and raw_home_execution_context.complete:
+            execution_context = home_execution_context
+            raw_execution_context = raw_home_execution_context
+            interpreter_executable_identities = _python_interpreter_executable_identities(
+                raw_command_text or detection_command_text,
+                cwd=cwd,
+                home_dir=home_dir,
+                execution_context=(
+                    raw_execution_context
+                    if raw_command_text is not None and raw_command_text != detection_command_text
+                    else execution_context
+                ),
+            )
     execution_context_reason = _shell_execution_context_validation_reason(execution_context)
     if execution_context.directory_change_present and execution_context_reason is not None:
         return ToolActionRequestMatch(
@@ -1655,10 +1698,6 @@ def _destructive_shell_tool_action_request(
             pytest_config_reason_codes=pytest_config_assessment.reason_codes,
             interpreter_executable_identities=interpreter_executable_identities,
         )
-    github_assessment = classify_github_shell_capabilities(
-        raw_command_text or detection_command_text,
-        home_dir=home_dir,
-    )
     if github_assessment is not None and github_capability_requires_confirmation(github_assessment):
         return ToolActionRequestMatch(
             tool_name=tool_name,

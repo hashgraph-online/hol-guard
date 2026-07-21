@@ -16432,6 +16432,61 @@ def test_guard_runtime_allows_gh_graphql_pipeline_with_python_parser(tmp_path):
     assert match is None
 
 
+@pytest.mark.parametrize(
+    "github_command",
+    [
+        (
+            'gh api graphql -f query=\'query { repository(owner: "example", name: "project") '
+            "{ pullRequest(number: 1) { reviewThreads(first: 20) { nodes { id isResolved } } } } }' 2>&1 | "
+            "python3 -c \"import json,sys; data=json.load(sys.stdin); print(data['data'])\""
+        ),
+        (
+            "gh api repos/example/project/branches/main/protection 2>&1 | "
+            "python3 -c \"import json,sys; data=json.load(sys.stdin); print(data.get('enforce_admins'))\" "
+            "2>&1 | head -20"
+        ),
+    ],
+)
+def test_guard_runtime_allows_read_only_github_pipeline_after_literal_home_cd(tmp_path, github_command):
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    sibling_worktree = home_dir / "sibling-worktree"
+    workspace.mkdir(parents=True)
+    sibling_worktree.mkdir()
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": f"cd ~/sibling-worktree && {github_command}"},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert match is None
+
+
+def test_guard_runtime_keeps_mutating_github_graphql_after_literal_home_cd_reviewable(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    sibling_worktree = home_dir / "sibling-worktree"
+    workspace.mkdir(parents=True)
+    sibling_worktree.mkdir()
+    command = (
+        "cd ~/sibling-worktree && gh api graphql "
+        "-f query='mutation { deleteProjectV2(input: { ownerId: \"O_1\" }) { clientMutationId } }'"
+    )
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert match is not None
+    assert match.action_class == "unresolved shell execution context"
+    assert match.shell_execution_context_reason_code == "shell_cwd_workspace_escape"
+
+
 def test_guard_runtime_allows_lean_ctx_wrapped_gh_graphql_pipeline(tmp_path):
     command = (
         "/path/to/lean-ctx -c 'gh api graphql -f query='\\''query { viewer { login } }'\\''' 2>&1 | "

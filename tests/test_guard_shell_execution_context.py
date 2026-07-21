@@ -121,6 +121,32 @@ def test_absolute_cd_and_newline_boundaries_preserve_full_command_identity(tmp_p
     assert context.segments[1].effective_cwd == destination.resolve()
 
 
+def test_literal_home_relative_cd_resolves_within_explicit_home_boundary(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    destination = home_dir / "sibling-worktree"
+    workspace.mkdir(parents=True)
+    destination.mkdir()
+
+    context = model_shell_execution_context(
+        "cd ~/sibling-worktree && gh api repos/example/project",
+        cwd=workspace,
+        workspace_root=home_dir,
+        home_dir=home_dir,
+    )
+
+    assert context.complete
+    assert context.reason_code is None
+    assert context.segments[1].effective_cwd == destination.resolve()
+
+
+def test_home_relative_cd_without_explicit_home_stays_unresolved(tmp_path: Path) -> None:
+    context = model_shell_execution_context("cd ~/sibling-worktree && gh api repos/example/project", cwd=tmp_path)
+
+    assert not context.complete
+    assert context.reason_code == SHELL_CWD_UNRESOLVED_EXPRESSION
+
+
 def test_nested_pushd_popd_tracks_a_bounded_explicit_stack(tmp_path: Path) -> None:
     nested = tmp_path / "services" / "auth"
     nested.mkdir(parents=True)
@@ -714,9 +740,10 @@ def test_destructive_shell_request_models_each_command_context_once(
         *,
         cwd: Path | None = None,
         workspace_root: Path | None = None,
+        home_dir: Path | None = None,
     ):
         calls.append(command_text)
-        return original_model(command_text, cwd=cwd, workspace_root=workspace_root)
+        return original_model(command_text, cwd=cwd, workspace_root=workspace_root, home_dir=home_dir)
 
     monkeypatch.setattr(secret_file_requests_module, "model_shell_execution_context", counting_model)
 
