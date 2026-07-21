@@ -28,6 +28,14 @@ function approvalUrlFromResponse(response: GuardResponse): string | null {
   return approvalUrl;
 }
 
+function approvalCenterKey(approvalUrl: string): string {
+  try {
+    return new URL(approvalUrl).origin;
+  } catch {
+    return approvalUrl;
+  }
+}
+
 function approvalBlockedReason(response: GuardResponse, fallbackReason: string): string {
   const reason = fallbackReason.trim() || 'Blocked by HOL Guard.';
   const approvalUrl = approvalUrlFromResponse(response);
@@ -62,10 +70,12 @@ function trySpawnOpen(command: string, args: string[]): Promise<boolean> {
   });
 }
 
-async function openApprovalUrl(response: GuardResponse, openedApprovalUrls: Set<string>): Promise<void> {
+async function openApprovalUrl(response: GuardResponse, openedApprovalCenters: Set<string>): Promise<void> {
   const approvalUrl = approvalUrlFromResponse(response);
-  if (!approvalUrl || openedApprovalUrls.has(approvalUrl)) return;
-  openedApprovalUrls.add(approvalUrl);
+  if (!approvalUrl) return;
+  const approvalCenter = approvalCenterKey(approvalUrl);
+  if (openedApprovalCenters.has(approvalCenter)) return;
+  openedApprovalCenters.add(approvalCenter);
   const platform = process.platform;
   let commands: Array<[string, string[]]>;
   if (platform === 'darwin') {
