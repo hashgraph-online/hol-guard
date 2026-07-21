@@ -354,7 +354,7 @@ def test_guard_codex_native_hook_state_rejects_manifest_copied_from_another_guar
     assert second_manifest.read_bytes() == foreign_manifest
 
 
-def test_guard_codex_install_and_uninstall_reject_manifest_from_another_workspace(tmp_path: Path) -> None:
+def test_guard_codex_install_migrates_authenticated_manifest_to_another_workspace(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     first_context = HarnessContext(
@@ -372,19 +372,18 @@ def test_guard_codex_install_and_uninstall_reject_manifest_from_another_workspac
     config_path = CodexHarnessAdapter._hook_config_path(first_context)
     state = codex_adapter.codex_native_hook_state(first_context)
     manifest_path = Path(str(state["manifest_path"]))
-    original_config = config_path.read_bytes()
     original_manifest = manifest_path.read_bytes()
 
-    with pytest.raises(CodexHookIntegrityError) as install_error:
-        adapter.install(second_context)
-    with pytest.raises(CodexHookIntegrityError) as uninstall_error:
-        adapter.uninstall(second_context)
+    installed = adapter.install(second_context)
+    migrated_manifest = manifest_path.read_bytes()
+    state = codex_adapter.codex_native_hook_state(second_context)
+    uninstalled = adapter.uninstall(second_context)
 
-    assert install_error.value.reason == "codex_hook_manifest_baseline_untrusted"
-    assert uninstall_error.value.reason == "codex_hook_manifest_baseline_untrusted"
-    assert config_path.read_bytes() == original_config
-    assert manifest_path.read_bytes() == original_manifest
-    assert codex_adapter.codex_native_hook_state(first_context)["protection_active"] is True
+    assert installed["active"] is True
+    assert migrated_manifest != original_manifest
+    assert state["protection_active"] is True
+    assert uninstalled["active"] is False
+    assert config_path.exists() is False
 
 
 def test_guard_codex_install_refuses_missing_manifest_when_modern_secret_remains(tmp_path: Path) -> None:

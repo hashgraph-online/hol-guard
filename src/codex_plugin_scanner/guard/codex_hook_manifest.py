@@ -51,6 +51,7 @@ class CodexHookManifestSpec:
     fallback_argv: tuple[str, ...]
     daemon_start_argv: tuple[str, ...]
     event_bindings: tuple[Mapping[str, object], ...]
+    workspace_rebinding_allowed: bool = False
 
 
 def build_authenticated_hook_manifest(spec: CodexHookManifestSpec) -> dict[str, object]:
@@ -249,13 +250,23 @@ def _manifest_has_owned_installation_context(
 ) -> bool:
     config = manifest.get("config")
     context = manifest.get("context")
+    expected_context = _expected_context(spec)
     return (
         manifest.get("harness") == "codex"
         and isinstance(config, dict)
         and config.get("scope") == "global"
         and config.get("target") == canonical_path(spec.config_path)
         and isinstance(context, dict)
-        and context == _expected_context(spec)
+        and (
+            context == expected_context
+            or (
+                spec.workspace_rebinding_allowed
+                and context.keys() == expected_context.keys()
+                and context["guard_home"] == expected_context["guard_home"]
+                and context["home_dir"] == expected_context["home_dir"]
+                and context["runtime_guard_home"] == expected_context["runtime_guard_home"]
+            )
+        )
     )
 
 
