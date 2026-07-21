@@ -15,6 +15,7 @@ from .package_execution_context import (
     PackageExecutionContext,
 )
 from .runtime.github_workflow_runtime import approval_record_from_approval_request
+from .temporary_mcp_approvals import temporary_mcp_approval_payload
 
 _SCOPED_APPROVAL_FAMILIES = frozenset(
     {
@@ -163,7 +164,11 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
 
 
 def request_scope_contract_payload(request: Mapping[str, object]) -> dict[str, object]:
-    return request_scope_contract(request).to_dict()
+    payload = request_scope_contract(request).to_dict()
+    temporary_mcp_approval = temporary_mcp_approval_payload(request)
+    if temporary_mcp_approval is not None:
+        payload["temporary_mcp_approval"] = temporary_mcp_approval
+    return payload
 
 
 def resolve_request_scope_selection(

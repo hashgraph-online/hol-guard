@@ -1869,6 +1869,11 @@
     border-width: 0;
   }
 
+  .border-y {
+    border-block-style: var(--tw-border-style);
+    border-block-width: 1px;
+  }
+
   .border-t {
     border-top-style: var(--tw-border-style);
     border-top-width: 1px;
@@ -4833,6 +4838,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .focus-within\:ring-brand-blue\/20:focus-within {
       --tw-ring-color: color-mix(in oklab, var(--brand-blue) 20%, transparent);
+    }
+  }
+
+  .focus-within\:ring-brand-blue\/30:focus-within {
+    --tw-ring-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus-within\:ring-brand-blue\/30:focus-within {
+      --tw-ring-color: color-mix(in oklab, var(--brand-blue) 30%, transparent);
     }
   }
 

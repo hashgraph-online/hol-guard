@@ -19,6 +19,7 @@ import {
   mostRestrictiveGuardAction,
   normalizeGuardAction,
 } from "./guard-action";
+import { parseTemporaryMcpApproval } from "./temporary-mcp-approval";
 import type {
   GuardActionEnvelope,
   GuardAction,
@@ -72,6 +73,7 @@ import type {
   GuardUpdateStatus,
   GuardUpdateVersionCheck,
   DecisionScope,
+  GuardApprovalResolutionInput,
   RiskSignalV2,
   RiskSignalV2Category,
   RiskSignalV2RedactionLevel,
@@ -113,6 +115,7 @@ type RawGuardApprovalRequest = Omit<
   | "recommended_scope_by_action"
   | "scope_restrictions"
   | "task_capability_eligibility"
+  | "temporary_mcp_approval"
 > & {
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
@@ -126,6 +129,7 @@ type RawGuardApprovalRequest = Omit<
   recommended_scope_by_action?: unknown;
   scope_restrictions?: unknown;
   task_capability_eligibility?: unknown;
+  temporary_mcp_approval?: unknown;
 };
 
 type RawGuardReceipt = Omit<GuardReceipt, "action_envelope_json" | "policy_decision"> & {
@@ -1066,6 +1070,7 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
       : undefined,
     scope_restrictions: hasScopeContract ? scopeRestrictions ?? [] : undefined,
     task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : undefined,
+    temporary_mcp_approval: parseTemporaryMcpApproval(item.temporary_mcp_approval),
     action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
     ...(hasDecisionContractError
@@ -2398,15 +2403,7 @@ function fetchGuardApi(input: RequestInfo, init?: RequestInit): Promise<Response
   return fetchWithGuardAuth(input, init);
 }
 
-export async function resolveRequest(input: {
-  requestId: string;
-  action: "allow" | "block";
-  scope: DecisionScope;
-  workspace?: string;
-  reason: string;
-  scope_contract_version?: string;
-  scope_contract_digest?: string;
-}): Promise<void> {
+export async function resolveRequest(input: GuardApprovalResolutionInput): Promise<void> {
   await resolveRequestWithQueueResult(input);
 }
 
@@ -2517,18 +2514,7 @@ export async function disableApprovalGateTotp(
   });
 }
 
-export async function resolveRequestWithQueueResult(input: {
-  requestId: string;
-  action: "allow" | "block";
-  scope: DecisionScope;
-  workspace?: string;
-  reason: string;
-  approval_password?: string;
-  approval_totp_code?: string;
-  approval_gate_use_cooldown?: boolean;
-  scope_contract_version?: string;
-  scope_contract_digest?: string;
-}): Promise<GuardQueueResolutionResult> {
+export async function resolveRequestWithQueueResult(input: GuardApprovalResolutionInput): Promise<GuardQueueResolutionResult> {
   if (isGuardDemoMode()) {
     return {
       resolved: true,
@@ -2563,6 +2549,8 @@ export async function resolveRequestWithQueueResult(input: {
       ...(input.scope_contract_digest !== undefined
         ? { scope_contract_digest: input.scope_contract_digest }
         : {}),
+      ...(input.mcp_grant_target !== undefined ? { mcp_grant_target: input.mcp_grant_target } : {}),
+      ...(input.mcp_grant_duration !== undefined ? { mcp_grant_duration: input.mcp_grant_duration } : {}),
       ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
       ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
       ...(input.approval_gate_use_cooldown !== undefined ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {})

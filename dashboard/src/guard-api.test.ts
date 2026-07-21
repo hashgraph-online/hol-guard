@@ -1537,6 +1537,8 @@ const resolution = await resolveRequestWithQueueResult({
   reason: "reviewed",
   scope_contract_version: "guard.approval-scopes.v2",
   scope_contract_digest: "scope-digest",
+  mcp_grant_target: "category",
+  mcp_grant_duration: "5h",
 });
 const resolveBody = JSON.parse(String(fetchResolveCalls[0].init?.body)) as Record<string, unknown>;
 
@@ -1552,6 +1554,10 @@ assert(
   resolveBody["scope_contract_version"] === "guard.approval-scopes.v2" &&
     resolveBody["scope_contract_digest"] === "scope-digest",
   "L077: resolveRequestWithQueueResult binds the displayed scope contract",
+);
+assert(
+  resolveBody["mcp_grant_target"] === "category" && resolveBody["mcp_grant_duration"] === "5h",
+  "L077: resolveRequestWithQueueResult binds the selected temporary MCP grant",
 );
 assert(resolution.remaining_pending_count === 1, "L077: resolveRequestWithQueueResult returns remaining count");
 assert(resolution.next_selectable_request_id === "req-next", "L077: resolveRequestWithQueueResult returns next selectable id");

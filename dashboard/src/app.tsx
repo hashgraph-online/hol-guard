@@ -60,7 +60,7 @@ import type {
   GuardReceipt,
   GuardRuntimeSnapshot,
   GuardInventoryItem,
-  DecisionScope,
+  GuardApprovalResolutionInput,
 } from "./guard-types";
 
 type RequestState =
@@ -634,18 +634,7 @@ export function App() {
     setReceipts({ kind: "ready", items: [] });
   }, [setReceipts]);
 
-  const handleResolve = useCallback(async (payload: {
-    requestId: string;
-    action: "allow" | "block";
-    scope: DecisionScope;
-    workspace?: string;
-    reason: string;
-    approval_password?: string;
-    approval_totp_code?: string;
-    approval_gate_use_cooldown?: boolean;
-    scope_contract_version?: string;
-    scope_contract_digest?: string;
-  }) => {
+  const handleResolve = useCallback(async (payload: GuardApprovalResolutionInput) => {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
     try {

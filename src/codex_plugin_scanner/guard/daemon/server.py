@@ -2104,6 +2104,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 persist_policy=persist_policy,
                 scope_contract_version=scope_contract_version,
                 scope_contract_digest=scope_contract_digest,
+                mcp_grant_target=payload.get("mcp_grant_target"),
+                mcp_grant_duration=payload.get("mcp_grant_duration"),
             )
         except ApprovalRequestNotFoundError:
             self._write_json(
