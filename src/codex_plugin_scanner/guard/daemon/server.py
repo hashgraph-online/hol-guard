@@ -6345,6 +6345,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/operations/block",
             "/v1/policy/decisions",
             "/v1/policy/cloud-exceptions",
+            "/v1/command-activity/feedback",
             "/v1/policy/cloud-exception-requests",
             "/v1/policy/clear",
             "/v1/policy/sync",

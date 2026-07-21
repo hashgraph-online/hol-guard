@@ -556,18 +556,6 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
             workspace_id="workspace-1",
         ),
     )
-    connect_finalized = threading.Event()
-    set_guard_cloud_connect_state = daemon_server._set_guard_cloud_connect_state
-
-    def set_state_and_signal(
-        server: daemon_server._GuardDaemonHttpServer,
-        state: dict[str, object] | None,
-    ) -> None:
-        set_guard_cloud_connect_state(server, state)
-        if state is None:
-            connect_finalized.set()
-
-    monkeypatch.setattr(daemon_server, "_set_guard_cloud_connect_state", set_state_and_signal)
 
     def unavailable_first_sync(
         _store: GuardStore,
