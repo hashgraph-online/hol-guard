@@ -11,7 +11,7 @@ PUBLISH_WORKFLOW = ROOT / ".github" / "workflows" / "publish.yml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
 CI_BRANCHES = ["main", "release/2.1", "release/2.2"]
-PUBLISH_BRANCHES = ["main", "release/2.1", "release/2.2"]
+PUBLISH_BRANCHES = ["main", "release/2.1"]
 RELEASE_MAINTAINERS = {"@kantorcodes", "@deep-purple-boots"}
 
 
@@ -98,7 +98,7 @@ def test_alpha_only_dispatch_and_pr_version_stamping_contracts() -> None:
     stamp_run = next(step["run"] for step in build_steps if step.get("name") == "Stamp package version when needed")
 
     assert 'if [[ "$CHANNEL" != "alpha" ]]' in compute_run
-    assert "Release train ${TRAIN} is alpha-only" in compute_run
+    assert "The release/2.1 train is alpha-only" in compute_run
     assert 'elif [[ "$CHANNEL" == "stable" ]]' not in compute_run
     assert "VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py" in compute_run
     assert 'VERSION=$(BASE_VERSION="$BASE_VERSION" PR_NUMBER="$PR_NUMBER"' in compute_run
@@ -112,7 +112,7 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     build_steps = workflow["jobs"]["build"]["steps"]
 
     assert inputs["release_channel"]["options"] == ["alpha"]
-    assert inputs["release_train"]["options"] == ["2.1", "2.2"]
+    assert inputs["release_train"]["options"] == ["2.1"]
     assert inputs["release_version"]["required"] is True
     assert inputs["expected_sha"]["required"] is True
     assert "promotion_pr" not in inputs
@@ -132,8 +132,8 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     assert '"$GITHUB_ACTOR_ID" != "6068672"' in dispatch_gate["run"]
     assert '"$GITHUB_ACTOR_ID" != "301892678"' in dispatch_gate["run"]
     assert '"$RELEASE_CHANNEL" != "alpha"' in dispatch_gate["run"]
-    assert "2.1|2.2" in dispatch_gate["run"]
-    assert '"$GITHUB_REF" != "refs/heads/release/${RELEASE_TRAIN}"' in dispatch_gate["run"]
+    assert '"$RELEASE_TRAIN" != "2.1"' in dispatch_gate["run"]
+    assert '"$GITHUB_REF" != "refs/heads/release/2.1"' in dispatch_gate["run"]
     assert '"$EXPECTED_SHA" != "$GITHUB_SHA"' in dispatch_gate["run"]
     assert jobs["build"]["needs"] == "authorize-release"
     build_condition = jobs["build"]["if"]
@@ -150,7 +150,7 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
         assert "github.run_attempt == 1" in jobs[job_name]["if"]
     compute_run = next(step["run"] for step in build_steps if step.get("name") == "Compute publish version")
     assert 'if [[ "$CHANNEL" != "alpha" ]]' in compute_run
-    assert "2.1|2.2" in compute_run
+    assert 'if [[ "$TRAIN" != "2.1" ]]' in compute_run
     assert 'if [[ "$GITHUB_REF" != "$TRAIN_REF" ]]' in compute_run
     assert '"$GITHUB_RUN_ATTEMPT" != "1"' in compute_run
     assert '"$GITHUB_ACTOR_ID" != "6068672"' in compute_run
