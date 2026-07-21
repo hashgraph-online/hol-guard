@@ -1848,6 +1848,10 @@ def low_risk_compound_developer_execution_context(
             return None
         args = list(segment.tokens[command_index + 1 :])
         segment_root = segment.effective_cwd or home_dir
+        if not _path_text_is_within_root(segment_root, home_dir) or any(
+            _absolute_shell_token_escapes_root(arg, home_dir) for arg in args
+        ):
+            return None
         if segment.directory_operation is not None:
             continue
         if command_name == "git" and is_low_risk_git_inspection_segment(segment):
@@ -1895,6 +1899,13 @@ def low_risk_compound_developer_execution_context(
                 continue
         return None
     return context if saw_inspection else None
+
+
+def _absolute_shell_token_escapes_root(token: str, root: Path) -> bool:
+    stripped = token.strip().strip("'\"")
+    if not stripped or not Path(stripped).is_absolute():
+        return False
+    return not _path_text_is_within_root(Path(stripped), root)
 
 
 def classify_github_shell_capabilities(

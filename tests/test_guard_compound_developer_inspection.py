@@ -76,6 +76,8 @@ def test_compound_stdin_only_python_observer_is_one_unit(tmp_path: Path) -> None
         'python3 -c "import subprocess; subprocess.run(["sh"])"',
         "find . -delete",
         "cat settings.txt > copied.txt",
+        "cat /etc/example.py",
+        "cd / && cat /etc/example.py",
         "curl https://example.test",
     ),
 )
