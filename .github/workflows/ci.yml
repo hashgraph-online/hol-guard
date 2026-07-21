@@ -96,16 +96,12 @@ jobs:
       - name: Run pytest shard ${{ matrix.shard-index }}
         shell: bash
         run: |
-          files_output="$(uv run --no-sync python scripts/ci/pytest_shard.py \
+          uv run --no-sync python scripts/ci/pytest_shard.py \
             --shard-index "${{ matrix.shard-index }}" \
             --shard-count 16 \
-            --granularity node)"
-          if [[ -z "$files_output" ]]; then
-            echo "pytest shard produced no test files" >&2
-            exit 1
-          fi
-          mapfile -t files <<< "$files_output"
-          uv run --no-sync pytest "${files[@]}" --tb=short
+            --granularity node > pytest-nodes.txt
+          test -s pytest-nodes.txt
+          uv run --no-sync pytest @pytest-nodes.txt --tb=short
 
   compatibility:
     runs-on: ubuntu-latest
@@ -156,12 +152,12 @@ jobs:
       - name: Run deep compatibility shard ${{ matrix.shard-index }}
         shell: bash
         run: |
-          files_output="$(uv run --no-sync python scripts/ci/pytest_shard.py \
+          uv run --no-sync python scripts/ci/pytest_shard.py \
             --shard-index "${{ matrix.shard-index }}" \
             --shard-count 4 \
-            --granularity file)"
-          mapfile -t files <<< "$files_output"
-          uv run --no-sync pytest "${files[@]}" --tb=short
+            --granularity file > pytest-files.txt
+          test -s pytest-files.txt
+          uv run --no-sync pytest @pytest-files.txt --tb=short
 
   ci-python-312:
     name: ci (3.12)

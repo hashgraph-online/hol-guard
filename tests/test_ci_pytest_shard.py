@@ -49,6 +49,8 @@ def test_ci_workflow_cancels_stale_runs_and_executes_each_shard() -> None:
     assert workflow.count("uv run --no-sync python scripts/ci/pytest_shard.py") == 2
     assert "--shard-count 16" in tests_job
     assert "--granularity node" in tests_job
+    assert "pytest @pytest-nodes.txt" in tests_job
+    assert "mapfile -t files" not in workflow
     assert "name: ci (3.12)" in workflow
     assert "needs: [quality, tests, compatibility]" in workflow
     assert "COMPATIBILITY_RESULT" in workflow
