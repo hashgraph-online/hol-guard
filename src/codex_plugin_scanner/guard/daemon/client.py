@@ -18,7 +18,20 @@ from .manager import (
 
 
 class GuardDaemonRequestError(RuntimeError):
-    """Raised when the Guard daemon returns a non-retryable request failure."""
+    """Raised with stable daemon error metadata for caller recovery."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = None,
+        code: str | None = None,
+        recovery_action: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status = status
+        self.code = code
+        self.recovery_action = recovery_action
 
 
 class GuardDaemonTransportError(GuardDaemonRequestError):
@@ -143,6 +156,21 @@ class GuardSurfaceDaemonClient:
         operation = response.get("operation")
         return dict(operation) if _is_string_object_dict(operation) else response
 
+    def extension_control_catalog(self) -> dict[str, object]:
+        return self._get("/v1/extension-controls/catalog", timeout=_DEFAULT_REQUEST_TIMEOUT_S)
+
+    def effective_extension_controls(self) -> dict[str, object]:
+        return self._get("/v1/extension-controls/effective", timeout=_DEFAULT_REQUEST_TIMEOUT_S)
+
+    def refresh_extension_controls(self) -> dict[str, object]:
+        return self._post("/v1/extension-controls/refresh", {})
+
+    def preview_extension_controls(self, payload: dict[str, object]) -> dict[str, object]:
+        return self._post("/v1/extension-controls/preview", payload)
+
+    def apply_extension_controls(self, payload: dict[str, object]) -> dict[str, object]:
+        return self._post("/v1/extension-controls/apply", payload)
+
     def containment_health(self) -> dict[str, object]:
         response = self._get("/v1/runtime/containment-health", timeout=5.0)
         value = response.get("containment_health")
@@ -160,12 +188,7 @@ class GuardSurfaceDaemonClient:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 return self._decode_json_response(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
-            try:
-                payload = self._decode_json_response(error.read().decode("utf-8"))
-                message = payload.get("error", str(error))
-            except (OSError, json.JSONDecodeError):
-                message = str(error)
-            raise GuardDaemonRequestError(f"Guard daemon request failed: {message}") from error
+            raise self._http_request_error(error) from error
         except GuardDaemonRequestError:
             raise
         except (OSError, urllib.error.URLError) as error:
@@ -191,16 +214,32 @@ class GuardSurfaceDaemonClient:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 return self._decode_json_response(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
-            try:
-                payload = self._decode_json_response(error.read().decode("utf-8"))
-                message = payload.get("error", str(error))
-            except (OSError, json.JSONDecodeError):
-                message = str(error)
-            raise GuardDaemonRequestError(f"Guard daemon request failed: {message}") from error
+            raise self._http_request_error(error) from error
         except GuardDaemonRequestError:
             raise
         except (OSError, urllib.error.URLError) as error:
             raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
+
+    def _http_request_error(self, error: urllib.error.HTTPError) -> GuardDaemonRequestError:
+        code: str | None = None
+        recovery_action: str | None = None
+        try:
+            payload = self._decode_json_response(error.read().decode("utf-8"))
+            raw_code = payload.get("error")
+            code = raw_code if isinstance(raw_code, str) else None
+            recovery = payload.get("recovery")
+            if _is_string_object_dict(recovery):
+                raw_action = recovery.get("action")
+                recovery_action = raw_action if isinstance(raw_action, str) else None
+        except (OSError, json.JSONDecodeError, GuardDaemonRequestError):
+            pass
+        message = code or str(error)
+        return GuardDaemonRequestError(
+            f"Guard daemon request failed: {message}",
+            status=error.code,
+            code=code,
+            recovery_action=recovery_action,
+        )
 
     @staticmethod
     def _decode_json_response(raw_payload: str) -> dict[str, object]:

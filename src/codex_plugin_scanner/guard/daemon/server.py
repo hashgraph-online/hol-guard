@@ -225,6 +225,7 @@ from .discovery import (
     load_authenticated_daemon_state,
     load_daemon_discovery_key,
 )
+from .extension_control_api import ExtensionControlApiError, ExtensionControlApiService
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     clear_guard_daemon_state_if_current,
@@ -381,6 +382,11 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
             store.read_extension_control_authority(
                 catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
             )
+        )
+        self.extension_control_api = ExtensionControlApiService(
+            store=store,
+            registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+            runtime=self.extension_control_runtime,
         )
         self.approval_attention = ApprovalAttentionCoordinator(
             store=store,
@@ -1449,6 +1455,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/v1/") and not self._header_token_is_valid():
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
+        if parsed.path == "/v1/extension-controls/catalog":
+            self._write_json(
+                self._daemon_server().extension_control_api.catalog(),
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+        if parsed.path == "/v1/extension-controls/effective":
+            self._write_json(
+                self._daemon_server().extension_control_api.effective(),
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
         if parsed.path == "/v1/capabilities":
             self._handle_capabilities()
             return
@@ -1834,6 +1852,30 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not self._origin_is_allowed_for_request(parsed.path, path_parts):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
+        if (
+            parsed.path
+            in {
+                "/v1/extension-controls/preview",
+                "/v1/extension-controls/apply",
+                "/v1/extension-controls/refresh",
+            }
+            and not self._header_token_is_valid()
+        ):
+            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+            return
+        if parsed.path in {
+            "/v1/extension-controls/preview",
+            "/v1/extension-controls/apply",
+            "/v1/extension-controls/refresh",
+        }:
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                self._write_json({"error": "invalid_content_length"}, status=400)
+                return
+            if content_length < 0 or content_length > self._MAX_BODY_BYTES:
+                self._write_json({"error": "body_too_large"}, status=413)
+                return
         payload, body_error = self._load_request_body()
         if body_error is not None:
             self._write_json({"error": body_error}, status=400)
@@ -1895,6 +1937,23 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 {"error": "daemon_identity_required", "repair": "Run `hol-guard daemon repair`."},
                 status=401,
             )
+            return
+        if parsed.path in {
+            "/v1/extension-controls/preview",
+            "/v1/extension-controls/apply",
+            "/v1/extension-controls/refresh",
+        }:
+            try:
+                if parsed.path.endswith("/preview"):
+                    response = self._daemon_server().extension_control_api.preview(payload)
+                elif parsed.path.endswith("/apply"):
+                    response = self._daemon_server().extension_control_api.apply(payload)
+                else:
+                    response = self._daemon_server().extension_control_api.refresh()
+            except ExtensionControlApiError as error:
+                self._write_json(error.to_payload(), status=error.status)
+                return
+            self._write_json(response, extra_headers={"Cache-Control": "no-store"})
             return
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
@@ -5944,6 +6003,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/command-activity/events",
             "/v1/command-activity/feedback",
             "/v1/command-extensions",
+            "/v1/extension-controls/catalog",
+            "/v1/extension-controls/effective",
+            "/v1/extension-controls/preview",
+            "/v1/extension-controls/apply",
+            "/v1/extension-controls/refresh",
             "/v1/harnesses",
             "/v1/notifications/setup",
             "/v1/policy",
