@@ -25,7 +25,7 @@ def is_low_risk_compound_git_inspection(context: ShellExecutionContext) -> bool:
             return False
         command = segment.tokens[0] if segment.tokens else ""
         if command == "git":
-            if not _safe_git_segment(segment):
+            if not is_low_risk_git_inspection_segment(segment):
                 return False
             saw_git = True
             continue
@@ -50,21 +50,38 @@ def _leading_literal_cd(segment: ShellExecutionSegment) -> bool:
     )
 
 
-def _safe_git_segment(segment: ShellExecutionSegment) -> bool:
+def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
+    """Recognize one bounded Git refresh or inspection segment."""
+
     tokens = _without_stderr_merge(segment.tokens)
-    if tokens is None or len(tokens) < 4 or tokens[1] != "-C":
+    if tokens is None or len(tokens) < 2:
         return False
-    repository = tokens[2]
-    if _REPOSITORY_DIR.fullmatch(repository) is None:
-        return False
-    operation = tokens[3]
-    args = tokens[4:]
+    operation_index = 1
+    if tokens[1] == "-C":
+        if len(tokens) < 4 or _REPOSITORY_DIR.fullmatch(tokens[2]) is None:
+            return False
+        operation_index = 3
+    operation = tokens[operation_index]
+    args = tokens[operation_index + 1 :]
     if operation == "fetch":
         return len(args) == 2 and args[0] == "origin" and _safe_ref(args[1])
     if operation == "log":
         return len(args) == 3 and set(args[1:]) == {"-1", "--oneline"} and _safe_ref(args[0])
     if operation == "status":
-        return args == ("--short",)
+        return bool(args) and all(arg in {"--short", "--branch", "--porcelain", "--porcelain=v1"} for arg in args)
+    if operation == "branch":
+        return args in {("--show-current",), ("--list",)}
+    if operation == "rev-parse":
+        return args in {("--show-toplevel",), ("--show-prefix",), ("--is-inside-work-tree",), ("HEAD",)}
+    if operation == "diff":
+        return bool(args) and all(
+            arg in {"--check", "--stat", "--name-only", "--name-status", "--cached", "HEAD"} or _safe_ref(arg)
+            for arg in args
+        )
+    if operation == "show":
+        return bool(args) and all(
+            arg in {"--stat", "--oneline", "--name-only", "--name-status", "HEAD"} or _safe_ref(arg) for arg in args
+        )
     return False
 
 
@@ -105,4 +122,4 @@ def _dynamic(value: str) -> bool:
     return any(marker in value for marker in ("$", "`", "<", ">", "|", ";", "&", "\x00"))
 
 
-__all__ = ("is_low_risk_compound_git_inspection",)
+__all__ = ("is_low_risk_compound_git_inspection", "is_low_risk_git_inspection_segment")

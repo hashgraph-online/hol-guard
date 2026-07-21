@@ -185,6 +185,7 @@ from ..runtime.secret_file_requests import (
     extract_sensitive_file_write_request,
     extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
+    low_risk_compound_developer_execution_context,
     shell_execution_context_starts_with_literal_cd,
 )
 from ..runtime.secret_sensitivity import (
