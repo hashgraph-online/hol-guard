@@ -255,7 +255,6 @@ def _run_guard_hook_command(
         data_flow_signals=data_flow_signals,
         home_dir=context.home_dir,
         guard_home=context.guard_home,
-        store=store,
         workspace=runtime_workspace,
     )
     result = _run_hook_claude_permission_request(
@@ -322,7 +321,6 @@ def _run_guard_hook_command(
                 data_flow_signals=fresh_data_flow_signals,
                 home_dir=context.home_dir,
                 guard_home=context.guard_home,
-                store=store,
                 workspace=runtime_workspace,
             )
             if fresh_runtime_artifact is None:

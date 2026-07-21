@@ -363,7 +363,6 @@ def _persist_cursor_native_permission_after_shell(
             action_envelope=action_envelope,
             home_dir=home_dir,
             guard_home=guard_home,
-            store=store,
             workspace=workspace,
         )
         if runtime_artifact is not None:
