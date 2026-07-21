@@ -79,9 +79,7 @@ class ExtensionControlRuntime:
     def __init__(self, initial: ExtensionControlAuthorityView) -> None:
         self._lock = threading.Lock()
         self._snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(initial)
-        self._highest_protected_revision = (
-            initial.revision if initial.health is AuthorityHealth.PROTECTED else 0
-        )
+        self._highest_protected_revision = initial.revision if initial.health is AuthorityHealth.PROTECTED else 0
         self._highest_protected_digest = (
             self._snapshot.effective_digest if initial.health is AuthorityHealth.PROTECTED else None
         )
