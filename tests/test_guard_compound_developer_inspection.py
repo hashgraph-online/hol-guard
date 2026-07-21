@@ -119,6 +119,17 @@ def test_compound_stdin_only_python_observer_is_one_unit(tmp_path: Path) -> None
     assert artifact is None
 
 
+def test_compound_shell_syntax_check_is_inspection_only(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    workspace = home / "workspace"
+    workspace.mkdir(parents=True)
+    script = workspace / "scripts" / "check.sh"
+    script.parent.mkdir()
+    script.write_text("#!/bin/sh\n", encoding="utf-8")
+
+    assert _artifact(f"cd {workspace} && bash -n scripts/check.sh && echo valid", home=home) is None
+
+
 @pytest.mark.parametrize(
     "suffix",
     (
@@ -132,6 +143,8 @@ def test_compound_stdin_only_python_observer_is_one_unit(tmp_path: Path) -> None
         "cat ../../../../outside/example.py",
         "cd / && cat /etc/example.py",
         "curl https://example.test",
+        "bash scripts/check.sh",
+        "bash -n ../outside.sh",
     ),
 )
 def test_compound_recovery_preserves_real_risk_boundaries(tmp_path: Path, suffix: str) -> None:

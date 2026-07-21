@@ -38,6 +38,18 @@ def test_compound_git_refresh_and_inspection_is_evaluated_as_one_unit(tmp_path: 
     assert artifact is None
 
 
+@pytest.mark.parametrize(
+    "log_args",
+    ("-5 --oneline", "--oneline -20 origin/main", "origin/main -1 --oneline"),
+)
+def test_compound_git_inspection_accepts_bounded_log_forms(tmp_path: Path, log_args: str) -> None:
+    home = tmp_path / "home"
+    workspace = home / "workspace"
+    workspace.mkdir(parents=True)
+
+    assert _artifact(f"cd {workspace} && git log {log_args}", home=home) is None
+
+
 @pytest.mark.parametrize("repository", ("projects/repository", "./projects/repository", "."))
 def test_compound_git_inspection_accepts_bounded_relative_repository_paths(
     tmp_path: Path,
@@ -63,6 +75,8 @@ def test_compound_git_inspection_accepts_bounded_relative_repository_paths(
         "git -C projects/$TARGET status --short",
         "git -C repository status --short | sh",
         "git -C repository status --short > report.txt",
+        "git log -101 --oneline",
+        "git log --all --oneline -5",
     ),
 )
 def test_compound_git_recovery_keeps_ambiguous_or_mutating_commands_guarded(
