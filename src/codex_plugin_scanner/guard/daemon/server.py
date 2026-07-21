@@ -129,6 +129,7 @@ from ..package_firewall_entitlement import (
     package_firewall_available_actions,
     package_firewall_block_details,
     package_firewall_operation_allowed,
+    reconcile_connect_state_with_oauth_entitlement,
     resolve_package_firewall_entitlement,
 )
 from ..package_firewall_receipts import package_firewall_receipt_metadata
@@ -1290,6 +1291,10 @@ def _finalize_daemon_guard_connect_payload(
                 "latest_connect_state": store.get_latest_guard_connect_state(now=now),
             }
         )
+        reconciled_state = reconcile_connect_state_with_oauth_entitlement(store, now=now)
+        if reconciled_state is not None:
+            payload["milestone"] = str(reconciled_state.get("milestone") or "first_sync_pending")
+            payload["latest_connect_state"] = reconciled_state
         return payload
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
         store.record_latest_guard_connect_sync_result(

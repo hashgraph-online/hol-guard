@@ -556,6 +556,19 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
             workspace_id="workspace-1",
         ),
     )
+
+    def unavailable_first_sync(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        del auth_context
+        raise GuardSyncNotAvailableError(
+            "Guard sync requires a Pro or Team plan.",
+            retryable=False,
+        )
+
+    monkeypatch.setattr(daemon_server, "sync_local_guard_cloud_proof", unavailable_first_sync)
     connect_finalized = threading.Event()
     connect_failure_details: list[str] = []
     set_guard_cloud_connect_state = daemon_server._set_guard_cloud_connect_state
@@ -620,6 +633,9 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         assert refreshed["entitlement"]["allowed"] is True
         assert refreshed["entitlement"]["reason"] == "paid_oauth_entitlement_active"
         assert refreshed["connect_flow"] is None
+        latest_connect_state = store.get_effective_guard_connect_state(now=datetime.now(timezone.utc).isoformat())
+        assert isinstance(latest_connect_state, dict)
+        assert latest_connect_state["milestone"] == "first_sync_pending"
     finally:
         daemon.stop()
 
