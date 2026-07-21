@@ -6352,6 +6352,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/requests/clear",
             "/v1/requests/bulk-allow-once",
             "/v1/requests/remote-once",
+            "/v1/update/reconnect/prepare",
             "/v1/settings",
             "/v1/settings/import",
             "/v1/settings/reset",
