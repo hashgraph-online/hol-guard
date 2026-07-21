@@ -1353,7 +1353,7 @@ jobs:
               exit 1
             fi
             echo "push=false" >> "$GITHUB_OUTPUT"
-          elif rg -qi 'manifest unknown' "$pull_output"; then
+          elif grep -Eqi 'manifest unknown' "$pull_output"; then
             echo "push=true" >> "$GITHUB_OUTPUT"
           else
             cat "$pull_output" >&2

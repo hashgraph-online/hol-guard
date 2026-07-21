@@ -19,6 +19,7 @@ def test_container_refuses_to_mutate_an_existing_alpha_image() -> None:
     assert "org.opencontainers.image.revision" in inspect_step["run"]
     assert '"$revision" != "$SOURCE_SHA"' in inspect_step["run"]
     assert 'echo "push=false"' in inspect_step["run"]
-    assert "manifest unknown" in inspect_step["run"]
+    assert "grep -Eqi 'manifest unknown'" in inspect_step["run"]
+    assert "rg -qi" not in inspect_step["run"]
     assert "Unable to determine whether the image tag already exists" in inspect_step["run"]
     assert publish_step["if"] == "steps.image.outputs.push == 'true'"
