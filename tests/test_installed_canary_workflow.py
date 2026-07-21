@@ -104,14 +104,26 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "PYTHONPATH=" in workflow_text
     assert '-X "pycache_prefix=$RUNNER_TEMP/hol-guard-evidence-cache"' in workflow_text
     assert "pnpm" not in workflow_text
-    assert "Run canonical command extension analytics Dockerlab" not in names
-    assert "installed-canary/command-extension-analytics.json" not in workflow_text
+    assert "Run canonical command extension analytics Dockerlab" in names
+    assert "runner.os == 'Linux'" in workflow_text
+    assert 'cmp "$VERIFIED_WHEEL" "dist/$WHEEL_NAME"' in workflow_text
+    assert "bunx playwright install --with-deps chromium" in workflow_text
+    assert "cd ../tests/dockerlabs/command-extension-analytics" in workflow_text
+    assert "bun run typecheck" in workflow_text
+    assert "bun run guard:test:command-extension-analytics" in workflow_text
+    assert "installed-canary/command-extension-analytics.json" in workflow_text
+    assert ".artifacts/command-extension-analytics/*.png" in workflow_text
+    canonical_runner_text = (ROOT / "tests/dockerlabs/command-extension-analytics/runner.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "Bun.env.HOL_GUARD_LAB_EXPECTED_VERSION" in canonical_runner_text
     verifier_text = (ROOT / "scripts/installed_canary_proof.py").read_text(encoding="utf-8")
     assert 'f"{PROJECT} @ {wheel.resolve().as_uri()}#sha256={digest}"' in verifier_text
     assert 'read_text("direct_url.json")' in verifier_text
     assert 'direct_url_mapping["archive_info"]' in verifier_text
     assert ".dist-info/RECORD" in verifier_text
     runner_text = (ROOT / "scripts/run_installed_canary.py").read_text(encoding="utf-8")
+    assert "with closing(sqlite3.connect(store.path)) as connection" in runner_text
     assert 'shutil.which("bun")' in runner_text
     assert '"build",' in runner_text
     assert 'manifest["canonical_digests"]' in runner_text
@@ -179,7 +191,7 @@ def test_slice_manifest_binds_the_release_correction_chain_and_repo_relative_own
                 ownership[path] = _text(item["id"])
             ownership_counts[cast(int, item["pull_request"])] += 1
     assert observed_overlaps == overlap_exceptions.keys()
-    assert ownership_counts == {1761: 38, 1763: 35}
+    assert ownership_counts == {1761: 38, 1763: 36}
 
     gates = _mapping(manifest["gates"])
     review = _mapping(gates["review"])

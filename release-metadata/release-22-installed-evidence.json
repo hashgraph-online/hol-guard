@@ -206,6 +206,7 @@
         "tests/dockerlabs/command-extension-analytics/runner.test.ts",
         "tests/dockerlabs/command-extension-analytics/runner.ts",
         "tests/dockerlabs/command-extension-analytics/session-handoff.ts",
+        "tests/dockerlabs/command-extension-analytics/tcp_relay.py",
         "tests/dockerlabs/command-extension-analytics/tsconfig.json",
         "tests/test_guard_github_workflow_runtime_eval.py"
       ],

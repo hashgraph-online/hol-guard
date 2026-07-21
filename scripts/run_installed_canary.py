@@ -13,6 +13,7 @@ import tempfile
 import time
 from collections import defaultdict
 from collections.abc import Iterable
+from contextlib import closing
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -203,7 +204,7 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
                 f"Installed no-post-proof hook returned {completed.returncode}, expected prompt-free continuation"
             )
         store = GuardStore(guard_home, prime_policy_integrity=False)
-        with sqlite3.connect(store.path) as connection:
+        with closing(sqlite3.connect(store.path)) as connection:
             row = cast(
                 tuple[object, ...] | None,
                 connection.execute(

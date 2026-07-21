@@ -25,6 +25,20 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(command.slice(-2)).toEqual(["-d", "--wait"]);
   });
 
+  test("keeps Guard internal and publishes only the fixed-target relay", async () => {
+    const compose = await Bun.file(`${import.meta.dir}/docker-compose.yml`).text();
+    const guardBlock = compose.slice(compose.indexOf("  guard:"), compose.indexOf("  relay:"));
+    const relayStart = compose.indexOf("  relay:");
+    const relayBlock = compose.slice(relayStart, compose.indexOf("\nvolumes:", relayStart));
+    expect(guardBlock).toContain("- guard-analytics");
+    expect(guardBlock).not.toContain("ports:");
+    expect(relayBlock).toContain('["python", "/opt/guard-lab/tcp_relay.py"]');
+    expect(relayBlock).toContain('"127.0.0.1:${HOL_GUARD_LAB_PORT:?set by runner}:4781"');
+    expect(relayBlock).toContain("- guard-analytics\n      - host-access");
+    expect(relayBlock).toContain("condition: service_healthy");
+    expect(compose).toContain("guard-analytics:\n    internal: true");
+  });
+
   test("preserves exact wheel bindings when compose reparses the lab", async () => {
     const environment = {
       GUARD_TEST_PROJECT: "guard-command-analytics",
@@ -107,6 +121,7 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(dockerignore).toContain("!dist/*.whl");
     expect(dockerignore).toContain("installed_server.py");
     expect(dockerignore).toContain("github-cli-fixture.sh");
+    expect(dockerignore).toContain("tcp_relay.py");
     expect(compose).not.toContain("../../src");
     expect(compose).toContain("internal: true");
     for (const harness of ["codex", "claude-code", "cursor"]) {

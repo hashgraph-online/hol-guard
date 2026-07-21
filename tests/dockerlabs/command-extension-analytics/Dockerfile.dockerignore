@@ -6,3 +6,4 @@
 !tests/dockerlabs/command-extension-analytics/
 !tests/dockerlabs/command-extension-analytics/installed_server.py
 !tests/dockerlabs/command-extension-analytics/github-cli-fixture.sh
+!tests/dockerlabs/command-extension-analytics/tcp_relay.py
