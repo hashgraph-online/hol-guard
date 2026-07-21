@@ -18,8 +18,8 @@ import threading
 import time
 import uuid
 import webbrowser
-from collections.abc import Mapping
-from contextlib import suppress
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -402,7 +402,50 @@ _ROOT_STATIC_FILES = {
     "/favicon-16x16.png",
     "/favicon-32x32.png",
 }
-_CLAUDE_HOOK_EXECUTION_LOCK = threading.Lock()
+
+
+class _RuntimeHookExecutionGate:
+    """Allow concurrent hooks unless one temporarily mutates process environment."""
+
+    def __init__(self) -> None:
+        self._condition = threading.Condition()
+        self._readers = 0
+        self._writer = False
+        self._waiting_writers = 0
+
+    @contextmanager
+    def shared(self) -> Iterator[None]:
+        with self._condition:
+            while self._writer or self._waiting_writers > 0:
+                self._condition.wait()
+            self._readers += 1
+        try:
+            yield
+        finally:
+            with self._condition:
+                self._readers -= 1
+                if self._readers == 0:
+                    self._condition.notify_all()
+
+    @contextmanager
+    def exclusive(self) -> Iterator[None]:
+        with self._condition:
+            self._waiting_writers += 1
+            try:
+                while self._writer or self._readers > 0:
+                    self._condition.wait()
+            finally:
+                self._waiting_writers -= 1
+            self._writer = True
+        try:
+            yield
+        finally:
+            with self._condition:
+                self._writer = False
+                self._condition.notify_all()
+
+
+_RUNTIME_HOOK_EXECUTION_GATE = _RuntimeHookExecutionGate()
 _RUNTIME_HOOK_ENV_ALLOWLIST = frozenset(
     {
         "HOL_GUARD_MANAGED_CURSOR_HOOK",
@@ -4690,7 +4733,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             json=True,
         )
         buffer = io.StringIO()
-        with _CLAUDE_HOOK_EXECUTION_LOCK:
+        execution_guard = (
+            _RUNTIME_HOOK_EXECUTION_GATE.exclusive() if hook_env else _RUNTIME_HOOK_EXECUTION_GATE.shared()
+        )
+        with execution_guard:
             from ..cli.commands import run_guard_command
 
             original_env: dict[str, str | None] = {key: os.environ.get(key) for key in hook_env}
