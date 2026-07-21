@@ -182,6 +182,22 @@ def test_alpha_release_test_paths_exist() -> None:
                 assert (ROOT / argument).is_file(), f"release workflow references missing {argument}"
 
 
+def test_alpha_publication_requires_cross_platform_test_success() -> None:
+    jobs = _workflow(PUBLISH_WORKFLOW)["jobs"]
+
+    assert jobs["publish-alpha-testpypi"]["needs"] == [
+        "build",
+        "alpha-cross-platform",
+    ]
+    assert jobs["publish-alpha-pypi"]["needs"] == [
+        "build",
+        "alpha-cross-platform",
+        "publish-alpha-testpypi",
+    ]
+    for job_name in ("publish-alpha-testpypi", "publish-alpha-pypi"):
+        assert "needs.alpha-cross-platform.result == 'success'" in jobs[job_name]["if"]
+
+
 def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     jobs = workflow["jobs"]
@@ -191,6 +207,7 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     }
     assert jobs["publish-alpha-pypi"]["needs"] == [
         "build",
+        "alpha-cross-platform",
         "publish-alpha-testpypi",
     ]
     for job_name in (

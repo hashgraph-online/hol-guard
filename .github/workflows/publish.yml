@@ -547,8 +547,9 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       github.run_attempt == 1 &&
       github.event.inputs.release_channel == 'alpha' &&
-      needs.build.result == 'success'
-    needs: [build]
+      needs.build.result == 'success' &&
+      needs.alpha-cross-platform.result == 'success'
+    needs: [build, alpha-cross-platform]
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
@@ -644,8 +645,9 @@ jobs:
       github.run_attempt == 1 &&
       github.event.inputs.release_channel == 'alpha' &&
       needs.build.result == 'success' &&
-      needs.publish-alpha-testpypi.result == 'success'
-    needs: [build, publish-alpha-testpypi]
+      needs.publish-alpha-testpypi.result == 'success' &&
+      needs.alpha-cross-platform.result == 'success'
+    needs: [build, alpha-cross-platform, publish-alpha-testpypi]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
