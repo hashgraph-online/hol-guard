@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import TextIO, cast
 
+from ..approval_gate import ApprovalGateError
 from ..daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
 from ..daemon.manager import load_guard_daemon_auth_token, load_guard_daemon_url
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -158,7 +159,7 @@ def run_extension_controls_command(
         payload["proof_id"] = proof_id
         _emit(client.apply_extension_controls(payload), output_stream)
         return 0
-    except (ExtensionControlProofError, EOFError) as error:
+    except (ApprovalGateError, ExtensionControlProofError, EOFError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 4
     except GuardDaemonRequestError as error:

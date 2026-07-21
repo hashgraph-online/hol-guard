@@ -295,15 +295,16 @@ def _resolve_legacy_args(
 
 def main(argv: list[str] | None = None) -> int:
     program_name = Path(sys.argv[0]).name or "plugin-scanner"
+    requested_argv = argv or sys.argv[1:]
     if _is_guard_program(program_name):
         program_mode = "guard"
-    elif _is_scanner_program(program_name):
+    elif _is_scanner_program(program_name) and (not requested_argv or requested_argv[0] != "guard"):
         program_mode = "scanner"
     else:
         program_mode = "combined"
     parser = _build_parser(program_name, program_mode=program_mode)
     resolved_argv = _resolve_legacy_args(
-        argv or sys.argv[1:],
+        requested_argv,
         program_mode=program_mode,
         program_name=program_name,
     )

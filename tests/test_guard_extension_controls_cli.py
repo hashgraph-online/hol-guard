@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import argparse
 import io
+import sys
 from pathlib import Path
 
+import pytest
+
+from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli.extension_controls_commands import (
     _mutation_payload,
     run_extension_controls_command,
@@ -20,9 +24,7 @@ def _effective() -> dict[str, object]:
                 "kind": "local-admin",
                 "catalog_digest": "a" * 64,
                 "global_lockdown": False,
-                "controls": [
-                    {"target_kind": "extension", "target_id": "existing", "state": "disabled"}
-                ],
+                "controls": [{"target_kind": "extension", "target_id": "existing", "state": "disabled"}],
             }
         ],
     }
@@ -69,3 +71,17 @@ def test_status_without_daemon_is_read_only(tmp_path: Path) -> None:
 
     assert result == 2
     assert not guard_home.exists()
+
+
+@pytest.mark.parametrize("program_name", ["hol-guard", "plugin-scanner", "plugin-guard", "plugin-ecosystem-scanner"])
+def test_controls_help_is_available_from_every_installed_alias(
+    program_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", [program_name])
+    with pytest.raises(SystemExit) as exit_info:
+        main(["guard", "command", "controls", "--help"])
+
+    assert exit_info.value.code == 0
+    assert "{status,list,show,preview,apply,global-preview,global-apply,enroll}" in capsys.readouterr().out
