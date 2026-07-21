@@ -132,6 +132,7 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     attributes_text = (ROOT / ".gitattributes").read_text(encoding="utf-8")
     assert "/tests/guard_command_corpus*.py text eol=lf" in attributes_text
     assert "/tests/fixtures/guard-command-corpus/*.json text eol=lf" in attributes_text
+    assert "/src/codex_plugin_scanner/guard/daemon/static/index.html text eol=lf" in attributes_text
     assert '"$CANARY_PYTHON" -m pip install --no-compile' in workflow_text
     assert "uv pip install" not in workflow_text
 
