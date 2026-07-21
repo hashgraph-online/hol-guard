@@ -41,6 +41,8 @@ class SignedCloudControlPolicy:
             raise ValueError("revision must be a positive integer")
         if not self.signer_key_id or len(self.signer_key_id) > 128:
             raise ValueError("signer_key_id must be non-empty and bounded")
+        if type(self.status) is not ManagedPolicyStatus:
+            raise ValueError("status must be an exact ManagedPolicyStatus")
         if self.issued_at.tzinfo is None or self.valid_until.tzinfo is None:
             raise ValueError("managed policy timestamps must be timezone-aware")
         if self.valid_until <= self.issued_at:
@@ -86,10 +88,35 @@ def resolve_signed_cloud_controls(
     if candidate is not None:
         failure = _policy_failure(candidate, registry, current_time)
         if failure is None:
+            if (
+                last_known_good is not None
+                and candidate.policy_id == last_known_good.policy_id
+                and candidate.revision < last_known_good.revision
+                and _policy_failure(last_known_good, registry, current_time) is None
+            ):
+                return ManagedControlResolution(
+                    last_known_good.layer,
+                    last_known_good,
+                    (
+                        ControlResolverFailure(
+                            ResolverFailureCode.MANAGED_POLICY_ROLLBACK,
+                            ControlLayerKind.SIGNED_CLOUD,
+                        ),
+                    ),
+                    True,
+                )
             return ManagedControlResolution(candidate.layer, candidate, (), False)
     elif failure is None:
         failure = ResolverFailureCode.MANAGED_POLICY_UNAVAILABLE
 
+    revoked_cached_policy = (
+        candidate is not None
+        and failure is ResolverFailureCode.MANAGED_POLICY_REVOKED
+        and last_known_good is not None
+        and candidate.policy_id == last_known_good.policy_id
+    )
+    if revoked_cached_policy:
+        last_known_good = None
     if last_known_good is not None and _policy_failure(last_known_good, registry, current_time) is None:
         return ManagedControlResolution(
             last_known_good.layer,

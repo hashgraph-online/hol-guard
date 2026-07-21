@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
 import pytest
 
@@ -44,14 +45,16 @@ def _layer(*, lockdown: bool = False, digest: str | None = None) -> ExtensionCon
 
 def _policy(
     *,
+    policy_id: str = "managed-policy-1",
+    revision: int = 7,
     status: ManagedPolicyStatus = ManagedPolicyStatus.ACTIVE,
     issued_at: datetime = _NOW - timedelta(hours=1),
     valid_until: datetime = _NOW + timedelta(hours=1),
     layer: ExtensionControlLayer | None = None,
 ) -> SignedCloudControlPolicy:
     return SignedCloudControlPolicy(
-        policy_id="managed-policy-1",
-        revision=7,
+        policy_id=policy_id,
+        revision=revision,
         issued_at=issued_at,
         valid_until=valid_until,
         signer_key_id="fleet-signing-key-1",
@@ -108,6 +111,45 @@ def test_unavailable_resolver_retains_valid_last_known_good_floor() -> None:
     assert result.policy is cached
     assert result.using_last_known_good is True
     assert result.failures[0].code is ResolverFailureCode.MANAGED_POLICY_UNAVAILABLE
+
+
+def test_policy_status_must_be_exact_enum() -> None:
+    with pytest.raises(ValueError, match="exact ManagedPolicyStatus"):
+        _policy(status=cast(ManagedPolicyStatus, "revoked"))
+
+
+def test_older_candidate_cannot_replace_last_known_good_revision_floor() -> None:
+    cached = _policy(revision=7, layer=_layer(lockdown=True))
+    candidate = _policy(revision=6)
+
+    result = resolve_signed_cloud_controls(
+        _Resolver(candidate),
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        now=_NOW,
+        last_known_good=cached,
+    )
+
+    assert result.policy is cached
+    assert result.layer.global_lockdown is True
+    assert result.using_last_known_good is True
+    assert result.failures[0].code is ResolverFailureCode.MANAGED_POLICY_ROLLBACK
+
+
+def test_revoked_policy_cannot_restore_same_policy_from_cache() -> None:
+    cached = _policy(status=ManagedPolicyStatus.ACTIVE)
+    revoked = _policy(status=ManagedPolicyStatus.REVOKED, revision=8)
+
+    result = resolve_signed_cloud_controls(
+        _Resolver(revoked),
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        now=_NOW,
+        last_known_good=cached,
+    )
+
+    assert result.policy is None
+    assert result.layer.global_lockdown is True
+    assert result.using_last_known_good is False
+    assert result.failures[0].code is ResolverFailureCode.MANAGED_POLICY_REVOKED
 
 
 def test_managed_audit_payload_excludes_actor_proof_and_command_data() -> None:

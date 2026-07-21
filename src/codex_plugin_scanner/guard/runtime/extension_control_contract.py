@@ -53,6 +53,7 @@ class ResolverFailureCode(str, Enum):
     MANAGED_POLICY_NOT_YET_VALID = "managed-policy-not-yet-valid"
     MANAGED_POLICY_EXPIRED = "managed-policy-expired"
     MANAGED_POLICY_REVOKED = "managed-policy-revoked"
+    MANAGED_POLICY_ROLLBACK = "managed-policy-rollback"
 
 
 @dataclass(frozen=True, slots=True, order=True)
