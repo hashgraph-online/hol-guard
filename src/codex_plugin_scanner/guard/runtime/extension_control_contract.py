@@ -49,6 +49,10 @@ class ResolverFailureCode(str, Enum):
     CATALOG_UNAVAILABLE = "catalog-unavailable"
     INPUT_LIMIT_EXCEEDED = "input-limit-exceeded"
     NON_CANONICAL_TARGET = "non-canonical-target"
+    MANAGED_POLICY_UNAVAILABLE = "managed-policy-unavailable"
+    MANAGED_POLICY_NOT_YET_VALID = "managed-policy-not-yet-valid"
+    MANAGED_POLICY_EXPIRED = "managed-policy-expired"
+    MANAGED_POLICY_REVOKED = "managed-policy-revoked"
 
 
 @dataclass(frozen=True, slots=True, order=True)
