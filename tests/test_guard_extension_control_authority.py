@@ -26,8 +26,11 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControlLayer,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_proof import (
+    ExtensionControlEnrollment,
+    ExtensionControlEnrollmentProof,
     ExtensionControlMutation,
     ExtensionControlProof,
+    issue_extension_control_enrollment_proof,
     issue_extension_control_proof,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -63,7 +66,20 @@ class MemorySecretStore:
         self.values.pop(secret_id, None)
 
 
-def _store(tmp_path: Path, secrets: MemorySecretStore) -> GuardStore:
+@pytest.fixture(autouse=True)
+def _allow_local_terminal_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
+        lambda _enrollment: None,
+    )
+
+
+def _store(
+    tmp_path: Path,
+    secrets: MemorySecretStore,
+    *,
+    enroll: bool = True,
+) -> GuardStore:
     store = GuardStore(tmp_path, prime_policy_integrity=False)
     update_settings(
         tmp_path,
@@ -75,7 +91,42 @@ def _store(tmp_path: Path, secrets: MemorySecretStore) -> GuardStore:
         },
     )
     store._extension_control_authority_secret_store = secrets
+    if enroll:
+        _enroll(store)
     return store
+
+
+def _enrollment_proof(
+    store: GuardStore,
+    *,
+    actor_id: str = "local-admin",
+    nonce: str = "enrollment-nonce",
+) -> ExtensionControlEnrollmentProof:
+    enrollment = ExtensionControlEnrollment(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        actor_id=actor_id,
+        nonce=nonce,
+    )
+    return issue_extension_control_enrollment_proof(
+        store.guard_home,
+        enrollment,
+        approval_gate_input=ApprovalGateInput(password=_PASSWORD),
+        session_nonce=f"session-{nonce}",
+    )
+
+
+def _enroll(
+    store: GuardStore,
+    *,
+    actor_id: str = "local-admin",
+    nonce: str = "enrollment-nonce",
+) -> ExtensionControlAuthorityView:
+    return store.enroll_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        actor_id=actor_id,
+        nonce=nonce,
+        proof=_enrollment_proof(store, actor_id=actor_id, nonce=nonce),
+    )
 
 
 def _disabled_layer() -> ExtensionControlLayer:
@@ -143,35 +194,42 @@ def _commit(
     )
 
 
-def test_bootstrap_occurs_only_when_database_and_anchor_are_both_absent(tmp_path: Path) -> None:
+def test_first_enrollment_requires_one_trusted_local_proof(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
-    store = _store(tmp_path, secrets)
+    store = _store(tmp_path, secrets, enroll=False)
+    digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
 
-    initial = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
-    assert initial.health is AuthorityHealth.PROTECTED
+    initial = store.read_extension_control_authority(catalog_digest=digest)
+    assert initial.health is AuthorityHealth.UNENROLLED
     assert initial.revision == 0
     assert initial.layers == ()
+    assert secrets.values == {}
 
-    with store._connect() as connection:
-        connection.execute("delete from extension_control_authority_snapshot")
-    missing_database = store.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    proof = _enrollment_proof(store)
+    enrolled = store.enroll_extension_control_authority(
+        catalog_digest=digest,
+        actor_id="local-admin",
+        nonce="enrollment-nonce",
+        proof=proof,
     )
-    assert missing_database.health is AuthorityHealth.TAMPERED
-    assert missing_database.layers_for(ControlSurface.COMMAND_EVALUATION)[0].global_lockdown is True
+    assert enrolled.health is AuthorityHealth.PROTECTED
+    persisted_database = (tmp_path / "guard.db").read_bytes()
+    for private_value in (
+        proof.proof_id,
+        proof.grant.grant_id,
+        proof.actor_id,
+        proof.nonce,
+        proof.session_nonce,
+    ):
+        assert private_value.encode() not in persisted_database
 
-    second_secrets = MemorySecretStore()
-    second_store = _store(tmp_path / "both-missing", second_secrets)
-    second_store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
-    anchor_ref = next(secret_id for secret_id in second_secrets.values if secret_id.endswith(":anchor"))
-    del second_secrets.values[anchor_ref]
-    with second_store._connect() as connection:
-        connection.execute("delete from extension_control_authority_snapshot")
-    missing_both_with_existing_key = second_store.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    )
-    assert missing_both_with_existing_key.health is AuthorityHealth.TAMPERED
-    assert anchor_ref not in second_secrets.values
+    with pytest.raises(ExtensionControlAuthorityError, match="already enrolled"):
+        store.enroll_extension_control_authority(
+            catalog_digest=digest,
+            actor_id="local-admin",
+            nonce="second-enrollment",
+            proof=_enrollment_proof(store, nonce="second-enrollment"),
+        )
 
 
 def test_authenticated_snapshot_transition_and_anchor_detect_sqlite_tamper(tmp_path: Path) -> None:
