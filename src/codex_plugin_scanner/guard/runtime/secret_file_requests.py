@@ -1564,7 +1564,7 @@ def _destructive_shell_tool_action_request(
             canonical_command=canonical_command,
             interpreter_executable_identities=interpreter_executable_identities,
         )
-    if not execution_context.complete and cwd is None and home_dir is not None:
+    if not execution_context.complete and home_dir is not None:
         developer_execution_context = low_risk_compound_developer_execution_context(
             detection_command_text,
             home_dir=home_dir,

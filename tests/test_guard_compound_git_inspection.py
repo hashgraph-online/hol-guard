@@ -38,6 +38,18 @@ def test_compound_git_refresh_and_inspection_is_evaluated_as_one_unit(tmp_path: 
     assert artifact is None
 
 
+@pytest.mark.parametrize("repository", ("projects/repository", "./projects/repository", "."))
+def test_compound_git_inspection_accepts_bounded_relative_repository_paths(
+    tmp_path: Path,
+    repository: str,
+) -> None:
+    home = tmp_path / "home"
+    workspace = home / "workspace"
+    (workspace / "projects" / "repository").mkdir(parents=True)
+
+    assert _artifact(f"cd {workspace} && git -C {repository} status --short | head -20", home=home) is None
+
+
 @pytest.mark.parametrize(
     "suffix",
     (
@@ -45,6 +57,10 @@ def test_compound_git_refresh_and_inspection_is_evaluated_as_one_unit(tmp_path: 
         "git -C repository reset --hard origin/main",
         "git -C repository fetch origin main:refs/heads/main",
         "git -C ../outside fetch origin main",
+        "git -C projects/../../outside status --short",
+        "git -C /outside status --short",
+        "git -C ~/outside status --short",
+        "git -C projects/$TARGET status --short",
         "git -C repository status --short | sh",
         "git -C repository status --short > report.txt",
     ),

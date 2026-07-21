@@ -8,7 +8,13 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _h
 from codex_plugin_scanner.guard.models import GuardArtifact
 
 
-def _artifact(command: str, *, home: Path, harness: str = "pi") -> GuardArtifact | None:
+def _artifact(
+    command: str,
+    *,
+    home: Path,
+    harness: str = "pi",
+    workspace: Path | None = None,
+) -> GuardArtifact | None:
     return _hook_runtime_artifact(
         harness=harness,
         payload={
@@ -19,7 +25,7 @@ def _artifact(command: str, *, home: Path, harness: str = "pi") -> GuardArtifact
         action_envelope=None,
         home_dir=home,
         guard_home=home / ".guard",
-        workspace=None,
+        workspace=workspace,
     )
 
 
@@ -39,6 +45,52 @@ def test_harnesses_evaluate_compound_source_inspection_as_one_unit(
     )
 
     assert artifact is None
+
+
+@pytest.mark.parametrize("harness", ("pi", "codex", "claude-code", "gemini", "cursor"))
+def test_harnesses_recover_safe_inspection_after_cross_workspace_cd(
+    tmp_path: Path,
+    harness: str,
+) -> None:
+    home = tmp_path / "home"
+    active_workspace = home / "projects" / "active"
+    inspected_workspace = home / "projects" / "inspected"
+    active_workspace.mkdir(parents=True)
+    (inspected_workspace / "src").mkdir(parents=True)
+
+    artifact = _artifact(
+        f"cd {inspected_workspace} && grep -n TODO src/example.ts | head -20",
+        home=home,
+        harness=harness,
+        workspace=active_workspace,
+    )
+
+    assert artifact is None
+
+
+def test_cross_workspace_recovery_preserves_mutating_command_review(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    active_workspace = home / "projects" / "active"
+    inspected_workspace = home / "projects" / "inspected"
+    active_workspace.mkdir(parents=True)
+    inspected_workspace.mkdir(parents=True)
+
+    assert (
+        _artifact(
+            f"cd {inspected_workspace} && git push origin main",
+            home=home,
+            workspace=active_workspace,
+        )
+        is not None
+    )
+    assert (
+        _artifact(
+            f"cd {inspected_workspace} && vitest run src/example.test.ts --maxWorkers=1",
+            home=home,
+            workspace=active_workspace,
+        )
+        is not None
+    )
 
 
 def test_compound_git_and_filesystem_inspection_is_one_unit(tmp_path: Path) -> None:

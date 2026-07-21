@@ -8,7 +8,7 @@ from typing import Final
 from .shell_execution_context import ShellExecutionContext, ShellExecutionSegment
 
 _REF: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,255}")
-_REPOSITORY_DIR: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+_REPOSITORY_PATH_COMPONENT: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 _BOUND: Final = 1000
 
 
@@ -58,7 +58,7 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
         return False
     operation_index = 1
     if tokens[1] == "-C":
-        if len(tokens) < 4 or _REPOSITORY_DIR.fullmatch(tokens[2]) is None:
+        if len(tokens) < 4 or not _safe_repository_path(tokens[2]):
             return False
         operation_index = 3
     operation = tokens[operation_index]
@@ -83,6 +83,20 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
             arg in {"--stat", "--oneline", "--name-only", "--name-status", "HEAD"} or _safe_ref(arg) for arg in args
         )
     return False
+
+
+def _safe_repository_path(value: str) -> bool:
+    if value == ".":
+        return True
+    if not value or len(value) > 512 or value.startswith(("/", "~")) or _dynamic(value):
+        return False
+    components = value.split("/")
+    if components[:1] == ["."]:
+        components = components[1:]
+    return bool(components) and all(
+        component not in {"", ".", ".."} and _REPOSITORY_PATH_COMPONENT.fullmatch(component) is not None
+        for component in components
+    )
 
 
 def _without_stderr_merge(tokens: tuple[str, ...]) -> tuple[str, ...] | None:
