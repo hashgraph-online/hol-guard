@@ -265,6 +265,43 @@ def _configure_guard_local_parsers(
     setup_parser.add_argument("--detect", action="store_true", required=True)
     setup_parser.add_argument("--workspace", default=".")
     setup_parser.add_argument("--json", action="store_true")
+    controls_parser = command_subparsers.add_parser(
+        "controls",
+        help="Inspect or change extension controls",
+    )
+    controls_subparsers = controls_parser.add_subparsers(
+        dest="controls_command",
+        required=True,
+    )
+    controls_subparsers.add_parser("status", help="Show authority status")
+    controls_subparsers.add_parser("list", help="List catalog extensions")
+    controls_show = controls_subparsers.add_parser("show", help="Show one catalog target")
+    controls_show.add_argument("target_id")
+    for action in ("preview", "apply"):
+        mutation_parser = controls_subparsers.add_parser(action, help=f"{action.title()} a control")
+        mutation_parser.add_argument("target_id")
+        mutation_parser.add_argument(
+            "--target-kind",
+            choices=("extension", "permission"),
+            default="extension",
+        )
+        mutation_parser.add_argument(
+            "--state",
+            choices=("enabled", "disabled"),
+            required=True,
+        )
+    for action in ("global-preview", "global-apply"):
+        global_parser = controls_subparsers.add_parser(action, help=f"{action.title()} lockdown")
+        global_parser.add_argument(
+            "--state",
+            choices=("enabled", "disabled"),
+            required=True,
+        )
+    enroll_parser = controls_subparsers.add_parser(
+        "enroll",
+        help="Enroll this local authority using direct terminal confirmation",
+    )
+    enroll_parser.add_argument("--actor", default="local-admin")
 
     preflight_parser = guard_subparsers.add_parser(
         "preflight",
