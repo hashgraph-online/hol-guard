@@ -1855,6 +1855,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             in {
                 "/v1/extension-controls/preview",
                 "/v1/extension-controls/apply",
+                "/v1/extension-controls/refresh",
             }
             and not self._header_token_is_valid()
         ):
@@ -1863,6 +1864,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path in {
             "/v1/extension-controls/preview",
             "/v1/extension-controls/apply",
+            "/v1/extension-controls/refresh",
         }:
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
@@ -1937,13 +1939,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path in {
             "/v1/extension-controls/preview",
             "/v1/extension-controls/apply",
+            "/v1/extension-controls/refresh",
         }:
             try:
-                response = (
-                    self._daemon_server().extension_control_api.preview(payload)
-                    if parsed.path.endswith("/preview")
-                    else self._daemon_server().extension_control_api.apply(payload)
-                )
+                if parsed.path.endswith("/preview"):
+                    response = self._daemon_server().extension_control_api.preview(payload)
+                elif parsed.path.endswith("/apply"):
+                    response = self._daemon_server().extension_control_api.apply(payload)
+                else:
+                    response = self._daemon_server().extension_control_api.refresh()
             except ExtensionControlApiError as error:
                 self._write_json(error.to_payload(), status=error.status)
                 return

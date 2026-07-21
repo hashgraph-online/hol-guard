@@ -162,6 +162,9 @@ class GuardSurfaceDaemonClient:
     def effective_extension_controls(self) -> dict[str, object]:
         return self._get("/v1/extension-controls/effective", timeout=_DEFAULT_REQUEST_TIMEOUT_S)
 
+    def refresh_extension_controls(self) -> dict[str, object]:
+        return self._post("/v1/extension-controls/refresh", {})
+
     def preview_extension_controls(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post("/v1/extension-controls/preview", payload)
 

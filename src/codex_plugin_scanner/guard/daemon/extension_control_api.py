@@ -132,6 +132,13 @@ class ExtensionControlApiService:
             ],
         }
 
+    def refresh(self) -> dict[str, object]:
+        view = self._store.read_extension_control_authority(
+            catalog_digest=self._registry.catalog_digest,
+        )
+        _ = self._runtime.refresh(view)
+        return self.effective()
+
     def preview(self, payload: dict[str, object]) -> dict[str, object]:
         current = self._runtime.current()
         mutation = self._mutation_from_payload(payload)

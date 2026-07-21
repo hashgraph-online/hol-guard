@@ -216,6 +216,8 @@ def test_http_routes_authenticate_before_reading_sensitive_post_body(tmp_path: P
         connection.endheaders()
         response = connection.getresponse()
         client = GuardSurfaceDaemonClient(f"http://127.0.0.1:{daemon.port}", auth_token)
+        refreshed = client.refresh_extension_controls()
+        assert refreshed["health"] == "unenrolled"
         with pytest.raises(GuardDaemonRequestError) as unavailable:
             client.preview_extension_controls(_mutation_payload(revision=0))
         assert unavailable.value.status == 423
