@@ -51,9 +51,10 @@ def validate_alpha_phase_open(release_train: str, existing_versions: Iterable[st
 
 def compute_alpha_release_version(release_train: str, existing_versions: Iterable[str]) -> str:
     alpha_numbers = _alpha_versions(release_train, existing_versions)
+    version_prefix = ".".join(str(part) for part in SUPPORTED_TRAINS[release_train])
 
     next_alpha = max(alpha_numbers, default=0) + 1
-    return f"{release_train}.0a{next_alpha}"
+    return f"{version_prefix}a{next_alpha}"
 
 
 def main() -> int:
@@ -69,7 +70,7 @@ def main() -> int:
         items = cast(list[object], payload)
         if not all(isinstance(item, str) for item in items):
             raise ValueError("Registry versions must be a JSON array of strings")
-        existing_versions = [item for item in items if isinstance(item, str)]
+        existing_versions = cast(list[str], items)
         release_train = cast(str, args.release_train)
         validate_phase_only = cast(bool, args.validate_phase_only)
         if validate_phase_only:
