@@ -1458,11 +1458,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "resume":
             if not self._header_token_is_valid():
-                self._write_json(
-                    {"error": "unauthorized"},
-                    status=401,
-                    extra_headers=self._cors_headers_for_request(),
-                )
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
                 return
             self._handle_request_resume_read(path_parts[2])
             return
@@ -1669,11 +1665,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
         if not self._header_token_is_valid():
-            self._write_json(
-                {"error": "unauthorized"},
-                status=401,
-                extra_headers=self._cors_headers_for_request(),
-            )
+            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
         store = self.server.store  # type: ignore[attr-defined]
         if parsed.path == "/v1/evidence":
@@ -1736,6 +1728,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 host = self._daemon_server().daemon_host()
                 port = self._daemon_server().daemon_port()
                 reconnect_url = _build_local_url(host, port, "/#/reconnect")
+                self._record_auth_audit_event()
                 self._write_json(
                     {
                         "error": "unauthorized",

@@ -1573,6 +1573,28 @@ class TestGuardSurfaceServer:
         events = store.list_events(event_name="daemon.auth.unauthorized")
         assert events[-1]["payload"]["path"] == "/v1/receipts"
 
+    def test_guard_daemon_delete_endpoint_requires_auth_and_records_audit(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/evidence",
+                method="DELETE",
+            )
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request, timeout=5)
+        finally:
+            daemon.stop()
+
+        assert error.value.code == 401
+        payload = json.loads(error.value.read().decode("utf-8"))
+        assert payload["error"] == "unauthorized"
+        events = store.list_events(event_name="daemon.auth.unauthorized")
+        assert events[-1]["payload"]["method"] == "DELETE"
+        assert events[-1]["payload"]["path"] == "/v1/evidence"
+
     def test_guard_daemon_claude_hook_endpoint_accepts_empty_allow_response(self, tmp_path) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
