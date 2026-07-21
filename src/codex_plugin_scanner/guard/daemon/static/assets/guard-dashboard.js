@@ -16740,7 +16740,9 @@ const PENDING_QUEUE_PAGE_LIMIT = 200;
 const MAX_PENDING_QUEUE_PAGES = 50;
 async function fetchAllPendingRequests(onPage) {
   if (isGuardDemoMode()) {
-    return getDemoRequests();
+    const demoRequests2 = getDemoRequests();
+    onPage?.(demoRequests2);
+    return demoRequests2;
   }
   const items = [];
   let cursor;
