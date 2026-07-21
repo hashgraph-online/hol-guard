@@ -1849,7 +1849,7 @@ def low_risk_compound_developer_execution_context(
         args = list(segment.tokens[command_index + 1 :])
         segment_root = segment.effective_cwd or home_dir
         if not _path_text_is_within_root(os.fspath(segment_root), home_dir) or any(
-            _absolute_shell_token_escapes_root(arg, home_dir) for arg in args
+            _shell_token_escapes_root(arg, cwd=segment_root, root=home_dir) for arg in args
         ):
             return None
         if segment.directory_operation is not None:
@@ -1901,11 +1901,20 @@ def low_risk_compound_developer_execution_context(
     return context if saw_inspection else None
 
 
-def _absolute_shell_token_escapes_root(token: str, root: Path) -> bool:
+def _shell_token_escapes_root(token: str, *, cwd: Path, root: Path) -> bool:
     stripped = token.strip().strip("'\"")
-    if not stripped or not Path(stripped).is_absolute():
+    if not stripped:
         return False
-    return not _path_text_is_within_root(stripped, root)
+    candidate = Path(stripped)
+    if stripped.startswith("~/"):
+        candidate = root / stripped[2:]
+    elif stripped.startswith("~"):
+        return True
+    elif not candidate.is_absolute():
+        if ".." not in candidate.parts:
+            return False
+        candidate = cwd / candidate
+    return not _path_text_is_within_root(os.fspath(candidate), root)
 
 
 def classify_github_shell_capabilities(

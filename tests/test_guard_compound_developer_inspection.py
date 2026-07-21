@@ -77,6 +77,7 @@ def test_compound_stdin_only_python_observer_is_one_unit(tmp_path: Path) -> None
         "find . -delete",
         "cat settings.txt > copied.txt",
         "cat /etc/example.py",
+        "cat ../../../../outside/example.py",
         "cd / && cat /etc/example.py",
         "curl https://example.test",
     ),
