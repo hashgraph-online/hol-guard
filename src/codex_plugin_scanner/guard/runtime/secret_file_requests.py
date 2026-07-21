@@ -1586,6 +1586,28 @@ def _destructive_shell_tool_action_request(
             if raw_command_text is not None and raw_command_text != detection_command_text
             else home_execution_context
         )
+        if not home_execution_context.complete and cwd is None:
+            fallback_home_execution_context = model_shell_execution_context(
+                detection_command_text,
+                cwd=home_dir,
+                workspace_root=home_dir,
+                home_dir=home_dir,
+            )
+            fallback_raw_home_execution_context = (
+                model_shell_execution_context(
+                    raw_command_text,
+                    cwd=home_dir,
+                    workspace_root=home_dir,
+                    home_dir=home_dir,
+                )
+                if raw_command_text is not None and raw_command_text != detection_command_text
+                else fallback_home_execution_context
+            )
+            if _starts_with_literal_cd(fallback_home_execution_context) and _starts_with_literal_cd(
+                fallback_raw_home_execution_context
+            ):
+                home_execution_context = fallback_home_execution_context
+                raw_home_execution_context = fallback_raw_home_execution_context
         if home_execution_context.complete and raw_home_execution_context.complete:
             execution_context = home_execution_context
             raw_execution_context = raw_home_execution_context
@@ -1755,6 +1777,15 @@ def _shell_execution_context_validation_reason(context: ShellExecutionContext) -
         if reason is not None:
             return reason
     return None
+
+
+def _starts_with_literal_cd(context: ShellExecutionContext) -> bool:
+    if not context.complete or not context.segments:
+        return False
+    first = context.segments[0]
+    if first.control_before or first.directory_operation != "cd" or not first.tokens:
+        return False
+    return first.tokens[0].strip("\"'").lower() == "cd"
 
 
 def classify_github_shell_capabilities(
