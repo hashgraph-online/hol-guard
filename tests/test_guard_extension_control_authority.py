@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -23,8 +25,15 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControl,
     ExtensionControlLayer,
 )
+from codex_plugin_scanner.guard.runtime.extension_control_proof import (
+    ExtensionControlMutation,
+    ExtensionControlProof,
+    issue_extension_control_proof,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import SystemKeyringSecretStore
+
+_PASSWORD = "correct horse battery staple"
 
 
 class MemorySecretStore:
@@ -56,6 +65,15 @@ class MemorySecretStore:
 
 def _store(tmp_path: Path, secrets: MemorySecretStore) -> GuardStore:
     store = GuardStore(tmp_path, prime_policy_integrity=False)
+    update_settings(
+        tmp_path,
+        {
+            "enabled": True,
+            "new_password": _PASSWORD,
+            "confirm_password": _PASSWORD,
+            "cooldown_seconds": 0,
+        },
+    )
     store._extension_control_authority_secret_store = secrets
     return store
 
@@ -76,6 +94,30 @@ def _disabled_layer() -> ExtensionControlLayer:
     )
 
 
+def _proof(
+    store: GuardStore,
+    layers: tuple[ExtensionControlLayer, ...],
+    *,
+    revision: int,
+    key: str,
+    actor_id: str,
+    nonce: str,
+) -> ExtensionControlProof:
+    return issue_extension_control_proof(
+        store.guard_home,
+        ExtensionControlMutation(
+            previous_revision=revision,
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            layers=layers,
+            actor_id=actor_id,
+            idempotency_key=key,
+            nonce=nonce,
+        ),
+        approval_gate_input=ApprovalGateInput(password=_PASSWORD),
+        session_nonce=f"session-{key}-{nonce}",
+    )
+
+
 def _commit(
     store: GuardStore,
     *,
@@ -90,6 +132,14 @@ def _commit(
         expected_revision=revision,
         idempotency_key=key,
         nonce=f"nonce-{key}",
+        proof=_proof(
+            store,
+            (_disabled_layer(),),
+            revision=revision,
+            key=key,
+            actor_id=actor_id,
+            nonce=f"nonce-{key}",
+        ),
     )
 
 
@@ -152,6 +202,14 @@ def test_authenticated_historical_transition_fields_detect_tamper(tmp_path: Path
         expected_revision=1,
         idempotency_key="change-2",
         nonce="nonce-change-2",
+        proof=_proof(
+            store,
+            (),
+            revision=1,
+            key="change-2",
+            actor_id="local-admin",
+            nonce="nonce-change-2",
+        ),
     )
     with store._connect() as connection:
         connection.execute(
@@ -261,6 +319,14 @@ def test_idempotent_retry_after_prepared_transition_commits_once(tmp_path: Path)
         expected_revision=0,
         idempotency_key="change-1",
         nonce="nonce-change-1",
+        proof=_proof(
+            store,
+            (_disabled_layer(),),
+            revision=0,
+            key="change-1",
+            actor_id="local-admin",
+            nonce="nonce-change-1",
+        ),
     )
 
     assert retried.health is AuthorityHealth.PROTECTED
@@ -302,6 +368,14 @@ def test_transition_records_are_purpose_separated_and_replay_safe(tmp_path: Path
         expected_revision=0,
         idempotency_key="change-1",
         nonce="nonce-change-1",
+        proof=_proof(
+            store,
+            (_disabled_layer(),),
+            revision=0,
+            key="change-1",
+            actor_id="local-admin",
+            nonce="nonce-change-1",
+        ),
     )
     assert replay.revision == 1
 
@@ -372,6 +446,14 @@ def test_idempotency_key_cannot_replay_different_transition(tmp_path: Path) -> N
             expected_revision=0,
             idempotency_key="change-1",
             nonce="different-nonce",
+            proof=_proof(
+                store,
+                (),
+                revision=0,
+                key="change-1",
+                actor_id="different-actor",
+                nonce="different-nonce",
+            ),
         )
 
 
@@ -389,3 +471,174 @@ def test_oversized_persisted_layers_fail_closed_without_deserialization(tmp_path
     view = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
 
     assert view.health is AuthorityHealth.TAMPERED
+
+
+def test_authority_proof_is_consumed_once_and_only_private_hash_is_persisted(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    store.read_extension_control_authority(catalog_digest=digest)
+    layers = (_disabled_layer(),)
+    proof = _proof(
+        store,
+        layers,
+        revision=0,
+        key="change-proof",
+        actor_id="local-admin",
+        nonce="nonce-proof",
+    )
+
+    committed = store.commit_extension_control_layers(
+        layers,
+        catalog_digest=digest,
+        actor_id="local-admin",
+        expected_revision=0,
+        idempotency_key="change-proof",
+        nonce="nonce-proof",
+        proof=proof,
+    )
+
+    assert committed.revision == 1
+    with store._connect() as connection:
+        row = connection.execute(
+            "select proof_id_hash, mutation_digest, transition_revision, consumed_at "
+            "from extension_control_authority_proof"
+        ).fetchone()
+    assert row is not None
+    assert row["proof_id_hash"] != proof.proof_id
+    assert row["mutation_digest"] == proof.canonical_diff_digest
+    assert row["transition_revision"] == 1
+    assert row["consumed_at"] is not None
+
+    with pytest.raises(ExtensionControlAuthorityError, match="proof replay"):
+        store.commit_extension_control_layers(
+            layers,
+            catalog_digest=digest,
+            actor_id="local-admin",
+            expected_revision=0,
+            idempotency_key="change-proof",
+            nonce="nonce-proof",
+            proof=proof,
+        )
+
+
+def test_mismatched_authority_proof_cannot_create_transition(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    store.read_extension_control_authority(catalog_digest=digest)
+    proof = _proof(
+        store,
+        (),
+        revision=0,
+        key="change-mismatch",
+        actor_id="local-admin",
+        nonce="nonce-mismatch",
+    )
+
+    with pytest.raises(PermissionError, match="does not match mutation"):
+        store.commit_extension_control_layers(
+            (_disabled_layer(),),
+            catalog_digest=digest,
+            actor_id="local-admin",
+            expected_revision=0,
+            idempotency_key="change-mismatch",
+            nonce="nonce-mismatch",
+            proof=proof,
+        )
+
+    with store._connect() as connection:
+        assert connection.execute("select count(*) from extension_control_authority_transition").fetchone()[0] == 0
+        assert connection.execute("select count(*) from extension_control_authority_proof").fetchone()[0] == 0
+
+
+def test_failed_proof_reservation_preserves_grant_for_retry(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    store.read_extension_control_authority(catalog_digest=digest)
+    layers = (_disabled_layer(),)
+    proof = _proof(
+        store,
+        layers,
+        revision=0,
+        key="change-reservation-retry",
+        actor_id="local-admin",
+        nonce="nonce-reservation-retry",
+    )
+    with store._connect() as connection:
+        connection.execute(
+            """
+            create trigger fail_extension_control_proof_reservation
+            before insert on extension_control_authority_proof
+            begin
+                select raise(abort, 'injected proof reservation failure');
+            end
+            """
+        )
+
+    with pytest.raises(sqlite3.IntegrityError, match="injected proof reservation failure"):
+        store.commit_extension_control_layers(
+            layers,
+            catalog_digest=digest,
+            actor_id="local-admin",
+            expected_revision=0,
+            idempotency_key="change-reservation-retry",
+            nonce="nonce-reservation-retry",
+            proof=proof,
+        )
+
+    with store._connect() as connection:
+        connection.execute("drop trigger fail_extension_control_proof_reservation")
+        assert connection.execute("select count(*) from extension_control_authority_proof").fetchone()[0] == 0
+        assert connection.execute("select count(*) from extension_control_authority_transition").fetchone()[0] == 0
+
+    committed = store.commit_extension_control_layers(
+        layers,
+        catalog_digest=digest,
+        actor_id="local-admin",
+        expected_revision=0,
+        idempotency_key="change-reservation-retry",
+        nonce="nonce-reservation-retry",
+        proof=proof,
+    )
+    assert committed.revision == 1
+
+
+def test_prepared_transition_retries_with_same_reserved_proof(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    store.read_extension_control_authority(catalog_digest=digest)
+    layers = (_disabled_layer(),)
+    proof = _proof(
+        store,
+        layers,
+        revision=0,
+        key="change-prepared-retry",
+        actor_id="local-admin",
+        nonce="nonce-prepared-retry",
+    )
+    secrets.fail_anchor_set_number = secrets.anchor_set_count + 1
+
+    with pytest.raises(ExtensionControlAuthorityError, match="anchor unavailable"):
+        store.commit_extension_control_layers(
+            layers,
+            catalog_digest=digest,
+            actor_id="local-admin",
+            expected_revision=0,
+            idempotency_key="change-prepared-retry",
+            nonce="nonce-prepared-retry",
+            proof=proof,
+        )
+
+    committed = store.commit_extension_control_layers(
+        layers,
+        catalog_digest=digest,
+        actor_id="local-admin",
+        expected_revision=0,
+        idempotency_key="change-prepared-retry",
+        nonce="nonce-prepared-retry",
+        proof=proof,
+    )
+    assert committed.revision == 1
