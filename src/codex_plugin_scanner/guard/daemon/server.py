@@ -6593,6 +6593,8 @@ class GuardDaemonServer:
         self._command_queue_worker: CommandQueueWorker | None = None
         self._headless_cloud_sync_thread: threading.Thread | None = None
         self._command_activity_maintenance_thread: threading.Thread | None = None
+        self._extension_control_refresh_thread: threading.Thread | None = None
+        self._extension_control_refresh_interval_seconds = 0.25
         self._live_request_sync_worker: LiveRequestSyncWorker | None = None
         self._thread: threading.Thread | None = None
         self._watchdog_thread: threading.Thread | None = None
@@ -6627,6 +6629,9 @@ class GuardDaemonServer:
             self._aibom_refresh_thread.join(timeout=_AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS)
             if not self._aibom_refresh_thread.is_alive():
                 self._aibom_refresh_thread = None
+        if self._extension_control_refresh_thread is not None:
+            self._extension_control_refresh_thread.join(timeout=5)
+            self._extension_control_refresh_thread = None
         if self._headless_cloud_sync_thread is not None:
             self._headless_cloud_sync_thread.join(timeout=5)
             self._headless_cloud_sync_thread = None
@@ -6666,12 +6671,30 @@ class GuardDaemonServer:
         self._start_headless_cloud_sync()
         self._start_supply_chain_bundle_refresh()
         self._start_aibom_inventory_refresh()
+        self._start_extension_control_refresh()
         self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
         self._live_request_sync_worker = start_cloud_sync_sync_worker(
             self._server.store,
             self._live_request_sync_worker,
         )
         self._start_command_activity_maintenance()
+
+    def _start_extension_control_refresh(self) -> None:
+        if self._extension_control_refresh_thread is not None:
+            return
+        self._extension_control_refresh_thread = threading.Thread(
+            target=self._refresh_extension_control_loop,
+            daemon=True,
+            name="guard-extension-control-refresh",
+        )
+        self._extension_control_refresh_thread.start()
+
+    def _refresh_extension_control_loop(self) -> None:
+        while not self._shutdown_started.wait(self._extension_control_refresh_interval_seconds):
+            try:
+                self._server.refresh_extension_control_runtime()
+            except Exception:
+                continue
 
     def _maintain_command_activity_best_effort(self) -> None:
         now = datetime.now(timezone.utc)

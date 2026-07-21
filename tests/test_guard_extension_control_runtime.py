@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import time
+from pathlib import Path
+
 import pytest
 
+from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityView,
@@ -24,6 +29,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
     extension_control_policy_version,
     use_extension_control_snapshot,
 )
+from codex_plugin_scanner.guard.store import GuardStore
 
 _CATALOG_DIGEST = "a" * 64
 
@@ -141,3 +147,32 @@ def test_authority_health_maps_to_fail_closed_runtime_failure() -> None:
 
     assert unavailable.authority_failure is ResolverFailureCode.AUTHORITY_UNAVAILABLE
     assert tampered.authority_failure is ResolverFailureCode.AUTHORITY_TAMPERED
+
+
+def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon._extension_control_refresh_interval_seconds = 0.01
+    daemon.start()
+    try:
+        updated = ExtensionControlAuthorityView(
+            AuthorityHealth.PROTECTED,
+            7,
+            BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            (),
+        )
+        monkeypatch.setattr(
+            store,
+            "read_extension_control_authority",
+            lambda *, catalog_digest: updated,
+        )
+        deadline = time.monotonic() + 1
+        while daemon._server.extension_control_runtime.current().revision != 7:
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+        assert daemon._server.extension_control_runtime.current().revision == 7
+    finally:
+        daemon.stop()
