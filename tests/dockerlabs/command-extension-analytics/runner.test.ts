@@ -125,7 +125,8 @@ describe("command extension analytics Dockerlabs orchestration", () => {
 
   test("installed fixture is wheel-only and exercises the required evidence paths", async () => {
     const directory = import.meta.dir;
-    const [dockerfile, dockerignore, compose, server, containmentProbe, runner, relayFetch, playwright, databasePrivacy]
+    const [dockerfile, dockerignore, compose, server, containmentProbe, runner, relay, relayFetch, playwright,
+      databasePrivacy]
       = await Promise.all([
       Bun.file(`${directory}/Dockerfile`).text(),
       Bun.file(`${directory}/Dockerfile.dockerignore`).text(),
@@ -133,6 +134,7 @@ describe("command extension analytics Dockerlabs orchestration", () => {
       Bun.file(`${directory}/installed_server.py`).text(),
       Bun.file(`${directory}/installed_containment_probe.py`).text(),
       Bun.file(`${directory}/runner.ts`).text(),
+      Bun.file(`${directory}/tcp_relay.py`).text(),
       Bun.file(`${directory}/relay-fetch.ts`).text(),
       Bun.file(`${directory}/../../../dashboard/playwright.installed.config.ts`).text(),
       Bun.file(`${directory}/database-privacy.ts`).text(),
@@ -149,6 +151,9 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(compose).not.toContain("SYS_ADMIN");
     expect(compose).not.toContain("seccomp:unconfined");
     expect(dockerfile).not.toContain("bubblewrap");
+    expect(relay).toContain("destination.shutdown(socket.SHUT_WR)");
+    expect(relay).toContain("active.remove(source)");
+    expect(relay).not.toContain("(), (), 30");
     for (const harness of ["codex", "claude-code", "cursor"]) {
       expect(server).toContain(`_run_installed_hook(\"${harness}\"`);
     }
