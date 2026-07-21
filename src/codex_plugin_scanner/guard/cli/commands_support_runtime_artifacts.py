@@ -239,6 +239,20 @@ def _unmodeled_shell_runtime_artifact(
     execution_context = model_shell_execution_context(command_text, cwd=workspace, workspace_root=workspace)
     if canonical_command.confidence == "exact" and execution_context.complete:
         return None
+    if canonical_command.confidence == "exact" and workspace is None:
+        github_assessment = classify_github_shell_capabilities(command_text, home_dir=home_dir)
+        home_execution_context = model_shell_execution_context(
+            command_text,
+            cwd=home_dir,
+            workspace_root=home_dir,
+            home_dir=home_dir,
+        )
+        if (
+            github_assessment is not None
+            and not github_capability_requires_confirmation(github_assessment)
+            and shell_execution_context_starts_with_literal_cd(home_execution_context)
+        ):
+            return None
     context_metadata = shell_execution_context_metadata(execution_context)
     reason_code = canonical_command.uncertainty_reason
     if reason_code is None:

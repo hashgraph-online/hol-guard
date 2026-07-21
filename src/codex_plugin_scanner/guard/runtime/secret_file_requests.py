@@ -1603,9 +1603,9 @@ def _destructive_shell_tool_action_request(
                 if raw_command_text is not None and raw_command_text != detection_command_text
                 else fallback_home_execution_context
             )
-            if _starts_with_literal_cd(fallback_home_execution_context) and _starts_with_literal_cd(
-                fallback_raw_home_execution_context
-            ):
+            if shell_execution_context_starts_with_literal_cd(
+                fallback_home_execution_context
+            ) and shell_execution_context_starts_with_literal_cd(fallback_raw_home_execution_context):
                 home_execution_context = fallback_home_execution_context
                 raw_home_execution_context = fallback_raw_home_execution_context
         if home_execution_context.complete and raw_home_execution_context.complete:
@@ -1779,7 +1779,7 @@ def _shell_execution_context_validation_reason(context: ShellExecutionContext) -
     return None
 
 
-def _starts_with_literal_cd(context: ShellExecutionContext) -> bool:
+def shell_execution_context_starts_with_literal_cd(context: ShellExecutionContext) -> bool:
     if not context.complete or not context.segments:
         return False
     first = context.segments[0]
