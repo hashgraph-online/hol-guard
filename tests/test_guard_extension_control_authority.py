@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from typing import cast
 
@@ -549,3 +550,56 @@ def test_mismatched_authority_proof_cannot_create_transition(tmp_path: Path) -> 
     with store._connect() as connection:
         assert connection.execute("select count(*) from extension_control_authority_transition").fetchone()[0] == 0
         assert connection.execute("select count(*) from extension_control_authority_proof").fetchone()[0] == 0
+
+
+def test_failed_proof_reservation_preserves_grant_for_retry(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    store.read_extension_control_authority(catalog_digest=digest)
+    layers = (_disabled_layer(),)
+    proof = _proof(
+        store,
+        layers,
+        revision=0,
+        key="change-reservation-retry",
+        actor_id="local-admin",
+        nonce="nonce-reservation-retry",
+    )
+    with store._connect() as connection:
+        connection.execute(
+            """
+            create trigger fail_extension_control_proof_reservation
+            before insert on extension_control_authority_proof
+            begin
+                select raise(abort, 'injected proof reservation failure');
+            end
+            """
+        )
+
+    with pytest.raises(sqlite3.IntegrityError, match="injected proof reservation failure"):
+        store.commit_extension_control_layers(
+            layers,
+            catalog_digest=digest,
+            actor_id="local-admin",
+            expected_revision=0,
+            idempotency_key="change-reservation-retry",
+            nonce="nonce-reservation-retry",
+            proof=proof,
+        )
+
+    with store._connect() as connection:
+        connection.execute("drop trigger fail_extension_control_proof_reservation")
+        assert connection.execute("select count(*) from extension_control_authority_proof").fetchone()[0] == 0
+        assert connection.execute("select count(*) from extension_control_authority_transition").fetchone()[0] == 0
+
+    committed = store.commit_extension_control_layers(
+        layers,
+        catalog_digest=digest,
+        actor_id="local-admin",
+        expected_revision=0,
+        idempotency_key="change-reservation-retry",
+        nonce="nonce-reservation-retry",
+        proof=proof,
+    )
+    assert committed.revision == 1

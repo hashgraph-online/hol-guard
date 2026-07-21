@@ -199,7 +199,6 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 key=key,
                 purpose=TRANSITION_PURPOSE,
             )
-            consume_extension_control_proof(self.guard_home, proof, mutation)
             with self._connect() as connection:
                 ensure_extension_control_authority_schema(connection)
                 connection.execute(
@@ -236,6 +235,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                         created_at,
                     ),
                 )
+            consume_extension_control_proof(self.guard_home, proof, mutation)
             anchored = AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.ANCHORED)
             try:
                 self._write_and_verify_anchor(anchored, key=key)
