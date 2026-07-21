@@ -29,6 +29,8 @@ dashboard/node_modules/
 dashboard/node_modules
 dashboard/.vite/
 dashboard/dist/
+dashboard/.artifacts/
+.artifacts/
 output/playwright/
 .guard-*/
 .guard-ui-review/

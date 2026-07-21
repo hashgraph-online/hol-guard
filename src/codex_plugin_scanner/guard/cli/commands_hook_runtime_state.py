@@ -48,6 +48,7 @@ class RuntimeArtifactHookState:
     guard_home: Path | None = None
     hook_payload: dict[str, object] = field(default_factory=dict)
     receipt_recorded: bool = False
+    workflow_authorization_claimed: bool = False
 
 
 def set_runtime_artifact_hook_final_action(
@@ -245,6 +246,7 @@ def _record_runtime_command_activity(state: RuntimeArtifactHookState, store: Gua
             approval_reuse_status,
         ),
         approval_reuse_status=approval_reuse_status,
+        workflow_authorization_claimed=state.workflow_authorization_claimed,
     )
 
 __all__ = [
