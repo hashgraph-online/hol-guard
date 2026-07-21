@@ -89,6 +89,12 @@ def test_refresh_swaps_atomically_and_rejects_rollback_or_equivocation() -> None
     with pytest.raises(ValueError, match="cannot be replaced"):
         runtime.refresh(_view(4, state=ControlState.ENABLED))
     assert runtime.current() is replacement
+    degraded = runtime.refresh(_view(0, health=AuthorityHealth.TAMPERED))
+    assert degraded.health is AuthorityHealth.TAMPERED
+    assert runtime.current() is degraded
+    with pytest.raises(ValueError, match="move backwards"):
+        runtime.refresh(_view(3, state=ControlState.ENABLED))
+    assert runtime.refresh(_view(5, state=ControlState.ENABLED)).revision == 5
 
 
 def test_snapshot_digest_is_independent_of_layer_and_control_order() -> None:

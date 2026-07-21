@@ -79,6 +79,12 @@ class ExtensionControlRuntime:
     def __init__(self, initial: ExtensionControlAuthorityView) -> None:
         self._lock = threading.Lock()
         self._snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(initial)
+        self._highest_protected_revision = (
+            initial.revision if initial.health is AuthorityHealth.PROTECTED else 0
+        )
+        self._highest_protected_digest = (
+            self._snapshot.effective_digest if initial.health is AuthorityHealth.PROTECTED else None
+        )
 
     def current(self) -> ExtensionControlRuntimeSnapshot:
         return self._snapshot
@@ -86,11 +92,19 @@ class ExtensionControlRuntime:
     def refresh(self, view: ExtensionControlAuthorityView) -> ExtensionControlRuntimeSnapshot:
         candidate = ExtensionControlRuntimeSnapshot.from_authority_view(view)
         with self._lock:
-            current = self._snapshot
-            if candidate.revision < current.revision:
+            if candidate.health is not AuthorityHealth.PROTECTED:
+                self._snapshot = candidate
+                return candidate
+            if candidate.revision < self._highest_protected_revision:
                 raise ValueError("extension control runtime revision cannot move backwards")
-            if candidate.revision == current.revision and candidate.effective_digest != current.effective_digest:
+            if (
+                candidate.revision == self._highest_protected_revision
+                and self._highest_protected_digest is not None
+                and candidate.effective_digest != self._highest_protected_digest
+            ):
                 raise ValueError("extension control runtime revision cannot be replaced")
+            self._highest_protected_digest = candidate.effective_digest
+            self._highest_protected_revision = candidate.revision
             self._snapshot = candidate
             return candidate
 
