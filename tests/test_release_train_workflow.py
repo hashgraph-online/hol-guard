@@ -191,8 +191,15 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     }
     assert jobs["publish-alpha-pypi"]["needs"] == [
         "build",
+        "alpha-cross-platform",
         "publish-alpha-testpypi",
     ]
+    assert jobs["publish-alpha-testpypi"]["needs"] == [
+        "build",
+        "alpha-cross-platform",
+    ]
+    assert "needs.alpha-cross-platform.result == 'success'" in jobs["publish-alpha-testpypi"]["if"]
+    assert "needs.alpha-cross-platform.result == 'success'" in jobs["publish-alpha-pypi"]["if"]
     for job_name in (
         "publish-alpha-testpypi",
         "publish-alpha-pypi",
