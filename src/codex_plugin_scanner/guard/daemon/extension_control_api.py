@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
 _EXTENSION_CONTROL_API_SCHEMA = "guard.daemon.extension-controls.v1"
 _MAX_PENDING_PROOFS = 128
+_MAX_APPLIED_MUTATIONS = 128
 _MAX_CONTROLS = 4096
 _MAX_LAYERS = 2
 _MAX_OBSERVATIONS = 2048
@@ -88,7 +89,8 @@ class ExtensionControlApiService:
         self._runtime = runtime
         self._proof_lock = threading.Lock()
         self._apply_lock = threading.Lock()
-        self._pending_proofs: OrderedDict[str, _PendingMutation | _AppliedMutation] = OrderedDict()
+        self._pending_proofs: OrderedDict[str, _PendingMutation] = OrderedDict()
+        self._applied_mutations: OrderedDict[str, _AppliedMutation] = OrderedDict()
 
     def catalog(self) -> dict[str, object]:
         return {
@@ -219,7 +221,11 @@ class ExtensionControlApiService:
             "catalog_digest": snapshot.catalog_digest,
         }
         with self._proof_lock:
-            self._pending_proofs[proof_id] = _AppliedMutation(mutation.canonical_digest, response)
+            _ = self._pending_proofs.pop(proof_id, None)
+            self._applied_mutations[proof_id] = _AppliedMutation(mutation.canonical_digest, response)
+            self._applied_mutations.move_to_end(proof_id)
+            while len(self._applied_mutations) > _MAX_APPLIED_MUTATIONS:
+                _ = self._applied_mutations.popitem(last=False)
         return dict(response)
 
     def _mutation_from_payload(self, payload: dict[str, object]) -> ExtensionControlMutation:
@@ -246,7 +252,12 @@ class ExtensionControlApiService:
             _ = mutation.canonical_digest
         except ExtensionControlApiError:
             raise
-        except (TypeError, ValueError) as exc:
+        except (
+            TypeError,
+            ValueError,
+            ExtensionControlProofError,
+            ExtensionControlAuthorityError,
+        ) as exc:
             raise ExtensionControlApiError(400, "invalid_mutation") from exc
         if mutation.catalog_digest != self._registry.catalog_digest:
             raise ExtensionControlApiError(409, "catalog_conflict")
@@ -287,10 +298,14 @@ class ExtensionControlApiService:
             self._pending_proofs[proof.proof_id] = _PendingMutation(mutation, proof)
             self._pending_proofs.move_to_end(proof.proof_id)
             while len(self._pending_proofs) > _MAX_PENDING_PROOFS:
-                self._pending_proofs.popitem(last=False)
+                _ = self._pending_proofs.popitem(last=False)
 
     def _proof_state(self, proof_id: str) -> _PendingMutation | _AppliedMutation:
         with self._proof_lock:
+            applied = self._applied_mutations.get(proof_id)
+            if applied is not None:
+                self._applied_mutations.move_to_end(proof_id)
+                return applied
             pending = self._pending_proofs.get(proof_id)
         if pending is None:
             raise ExtensionControlApiError(409, "proof_not_found")

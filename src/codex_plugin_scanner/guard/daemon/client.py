@@ -231,7 +231,7 @@ class GuardSurfaceDaemonClient:
             if _is_string_object_dict(recovery):
                 raw_action = recovery.get("action")
                 recovery_action = raw_action if isinstance(raw_action, str) else None
-        except (OSError, json.JSONDecodeError):
+        except (OSError, json.JSONDecodeError, GuardDaemonRequestError):
             pass
         message = code or str(error)
         return GuardDaemonRequestError(

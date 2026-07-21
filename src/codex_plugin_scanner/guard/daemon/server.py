@@ -6007,6 +6007,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/extension-controls/effective",
             "/v1/extension-controls/preview",
             "/v1/extension-controls/apply",
+            "/v1/extension-controls/refresh",
             "/v1/harnesses",
             "/v1/notifications/setup",
             "/v1/policy",

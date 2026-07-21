@@ -116,6 +116,12 @@ def test_preview_rejects_stale_revision_and_unknown_catalog(tmp_path: Path) -> N
         service.preview(payload)
     assert (catalog.value.status, catalog.value.code) == (409, "catalog_conflict")
 
+    malformed = _mutation_payload()
+    malformed["layers"] = [{"kind": "invalid"}]
+    with pytest.raises(ExtensionControlApiError) as invalid:
+        service.preview(malformed)
+    assert (invalid.value.status, invalid.value.code) == (400, "invalid_mutation")
+
 
 @dataclass
 class _FakeProof:
