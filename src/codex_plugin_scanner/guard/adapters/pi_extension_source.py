@@ -201,7 +201,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    return {\n"
         '      decision: "deny",\n'
         "      reason: errorCode === 'ETIMEDOUT' || result.error?.name === 'TimeoutError'\n"
-        "        ? `HOL Guard Pi hook timed out after ${GUARD_TIMEOUT_MS}ms while reviewing this action.`\n"
+        "        ? `HOL Guard Pi hook timed out after ${GUARD_CLI_TIMEOUT_MS}ms while reviewing this action.`\n"
         "        : `HOL Guard Pi hook failed before completing review: ${errorMessage}`,\n"
         "    };\n"
         "  }\n"
