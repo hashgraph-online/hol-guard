@@ -281,7 +281,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    const requestId = approvalRequestId(response);\n"
         "    if (!requestId || pendingApprovalResumes.has(requestId)) return;\n"
         "    pendingApprovalResumes.add(requestId);\n"
-        "    void openApprovalUrl(response, openedApprovalCenters);\n"
+        "    if (details.kind === 'input') void openApprovalUrl(response, openedApprovalCenters);\n"
         "    const pollPath = approvalPollPath(response, requestId);\n"
         "    void (async () => {\n"
         "      try {\n"
