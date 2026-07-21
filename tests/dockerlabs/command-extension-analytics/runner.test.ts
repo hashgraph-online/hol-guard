@@ -176,6 +176,7 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(server).not.toContain("record_command_activity(");
     expect(server).not.toContain("ActivityDecisionReason.CAPABILITY");
     expect(server).toContain("HOL_GUARD_LAB_PENDING");
+    expect(server).not.toContain("READY_MARKER");
     expect(server).not.toContain('"dashboard_session"');
     expect(server).toContain("os.O_NOFOLLOW");
     expect(server).toContain("request_scope_contract(");

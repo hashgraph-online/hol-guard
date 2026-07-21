@@ -116,7 +116,17 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "/usr/bin/bwrap flags=(unconfined)" in workflow_text
     assert "sudo apparmor_parser -r /etc/apparmor.d/hol-guard-bwrap" in workflow_text
     assert "installed-canary/command-extension-analytics.json" in workflow_text
-    assert ".artifacts/command-extension-analytics/*.png" in workflow_text
+    verify_browser_proof = _named_step(steps, "Verify installed browser proof")
+    assert verify_browser_proof["if"] == "runner.os == 'Linux'"
+    verify_browser_proof_run = _text(verify_browser_proof["run"])
+    assert ".artifacts/command-extension-analytics/playwright-output" in verify_browser_proof_run
+    assert "installed-command-activity-overview.png" in verify_browser_proof_run
+    assert "installed-command-activity-filtered.png" in verify_browser_proof_run
+    assert "installed-command-activity-detail-feedback.png" in verify_browser_proof_run
+    upload = _named_step(steps, "Upload installed canary evidence")
+    upload_with = _mapping(upload["with"])
+    assert ".artifacts/command-extension-analytics/playwright-output/**/*.png" in _text(upload_with["path"])
+    assert upload_with["include-hidden-files"] is True
     canonical_runner_text = (ROOT / "tests/dockerlabs/command-extension-analytics/runner.ts").read_text(
         encoding="utf-8"
     )
@@ -148,7 +158,16 @@ def test_slice_manifest_binds_the_release_correction_chain_and_repo_relative_own
     assert manifest["schema_version"] == "hol-guard.release-slice-manifest.v2"
     assert manifest["target_branch"] == "release/2.2"
     pull_requests = [_mapping(item) for item in _sequence(manifest["pull_requests"])]
-    assert [item["number"] for item in pull_requests] == [1746, 1761, 1764, 1767, 1763]
+    assert [item["number"] for item in pull_requests] == [
+        1746,
+        1761,
+        1764,
+        1767,
+        1763,
+        1772,
+        1775,
+        1776,
+    ]
     by_number = {cast(int, item["number"]): item for item in pull_requests}
     assert by_number[1746]["depends_on"] == []
     assert by_number[1761]["depends_on"] == [1746]
@@ -156,8 +175,14 @@ def test_slice_manifest_binds_the_release_correction_chain_and_repo_relative_own
     assert by_number[1764]["depends_on"] == [1761]
     assert by_number[1767]["depends_on"] == [1761, 1764]
     assert by_number[1763]["depends_on"] == [1746, 1761, 1764, 1767]
+    assert by_number[1763]["corrected_by"] == [1772, 1775, 1776]
     assert by_number[1763]["final_base_sha"] == "a0b2ad8b3caa51b97ec8b0597b3bbe30c4781e68"
     assert by_number[1763]["final_base_requirement"] == "the current release/2.2 head at final rebase"
+    assert by_number[1772]["depends_on"] == [1763]
+    assert by_number[1772]["corrected_by"] == [1775, 1776]
+    assert by_number[1775]["depends_on"] == [1763, 1772]
+    assert by_number[1775]["corrected_by"] == [1776]
+    assert by_number[1776]["depends_on"] == [1763, 1772, 1775]
 
     slices = [_mapping(item) for item in _sequence(manifest["slices"])]
     assert [item["id"] for item in slices] == [f"CDX-{number:03d}" for number in range(63, 75)]
@@ -211,6 +236,23 @@ def test_slice_manifest_binds_the_release_correction_chain_and_repo_relative_own
     assert pull_request_1767["independent_review_completed"] is True
     assert pull_request_1767["unresolved_review_thread_count"] == 0
     assert pull_request_1767["post_review_observation_completed"] is True
+    pull_request_1763 = _mapping(gates["pull_request_1763"])
+    assert pull_request_1763["review_loop_completed_before_merge"] is False
+    assert pull_request_1763["corrected_by"] == [1772, 1775, 1776]
+    pull_request_1772 = _mapping(gates["pull_request_1772"])
+    assert pull_request_1772["review_loop_completed_before_merge"] is False
+    assert pull_request_1772["corrected_by"] == [1775, 1776]
+    pull_request_1775 = _mapping(gates["pull_request_1775"])
+    assert pull_request_1775["review_loop_completed_before_merge"] is False
+    assert pull_request_1775["corrected_by"] == [1776]
+    pull_request_1776 = _mapping(gates["pull_request_1776"])
+    assert pull_request_1776["required_exact_testpypi_canary"] is True
+    assert pull_request_1776["required_operating_systems"] == ["Linux", "macOS", "Windows"]
+    assert pull_request_1776["required_browser_screenshots"] == [
+        "installed-command-activity-overview.png",
+        "installed-command-activity-filtered.png",
+        "installed-command-activity-detail-feedback.png",
+    ]
     verification = [_text(value) for value in _sequence(manifest["verification"])]
     assert all("pnpm" not in command for command in verification)
     canonical_lab_verification = (
