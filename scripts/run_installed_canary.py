@@ -125,7 +125,7 @@ def _run_corpus(repo_root: Path) -> dict[str, object]:
     )
     for case, oracle in streams:
         decision = evaluate_command(case.command, cwd=repo_root / "workspace", home_dir=repo_root / "home")
-        observed = decision.minimum_action
+        observed = decision.decision_plane.action
         if ranks[observed] != ranks[oracle.minimum_floor]:
             kind = "underclassified" if ranks[observed] < ranks[oracle.minimum_floor] else "overclassified"
             groups["|".join((oracle.owner, kind, oracle.minimum_floor, observed))].append(case.case_id)
