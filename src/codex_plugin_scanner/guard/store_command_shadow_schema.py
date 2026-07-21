@@ -9,7 +9,8 @@ import sqlite3
 from typing import Final, cast
 
 COMMAND_SHADOW_LEGACY_MIGRATION_VERSION: Final = 15
-COMMAND_SHADOW_MIGRATION_VERSION: Final = 17
+COMMAND_SHADOW_PREVIOUS_MIGRATION_VERSION: Final = 17
+COMMAND_SHADOW_MIGRATION_VERSION: Final = 18
 
 _ACTIONS: Final = "'allow', 'warn', 'review', 'require-reapproval', 'sandbox-required', 'block'"
 _DISPOSITIONS: Final = (
@@ -46,7 +47,7 @@ _SCHEMA_STATEMENTS: Final = (
         and proposal_version glob '[a-z]*'
         and proposal_version not glob '*[^a-z0-9.-]*'
       ),
-      evaluator_schema_version text not null check (evaluator_schema_version = '1.0.0'),
+      evaluator_schema_version text not null check (evaluator_schema_version in ('1.0.0', '1.1.0')),
       control_generation integer not null check (control_generation = 1),
       sample_basis_points integer not null check (sample_basis_points between 1 and 10000),
       schema_version text not null check (schema_version = 'guard.command-shadow.v1'),
@@ -184,26 +185,41 @@ _LEGACY_SCHEMA_STATEMENTS: Final = (
     end""",
 )
 
+_PREVIOUS_SCHEMA_STATEMENTS: Final = (
+    _SCHEMA_STATEMENTS[0].replace(
+        "evaluator_schema_version in ('1.0.0', '1.1.0')",
+        "evaluator_schema_version = '1.0.0'",
+    ),
+    *_SCHEMA_STATEMENTS[1:],
+)
+
 
 def ensure_command_shadow_schema(connection: sqlite3.Connection, *, applied_at: str) -> None:
-    """Apply the current schema atomically, upgrading the exact legacy v15 shape."""
+    """Apply the current schema atomically, upgrading either supported legacy shape."""
 
-    connection.execute("savepoint command_shadow_schema_v17")
+    connection.execute("savepoint command_shadow_schema_v18")
     try:
         current = _expected_schema(_SCHEMA_STATEMENTS)
         legacy = _expected_schema(_LEGACY_SCHEMA_STATEMENTS)
-        actual = _read_schema(connection, frozenset(current) | frozenset(legacy))
+        previous = _expected_schema(_PREVIOUS_SCHEMA_STATEMENTS)
+        actual = _read_schema(connection, frozenset(current) | frozenset(legacy) | frozenset(previous))
         _reject_external_foreign_keys(connection)
-        _reject_external_sql_dependencies(connection, (current, legacy))
+        _reject_external_sql_dependencies(connection, (current, legacy, previous))
         if actual == legacy:
-            _upgrade_legacy_schema(connection)
+            _upgrade_legacy_schema(connection, _LEGACY_SCHEMA_STATEMENTS)
+        elif actual == previous:
+            _upgrade_legacy_schema(connection, _PREVIOUS_SCHEMA_STATEMENTS)
         elif actual and actual != current:
             raise RuntimeError("incompatible command shadow schema objects")
         elif not actual:
             for statement in _SCHEMA_STATEMENTS:
                 connection.execute(statement)
         _validate_schema(connection)
-        for version in (COMMAND_SHADOW_LEGACY_MIGRATION_VERSION, COMMAND_SHADOW_MIGRATION_VERSION):
+        for version in (
+            COMMAND_SHADOW_LEGACY_MIGRATION_VERSION,
+            COMMAND_SHADOW_PREVIOUS_MIGRATION_VERSION,
+            COMMAND_SHADOW_MIGRATION_VERSION,
+        ):
             connection.execute(
                 "insert or ignore into schema_migrations (version, applied_at) values (?, ?)",
                 (version, applied_at),
@@ -215,14 +231,17 @@ def ensure_command_shadow_schema(connection: sqlite3.Connection, *, applied_at: 
         if row is None or not str(row[0]):
             raise RuntimeError("command_shadow_migration_not_recorded")
     except BaseException:
-        connection.execute("rollback to command_shadow_schema_v17")
-        connection.execute("release command_shadow_schema_v17")
+        connection.execute("rollback to command_shadow_schema_v18")
+        connection.execute("release command_shadow_schema_v18")
         raise
-    connection.execute("release command_shadow_schema_v17")
+    connection.execute("release command_shadow_schema_v18")
 
 
-def _upgrade_legacy_schema(connection: sqlite3.Connection) -> None:
-    for object_type, name in _schema_object_identities(_LEGACY_SCHEMA_STATEMENTS):
+def _upgrade_legacy_schema(
+    connection: sqlite3.Connection,
+    source_statements: tuple[str, ...],
+) -> None:
+    for object_type, name in _schema_object_identities(source_statements):
         if object_type != "table":
             connection.execute(f"drop {object_type} {name}")
     connection.execute("alter table command_activity_shadow_cohorts rename to command_activity_shadow_cohorts_v15")
