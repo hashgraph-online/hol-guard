@@ -462,6 +462,7 @@ def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
             python_executable=_guard_python_executable(),
         ),
         event_bindings=tuple(_manifest_event_bindings(context)),
+        workspace_rebinding_allowed=not context.workspace_override_explicit,
     )
 
 
