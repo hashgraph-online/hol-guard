@@ -394,7 +394,7 @@ def _directory_arguments(tokens: tuple[str, ...]) -> tuple[str, ...] | None:
 
 
 def _operand_is_dynamic(value: str) -> bool:
-    if not value or "\x00" in value or value.startswith("~"):
+    if not value or "\x00" in value or (value.startswith("~") and not value.startswith("~/")):
         return True
     return any(character in value for character in ("$", "`", "*", "?", "[", "]", "{", "}", "<", ">"))
 
@@ -404,8 +404,14 @@ def resolve_directory_operand(
     *,
     current_cwd: Path,
     workspace_root: Path,
+    home_dir: Path | None = None,
 ) -> tuple[Path | None, ShellPathIdentity | None, ShellPathProof | None, str | None]:
-    candidate = Path(value)
+    if value.startswith("~/"):
+        if home_dir is None:
+            return None, None, None, SHELL_CWD_UNRESOLVED_EXPRESSION
+        candidate = home_dir / value[2:]
+    else:
+        candidate = Path(value)
     if not candidate.is_absolute():
         candidate = current_cwd / candidate
     lexical_candidate = Path(os.path.abspath(candidate))

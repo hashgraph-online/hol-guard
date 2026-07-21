@@ -115,6 +115,7 @@ def model_shell_execution_context(
     *,
     cwd: Path | None = None,
     workspace_root: Path | None = None,
+    home_dir: Path | None = None,
 ) -> ShellExecutionContext:
     """Model literal shell directory changes without executing shell code."""
 
@@ -209,6 +210,7 @@ def model_shell_execution_context(
                 operation,
                 state,
                 workspace_root=root,
+                home_dir=home_dir,
                 controls_before=controls_before,
                 controls_after=controls_after,
             )
@@ -347,6 +349,7 @@ def _apply_directory_operation(
     state: _ShellState,
     *,
     workspace_root: Path | None,
+    home_dir: Path | None,
     controls_before: tuple[str, ...],
     controls_after: tuple[str, ...],
 ) -> tuple[_ShellState, str | None]:
@@ -376,6 +379,7 @@ def _apply_directory_operation(
             operation.operand,
             current_cwd=state.cwd,
             workspace_root=workspace_root,
+            home_dir=home_dir,
         )
         if reason is not None or destination is None or destination_identity is None or destination_proof is None:
             failure_reason = reason or SHELL_CWD_MISSING_DIRECTORY
