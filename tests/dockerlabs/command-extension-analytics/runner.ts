@@ -12,6 +12,7 @@ import {
 } from "./lab-process";
 import { teardownLab, type TeardownEvidence } from "./teardown";
 import { runInstalledPlaywright } from "./installed-playwright";
+import { fetchLabGet } from "./relay-fetch";
 import { readDashboardSession } from "./session-handoff";
 const SENTINEL = "guard-private-command-sentinel";
 interface ReadyEvidence {
@@ -105,9 +106,7 @@ async function waitForReady(origin: string, timeoutMs = 60_000): Promise<void> {
   throw new Error("installed Guard daemon did not become ready");
 }
 export async function readyFromLogs(
-  project: string,
-  environment: Record<string, string>,
-  runner: CommandRunner,
+  project: string, environment: Record<string, string>, runner: CommandRunner,
 ): Promise<ReadyEvidence> {
   const logs = requireSuccess(
     await runner(composeCommand(project, "logs", "--no-color", "guard"), { cwd: LAB_DIR, env: environment }),
@@ -119,9 +118,7 @@ export async function readyFromLogs(
   return JSON.parse(payload) as ReadyEvidence;
 }
 async function pendingFromLogs(
-  project: string,
-  environment: Record<string, string>,
-  runner: CommandRunner,
+  project: string, environment: Record<string, string>, runner: CommandRunner,
 ): Promise<PendingWorkflowEvidence | null> {
   const logs = requireSuccess(
     await runner(composeCommand(project, "logs", "--no-color", "guard"), { cwd: LAB_DIR, env: environment }),
@@ -194,14 +191,18 @@ async function apiJson(
   session: string,
   init: RequestInit = {},
 ): Promise<Record<string, unknown>> {
-  const response = await fetch(`${origin}${path}`, {
+  const request = `${origin}${path}`;
+  const options = {
     ...init,
     headers: {
       "Content-Type": "application/json",
       "X-Guard-Dashboard-Session": session,
       ...init.headers,
     },
-  });
+  };
+  const response = init.method === undefined
+    ? await fetchLabGet(request, options)
+    : await fetch(request, options);
   if (!response.ok) throw new Error(`${path} returned ${response.status}: ${await response.text()}`);
   return await response.json() as Record<string, unknown>;
 }
@@ -267,7 +268,7 @@ async function verifyDiagnosticsExport(
   session: string,
   expectedActivityCount: number,
 ): Promise<number> {
-  const unauthenticated = await fetch(`${origin}/v1/command-activity/diagnostics`);
+  const unauthenticated = await fetchLabGet(`${origin}/v1/command-activity/diagnostics`);
   if (unauthenticated.status !== 401) throw new Error("command activity export did not require authentication");
   const diagnostics = await apiJson(origin, "/v1/command-activity/diagnostics", session);
   assertPrivate(diagnostics);
@@ -291,13 +292,13 @@ async function verifyCommandActivitySse(
   session: string,
   expectedActivityIds: ReadonlySet<string>,
 ): Promise<number> {
-  const unauthenticated = await fetch(`${origin}/v1/command-activity/events?cursor=0`);
+  const unauthenticated = await fetchLabGet(`${origin}/v1/command-activity/events?cursor=0`);
   if (unauthenticated.status !== 401) throw new Error("command activity SSE did not require authentication");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5_000);
   const seen = new Set<string>();
   try {
-    const response = await fetch(`${origin}/v1/command-activity/events?cursor=0`, {
+    const response = await fetchLabGet(`${origin}/v1/command-activity/events?cursor=0`, {
       headers: { "X-Guard-Dashboard-Session": session },
       signal: controller.signal,
     });
@@ -352,7 +353,7 @@ async function verifyApi(
   containment: ContainmentEvidence,
   promptFreeHookCount: number,
 ): Promise<ApiEvidence> {
-  const unauthenticated = await fetch(`${origin}/v1/command-activity`);
+  const unauthenticated = await fetchLabGet(`${origin}/v1/command-activity`);
   if (unauthenticated.status !== 401) throw new Error("command activity API did not require authentication");
   const [activity, analytics, cursor] = await Promise.all([
     apiJson(origin, "/v1/command-activity?limit=100", session),
