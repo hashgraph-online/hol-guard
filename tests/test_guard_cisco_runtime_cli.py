@@ -352,6 +352,7 @@ def test_cisco_preflight_rejects_absolute_skill_targets_outside_workspace(
     signals = scan_action_for_cisco_evidence(_absolute_file_write_action(external_skill), workspace=tmp_path)
 
     assert [signal.scanner_rule_id for signal in signals] == ["outside_approved_workspace"]
+    assert signals[0].evidence_ref == "approved-root:all-approved-roots"
     assert called == []
 
 

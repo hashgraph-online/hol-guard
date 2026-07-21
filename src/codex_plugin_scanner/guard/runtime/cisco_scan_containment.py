@@ -89,7 +89,10 @@ def validated_scan_target(
         raise CiscoPathContainmentError("target_unresolved") from exc
     approved_root = _most_specific_approved_root(target_path, approved_roots)
     if approved_root is None:
-        raise CiscoPathContainmentError("target_outside_approved_roots")
+        raise CiscoPathContainmentError(
+            "target_outside_approved_roots",
+            approved_root_label="all-approved-roots",
+        )
     if not stat.S_ISREG(target_metadata.st_mode) or not target_metadata.st_mode & (
         stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH
     ):

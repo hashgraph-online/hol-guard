@@ -453,6 +453,7 @@ def _string_or_none(value: object) -> str | None:
 
 def _normalized_workspace_path(value: str) -> str:
     try:
+        # codeql[py/path-injection] This only canonicalizes an approval-scope identity; it does not access content.
         resolved = str(Path(value).resolve())
     except Exception:
         resolved = value

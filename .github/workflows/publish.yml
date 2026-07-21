@@ -16,6 +16,7 @@ on:
         type: choice
         options:
           - "2.1"
+          - "2.2"
       release_version:
         description: "Exact canonical release version"
         required: true
@@ -25,9 +26,9 @@ on:
         required: true
         type: string
   push:
-    branches: [main, release/2.1]
+    branches: [main, release/2.1, release/2.2]
   pull_request:
-    branches: [main, release/2.1]
+    branches: [main, release/2.1, release/2.2]
 
 permissions:
   contents: read
@@ -62,12 +63,19 @@ jobs:
             echo "Release dispatch actor is not an authorized maintainer" >&2
             exit 1
           fi
-          if [[ "$RELEASE_CHANNEL" != "alpha" || "$RELEASE_TRAIN" != "2.1" ]]; then
-            echo "Only the release/2.1 alpha train is authorized" >&2
+          if [[ "$RELEASE_CHANNEL" != "alpha" ]]; then
+            echo "Only alpha releases are authorized" >&2
             exit 1
           fi
-          if [[ "$GITHUB_REF" != "refs/heads/release/2.1" ]]; then
-            echo "Alpha releases must run from refs/heads/release/2.1" >&2
+          case "$RELEASE_TRAIN" in
+            2.1|2.2) ;;
+            *)
+              echo "Unsupported release train: ${RELEASE_TRAIN}" >&2
+              exit 1
+              ;;
+          esac
+          if [[ "$GITHUB_REF" != "refs/heads/release/${RELEASE_TRAIN}" ]]; then
+            echo "Alpha releases must run from refs/heads/release/${RELEASE_TRAIN}" >&2
             exit 1
           fi
           if [[ "$EXPECTED_SHA" != "$GITHUB_SHA" ]]; then
@@ -148,14 +156,17 @@ jobs:
             fi
             CHANNEL="$RELEASE_CHANNEL"
             TRAIN="$RELEASE_TRAIN"
-            if [[ "$TRAIN" != "2.1" ]]; then
-              echo "Unsupported release train: ${TRAIN}" >&2
-              exit 1
-            fi
+            case "$TRAIN" in
+              2.1|2.2) ;;
+              *)
+                echo "Unsupported release train: ${TRAIN}" >&2
+                exit 1
+                ;;
+            esac
             TRAIN_REF="refs/heads/release/${TRAIN}"
 
             if [[ "$CHANNEL" != "alpha" ]]; then
-              echo "The release/2.1 train is alpha-only" >&2
+              echo "Release train ${TRAIN} is alpha-only" >&2
               exit 1
             fi
             if [[ "$GITHUB_REF" != "$TRAIN_REF" ]]; then

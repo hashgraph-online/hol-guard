@@ -714,6 +714,16 @@ def _normalized_launch_cwd(cwd: Path | None) -> Path:
 
 def _launch_argv_digest(argv: Sequence[str]) -> str:
     material = json.dumps(list(argv), ensure_ascii=True, separators=(",", ":"))
+    return _opaque_identity_digest(material)
+
+
+def _opaque_identity_digest(material: str) -> str:
+    """Return a stable launch-identity digest, not a credential verifier."""
+
+    # Launch material can contain password-like values, but this digest is used
+    # only for exact approval-context change detection. It is never used to
+    # authenticate a secret, so a password KDF would be the wrong primitive.
+    # codeql[py/weak-sensitive-data-hashing]
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -1214,7 +1224,7 @@ def _python_module_runtime_entrypoint_identity(
             argument=str(entrypoint_path),
             launch_cwd=launch_cwd,
         )
-        identity["module_sha256"] = hashlib.sha256(module.encode("utf-8")).hexdigest()
+        identity["module_sha256"] = _opaque_identity_digest(module)
         identity["package_initializers"] = _python_package_initializer_identities(
             root=root,
             relative_module=relative_module,
@@ -1482,7 +1492,7 @@ def _file_runtime_entrypoint(*, kind: str, argument: str, launch_cwd: Path) -> d
         cwd=launch_cwd,
         require_executable=False,
     )
-    identity["argument_sha256"] = hashlib.sha256(argument.encode("utf-8")).hexdigest()
+    identity["argument_sha256"] = _opaque_identity_digest(argument)
     identity["kind"] = kind
     return identity
 
@@ -1490,7 +1500,7 @@ def _file_runtime_entrypoint(*, kind: str, argument: str, launch_cwd: Path) -> d
 def _inline_runtime_entrypoint(*, kind: str, source: str) -> dict[str, object]:
     return {
         "kind": kind,
-        "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+        "sha256": _opaque_identity_digest(source),
         "status": "verified",
     }
 
