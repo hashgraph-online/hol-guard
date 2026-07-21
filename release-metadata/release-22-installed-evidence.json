@@ -61,9 +61,43 @@
       "base_branch": "release/2.2",
       "initial_base_sha": "97aa1dd142d7e65d6ba2a0a52e7dc78b06a4547e",
       "final_base_sha": "a0b2ad8b3caa51b97ec8b0597b3bbe30c4781e68",
+      "head_sha": "3eba164ee3109f6f1bb4a4c57fc48c950b03ebc9",
+      "merge_sha": "12faf0181caaa3d0f987a7d6e5d59eb32055d578",
       "depends_on": [1746, 1761, 1764, 1767],
+      "corrected_by": [1772, 1775, 1776],
       "final_base_requirement": "the current release/2.2 head at final rebase",
       "post_rebase_requirement": "regenerate and verify every corpus, oracle, fixture, source, and decision-report binding"
+    },
+    {
+      "number": 1772,
+      "role": "installed-containment-correction",
+      "tasks": ["CDX-067", "CDX-068", "CDX-070", "CDX-071", "CDX-074"],
+      "base_branch": "release/2.2",
+      "initial_base_sha": "12faf0181caaa3d0f987a7d6e5d59eb32055d578",
+      "head_sha": "4c8efc6d08ebf77ce9988ed06369c104bd27a926",
+      "merge_sha": "7ac19f258194c77976d0af37ca74973957d335b5",
+      "depends_on": [1763],
+      "corrected_by": [1775, 1776]
+    },
+    {
+      "number": 1775,
+      "role": "installed-relay-correction",
+      "tasks": ["CDX-068", "CDX-069", "CDX-071", "CDX-074"],
+      "base_branch": "release/2.2",
+      "initial_base_sha": "7ac19f258194c77976d0af37ca74973957d335b5",
+      "head_sha": "7ccc022398b0dea6dd0b2a78871eb11c4e2d120e",
+      "merge_sha": "fa4d0622cdda06c23d7dcabe4a28d8ff97fb881f",
+      "depends_on": [1763, 1772],
+      "corrected_by": [1776]
+    },
+    {
+      "number": 1776,
+      "role": "installed-evidence-final-correction",
+      "tasks": ["CDX-068", "CDX-069", "CDX-070", "CDX-071", "CDX-072", "CDX-073", "CDX-074"],
+      "base_branch": "release/2.2",
+      "initial_base_sha": "fee0ab0c46f76dbfc3c230a954ce21b94019b696",
+      "depends_on": [1763, 1772, 1775],
+      "final_head_requirement": "the exact open pull-request head verified by required workflows and the final review loop"
     }
   ],
   "ownership_overlap_exceptions": [
@@ -334,7 +368,29 @@
       "installed_record_and_payload_proof": true,
       "authenticated_dashboard_reconciliation": true,
       "no_post_execution_proof_harness": "allowed_unconfirmed",
-      "docker_resource_count_after_teardown": 0
+      "docker_resource_count_after_teardown": 0,
+      "review_loop_completed_before_merge": false,
+      "corrected_by": [1772, 1775, 1776]
+    },
+    "pull_request_1772": {
+      "review_loop_completed_before_merge": false,
+      "corrected_by": [1775, 1776]
+    },
+    "pull_request_1775": {
+      "review_loop_completed_before_merge": false,
+      "corrected_by": [1776]
+    },
+    "pull_request_1776": {
+      "required_exact_testpypi_canary": true,
+      "required_operating_systems": ["Linux", "macOS", "Windows"],
+      "required_browser_screenshots": [
+        "installed-command-activity-overview.png",
+        "installed-command-activity-filtered.png",
+        "installed-command-activity-detail-feedback.png"
+      ],
+      "required_independent_review": true,
+      "required_unresolved_review_thread_count": 0,
+      "required_post_review_observation": true
     },
     "review": {
       "required_independent_review": true,

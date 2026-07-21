@@ -23,7 +23,6 @@ from codex_plugin_scanner.guard.store import GuardStore
 GUARD_HOME = Path("/guard-home")
 WORKSPACE = Path("/workspace")
 SENTINEL = "guard-private-command-sentinel"
-READY_MARKER = GUARD_HOME / ".hol-guard-command-analytics-ready"
 SESSION_HANDOFF = GUARD_HOME / ".installed-dashboard-session"
 _MAX_HOOK_DIAGNOSTIC_CHARS = 2_000
 _GH_EXECUTABLE = GUARD_HOME / "bin" / "gh"
@@ -368,7 +367,6 @@ def _installed_origin() -> str:
 
 
 def main() -> None:
-    READY_MARKER.unlink(missing_ok=True)
     expected = os.environ["HOL_GUARD_LAB_EXPECTED_VERSION"]
     if __version__ != expected:
         raise RuntimeError(f"installed version mismatch: expected {expected}, got {__version__}")
@@ -420,14 +418,12 @@ def main() -> None:
             ),
             flush=True,
         )
-        _ = READY_MARKER.write_text("ready\n", encoding="ascii")
         stop_requested = threading.Event()
         _ = signal.signal(signal.SIGTERM, lambda _signum, _frame: stop_requested.set())
         _ = signal.signal(signal.SIGINT, lambda _signum, _frame: stop_requested.set())
         while not stop_requested.wait(3600):
             pass
     finally:
-        READY_MARKER.unlink(missing_ok=True)
         SESSION_HANDOFF.unlink(missing_ok=True)
         daemon.stop()
 
