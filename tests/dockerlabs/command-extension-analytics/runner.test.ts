@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { composeCommand, safeProjectName, type CommandResult } from "./lab-process";
 import { runInstalledPlaywright } from "./installed-playwright";
-import { fetchLabGet } from "./relay-fetch";
+import { fetchLabGet, fetchLabIdempotent } from "./relay-fetch";
 import { readyFromLogs } from "./runner";
 import { readDashboardSession } from "./session-handoff";
 import { teardownLab } from "./teardown";
@@ -37,6 +37,27 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     try {
       const response = await fetchLabGet("http://127.0.0.1:4781/healthz");
       expect(response.status).toBe(200);
+      expect(calls).toBe(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("retries an explicitly idempotent relay POST after a transient reset", async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async (_input, init) => {
+      calls += 1;
+      expect(init?.method).toBe("POST");
+      if (calls === 1) throw new TypeError("connection reset");
+      return Response.json({ resolved: true });
+    };
+    try {
+      const response = await fetchLabIdempotent("http://127.0.0.1:4781/v1/requests/id/approve", {
+        method: "POST",
+        body: JSON.stringify({ action: "allow", scope: "artifact" }),
+      });
+      expect(await response.json()).toEqual({ resolved: true });
       expect(calls).toBe(2);
     } finally {
       globalThis.fetch = originalFetch;
@@ -223,7 +244,10 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(runner).toContain('"-I"');
     expect(runner).toContain("HOL_GUARD_LAB_PYTHON");
     expect(relayFetch).toContain("async function fetchLabGet");
+    expect(relayFetch).toContain("async function fetchLabIdempotent");
     expect(runner).toContain("init.method === undefined");
+    expect(runner).toContain("retryTransientReset");
+    expect(runner).toContain("await fetchLabIdempotent(request, options)");
     expect(runner).toContain("await fetch(request, options)");
     expect(runner.lastIndexOf("try {")).toBeLessThan(runner.lastIndexOf("runInstalledContainment(runner, version)"));
     expect(runner.lastIndexOf("runInstalledContainment(runner, version)")).toBeLessThan(
