@@ -61,7 +61,7 @@ def _probe() -> dict[str, object]:
         source = workspace / "format-input.txt"
         _ = source.write_text("formatted\n", encoding="utf-8")
         destination = output / "format-output.txt"
-        executable = "/bin/sh"
+        executable = str(Path("/bin/sh").resolve(strict=True))
         protected_path = shlex.quote(str(secret_file))
         command = (
             f"if secret=$(cat {protected_path} 2>/dev/null); then printf '%s' \"$secret\"; exit 91; fi; "

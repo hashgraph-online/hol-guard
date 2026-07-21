@@ -139,7 +139,7 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(server).toContain('"git push --delete origin stale-lab-branch"');
     expect(server).toContain('"shutdown -h now # {SENTINEL}"');
     expect(server).not.toContain("execute_contained");
-    expect(containmentProbe).toContain('executable = "/bin/sh"');
+    expect(containmentProbe).toContain('Path("/bin/sh").resolve(strict=True)');
     expect(containmentProbe).toContain("execute_contained(request");
     expect(containmentProbe).toContain('declared_outputs=("output/format-output.txt",)');
     expect(containmentProbe).toContain("result.outputs[0].content == b\"formatted\\n\"");
