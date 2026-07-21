@@ -23,8 +23,10 @@ def test_ci_shards_cover_every_test_file_once_and_deterministically() -> None:
 
 def test_ci_workflow_cancels_stale_runs_and_executes_each_shard() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    tests_job = workflow.split("  tests:\n", maxsplit=1)[1].split("\n  ci-python-312:", maxsplit=1)[0]
 
     assert "cancel-in-progress: true" in workflow
+    assert "timeout-minutes: 25" in tests_job
     assert "python scripts/ci/pytest_shard.py" in workflow
     assert "name: ci (3.12)" in workflow
     assert "needs: [quality, tests, windows-updater]" in workflow

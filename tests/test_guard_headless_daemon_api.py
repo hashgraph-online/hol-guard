@@ -569,6 +569,7 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         )
 
     monkeypatch.setattr(daemon_server, "sync_local_guard_cloud_proof", unavailable_first_sync)
+    connect_started = threading.Event()
     connect_finalized = threading.Event()
     connect_failure_details: list[str] = []
     set_guard_cloud_connect_state = daemon_server._set_guard_cloud_connect_state
@@ -581,7 +582,11 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         if server.store is not store:
             return
         if state is None:
-            connect_finalized.set()
+            if connect_started.is_set():
+                connect_finalized.set()
+            return
+        if state.get("state") in {"starting", "running"}:
+            connect_started.set()
         elif state.get("state") == "failed":
             connect_failure_details.append(str(state.get("detail") or "unknown error"))
             connect_finalized.set()
@@ -621,15 +626,22 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
                 assert connect_flow["authorize_url"] == "https://hol.org/mock-authorize"
         assert connect_finalized.wait(timeout=30), "Guard Cloud connect did not finalize repaired credentials"
         assert not connect_failure_details, f"Guard Cloud connect failed: {connect_failure_details[0]}"
-        status, refreshed = _read_json_response(
-            _request(
-                daemon.port,
-                "/v1/supply-chain/package-shims",
-                method="GET",
-                token=token,
-            ),
-        )
-        assert status == 200
+        deadline = time.monotonic() + 30
+        refreshed = running
+        while not bool(refreshed["entitlement"]["allowed"]) and time.monotonic() < deadline:
+            time.sleep(0.05)
+            status, refreshed = _read_json_response(
+                _request(
+                    daemon.port,
+                    "/v1/supply-chain/package-shims",
+                    method="GET",
+                    token=token,
+                ),
+            )
+            assert status == 200
+            connect_flow = refreshed["connect_flow"]
+            if isinstance(connect_flow, dict) and connect_flow.get("state") == "failed":
+                pytest.fail(f"Guard Cloud connect failed: {connect_flow.get('detail') or 'unknown error'}")
         assert refreshed["entitlement"]["allowed"] is True
         assert refreshed["entitlement"]["reason"] == "paid_oauth_entitlement_active"
         assert refreshed["connect_flow"] is None
