@@ -239,7 +239,7 @@ def test_failure_post_transitions_with_same_native_identifier(tmp_path: Path) ->
         store=store,
         guard_home=guard_home,
         harness="codex",
-        event="PostToolUse",
+        event="PostToolUseFailure",
         payload=payload,
         succeeded=False,
     )

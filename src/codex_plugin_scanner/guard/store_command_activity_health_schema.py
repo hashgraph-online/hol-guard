@@ -8,8 +8,7 @@ import re
 import sqlite3
 from typing import Final, cast
 
-COMMAND_ACTIVITY_HEALTH_MIGRATION_VERSION: Final = 14
-_LEGACY_COMMAND_ACTIVITY_HEALTH_MIGRATION_VERSION: Final = 11
+COMMAND_ACTIVITY_HEALTH_MIGRATION_VERSION: Final = 11
 COMMAND_ACTIVITY_HEALTH_SCHEMA_VERSION: Final = "1.0.0"
 _HEALTH_TABLE_SQL: Final = """
 create table if not exists command_activity_health (
@@ -24,7 +23,7 @@ create table if not exists command_activity_health (
 
 
 def ensure_command_activity_health_schema(connection: sqlite3.Connection, *, applied_at: str) -> None:
-    """Create and validate health state, repairing legacy false post failures once."""
+    """Create and validate v11 atomically, including its singleton seed row."""
 
     connection.execute("savepoint command_activity_health_schema_v1")
     try:
@@ -40,30 +39,6 @@ def ensure_command_activity_health_schema(connection: sqlite3.Connection, *, app
             (COMMAND_ACTIVITY_HEALTH_SCHEMA_VERSION,),
         )
         _validate_health_row(connection)
-        migration_applied = cast(
-            tuple[int] | None,
-            connection.execute(
-                "select 1 from schema_migrations where version = ?",
-                (COMMAND_ACTIVITY_HEALTH_MIGRATION_VERSION,),
-            ).fetchone(),
-        )
-        if migration_applied is None:
-            legacy_applied = cast(
-                tuple[int] | None,
-                connection.execute(
-                    "select 1 from schema_migrations where version = ?",
-                    (_LEGACY_COMMAND_ACTIVITY_HEALTH_MIGRATION_VERSION,),
-                ).fetchone(),
-            )
-            if legacy_applied is not None:
-                connection.execute(
-                    """
-                    update command_activity_health
-                    set dropped_event_count = 0, persistence_error_count = 0,
-                        last_error_code = null, last_error_at = null
-                    where singleton = 1 and last_error_code = 'post_record_failed'
-                    """
-                )
         connection.execute(
             "insert or ignore into schema_migrations (version, applied_at) values (?, ?)",
             (COMMAND_ACTIVITY_HEALTH_MIGRATION_VERSION, applied_at),
