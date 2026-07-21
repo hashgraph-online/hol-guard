@@ -17,7 +17,7 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
     baseURL: origin,
     screenshot: "only-on-failure",
-    trace: "retain-on-failure",
+    trace: "off",
     viewport: { width: 1440, height: 1000 },
   },
 });

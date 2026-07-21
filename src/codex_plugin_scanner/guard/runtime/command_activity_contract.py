@@ -341,7 +341,7 @@ def _validate_activity_state(activity: CommandActivity) -> None:
             ActivityDecisionReason.NO_MATCH,
             ActivityDecisionReason.CAPABILITY,
         }:
-            raise ValueError("an activity without matches requires a no-match or capability reason")
+            raise ValueError("an activity without matches requires a no-match reason or capability reason")
     if activity.receipt_link_status is ReceiptLinkStatus.LINKED and activity.receipt_id is None:
         raise ValueError("linked receipt status requires receipt_id")
     if activity.receipt_link_status is ReceiptLinkStatus.NOT_APPLICABLE and activity.receipt_id is not None:

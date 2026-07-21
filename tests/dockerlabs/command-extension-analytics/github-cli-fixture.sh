@@ -2,7 +2,7 @@
 set -eu
 
 if [ "$#" -eq 2 ] && [ "$1" = "api" ] && [ "$2" = "user" ]; then
-  printf '%s\n' '{"login":"kantorcodes"}'
+  printf '%s\n' '{"login":"dashboard-reviewer"}'
   exit 0
 fi
 

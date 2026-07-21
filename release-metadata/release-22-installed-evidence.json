@@ -73,6 +73,18 @@
       "original_slice": "CDX-063",
       "final_slice": "CDX-068",
       "reason": "the installed evidence slice propagates the trusted claimed-authorization fact into command activity"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
+      "original_slice": "CDX-063",
+      "final_slice": "CDX-068",
+      "reason": "the installed evidence slice normalizes persisted approval timestamps before issuing exact workflow capabilities"
+    },
+    {
+      "path": "tests/fixtures/guard-command-corpus/decision-diff-report.json",
+      "original_slice": "CDX-066",
+      "final_slice": "CDX-068",
+      "reason": "the installed evidence runtime fix regenerates the exact source-bound decision report"
     }
   ],
   "slices": [
@@ -180,14 +192,23 @@
         "src/codex_plugin_scanner/guard/cli/commands_support_command_activity.py",
         "src/codex_plugin_scanner/guard/runtime/command_activity_contract.py",
         "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
+        "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
+        "tests/fixtures/guard-command-corpus/decision-diff-report.json",
         "tests/dockerlabs/command-extension-analytics/Dockerfile",
         "tests/dockerlabs/command-extension-analytics/Dockerfile.dockerignore",
+        "tests/dockerlabs/command-extension-analytics/bun-test-types.d.ts",
+        "tests/dockerlabs/command-extension-analytics/database-privacy.ts",
         "tests/dockerlabs/command-extension-analytics/github-cli-fixture.sh",
         "tests/dockerlabs/command-extension-analytics/installed_server.py",
+        "tests/dockerlabs/command-extension-analytics/installed-playwright.ts",
         "tests/dockerlabs/command-extension-analytics/lab-process.ts",
         "tests/dockerlabs/command-extension-analytics/package.json",
+        "tests/dockerlabs/command-extension-analytics/proof-privacy.ts",
         "tests/dockerlabs/command-extension-analytics/runner.test.ts",
-        "tests/dockerlabs/command-extension-analytics/runner.ts"
+        "tests/dockerlabs/command-extension-analytics/runner.ts",
+        "tests/dockerlabs/command-extension-analytics/session-handoff.ts",
+        "tests/dockerlabs/command-extension-analytics/tsconfig.json",
+        "tests/test_guard_github_workflow_runtime_eval.py"
       ],
       "acceptance": "the Bun Dockerlab exercises prompt-free, contained, workflow, review, block, persistence, and privacy paths through an installed wheel",
       "evidence_paths": [

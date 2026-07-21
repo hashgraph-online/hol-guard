@@ -109,6 +109,7 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert 'cmp "$VERIFIED_WHEEL" "dist/$WHEEL_NAME"' in workflow_text
     assert "bunx playwright install --with-deps chromium" in workflow_text
     assert "cd ../tests/dockerlabs/command-extension-analytics" in workflow_text
+    assert "bun run typecheck" in workflow_text
     assert "bun run guard:test:command-extension-analytics" in workflow_text
     assert "installed-canary/command-extension-analytics.json" in workflow_text
     assert ".artifacts/command-extension-analytics/*.png" in workflow_text
@@ -183,7 +184,7 @@ def test_slice_manifest_binds_the_release_correction_chain_and_repo_relative_own
                 ownership[path] = _text(item["id"])
             ownership_counts[cast(int, item["pull_request"])] += 1
     assert observed_overlaps == overlap_exceptions.keys()
-    assert ownership_counts == {1761: 38, 1763: 26}
+    assert ownership_counts == {1761: 38, 1763: 35}
 
     gates = _mapping(manifest["gates"])
     review = _mapping(gates["review"])

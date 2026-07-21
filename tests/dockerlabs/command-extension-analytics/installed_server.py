@@ -31,11 +31,12 @@ GUARD_HOME = Path("/guard-home")
 WORKSPACE = Path("/workspace")
 SENTINEL = "guard-private-command-sentinel"
 READY_MARKER = Path.home() / ".hol-guard-command-analytics-ready"
+SESSION_HANDOFF = GUARD_HOME / ".installed-dashboard-session"
 _MAX_HOOK_DIAGNOSTIC_CHARS = 2_000
 _GH_EXECUTABLE = GUARD_HOME / "bin" / "gh"
 _GH_FIXTURE = Path("/opt/guard-lab/github-cli-fixture.sh")
 _REPOSITORY = "hashgraph-online/hol-guard"
-_VIEWER = "kantorcodes"
+_VIEWER = "dashboard-reviewer"
 _WORKFLOW_COMMAND = f"{_GH_EXECUTABLE} issue lock 17 --repo {_REPOSITORY}"
 _KEYRING_MODULE = """\
 import hashlib
@@ -80,6 +81,14 @@ def _safe_hook_diagnostic(value: str) -> str:
     if len(redacted) <= _MAX_HOOK_DIAGNOSTIC_CHARS:
         return redacted
     return redacted[-_MAX_HOOK_DIAGNOSTIC_CHARS:]
+
+
+def _write_dashboard_session_handoff(session: str) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW
+    descriptor = os.open(SESSION_HANDOFF, flags, 0o600)
+    _ = os.fchmod(descriptor, 0o600)
+    with os.fdopen(descriptor, "w", encoding="ascii") as stream:
+        _ = stream.write(f"{session}\n")
 
 
 def _run_installed_hook(
@@ -191,9 +200,12 @@ def _await_exact_allow(store: GuardStore, request_id: str) -> None:
         if request is not None and request.get("status") == "resolved":
             if request.get("resolution_action") != "allow" or request.get("resolution_scope") != "artifact":
                 raise RuntimeError("workflow request resolved outside its exact contract")
-            return
+            issued = store.list_events(event_name="workflow_capability.issued")
+            claimed = store.list_events(event_name="workflow_capability.claimed")
+            if len(issued) == 1 and not claimed:
+                return
         time.sleep(0.05)
-    raise RuntimeError("workflow request was not resolved by the external lab actor")
+    raise RuntimeError("workflow request and capability issuance did not complete")
 
 
 def _assert_capability_event_privacy(store: GuardStore) -> None:
@@ -316,6 +328,17 @@ def _assert_seeded_activity(store: GuardStore) -> None:
         (
             "claude-code",
             "pre",
+            "allowed_unconfirmed",
+            "pre_hook",
+            "warn",
+            "no_match",
+            0,
+            0,
+            "not-applicable",
+        ),
+        (
+            "claude-code",
+            "pre",
             "prevented",
             "pre_hook",
             "require-reapproval",
@@ -324,12 +347,23 @@ def _assert_seeded_activity(store: GuardStore) -> None:
             1,
             "not-applicable",
         ),
-        ("codex", "pre", "allowed_unconfirmed", "pre_hook", "allow", "extension_match", 1, 0, "accepted"),
+        ("codex", "pre", "allowed_unconfirmed", "pre_hook", "allow", "capability", 1, 0, "accepted"),
+        (
+            "codex",
+            "post_success",
+            "confirmed_success",
+            "post_hook",
+            "warn",
+            "no_match",
+            0,
+            0,
+            "not-applicable",
+        ),
         ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "extension_match", 1, 1, "not-applicable"),
-        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "extension_match", 1, 1, "not-applicable"),
+        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "extension_match", 1, 1, "rejected"),
         ("cursor", "pre", "prevented", "pre_hook", "block", "extension_match", 1, 1, "not-applicable"),
     ]
-    if rows != expected:
+    if sorted(rows) != sorted(expected):
         raise RuntimeError(f"installed hook activity mismatch: {rows!r}")
 
 
@@ -397,6 +431,7 @@ def main() -> None:
         prompt_free_hook_count = 2
         auth_token = daemon._server.auth_token  # pyright: ignore[reportPrivateUsage]
         session = build_local_dashboard_session_token(auth_token=auth_token, surface="dashboard")
+        _write_dashboard_session_handoff(session)
         if workflow_authorization is None:
             if store.count_command_activities() != 0:
                 raise RuntimeError("incomplete workflow authorization state cannot be resumed")
@@ -404,7 +439,7 @@ def main() -> None:
             print(
                 "HOL_GUARD_LAB_PENDING "
                 + json.dumps(
-                    {**pending, "dashboard_session": session},
+                    pending,
                     separators=(",", ":"),
                 ),
                 flush=True,
@@ -427,7 +462,6 @@ def main() -> None:
                 {
                     "activity_count": store.count_command_activities(),
                     "containment": containment,
-                    "dashboard_session": session,
                     "installed_origin": _installed_origin(),
                     "prompt_free_hook_count": prompt_free_hook_count,
                     "version": __version__,
@@ -445,6 +479,7 @@ def main() -> None:
             pass
     finally:
         READY_MARKER.unlink(missing_ok=True)
+        SESSION_HANDOFF.unlink(missing_ok=True)
         daemon.stop()
 
 

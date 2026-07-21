@@ -11,14 +11,6 @@ const session = requiredEnvironment("GUARD_INSTALLED_DASHBOARD_SESSION");
 const expectedCount = Number(requiredEnvironment("GUARD_INSTALLED_ACTIVITY_COUNT"));
 if (!Number.isInteger(expectedCount) || expectedCount < 1) throw new Error("GUARD_INSTALLED_ACTIVITY_COUNT must be positive");
 
-function dashboardUrl(): string {
-  const fragment = new URLSearchParams({
-    "guard-token": session,
-    guardDaemon: origin,
-  });
-  return `/evidence?view=commands#${fragment.toString()}`;
-}
-
 test("installed dashboard reconciles command analytics, filters, details, health, and feedback", async ({ page }, testInfo) => {
   const commandResponses: { path: string; status: number }[] = [];
   page.on("response", (response) => {
@@ -28,7 +20,13 @@ test("installed dashboard reconciles command analytics, filters, details, health
     }
   });
 
-  await page.goto(dashboardUrl());
+  await page.addInitScript(({ daemon, token }) => {
+    sessionStorage.setItem("guard-token", token);
+    sessionStorage.setItem("guardDaemon", daemon);
+  }, { daemon: origin, token: session });
+  await page.goto("/evidence?view=commands");
+  expect(page.url()).not.toContain(session);
+  expect(page.url()).not.toContain("guard-token");
   await expect(page.getByRole("heading", { name: "Commands" })).toBeVisible();
   const summary = page.getByLabel("Command activity summary");
   await expect(summary.getByText("Commands checked").locator("..").getByText(String(expectedCount), { exact: true })).toBeVisible();

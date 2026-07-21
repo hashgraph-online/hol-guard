@@ -498,6 +498,7 @@ jobs:
           bun install --frozen-lockfile --ignore-scripts
           bunx playwright install --with-deps chromium
           cd ../tests/dockerlabs/command-extension-analytics
+          bun run typecheck
           HOL_GUARD_LAB_EXPECTED_VERSION="$VERSION" \
             HOL_GUARD_WHEEL="$GITHUB_WORKSPACE/dist/$WHEEL_NAME" \
             bun run guard:test:command-extension-analytics \

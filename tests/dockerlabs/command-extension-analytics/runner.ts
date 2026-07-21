@@ -1,4 +1,5 @@
 import { basename, resolve } from "node:path";
+import { verifyDatabasePrivacy } from "./database-privacy";
 import {
   composeCommand,
   LAB_DIR,
@@ -10,6 +11,8 @@ import {
   type CommandRunner,
 } from "./lab-process";
 import { teardownLab, type TeardownEvidence } from "./teardown";
+import { runInstalledPlaywright } from "./installed-playwright";
+import { readDashboardSession } from "./session-handoff";
 const SENTINEL = "guard-private-command-sentinel";
 interface ReadyEvidence {
   activity_count: number;
@@ -20,7 +23,6 @@ interface ReadyEvidence {
     protected_value_unchanged: boolean;
     secret_hidden: boolean;
   };
-  dashboard_session: string;
   installed_origin: string;
   prompt_free_hook_count: 2;
   version: string;
@@ -33,7 +35,6 @@ interface ReadyEvidence {
   };
 }
 interface PendingWorkflowEvidence {
-  dashboard_session: string;
   request_id: string;
   scope_contract_digest: string;
   scope_contract_version: string;
@@ -52,7 +53,7 @@ interface ApiEvidence {
 export interface LabEvidence {
   api: ApiEvidence;
   cleanup: TeardownEvidence;
-  installed: Omit<ReadyEvidence, "dashboard_session">;
+  installed: Omit<ReadyEvidence, "workflow_authorization">;
   persistence: { afterRestart: number; beforeRestart: number };
   playwright: "passed";
   privacy: { api: "clean"; database: "clean"; export: "clean"; sse: "clean" };
@@ -172,9 +173,11 @@ async function apiJson(
   if (!response.ok) throw new Error(`${path} returned ${response.status}: ${await response.text()}`);
   return await response.json() as Record<string, unknown>;
 }
-async function approveWorkflowAuthorization(origin: string, pending: PendingWorkflowEvidence): Promise<void> {
+async function approveWorkflowAuthorization(
+  origin: string, pending: PendingWorkflowEvidence, session: string,
+): Promise<void> {
   const path = `/v1/requests/${encodeURIComponent(pending.request_id)}`;
-  const request = await apiJson(origin, path, pending.dashboard_session);
+  const request = await apiJson(origin, path, session);
   const eligibility = request.task_capability_eligibility;
   if (typeof eligibility !== "object" || eligibility === null || Array.isArray(eligibility)) {
     throw new Error("workflow request omitted task-capability eligibility");
@@ -192,7 +195,7 @@ async function approveWorkflowAuthorization(origin: string, pending: PendingWork
     body: JSON.stringify({ action: "allow", scope: "artifact" }),
   });
   if (unauthenticated.status !== 401) throw new Error("workflow approval endpoint did not require authentication");
-  const response = await apiJson(origin, `${path}/approve`, pending.dashboard_session, {
+  const response = await apiJson(origin, `${path}/approve`, session, {
     method: "POST",
     body: JSON.stringify({
       action: "allow",
@@ -330,7 +333,7 @@ async function verifyApi(
   const activityIds = new Set(rows.map((row) => String(row.activity_id)));
   const harnesses = [...new Set(rows.map((row) => String(row.harness)))].sort();
   const statuses = [...new Set(rows.map((row) => String(row.execution_status)))].sort();
-  if (rows.length !== 5 || Number(analytics.commands_checked) !== rows.length) {
+  if (rows.length !== 7 || Number(analytics.commands_checked) !== rows.length) {
     throw new Error("authenticated list and analytics totals did not reconcile");
   }
   if (!harnesses.includes("codex") || !harnesses.includes("claude-code") || !harnesses.includes("cursor")) {
@@ -342,6 +345,8 @@ async function verifyApi(
   if (cursorRows.length !== 1 || cursorRows[0]?.harness !== "cursor") throw new Error("cursor filter did not reconcile");
   const workflowAuthorized = rows.some((row) => (
     row.policy_action === "allow" && row.approval_reuse_status === "accepted" && row.prompted === false
+    && row.decision_reason_code === "capability" && row.match_count === 1
+    && row.execution_status === "allowed_unconfirmed"
   ));
   const categories = [
     promptFreeHookCount === 2 ? "prompt-free" : null,
@@ -375,39 +380,6 @@ async function verifyApi(
     statuses,
   };
 }
-async function verifyDatabasePrivacy(
-  project: string,
-  environment: Record<string, string>,
-  runner: CommandRunner,
-): Promise<void> {
-  const code = `from pathlib import Path; print(${JSON.stringify(SENTINEL)}.encode() in Path('/guard-home/guard.db').read_bytes())`;
-  const result = requireSuccess(
-    await runner(composeCommand(project, "exec", "-T", "guard", "python", "-c", code), {
-      cwd: LAB_DIR,
-      env: environment,
-    }),
-    "database privacy probe",
-  );
-  if (result !== "False") throw new Error("private command value escaped into the database");
-}
-async function runPlaywright(origin: string, session: string, proofDir: string, runner: CommandRunner): Promise<void> {
-  requireSuccess(
-    await runner(["bun", "install", "--frozen-lockfile", "--ignore-scripts"], { cwd: resolve(REPO_ROOT, "dashboard") }),
-    "dashboard dependency install",
-  );
-  requireSuccess(
-    await runner(["bun", "run", "test:e2e:installed"], {
-      cwd: resolve(REPO_ROOT, "dashboard"),
-      env: {
-        GUARD_INSTALLED_ACTIVITY_COUNT: "5",
-        GUARD_INSTALLED_DASHBOARD_SESSION: session,
-        GUARD_INSTALLED_ORIGIN: origin,
-        PLAYWRIGHT_PROOF_DIR: proofDir,
-      },
-    }),
-    "installed dashboard Playwright",
-  );
-}
 export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvidence> {
   const project = safeProjectName(Bun.env.GUARD_TEST_PROJECT ?? `guard-command-analytics-${process.pid}`);
   const port = Number(Bun.env.GUARD_TEST_PORT ?? 48_000 + process.pid % 1_000);
@@ -434,7 +406,8 @@ export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvi
     );
     await waitForReady(origin);
     const pending = await waitForPendingWorkflow(project, environment, runner);
-    await approveWorkflowAuthorization(origin, pending);
+    const session = await readDashboardSession(project, environment, runner);
+    await approveWorkflowAuthorization(origin, pending, session);
     const first = await waitForReadyEvidence(project, environment, runner);
     if (JSON.stringify(first.workflow_authorization) !== JSON.stringify({
       activity_proof: "drift-rejected-restored-one-shot-reuse",
@@ -443,7 +416,7 @@ export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvi
       drift_claimed: 0,
       request_flow: "authenticated-daemon-api",
     })) throw new Error("workflow authorization evidence did not reconcile");
-    const api = await verifyApi(origin, first.dashboard_session, first.containment, first.prompt_free_hook_count);
+    const api = await verifyApi(origin, session, first.containment, first.prompt_free_hook_count);
     await verifyDatabasePrivacy(project, environment, runner);
     requireSuccess(
       await runner(composeCommand(project, "restart", "guard"), { cwd: LAB_DIR, env: environment }),
@@ -451,16 +424,17 @@ export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvi
     );
     await waitForReady(origin);
     const restarted = await waitForReadyEvidence(project, environment, runner);
+    const restartedSession = await readDashboardSession(project, environment, runner);
     const afterRestart = await verifyApi(
       origin,
-      restarted.dashboard_session,
+      restartedSession,
       restarted.containment,
       restarted.prompt_free_hook_count,
     );
     if (afterRestart.activityCount !== api.activityCount) throw new Error("activity persistence failed across restart");
     const proofDir = resolve(REPO_ROOT, ".artifacts/command-extension-analytics");
-    await runPlaywright(origin, restarted.dashboard_session, proofDir, runner);
-    const finalAnalytics = await apiJson(origin, "/v1/command-activity/analytics?days=7", restarted.dashboard_session);
+    await runInstalledPlaywright(origin, restartedSession, afterRestart.activityCount, proofDir, runner);
+    const finalAnalytics = await apiJson(origin, "/v1/command-activity/analytics?days=7", restartedSession);
     const feedback = finalAnalytics.feedback;
     if (!Array.isArray(feedback) || feedback.length !== 1) throw new Error("rendered feedback did not persist");
     assertPrivate(finalAnalytics);

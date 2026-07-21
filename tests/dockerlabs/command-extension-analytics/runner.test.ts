@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 import { composeCommand, safeProjectName, type CommandResult } from "./lab-process";
+import { runInstalledPlaywright } from "./installed-playwright";
 import { readyFromLogs } from "./runner";
+import { readDashboardSession } from "./session-handoff";
 import { teardownLab } from "./teardown";
 
 function result(stdout = "", exitCode = 0): CommandResult {
@@ -33,9 +35,33 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     const ready = await readyFromLogs("guard-command-analytics", environment, async (command, options) => {
       expect(command).toContain("logs");
       expect(options?.env).toEqual(environment);
-      return result('guard | HOL_GUARD_LAB_READY {"dashboard_session":"session"}\n');
+      return result('guard | HOL_GUARD_LAB_READY {"activity_count":7}\n');
     });
-    expect(ready.dashboard_session).toBe("session");
+    expect(ready.activity_count).toBe(7);
+  });
+
+  test("consumes the owner-only dashboard session handoff", async () => {
+    const session = await readDashboardSession("guard-command-analytics", {}, async (command) => {
+      expect(command).toContain("exec");
+      expect(command.at(-1)).toContain("/guard-home/.installed-dashboard-session");
+      expect(command.at(-1)).toContain("metadata.st_uid != os.getuid()");
+      expect(command.at(-1)).toContain("stat.S_IMODE(metadata.st_mode) != 0o600");
+      expect(command.at(-1)).toContain("os.unlink(path)");
+      return result("session\n");
+    });
+    expect(session).toBe("session");
+  });
+
+  test("scans proof artifacts when installed Playwright fails", async () => {
+    let proofScanned = false;
+    let invocation = 0;
+    await expect(runInstalledPlaywright("http://127.0.0.1:4781", "session", 7, "proof", async () => {
+      invocation += 1;
+      return invocation === 1 ? result() : result("", 1);
+    }, async () => {
+      proofScanned = true;
+    })).rejects.toThrow("installed dashboard Playwright failed");
+    expect(proofScanned).toBe(true);
   });
 
   test("teardown removes volumes and orphans then proves zero resources", async () => {
@@ -67,12 +93,14 @@ describe("command extension analytics Dockerlabs orchestration", () => {
 
   test("installed fixture is wheel-only and exercises the required evidence paths", async () => {
     const directory = import.meta.dir;
-    const [dockerfile, dockerignore, compose, server, runner] = await Promise.all([
+    const [dockerfile, dockerignore, compose, server, runner, playwright, databasePrivacy] = await Promise.all([
       Bun.file(`${directory}/Dockerfile`).text(),
       Bun.file(`${directory}/Dockerfile.dockerignore`).text(),
       Bun.file(`${directory}/docker-compose.yml`).text(),
       Bun.file(`${directory}/installed_server.py`).text(),
       Bun.file(`${directory}/runner.ts`).text(),
+      Bun.file(`${directory}/../../../dashboard/playwright.installed.config.ts`).text(),
+      Bun.file(`${directory}/database-privacy.ts`).text(),
     ]);
     expect(dockerfile).toContain("pip install --no-cache-dir /opt/wheels/*.whl");
     expect(dockerfile).not.toContain("COPY src");
@@ -94,6 +122,8 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(server).not.toContain("record_command_activity(");
     expect(server).not.toContain("ActivityDecisionReason.CAPABILITY");
     expect(server).toContain("HOL_GUARD_LAB_PENDING");
+    expect(server).not.toContain('"dashboard_session"');
+    expect(server).toContain("os.O_NOFOLLOW");
     expect(server).toContain("request_scope_contract(");
     expect(server).toContain("codex_lab_workflow_drift_0002");
     expect(server).toContain("codex_lab_workflow_retry_0003");
@@ -106,7 +136,10 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(runner).toContain("/v1/command-activity/events?cursor=0");
     expect(runner).toContain('"X-Guard-Dashboard-Session": session');
     expect(runner).toContain("scope_contract_digest: pending.scope_contract_digest");
-    expect(runner).toContain("approveWorkflowAuthorization(origin, pending)");
+    expect(runner).toContain("approveWorkflowAuthorization(origin, pending, session)");
+    expect(playwright).toContain('trace: "off"');
+    expect(databasePrivacy).toContain("command_activity(?:_[a-z0-9_]+)?");
+    expect(databasePrivacy).toContain("envelope_redacted_json");
     expect(runner).toContain('["event", "activity_id"]');
     for (const category of ["prompt-free", "contained", "workflow", "review", "block"]) {
       expect(runner).toContain(`\"${category}\"`);
