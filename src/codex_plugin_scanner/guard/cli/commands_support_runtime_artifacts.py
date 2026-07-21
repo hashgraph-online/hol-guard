@@ -239,7 +239,7 @@ def _unmodeled_shell_runtime_artifact(
     execution_context = model_shell_execution_context(command_text, cwd=workspace, workspace_root=workspace)
     if canonical_command.confidence == "exact" and execution_context.complete:
         return None
-    if canonical_command.confidence == "exact" and workspace is None:
+    if canonical_command.confidence == "exact" and not execution_context.complete:
         home_execution_context = low_risk_compound_developer_execution_context(
             command_text,
             home_dir=home_dir,
