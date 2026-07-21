@@ -107,11 +107,13 @@ describe("command extension analytics Dockerlabs orchestration", () => {
 
   test("installed fixture is wheel-only and exercises the required evidence paths", async () => {
     const directory = import.meta.dir;
-    const [dockerfile, dockerignore, compose, server, runner, playwright, databasePrivacy] = await Promise.all([
+    const [dockerfile, dockerignore, compose, server, containmentProbe, runner, playwright, databasePrivacy]
+      = await Promise.all([
       Bun.file(`${directory}/Dockerfile`).text(),
       Bun.file(`${directory}/Dockerfile.dockerignore`).text(),
       Bun.file(`${directory}/docker-compose.yml`).text(),
       Bun.file(`${directory}/installed_server.py`).text(),
+      Bun.file(`${directory}/installed_containment_probe.py`).text(),
       Bun.file(`${directory}/runner.ts`).text(),
       Bun.file(`${directory}/../../../dashboard/playwright.installed.config.ts`).text(),
       Bun.file(`${directory}/database-privacy.ts`).text(),
@@ -124,6 +126,10 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(dockerignore).toContain("tcp_relay.py");
     expect(compose).not.toContain("../../src");
     expect(compose).toContain("internal: true");
+    expect(compose).toContain("no-new-privileges:true");
+    expect(compose).not.toContain("SYS_ADMIN");
+    expect(compose).not.toContain("seccomp:unconfined");
+    expect(dockerfile).not.toContain("bubblewrap");
     for (const harness of ["codex", "claude-code", "cursor"]) {
       expect(server).toContain(`_run_installed_hook(\"${harness}\"`);
     }
@@ -132,7 +138,15 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(server).toContain('"git diff --stat"');
     expect(server).toContain('"git push --delete origin stale-lab-branch"');
     expect(server).toContain('"shutdown -h now # {SENTINEL}"');
-    expect(server).toContain('executable = "/usr/bin/cp"');
+    expect(server).not.toContain("execute_contained");
+    expect(containmentProbe).toContain('executable = "/bin/sh"');
+    expect(containmentProbe).toContain("execute_contained(request");
+    expect(containmentProbe).toContain('declared_outputs=("output/format-output.txt",)');
+    expect(containmentProbe).toContain("result.outputs[0].content == b\"formatted\\n\"");
+    expect(containmentProbe).toContain("not destination.exists()");
+    expect(containmentProbe).toContain("cat {protected_path}");
+    expect(containmentProbe).toContain("printf changed 2>/dev/null > {protected_path}");
+    expect(containmentProbe).toContain('"site-packages"');
     expect(server).not.toContain("record_pre_hook_command_activity_best_effort");
     expect(server).not.toContain("record_command_activity(");
     expect(server).not.toContain("ActivityDecisionReason.CAPABILITY");
@@ -152,6 +166,8 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(runner).toContain('"X-Guard-Dashboard-Session": session');
     expect(runner).toContain("scope_contract_digest: pending.scope_contract_digest");
     expect(runner).toContain("approveWorkflowAuthorization(origin, pending, session)");
+    expect(runner).toContain('"-I"');
+    expect(runner).toContain("HOL_GUARD_LAB_PYTHON");
     expect(playwright).toContain('trace: "off"');
     expect(databasePrivacy).toContain("command_activity(?:_[a-z0-9_]+)?");
     expect(databasePrivacy).toContain("envelope_redacted_json");

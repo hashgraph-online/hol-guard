@@ -111,6 +111,8 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "cd ../tests/dockerlabs/command-extension-analytics" in workflow_text
     assert "bun run typecheck" in workflow_text
     assert "bun run guard:test:command-extension-analytics" in workflow_text
+    assert 'HOL_GUARD_LAB_PYTHON="$CANARY_PYTHON"' in workflow_text
+    assert "sudo apt-get install -y --no-install-recommends bubblewrap" in workflow_text
     assert "installed-canary/command-extension-analytics.json" in workflow_text
     assert ".artifacts/command-extension-analytics/*.png" in workflow_text
     canonical_runner_text = (ROOT / "tests/dockerlabs/command-extension-analytics/runner.ts").read_text(
