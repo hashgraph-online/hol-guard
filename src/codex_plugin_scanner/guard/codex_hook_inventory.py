@@ -211,7 +211,8 @@ def _is_codex_hook_state_metadata(
         and all(
             isinstance(coordinate, str)
             and isinstance(state_entry, Mapping)
-            and set(state_entry) == {"trusted_hash"}
+            and len(state_entry) == 1
+            and "trusted_hash" in state_entry
             and _is_trusted_hook_hash(state_entry.get("trusted_hash"))
             for coordinate, state_entry in value.items()
         )
@@ -223,7 +224,7 @@ def _is_trusted_hook_hash(value: object) -> bool:
         isinstance(value, str)
         and value.startswith("sha256:")
         and len(value) == 71
-        and all(character in "0123456789abcdef" for character in value[7:])
+        and all(character in "0123456789abcdefABCDEF" for character in value[7:])
     )
 
 

@@ -54,6 +54,18 @@ def test_guard_install_codex_preserves_codex_hook_state_metadata(
     assert isinstance(installed["hooks"]["PreToolUse"], list)
 
 
+def test_uppercase_codex_hook_state_hash_is_recognized(tmp_path: Path) -> None:
+    inventory = enumerate_codex_hooks(
+        {"hooks": {"state": {"fixture": {"trusted_hash": f"sha256:{'A' * 64}"}}}},
+        source_path=tmp_path / "config.toml",
+        source_scope="global",
+        source_format="toml",
+        source_hooks_enabled=False,
+    )
+
+    assert inventory.complete is True
+
+
 @pytest.mark.parametrize(
     "state",
     (
