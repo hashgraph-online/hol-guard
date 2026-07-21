@@ -261,10 +261,10 @@ def _manifest_has_owned_installation_context(
             context == expected_context
             or (
                 spec.workspace_rebinding_allowed
-                and set(context) == set(expected_context)
-                and context.get("guard_home") == expected_context["guard_home"]
-                and context.get("home_dir") == expected_context["home_dir"]
-                and context.get("runtime_guard_home") == expected_context["runtime_guard_home"]
+                and context.keys() == expected_context.keys()
+                and context["guard_home"] == expected_context["guard_home"]
+                and context["home_dir"] == expected_context["home_dir"]
+                and context["runtime_guard_home"] == expected_context["runtime_guard_home"]
             )
         )
     )
