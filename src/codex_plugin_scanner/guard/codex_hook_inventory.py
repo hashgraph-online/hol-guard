@@ -124,6 +124,8 @@ def enumerate_codex_hooks(
     records: list[CodexHookInventoryRecord] = []
     issues: list[CodexHookInventoryIssue] = []
     for event_name, groups in hooks.items():
+        if _is_codex_hook_state_metadata(event_name, groups, source_format):
+            continue
         if not isinstance(event_name, str) or not isinstance(groups, list):
             issues.append(
                 CodexHookInventoryIssue(
@@ -193,6 +195,37 @@ def enumerate_codex_hooks(
                     records.append(record)
                 issues.extend(handler_issues)
     return CodexHookInventory(str(source_path), tuple(records), tuple(issues))
+
+
+def _is_codex_hook_state_metadata(
+    event_name: object,
+    value: object,
+    source_format: HookSourceFormat,
+) -> bool:
+    """Recognize Codex's reserved TOML hook-state metadata table."""
+
+    return (
+        source_format == "toml"
+        and event_name == "state"
+        and isinstance(value, Mapping)
+        and all(
+            isinstance(coordinate, str)
+            and isinstance(state_entry, Mapping)
+            and len(state_entry) == 1
+            and "trusted_hash" in state_entry
+            and _is_trusted_hook_hash(state_entry.get("trusted_hash"))
+            for coordinate, state_entry in value.items()
+        )
+    )
+
+
+def _is_trusted_hook_hash(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and value.startswith("sha256:")
+        and len(value) == 71
+        and all(character in "0123456789abcdefABCDEF" for character in value[7:])
+    )
 
 
 def _handler_record(
