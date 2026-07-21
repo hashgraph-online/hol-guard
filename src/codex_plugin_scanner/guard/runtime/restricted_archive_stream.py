@@ -6,6 +6,7 @@ import hashlib
 import os
 import re
 import tempfile
+import threading
 import urllib.parse
 from contextlib import suppress
 from pathlib import Path
@@ -21,6 +22,35 @@ _READ_CHUNK_BYTES = 64 * 1024
 _MAX_RESPONSE_HEADERS = 64
 _MAX_RESPONSE_HEADER_BYTES = 32 * 1024
 _HTTP_FIELD_NAME_RE = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
+
+
+class _OwnedDescriptorWrite:
+    """Keep a timed-out write bound to its original unlinked inode."""
+
+    def __init__(self, file_descriptor: int, payload: memoryview) -> None:
+        self._file_descriptor = os.dup(file_descriptor)
+        self._payload = payload
+        self._lock = threading.Lock()
+        self._state = "pending"
+
+    def __call__(self) -> int:
+        with self._lock:
+            if self._state == "cancelled":
+                return 0
+            self._state = "running"
+        try:
+            return os.write(self._file_descriptor, self._payload)
+        finally:
+            os.close(self._file_descriptor)
+            with self._lock:
+                self._state = "finished"
+
+    def cancel(self) -> None:
+        with self._lock:
+            if self._state != "pending":
+                return
+            self._state = "cancelled"
+            os.close(self._file_descriptor)
 
 
 def _response_header(response: _ReadableResponse, name: str) -> str | None:
@@ -79,10 +109,14 @@ def _write_chunk_with_deadline(file_descriptor: int, chunk: bytes, *, deadline: 
     offset = 0
     while offset < len(chunk):
         pending = memoryview(chunk)[offset:]
-        written = _call_with_deadline(
-            lambda pending=pending: os.write(file_descriptor, pending),
-            deadline=deadline,
-        )
+        write = _OwnedDescriptorWrite(file_descriptor, pending)
+        try:
+            written = _call_with_deadline(write, deadline=deadline, cancel=write.cancel)
+        except BaseException:
+            # Capacity/start failures happen before the deadline helper can
+            # invoke its cancellation callback.
+            write.cancel()
+            raise
         if written <= 0:
             raise _RestrictedDownloadError(
                 "external_archive_connection_failed",
