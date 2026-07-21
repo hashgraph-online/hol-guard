@@ -49,6 +49,11 @@ def _run_guard_command_inspection_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    if str(getattr(args, "command_command", "")) == "controls":
+        from .extension_controls_commands import run_extension_controls_command
+
+        guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
+        return run_extension_controls_command(args, guard_home=guard_home, output_stream=output_stream)
     from ..runtime.command_inspection import command_extensions_payload, inspect_command
 
     command_command = str(getattr(args, "command_command", ""))
