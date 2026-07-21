@@ -12,17 +12,11 @@ import {
 } from "./lab-process";
 import { teardownLab, type TeardownEvidence } from "./teardown";
 import { runInstalledPlaywright } from "./installed-playwright";
+import { fetchLabGet } from "./relay-fetch";
 import { readDashboardSession } from "./session-handoff";
 const SENTINEL = "guard-private-command-sentinel";
 interface ReadyEvidence {
   activity_count: number;
-  containment: {
-    enforced: boolean;
-    exit_code: number;
-    output_written: boolean;
-    protected_value_unchanged: boolean;
-    secret_hidden: boolean;
-  };
   installed_origin: string;
   prompt_free_hook_count: 2;
   version: string;
@@ -33,6 +27,13 @@ interface ReadyEvidence {
     drift_claimed: 0;
     request_flow: "authenticated-daemon-api";
   };
+}
+interface ContainmentEvidence {
+  enforced: boolean;
+  exit_code: number;
+  output_written: boolean;
+  protected_value_unchanged: boolean;
+  secret_hidden: boolean;
 }
 interface PendingWorkflowEvidence {
   request_id: string;
@@ -53,12 +54,17 @@ interface ApiEvidence {
 export interface LabEvidence {
   api: ApiEvidence;
   cleanup: TeardownEvidence;
-  installed: Omit<ReadyEvidence, "workflow_authorization">;
+  installed: Omit<ReadyEvidence, "workflow_authorization"> & { containment: ContainmentEvidence };
   persistence: { afterRestart: number; beforeRestart: number };
   playwright: "passed";
   privacy: { api: "clean"; database: "clean"; export: "clean"; sse: "clean" };
   status: "pass";
   workflowAuthorization: ReadyEvidence["workflow_authorization"];
+}
+interface InstalledContainmentEnvelope {
+  containment: ContainmentEvidence;
+  installed_origin: string;
+  version: string;
 }
 function packageVersion(pyproject: string): string {
   const match = pyproject.match(/^version\s*=\s*"([^"]+)"/m);
@@ -100,9 +106,7 @@ async function waitForReady(origin: string, timeoutMs = 60_000): Promise<void> {
   throw new Error("installed Guard daemon did not become ready");
 }
 export async function readyFromLogs(
-  project: string,
-  environment: Record<string, string>,
-  runner: CommandRunner,
+  project: string, environment: Record<string, string>, runner: CommandRunner,
 ): Promise<ReadyEvidence> {
   const logs = requireSuccess(
     await runner(composeCommand(project, "logs", "--no-color", "guard"), { cwd: LAB_DIR, env: environment }),
@@ -114,9 +118,7 @@ export async function readyFromLogs(
   return JSON.parse(payload) as ReadyEvidence;
 }
 async function pendingFromLogs(
-  project: string,
-  environment: Record<string, string>,
-  runner: CommandRunner,
+  project: string, environment: Record<string, string>, runner: CommandRunner,
 ): Promise<PendingWorkflowEvidence | null> {
   const logs = requireSuccess(
     await runner(composeCommand(project, "logs", "--no-color", "guard"), { cwd: LAB_DIR, env: environment }),
@@ -156,20 +158,51 @@ async function waitForReadyEvidence(
   }
   throw new Error("installed daemon did not complete workflow authorization");
 }
+async function runInstalledContainment(runner: CommandRunner, version: string): Promise<ContainmentEvidence> {
+  const python = Bun.env.HOL_GUARD_LAB_PYTHON;
+  if (!python) throw new Error("HOL_GUARD_LAB_PYTHON must name the exact installed canary interpreter");
+  const result = requireSuccess(
+    await runner([
+      python, "-I", resolve(LAB_DIR, "installed_containment_probe.py"),
+      "--expected-version", version, "--repo-root", REPO_ROOT,
+    ], { cwd: LAB_DIR }),
+    "installed containment proof",
+  );
+  const envelope = JSON.parse(result) as InstalledContainmentEnvelope;
+  const expected = {
+    enforced: true,
+    exit_code: 0,
+    output_written: true,
+    protected_value_unchanged: true,
+    secret_hidden: true,
+  };
+  if (
+    envelope.version !== version
+    || !envelope.installed_origin.includes("site-packages")
+    || JSON.stringify(envelope.containment) !== JSON.stringify(expected)
+  ) {
+    throw new Error("installed containment evidence did not reconcile");
+  }
+  return envelope.containment;
+}
 async function apiJson(
   origin: string,
   path: string,
   session: string,
   init: RequestInit = {},
 ): Promise<Record<string, unknown>> {
-  const response = await fetch(`${origin}${path}`, {
+  const request = `${origin}${path}`;
+  const options = {
     ...init,
     headers: {
       "Content-Type": "application/json",
       "X-Guard-Dashboard-Session": session,
       ...init.headers,
     },
-  });
+  };
+  const response = init.method === undefined
+    ? await fetchLabGet(request, options)
+    : await fetch(request, options);
   if (!response.ok) throw new Error(`${path} returned ${response.status}: ${await response.text()}`);
   return await response.json() as Record<string, unknown>;
 }
@@ -235,7 +268,7 @@ async function verifyDiagnosticsExport(
   session: string,
   expectedActivityCount: number,
 ): Promise<number> {
-  const unauthenticated = await fetch(`${origin}/v1/command-activity/diagnostics`);
+  const unauthenticated = await fetchLabGet(`${origin}/v1/command-activity/diagnostics`);
   if (unauthenticated.status !== 401) throw new Error("command activity export did not require authentication");
   const diagnostics = await apiJson(origin, "/v1/command-activity/diagnostics", session);
   assertPrivate(diagnostics);
@@ -259,13 +292,13 @@ async function verifyCommandActivitySse(
   session: string,
   expectedActivityIds: ReadonlySet<string>,
 ): Promise<number> {
-  const unauthenticated = await fetch(`${origin}/v1/command-activity/events?cursor=0`);
+  const unauthenticated = await fetchLabGet(`${origin}/v1/command-activity/events?cursor=0`);
   if (unauthenticated.status !== 401) throw new Error("command activity SSE did not require authentication");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5_000);
   const seen = new Set<string>();
   try {
-    const response = await fetch(`${origin}/v1/command-activity/events?cursor=0`, {
+    const response = await fetchLabGet(`${origin}/v1/command-activity/events?cursor=0`, {
       headers: { "X-Guard-Dashboard-Session": session },
       signal: controller.signal,
     });
@@ -317,10 +350,10 @@ async function verifyCommandActivitySse(
 async function verifyApi(
   origin: string,
   session: string,
-  containment: ReadyEvidence["containment"],
+  containment: ContainmentEvidence,
   promptFreeHookCount: number,
 ): Promise<ApiEvidence> {
-  const unauthenticated = await fetch(`${origin}/v1/command-activity`);
+  const unauthenticated = await fetchLabGet(`${origin}/v1/command-activity`);
   if (unauthenticated.status !== 401) throw new Error("command activity API did not require authentication");
   const [activity, analytics, cursor] = await Promise.all([
     apiJson(origin, "/v1/command-activity?limit=100", session),
@@ -400,6 +433,7 @@ export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvi
     if (existing.containers.length || existing.volumes.length || existing.networks.length) {
       throw new Error(`Dockerlabs project is not clean before start: ${JSON.stringify(existing)}`);
     }
+    const containment = await runInstalledContainment(runner, version);
     requireSuccess(
       await runner(composeCommand(project, "up", "-d", "--build", "--wait"), { cwd: LAB_DIR, env: environment }),
       "Dockerlabs startup",
@@ -416,7 +450,7 @@ export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvi
       drift_claimed: 0,
       request_flow: "authenticated-daemon-api",
     })) throw new Error("workflow authorization evidence did not reconcile");
-    const api = await verifyApi(origin, session, first.containment, first.prompt_free_hook_count);
+    const api = await verifyApi(origin, session, containment, first.prompt_free_hook_count);
     await verifyDatabasePrivacy(project, environment, runner);
     requireSuccess(
       await runner(composeCommand(project, "restart", "guard"), { cwd: LAB_DIR, env: environment }),
@@ -428,7 +462,7 @@ export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvi
     const afterRestart = await verifyApi(
       origin,
       restartedSession,
-      restarted.containment,
+      containment,
       restarted.prompt_free_hook_count,
     );
     if (afterRestart.activityCount !== api.activityCount) throw new Error("activity persistence failed across restart");
@@ -444,7 +478,7 @@ export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvi
       cleanup,
       installed: {
         activity_count: first.activity_count,
-        containment: first.containment,
+        containment,
         installed_origin: first.installed_origin,
         prompt_free_hook_count: first.prompt_free_hook_count,
         version: first.version,
