@@ -30,6 +30,7 @@ from codex_plugin_scanner.guard.runtime.command_rules import (
 )
 from codex_plugin_scanner.guard.runtime.effect_contract import DecisionBasis, EffectKind, UncertaintyKind
 from codex_plugin_scanner.guard.runtime.effect_decision import (
+    EFFECT_DECISION_SCHEMA_VERSION,
     DecisionFactor,
     DecisionFactorSource,
     EffectDecision,
@@ -231,7 +232,7 @@ def test_public_payload_contains_versions_without_raw_command_or_failure_detail(
     assert observations
     assert all(item["extension_version"] and item["rule_version"] for item in observations)
     assert "./private-name" not in repr(payload)
-    assert cast(dict[str, object], payload["decision_plane"])["schema_version"] == "1.0.0"
+    assert cast(dict[str, object], payload["decision_plane"])["schema_version"] == EFFECT_DECISION_SCHEMA_VERSION
 
 
 @pytest.mark.parametrize("matcher", [_FailingMatcher(), _MalformedMatcher()])
