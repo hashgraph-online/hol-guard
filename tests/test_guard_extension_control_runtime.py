@@ -154,8 +154,12 @@ def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon._extension_control_refresh_interval_seconds = 0.01
+    daemon = GuardDaemonServer(
+        store,
+        host="127.0.0.1",
+        port=0,
+        extension_control_refresh_interval_seconds=0.01,
+    )
     daemon.start()
     try:
         updated = ExtensionControlAuthorityView(

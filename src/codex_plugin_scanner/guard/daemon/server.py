@@ -9,6 +9,7 @@ import hmac
 import inspect
 import io
 import json
+import logging
 import mimetypes
 import os
 import platform
@@ -233,6 +234,7 @@ from .manager import (
     write_guard_daemon_state,
 )
 
+_LOGGER = logging.getLogger(__name__)
 _HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
 _HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
 _AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
@@ -6556,6 +6558,7 @@ class GuardDaemonServer:
         bundle_refresh_interval_seconds: float | None = _DEFAULT_SUPPLY_CHAIN_REFRESH_INTERVAL_SECONDS,
         aibom_refresh_backoff_seconds: float = _DEFAULT_SUPPLY_CHAIN_REFRESH_BACKOFF_SECONDS,
         aibom_refresh_interval_seconds: float | None = float(_AIBOM_AUTO_SYNC_INTERVAL_SECONDS),
+        extension_control_refresh_interval_seconds: float = 5.0,
         idle_timeout_seconds: float | None = None,
         home_dir: Path | None = None,
         workspace_dir: Path | None = None,
@@ -6594,7 +6597,7 @@ class GuardDaemonServer:
         self._headless_cloud_sync_thread: threading.Thread | None = None
         self._command_activity_maintenance_thread: threading.Thread | None = None
         self._extension_control_refresh_thread: threading.Thread | None = None
-        self._extension_control_refresh_interval_seconds = 0.25
+        self._extension_control_refresh_interval_seconds = extension_control_refresh_interval_seconds
         self._live_request_sync_worker: LiveRequestSyncWorker | None = None
         self._thread: threading.Thread | None = None
         self._watchdog_thread: threading.Thread | None = None
@@ -6692,9 +6695,9 @@ class GuardDaemonServer:
     def _refresh_extension_control_loop(self) -> None:
         while not self._shutdown_started.wait(self._extension_control_refresh_interval_seconds):
             try:
-                self._server.refresh_extension_control_runtime()
+                _ = self._server.refresh_extension_control_runtime()
             except Exception:
-                continue
+                _LOGGER.exception("Failed to refresh resident extension-control authority")
 
     def _maintain_command_activity_best_effort(self) -> None:
         now = datetime.now(timezone.utc)
