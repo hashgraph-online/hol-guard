@@ -69,6 +69,7 @@ type LayoutProps = {
   homeContent: ReactNode;
   fleetContent: ReactNode;
   settingsContent: ReactNode;
+  extensionsContent: ReactNode;
   appDetailContent: ReactNode;
   supplyChainHubContent?: ReactNode;
   policyContent?: ReactNode;
@@ -181,6 +182,9 @@ function renderViewContent(props: LayoutProps): ReactNode {
   }
   if (props.view === "app-detail") {
     return props.appDetailContent;
+  }
+  if (props.view === "extensions") {
+    return props.extensionsContent;
   }
   if (props.view === "settings") {
     return props.settingsContent;

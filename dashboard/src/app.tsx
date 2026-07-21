@@ -33,6 +33,9 @@ import { useRouteFocus } from "./use-route-focus";
 const HomeWorkspace = lazy(() => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazy(() => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
 const SettingsWorkspace = lazy(() => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
+const ExtensionsWorkspace = lazy(() =>
+  import("./extensions-workspace").then((module) => ({ default: module.ExtensionsWorkspace }))
+);
 const AppDetailWorkspace = lazy(() => import("./apps/app-detail-workspace").then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazy(() => import("./help-modal").then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazy(() =>
@@ -167,6 +170,9 @@ export function resolveView(pathname: string): AppView {
   }
   if (pathname.startsWith("/apps/")) {
     return "fleet";
+  }
+  if (pathname === "/extensions") {
+    return "extensions";
   }
   if (pathname === "/settings") {
     return "settings";
@@ -910,6 +916,11 @@ export function App() {
             {appDetailContent}
           </Suspense>
         </ErrorBoundary>
+      }
+      extensionsContent={
+        <Suspense fallback={<LazyFallback />}>
+          <ExtensionsWorkspace />
+        </Suspense>
       }
       settingsContent={
         <Suspense fallback={<LazyFallback />}>
