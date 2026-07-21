@@ -603,3 +603,42 @@ def test_failed_proof_reservation_preserves_grant_for_retry(tmp_path: Path) -> N
         proof=proof,
     )
     assert committed.revision == 1
+
+
+def test_prepared_transition_retries_with_same_reserved_proof(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    store.read_extension_control_authority(catalog_digest=digest)
+    layers = (_disabled_layer(),)
+    proof = _proof(
+        store,
+        layers,
+        revision=0,
+        key="change-prepared-retry",
+        actor_id="local-admin",
+        nonce="nonce-prepared-retry",
+    )
+    secrets.fail_anchor_set_number = secrets.anchor_set_count + 1
+
+    with pytest.raises(ExtensionControlAuthorityError, match="anchor unavailable"):
+        store.commit_extension_control_layers(
+            layers,
+            catalog_digest=digest,
+            actor_id="local-admin",
+            expected_revision=0,
+            idempotency_key="change-prepared-retry",
+            nonce="nonce-prepared-retry",
+            proof=proof,
+        )
+
+    committed = store.commit_extension_control_layers(
+        layers,
+        catalog_digest=digest,
+        actor_id="local-admin",
+        expected_revision=0,
+        idempotency_key="change-prepared-retry",
+        nonce="nonce-prepared-retry",
+        proof=proof,
+    )
+    assert committed.revision == 1
