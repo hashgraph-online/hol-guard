@@ -32,8 +32,6 @@ if TYPE_CHECKING:
     from .commands_support_runtime_resolution import _canonical_harness_name, _runtime_policy_path
 
 
-from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from ..runtime.extension_control_contract import ControlSurface
 from ..runtime.kubernetes_commands import kubernetes_secret_read_source
 from ..runtime.shell_command_wrappers import normalize_transparent_shell_command
 from ._commands_shared import *
@@ -170,12 +168,7 @@ def _hook_runtime_artifact(
     home_dir: Path,
     guard_home: Path,
     workspace: Path | None,
-    store: GuardStore | None = None,
 ) -> GuardArtifact | None:
-    authority_store = store if store is not None else GuardStore(guard_home)
-    extension_control_layers = authority_store.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    ).layers_for(ControlSurface.COMMAND_EVALUATION)
     harness = _canonical_harness_name(harness)
     event_name = _hook_event_name(payload)
     if harness in {"codex", "pi"} and event_name == "PostToolUse":
@@ -303,7 +296,6 @@ def _hook_runtime_artifact(
         request=tool_request,
         config_path=config_path,
         source_scope=source_scope,
-        extension_control_layers=extension_control_layers,
     )
 
 
