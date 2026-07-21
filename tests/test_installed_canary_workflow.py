@@ -116,8 +116,17 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "/usr/bin/bwrap flags=(unconfined)" in workflow_text
     assert "sudo apparmor_parser -r /etc/apparmor.d/hol-guard-bwrap" in workflow_text
     assert "installed-canary/command-extension-analytics.json" in workflow_text
-    assert ".artifacts/command-extension-analytics/*.png" in workflow_text
-    assert "include-hidden-files: true" in workflow_text
+    verify_browser_proof = _named_step(steps, "Verify installed browser proof")
+    assert verify_browser_proof["if"] == "runner.os == 'Linux'"
+    verify_browser_proof_run = _text(verify_browser_proof["run"])
+    assert ".artifacts/command-extension-analytics/playwright-output" in verify_browser_proof_run
+    assert "installed-command-activity-overview.png" in verify_browser_proof_run
+    assert "installed-command-activity-filtered.png" in verify_browser_proof_run
+    assert "installed-command-activity-detail-feedback.png" in verify_browser_proof_run
+    upload = _named_step(steps, "Upload installed canary evidence")
+    upload_with = _mapping(upload["with"])
+    assert ".artifacts/command-extension-analytics/playwright-output/**/*.png" in _text(upload_with["path"])
+    assert upload_with["include-hidden-files"] is True
     canonical_runner_text = (ROOT / "tests/dockerlabs/command-extension-analytics/runner.ts").read_text(
         encoding="utf-8"
     )

@@ -514,6 +514,18 @@ jobs:
             HOL_GUARD_WHEEL="$GITHUB_WORKSPACE/dist/$WHEEL_NAME" \
             bun run guard:test:command-extension-analytics \
               > "$GITHUB_WORKSPACE/installed-canary/command-extension-analytics.json"
+      - name: Verify installed browser proof
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          proof_dir=.artifacts/command-extension-analytics/playwright-output
+          for screenshot in \
+            installed-command-activity-overview.png \
+            installed-command-activity-filtered.png \
+            installed-command-activity-detail-feedback.png; do
+            count=$(find "$proof_dir" -type f -name "$screenshot" | wc -l)
+            test "$count" -eq 1
+          done
       - name: Upload installed canary evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -521,7 +533,7 @@ jobs:
           path: |
             installed-canary/evidence.json
             installed-canary/command-extension-analytics.json
-            .artifacts/command-extension-analytics/*.png
+            .artifacts/command-extension-analytics/playwright-output/**/*.png
           if-no-files-found: error
           include-hidden-files: true
 
