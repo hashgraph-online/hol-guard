@@ -132,6 +132,15 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
                     "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
                     (AuthorityPhase.COMMITTED.value, _now(), revision),
                 )
+            self._queue_extension_control_change_event(
+                connection,
+                revision=revision,
+                previous_revision=previous_revision,
+                catalog_digest=catalog_digest,
+                snapshot_digest=_row_str(row, "snapshot_digest"),
+                layers_json=layers_json,
+                occurred_at=_row_str(row, "created_at"),
+            )
             connection.commit()
             self._write_and_verify_anchor(
                 AuthorityAnchor(revision, _row_str(row, "snapshot_digest"), AuthorityPhase.COMMITTED),

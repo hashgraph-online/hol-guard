@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
+from .edge_events import build_policy_event
+from .extension_control_events import extension_control_change_payload
 from .runtime.extension_control_authority import (
     AuthorityAnchor,
     AuthorityHealth,
@@ -21,6 +23,7 @@ from .runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
     anchor_from_json,
     anchor_to_json,
+    layers_from_json,
 )
 from .runtime.extension_control_contract import ControlLayerKind, ExtensionControlLayer
 from .runtime.extension_control_resolver import compose_control_layers
@@ -131,6 +134,35 @@ class _ExtensionControlAuthoritySupportMixin:
     def _validate_serialized_layers(layers_json: str) -> None:
         if len(layers_json.encode("utf-8")) > _MAX_SERIALIZED_LAYERS_BYTES:
             raise ExtensionControlAuthorityError("extension control layers exceed storage limit")
+
+    def _queue_extension_control_change_event(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        revision: int,
+        previous_revision: int,
+        catalog_digest: str,
+        snapshot_digest: str,
+        layers_json: str,
+        occurred_at: str,
+    ) -> None:
+        layers = layers_from_json(layers_json)
+        self._add_guard_event_v1(
+            connection,
+            build_policy_event(
+                policy_key=f"extension-controls:{revision}",
+                occurred_at=occurred_at,
+                device_id=None,
+                workspace_id=self._cloud_workspace_id_from_connection(connection),
+                payload=extension_control_change_payload(
+                    revision=revision,
+                    previous_revision=previous_revision,
+                    catalog_digest=catalog_digest,
+                    snapshot_digest=snapshot_digest,
+                    layers=layers,
+                ),
+            ),
+        )
 
     def _degraded_view(self, catalog_digest: str) -> ExtensionControlAuthorityView:
         health = (

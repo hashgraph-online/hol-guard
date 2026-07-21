@@ -700,3 +700,28 @@ def test_prepared_transition_retries_with_same_reserved_proof(tmp_path: Path) ->
         proof=proof,
     )
     assert committed.revision == 1
+
+
+def test_control_change_queues_privacy_safe_append_only_cloud_event(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+
+    _commit(store, actor_id="private-admin-identity")
+
+    with store._connect() as connection:
+        rows = connection.execute(
+            "select event_type, payload_json from guard_cloud_events where event_type = 'policy.changed'"
+        ).fetchall()
+    assert len(rows) == 1
+    envelope = json.loads(str(rows[0]["payload_json"]))
+    assert envelope["source"] == "policy"
+    payload = envelope["payload"]
+    assert payload["schema"] == "guard.extension-control-authority-change.v1"
+    assert payload["revision"] == 1
+    assert payload["previousRevision"] == 0
+    assert payload["disabledExtensionCount"] == 1
+    assert payload["blockSource"] == "extension-control-authority"
+    serialized = json.dumps(envelope)
+    assert "private-admin-identity" not in serialized
+    assert "nonce-change-1" not in serialized
+    assert _PASSWORD not in serialized

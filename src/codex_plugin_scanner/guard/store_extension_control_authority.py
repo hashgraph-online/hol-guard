@@ -334,6 +334,15 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                     "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
                     (AuthorityPhase.COMMITTED.value, created_at, revision),
                 )
+                self._queue_extension_control_change_event(
+                    connection,
+                    revision=revision,
+                    previous_revision=current.revision,
+                    catalog_digest=catalog_digest,
+                    snapshot_digest=snapshot_digest,
+                    layers_json=layers_json,
+                    occurred_at=created_at,
+                )
             try:
                 self._write_and_verify_anchor(
                     AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.COMMITTED),
