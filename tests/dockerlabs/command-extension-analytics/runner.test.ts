@@ -146,6 +146,7 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(containmentProbe).toContain("not destination.exists()");
     expect(containmentProbe).toContain("cat {protected_path}");
     expect(containmentProbe).toContain("printf changed 2>/dev/null > {protected_path}");
+    expect(containmentProbe).toContain('"namespace-unavailable"');
     expect(containmentProbe).toContain('"site-packages"');
     expect(server).not.toContain("record_pre_hook_command_activity_best_effort");
     expect(server).not.toContain("record_command_activity(");

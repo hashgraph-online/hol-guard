@@ -86,13 +86,22 @@ def _probe() -> dict[str, object]:
             and result.outputs[0].content == b"formatted\n"
             and not destination.exists()
         )
-        return {
+        evidence: dict[str, object] = {
             "enforced": result.enforced,
             "exit_code": result.exit_code,
             "output_written": output_written,
             "protected_value_unchanged": secret_file.read_text(encoding="utf-8") == SENTINEL,
             "secret_hidden": SENTINEL not in result.stdout and SENTINEL not in result.stderr,
         }
+        if result.exit_code != 0:
+            namespace_error = any(
+                marker in result.stderr for marker in ("No permissions", "Operation not permitted", "user namespace")
+            )
+            evidence["backend_error"] = "namespace-unavailable" if namespace_error else "command-failed"
+            evidence["failure"] = (
+                result.attestation.failure.value if result.attestation.failure is not None else "backend-command-failed"
+            )
+        return evidence
 
 
 def main() -> None:
@@ -110,7 +119,7 @@ def main() -> None:
         "secret_hidden": True,
     }
     if evidence != expected:
-        raise RuntimeError("installed containment proof failed closed")
+        raise RuntimeError(f"installed containment proof failed closed: {json.dumps(evidence, sort_keys=True)}")
     print(
         json.dumps(
             {
