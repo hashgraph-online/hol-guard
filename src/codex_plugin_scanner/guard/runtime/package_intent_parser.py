@@ -46,6 +46,7 @@ from .shell_execution_context import (
     model_shell_execution_context,
     validate_shell_execution_segment,
 )
+from .typescript_launch_evidence import TypeScriptLaunchInputs, build_typescript_launch_evidence
 
 _CONTROL_TOKENS = {"&&", "||", ";", "|", "|&", "&"}
 _CONTROL_CONTEXT_LABELS = {
@@ -65,20 +66,6 @@ _LOCAL_EXECUTION_FLAGS_BY_COMMAND = {
     "bunx": frozenset({"--bun", "--no-install"}),
     "npx": frozenset({"--no", "--no-install"}),
 }
-_TSC_READ_ONLY_FLAGS = frozenset(
-    {
-        "--diagnostics",
-        "--extendedDiagnostics",
-        "--explainFiles",
-        "--listFiles",
-        "--listFilesOnly",
-        "--noEmit",
-        "--noErrorTruncation",
-        "--pretty",
-        "--skipLibCheck",
-        "--traceResolution",
-    }
-)
 _LOCAL_EXECUTABLE_PACKAGE_ALIASES = {"tsc": "typescript"}
 _JS_LOCKFILE_NAMES = ("bun.lock", "bun.lockb", "package-lock.json", "pnpm-lock.yaml", "yarn.lock")
 _PYTHON_EXECUTABLES = {"py", "python", "python3", "python3.11", "python3.12", "python3.13", "python3.14"}
@@ -339,8 +326,9 @@ def _parse_exec_intent(
         manifest_paths=intent.manifest_paths,
         lockfile_paths=intent.lockfile_paths,
     )
-    if _is_verified_read_only_typescript_check(tokens, local_execution):
-        return None
+    typescript_launch = build_typescript_launch_evidence(_typescript_launch_inputs(tokens, local_execution))
+    if typescript_launch is not None:
+        local_execution = replace(local_execution, typescript_launch=typescript_launch)
     return replace(
         intent,
         local_executions=(local_execution,),
@@ -348,66 +336,38 @@ def _parse_exec_intent(
     )
 
 
-def _is_verified_read_only_typescript_check(
+def _typescript_launch_inputs(
     tokens: tuple[str, ...],
     evidence: LocalPackageExecutionEvidence,
-) -> bool:
-    if any(token == "--package" or token.startswith("--package=") for token in tokens[1:]):
-        return False
-    if evidence.package_name not in {"tsc", "typescript"} or evidence.executable_name != "tsc":
-        return False
-    required_files = (evidence.manager, evidence.local_executable, *evidence.manifests, *evidence.lockfiles)
-    if (
-        evidence.declared_version is None
-        or not evidence.manifests
-        or not evidence.lockfiles
-        or any(file is None or file.status != "available" for file in required_files)
-        or not _lockfiles_record_typescript(evidence.lockfiles)
-    ):
-        return False
-    try:
-        executable_index = tokens.index("tsc", 1)
-    except ValueError:
-        return False
-    compiler_args = tokens[executable_index + 1 :]
-    if "--noEmit" not in compiler_args:
-        return False
-    if "2>" in compiler_args and compiler_args[-1] != "2>":
-        return False
-    return all(_is_read_only_typescript_argument(token) for token in compiler_args)
-
-
-def _lockfiles_record_typescript(lockfiles: tuple[PackageExecutionFileEvidence, ...]) -> bool:
-    for lockfile in lockfiles:
-        if (
-            lockfile.resolved_path is None
-            or lockfile.status != "available"
-            or Path(lockfile.path).name != "package-lock.json"
-        ):
-            continue
-        try:
-            payload = json.loads(Path(lockfile.resolved_path).read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, ValueError):
-            continue
-        packages = payload.get("packages") if isinstance(payload, dict) else None
-        typescript_entry = packages.get("node_modules/typescript") if isinstance(packages, dict) else None
-        if isinstance(typescript_entry, dict) and isinstance(typescript_entry.get("version"), str):
-            return True
-    return False
-
-
-def _is_read_only_typescript_argument(token: str) -> bool:
-    if token in _TSC_READ_ONLY_FLAGS or token == "2>" or _is_safe_fd_duplication_redirect(token):
-        return True
-    if re.match(r"^\d*(?:>>?|<<?)", token):
-        return False
-    if token.startswith("-"):
-        return False
-    return token.endswith((".cts", ".mts", ".ts", ".tsx"))
-
-
-def _is_safe_fd_duplication_redirect(token: str) -> bool:
-    return re.fullmatch(r"[012]?[<>]&(?:[012]|-)", token) is not None
+) -> TypeScriptLaunchInputs:
+    manager = evidence.manager
+    executable = evidence.local_executable
+    available_manifests = tuple(
+        item for item in evidence.manifests if item.status == "available" and item.resolved_path and item.content_hash
+    )
+    available_lockfiles = tuple(
+        item for item in evidence.lockfiles if item.status == "available" and item.resolved_path and item.content_hash
+    )
+    return TypeScriptLaunchInputs(
+        tokens=tokens,
+        manager_name=evidence.manager_name,
+        local_only_requested=evidence.local_only_requested,
+        package_name=evidence.package_name,
+        executable_name=evidence.executable_name,
+        declared_version=evidence.declared_version,
+        manager_path=manager.resolved_path if manager is not None and manager.status == "available" else None,
+        manager_hash=manager.content_hash if manager is not None and manager.status == "available" else None,
+        executable_path=(
+            executable.resolved_path if executable is not None and executable.status == "available" else None
+        ),
+        executable_hash=(
+            executable.content_hash if executable is not None and executable.status == "available" else None
+        ),
+        manifest_paths=tuple(str(item.resolved_path) for item in available_manifests),
+        manifest_hashes=tuple(str(item.content_hash) for item in available_manifests),
+        lockfile_paths=tuple(str(item.resolved_path) for item in available_lockfiles),
+        lockfile_hashes=tuple(str(item.content_hash) for item in available_lockfiles),
+    )
 
 
 def _local_execution_disables_install(tokens: tuple[str, ...]) -> bool:

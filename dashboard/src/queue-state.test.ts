@@ -532,7 +532,7 @@ assert(
   "T-QS-47: buildHomePrimaryState CTA is 'Set up protection' when no watched apps"
 );
 
-const protectedState = buildHomePrimaryState(0, 2);
+const protectedState = buildHomePrimaryState(0, 2, "protected");
 assert(
   protectedState.status === "protected",
   "T-QS-48: buildHomePrimaryState returns protected status when guarded with apps present"
@@ -540,6 +540,12 @@ assert(
 assert(
   protectedState.copy.includes("protecting"),
   "T-QS-49: buildHomePrimaryState copy mentions protecting when protected"
+);
+
+const unprovenState = buildHomePrimaryState(0, 2);
+assert(
+  unprovenState.status === "setup_needed" && unprovenState.copy.includes("degraded"),
+  "T-QS-49b: connected apps do not imply protection without health proof"
 );
 
 const singlePending = buildHomePrimaryState(1, 1);
@@ -628,6 +634,23 @@ const fileReadTypeGroup = groupDuplicates([fileReadTypeItem])[0];
 assert(
   isReadOnlyQueueGroup(fileReadTypeGroup),
   "T-QS-54: isReadOnlyQueueGroup returns true for artifact_type file_read_request even without action_envelope"
+);
+
+const noAllowScopeGroup = groupDuplicates([
+  {
+    ...readOnlySingle,
+    request_id: "req-no-allow-scope",
+    allowed_scopes_by_action: { allow: [], block: ["artifact"] },
+    recommended_scope_by_action: { allow: null, block: "artifact" },
+  },
+])[0];
+assert(
+  !isBulkApprovableGroup(noAllowScopeGroup),
+  "T-QS-54a: batch selection excludes requests without an eligible artifact allow",
+);
+assert(
+  isBulkApprovableGroup(singleReadOnlyGroup),
+  "T-QS-54b: legacy requests retain conservative artifact-once batch eligibility",
 );
 
 const mixedGroups = groupDuplicates([readOnlySingle, readOnlyWithDup1, readOnlyWithDup2]);

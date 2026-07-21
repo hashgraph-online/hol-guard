@@ -7,12 +7,21 @@ from __future__ import annotations
 
 from ._commands_shared import *
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from ..action_lattice import normalize_guard_action
 from ..incident import build_incident_context
 from ..models import GuardReceipt
+from ..runtime.command_activity_contract import ActivityApprovalReuseStatus
 from ..runtime.signals import RiskSignalV2
+from .commands_support_command_activity import (
+    command_activity_was_prompted,
+    hook_is_post_event,
+    hook_is_pre_event,
+    hook_post_succeeded,
+    record_post_hook_command_activity_best_effort,
+    record_pre_hook_command_activity_best_effort,
+)
 
 
 @dataclass
@@ -36,6 +45,8 @@ class RuntimeArtifactHookState:
     runtime_artifact_hash: str
     scanner_evidence_payload: list[dict[str, object]]
     stored_policy_action: str | None
+    guard_home: Path | None = None
+    hook_payload: dict[str, object] = field(default_factory=dict)
     receipt_recorded: bool = False
 
 
@@ -197,6 +208,44 @@ def record_runtime_artifact_hook_receipt(
     state.receipt_recorded = True
     state.response_payload["recorded"] = True
     state.response_payload["receipt_id"] = state.receipt.receipt_id
+    _record_runtime_command_activity(state, store)
+
+
+def _record_runtime_command_activity(state: RuntimeArtifactHookState, store: GuardStore) -> None:
+    if state.guard_home is None:
+        return
+    if hook_is_post_event(state.event_name):
+        record_post_hook_command_activity_best_effort(
+            store=store,
+            guard_home=state.guard_home,
+            harness=state.runtime_artifact.harness,
+            event=state.event_name,
+            payload=state.hook_payload,
+            succeeded=hook_post_succeeded(state.event_name, state.hook_payload),
+        )
+        return
+    if not hook_is_pre_event(state.event_name):
+        return
+    approval_reuse_status = ActivityApprovalReuseStatus.NOT_APPLICABLE
+    approval_reuse = state.response_payload.get("approval_reuse")
+    if isinstance(approval_reuse, dict):
+        status = approval_reuse.get("status")
+        if status in {item.value for item in ActivityApprovalReuseStatus}:
+            approval_reuse_status = ActivityApprovalReuseStatus(status)
+    record_pre_hook_command_activity_best_effort(
+        store=store,
+        guard_home=state.guard_home,
+        harness=state.runtime_artifact.harness,
+        event=state.event_name,
+        payload=state.hook_payload,
+        policy_action=state.receipt.policy_decision,
+        receipt_id=state.receipt.receipt_id,
+        prompted=command_activity_was_prompted(
+            normalize_guard_action(state.initial_policy_action),
+            approval_reuse_status,
+        ),
+        approval_reuse_status=approval_reuse_status,
+    )
 
 __all__ = [
     "RuntimeArtifactHookState",

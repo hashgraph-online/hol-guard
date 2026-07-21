@@ -1,4 +1,4 @@
-import { Q as requireReact, R as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, x as useFocusTrap, T as HiMiniKey, S as SectionLabel, A as ActionButton, k as HiMiniShieldCheck, U as HiMiniLockClosed, V as HiMiniBellAlert, W as HiMiniAdjustmentsHorizontal, X as HiMiniCog6Tooth, Y as HiMiniCircleStack, Z as TabBar, F as HiMiniChevronRight, _ as resolveProtectionLevelCopy, $ as fetchSettings, a0 as fetchRuntimeSnapshot, a1 as updateSettings, a2 as clearPolicy, a3 as clearReviewQueue, a4 as revokeApprovalGateCooldown, a5 as disableApprovalGateTotp, a6 as importSettings, a7 as resetSettings, a8 as enrollApprovalGateTotp, a9 as verifyApprovalGateTotp, aa as clearEvidence, ab as exportDiagnostics, ac as repairApprovalCenter, ad as exportSettings, ae as setupDesktopNotifications, b as EmptyState, e as GuardHero, af as Tag, ag as HiMiniMagnifyingGlass, d as HiMiniCheckCircle, z as HiMiniExclamationTriangle, ah as approvalGateCooldownLabel, p as HiMiniXMark } from "../guard-dashboard.js";
+import { W as requireReact, X as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, I as useFocusTrap, Y as HiMiniKey, S as SectionLabel, A as ActionButton, q as HiMiniShieldCheck, Z as HiMiniLockClosed, _ as HiMiniBellAlert, $ as HiMiniAdjustmentsHorizontal, a0 as HiMiniCog6Tooth, a1 as HiMiniCircleStack, a2 as TabBar, c as HiMiniChevronRight, a3 as resolveProtectionLevelCopy, a4 as fetchSettings, a5 as fetchRuntimeSnapshot, a6 as updateSettings, a7 as clearPolicy, a8 as clearReviewQueue, a9 as revokeApprovalGateCooldown, aa as disableApprovalGateTotp, ab as importSettings, ac as resetSettings, ad as enrollApprovalGateTotp, ae as verifyApprovalGateTotp, af as clearEvidence, ag as exportDiagnostics, ah as repairApprovalCenter, ai as exportSettings, aj as setupDesktopNotifications, k as EmptyState, n as GuardHero, ak as Tag, al as HiMiniMagnifyingGlass, m as HiMiniCheckCircle, K as HiMiniExclamationTriangle, am as approvalGateCooldownLabel, x as HiMiniXMark } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
 var lib = {};
 var propTypes = { exports: {} };
@@ -2862,7 +2862,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       GuardHero,
       {
-        status: "clear",
+        status: "neutral",
         headline: "Set how hard Guard should push back",
         subheadline: "Pick a security level, then fine-tune individual rules whenever you need more control.",
         cta: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: protectionModeLabel(draft.mode) })

@@ -17,6 +17,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..cli.commands_support_command_activity import (
+    hook_post_succeeded,
+    record_post_hook_command_activity_best_effort,
+)
 from ..config import load_guard_config
 from ..runtime.hook_content_scanner import ContentScanner
 from ..runtime.hook_decision_cache import HookDecisionCache
@@ -105,6 +109,14 @@ class HookWorker:
             workspace=workspace,
         )
         response = self.engine.review(request)
+        record_post_hook_command_activity_best_effort(
+            store=self.store,
+            guard_home=self.guard_home,
+            harness=harness,
+            event=event_name,
+            payload=payload,
+            succeeded=hook_post_succeeded(event_name, payload),
+        )
         return _harness_json_from_review_response(harness, event_name, response)
 
     def _runtime_harness(self, params: Mapping[str, list[str]]) -> str | None:

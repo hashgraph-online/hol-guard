@@ -13,7 +13,7 @@ const urls = {
   connect_url: "http://localhost:7392/connect",
 };
 
-const localOnlyWithApps = resolveFleetHeroCopy("local_only", 2, urls);
+const localOnlyWithApps = resolveFleetHeroCopy("local_only", 2, "protected", urls);
 assert(
   localOnlyWithApps.primaryCtaLabel !== "Open Cloud Devices",
   `F1: local_only primary CTA must not be "Open Cloud Devices" — got "${localOnlyWithApps.primaryCtaLabel}"`
@@ -28,14 +28,14 @@ assert(
 );
 assert(localOnlyWithApps.status === "clear", "F1: local_only with apps status should be clear");
 
-const localOnlyNoApps = resolveFleetHeroCopy("local_only", 0, urls);
+const localOnlyNoApps = resolveFleetHeroCopy("local_only", 0, "degraded", urls);
 assert(
   localOnlyNoApps.primaryCtaHref === urls.connect_url,
   `F2: local_only no-apps primary CTA href should be connect_url — got "${localOnlyNoApps.primaryCtaHref}"`
 );
 assert(localOnlyNoApps.status === "setup_gap", "F2: local_only no apps status should be setup_gap");
 
-const pairedWaitingWithApps = resolveFleetHeroCopy("paired_waiting", 3, urls);
+const pairedWaitingWithApps = resolveFleetHeroCopy("paired_waiting", 3, "protected", urls);
 assert(
   pairedWaitingWithApps.primaryCtaLabel === "Open Cloud Devices",
   `F3: paired_waiting primary CTA should be "Open Cloud Devices" — got "${pairedWaitingWithApps.primaryCtaLabel}"`
@@ -47,10 +47,10 @@ assert(
 );
 assert(pairedWaitingWithApps.status === "clear", "F3: paired_waiting with apps status should be clear");
 
-const pairedWaitingNoApps = resolveFleetHeroCopy("paired_waiting", 0, urls);
+const pairedWaitingNoApps = resolveFleetHeroCopy("paired_waiting", 0, "degraded", urls);
 assert(pairedWaitingNoApps.status === "setup_gap", "F3b: paired_waiting no apps status should be setup_gap");
 
-const pairedActiveWithApps = resolveFleetHeroCopy("paired_active", 2, urls);
+const pairedActiveWithApps = resolveFleetHeroCopy("paired_active", 2, "protected", urls);
 assert(
   pairedActiveWithApps.primaryCtaLabel === "Open Cloud Devices",
   `F4: paired_active primary CTA should be "Open Cloud Devices" — got "${pairedActiveWithApps.primaryCtaLabel}"`
@@ -61,7 +61,11 @@ assert(
 );
 assert(pairedActiveWithApps.status === "clear", "F4: paired_active with apps status should be clear");
 
-const pairedActiveNoApps = resolveFleetHeroCopy("paired_active", 0, urls);
+const pairedActiveNoApps = resolveFleetHeroCopy("paired_active", 0, "degraded", urls);
+
+const degradedWithApps = resolveFleetHeroCopy("paired_active", 2, "degraded", urls);
+assert(degradedWithApps.status === "degraded", "active installs cannot imply protected fleet health");
+assert(degradedWithApps.headline === "App protection is degraded", "degraded fleet copy is explicit");
 assert(pairedActiveNoApps.status === "setup_gap", "F5: paired_active no apps status should be setup_gap");
 
 const allStates: FleetHeroCopy[] = [localOnlyWithApps, pairedWaitingWithApps, pairedActiveWithApps];

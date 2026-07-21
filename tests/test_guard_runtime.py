@@ -12096,22 +12096,14 @@ def test_guard_run_prompt_allow_once_launches_and_records_override(tmp_path, cap
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
-    _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
-    global_server = home_dir / "global-server.py"
-    workspace_server = workspace_dir / "workspace-server.py"
-    _write_text(global_server, "print('global server')\n")
-    _write_text(workspace_server, "print('workspace server')\n")
+    codex_executable = _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
     _write_text(
         home_dir / ".codex" / "config.toml",
-        "[mcp_servers.global_tools]\n"
-        f"command = {json.dumps(sys.executable)}\n"
-        f"args = [{json.dumps(str(global_server))}]\n",
+        f"[mcp_servers.global_tools]\ncommand = {json.dumps(str(codex_executable))}\nargs = []\n",
     )
     _write_text(
         workspace_dir / ".codex" / "config.toml",
-        "[mcp_servers.workspace_skill]\n"
-        f"command = {json.dumps(sys.executable)}\n"
-        f"args = [{json.dumps(str(workspace_server))}]\n",
+        f"[mcp_servers.workspace_skill]\ncommand = {json.dumps(str(codex_executable))}\nargs = []\n",
     )
     _install_codex_native_hooks(home_dir, workspace_dir)
     answers = iter(["1", "1"])
@@ -12147,22 +12139,14 @@ def test_guard_run_prompt_allow_artifact_persists_for_next_run(tmp_path, capsys,
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
-    _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
-    global_server = home_dir / "global-server.py"
-    workspace_server = workspace_dir / "workspace-server.py"
-    _write_text(global_server, "print('global server')\n")
-    _write_text(workspace_server, "print('workspace server')\n")
+    codex_executable = _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
     _write_text(
         home_dir / ".codex" / "config.toml",
-        "[mcp_servers.global_tools]\n"
-        f"command = {json.dumps(sys.executable)}\n"
-        f"args = [{json.dumps(str(global_server))}]\n",
+        f"[mcp_servers.global_tools]\ncommand = {json.dumps(str(codex_executable))}\nargs = []\n",
     )
     _write_text(
         workspace_dir / ".codex" / "config.toml",
-        "[mcp_servers.workspace_skill]\n"
-        f"command = {json.dumps(sys.executable)}\n"
-        f"args = [{json.dumps(str(workspace_server))}]\n",
+        f"[mcp_servers.workspace_skill]\ncommand = {json.dumps(str(codex_executable))}\nargs = []\n",
     )
     _install_codex_native_hooks(home_dir, workspace_dir)
     answers = iter(["2", "2"])
@@ -13346,11 +13330,11 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
-    _make_pinnable_harness_executable(tmp_path, monkeypatch, "claude")
+    claude_executable = _make_pinnable_harness_executable(tmp_path, monkeypatch, "claude")
     _write_text(workspace_dir / "guard-pre.py", "pass\n")
     _write_json(
         workspace_dir / ".mcp.json",
-        {"mcpServers": {"workspace-tools": {"command": sys.executable, "args": ["-c", "pass"]}}},
+        {"mcpServers": {"workspace-tools": {"command": str(claude_executable), "args": []}}},
     )
     _write_text(
         home_dir / "config.toml",
@@ -13539,6 +13523,7 @@ def test_guard_run_interactive_allow_once_redetects_before_resume(tmp_path, monk
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True)
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
     artifact_id = "codex:project:interactive-redetect"
     detections = [
         HarnessDetection(
@@ -13554,7 +13539,7 @@ def test_guard_run_interactive_allow_once_redetects_before_resume(tmp_path, monk
                     artifact_type="tool_action_request",
                     source_scope="project",
                     config_path=str(workspace_dir / ".codex" / "config.toml"),
-                    command=sys.executable,
+                    command="codex",
                     args=("-c", "print('before')"),
                 ),
             ),
@@ -13572,7 +13557,7 @@ def test_guard_run_interactive_allow_once_redetects_before_resume(tmp_path, monk
                     artifact_type="tool_action_request",
                     source_scope="project",
                     config_path=str(workspace_dir / ".codex" / "config.toml"),
-                    command=sys.executable,
+                    command="codex",
                     args=("-c", "print('after')"),
                 ),
             ),
@@ -13957,7 +13942,7 @@ def test_runtime_hook_saved_v1_allow_satisfies_exact_unchanged_current_review(tm
     event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
-        "tool_input": {"command": "rm -rf build-cache"},
+        "tool_input": {"command": "rm -rf build"},
         "source_scope": "project",
     }
 
@@ -14365,7 +14350,7 @@ def test_runtime_hook_saved_allow_invalidates_when_path_resolves_executable_else
     event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
-        "tool_input": {"command": "rm -rf build-cache"},
+        "tool_input": {"command": "rm -rf build"},
         "source_scope": "project",
     }
     original_path = os.environ.get("PATH", "")
@@ -15222,7 +15207,7 @@ def test_guard_hook_codex_strict_default_still_denies_destructive_shell_command(
     assert "destructive shell command" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
-def test_guard_hook_codex_emits_no_native_output_for_safe_github_node_review_thread_command(
+def test_guard_hook_codex_blocks_github_token_substitution_command(
     tmp_path,
     capsys,
     monkeypatch,
@@ -15262,8 +15247,10 @@ def test_guard_hook_codex_emits_no_native_output_for_safe_github_node_review_thr
     pending = GuardStore(home_dir).list_approval_requests(limit=10)
 
     assert rc == 0
-    assert output == ""
-    assert GuardStore(home_dir).list_receipts(limit=10) == []
+    payload = json.loads(output)
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "GitHub secret mutation command" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert len(GuardStore(home_dir).list_receipts(limit=10)) == 1
     assert pending == []
 
 
@@ -16455,7 +16442,7 @@ def test_guard_runtime_allows_lean_ctx_wrapped_gh_graphql_pipeline(tmp_path):
     assert match is None
 
 
-def test_guard_hook_allows_routine_github_repository_update(tmp_path, capsys, monkeypatch):
+def test_guard_hook_reviews_github_repository_update(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -16482,7 +16469,8 @@ def test_guard_hook_allows_routine_github_repository_update(tmp_path, capsys, mo
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert output["permissionDecision"] == "deny"
+    assert "GitHub remote mutation command" in output["permissionDecisionReason"]
 
 
 def test_guard_runtime_blocks_unsafe_cd_before_pytest_module_invocation(tmp_path):
@@ -17266,7 +17254,7 @@ def test_guard_runtime_tool_action_policy_uses_network_egress_when_stricter(tmp_
         "global",
     ],
 )
-def test_guard_runtime_honors_saved_allows_for_same_risky_tool_action(
+def test_guard_runtime_narrows_legacy_broad_allow_for_same_risky_tool_action(
     tmp_path: Path,
     scope: str,
 ) -> None:
@@ -17312,7 +17300,7 @@ def test_guard_runtime_honors_saved_allows_for_same_risky_tool_action(
     )
     store.add_approval_request(request, "2026-06-12T00:00:00+00:00")
 
-    apply_approval_resolution(
+    resolution = apply_approval_resolution(
         store=store,
         request_id=request.request_id,
         action="allow",
@@ -17321,6 +17309,10 @@ def test_guard_runtime_honors_saved_allows_for_same_risky_tool_action(
         reason=f"saved for {scope}",
         now="2026-06-12T00:01:00+00:00",
     )
+
+    assert resolution["requested_scope"] == scope
+    assert resolution["applied_scope"] == "artifact"
+    assert resolution["scope_warning"] == "legacy_scope_narrowed_to_artifact"
 
     runtime_artifact = GuardArtifact(
         artifact_id=request.artifact_id,
@@ -17342,7 +17334,7 @@ def test_guard_runtime_honors_saved_allows_for_same_risky_tool_action(
             artifact_hash="hash-retry",
             workspace=str(workspace),
         )
-        == "allow"
+        is None
     )
 
 
@@ -17399,7 +17391,7 @@ def test_guard_runtime_rejects_saved_allows_for_different_risky_tool_action(
     )
     store.add_approval_request(request, "2026-06-12T00:00:00+00:00")
 
-    apply_approval_resolution(
+    resolution = apply_approval_resolution(
         store=store,
         request_id=request.request_id,
         action="allow",
@@ -17408,6 +17400,10 @@ def test_guard_runtime_rejects_saved_allows_for_different_risky_tool_action(
         reason=f"saved for {scope}",
         now="2026-06-12T00:01:00+00:00",
     )
+
+    assert resolution["requested_scope"] == scope
+    assert resolution["applied_scope"] == "artifact"
+    assert resolution["scope_warning"] == "legacy_scope_narrowed_to_artifact"
 
     later_artifact = GuardArtifact(
         artifact_id="opencode:project:tool-action:credential-upload",
