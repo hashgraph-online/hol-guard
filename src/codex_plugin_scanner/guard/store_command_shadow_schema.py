@@ -9,6 +9,7 @@ import sqlite3
 from typing import Final, cast
 
 from .runtime.effect_decision import EFFECT_DECISION_SCHEMA_VERSION
+from .store_command_shadow_schema_v18 import INITIAL_V18_SCHEMA_STATEMENTS
 
 COMMAND_SHADOW_LEGACY_MIGRATION_VERSION: Final = 15
 COMMAND_SHADOW_PREVIOUS_MIGRATION_VERSION: Final = 17
@@ -132,16 +133,16 @@ _SCHEMA_STATEMENTS: Final = (
     end""",
 )
 
+_CURRENT_EVALUATOR_SCHEMA_CHECK: Final = f"""evaluator_schema_version text not null check (
+        evaluator_schema_version in ({_EVALUATOR_SCHEMA_VERSIONS_SQL})
+      )"""
 _PREVIOUS_SCHEMA_STATEMENTS: Final = tuple(
     statement.replace(
-        f"evaluator_schema_version text not null check (\n"
-        f"        evaluator_schema_version in ({_EVALUATOR_SCHEMA_VERSIONS_SQL})\n"
-        "      )",
+        _CURRENT_EVALUATOR_SCHEMA_CHECK,
         "evaluator_schema_version text not null check (evaluator_schema_version = '1.0.0')",
     )
     for statement in _SCHEMA_STATEMENTS
 )
-
 _LEGACY_SCHEMA_STATEMENTS: Final = (
     f"""create table command_activity_shadow_evaluations (
       activity_id text primary key references command_activity(activity_id) on delete cascade,
@@ -203,20 +204,26 @@ _LEGACY_SCHEMA_STATEMENTS: Final = (
 
 
 def ensure_command_shadow_schema(connection: sqlite3.Connection, *, applied_at: str) -> None:
-    """Apply the current schema atomically, upgrading exact v15 and v17 shapes."""
+    """Apply the current schema atomically, upgrading exact historical shapes."""
 
     connection.execute("savepoint command_shadow_schema_v18")
     try:
         current = _expected_schema(_SCHEMA_STATEMENTS)
         previous = _expected_schema(_PREVIOUS_SCHEMA_STATEMENTS)
+        initial_v18 = _expected_schema(INITIAL_V18_SCHEMA_STATEMENTS)
         legacy = _expected_schema(_LEGACY_SCHEMA_STATEMENTS)
-        actual = _read_schema(connection, frozenset(current) | frozenset(previous) | frozenset(legacy))
+        actual = _read_schema(
+            connection,
+            frozenset(current) | frozenset(previous) | frozenset(initial_v18) | frozenset(legacy),
+        )
         _reject_external_foreign_keys(connection)
-        _reject_external_sql_dependencies(connection, (current, previous, legacy))
+        _reject_external_sql_dependencies(connection, (current, previous, initial_v18, legacy))
         if actual == legacy:
             _upgrade_schema(connection, source_statements=_LEGACY_SCHEMA_STATEMENTS, suffix="v15")
         elif actual == previous:
             _upgrade_schema(connection, source_statements=_PREVIOUS_SCHEMA_STATEMENTS, suffix="v17")
+        elif actual == initial_v18:
+            _upgrade_schema(connection, source_statements=INITIAL_V18_SCHEMA_STATEMENTS, suffix="initial_v18")
         elif actual and actual != current:
             raise RuntimeError("incompatible command shadow schema objects")
         elif not actual:
