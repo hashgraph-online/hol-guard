@@ -151,6 +151,12 @@ from ..review_contracts import (
     validated_remote_approval_envelope,
 )
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
+from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from ..runtime.extension_control_runtime import (
+    ExtensionControlRuntime,
+    ExtensionControlRuntimeSnapshot,
+    use_extension_control_snapshot,
+)
 from ..runtime.live_request_sync import LiveRequestSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -369,11 +375,22 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         from .hook_worker import HookWorker
 
         self.hook_worker = HookWorker(store=store)
+        self.extension_control_runtime = ExtensionControlRuntime(
+            store.read_extension_control_authority(
+                catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            )
+        )
         self.approval_attention = ApprovalAttentionCoordinator(
             store=store,
             runtime=self.runtime,
             opener=webbrowser.open,
         )
+
+    def refresh_extension_control_runtime(self) -> ExtensionControlRuntimeSnapshot:
+        view = self.store.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        )
+        return self.extension_control_runtime.refresh(view)
 
     def daemon_host(self) -> str:
         return str(self.server_address[0])
@@ -5091,7 +5108,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self,
         payload: dict[str, object],
         params: Mapping[str, list[str]],
-        *,
         hook_env: dict[str, str],
         default_harness: str,
         home_dir: str | None,
@@ -5120,7 +5136,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             original_env: dict[str, str | None] = {key: os.environ.get(key) for key in hook_env}
             try:
                 os.environ.update(hook_env)
-                exit_code = run_guard_command(args, input_text=json.dumps(payload), output_stream=buffer)
+                with use_extension_control_snapshot(self.server.extension_control_runtime.current()):
+                    exit_code = run_guard_command(args, input_text=json.dumps(payload), output_stream=buffer)
             finally:
                 for key, original in original_env.items():
                     if original is None:

@@ -8,6 +8,14 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
+    ExtensionControlRuntimeSnapshot,
+    use_extension_control_snapshot,
+)
 from codex_plugin_scanner.guard.runtime.github_workflow_context import (
     GitHubWorkflowDescriptor,
     build_github_workflow_descriptor,
@@ -104,3 +112,24 @@ def test_oversized_binding_file_cannot_retain_empty_digest_at_claim(
         _ = stream.truncate(_OVERSIZED_FILE_BYTES)
 
     assert _build_descriptor(tmp_path) is None
+
+
+def test_descriptor_policy_binding_changes_with_extension_control_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_github_context(monkeypatch)
+    first_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 1, "a" * 64, ())
+    )
+    second_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 2, "a" * 64, ())
+    )
+
+    with use_extension_control_snapshot(first_snapshot):
+        first = _build_descriptor(tmp_path)
+    with use_extension_control_snapshot(second_snapshot):
+        second = _build_descriptor(tmp_path)
+
+    assert first is not None
+    assert second is not None
+    assert first.binding_context.policy_version != second.binding_context.policy_version

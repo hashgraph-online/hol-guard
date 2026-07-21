@@ -36,6 +36,8 @@ class ControlSurface(str, Enum):
 
 
 class ResolverFailureCode(str, Enum):
+    AUTHORITY_TAMPERED = "authority-tampered"
+    AUTHORITY_UNAVAILABLE = "authority-unavailable"
     UNSUPPORTED_CONTROL_SCHEMA = "unsupported-control-schema"
     DUPLICATE_LAYER_KIND = "duplicate-layer-kind"
     DUPLICATE_TARGET_IN_LAYER = "duplicate-target-in-layer"
