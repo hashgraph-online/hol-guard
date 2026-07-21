@@ -94,7 +94,7 @@ def unsynced_manifest_dependency_targets(
             normalized_name = package_eval._normalize_package_name(ecosystem, package_name)
             if normalized_name in lockfile_names:
                 continue
-            namespace, name = package_eval._split_namespace_name(package_name)
+            namespace, name = package_eval._split_namespace_name(package_name, ecosystem=ecosystem)
             exact_version = package_eval._manifest_exact_version(ecosystem, specifier)
             unsynced_targets.append(
                 {

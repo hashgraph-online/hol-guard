@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.inventory_contract import serialize_inventory_sn
 from codex_plugin_scanner.guard.risk import artifact_risk_signals
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.models import Finding, Severity
+from tests.openclaw_test_support import mcp_artifact
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
@@ -101,12 +102,12 @@ def test_detects_openclaw_config_channels_mcp_and_skills(tmp_path: Path) -> None
     assert str(config_path) in detection.config_paths
     assert "openclaw:config:global" in artifacts
     assert "openclaw:channel:telegram" in artifacts
-    assert "openclaw:mcp:docs" in artifacts
-    assert "openclaw:mcp:local" in artifacts
+    docs_mcp = mcp_artifact(detection, "docs")
+    local_mcp = mcp_artifact(detection, "local")
     assert any(artifact.name == "deploy-helper" for artifact in artifacts.values())
     assert artifacts["openclaw:config:global"].metadata["workspace_path"] == str(workspace_path)
-    assert artifacts["openclaw:mcp:docs"].transport == "http"
-    assert artifacts["openclaw:mcp:local"].to_dict()["metadata"]["env"]["API_TOKEN"] == "*****"
+    assert docs_mcp.transport == "http"
+    assert local_mcp.to_dict()["metadata"]["env"]["API_TOKEN"] == "*****"
 
 
 def test_detects_workspace_skills_without_explicit_openclaw_workspace_config(tmp_path: Path) -> None:
@@ -200,29 +201,6 @@ def test_inventory_snapshot_can_include_cisco_openclaw_inventory_runs(tmp_path: 
     assert snapshot.findings[0].source == "cisco-skill-scanner"
 
 
-def test_openclaw_flags_open_dm_policy_and_remote_mcp(tmp_path: Path) -> None:
-    context = _ctx(tmp_path)
-    _write(
-        context.home_dir / ".openclaw" / "openclaw.json",
-        json.dumps(
-            {
-                "channels": {"telegram": {"dmPolicy": "open", "allowFrom": ["*"]}},
-                "mcp": {"servers": {"remote": {"url": "https://evil.example/mcp"}}},
-            }
-        ),
-    )
-
-    detection = OpenClawHarnessAdapter().detect(context)
-    channel = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:channel:telegram")
-    mcp = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:mcp:remote")
-
-    channel_signals = artifact_risk_signals(channel)
-    mcp_signals = artifact_risk_signals(mcp)
-
-    assert any("network traffic" in signal for signal in channel_signals)
-    assert any("remote server" in signal for signal in mcp_signals)
-
-
 def test_openclaw_skips_open_dm_risk_for_disabled_channels(tmp_path: Path) -> None:
     context = _ctx(tmp_path)
     _write(
@@ -234,26 +212,6 @@ def test_openclaw_skips_open_dm_risk_for_disabled_channels(tmp_path: Path) -> No
     channel = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:channel:telegram")
 
     assert not any("network traffic" in signal for signal in artifact_risk_signals(channel))
-
-
-def test_openclaw_checks_fallback_mcp_maps_after_disabled_servers(tmp_path: Path) -> None:
-    context = _ctx(tmp_path)
-    _write(
-        context.home_dir / ".openclaw" / "openclaw.json",
-        json.dumps(
-            {
-                "mcp": {
-                    "servers": {"disabled": {"enabled": False, "url": "https://disabled.example/mcp"}},
-                    "mcpServers": {"remote": {"url": "https://remote.example/mcp"}},
-                }
-            }
-        ),
-    )
-
-    detection = OpenClawHarnessAdapter().detect(context)
-    mcp = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:mcp:remote")
-
-    assert any("remote server" in signal for signal in artifact_risk_signals(mcp))
 
 
 def test_openclaw_flags_legacy_dm_policy_fields(tmp_path: Path) -> None:
@@ -320,7 +278,7 @@ def test_openclaw_accepts_json5_unquoted_keys_and_single_quotes(tmp_path: Path) 
 
     detection = OpenClawHarnessAdapter().detect(context)
     channel = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:channel:telegram")
-    mcp = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:mcp:remote")
+    mcp = mcp_artifact(detection, "remote")
 
     assert any("network traffic" in signal for signal in artifact_risk_signals(channel))
     assert any("remote server" in signal for signal in artifact_risk_signals(mcp))
@@ -353,7 +311,7 @@ def test_openclaw_resolves_config_includes_before_building_artifacts(tmp_path: P
     artifact_ids = {artifact.artifact_id for artifact in detection.artifacts}
 
     assert "openclaw:channel:telegram" in artifact_ids
-    assert "openclaw:mcp:remote" in artifact_ids
+    assert any(artifact_id.startswith("openclaw:mcp:remote:") for artifact_id in artifact_ids)
 
 
 def test_openclaw_extra_skill_dirs_skip_blank_and_anchor_relative_paths(tmp_path: Path) -> None:

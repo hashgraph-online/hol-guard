@@ -145,7 +145,10 @@ def test_gr096_managed_hook_json_matches_each_harness_schema(tmp_path: Path) -> 
 
     assert {"PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse"}.issubset(codex_hooks)
     assert claude_hooks["PreToolUse"][0]["hooks"][0]["type"] == "command"
-    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in claude_hooks["PreToolUse"][0]["hooks"][0]["command"]
+    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in json.dumps(
+        claude_hooks["PreToolUse"][0]["hooks"][0],
+        ensure_ascii=False,
+    )
     assert opencode_runtime["permission"]
     assert {"preToolUse", "postToolUse", "permissionRequest", "userPromptSubmitted"}.issubset(copilot_hooks["hooks"])
 

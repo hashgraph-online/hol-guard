@@ -45,7 +45,6 @@ def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
 
 
-
 # --- HAO038-HAO044: Local remote-pair proof tests ---
 
 
@@ -224,7 +223,7 @@ def test_hao040_verify_distinguishes_connected_from_paired_not_protected(
     assert exit_code == 0
     assert finalize_called["called"] is True, "finalize_connect_payload was not called with --verify"
     assert len(emitted) == 1
-    event, payload, as_json = emitted[0]
+    event, payload, _ = emitted[0]
     assert event == "remote-pair"
     assert payload.get("status") == "connected"
     assert payload.get("protection") in ("active", "paired_not_protected")
@@ -290,10 +289,12 @@ def test_hao042_runtime_mismatch_error_preserves_error_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """HAO042: remote-pair failure preserves actionable error code for runtime mismatch."""
-    error_body = json.dumps({
-        "code": "runtime_mismatch",
-        "error": "This pairing code was created for Hermes, not OpenClaw.",
-    }).encode("utf-8")
+    error_body = json.dumps(
+        {
+            "code": "runtime_mismatch",
+            "error": "This pairing code was created for Hermes, not OpenClaw.",
+        }
+    ).encode("utf-8")
 
     def fake_urlopen(_request, timeout=30):
         raise urllib.error.HTTPError(
@@ -320,10 +321,12 @@ def test_hao043_expired_code_error_preserves_error_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """HAO043: remote-pair failure preserves actionable error code for expired code."""
-    error_body = json.dumps({
-        "code": "pairing_code_expired",
-        "error": "This pairing code has expired. Create a new code.",
-    }).encode("utf-8")
+    error_body = json.dumps(
+        {
+            "code": "pairing_code_expired",
+            "error": "This pairing code has expired. Create a new code.",
+        }
+    ).encode("utf-8")
 
     def fake_urlopen(_request, timeout=30):
         raise urllib.error.HTTPError(
@@ -350,10 +353,12 @@ def test_hao044_already_claimed_error_preserves_error_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """HAO044: remote-pair failure preserves actionable error code for already claimed code."""
-    error_body = json.dumps({
-        "code": "pairing_code_replayed",
-        "error": "This pairing code was already used.",
-    }).encode("utf-8")
+    error_body = json.dumps(
+        {
+            "code": "pairing_code_replayed",
+            "error": "This pairing code was already used.",
+        }
+    ).encode("utf-8")
 
     def fake_urlopen(_request, timeout=30):
         raise urllib.error.HTTPError(

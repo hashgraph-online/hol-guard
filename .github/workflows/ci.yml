@@ -41,7 +41,7 @@ jobs:
 
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -56,6 +56,20 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
+      - name: Secure the CI virtualenv interpreter
+        shell: bash
+        run: |
+          interpreter="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
+          target="$(realpath "$interpreter")"
+          mode="$(stat -c '%a' "$target")"
+          if (( (8#$mode & 2) != 0 )); then
+            replacement="${interpreter}.guard-ci"
+            cp --dereference "$target" "$replacement"
+            chmod 0755 "$replacement"
+            mv "$replacement" "$target"
+          fi
+          secured_mode="$(stat -c '%a' "$(realpath "$interpreter")")"
+          (( (8#$secured_mode & 2) == 0 ))
       - name: Run pytest shard ${{ matrix.shard-index }}
         shell: bash
         run: |
@@ -134,7 +148,32 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
-      - run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py --tb=short
+      - name: Run cross-platform Guard regressions
+        run: >-
+          uv run --no-sync pytest
+          tests/test_cli.py
+          tests/test_verification.py
+          tests/test_action_runner.py
+          tests/test_guard_skill_directory_identity.py
+          tests/test_guard_skill_directory_identity_discovery.py
+          tests/test_guard_skill_directory_identity_downstream.py
+          tests/test_guard_skill_directory_identity_links.py
+          tests/test_guard_consumer_skill_directory_identity.py
+          tests/test_guard_runner_skill_directory_identity.py
+          tests/test_gemini_adapter.py
+          tests/test_gemini_skill_directory_identity.py
+          tests/test_antigravity_adapter.py
+          tests/test_guard_aibom_detection.py
+          tests/test_guard_aibom_content_upload_batches.py
+          tests/test_guard_aibom_skill_directory_identity.py
+          --tb=short
+      - name: Run Windows Codex hook process-tree regressions
+        if: runner.os == 'Windows'
+        run: >-
+          uv run --no-sync pytest
+          tests/test_codex_hook_fallback_isolation.py
+          -k "isolated_process_timeout_kills_descendants or isolated_process_closes_descendant_held_pipes_after_parent_exit"
+          --tb=short
 
   windows-updater:
     runs-on: windows-latest

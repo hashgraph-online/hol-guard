@@ -6,8 +6,6 @@ configured in the Hermes config directory (default ~/.hermes, or $HERMES_HOME).
 
 from __future__ import annotations
 
-import ast
-import hashlib
 import json
 import os
 import re
@@ -15,22 +13,27 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import yaml as _yaml  # type: ignore[import-untyped]
+
 from ..aibom_detection import enrich_mcp_server_metadata
 from ..inventory_cisco import run_cisco_inventory_scans
 from ..inventory_contract import GuardAgentInventorySnapshot, inventory_snapshot_from_detection
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
+from ..skill_directory_identity import (
+    inspect_skill_directory,
+    skill_directory_identity_metadata,
+)
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
 from .cloud_identity import cloud_agent_identity_environment, cloud_agent_identity_hints
-
-# Optional: PyYAML is preferred when available for robust YAML parsing.
-# The adapter works without it via a line-based fallback parser.
-try:
-    import yaml as _yaml_mod  # type: ignore[import-untyped]
-
-    _yaml: Any = _yaml_mod
-except ImportError:
-    _yaml = None
+from .hermes_file_inspection import (
+    HermesConfigInspection,
+    HermesFileInspection,
+    file_inspection_metadata,
+    inspect_hermes_config,
+    inspect_hermes_text_file,
+    parse_hermes_yaml_mapping,
+)
 
 # Subdirectories within a skill that may contain executable or injectable content.
 _SKILL_SUBDIRS = ("references", "templates", "scripts", "assets")
@@ -56,8 +59,6 @@ _SCANNABLE_EXTENSIONS = {
 # Filenames (no extension) that should be scanned in skill subdirectories.
 _SCANNABLE_NAMES = {".env", "Makefile", "Dockerfile", "Procfile"}
 
-# Maximum bytes read from any single file for risk analysis.
-_MAX_FILE_READ = 64 * 1024
 _HERMES_MANAGED_APPROVAL_TIER = "native-or-center"
 _HERMES_MANAGED_PROMPT_CHANNEL = "native"
 
@@ -122,7 +123,10 @@ def _hermes_home_has_artifacts(hermes_home: Path) -> bool:
             if _parse_mcp_from_yaml(yaml_path):
                 return True
         except (ValueError, OSError):
-            pass
+            # An unreadable or malformed primary config is still an artifact.
+            # Treat it as populated so an incomplete sandbox cannot inherit
+            # unrelated MCP configuration from a host-home mirror.
+            return True
     json_path = hermes_home / "mcp_servers.json"
     if json_path.is_file():
         try:
@@ -130,7 +134,7 @@ def _hermes_home_has_artifacts(hermes_home: Path) -> bool:
             if servers:
                 return True
         except (ValueError, OSError):
-            pass
+            return True
     skills_dir = hermes_home / "skills"
     if skills_dir.is_dir():
         try:
@@ -164,6 +168,15 @@ class HermesHarnessAdapter(HarnessAdapter):
     fallback_hint = "Configure Hermes to use Guard-launched sessions for skill execution."
 
     def install(self, context: HarnessContext) -> dict[str, object]:
+        hermes_home = _hermes_home(context)
+        source_configs = _load_mcp_server_sources(hermes_home)
+        # Only consult the mirror for a minimal sandbox, matching detect().
+        host_home = _hermes_host_home(context)
+        if host_home and host_home.resolve() != hermes_home.resolve() and not _hermes_home_has_artifacts(hermes_home):
+            for key, config in _load_mcp_server_sources(host_home).items():
+                source_configs.setdefault(key, config)
+
+        # Parse every source completely before making any installation change.
         shim_manifest = install_guard_shim(self.harness, context)
         managed_root = _managed_root(context)
         manifest_path = managed_root / "manifest.json"
@@ -176,13 +189,6 @@ class HermesHarnessAdapter(HarnessAdapter):
             overlay_path=overlay_path,
             pretool_path=pretool_path,
         )
-        hermes_home = _hermes_home(context)
-        source_configs = _load_mcp_server_sources(hermes_home)
-        # Only consult the mirror for a minimal sandbox, matching detect().
-        host_home = _hermes_host_home(context)
-        if host_home and host_home.resolve() != hermes_home.resolve() and not _hermes_home_has_artifacts(hermes_home):
-            for key, config in _load_mcp_server_sources(host_home).items():
-                source_configs.setdefault(key, config)
         overlay_servers = _overlay_servers(context=context, source_configs=source_configs)
         cloud_identity = cloud_agent_identity_hints(context, runtime=self.harness)
         overlay_path.write_text(json.dumps(overlay_servers, indent=2) + "\n", encoding="utf-8")
@@ -349,6 +355,7 @@ class HermesHarnessAdapter(HarnessAdapter):
         hermes_home = _hermes_home(context)
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []
+        warnings: list[str] = []
 
         # Detect Hermes installation signals.
         for config_name in ("config.yaml", "config.toml"):
@@ -377,16 +384,24 @@ class HermesHarnessAdapter(HarnessAdapter):
                     if not skill_md.is_file():
                         continue
                     found_paths.append(str(skill_md))
-                    artifacts.extend(self._scan_skill(category_dir, skill_dir, skill_md))
+                    artifacts.extend(
+                        self._scan_skill(
+                            category_dir,
+                            skill_dir,
+                            skill_md,
+                            identity_scope_root=skills_dir,
+                            warnings=warnings,
+                        )
+                    )
 
         # Discover MCP servers from both config.yaml and mcp_servers.json.
-        artifacts.extend(self._scan_mcp_servers(hermes_home, found_paths))
+        artifacts.extend(self._scan_mcp_servers(hermes_home, found_paths, warnings))
 
         # Container fallback: use an explicit or persisted host-home mirror
         # when the sandbox has only empty skills and trivial config.
         host_home = _hermes_host_home(context)
         if host_home and host_home.resolve() != hermes_home.resolve() and not _hermes_home_has_artifacts(hermes_home):
-            artifacts.extend(self._scan_host_home(host_home, found_paths))
+            artifacts.extend(self._scan_host_home(host_home, found_paths, warnings))
 
         # Manifest fallback: when no MCP servers were discovered from config
         # files, fall back to the Guard-managed manifest.json.  This covers
@@ -401,6 +416,7 @@ class HermesHarnessAdapter(HarnessAdapter):
             command_available=_command_available(self.executable),
             artifacts=tuple(artifacts),
             config_paths=tuple(found_paths),
+            warnings=tuple(dict.fromkeys(warnings)),
         )
 
     def inventory_snapshot(
@@ -437,11 +453,15 @@ class HermesHarnessAdapter(HarnessAdapter):
         category_dir: Path,
         skill_dir: Path,
         skill_md: Path,
+        *,
+        identity_scope_root: Path,
+        warnings: list[str],
     ) -> list[GuardArtifact]:
         """Produce artifacts for SKILL.md and any scannable subdirectory files."""
         artifacts: list[GuardArtifact] = []
 
-        content = _safe_read(skill_md)
+        inspection = inspect_hermes_text_file(skill_md, scope_root=skill_dir)
+        content = inspection.preview
         frontmatter = _parse_frontmatter(content)
         code_blocks = _extract_code_blocks(content)
 
@@ -464,17 +484,31 @@ class HermesHarnessAdapter(HarnessAdapter):
                     if isinstance(hermes_related, str):
                         related = hermes_related
 
-        content_hash = _primary_content_hash(skill_md, fallback_content=content)
         env_mentions = _extract_env_mentions(content)
-
-        metadata: dict[str, object] = {
-            "category": category_dir.name,
-            "description": description[:200] if description else "",
-            "content_hash": content_hash,
-            "has_code_blocks": bool(code_blocks),
-            "related_skills": related,
-            "env_mentions": sorted(env_mentions),
-        }
+        identity = inspect_skill_directory(skill_md, scope_root=identity_scope_root)
+        metadata = skill_directory_identity_metadata(
+            identity,
+            version_label=f"{category_dir.name}/{skill_dir.name}",
+        )
+        metadata.update(
+            {
+                "category": category_dir.name,
+                "description": description[:200] if description else "",
+                "has_code_blocks": bool(code_blocks),
+                "related_skills": related,
+                "env_mentions": sorted(env_mentions),
+                **file_inspection_metadata(inspection),
+            }
+        )
+        signals = _inspection_signals(inspection, label="Hermes skill")
+        if identity.status != "complete":
+            signals.append("Hermes skill directory identity is incomplete; review is required.")
+            warnings.append(
+                f"Hermes skill directory identity is incomplete ({identity.failure_reason or 'unknown'}); "
+                "approval reuse is disabled."
+            )
+        if signals:
+            metadata["runtime_request_signals"] = signals
 
         # Include both fenced code blocks AND non-fenced plain text for risk
         # analysis.  Mixed files may have a benign fenced snippet plus malicious
@@ -514,9 +548,8 @@ class HermesHarnessAdapter(HarnessAdapter):
                     continue
                 if not _is_scannable(file_path):
                     continue
-                file_content = _safe_read(file_path)
-                if not file_content:
-                    continue
+                file_inspection = inspect_hermes_text_file(file_path, scope_root=skill_dir)
+                file_content = file_inspection.preview
                 file_blocks = _extract_code_blocks(file_content)
                 file_env = _extract_env_mentions(file_content)
                 rel_path = file_path.relative_to(skill_dir)
@@ -529,6 +562,16 @@ class HermesHarnessAdapter(HarnessAdapter):
                 if file_plain:
                     file_risk_args = (*file_risk_args, file_plain)
 
+                file_metadata: dict[str, object] = {
+                    "parent_skill": skill_name,
+                    "subdir": subdir_name,
+                    "has_code_blocks": bool(file_blocks),
+                    "env_mentions": sorted(file_env),
+                    **file_inspection_metadata(file_inspection),
+                }
+                file_signals = _inspection_signals(file_inspection, label="Hermes skill file")
+                if file_signals:
+                    file_metadata["runtime_request_signals"] = file_signals
                 artifacts.append(
                     GuardArtifact(
                         artifact_id=(f"hermes:skill:{category_dir.name}:{skill_dir.name}:{rel_path}"),
@@ -541,13 +584,7 @@ class HermesHarnessAdapter(HarnessAdapter):
                         url=None,
                         transport=None,
                         args=file_risk_args,
-                        metadata={
-                            "parent_skill": skill_name,
-                            "subdir": subdir_name,
-                            "content_hash": _content_hash(file_content),
-                            "has_code_blocks": bool(file_blocks),
-                            "env_mentions": sorted(file_env),
-                        },
+                        metadata=file_metadata,
                     )
                 )
 
@@ -561,6 +598,7 @@ class HermesHarnessAdapter(HarnessAdapter):
         self,
         hermes_home: Path,
         found_paths: list[str],
+        warnings: list[str],
     ) -> list[GuardArtifact]:
         """Read MCP server configs from config.yaml and mcp_servers.json."""
         artifacts: list[GuardArtifact] = []
@@ -569,15 +607,29 @@ class HermesHarnessAdapter(HarnessAdapter):
         yaml_path = hermes_home / "config.yaml"
         if yaml_path.is_file():
             found_paths.append(str(yaml_path))
-            yaml_servers = _parse_mcp_from_yaml(yaml_path)
-            artifacts.extend(self._mcp_artifacts(yaml_servers, str(yaml_path), source="yaml"))
+            inspection = inspect_hermes_config(yaml_path, syntax="yaml")
+            if inspection.complete and inspection.payload is not None:
+                yaml_servers = _mcp_servers_from_payload(inspection.payload)
+                artifacts.extend(self._mcp_artifacts(yaml_servers, str(yaml_path), source="yaml"))
+            else:
+                artifacts.append(_config_failure_artifact(yaml_path, source="yaml", inspection=inspection))
+                warnings.append(_config_failure_warning(yaml_path, inspection))
 
         # Source 2: mcp_servers.json (legacy / alternative).
         json_path = hermes_home / "mcp_servers.json"
         if json_path.is_file():
             found_paths.append(str(json_path))
-            json_servers = _parse_mcp_from_json(json_path)
-            artifacts.extend(self._mcp_artifacts(json_servers, str(json_path), source="json"))
+            inspection = inspect_hermes_config(json_path, syntax="json")
+            if inspection.complete and inspection.payload is not None:
+                json_servers = {
+                    name: config
+                    for name, config in inspection.payload.items()
+                    if isinstance(name, str) and isinstance(config, dict)
+                }
+                artifacts.extend(self._mcp_artifacts(json_servers, str(json_path), source="json"))
+            else:
+                artifacts.append(_config_failure_artifact(json_path, source="json", inspection=inspection))
+                warnings.append(_config_failure_warning(json_path, inspection))
 
         return artifacts
 
@@ -585,6 +637,7 @@ class HermesHarnessAdapter(HarnessAdapter):
         self,
         host_home: Path,
         found_paths: list[str],
+        warnings: list[str],
     ) -> list[GuardArtifact]:
         """Scan the host's real Hermes home when running inside a container.
 
@@ -616,10 +669,18 @@ class HermesHarnessAdapter(HarnessAdapter):
                     if not skill_md.is_file():
                         continue
                     found_paths.append(str(skill_md))
-                    artifacts.extend(self._scan_skill(category_dir, skill_dir, skill_md))
+                    artifacts.extend(
+                        self._scan_skill(
+                            category_dir,
+                            skill_dir,
+                            skill_md,
+                            identity_scope_root=skills_dir,
+                            warnings=warnings,
+                        )
+                    )
 
         # Discover MCP servers from the host's config files.
-        artifacts.extend(self._scan_mcp_servers(host_home, found_paths))
+        artifacts.extend(self._scan_mcp_servers(host_home, found_paths, warnings))
 
         return artifacts
 
@@ -779,6 +840,60 @@ class HermesHarnessAdapter(HarnessAdapter):
 # ------------------------------------------------------------------
 
 
+class _HermesConfigInspectionError(ValueError):
+    def __init__(self, path: Path, inspection: HermesConfigInspection) -> None:
+        reason = inspection.reason or "config_parse_error"
+        super().__init__(f"Hermes config inspection failed for {path}: {reason}")
+        self.inspection = inspection
+
+
+def _inspection_signals(inspection: HermesFileInspection, *, label: str) -> list[str]:
+    if not inspection.complete:
+        reason = inspection.reason or "unknown"
+        return [f"{label} inspection is incomplete ({reason}); unseen content cannot be treated as safe."]
+    if inspection.analysis_truncated:
+        return [f"{label} risk preview is truncated; review the complete content before approval."]
+    return []
+
+
+def _config_failure_artifact(
+    path: Path,
+    *,
+    source: str,
+    inspection: HermesConfigInspection,
+) -> GuardArtifact:
+    reason = inspection.reason or "config_parse_error"
+    metadata = {
+        **file_inspection_metadata(inspection.file),
+        "config_parse_complete": False,
+        "config_reason": reason,
+        "runtime_request_signals": [
+            f"Hermes {source.upper()} configuration inspection is incomplete ({reason}); review is required."
+        ],
+    }
+    return GuardArtifact(
+        artifact_id=f"hermes:config:{source}:incomplete",
+        name=f"Incomplete Hermes {source.upper()} configuration",
+        harness="hermes",
+        artifact_type="configuration",
+        source_scope="global",
+        config_path=str(path),
+        metadata=metadata,
+    )
+
+
+def _config_failure_warning(path: Path, inspection: HermesConfigInspection) -> str:
+    reason = inspection.reason or "config_parse_error"
+    return f"Hermes config {path.name} was not accepted ({reason}); no partial configuration was applied."
+
+
+def _mcp_servers_from_payload(payload: dict[str, object]) -> dict[str, dict[str, object]]:
+    mcp = payload.get("mcp_servers")
+    if not isinstance(mcp, dict):
+        return {}
+    return {name: config for name, config in mcp.items() if isinstance(name, str) and isinstance(config, dict)}
+
+
 def _is_scannable(file_path: Path) -> bool:
     """Check whether a file should be scanned based on extension or name."""
     if file_path.suffix.lower() in _SCANNABLE_EXTENSIONS:
@@ -796,11 +911,7 @@ def _is_scannable(file_path: Path) -> bool:
 
 
 def _parse_frontmatter(content: str) -> dict[str, object]:
-    """Parse YAML frontmatter from SKILL.md content.
-
-    Prefers PyYAML when available for correct nested-structure handling.
-    Falls back to a simple line-based parser that extracts top-level keys.
-    """
+    """Parse complete, bounded YAML frontmatter from the retained preview."""
     if not content.startswith("---"):
         return {}
     parts = content[3:].split("---", 1)
@@ -808,24 +919,11 @@ def _parse_frontmatter(content: str) -> dict[str, object]:
         return {}
     raw = parts[0].strip()
 
-    # Try PyYAML first for robust nested-structure support.
-    if _yaml is not None:
-        try:
-            parsed = _yaml.safe_load(raw)
-            if isinstance(parsed, dict):
-                # Flatten values to strings for consistent downstream handling.
-                return {k: _flatten_yaml_value(v) for k, v in parsed.items()}
-        except Exception:
-            pass
-
-    # Fallback: simple line-based parser for top-level keys only.
-    frontmatter: dict[str, object] = {}
-    for line in raw.split("\n"):
-        if not line or ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        frontmatter[key.strip()] = value.strip()
-    return frontmatter
+    parsed = parse_hermes_yaml_mapping(raw)
+    if parsed is not None:
+        # Flatten values to strings for consistent downstream handling.
+        return {key: _flatten_yaml_value(value) for key, value in parsed.items()}
+    return {}
 
 
 def _flatten_yaml_value(value: object) -> str:
@@ -885,41 +983,6 @@ def _extract_env_mentions(content: str) -> list[str]:
     return sorted(mentions)
 
 
-def _content_hash(content: str) -> str:
-    """Deterministic hash for change detection (truncated SHA-256)."""
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
-
-
-def _primary_content_hash(path: Path, *, fallback_content: str) -> str:
-    """Hash the exact primary artifact body using the cloud content format."""
-    digest = hashlib.sha256()
-    try:
-        with path.open("rb") as handle:
-            while chunk := handle.read(64 * 1024):
-                digest.update(chunk)
-    except OSError:
-        digest = hashlib.sha256(fallback_content.encode("utf-8"))
-    return f"sha256:{digest.hexdigest()}"
-
-
-def _safe_read(path: Path) -> str:
-    """Read file content with error handling and size enforcement.
-
-    Checks file size before reading to avoid loading oversized files
-    into memory.  Returns at most _MAX_FILE_READ bytes of content.
-    """
-    try:
-        # Check file size before reading to avoid OOM on huge files.
-        size = path.stat().st_size
-        if size > _MAX_FILE_READ:
-            # Read only the leading portion of large files.
-            with path.open("r", encoding="utf-8") as f:
-                return f.read(_MAX_FILE_READ)
-        return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return ""
-
-
 def _looks_like_secret(value: str) -> bool:
     """Heuristic: does this value look like a secret/token?"""
     if len(value) < 8:
@@ -945,254 +1008,22 @@ def _looks_like_secret(value: str) -> bool:
     )
 
 
-def _unquote(value: str) -> str:
-    """Remove surrounding quotes from a YAML value."""
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
-        return value[1:-1]
-    return value
-
-
-def _server_list_value(target: dict[str, object], key: str) -> list[str]:
-    value = target.get(key)
-    if isinstance(value, list):
-        return value
-    values: list[str] = []
-    target[key] = values
-    return values
-
-
-def _server_mapping_value(target: dict[str, object], key: str) -> dict[str, object]:
-    value = target.get(key)
-    if isinstance(value, dict):
-        return value
-    mapping: dict[str, object] = {}
-    target[key] = mapping
-    return mapping
-
-
 def _parse_mcp_from_yaml(yaml_path: Path) -> dict[str, dict[str, object]]:
-    """Extract mcp_servers entries from config.yaml.
+    """Extract MCP entries only from a complete, bounded YAML mapping."""
 
-    Uses PyYAML when available for full nested-structure support.
-    Falls back to a line-based indent parser that handles env/headers
-    blocks by tracking nesting depth.
-    """
-    # Try PyYAML first for robust parsing.
-    if _yaml is not None:
-        try:
-            content = _safe_read(yaml_path)
-            if not content:
-                return {}
-            parsed = _yaml.safe_load(content)
-            if not isinstance(parsed, dict):
-                return {}
-            mcp = parsed.get("mcp_servers")
-            if not isinstance(mcp, dict):
-                return {}
-            # Normalise to plain dicts with string keys.
-            servers: dict[str, dict[str, object]] = {}
-            for name, config in mcp.items():
-                if isinstance(name, str) and isinstance(config, dict):
-                    servers[name] = config
-            return servers
-        except Exception:
-            pass
-
-    # Fallback: indent-aware line-based parser.
-    return _parse_mcp_yaml_fallback(yaml_path)
-
-
-def _parse_mcp_yaml_fallback(yaml_path: Path) -> dict[str, dict[str, object]]:
-    """Line-based YAML parser with indent tracking for nested env/headers blocks."""
-    content = _safe_read(yaml_path)
-    if not content:
-        return {}
-
-    servers: dict[str, dict[str, object]] = {}
-    lines = content.splitlines()
-    in_mcp_section = False
-    current_server: str | None = None
-    server_indent = 0
-    # Track which nested block we are inside (e.g. "env", "headers", "sampling").
-    nested_block: str | None = None
-    nested_indent = 0
-    # Track block-style args list (args:\n  - value1\n  - value2).
-    in_args_block = False
-    args_indent = 0
-    # Track multiline scalar args (- | or - >)
-    multiline_continue = False
-    multiline_buffer = ""
-    multiline_start_indent = 0
-
-    for line in lines:
-        stripped = line.lstrip()
-        if not stripped or stripped.startswith("#"):
-            continue
-
-        indent = len(line) - len(stripped)
-
-        if stripped.startswith("mcp_servers:") and indent == 0:
-            in_mcp_section = True
-            current_server = None
-            nested_block = None
-            in_args_block = False
-            continue
-
-        if indent == 0 and in_mcp_section:
-            in_mcp_section = False
-            current_server = None
-            nested_block = None
-            in_args_block = False
-            continue
-
-        if not in_mcp_section:
-            continue
-
-        # Server name line: any key ending with ":" that is deeper than
-        # the mcp_servers: line but shallower than server properties.
-        if (
-            stripped.endswith(":")
-            and not stripped.startswith("-")
-            and (current_server is None or indent <= server_indent)
-        ):
-            server_name = stripped.rstrip(":").strip()
-            if server_name and server_name not in ("mcp_servers",):
-                current_server = server_name
-                server_indent = indent
-                servers[server_name] = {}
-                nested_block = None
-                in_args_block = False
-                continue
-
-        if not current_server or indent <= server_indent:
-            nested_block = None
-            in_args_block = False
-            continue
-
-        # Check for nested block headers (env:, headers:, sampling:).
-        if stripped.endswith(":") and stripped.count(":") == 1:
-            block_name = stripped.rstrip(":").strip()
-            if block_name in ("env", "headers", "sampling"):
-                nested_block = block_name
-                nested_indent = indent
-                servers[current_server].setdefault(block_name, {})
-                in_args_block = False
-                continue
-            # args: without inline value starts a block-style list.
-            if block_name == "args":
-                in_args_block = True
-                args_indent = indent
-                servers[current_server].setdefault("args", [])
-                nested_block = None
-                continue
-
-        # Inside a block-style args list (  - value1).
-        if in_args_block and indent > args_indent and stripped.startswith("- "):
-            # Check for multiline scalar indicator (- | or - >)
-            if stripped[2:].strip() in ("|", ">"):
-                # Start collecting multiline content
-                multiline_start_indent = indent + 2
-                multiline_continue = True
-                multiline_buffer = ""
-                continue
-            arg_val = _unquote(stripped[2:].strip())
-            _server_list_value(servers[current_server], "args").append(arg_val)
-            continue
-
-        # Inside a nested block (env/headers key: value pairs).
-        if nested_block and indent > nested_indent:
-            if nested_block in ("env", "headers"):
-                if ":" in stripped:
-                    k, _, v = stripped.partition(":")
-                    _server_mapping_value(servers[current_server], nested_block)[k.strip()] = _unquote(v.strip())
-                continue
-            if nested_block == "sampling":
-                if ":" in stripped:
-                    k, _, v = stripped.partition(":")
-                    _server_mapping_value(servers[current_server], "sampling")[k.strip()] = _unquote(v.strip())
-                continue
-
-        # Exit nested block if indent drops back.
-        if nested_block and indent <= nested_indent:
-            nested_block = None
-        if in_args_block and indent <= args_indent:
-            in_args_block = False
-
-        # Handle multiline scalar args continuation (- | or - >)
-        if multiline_continue:
-            if indent < multiline_start_indent or (not stripped and indent == 0):
-                # Multiline block ended - save collected content
-                if multiline_buffer and current_server:
-                    _server_list_value(servers[current_server], "args").append(multiline_buffer.strip())
-                multiline_continue = False
-                multiline_buffer = ""
-                # Don't continue - let the dedented line be parsed below
-            else:
-                # Collect continuation line
-                multiline_buffer += stripped + "\n"
-                continue
-
-        # Top-level server property.
-        _parse_yaml_property(stripped, servers[current_server])
-
-    # Flush any remaining multiline buffer
-    if multiline_continue and multiline_buffer and current_server:
-        _server_list_value(servers[current_server], "args").append(multiline_buffer.strip())
-
-    return servers
-
-
-def _parse_yaml_property(line: str, target: dict[str, object]) -> None:
-    """Parse a single YAML key: value property into target dict."""
-    if ":" not in line:
-        return
-    key, _, value = line.partition(":")
-    key = key.strip()
-    value = value.strip()
-
-    if key in ("command", "url"):
-        target[key] = _unquote(value)
-    elif key in ("enabled",):
-        # Strip inline comments before boolean coercion.
-        # e.g. "false # disabled for prod" -> "false"
-        bare_value = value.split("#", 1)[0].strip()
-        if bare_value.lower() in ("false", "no", "off"):
-            target[key] = False
-        elif bare_value.lower() in ("true", "yes", "on"):
-            target[key] = True
-        else:
-            target[key] = _unquote(bare_value)
-    elif key in ("env", "headers"):
-        # Handle inline map syntax: env: {KEY: value}
-        inline_match = re.match(r"^\{(.+)\}$", value)
-        if inline_match:
-            try:
-                # Parse as Python dict literal (YAML keys are unquoted by this point)
-                parsed = ast.literal_eval("{" + inline_match.group(1) + "}")
-                if isinstance(parsed, dict):
-                    target[key] = parsed
-            except (ValueError, SyntaxError):
-                pass
-    elif key == "args":
-        # Handle JSON array: args: [value1, value2]
-        if value.startswith("["):
-            try:
-                parsed = json.loads(value)
-                if isinstance(parsed, list):
-                    target[key] = parsed
-            except json.JSONDecodeError:
-                pass
-        # Handle single quoted string: args: 'value' (fallback for simple cases)
-        elif value.startswith("'") or value.startswith('"'):
-            target[key] = [_unquote(value)]
+    inspection = inspect_hermes_config(yaml_path, syntax="yaml")
+    if not inspection.complete or inspection.payload is None:
+        raise _HermesConfigInspectionError(yaml_path, inspection)
+    return _mcp_servers_from_payload(inspection.payload)
 
 
 def _parse_mcp_from_json(json_path: Path) -> dict[str, dict[str, object]]:
-    """Parse MCP servers from mcp_servers.json."""
-    payload = _json_payload(json_path)
-    if not isinstance(payload, dict):
-        return {}
-    return {name: config for name, config in payload.items() if isinstance(name, str) and isinstance(config, dict)}
+    """Parse MCP servers only from a complete, bounded JSON mapping."""
+
+    inspection = inspect_hermes_config(json_path, syntax="json")
+    if not inspection.complete or inspection.payload is None:
+        raise _HermesConfigInspectionError(json_path, inspection)
+    return {name: config for name, config in inspection.payload.items() if isinstance(config, dict)}
 
 
 def _managed_root(context: HarnessContext) -> Path:
@@ -1474,31 +1305,17 @@ def _write_guard_to_hermes_config_yaml(
     ``previous_guard_section`` is the user's existing ``guard`` section (or
     ``None`` if there wasn't one) so that ``uninstall()`` can restore it.
     ``config_written`` is ``True`` if config.yaml was written, ``False`` if the
-    write bailed out (parse error, missing PyYAML).
+    existing configuration could not be inspected completely.
     """
     config_yaml_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Load existing config.
     existing: dict[str, Any] = {}
-    if _yaml is None:
-        # Without PyYAML we can't safely read or round-trip YAML; bail out
-        # without claiming to have written anything.
-        return [], None, False
-
     if config_yaml_path.exists():
-        try:
-            raw = _yaml.safe_load(config_yaml_path.read_text(encoding="utf-8"))
-            if isinstance(raw, dict):
-                existing = raw
-            elif raw is None:
-                # Empty YAML document — treat as empty config, not a clobber risk.
-                pass
-            else:
-                # Config contains a scalar/list — bail out, don't risk clobbering.
-                return [], None, False
-        except Exception:
-            # Parse error — bail out rather than overwriting the user's config.
+        inspection = inspect_hermes_config(config_yaml_path, syntax="yaml")
+        if not inspection.complete or inspection.payload is None:
             return [], None, False
+        existing = inspection.payload
 
     # Capture the user's existing guard section so uninstall can restore it.
     previous_guard = existing.get(_GUARD_CONFIG_KEY)
@@ -1557,15 +1374,10 @@ def _remove_guard_from_hermes_config_yaml(
     """
     if not config_yaml_path.exists():
         return
-    if _yaml is None:
+    inspection = inspect_hermes_config(config_yaml_path, syntax="yaml")
+    if not inspection.complete or inspection.payload is None:
         return
-
-    try:
-        raw = _yaml.safe_load(config_yaml_path.read_text(encoding="utf-8"))
-    except Exception:
-        return
-    if not isinstance(raw, dict):
-        return
+    raw = inspection.payload
 
     managed_set = set(managed_names)
     mcp_servers = raw.get("mcp_servers")

@@ -7,7 +7,6 @@ import argparse
 import re
 from pathlib import Path
 
-
 STEP2_PATTERN = re.compile(
     r"(### Step 2: Run the scanner locally and check your score\n\n)"
     r".*?"
@@ -35,10 +34,12 @@ def _build_step2_body(scanner_version: str, scanner_sha256: str) -> str:
         "If you want to verify the exact wheel before install:\n\n"
         "```bash\n"
         "rm -rf .hol-plugin-scanner-dist\n"
-        f'python3 -m pip download --only-binary=:all: --no-deps --dest .hol-plugin-scanner-dist "plugin-scanner=={scanner_version}"\n'
+        "python3 -m pip download --only-binary=:all: --no-deps "
+        f'--dest .hol-plugin-scanner-dist "plugin-scanner=={scanner_version}"\n'
         "python3 -m pip hash .hol-plugin-scanner-dist/*.whl\n"
         "```\n\n"
-        "You need a score of **80/130** or higher with **no critical or high severity findings**. Save the output to include in your PR description."
+        "You need a score of **80/130** or higher with **no critical or high severity findings**. "
+        "Save the output to include in your PR description."
     )
 
 

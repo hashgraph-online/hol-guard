@@ -7,13 +7,14 @@ import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
+from .env_wrapper import parse_env_wrapper
+
 SHELL_COMMAND_NORMALIZE_MAX_BYTES = 8192
 _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
 _SHELL_CONTROL_TOKENS = frozenset({"&&", "||", ";", "|", "|&", "&"})
 _LEAN_CTX_BINARIES = frozenset({"lean-ctx"})
 _SHELL_STRING_WRAPPERS = frozenset({"ash", "bash", "dash", "fish", "sh", "zsh"})
 _PLAIN_WRAPPERS = frozenset({"command", "nice", "nohup", "stdbuf", "time"})
-_ENV_OPTION_FLAGS_WITH_VALUES = frozenset({"-u", "-C", "--unset", "--chdir"})
 _NICE_OPTION_FLAGS_WITH_VALUES = frozenset({"-n", "--adjustment"})
 _STDBUF_VALUE_FLAGS = frozenset({"-i", "-o", "-e"})
 _TIME_OPTION_FLAGS_WITH_VALUES = frozenset({"-f", "-o", "--format", "--output"})
@@ -128,19 +129,7 @@ def _normalize_parts(
                 inner_command_text = _join_command_fragments(_join_shell_tokens(preserved_env), inner_command_text)
             return inner_command_text, tuple((*wrappers, *inner_wrappers))
         if command_name == "env":
-            next_parts, env_prefix, env_split = _strip_env_wrapper(current)
-            if env_split is not None:
-                wrappers.append("env")
-                inner_text, inner_wrappers = _normalize_command_text(
-                    env_split,
-                    depth=depth + 1,
-                    cwd=cwd,
-                    home_dir=home_dir,
-                )
-                all_env = [*preserved_env, *env_prefix]
-                if all_env:
-                    inner_text = _join_command_fragments(_join_shell_tokens(all_env), inner_text)
-                return inner_text, tuple((*wrappers, *inner_wrappers))
+            next_parts, env_prefix = _strip_env_wrapper(current, cwd=cwd)
             if next_parts is None:
                 break
             wrappers.append("env")
@@ -231,49 +220,12 @@ def _unwrap_shell_string_wrapper(parts: list[str]) -> tuple[str, list[str]] | No
     return None
 
 
-def _strip_env_wrapper(parts: list[str]) -> tuple[list[str] | None, list[str], str | None]:
-    env_prefix: list[str] = []
-    index = 1
-    while index < len(parts):
-        token = parts[index]
-        if _ENV_ASSIGNMENT_RE.fullmatch(token):
-            env_prefix.append(token)
-            index += 1
-            continue
-        if token == "--":
-            return parts[index + 1 :], env_prefix, None
-        if token in {"-S", "--split-string"}:
-            if index + 1 >= len(parts):
-                return None, env_prefix, None
-            return [], env_prefix, parts[index + 1]
-        split_string = _env_clustered_split_string_payload(token)
-        if split_string is not None:
-            if split_string:
-                return [], env_prefix, split_string
-            if index + 1 >= len(parts):
-                return None, env_prefix, None
-            return [], env_prefix, parts[index + 1]
-        short_option_tokens = _env_short_option_tokens_consumed(token)
-        if short_option_tokens is not None:
-            if index + short_option_tokens - 1 >= len(parts):
-                return None, env_prefix, None
-            index += short_option_tokens
-            continue
-        if token in _ENV_OPTION_FLAGS_WITH_VALUES:
-            if index + 1 >= len(parts):
-                return None, env_prefix, None
-            index += 2
-            continue
-        if any(token.startswith(f"{flag}=") for flag in {"--unset", "--chdir", "--split-string"}):
-            if token.startswith("--split-string="):
-                return [], env_prefix, token.partition("=")[2]
-            index += 1
-            continue
-        if token.startswith("-"):
-            index += 1
-            continue
-        return parts[index:], env_prefix, None
-    return None, env_prefix, None
+def _strip_env_wrapper(parts: list[str], *, cwd: Path | None) -> tuple[list[str] | None, list[str]]:
+    parsed = parse_env_wrapper(parts[1:], cwd=cwd)
+    if not parsed.complete or not parsed.executable_argv:
+        return None, []
+    env_prefix = [f"{name}={value}" for name, value in parsed.environment_delta.assignments]
+    return list(parsed.executable_argv), env_prefix
 
 
 def _strip_command_wrapper(parts: list[str]) -> list[str] | None:
@@ -363,29 +315,6 @@ def _strip_stdbuf_wrapper(parts: list[str]) -> list[str] | None:
     return None
 
 
-def _env_short_option_tokens_consumed(token: str) -> int | None:
-    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
-        return None
-    for index, flag_character in enumerate(token[1:], start=1):
-        if flag_character not in {"C", "S", "u"}:
-            continue
-        if index < len(token) - 1:
-            return 1
-        return 2
-    return 1
-
-
-def _env_clustered_split_string_payload(token: str) -> str | None:
-    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
-        return None
-    split_index = token.find("S", 1)
-    if split_index == -1:
-        return None
-    if split_index + 1 >= len(token):
-        return ""
-    return token[split_index + 1 :]
-
-
 def _command_name(
     token: str,
     *,
@@ -400,12 +329,18 @@ def _command_name(
     command_path = Path(token)
     if not command_path.is_absolute():
         return ""
-    if not _trusted_absolute_command_path(command_path, cwd=cwd, home_dir=home_dir):
+    if not is_trusted_absolute_command_path(command_path, cwd=cwd, home_dir=home_dir):
         return ""
     return command_path.name.lower()
 
 
-def _trusted_absolute_command_path(command_path: Path, *, cwd: Path | None, home_dir: Path | None) -> bool:
+def is_trusted_absolute_command_path(command_path: Path, *, cwd: Path | None, home_dir: Path | None) -> bool:
+    """Return whether a resolved launch path is outside user-controlled roots.
+
+    This is shared by transparent-wrapper and interpreter classification so
+    basename normalization never silently changes the trust decision.
+    """
+
     try:
         if _path_is_under(command_path, cwd) or not _stable_non_writable_path(command_path):
             return False
@@ -484,4 +419,8 @@ def _join_shell_tokens(tokens: list[str]) -> str:
     return " ".join(rendered).strip()
 
 
-__all__ = ["ShellCommandNormalization", "normalize_transparent_shell_command"]
+__all__ = [
+    "ShellCommandNormalization",
+    "is_trusted_absolute_command_path",
+    "normalize_transparent_shell_command",
+]

@@ -117,6 +117,7 @@ spec:
 def store(tmp_path: Path) -> GuardStore:
     return GuardStore(tmp_path / "guard-home")
 
+
 def _import_policy(store: GuardStore, yaml: str, mode: str = "merge") -> None:
     """Compile and import a policy document, bypassing the approval gate."""
     from codex_plugin_scanner.guard.mcp.policy_tools import _now_iso
@@ -387,9 +388,7 @@ class TestApplyPendingPolicyRequest:
             apply_pending_policy_request(store, "nonexistent-id", approval_gate_grant=object())
         assert exc.value.code == "policy_request_not_found"
 
-    def test_apply_rejects_current_digest_mismatch(
-        self, store: GuardStore, env_flags: None
-    ) -> None:
+    def test_apply_rejects_current_digest_mismatch(self, store: GuardStore, env_flags: None) -> None:
         candidate_digest_v1 = _digest(_BASIC_POLICY_YAML)
         create_result = json.loads(
             execute_create_policy(
@@ -498,14 +497,16 @@ class TestPolicyStoreRepository:
         canonical_yaml = format_policy_document_yaml(document)
 
         staged = repo.stage_request(
-            StageRequestInput(policy_document_id=document.metadata.id,
-            policy_document_digest=digest,
-            expected_current_digest=None,
-            expected_policy_generation=None,
-            mode="merge",
-            canonical_policy_yaml=canonical_yaml,
-            plan_json='{"additions":[],"replacements":[],"removals":[]}',
-            idempotency_key="policy-request-fixture",)
+            StageRequestInput(
+                policy_document_id=document.metadata.id,
+                policy_document_digest=digest,
+                expected_current_digest=None,
+                expected_policy_generation=None,
+                mode="merge",
+                canonical_policy_yaml=canonical_yaml,
+                plan_json='{"additions":[],"replacements":[],"removals":[]}',
+                idempotency_key="policy-request-fixture",
+            )
         )
         assert staged.status == "pending"
 
@@ -521,14 +522,16 @@ class TestPolicyStoreRepository:
         canonical_yaml = format_policy_document_yaml(document)
 
         repo.stage_request(
-            StageRequestInput(policy_document_id=document.metadata.id,
-            policy_document_digest=digest,
-            expected_current_digest=None,
-            expected_policy_generation=None,
-            mode="merge",
-            canonical_policy_yaml=canonical_yaml,
-            plan_json='{"additions":[],"replacements":[],"removals":[]}',
-            idempotency_key="policy-request-fixture",)
+            StageRequestInput(
+                policy_document_id=document.metadata.id,
+                policy_document_digest=digest,
+                expected_current_digest=None,
+                expected_policy_generation=None,
+                mode="merge",
+                canonical_policy_yaml=canonical_yaml,
+                plan_json='{"additions":[],"replacements":[],"removals":[]}',
+                idempotency_key="policy-request-fixture",
+            )
         )
         pending = repo.list_pending_requests()
         assert len(pending) == 1
@@ -540,28 +543,32 @@ class TestPolicyStoreRepository:
         canonical_yaml = format_policy_document_yaml(document)
 
         repo.stage_request(
-            StageRequestInput(policy_document_id=document.metadata.id,
-            policy_document_digest=digest,
-            expected_current_digest=None,
-            expected_policy_generation=None,
-            mode="merge",
-            canonical_policy_yaml=canonical_yaml,
-            plan_json='{}',
-            idempotency_key="shared-fixture-request",)
+            StageRequestInput(
+                policy_document_id=document.metadata.id,
+                policy_document_digest=digest,
+                expected_current_digest=None,
+                expected_policy_generation=None,
+                mode="merge",
+                canonical_policy_yaml=canonical_yaml,
+                plan_json="{}",
+                idempotency_key="shared-fixture-request",
+            )
         )
         document2 = parse_policy_document_yaml(_BASIC_POLICY_YAML_2)
         digest2 = policy_document_digest(document2)
         canonical_yaml2 = format_policy_document_yaml(document2)
         with pytest.raises(PolicyToolError) as exc:
             repo.stage_request(
-                StageRequestInput(policy_document_id=document2.metadata.id,
-                policy_document_digest=digest2,
-                expected_current_digest=None,
-                expected_policy_generation=None,
-                mode="merge",
-                canonical_policy_yaml=canonical_yaml2,
-                plan_json='{}',
-                idempotency_key="shared-fixture-request",)
+                StageRequestInput(
+                    policy_document_id=document2.metadata.id,
+                    policy_document_digest=digest2,
+                    expected_current_digest=None,
+                    expected_policy_generation=None,
+                    mode="merge",
+                    canonical_policy_yaml=canonical_yaml2,
+                    plan_json="{}",
+                    idempotency_key="shared-fixture-request",
+                )
             )
         assert exc.value.code == "idempotency_conflict"
 
@@ -581,9 +588,7 @@ class TestGetGuardStatusPolicyFields:
         assert result["policySchemaVersion"] == "1.0"
         assert result["pendingPolicyRequests"] == 0
 
-    def test_status_reflects_enabled_flags(
-        self, store: GuardStore, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_status_reflects_enabled_flags(self, store: GuardStore, monkeypatch: pytest.MonkeyPatch) -> None:
         from codex_plugin_scanner.guard.mcp.tools import execute_get_guard_status
 
         monkeypatch.setenv("HOL_GUARD_POLICY_YAML_IMPORT", "1")
@@ -592,9 +597,7 @@ class TestGetGuardStatusPolicyFields:
         assert result["policyAuthoringAvailable"] is True
         assert result["policyWriteEnabled"] is True
 
-    def test_status_reflects_disabled_flags(
-        self, store: GuardStore, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_status_reflects_disabled_flags(self, store: GuardStore, monkeypatch: pytest.MonkeyPatch) -> None:
         from codex_plugin_scanner.guard.mcp.tools import execute_get_guard_status
 
         monkeypatch.delenv("HOL_GUARD_POLICY_YAML_IMPORT", raising=False)
@@ -808,9 +811,7 @@ class TestDaemonMcpPolicyRequestSurface:
         assert status == 403
         assert payload["error"] == "forbidden_origin"
 
-    def test_decision_post_rejects_missing_token(
-        self, store: GuardStore, env_flags: None, tmp_path: Path
-    ) -> None:
+    def test_decision_post_rejects_missing_token(self, store: GuardStore, env_flags: None, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 
         request_id = self._stage_pending_request(store)
@@ -832,9 +833,7 @@ class TestDaemonMcpPolicyRequestSurface:
 
         assert status == 401
 
-    def test_decision_post_rejects_invalid_action(
-        self, store: GuardStore, env_flags: None, tmp_path: Path
-    ) -> None:
+    def test_decision_post_rejects_invalid_action(self, store: GuardStore, env_flags: None, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 
         request_id = self._stage_pending_request(store)
@@ -889,9 +888,7 @@ class TestDaemonMcpPolicyRequestSurface:
         assert payload["status"] == "declined"
         assert "resolvedAt" in payload
 
-    def test_decline_then_get_shows_terminal_state(
-        self, store: GuardStore, env_flags: None, tmp_path: Path
-    ) -> None:
+    def test_decline_then_get_shows_terminal_state(self, store: GuardStore, env_flags: None, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 
         request_id = self._stage_pending_request(store)
@@ -987,6 +984,4 @@ class TestDaemonMcpPolicyRequestSurface:
         assert "canonicalPolicyYaml" not in payload
         assert "canonical_policy_yaml" not in payload
         for forbidden_key in ("password", "totp", "secret", "credential", "passphrase"):
-            assert forbidden_key not in serialized.lower(), (
-                f"GET response leaked credential-like key: {forbidden_key}"
-            )
+            assert forbidden_key not in serialized.lower(), f"GET response leaked credential-like key: {forbidden_key}"

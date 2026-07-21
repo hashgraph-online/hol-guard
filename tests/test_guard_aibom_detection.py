@@ -520,9 +520,7 @@ def test_workspace_skills_excluded_for_hermes(tmp_path: Path) -> None:
         home_dir=tmp_path,
         workspace_dir=workspace,
     )
-    hermes_skill_names = {
-        a.name for a in hermes_artifacts if a.artifact_type == "skill"
-    }
+    hermes_skill_names = {a.name for a in hermes_artifacts if a.artifact_type == "skill"}
     assert "bare-metal-server" not in hermes_skill_names
 
     # Codex and OpenClaw SHOULD discover .agents/skills/
@@ -532,9 +530,7 @@ def test_workspace_skills_excluded_for_hermes(tmp_path: Path) -> None:
             home_dir=tmp_path,
             workspace_dir=workspace,
         )
-        skill_names = {
-            a.name for a in artifacts if a.artifact_type == "skill"
-        }
+        skill_names = {a.name for a in artifacts if a.artifact_type == "skill"}
         assert "bare-metal-server" in skill_names, f"{harness} should discover .agents/skills/"
 
     # Copilot also doesn't use .agents/skills/
@@ -544,9 +540,7 @@ def test_workspace_skills_excluded_for_hermes(tmp_path: Path) -> None:
             home_dir=tmp_path,
             workspace_dir=workspace,
         )
-        skill_names = {
-            a.name for a in artifacts if a.artifact_type == "skill"
-        }
+        skill_names = {a.name for a in artifacts if a.artifact_type == "skill"}
         assert "bare-metal-server" not in skill_names, f"{harness} should not discover .agents/skills/"
 
 
@@ -570,8 +564,6 @@ def test_workspace_skills_excluded_for_hermes_inventory_snapshot(tmp_path: Path)
         generated_at="2026-01-01T00:00:00Z",
     )
     skill_names = {
-        item.metadata.get("skill_name") or item.display_name
-        for item in snapshot.items
-        if item.item_kind == "skill"
+        item.metadata.get("skill_name") or item.display_name for item in snapshot.items if item.item_kind == "skill"
     }
     assert "bare-metal-server" not in skill_names

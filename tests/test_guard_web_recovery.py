@@ -29,7 +29,7 @@ def _add_pending_request(store: GuardStore, request_id: str = "req-test-001") ->
             artifact_id="codex:project:test_tool",
             artifact_name="test_tool",
             artifact_hash="hash-test",
-            policy_action="review",
+            policy_action="require-reapproval",
             recommended_scope="artifact",
             changed_fields=(),
             source_scope="local",
@@ -77,7 +77,7 @@ class TestApproveBlockRecoveryPayloads:
         _add_pending_request(store, "req-resolved-001")
         store.resolve_approval_request(
             "req-resolved-001",
-            resolution_action="allow",
+            resolution_action="block",
             resolution_scope="artifact",
             reason=None,
             resolved_at="2026-01-01T01:00:00+00:00",
@@ -117,7 +117,7 @@ class TestApproveBlockRecoveryPayloads:
                 artifact_id="opencode:project:test_tool",
                 artifact_name="test_tool",
                 artifact_hash="hash-test",
-                policy_action="review",
+                policy_action="require-reapproval",
                 recommended_scope="artifact",
                 changed_fields=(),
                 source_scope="local",

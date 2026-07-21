@@ -3,17 +3,28 @@
 from __future__ import annotations
 
 import ctypes
+import importlib
 import ntpath
 import os
 import stat
+import time
 import uuid
 from contextlib import suppress
 from ctypes import wintypes
 from pathlib import Path
 
 _WINDOWS_PATH_BUFFER_SIZE = 32_768
+_WINDOWS_FILE_ATTRIBUTE_DIRECTORY = 0x00000010
 _FILE_ATTRIBUTE_REPARSE_POINT = 0x00000400
+_WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
+_WINDOWS_FILE_FLAG_SEQUENTIAL_SCAN = 0x08000000
+_WINDOWS_GENERIC_READ = 0x80000000
+_WINDOWS_FILE_SHARE_READ = 0x00000001
+_WINDOWS_OPEN_EXISTING = 3
 _WINDOWS_ERROR_INVALID_PARAMETER = 87
+_WINDOWS_ERROR_SHARING_VIOLATION = 32
+_WINDOWS_LOCK_OPEN_ATTEMPTS = 6
+_WINDOWS_LOCK_RETRY_SECONDS = 0.01
 _WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION = 0x00001000
 _WINDOWS_PROCESS_TERMINATE = 0x00000001
 _WINDOWS_SYNCHRONIZE = 0x00100000
@@ -26,6 +37,103 @@ _FOLDERID_ROAMING_APPDATA = uuid.UUID("3eb685db-65f9-4cf6-a03a-e3ef65729f3d").by
 
 class _Guid(ctypes.Structure):
     _fields_ = [("bytes", ctypes.c_ubyte * 16)]
+
+
+class _WindowsByHandleFileInformation(ctypes.Structure):
+    _fields_ = [
+        ("dwFileAttributes", wintypes.DWORD),
+        ("ftCreationTime", wintypes.FILETIME),
+        ("ftLastAccessTime", wintypes.FILETIME),
+        ("ftLastWriteTime", wintypes.FILETIME),
+        ("dwVolumeSerialNumber", wintypes.DWORD),
+        ("nFileSizeHigh", wintypes.DWORD),
+        ("nFileSizeLow", wintypes.DWORD),
+        ("nNumberOfLinks", wintypes.DWORD),
+        ("nFileIndexHigh", wintypes.DWORD),
+        ("nFileIndexLow", wintypes.DWORD),
+    ]
+
+
+def open_windows_locked_regular_descriptor(path: Path | str) -> int:
+    """Open one regular file while denying concurrent write/delete access.
+
+    The returned CRT descriptor owns the native handle.  ``FILE_SHARE_READ``
+    deliberately excludes write and delete sharing, so the pathname cannot be
+    replaced and an existing writer cannot coexist while trusted bytes are
+    hashed.
+    """
+
+    if os.name != "nt":
+        raise OSError("windows_locked_file_unavailable")
+    win_dll = getattr(ctypes, "WinDLL", None)
+    if win_dll is None:
+        raise OSError("windows_locked_file_unavailable")
+    handle: object | None = None
+    close_handle = None
+    try:
+        msvcrt = importlib.import_module("msvcrt")
+        kernel32 = win_dll("kernel32", use_last_error=True)
+        create_file = kernel32.CreateFileW
+        create_file.argtypes = [
+            wintypes.LPCWSTR,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.HANDLE,
+        ]
+        create_file.restype = wintypes.HANDLE
+        get_information = kernel32.GetFileInformationByHandle
+        get_information.argtypes = [
+            wintypes.HANDLE,
+            ctypes.POINTER(_WindowsByHandleFileInformation),
+        ]
+        get_information.restype = wintypes.BOOL
+        close_handle = kernel32.CloseHandle
+        close_handle.argtypes = [wintypes.HANDLE]
+        close_handle.restype = wintypes.BOOL
+        invalid_handle = ctypes.c_void_p(-1).value
+        for attempt in range(_WINDOWS_LOCK_OPEN_ATTEMPTS):
+            handle = create_file(
+                str(path),
+                _WINDOWS_GENERIC_READ,
+                _WINDOWS_FILE_SHARE_READ,
+                None,
+                _WINDOWS_OPEN_EXISTING,
+                _WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT | _WINDOWS_FILE_FLAG_SEQUENTIAL_SCAN,
+                None,
+            )
+            if handle not in {None, invalid_handle}:
+                break
+            sharing_violation = ctypes.get_last_error() == _WINDOWS_ERROR_SHARING_VIOLATION
+            handle = None
+            if not sharing_violation or attempt + 1 == _WINDOWS_LOCK_OPEN_ATTEMPTS:
+                raise OSError("windows_locked_file_open_failed")
+            time.sleep(_WINDOWS_LOCK_RETRY_SECONDS)
+        information = _WindowsByHandleFileInformation()
+        if not get_information(handle, ctypes.byref(information)):
+            raise OSError("windows_locked_file_inspection_failed")
+        attributes = int(information.dwFileAttributes)
+        if attributes & (_WINDOWS_FILE_ATTRIBUTE_DIRECTORY | _FILE_ATTRIBUTE_REPARSE_POINT):
+            raise OSError("windows_locked_file_not_regular")
+        handle_value = handle if isinstance(handle, int) else getattr(handle, "value", None)
+        if not isinstance(handle_value, int):
+            raise OSError("windows_locked_file_handle_invalid")
+        descriptor = int(
+            msvcrt.open_osfhandle(
+                handle_value,
+                os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOINHERIT", 0),
+            )
+        )
+        handle = None
+        return descriptor
+    except (AttributeError, ImportError, RuntimeError, TypeError, ValueError) as exc:
+        raise OSError("windows_locked_file_unavailable") from exc
+    finally:
+        if handle is not None and close_handle is not None:
+            with suppress(OSError, RuntimeError, TypeError, ValueError):
+                _ = close_handle(handle)
 
 
 def windows_command_line_to_argv(command: str) -> list[str] | None:
@@ -355,6 +463,7 @@ def _trusted_real_directory(path: Path) -> Path:
 
 
 __all__ = [
+    "open_windows_locked_regular_descriptor",
     "trusted_windows_roaming_appdata",
     "trusted_windows_system_directories",
     "trusted_windows_system_executable",

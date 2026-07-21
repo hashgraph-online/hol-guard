@@ -358,6 +358,39 @@ def test_package_policy_and_sandbox_context_changes_invalidate_review_approval(
     assert result.reasons[0]["code"] == expected_reason
 
 
+def test_package_lockfile_parser_version_changes_approval_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    artifact = _package_artifact(workspace)
+    context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
+    evaluation = _package_evaluation("review")
+    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace)
+    store = GuardStore(tmp_path / "guard-home")
+    original_digest = package_request_policy_hash(
+        artifact=artifact,
+        store=store,
+        workspace_dir=workspace,
+        evaluation=evaluation,
+        execution_context=context,
+        config=config,
+    )
+
+    monkeypatch.setattr(local_supply_chain_module, "LOCKFILE_PARSER_VERSION", "complete-v2")
+    upgraded_digest = package_request_policy_hash(
+        artifact=artifact,
+        store=store,
+        workspace_dir=workspace,
+        evaluation=evaluation,
+        execution_context=context,
+        config=config,
+    )
+
+    assert original_digest != upgraded_digest
+
+
 @pytest.mark.parametrize(("saved_action", "expected"), [("allow", False), ("block", True)])
 def test_package_cache_error_probe_is_non_consuming_and_never_authorizes_saved_allow(
     tmp_path: Path,

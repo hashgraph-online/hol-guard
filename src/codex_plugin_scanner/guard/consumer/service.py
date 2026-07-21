@@ -44,6 +44,7 @@ from ..runtime.approval_reuse import (
 from ..runtime.decisions import build_authoritative_decision, evaluation_authority_error
 from ..runtime.signals import RiskSignalV2
 from ..schemas import build_consumer_mode_contract
+from ..skill_directory_identity import validated_complete_skill_directory_hash
 from ..store import GuardStore
 from ..types import (
     CapabilityDelta,
@@ -81,6 +82,7 @@ _TRUSTED_REQUEST_OVERRIDE_REASON = "trusted_request_override_exact_context"
 _RUNTIME_DETECTOR_BLOCK_REASON = "runtime_detector_block"
 _RUNTIME_DETECTOR_REVIEW_REASON = "runtime_detector_review"
 _RUNTIME_DETECTOR_WARN_REASON = "runtime_detector_warn"
+_SKILL_DIRECTORY_IDENTITY_REASON = "skill_directory_identity_non_reusable"
 
 
 class ArtifactDiff(TypedDict):
@@ -118,7 +120,33 @@ def _serialize_artifact(artifact: GuardArtifact) -> dict[str, object]:
     return payload
 
 
+def _codex_hook_identity(artifact: GuardArtifact) -> str | None:
+    if artifact.harness != "codex" or artifact.artifact_type != "hook":
+        return None
+    identity = artifact.metadata.get("codex_hook_identity")
+    return identity if isinstance(identity, str) and identity else None
+
+
+def _snapshot_codex_hook_identity(snapshot: Mapping[str, object]) -> str | None:
+    if snapshot.get("harness") != "codex" or snapshot.get("artifact_type") != "hook":
+        return None
+    metadata = snapshot.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return None
+    identity = metadata.get("codex_hook_identity")
+    return identity if isinstance(identity, str) and identity else None
+
+
 def _hash_payload(artifact: GuardArtifact) -> dict[str, object]:
+    codex_hook_identity = _codex_hook_identity(artifact)
+    if codex_hook_identity is not None:
+        return {
+            "schema": "codex-hook-artifact-hash-v1",
+            "harness": artifact.harness,
+            "artifact_type": artifact.artifact_type,
+            "source_scope": artifact.source_scope,
+            "codex_hook_identity": codex_hook_identity,
+        }
     payload = artifact.to_dict()
     metadata = artifact.metadata
     if (
@@ -168,6 +196,19 @@ def diff_artifact(previous: dict[str, object] | None, current: GuardArtifact) ->
             "current_snapshot": current_payload,
         }
     previous_payload = dict(previous)
+    previous_codex_hook_identity = _snapshot_codex_hook_identity(previous_payload)
+    current_codex_hook_identity = _codex_hook_identity(current)
+    if current_codex_hook_identity is not None and previous_codex_hook_identity == current_codex_hook_identity:
+        previous_hash = previous.get("artifact_hash")
+        previous_hash_value = previous_hash if isinstance(previous_hash, str) else None
+        hash_changed = previous_hash_value is not None and previous_hash_value != current_hash
+        return {
+            "changed": hash_changed,
+            "changed_fields": ["metadata"] if hash_changed else [],
+            "previous_hash": previous_hash_value,
+            "current_hash": current_hash,
+            "current_snapshot": current_payload,
+        }
     if "env_keys" not in previous_payload:
         previous_payload["env_keys"] = []
     changed_fields = [key for key, value in current_payload.items() if previous_payload.get(key) != value]
@@ -494,11 +535,52 @@ def _consumer_execution_identity(
 
 
 def _consumer_context_metadata(artifact: GuardArtifact) -> dict[str, object]:
+    codex_hook_identity = _codex_hook_identity(artifact)
+    if codex_hook_identity is not None:
+        return {
+            "codex_hook_identity_schema": artifact.metadata.get("codex_hook_identity_schema"),
+            "codex_hook_identity": codex_hook_identity,
+        }
     if artifact.artifact_type != "prompt_request":
         return dict(artifact.metadata)
     return {
         key: value for key, value in artifact.metadata.items() if key not in _PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS
     }
+
+
+def _skill_directory_identity_reusable(
+    *,
+    artifact_type: object,
+    metadata: object,
+) -> bool | None:
+    """Classify the optional migrated skill identity boundary.
+
+    ``None`` preserves legacy behavior for adapters that do not emit the
+    marker.  Once the marker key is present, only a complete, reusable v1
+    envelope whose digest agrees with ``directory_hash`` may reuse approval.
+    """
+
+    if artifact_type != "skill" or not isinstance(metadata, Mapping):
+        return None
+    if "skillDirectoryIdentity" not in metadata:
+        return None
+    if metadata.get("inspection_complete") is False:
+        return False
+    return validated_complete_skill_directory_hash(metadata) is not None
+
+
+def _skill_directory_identity_evidence(reusable: bool | None) -> tuple[dict[str, object], ...]:
+    if reusable is not False:
+        return ()
+    return (
+        {
+            "source": "skill_directory_identity",
+            "status": "incomplete",
+            "reason_code": _SKILL_DIRECTORY_IDENTITY_REASON,
+            "reusable": False,
+            "action_floor": "require-reapproval",
+        },
+    )
 
 
 def _consumer_policy_context(
@@ -550,8 +632,29 @@ def _consumer_approval_context_token(
     effective_cwd = _consumer_effective_cwd(config)
     normalized_cwd = _normalized_consumer_path(effective_cwd)
     normalized_workspace = _normalized_consumer_path(config.workspace) if config.workspace is not None else None
-    return build_approval_context_token(
-        identity={
+    codex_hook_identity = _codex_hook_identity(artifact)
+    if codex_hook_identity is not None:
+        identity_payload: dict[str, object] = {
+            "artifact_id": artifact.artifact_id,
+            "artifact_name": artifact.name,
+            "artifact_type": artifact.artifact_type,
+            "codex_hook_identity": codex_hook_identity,
+            "config_path": f"codex-hook://{artifact.source_scope}",
+            "cwd": normalized_cwd,
+            "detection_harness": detection.harness,
+            "executable": {"codex_hook_identity": codex_hook_identity},
+            "harness": artifact.harness,
+            "publisher": artifact.publisher,
+            "source_scope": artifact.source_scope,
+            "workspace": normalized_workspace,
+        }
+        content_payload: dict[str, object] = {
+            "artifact_hash": content_hash,
+            "codex_hook_identity": codex_hook_identity,
+            "metadata": _consumer_context_metadata(artifact),
+        }
+    else:
+        identity_payload = {
             "artifact_id": artifact.artifact_id,
             "artifact_name": artifact.name,
             "artifact_type": artifact.artifact_type,
@@ -568,14 +671,17 @@ def _consumer_approval_context_token(
             "publisher": artifact.publisher,
             "source_scope": artifact.source_scope,
             "workspace": normalized_workspace,
-        },
-        content={
+        }
+        content_payload = {
             "args": list(artifact.args),
             "artifact_hash": content_hash,
             "command": artifact.command,
             "metadata": _consumer_context_metadata(artifact),
             "url": artifact.url,
-        },
+        }
+    return build_approval_context_token(
+        identity=identity_payload,
+        content=content_payload,
         capabilities={
             "artifact_capabilities": dict(capability_snapshot),
             "command_available": detection.command_available,
@@ -1007,6 +1113,15 @@ def evaluate_detection(
             current_policy_action,
             scanner_action,
         )
+        skill_directory_identity_reusable = _skill_directory_identity_reusable(
+            artifact_type=artifact.artifact_type,
+            metadata=artifact.metadata,
+        )
+        if skill_directory_identity_reusable is False:
+            current_policy_action = most_restrictive_guard_action(
+                current_policy_action,
+                "require-reapproval",
+            )
         approval_context_hash = _consumer_approval_context_token(
             detection=detection,
             artifact=artifact,
@@ -1086,6 +1201,7 @@ def evaluate_detection(
             has_saved_state=has_saved_state,
         )
         scanner_evidence = (
+            *_skill_directory_identity_evidence(skill_directory_identity_reusable),
             *approval_reuse_evidence,
             *_runtime_signal_scanner_evidence(runtime_risk_signals_v2),
             *(
@@ -1124,6 +1240,14 @@ def evaluate_detection(
             "raw_scoring_recommendation": verdict.action,
             "scoring_recommendation_non_authoritative": True,
             "trusted_request_override": trusted_request_override,
+            **(
+                {
+                    "skill_directory_identity_reusable": skill_directory_identity_reusable,
+                    "skill_directory_identity_floor": "require-reapproval",
+                }
+                if skill_directory_identity_reusable is False
+                else {}
+            ),
             **({"saved_approval_claim": approval_claim} if approval_claim is not None else {}),
             **(
                 {
@@ -1328,6 +1452,15 @@ def evaluate_detection(
             config=config,
             changed=True,
         )
+        skill_directory_identity_reusable = _skill_directory_identity_reusable(
+            artifact_type=previous.get("artifact_type"),
+            metadata=previous.get("metadata"),
+        )
+        if skill_directory_identity_reusable is False:
+            current_policy_action = most_restrictive_guard_action(
+                current_policy_action,
+                "require-reapproval",
+            )
         approval_context_hash = _removed_consumer_approval_context_token(
             harness=detection.harness,
             artifact_id=artifact_id,
@@ -1410,6 +1543,7 @@ def evaluate_detection(
             has_saved_state=has_saved_state,
         )
         scanner_evidence = (
+            *_skill_directory_identity_evidence(skill_directory_identity_reusable),
             *approval_reuse_evidence,
             *_runtime_signal_scanner_evidence(runtime_risk_signals_v2),
             *(
@@ -1451,6 +1585,14 @@ def evaluate_detection(
             "raw_scoring_recommendation": "warn",
             "scoring_recommendation_non_authoritative": True,
             "trusted_request_override": trusted_request_override,
+            **(
+                {
+                    "skill_directory_identity_reusable": skill_directory_identity_reusable,
+                    "skill_directory_identity_floor": "require-reapproval",
+                }
+                if skill_directory_identity_reusable is False
+                else {}
+            ),
             **({"saved_approval_claim": approval_claim} if approval_claim is not None else {}),
             **(
                 {

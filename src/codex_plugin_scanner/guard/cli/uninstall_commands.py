@@ -243,10 +243,19 @@ def _managed_install_context(
                 home_dir=context.home_dir,
                 workspace_dir=workspace_path,
                 guard_home=context.guard_home,
+                home_override_explicit=context.home_override_explicit,
             ),
             str(workspace_path),
         )
-    return HarnessContext(home_dir=context.home_dir, workspace_dir=None, guard_home=context.guard_home), None
+    return (
+        HarnessContext(
+            home_dir=context.home_dir,
+            workspace_dir=None,
+            guard_home=context.guard_home,
+            home_override_explicit=context.home_override_explicit,
+        ),
+        None,
+    )
 
 
 def _planned_uninstall_message(*, managed_count: int, package_shim_count: int) -> str:

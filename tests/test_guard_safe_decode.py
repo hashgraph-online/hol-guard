@@ -185,10 +185,11 @@ def test_decoded_layer_preview_redacts_tokens() -> None:
     assert "supersecret123" not in result.layers[0].preview_redacted
 
 
-def test_timeout_respected() -> None:
-    payload = _b64(_b64(_b64("deeply nested content")))
-    result = decode_layers(payload, max_time_ms=0.001)
-    assert result.timed_out or len(result.layers) <= 1
+def test_timeout_preserves_signals_from_materialized_layers(monkeypatch: pytest.MonkeyPatch) -> None:
+    ticks = iter((0.0, 0.0, 1.0))
+    monkeypatch.setattr(safe_decode_module.time, "monotonic", lambda: next(ticks))
+    result = decode_layers(_b64("eval('decoded before timeout')"), max_time_ms=1)
+    assert result.timed_out and result.eval_signals
 
 
 def test_repeated_payloads_use_versioned_decode_cache(monkeypatch: pytest.MonkeyPatch) -> None:

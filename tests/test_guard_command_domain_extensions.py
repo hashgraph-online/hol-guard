@@ -115,12 +115,15 @@ def test_domain_preview_and_help_commands_remain_safe(command: str, tmp_path: Pa
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
 
     assert payload["status"] == "no_match"
-    assert extract_sensitive_tool_action_request(
-        "Shell",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    ) is None
+    assert (
+        extract_sensitive_tool_action_request(
+            "Shell",
+            {"command": command},
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(
@@ -135,12 +138,15 @@ def test_kubernetes_dry_run_none_remains_live_execution(command: str, tmp_path: 
 
     assert payload["status"] == "review"
     assert payload["classification"]["action_class"] == "Kubernetes destructive command"
-    assert extract_sensitive_tool_action_request(
-        "Shell",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    ) is not None
+    assert (
+        extract_sensitive_tool_action_request(
+            "Shell",
+            {"command": command},
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+        is not None
+    )
 
 
 @pytest.mark.parametrize(

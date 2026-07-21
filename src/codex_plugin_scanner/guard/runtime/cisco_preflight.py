@@ -10,7 +10,29 @@ from codex_plugin_scanner.guard.config import GuardConfig, resolve_risk_action
 from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.cisco_evidence import cisco_finding_to_risk_signal
+from codex_plugin_scanner.guard.runtime.cisco_scan_containment import (
+    CiscoPathContainmentError as _CiscoPathContainmentError,
+)
+from codex_plugin_scanner.guard.runtime.cisco_scan_containment import (
+    canonical_approved_scan_roots as _canonical_approved_scan_roots,
+)
+from codex_plugin_scanner.guard.runtime.cisco_scan_containment import (
+    cisco_target_kind as _cisco_target_kind,
+)
+from codex_plugin_scanner.guard.runtime.cisco_scan_containment import (
+    revalidate_scan_target as _revalidate_scan_target,
+)
+from codex_plugin_scanner.guard.runtime.cisco_scan_containment import (
+    skill_scan_root_for_workspace as _skill_scan_root_for_workspace,
+)
+from codex_plugin_scanner.guard.runtime.cisco_scan_containment import (
+    validated_redacted_scan_target as _validated_redacted_scan_target,
+)
+from codex_plugin_scanner.guard.runtime.cisco_scan_containment import (
+    validated_scan_target as _validated_scan_target,
+)
 from codex_plugin_scanner.guard.runtime.signals import GuardRiskSignalV3, RiskSignalV2
+from codex_plugin_scanner.guard.stable_digest import stable_digest_hex
 from codex_plugin_scanner.integrations import cisco_mcp_scanner, cisco_skill_scanner
 from codex_plugin_scanner.integrations.cisco_skill_scanner import CiscoIntegrationStatus
 from codex_plugin_scanner.models import Finding
@@ -26,6 +48,7 @@ _SOURCE_RISK_CLASS: dict[str, str] = {
 
 
 _CISCO_DETECTOR_MIN_BUDGET_SECONDS = 0.5
+_OUTSIDE_APPROVED_WORKSPACE = "outside_approved_workspace"
 
 
 class CiscoSkillPreflightDetector:
@@ -42,7 +65,11 @@ class CiscoSkillPreflightDetector:
         if budget_seconds < _CISCO_DETECTOR_MIN_BUDGET_SECONDS:
             return ()
         signals = scan_action_for_cisco_evidence(
-            action, workspace=workspace, sources=("skill",), timeout_seconds=budget_seconds
+            action,
+            workspace=workspace,
+            approved_scan_roots=getattr(context, "approved_scan_roots", ()),
+            sources=("skill",),
+            timeout_seconds=budget_seconds,
         )
         return tuple(cisco_risk_signal_v3_to_v2(signal) for signal in signals)
 
@@ -61,7 +88,11 @@ class CiscoMcpPreflightDetector:
         if budget_seconds < _CISCO_DETECTOR_MIN_BUDGET_SECONDS:
             return ()
         signals = scan_action_for_cisco_evidence(
-            action, workspace=workspace, sources=("mcp",), timeout_seconds=budget_seconds
+            action,
+            workspace=workspace,
+            approved_scan_roots=getattr(context, "approved_scan_roots", ()),
+            sources=("mcp",),
+            timeout_seconds=budget_seconds,
         )
         return tuple(cisco_risk_signal_v3_to_v2(signal) for signal in signals)
 
@@ -75,6 +106,7 @@ def scan_action_for_cisco_evidence(
     action: GuardActionEnvelope,
     *,
     workspace: Path | str | None,
+    approved_scan_roots: Iterable[Path | str] = (),
     mode: str = "auto",
     sources: Iterable[str] = ("skill", "mcp"),
     timeout_seconds: float = _DEFAULT_SCANNER_TIMEOUT_SECONDS,
@@ -83,66 +115,94 @@ def scan_action_for_cisco_evidence(
 
     if action.action_type not in {"file_write", "config_change"}:
         return ()
-    workspace_path = Path(workspace).expanduser().resolve() if workspace is not None else Path.cwd().resolve()
     requested_sources = frozenset(sources)
     signals: list[GuardRiskSignalV3] = []
+    try:
+        approved_roots = _canonical_approved_scan_roots(workspace, approved_scan_roots)
+    except _CiscoPathContainmentError as exc:
+        return (_cisco_path_containment_signal("approved-root", exc),)
+    primary_root = approved_roots[0]
     scanned_skill_roots: set[Path] = set()
     scanned_mcp_roots: set[Path] = set()
-    skill_via_path = False
-    mcp_via_path = False
+    redacted_skill_target = False
+    redacted_mcp_target = False
     for target_str in action.target_paths:
-        target_path = _resolve_target_path(target_str, workspace_path)
-        if target_path is None:
+        target_kind = _cisco_target_kind(target_str, requested_sources)
+        if target_kind is None:
             continue
-        if "skill" in requested_sources and _is_skill_file(target_path):
-            if _is_redacted_path(target_str):
-                skill_via_path = True
-            else:
-                skill_via_path = True
-                skill_root = _skill_scan_root_for_file(target_path, workspace_path)
-                if skill_root not in scanned_skill_roots:
-                    scanned_skill_roots.add(skill_root)
-                    signals.extend(
-                        _skill_findings_to_signals(
-                            cisco_skill_scanner.run_cisco_skill_scan(
-                                skill_root,
-                                mode=mode,
-                                timeout_seconds=timeout_seconds,
-                            )
+        if _is_redacted_path(target_str):
+            redacted_skill_target = redacted_skill_target or target_kind == "skill"
+            redacted_mcp_target = redacted_mcp_target or target_kind == "mcp"
+            continue
+        try:
+            validated = _validated_scan_target(
+                target_str,
+                kind=target_kind,
+                resolution_root=primary_root.path,
+                approved_roots=approved_roots,
+            )
+            _revalidate_scan_target(validated)
+        except _CiscoPathContainmentError as exc:
+            _append_unique_signal(signals, _cisco_path_containment_signal(target_kind, exc))
+            continue
+        if target_kind == "skill" and validated.scan_root not in scanned_skill_roots:
+            scanned_skill_roots.add(validated.scan_root)
+            signals.extend(
+                _skill_findings_to_signals(
+                    cisco_skill_scanner.run_cisco_skill_scan(
+                        validated.scan_root,
+                        mode=mode,
+                        timeout_seconds=timeout_seconds,
+                    )
+                )
+            )
+        if target_kind == "mcp" and validated.scan_root not in scanned_mcp_roots:
+            scanned_mcp_roots.add(validated.scan_root)
+            signals.extend(
+                _mcp_findings_to_signals(
+                    cisco_mcp_scanner.run_cisco_mcp_scan(
+                        validated.scan_root,
+                        mode=mode,
+                        timeout_seconds=timeout_seconds,
+                    )
+                )
+            )
+    if redacted_skill_target:
+        try:
+            validated = _validated_redacted_scan_target("skill", primary_root)
+            _revalidate_scan_target(validated)
+        except _CiscoPathContainmentError as exc:
+            _append_unique_signal(signals, _cisco_path_containment_signal("skill", exc))
+        else:
+            if validated.scan_root not in scanned_skill_roots:
+                scanned_skill_roots.add(validated.scan_root)
+                signals.extend(
+                    _skill_findings_to_signals(
+                        cisco_skill_scanner.run_cisco_skill_scan(
+                            validated.scan_root,
+                            mode=mode,
+                            timeout_seconds=timeout_seconds,
                         )
                     )
-        if "mcp" in requested_sources and target_path.name == ".mcp.json":
-            if _is_redacted_path(target_str):
-                mcp_via_path = True
-            else:
-                mcp_via_path = True
-                mcp_root = target_path.parent
-                if mcp_root not in scanned_mcp_roots:
-                    scanned_mcp_roots.add(mcp_root)
-                    signals.extend(
-                        _mcp_findings_to_signals(
-                            cisco_mcp_scanner.run_cisco_mcp_scan(
-                                mcp_root,
-                                mode=mode,
-                                timeout_seconds=timeout_seconds,
-                            )
+                )
+    if redacted_mcp_target:
+        try:
+            validated = _validated_redacted_scan_target("mcp", primary_root)
+            _revalidate_scan_target(validated)
+        except _CiscoPathContainmentError as exc:
+            _append_unique_signal(signals, _cisco_path_containment_signal("mcp", exc))
+        else:
+            if validated.scan_root not in scanned_mcp_roots:
+                scanned_mcp_roots.add(validated.scan_root)
+                signals.extend(
+                    _mcp_findings_to_signals(
+                        cisco_mcp_scanner.run_cisco_mcp_scan(
+                            validated.scan_root,
+                            mode=mode,
+                            timeout_seconds=timeout_seconds,
                         )
                     )
-    if "skill" in requested_sources and skill_via_path and not scanned_skill_roots:
-        skill_root = _skill_scan_root_for_workspace(workspace_path)
-        scanned_skill_roots.add(skill_root)
-        signals.extend(
-            _skill_findings_to_signals(
-                cisco_skill_scanner.run_cisco_skill_scan(skill_root, mode=mode, timeout_seconds=timeout_seconds)
-            )
-        )
-    if "mcp" in requested_sources and mcp_via_path and not scanned_mcp_roots:
-        scanned_mcp_roots.add(workspace_path)
-        signals.extend(
-            _mcp_findings_to_signals(
-                cisco_mcp_scanner.run_cisco_mcp_scan(workspace_path, mode=mode, timeout_seconds=timeout_seconds)
-            )
-        )
+                )
     return tuple(signals)
 
 
@@ -239,34 +299,39 @@ def policy_action_for_cisco_signals(
     return action
 
 
-def _resolve_target_path(target: str, workspace: Path) -> Path | None:
-    candidate = Path(target).expanduser()
-    if candidate.is_absolute():
-        return candidate.resolve()
-    return (workspace / candidate).resolve()
+def _cisco_path_containment_signal(kind: str, error: _CiscoPathContainmentError) -> GuardRiskSignalV3:
+    signal_suffix = stable_digest_hex(f"{kind}|{error.reason}|{error.approved_root_label}".encode(), length=12)
+    return GuardRiskSignalV3(
+        signal_id=f"cisco-preflight:{_OUTSIDE_APPROVED_WORKSPACE}:{signal_suffix}",
+        source="runtime_detector",
+        source_version="1",
+        category="filesystem",
+        severity="high",
+        confidence="strong",
+        title="Cisco preflight target is outside the approved workspace",
+        plain_language_summary=(
+            "Guard did not run the Cisco scanner because the target or derived scan root could not be proven "
+            "to remain inside the selected workspace or another explicitly approved folder."
+        ),
+        technical_detail=f"{_OUTSIDE_APPROVED_WORKSPACE}: {error.reason}",
+        evidence_ref=f"approved-root:{error.approved_root_label}",
+        scanner_name="Cisco preflight containment",
+        scanner_status="failed",
+        scanner_rule_id=_OUTSIDE_APPROVED_WORKSPACE,
+        redaction_level="redacted",
+        source_path=None,
+        source_line=None,
+        data_source=None,
+        data_sink=None,
+        recommended_action=(
+            "Move the target into the selected workspace or explicitly approve its containing folder, then retry."
+        ),
+    )
 
 
-def _is_skill_file(path: Path) -> bool:
-    return path.name == "SKILL.md"
-
-
-def _skill_scan_root_for_file(path: Path, workspace: Path) -> Path:
-    parent = path.parent
-    if parent.parent.name == "skills":
-        return parent.parent
-    if parent.name == "skills":
-        return parent
-    if parent == workspace:
-        return parent
-    # Default: scan from the containing directory; callers should verify the result is meaningful.
-    return parent
-
-
-def _skill_scan_root_for_workspace(target: Path) -> Path:
-    skills_dir = target / "skills"
-    if skills_dir.is_dir():
-        return skills_dir
-    return target
+def _append_unique_signal(signals: list[GuardRiskSignalV3], signal: GuardRiskSignalV3) -> None:
+    if signal not in signals:
+        signals.append(signal)
 
 
 def _skill_findings_to_signals(summary: object) -> tuple[GuardRiskSignalV3, ...]:

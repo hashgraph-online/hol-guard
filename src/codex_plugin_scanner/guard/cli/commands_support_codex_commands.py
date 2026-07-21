@@ -340,6 +340,7 @@ _CODEX_GIT_DIFF_BOOLEAN_OPTIONS = frozenset(
         "--shortstat",
         "--stat",
         "--summary",
+        "--staged",
     }
 )
 

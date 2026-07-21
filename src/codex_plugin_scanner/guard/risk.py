@@ -421,6 +421,35 @@ def _env_keys(artifact: GuardArtifact) -> list[str]:
 
 def _metadata_signals(artifact: GuardArtifact) -> list[GuardSignal]:
     signals: list[GuardSignal] = []
+    if artifact.metadata.get("inspection_complete") is False or artifact.metadata.get("config_parse_complete") is False:
+        reason = artifact.metadata.get("inspection_reason") or artifact.metadata.get("config_reason") or "unknown"
+        signals.append(
+            GuardSignal(
+                signal_id="inspection:incomplete",
+                family="execution",
+                severity=8,
+                confidence=0.98,
+                evidence_source="artifact",
+                matched_text=str(reason),
+                explanation="artifact inspection is incomplete",
+                remediation="Repair or reduce the input, then run a complete inspection before approval.",
+                rule_version=_RULE_VERSION,
+            )
+        )
+    elif artifact.metadata.get("analysis_truncated") is True:
+        signals.append(
+            GuardSignal(
+                signal_id="inspection:analysis-truncated",
+                family="execution",
+                severity=6,
+                confidence=0.95,
+                evidence_source="artifact",
+                matched_text=None,
+                explanation="artifact risk preview is truncated",
+                remediation="Review the complete content before approval.",
+                rule_version=_RULE_VERSION,
+            )
+        )
     for key in ("runtime_request_signals", "prompt_signals"):
         value = artifact.metadata.get(key)
         if not isinstance(value, list):

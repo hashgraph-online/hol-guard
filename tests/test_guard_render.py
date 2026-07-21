@@ -34,7 +34,7 @@ def test_guard_connect_render_clarifies_paid_plan_pending_state(capsys) -> None:
     output = _normalize_render_output(capsys.readouterr().out)
     assert "Browser paired" in output
     assert "Connection" in output
-    assert "This device is protected locally" in output
+    assert "Guard is running locally" in output
     assert "Upgrade to sync this device to Guard Cloud" in output
 
 
@@ -55,7 +55,7 @@ def test_guard_connect_render_clarifies_unauthorized_pending_state(capsys) -> No
     )
 
     output = _normalize_render_output(capsys.readouterr().out)
-    assert "This device is protected locally" in output
+    assert "Guard is running locally" in output
     assert "Sign in to finish Guard Cloud setup" in output
 
 
@@ -393,7 +393,7 @@ def test_guard_connect_render_defaults_sync_not_available_to_upgrade_guidance(ca
     )
 
     output = _normalize_render_output(capsys.readouterr().out)
-    assert "This device is protected locally" in output
+    assert "Guard is running locally" in output
     assert "Upgrade to sync this device to Guard Cloud" in output
     assert "First Guard Cloud proof is on the way" not in output
 

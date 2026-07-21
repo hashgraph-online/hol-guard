@@ -132,9 +132,7 @@ def test_record_excludes_raw_output(recorder: HookMetricsRecorder) -> None:
 
     for field in ("latency_p50_ms", "latency_p95_ms", "latency_p99_ms", "total_decisions"):
         value = snap[field]
-        assert isinstance(value, (int, float)) and not isinstance(value, bool), (
-            f"{field}={value!r} is not numeric"
-        )
+        assert isinstance(value, (int, float)) and not isinstance(value, bool), f"{field}={value!r} is not numeric"
 
     leaked_values = [v for v in _leaf_values(snap) if isinstance(v, str) and secret in v]
     assert not leaked_values, f"secret fragment leaked into snapshot values: {leaked_values}"
@@ -219,10 +217,8 @@ def test_flush_to_store_no_raw_content(
     assert recorder.snapshot()["total_decisions"] == 0
 
     # Exactly one guard_events rollup row was written.
-    with store._connect() as connection:  # noqa: SLF001
-        rows = connection.execute(
-            "select event_name, payload_json from guard_events order by rowid"
-        ).fetchall()
+    with store._connect() as connection:
+        rows = connection.execute("select event_name, payload_json from guard_events order by rowid").fetchall()
     assert len(rows) == 1, f"expected 1 rollup event, got {len(rows)}"
     assert rows[0]["event_name"] == "hook.metrics.rollup"
     payload = json.loads(rows[0]["payload_json"])
@@ -236,6 +232,6 @@ def test_flush_to_store_no_raw_content(
 
     # Store is still usable: a second add_event succeeds.
     store.add_event("hook.metrics.rollup", {"total_decisions": 0}, "2026-06-27T00:00:00+00:00")
-    with store._connect() as connection:  # noqa: SLF001
+    with store._connect() as connection:
         count = connection.execute("select count(*) as n from guard_events").fetchone()["n"]
     assert count == 2, f"store unusable after flush: expected 2 events, got {count}"

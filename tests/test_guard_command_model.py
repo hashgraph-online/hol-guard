@@ -30,6 +30,14 @@ def test_parse_shell_command_tracks_env_wrapper_path_override() -> None:
     assert parsed.path_overridden is True
 
 
+def test_parse_shell_command_consumes_option_like_env_operand_once() -> None:
+    parsed = parse_shell_command("env -u -i python -m pytest -q")
+
+    assert parsed.wrapper_chain == ("env",)
+    assert parsed.segments[0].executable == "python"
+    assert parsed.segments[0].arguments == ("-m", "pytest", "-q")
+
+
 def test_parse_shell_command_tracks_sudo_and_nested_environment_wrapper() -> None:
     parsed = parse_shell_command("sudo -n env PATH=/usr/bin:/bin git -C repo push --force")
 

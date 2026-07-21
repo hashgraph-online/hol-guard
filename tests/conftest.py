@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -116,6 +117,7 @@ def _isolate_daemon_background_refresh_workers(
 class _FakeSystemKeyringModule:
     def __init__(self) -> None:
         self._secrets: dict[tuple[str, str], str] = {}
+        self._lock: threading.RLock = threading.RLock()
 
     @staticmethod
     def _store_path() -> Path | None:
@@ -144,7 +146,15 @@ class _FakeSystemKeyringModule:
         for (service_name, secret_id), secret_value in secrets.items():
             payload.setdefault(service_name, {})[secret_id] = secret_value
         store_path.parent.mkdir(parents=True, exist_ok=True)
-        store_path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+        temporary_path = store_path.with_name(f".{store_path.name}.{os.getpid()}.{id(self)}.tmp")
+        try:
+            _ = temporary_path.write_text(
+                json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            _ = temporary_path.replace(store_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
     @staticmethod
     def get_keyring():
@@ -154,17 +164,20 @@ class _FakeSystemKeyringModule:
         return _Backend()
 
     def set_password(self, service_name: str, secret_id: str, value: str) -> None:
-        secrets = self._load()
-        secrets[(service_name, secret_id)] = value
-        self._persist(secrets)
+        with self._lock:
+            secrets = self._load()
+            secrets[(service_name, secret_id)] = value
+            self._persist(secrets)
 
     def get_password(self, service_name: str, secret_id: str) -> str | None:
-        return self._load().get((service_name, secret_id))
+        with self._lock:
+            return self._load().get((service_name, secret_id))
 
     def delete_password(self, service_name: str, secret_id: str) -> None:
-        secrets = self._load()
-        secrets.pop((service_name, secret_id), None)
-        self._persist(secrets)
+        with self._lock:
+            secrets = self._load()
+            secrets.pop((service_name, secret_id), None)
+            self._persist(secrets)
 
 
 @pytest.fixture
@@ -195,10 +208,6 @@ _FAKE_SYSTEM_KEYRING_DISABLED_FILES = {
     "test_guard_store_migrations.py",
 }
 
-_FAKE_SYSTEM_KEYRING_DISABLED_NODEIDS = {
-    "tests/test_guard_cli.py::TestGuardCli::test_guard_status_reports_oauth_key_storage_health",
-}
-
 
 @pytest.fixture(autouse=True)
 def _policy_integrity_keyring_for_selected_tests(
@@ -207,10 +216,7 @@ def _policy_integrity_keyring_for_selected_tests(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    if (
-        request.node.path.name in _FAKE_SYSTEM_KEYRING_DISABLED_FILES
-        or request.node.nodeid in _FAKE_SYSTEM_KEYRING_DISABLED_NODEIDS
-    ):
+    if request.node.path.name in _FAKE_SYSTEM_KEYRING_DISABLED_FILES:
         return
     monkeypatch.setenv("HOL_GUARD_TEST_KEYRING_FILE", str(tmp_path / "fake-system-keyring.json"))
     install_fake_system_keyring()

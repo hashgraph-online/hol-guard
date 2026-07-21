@@ -199,29 +199,36 @@ class TestTrayDaemonRestartForce:
             handler._write_json = MagicMock()
 
             stop_result = TrayLifecycleResult(
-                ok=True, state=TrayState.STOPPING,
-                reason=TrayReasonCode.OK, message="stopped",
+                ok=True,
+                state=TrayState.STOPPING,
+                reason=TrayReasonCode.OK,
+                message="stopped",
             )
             start_result = TrayLifecycleResult(
-                ok=True, state=TrayState.RUNNING,
-                reason=TrayReasonCode.OK, message="started",
+                ok=True,
+                state=TrayState.RUNNING,
+                reason=TrayReasonCode.OK,
+                message="started",
             )
-            with patch(
-                "codex_plugin_scanner.guard.tray.platforms.detect_platform_adapter",
-                return_value=None,
-            ), patch(
-                "codex_plugin_scanner.guard.tray.lifecycle.stop_tray",
-                return_value=stop_result,
-            ) as mock_stop, patch(
-                "codex_plugin_scanner.guard.tray.lifecycle.start_tray",
-                return_value=start_result,
-            ) as mock_start:
+            with (
+                patch(
+                    "codex_plugin_scanner.guard.tray.platforms.detect_platform_adapter",
+                    return_value=None,
+                ),
+                patch(
+                    "codex_plugin_scanner.guard.tray.lifecycle.stop_tray",
+                    return_value=stop_result,
+                ) as mock_stop,
+                patch(
+                    "codex_plugin_scanner.guard.tray.lifecycle.start_tray",
+                    return_value=start_result,
+                ) as mock_start,
+            ):
                 from codex_plugin_scanner.guard.daemon.server import (
                     _GuardDaemonHandler,
                 )
-                _GuardDaemonHandler._handle_tray_action(
-                    handler, "restart", {}
-                )
+
+                _GuardDaemonHandler._handle_tray_action(handler, "restart", {})
 
             mock_stop.assert_called_once_with(guard_home)
             mock_start.assert_called_once_with(guard_home, force=True)

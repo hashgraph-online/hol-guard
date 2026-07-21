@@ -91,9 +91,7 @@ def test_protection_lease_signing_uses_distinct_purpose_bound_native_operation(
     monkeypatch.setattr(device_key_native.subprocess, "run", run)
     lease = _canonical_protection_lease()
 
-    result = device_key_native.sign_protection_lease(
-        _paths(tmp_path), "d" * 32, lease, system_name="Darwin"
-    )
+    result = device_key_native.sign_protection_lease(_paths(tmp_path), "d" * 32, lease, system_name="Darwin")
 
     assert result.signature == signature
     assert run.call_args.args[0] == [

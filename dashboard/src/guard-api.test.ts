@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   buildDemoRuntimeSnapshot,
   clearReviewQueue,
+  fetchCommandActivityApi,
   fetchAllPendingRequests,
   fetchApprovalPage,
   GuardHarnessActionError,
@@ -20,7 +21,8 @@ import {
 	  runAuditRemediation,
 	  resolveRequestWithQueueResult,
 	  retryResume,
-	} from "./guard-api";
+} from "./guard-api";
+import { recommendedScopeForAction } from "./approval-scopes";
 import { resolveCloudSyncHealthCopy } from "./runtime-overview";
 import {
   resolveDecisionV2Detail,
@@ -38,6 +40,79 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const snapshot = buildDemoRuntimeSnapshot();
+
+const missingRuntimeStateSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  runtime_state: undefined,
+});
+assert(missingRuntimeStateSnapshot.runtime_state === null, "runtime normalizer rejects missing runtime proof");
+assert(
+  missingRuntimeStateSnapshot.headline_state === "setup",
+  "missing runtime proof cannot produce a protected headline"
+);
+
+const malformedRuntimeStateSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  runtime_state: { session_id: "unproven" },
+});
+assert(malformedRuntimeStateSnapshot.runtime_state === null, "runtime normalizer rejects malformed runtime proof");
+assert(
+  malformedRuntimeStateSnapshot.headline_state === "setup",
+  "malformed runtime proof cannot produce a protected headline"
+);
+
+const semanticallyInvalidRuntimeStateSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  runtime_state: {
+    session_id: "unproven",
+    daemon_host: "127.0.0.1",
+    daemon_port: 4455,
+    started_at: "not-a-time",
+    last_heartbeat_at: "not-a-time",
+    approval_center_url: "not-a-url",
+  },
+});
+assert(
+  semanticallyInvalidRuntimeStateSnapshot.runtime_state === null,
+  "runtime normalizer rejects invalid timestamps and endpoint proof"
+);
+assert(
+  semanticallyInvalidRuntimeStateSnapshot.headline_state === "setup",
+  "semantically invalid runtime proof cannot produce a protected headline"
+);
+assert(snapshot.runtime_state !== null, "demo snapshot includes valid runtime proof");
+for (const [label, runtimeState] of [
+  [
+    "non-local approval URL",
+    { ...snapshot.runtime_state, approval_center_url: "https://example.test/" },
+  ],
+  [
+    "stale heartbeat",
+    { ...snapshot.runtime_state, last_heartbeat_at: new Date(Date.now() - 60_000).toISOString() },
+  ],
+  [
+    "timezone-naive heartbeat",
+    { ...snapshot.runtime_state, last_heartbeat_at: "2026-07-18T12:00:00" },
+  ],
+] as const) {
+  const normalized = normalizeRuntimeSnapshot({ ...snapshot, runtime_state: runtimeState });
+  assert(normalized.runtime_state === null, `runtime normalizer rejects ${label}`);
+  assert(normalized.headline_state === "setup", `${label} cannot produce a protected headline`);
+}
+
+const ipv6RuntimeStateSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  runtime_state: {
+    ...snapshot.runtime_state,
+    daemon_host: "::1",
+    approval_center_url: "http://[::1]:4455",
+  },
+});
+assert(ipv6RuntimeStateSnapshot.runtime_state !== null, "runtime normalizer accepts bracketed IPv6 loopback proof");
+assert(
+  ipv6RuntimeStateSnapshot.headline_state !== "setup",
+  "fresh IPv6 loopback proof does not report the runtime offline"
+);
 
 const normalizedAuthoritySnapshot = normalizeRuntimeSnapshot({
   ...snapshot,
@@ -432,6 +507,96 @@ const normalizedMalformedRequest = normalizeApprovalRequest({
 assert(
   normalizedMalformedRequest.action_envelope_json === null,
   "T071: detail-route approval payloads normalize malformed envelopes before rendering"
+);
+
+const normalizedScopeContract = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  scope_contract_version: "guard.approval-scopes.v2",
+  scope_contract_digest: "scope-digest",
+  allowed_scopes_by_action: {
+    allow: ["artifact"],
+    block: ["artifact", "global"],
+  },
+  recommended_scope_by_action: { allow: "artifact", block: "artifact" },
+  scope_restrictions: ["broad_allow_requires_positive_proof"],
+  task_capability_eligibility: {
+    eligible: false,
+    reason_codes: ["task_capability_not_enabled"],
+  },
+});
+assert(
+  normalizedScopeContract.allowed_scopes_by_action?.allow.join(",") === "artifact" &&
+    normalizedScopeContract.allowed_scopes_by_action?.block.join(",") === "artifact,global",
+  "T071a: approval scope contracts normalize action-specific scope lists",
+);
+assert(
+  normalizedScopeContract.task_capability_eligibility?.eligible === false,
+  "T071a: task capability eligibility is preserved",
+);
+
+const malformedScopeContract = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  scope_contract_version: "guard.approval-scopes.v2",
+  scope_contract_digest: "scope-digest",
+  allowed_scopes_by_action: {
+    allow: ["artifact", "invented"],
+    block: "global",
+  },
+  recommended_scope_by_action: { allow: "global", block: "invented" },
+});
+assert(
+  malformedScopeContract.allowed_scopes_by_action?.allow.length === 0 &&
+    malformedScopeContract.allowed_scopes_by_action?.block.length === 0,
+  "T071b: malformed action scope lists fail closed",
+);
+assert(
+  malformedScopeContract.recommended_scope_by_action?.allow === "global" &&
+    malformedScopeContract.recommended_scope_by_action?.block === null,
+  "T071b: malformed recommendations normalize without inventing values",
+);
+assert(
+  recommendedScopeForAction(malformedScopeContract, "allow") === null,
+  "T071b: a recommendation outside the action allow-list stays inert",
+);
+
+const incompleteScopeContract = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  scope_contract_version: "guard.approval-scopes.v2",
+  scope_contract_digest: null,
+  allowed_scopes_by_action: {
+    allow: ["artifact", "global"],
+    block: ["artifact", "global"],
+  },
+  recommended_scope_by_action: { allow: "global", block: "global" },
+});
+assert(
+  incompleteScopeContract.allowed_scopes_by_action?.allow.length === 0 &&
+    incompleteScopeContract.allowed_scopes_by_action?.block.length === 0,
+  "T071c: incomplete scope contract bindings expose no action scopes",
+);
+assert(
+  incompleteScopeContract.recommended_scope_by_action?.allow === null &&
+    incompleteScopeContract.recommended_scope_by_action?.block === null,
+  "T071c: incomplete scope contract bindings expose no recommendations",
+);
+
+const nullScopeContract = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  scope_contract_version: null,
+  scope_contract_digest: null,
+  allowed_scopes_by_action: null,
+  recommended_scope_by_action: null,
+  scope_restrictions: null,
+  task_capability_eligibility: null,
+});
+assert(
+  nullScopeContract.scope_contract_version === undefined &&
+    nullScopeContract.scope_contract_digest === undefined &&
+    nullScopeContract.allowed_scopes_by_action === undefined &&
+    nullScopeContract.recommended_scope_by_action === undefined &&
+    nullScopeContract.scope_restrictions === undefined &&
+    nullScopeContract.task_capability_eligibility === undefined,
+  "T071d: null-only scope metadata remains absent instead of rendering empty scope sections",
 );
 
 const BASE_DECISION_V2: GuardDecisionV2 = {
@@ -1388,7 +1553,9 @@ const resolution = await resolveRequestWithQueueResult({
   action: "allow",
   scope: "artifact",
   workspace: "/workspace",
-  reason: "reviewed"
+  reason: "reviewed",
+  scope_contract_version: "guard.approval-scopes.v2",
+  scope_contract_digest: "scope-digest",
 });
 const resolveBody = JSON.parse(String(fetchResolveCalls[0].init?.body)) as Record<string, unknown>;
 
@@ -1400,6 +1567,11 @@ assert(
 assert(resolveBody["scope"] === "artifact", "L077: resolveRequestWithQueueResult sends scope");
 assert(resolveBody["workspace"] === "/workspace", "L077: resolveRequestWithQueueResult sends workspace");
 assert(resolveBody["reason"] === "reviewed", "L077: resolveRequestWithQueueResult sends reason");
+assert(
+  resolveBody["scope_contract_version"] === "guard.approval-scopes.v2" &&
+    resolveBody["scope_contract_digest"] === "scope-digest",
+  "L077: resolveRequestWithQueueResult binds the displayed scope contract",
+);
 assert(resolution.remaining_pending_count === 1, "L077: resolveRequestWithQueueResult returns remaining count");
 assert(resolution.next_selectable_request_id === "req-next", "L077: resolveRequestWithQueueResult returns next selectable id");
 assert(resolution.remaining_pending_summaries[0].request_id === "req-next", "L077: resolveRequestWithQueueResult normalizes remaining summaries");
@@ -1707,5 +1879,28 @@ assert(
   headerValue(retryResumeCalls[2].init, "X-Guard-Dashboard-Session") === "fresh-retry-resume-session",
   "L080: retryResume retry uses refreshed dashboard session"
 );
+
+let hostileCommandActivityFetches = 0;
+globalThis.fetch = async (): Promise<Response> => {
+  hostileCommandActivityFetches += 1;
+  return Response.json({});
+};
+let hostileCommandActivityError: unknown;
+try {
+  await fetchCommandActivityApi("https://attacker.example/v1/command-activity");
+} catch (error) {
+  hostileCommandActivityError = error;
+}
+assert(hostileCommandActivityError instanceof Error, "absolute command activity URLs are rejected");
+assert(hostileCommandActivityFetches === 0, "rejected URLs cannot receive the dashboard session token");
+
+hostileCommandActivityError = null;
+try {
+  await fetchCommandActivityApi("/v1/command-activity/../../settings");
+} catch (error) {
+  hostileCommandActivityError = error;
+}
+assert(hostileCommandActivityError instanceof Error, "command activity path traversal is rejected");
+assert(hostileCommandActivityFetches === 0, "path traversal cannot receive the dashboard session token");
 
 console.log("guard-api.test.ts: all tests passed");

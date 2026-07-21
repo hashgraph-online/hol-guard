@@ -205,12 +205,15 @@ def test_help_redirection_target_does_not_hide_destructive_command(
 
     assert payload["status"] == "review"
     assert rule_id in {rule["rule_id"] for rule in payload["rules"]}
-    assert extract_sensitive_tool_action_request(
-        "Shell",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    ) is not None
+    assert (
+        extract_sensitive_tool_action_request(
+            "Shell",
+            {"command": command},
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+        is not None
+    )
 
 
 def test_managed_service_extensions_publish_official_references() -> None:

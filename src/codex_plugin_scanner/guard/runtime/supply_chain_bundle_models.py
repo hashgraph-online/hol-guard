@@ -20,6 +20,12 @@ from .supply_chain_bundle_base import (
     _require_string,
     _require_string_array,
 )
+from .supply_chain_bundle_package_identity import _deduplicate_bundle_packages
+from .supply_chain_package_identity import (
+    PackageIdentityError,
+    normalize_ecosystem,
+    parse_package_identity,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,15 +184,29 @@ class SupplyChainBundlePackage:
         normalized_severity = _require_string(data, "normalizedSeverity")
         if normalized_severity not in _SEVERITY_VALUES:
             raise SupplyChainBundleMalformedError(f"Unsupported package normalizedSeverity: {normalized_severity!r}")
+        ecosystem = normalize_ecosystem(_require_string(data, "ecosystem"))
+        name = _require_string(data, "name")
+        namespace = _optional_string(data, "namespace")
+        if ecosystem == "packagist" and namespace is None and name.count("/") == 1:
+            try:
+                legacy_identity = parse_package_identity(
+                    ecosystem=ecosystem,
+                    package_name=name,
+                    version="*",
+                )
+            except PackageIdentityError as error:
+                raise SupplyChainBundleMalformedError(f"Invalid package identity: {error}") from error
+            namespace = legacy_identity.namespace
+            name = legacy_identity.name
         return SupplyChainBundlePackage(
             confidence=_require_int(data, "confidence"),
             default_action=default_action,
-            ecosystem=_require_string(data, "ecosystem"),
+            ecosystem=ecosystem,
             exploit_level=exploit_level,
             known_exploited=_require_bool(data, "knownExploited"),
             malware_state=malware_state,
-            name=_require_string(data, "name"),
-            namespace=_optional_string(data, "namespace"),
+            name=name,
+            namespace=namespace,
             normalized_severity=normalized_severity,
             package_age_state=_require_string(data, "packageAgeState"),
             purl=_require_string(data, "purl"),
@@ -284,7 +304,7 @@ class SupplyChainBundleEmergencyDeny:
         if reason not in {"critical_active_exploit", "known_exploited", "known_malware"}:
             raise SupplyChainBundleMalformedError(f"Unsupported emergency deny reason: {reason!r}")
         return SupplyChainBundleEmergencyDeny(
-            ecosystem=_require_string(data, "ecosystem"),
+            ecosystem=normalize_ecosystem(_require_string(data, "ecosystem")),
             name=_require_string(data, "name"),
             namespace=_optional_string(data, "namespace"),
             reason=reason,
@@ -388,6 +408,10 @@ class SupplyChainBundle:
             raise SupplyChainBundleMalformedError("Bundle policyRules must be a list")
         if not isinstance(raw_source_hashes, list):
             raise SupplyChainBundleMalformedError("Bundle sourceHashes must be a list")
+        parsed_packages = tuple(
+            SupplyChainBundlePackage.from_dict(item) for item in raw_packages if isinstance(item, dict)
+        )
+        packages = _deduplicate_bundle_packages(parsed_packages)
         bundle = SupplyChainBundle(
             advisories=tuple(
                 SupplyChainBundleAdvisory.from_dict(item) for item in raw_advisories if isinstance(item, dict)
@@ -402,7 +426,7 @@ class SupplyChainBundle:
             feed_snapshot_hash=_require_string(data, "feedSnapshotHash"),
             generated_at=_require_string(data, "generatedAt"),
             key_id=_require_string(data, "keyId"),
-            packages=tuple(SupplyChainBundlePackage.from_dict(item) for item in raw_packages if isinstance(item, dict)),
+            packages=packages,
             policy_hash=_require_string(data, "policyHash"),
             policy_rules=tuple(
                 SupplyChainBundlePolicyRule.from_dict(item) for item in raw_policy_rules if isinstance(item, dict)
@@ -418,7 +442,7 @@ class SupplyChainBundle:
             raise SupplyChainBundleMalformedError("Bundle advisories must contain only objects")
         if len(bundle.emergency_denylist) != len(raw_emergency_denylist):
             raise SupplyChainBundleMalformedError("Bundle emergencyDenylist must contain only objects")
-        if len(bundle.packages) != len(raw_packages):
+        if len(parsed_packages) != len(raw_packages):
             raise SupplyChainBundleMalformedError("Bundle packages must contain only objects")
         if len(bundle.policy_rules) != len(raw_policy_rules):
             raise SupplyChainBundleMalformedError("Bundle policyRules must contain only objects")

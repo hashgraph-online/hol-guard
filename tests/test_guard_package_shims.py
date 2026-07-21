@@ -29,7 +29,10 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.models import PolicyDecision
-from codex_plugin_scanner.guard.package_shim_gate import package_shim_command_requires_guard
+from codex_plugin_scanner.guard.package_shim_gate import (
+    package_shim_command_requires_external_archive_binding,
+    package_shim_command_requires_guard,
+)
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
 from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
@@ -504,10 +507,13 @@ def test_guard_store_init_does_not_hold_sqlite_writer_during_missing_policy_inte
     slow_process.start()
     assert refresh_started_event.wait(timeout=5)
 
-    fast_started = time.monotonic()
+    with sqlite3.connect(home_dir / "guard.db", timeout=1.0) as writer_probe:
+        writer_probe.execute("pragma busy_timeout=1000")
+        writer_probe.execute("BEGIN IMMEDIATE")
+        writer_probe.rollback()
+
     fast_results: Queue = Queue()
     _run_guard_protect_command(str(home_dir), str(workspace_dir), result_queue=fast_results)
-    fast_elapsed = time.monotonic() - fast_started
     fast_result = fast_results.get(timeout=1)
 
     slow_process.join(timeout=20)
@@ -516,7 +522,6 @@ def test_guard_store_init_does_not_hold_sqlite_writer_during_missing_policy_inte
 
     assert fast_result["returncode"] == 2
     assert slow_result["returncode"] == 2
-    assert fast_elapsed < 3.0
 
 
 def _write_npm_ci_workspace(workspace_dir: Path, *, package_name: str, package_version: str) -> None:
@@ -610,16 +615,17 @@ def test_package_manager_shim_uses_trusted_guard_import_path(tmp_path: Path, cap
 
 
 @pytest.mark.parametrize(
-    "command",
+    ("command", "expected_action"),
     [
-        ["npm", "install", "guard-github@git+https://example.com/guard.git"],
-        ["npm", "install", "guard-tarball@https://example.com/guard.tgz"],
-        ["npm", "install", "file:./vendor/guard"],
+        (["npm", "install", "guard-github@git+https://example.com/guard.git"], "require-reapproval"),
+        (["npm", "install", "guard-tarball@https://example.com/guard.tgz"], "review"),
+        (["npm", "install", "file:./vendor/guard"], "require-reapproval"),
     ],
 )
 def test_guard_protect_requires_reapproval_for_untrusted_package_sources_without_cloud(
     tmp_path: Path,
     command: list[str],
+    expected_action: str,
 ) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
@@ -637,7 +643,7 @@ def test_guard_protect_requires_reapproval_for_untrusted_package_sources_without
     assert exit_code == 2
     assert payload["executed"] is False
     assert payload["verdict"]["blocking"] is True
-    assert payload["verdict"]["action"] == "require-reapproval"
+    assert payload["verdict"]["action"] == expected_action
 
 
 def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path(tmp_path: Path, capsys) -> None:
@@ -765,6 +771,12 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
     ("manager", "argv", "expected"),
     [
         ("bun", ("add", "minimist@1.2.9"), True),
+        ("bun", ("run", "build"), True),
+        ("bun", ("run", "build", "--watch"), True),
+        ("bun", ("run", "dev"), True),
+        ("bun", ("pm", "ls", "--all"), True),
+        ("bun", ("script.ts",), True),
+        ("bun", ("--version",), False),
         ("brew", ("install", "jq"), True),
         ("brew", ("install", "--cask", "firefox"), True),
         ("brew", ("tap", "user/repository"), True),
@@ -784,7 +796,7 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
         ("yarn", ("--cwd", ".", "add", "minimist@1.2.9"), True),
     ],
 )
-def test_package_shim_command_requires_guard_only_for_supply_chain_actions(
+def test_package_shim_command_requires_guard_for_supply_chain_or_bun_execution(
     tmp_path: Path,
     manager: str,
     argv: tuple[str, ...],
@@ -794,6 +806,57 @@ def test_package_shim_command_requires_guard_only_for_supply_chain_actions(
     workspace_dir.mkdir(parents=True, exist_ok=True)
 
     assert package_shim_command_requires_guard(manager, argv, workspace=workspace_dir) is expected
+
+
+@pytest.mark.parametrize(
+    ("manager", "argv", "expected"),
+    [
+        ("npm", ("install", "demo@https://packages.example.com/demo.tgz"), True),
+        (
+            "npm",
+            ("install", "demo@https://github.com/acme/demo/releases/download/v1/demo.tar.gz"),
+            True,
+        ),
+        ("npm", ("install", "demo@https://downloads.example/api/archive?id=123"), True),
+        ("npm", ("install", "demo@https:///packages.example.com/demo.tgz"), True),
+        ("pip", ("install", "https://packages.example.com/demo.whl?token=signed"), True),
+        ("cargo", ("add", "demo", "--git", "https://github.com/serde-rs/serde"), False),
+        ("npm", ("install", "demo@https://registry.npmjs.org/demo/-/demo-1.0.0.tgz"), False),
+        ("npm", ("install", "minimist@1.2.9"), False),
+        ("npm", ("run", "dev"), False),
+    ],
+)
+def test_package_shim_identifies_commands_that_guard_must_digest_bind(
+    tmp_path: Path,
+    manager: str,
+    argv: tuple[str, ...],
+    expected: bool,
+) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    assert (
+        package_shim_command_requires_external_archive_binding(
+            manager,
+            argv,
+            workspace=workspace_dir,
+        )
+        is expected
+    )
+
+
+def test_generated_package_shim_delegates_external_archive_execution_to_guard(tmp_path: Path) -> None:
+    context = HarnessContext(
+        home_dir=tmp_path,
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard-home",
+    )
+    source = guard_shims_module._build_package_manager_python_shim(context, "npm")
+
+    assert "if external_archive_binding_required:" in source
+    assert "guard_command = [*base_command, resolved_command]" in source
+    assert "raise SystemExit(guard_process.returncode)" in source
+    assert source.index("raise SystemExit(guard_process.returncode)") < source.rindex("_exec_real_manager()")
 
 
 def test_package_manager_shim_bypasses_guard_for_pnpm_run_commands(tmp_path: Path, capsys) -> None:
@@ -1366,6 +1429,24 @@ def test_package_shim_uses_manager_specific_local_only_flag(
     assert "local_only_flag = {'bunx': '--no-install', 'npx': '--no'}.get(command_name)" in shim_source
     assert "manager_args.insert(runner_index, local_only_flag)" in shim_source
     assert expected_local_only_flag in shim_source
+
+
+def test_package_shim_tries_owned_containment_before_guard_review(tmp_path: Path) -> None:
+    context = HarnessContext(
+        home_dir=Path.home(),
+        guard_home=tmp_path / ".hol-guard",
+        workspace_dir=tmp_path / "workspace",
+    )
+
+    shim_source = guard_shims_module._build_package_manager_python_shim(context, "npx")
+
+    package_script_index = shim_source.index("try_execute_contained_package_script")
+    typescript_index = shim_source.index("try_execute_contained_typescript")
+    node_index = shim_source.index("try_execute_contained_node_command")
+    guard_index = shim_source.index("guard_process = subprocess.run")
+    assert package_script_index < typescript_index < node_index < guard_index
+    assert "if contained_result is None:" in shim_source
+    assert "except Exception:\n        contained_result = None" in shim_source
 
 
 def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: Path, capsys) -> None:

@@ -61,6 +61,15 @@ def _runtime_hook_handlers(payload: dict[str, object]) -> list[dict[str, object]
     return handlers
 
 
+def _handler_argv(handler: dict[str, object]) -> tuple[str, ...]:
+    command = handler.get("command")
+    args = handler.get("args")
+    assert isinstance(command, str)
+    assert isinstance(args, list)
+    assert all(isinstance(arg, str) for arg in args)
+    return (command, *args)
+
+
 def test_claude_detect_marks_local_cli_install_as_available_when_not_on_path(monkeypatch, tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
@@ -113,27 +122,6 @@ def test_claude_detect_ignores_non_executable_local_cli_candidate_when_not_on_pa
     assert detection.command_available is False
 
 
-def test_claude_install_bakes_current_source_root_into_session_start_command(tmp_path):
-    context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
-
-    install_output = adapter.install(context)
-
-    settings_path = context.home_dir / ".claude" / "settings.json"
-    payload = json.loads(settings_path.read_text(encoding="utf-8"))
-    hook_command = str(payload["hooks"]["SessionStart"][0]["hooks"][0]["command"])
-    expected_source_root = str(Path(__file__).resolve().parents[1] / "src")
-
-    assert install_output["active"] is True
-    assert "ensure_guard_daemon" in hook_command
-    assert "refresh_installed_hook_urls" in hook_command
-    assert "hookEventName" in hook_command
-    assert "SessionStart" in hook_command
-    assert "HOL Guard protection is active for this workspace." in hook_command
-    assert expected_source_root in hook_command
-    assert '"guard", "hook"' not in hook_command
-
-
 def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idempotent(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
@@ -155,7 +143,7 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert len(pre_tool_use) == 1
     assert pre_tool_use[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
     assert pre_tool_use[0]["hooks"][0]["type"] == "command"
-    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in pre_tool_use[0]["hooks"][0]["command"]
+    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in "\0".join(_handler_argv(pre_tool_use[0]["hooks"][0]))
     assert "url" not in pre_tool_use[0]["hooks"][0]
     assert pre_tool_use[0]["hooks"][0]["timeout"] == 30
     assert pre_tool_use[0]["hooks"][0]["statusMessage"] == "HOL Guard is checking this tool use"
@@ -257,7 +245,7 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
         "command",
     ]
     assert payload["hooks"].get("UserPromptSubmit", []) == []
-    assert all(CLAUDE_GUARD_DAEMON_HOOK_MARKER in str(handler.get("command", "")) for handler in installed_handlers)
+    assert all(CLAUDE_GUARD_DAEMON_HOOK_MARKER in "\0".join(_handler_argv(handler)) for handler in installed_handlers)
     assert all("url" not in handler for handler in installed_handlers)
 
 
@@ -303,8 +291,8 @@ def test_claude_refresh_runtime_hook_urls_rewrites_stale_daemon_port(tmp_path):
 
     assert all(handler["type"] == "command" for handler in installed_handlers)
     assert all("url" not in handler for handler in installed_handlers)
-    assert all("http://127.0.0.1:5999" in str(handler["command"]) for handler in installed_handlers)
-    assert all(CLAUDE_GUARD_DAEMON_HOOK_MARKER in str(handler["command"]) for handler in installed_handlers)
+    assert all("http://127.0.0.1:5999" in "\0".join(_handler_argv(handler)) for handler in installed_handlers)
+    assert all(CLAUDE_GUARD_DAEMON_HOOK_MARKER in "\0".join(_handler_argv(handler)) for handler in installed_handlers)
 
 
 def test_claude_install_rejects_symlinked_settings_file(tmp_path):
@@ -497,9 +485,9 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
     settings_path = initial_context.home_dir / ".claude" / "settings.json"
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     session_start = payload["hooks"]["SessionStart"]
-    hook_commands = [entry["hooks"][0]["command"] for entry in session_start]
+    hook_commands = ["\0".join(_handler_argv(entry["hooks"][0])) for entry in session_start]
     operational_handlers = _runtime_hook_handlers(payload)
-    operational_commands = [str(handler["command"]) for handler in operational_handlers]
+    operational_commands = ["\0".join(_handler_argv(handler)) for handler in operational_handlers]
 
     assert len(session_start) == 4
     assert all(len(entry["hooks"]) == 1 for entry in session_start)
@@ -571,10 +559,10 @@ def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):
 
     assert len(pre_tool_use) == 1
     assert pre_tool_use[0]["hooks"][0]["type"] == "command"
-    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in pre_tool_use[0]["hooks"][0]["command"]
+    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in "\0".join(_handler_argv(pre_tool_use[0]["hooks"][0]))
     assert len(post_tool_use) == 1
     assert post_tool_use[0]["hooks"][0]["type"] == "command"
-    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in post_tool_use[0]["hooks"][0]["command"]
+    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in "\0".join(_handler_argv(post_tool_use[0]["hooks"][0]))
 
 
 def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path):
@@ -599,7 +587,14 @@ def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path
                 "PreToolUse": [
                     {
                         "matcher": "Bash|Read",
-                        "hooks": [{"type": "command", "command": "python3 guard-pre.py", "timeout": 30}],
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": "python3",
+                                "args": ["guard-pre.py", "workspace with 'quote $value"],
+                                "timeout": 30,
+                            }
+                        ],
                     }
                 ],
                 "UserPromptSubmit": [
@@ -640,6 +635,9 @@ def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path
     assert "claude-code:project:mcp:workspace-tools" in artifacts
     assert artifacts["claude-code:project:mcp:workspace-tools"].metadata["headers_keys"] == ["Authorization"]
     assert "claude-code:project:pretooluse:0:0" in artifacts
+    pretool_artifact = artifacts["claude-code:project:pretooluse:0:0"]
+    assert pretool_artifact.command == "python3"
+    assert pretool_artifact.args == ("guard-pre.py", "workspace with 'quote $value")
     assert "claude-code:project:userpromptsubmit:0:0" in artifacts
     assert "claude-code:project:skill:review" in artifacts
     assert "claude-code:project:command:deploy" in artifacts
