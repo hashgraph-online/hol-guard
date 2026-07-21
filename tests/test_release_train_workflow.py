@@ -169,6 +169,19 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     assert "$0 != candidate" in workflow_text
 
 
+def test_alpha_release_test_paths_exist() -> None:
+    workflow = _workflow(PUBLISH_WORKFLOW)
+    steps = workflow["jobs"]["alpha-cross-platform"]["steps"]
+
+    for step in steps:
+        command = step.get("run", "")
+        if "pytest" not in command:
+            continue
+        for argument in command.split():
+            if argument.startswith("tests/") and argument.endswith(".py"):
+                assert (ROOT / argument).is_file(), f"release workflow references missing {argument}"
+
+
 def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     jobs = workflow["jobs"]
