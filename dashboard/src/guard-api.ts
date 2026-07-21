@@ -952,6 +952,16 @@ export async function fetchCommandActivityApi(input: RequestInfo, init?: Request
   return fetchWithGuardAuth(input, init);
 }
 
+export async function fetchExtensionControlApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    typeof input === "string" &&
+    /^\/v1\/extension-controls\/(?:catalog|effective|preview|apply|refresh)$/.test(input);
+  if (!approvedPath) {
+    throw new Error("Invalid extension-control API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
 function guardAuthHeaders(): HeadersInit {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
