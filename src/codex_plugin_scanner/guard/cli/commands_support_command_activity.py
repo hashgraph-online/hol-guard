@@ -68,7 +68,11 @@ def record_pre_hook_command_activity_best_effort(
     try:
         if event not in _PRE_HOOK_EVENTS:
             return False
-        evaluation = _evaluate_payload_command(payload, cwd=cwd, home_dir=home_dir)
+        evaluation = _evaluate_payload_command(
+            payload,
+            cwd=cwd,
+            home_dir=home_dir,
+        )
         if evaluation is None:
             return False
         key = load_or_create_installation_correlation_key(guard_home)

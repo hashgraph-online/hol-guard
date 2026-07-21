@@ -37,6 +37,15 @@ from codex_plugin_scanner.guard.runtime.effect_decision import (
     EffectDecisionRequest,
     evaluate_effect_decision,
 )
+from codex_plugin_scanner.guard.runtime.extension_control_contract import (
+    CONTROL_SCHEMA_VERSION,
+    ControlLayerKind,
+    ControlState,
+    ControlTarget,
+    ControlTargetKind,
+    ExtensionControl,
+    ExtensionControlLayer,
+)
 
 
 class _FailingMatcher:
@@ -136,6 +145,65 @@ def test_legacy_floor_is_preserved_without_inventing_permissive_proof(
     evaluation = evaluate_command("test-tool target", registry=_registry(mode))
     assert evaluation.minimum_action == expected_legacy
     assert evaluation.decision_plane.action == expected_plane
+
+
+def test_runtime_extension_control_disable_is_a_monotonic_blocking_factor() -> None:
+    registry = _registry("disabled")
+    layer = ExtensionControlLayer(
+        schema_version=CONTROL_SCHEMA_VERSION,
+        kind=ControlLayerKind.LOCAL_ADMIN,
+        catalog_digest=registry.catalog_digest,
+        global_lockdown=False,
+        controls=(
+            ExtensionControl(
+                target=ControlTarget(ControlTargetKind.EXTENSION, "command.test"),
+                state=ControlState.DISABLED,
+            ),
+        ),
+    )
+
+    evaluation = evaluate_command(
+        "test-tool target",
+        registry=registry,
+        extension_control_layers=(layer,),
+    )
+
+    assert evaluation.minimum_action == "block"
+    assert evaluation.decision_plane.action == "block"
+    assert evaluation.control_resolution is not None
+    assert evaluation.control_resolution.blocked
+    assert any(reason.source is DecisionFactorSource.CONTROL for reason in evaluation.decision_plane.reasons)
+
+
+def test_disabled_extension_blocks_an_observed_safe_variant() -> None:
+    registry = _registry(
+        "review",
+        safe_variants=(CommandSafeVariant("safe", "Safe variant", _SegmentMatcher(0)),),
+    )
+    layer = ExtensionControlLayer(
+        schema_version=CONTROL_SCHEMA_VERSION,
+        kind=ControlLayerKind.LOCAL_ADMIN,
+        catalog_digest=registry.catalog_digest,
+        global_lockdown=False,
+        controls=(
+            ExtensionControl(
+                target=ControlTarget(ControlTargetKind.EXTENSION, "command.test"),
+                state=ControlState.DISABLED,
+            ),
+        ),
+    )
+
+    evaluation = evaluate_command(
+        "test-tool target",
+        registry=registry,
+        extension_control_layers=(layer,),
+    )
+
+    assert evaluation.extension_observations
+    assert evaluation.matches == ()
+    assert evaluation.minimum_action == "block"
+    assert evaluation.decision_plane.action == "block"
+    assert evaluation.control_resolution.blocked
 
 
 def test_required_extension_floors_remain_monotonic() -> None:

@@ -160,6 +160,9 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(compose).not.toContain("SYS_ADMIN");
     expect(compose).not.toContain("seccomp:unconfined");
     expect(dockerfile).not.toContain("bubblewrap");
+    expect(relay).toContain("destination.shutdown(socket.SHUT_WR)");
+    expect(relay).toContain("active.remove(source)");
+    expect(relay).not.toContain("(), (), 30");
     for (const harness of ["codex", "claude-code", "cursor"]) {
       expect(server).toContain(`_run_installed_hook(\"${harness}\"`);
     }
@@ -178,8 +181,6 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(containmentProbe).toContain("printf changed 2>/dev/null > {protected_path}");
     expect(containmentProbe).toContain('"namespace-unavailable"');
     expect(containmentProbe).toContain('"site-packages"');
-    expect(relay).toContain("select.select(sockets, (), ())");
-    expect(relay).not.toContain("select.select(sockets, (), (), 30)");
     expect(server).not.toContain("record_pre_hook_command_activity_best_effort");
     expect(server).not.toContain("record_command_activity(");
     expect(server).not.toContain("ActivityDecisionReason.CAPABILITY");
