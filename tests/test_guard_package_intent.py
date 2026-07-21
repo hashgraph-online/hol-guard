@@ -128,6 +128,20 @@ def test_parse_package_intent_bun_install_uses_bun_lock_context(tmp_path: Path) 
     assert intent.flags == ("--lockfile-only",)
 
 
+def test_package_sync_does_not_treat_fd_merge_as_a_package_target(tmp_path: Path) -> None:
+    _write_text(tmp_path / "package.json", '{"name":"demo"}\n')
+
+    bun = parse_package_intent("bun install 2>&1 | tail -5", workspace=tmp_path)
+    pnpm = parse_package_intent("pnpm install 2>&1 | tail -5", workspace=tmp_path)
+
+    assert bun is not None
+    assert bun.intent_kind == "install"
+    assert bun.targets == ()
+    assert pnpm is not None
+    assert pnpm.intent_kind == "install"
+    assert pnpm.targets == ()
+
+
 def test_parse_package_intent_exec_commands_are_classified_as_execute_requests() -> None:
     commands = {
         "npx create-vite@latest": ("npx", "create-vite", "latest"),

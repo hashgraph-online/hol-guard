@@ -240,14 +240,15 @@ def _unmodeled_shell_runtime_artifact(
     if canonical_command.confidence == "exact" and execution_context.complete:
         return None
     if canonical_command.confidence == "exact" and workspace is None:
-        home_execution_context = model_shell_execution_context(
+        home_execution_context = low_risk_compound_developer_execution_context(
             command_text,
-            cwd=home_dir,
-            workspace_root=home_dir,
             home_dir=home_dir,
         )
-        if is_low_risk_compound_git_inspection(home_execution_context):
+        if home_execution_context is not None:
             return None
+        home_execution_context = model_shell_execution_context(
+            command_text, cwd=home_dir, workspace_root=home_dir, home_dir=home_dir
+        )
         github_assessment = classify_github_shell_capabilities(command_text, home_dir=home_dir)
         if (
             github_assessment is not None

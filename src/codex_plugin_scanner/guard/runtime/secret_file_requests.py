@@ -27,7 +27,10 @@ from .command_evaluation import evaluate_command
 from .command_extension_interaction import classify_command_extension_interaction
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .command_model import CanonicalCommand, parse_shell_command
-from .compound_git_inspection import is_low_risk_compound_git_inspection
+from .compound_git_inspection import (
+    is_low_risk_compound_git_inspection,
+    is_low_risk_git_inspection_segment,
+)
 from .data_flow import extract_heredocs
 from .env_wrapper import parse_env_wrapper
 from .extension_control_contract import ExtensionControlLayer
@@ -1562,27 +1565,31 @@ def _destructive_shell_tool_action_request(
             interpreter_executable_identities=interpreter_executable_identities,
         )
     if not execution_context.complete and cwd is None and home_dir is not None:
-        git_home_execution_context = model_shell_execution_context(
+        developer_execution_context = low_risk_compound_developer_execution_context(
             detection_command_text,
-            cwd=home_dir,
-            workspace_root=home_dir,
             home_dir=home_dir,
         )
-        raw_git_home_execution_context = (
-            model_shell_execution_context(
+        raw_developer_execution_context = (
+            low_risk_compound_developer_execution_context(
                 raw_command_text,
-                cwd=home_dir,
-                workspace_root=home_dir,
                 home_dir=home_dir,
             )
             if raw_command_text is not None and raw_command_text != detection_command_text
-            else git_home_execution_context
+            else developer_execution_context
         )
-        if is_low_risk_compound_git_inspection(git_home_execution_context) and is_low_risk_compound_git_inspection(
-            raw_git_home_execution_context
-        ):
-            execution_context = git_home_execution_context
-            raw_execution_context = raw_git_home_execution_context
+        if developer_execution_context is not None and raw_developer_execution_context is not None:
+            execution_context = developer_execution_context
+            raw_execution_context = raw_developer_execution_context
+            interpreter_executable_identities = _python_interpreter_executable_identities(
+                raw_command_text or detection_command_text,
+                cwd=home_dir,
+                home_dir=home_dir,
+                execution_context=(
+                    raw_execution_context
+                    if raw_command_text is not None and raw_command_text != detection_command_text
+                    else execution_context
+                ),
+            )
     github_assessment = classify_github_shell_capabilities(
         raw_command_text or detection_command_text,
         home_dir=home_dir,
@@ -1809,6 +1816,105 @@ def shell_execution_context_starts_with_literal_cd(context: ShellExecutionContex
     if first.control_before or first.directory_operation != "cd" or not first.tokens:
         return False
     return first.tokens[0].strip("\"'").lower() == "cd"
+
+
+def low_risk_compound_developer_execution_context(
+    command_text: str,
+    *,
+    home_dir: Path,
+) -> ShellExecutionContext | None:
+    """Model a deterministic whole-command developer inspection from the user's home."""
+
+    context = model_shell_execution_context(
+        command_text,
+        cwd=home_dir,
+        workspace_root=home_dir,
+        home_dir=home_dir,
+    )
+    if not shell_execution_context_starts_with_literal_cd(context):
+        return None
+    if is_low_risk_compound_git_inspection(context):
+        return context
+    github_assessment = classify_github_shell_capabilities(command_text, home_dir=home_dir)
+    github_is_low_risk = github_assessment is not None and not github_capability_requires_confirmation(
+        github_assessment
+    )
+    saw_inspection = False
+    for segment in context.segments[1:]:
+        if any(control not in {"&&", "|"} for control in (*segment.control_before, *segment.control_after)):
+            return None
+        command_name, command_index = _shell_segment_primary_command(list(segment.tokens))
+        if command_name is None or command_index is None:
+            return None
+        args = list(segment.tokens[command_index + 1 :])
+        segment_root = segment.effective_cwd or home_dir
+        if not _path_text_is_within_root(os.fspath(segment_root), home_dir) or any(
+            _shell_token_escapes_root(arg, cwd=segment_root, root=home_dir) for arg in args
+        ):
+            return None
+        if segment.directory_operation is not None:
+            continue
+        if command_name == "git" and is_low_risk_git_inspection_segment(segment):
+            saw_inspection = True
+            continue
+        if command_name == "gh" and github_is_low_risk:
+            saw_inspection = True
+            continue
+        if command_name in _READ_ONLY_LOOKUP_COMMANDS and _read_only_lookup_primary_segment_is_safe(
+            command_name,
+            args,
+            home_dir=segment_root,
+        ):
+            saw_inspection = True
+            continue
+        if (
+            command_name in _READ_ONLY_LOOKUP_FILTERS
+            and segment.control_before == ("|",)
+            and (_read_only_lookup_filter_segment_is_safe(command_name, args, home_dir=segment_root))
+        ):
+            continue
+        if (
+            command_name == "wc"
+            and args
+            and all(
+                arg in {"-c", "-l", "-w"}
+                or (not arg.startswith("-") and not _shell_token_has_command_substitution(arg))
+                for arg in args
+            )
+        ):
+            saw_inspection = True
+            continue
+        if (
+            command_name == "sort"
+            and segment.control_before == ("|",)
+            and all(arg in {"-n", "-r", "-u"} for arg in args)
+        ):
+            continue
+        if command_name in _SAFE_STATIC_SHELL_COMMANDS and _static_shell_segment_is_safe(args):
+            continue
+        if _is_read_only_observer_interpreter_command(command_name):
+            scripts = list(_script_interpreter_texts(list(segment.tokens)))
+            if scripts and all(_script_is_read_only_observer(script) for script in scripts):
+                saw_inspection = True
+                continue
+        return None
+    return context if saw_inspection else None
+
+
+def _shell_token_escapes_root(token: str, *, cwd: Path, root: Path) -> bool:
+    stripped = token.strip().strip("'\"")
+    if not stripped:
+        return False
+    candidate = Path(stripped)
+    if stripped.startswith("~/"):
+        candidate = root / stripped[2:]
+    elif stripped.startswith("~"):
+        return True
+    elif not candidate.is_absolute():
+        if ".." not in candidate.parts:
+            return False
+        candidate = cwd / candidate
+    return not _path_text_is_within_root(os.fspath(candidate), root)
 
 
 def classify_github_shell_capabilities(

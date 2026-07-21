@@ -1311,7 +1311,7 @@ def _raw_command_segments_with_operators(
 
 
 def _normalize_segment(raw_segment: list[str]) -> list[str]:
-    segment = _strip_wrapper_tokens(list(raw_segment))
+    segment = _without_fd_merge_redirections(_strip_wrapper_tokens(list(raw_segment)))
     if len(segment) >= 3 and _command_name(segment[0]) in _PYTHON_EXECUTABLES and segment[1] == "-m":
         segment = [segment[2], *segment[3:]]
     return segment
@@ -1466,10 +1466,14 @@ def _redacted_command_text(command_text: str) -> str:
 
 
 def _redacted_segment(raw_segment: list[str]) -> list[str]:
-    segment = _strip_redaction_wrappers(list(raw_segment))
+    segment = _without_fd_merge_redirections(_strip_redaction_wrappers(list(raw_segment)))
     if len(segment) >= 3 and _command_name(segment[0]) in _PYTHON_EXECUTABLES and segment[1] == "-m":
         segment = [segment[2], *segment[3:]]
     return _redact_local_source_tokens(segment)
+
+
+def _without_fd_merge_redirections(tokens: list[str]) -> list[str]:
+    return [token for token in tokens if token not in {"1>&2", "2>&1"}]
 
 
 def _split_shell_tokens(command_text: str) -> list[str]:
