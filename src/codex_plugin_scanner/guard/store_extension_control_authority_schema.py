@@ -8,8 +8,9 @@ from typing import Final, cast
 
 from .runtime.extension_control_authority import ExtensionControlAuthorityError
 
-EXTENSION_CONTROL_SCHEMA_VERSION: Final = 1
-_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v1").hexdigest()
+EXTENSION_CONTROL_SCHEMA_VERSION: Final = 2
+_SCHEMA_CHECKSUM_V1: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v1").hexdigest()
+_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v2").hexdigest()
 
 
 def ensure_extension_control_authority_schema(connection: sqlite3.Connection) -> None:
@@ -48,7 +49,12 @@ def ensure_extension_control_authority_schema(connection: sqlite3.Connection) ->
             raise ExtensionControlAuthorityError("invalid extension control schema marker")
         version = version_raw
         checksum = checksum_raw
-        if version != EXTENSION_CONTROL_SCHEMA_VERSION or checksum != _SCHEMA_CHECKSUM:
+        if version == 1 and checksum == _SCHEMA_CHECKSUM_V1:
+            _ = connection.execute(
+                "update extension_control_schema_migration set version = ?, checksum = ? where singleton = 1",
+                (EXTENSION_CONTROL_SCHEMA_VERSION, _SCHEMA_CHECKSUM),
+            )
+        elif version != EXTENSION_CONTROL_SCHEMA_VERSION or checksum != _SCHEMA_CHECKSUM:
             raise ExtensionControlAuthorityError("unsupported or invalid extension control schema")
 
     _ = connection.execute(
@@ -85,6 +91,17 @@ def ensure_extension_control_authority_schema(connection: sqlite3.Connection) ->
             transition_mac text not null,
             created_at text not null,
             committed_at text
+        )
+        """
+    )
+    _ = connection.execute(
+        """
+        create table if not exists extension_control_authority_proof (
+            proof_id_hash text primary key,
+            mutation_digest text not null,
+            transition_revision integer not null check (transition_revision > 0),
+            reserved_at text not null,
+            consumed_at text
         )
         """
     )

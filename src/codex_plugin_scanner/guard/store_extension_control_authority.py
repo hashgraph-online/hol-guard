@@ -21,6 +21,12 @@ from .runtime.extension_control_authority import (
     verify_authenticated_record,
 )
 from .runtime.extension_control_contract import ExtensionControlLayer
+from .runtime.extension_control_proof import (
+    ExtensionControlMutation,
+    ExtensionControlProof,
+    consume_extension_control_proof,
+    validate_extension_control_proof,
+)
 from .store_base import SecretStore
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
 from .store_extension_control_authority_support import (
@@ -58,6 +64,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         expected_revision: int,
         idempotency_key: str,
         nonce: str,
+        proof: ExtensionControlProof,
     ) -> ExtensionControlAuthorityView:
         self._validate_commit_input(
             layers,
@@ -67,6 +74,15 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             idempotency_key=idempotency_key,
             nonce=nonce,
         )
+        mutation = ExtensionControlMutation(
+            previous_revision=expected_revision,
+            catalog_digest=catalog_digest,
+            layers=layers,
+            actor_id=actor_id,
+            idempotency_key=idempotency_key,
+            nonce=nonce,
+        )
+        validate_extension_control_proof(proof, mutation)
         layers_json = layers_to_json(layers)
         self._validate_serialized_layers(layers_json)
         with self._extension_control_authority_lock():
@@ -76,7 +92,17 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             actor_hash = _private_hash(actor_id, key=key, purpose="actor")
             idempotency_hash = _private_hash(idempotency_key, key=key, purpose="idempotency")
             nonce_hash = _private_hash(nonce, key=key, purpose="nonce")
+            proof_hash = _private_hash(proof.proof_id, key=key, purpose="proof")
             with self._connect() as connection:
+                ensure_extension_control_authority_schema(connection)
+                if (
+                    connection.execute(
+                        "select 1 from extension_control_authority_proof where proof_id_hash = ?",
+                        (proof_hash,),
+                    ).fetchone()
+                    is not None
+                ):
+                    raise ExtensionControlAuthorityError("extension control authority proof replay")
                 replay = connection.execute(
                     "select * from extension_control_authority_transition where idempotency_key_hash = ?",
                     (idempotency_hash,),
@@ -95,12 +121,30 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                         key=key,
                     )
                     if resumed is not None:
+                        consume_extension_control_proof(self.guard_home, proof, mutation)
+                        consumed_at = _now()
+                        connection.execute(
+                            """
+                            insert into extension_control_authority_proof (
+                                proof_id_hash, mutation_digest, transition_revision,
+                                reserved_at, consumed_at
+                            ) values (?, ?, ?, ?, ?)
+                            """,
+                            (
+                                proof_hash,
+                                mutation.canonical_digest,
+                                _row_int(replay, "revision"),
+                                consumed_at,
+                                consumed_at,
+                            ),
+                        )
                         return resumed
                     connection.commit()
                     current = self._read_extension_control_authority_locked(catalog_digest, bootstrap=False)
             if current.health is not AuthorityHealth.PROTECTED:
                 raise ExtensionControlAuthorityError("extension control authority unavailable")
             with self._connect() as connection:
+                ensure_extension_control_authority_schema(connection)
                 if current.revision != expected_revision:
                     raise ExtensionControlAuthorityError("extension control authority revision conflict")
                 if (
@@ -111,6 +155,14 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                     is not None
                 ):
                     raise ExtensionControlAuthorityError("extension control authority nonce replay")
+                if (
+                    connection.execute(
+                        "select 1 from extension_control_authority_proof where proof_id_hash = ?",
+                        (proof_hash,),
+                    ).fetchone()
+                    is not None
+                ):
+                    raise ExtensionControlAuthorityError("extension control authority proof replay")
                 snapshot_row = connection.execute(
                     "select snapshot_digest from extension_control_authority_snapshot where singleton = 1"
                 ).fetchone()
@@ -147,8 +199,17 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 key=key,
                 purpose=TRANSITION_PURPOSE,
             )
+            consume_extension_control_proof(self.guard_home, proof, mutation)
             with self._connect() as connection:
                 ensure_extension_control_authority_schema(connection)
+                connection.execute(
+                    """
+                    insert into extension_control_authority_proof (
+                        proof_id_hash, mutation_digest, transition_revision, reserved_at
+                    ) values (?, ?, ?, ?)
+                    """,
+                    (proof_hash, mutation.canonical_digest, revision, created_at),
+                )
                 connection.execute(
                     """
                     insert into extension_control_authority_transition (
@@ -207,6 +268,16 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 )
                 if connection.execute("select changes()").fetchone()[0] != 1:
                     raise ExtensionControlAuthorityError("extension control authority concurrent update")
+                connection.execute(
+                    """
+                    update extension_control_authority_proof
+                    set consumed_at = ?
+                    where proof_id_hash = ? and transition_revision = ? and consumed_at is null
+                    """,
+                    (created_at, proof_hash, revision),
+                )
+                if connection.execute("select changes()").fetchone()[0] != 1:
+                    raise ExtensionControlAuthorityError("extension control authority proof state conflict")
                 connection.execute(
                     "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
                     (AuthorityPhase.COMMITTED.value, created_at, revision),
