@@ -141,8 +141,6 @@ class _ExtensionControlAuthoritySupportMixin:
         *,
         revision: int,
         previous_revision: int,
-        catalog_digest: str,
-        snapshot_digest: str,
         layers_json: str,
         occurred_at: str,
     ) -> None:
@@ -157,8 +155,6 @@ class _ExtensionControlAuthoritySupportMixin:
                 payload=extension_control_change_payload(
                     revision=revision,
                     previous_revision=previous_revision,
-                    catalog_digest=catalog_digest,
-                    snapshot_digest=snapshot_digest,
                     layers=layers,
                 ),
             ),
