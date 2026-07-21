@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { composeCommand, safeProjectName, type CommandResult } from "./lab-process";
 import { runInstalledPlaywright } from "./installed-playwright";
+import { fetchLabGet } from "./relay-fetch";
 import { readyFromLogs } from "./runner";
 import { readDashboardSession } from "./session-handoff";
 import { teardownLab } from "./teardown";
@@ -23,6 +24,23 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(command.some((item) => item.endsWith("docker-compose.yml"))).toBe(true);
     expect(command).toContain("guard-command-analytics");
     expect(command.slice(-2)).toEqual(["-d", "--wait"]);
+  });
+
+  test("retries an idempotent relay GET after a transient reset", async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      if (calls === 1) throw new TypeError("connection reset");
+      return new Response("ready", { status: 200 });
+    };
+    try {
+      const response = await fetchLabGet("http://127.0.0.1:4781/healthz");
+      expect(response.status).toBe(200);
+      expect(calls).toBe(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   test("keeps Guard internal and publishes only the fixed-target relay", async () => {
@@ -107,7 +125,7 @@ describe("command extension analytics Dockerlabs orchestration", () => {
 
   test("installed fixture is wheel-only and exercises the required evidence paths", async () => {
     const directory = import.meta.dir;
-    const [dockerfile, dockerignore, compose, server, containmentProbe, runner, playwright, databasePrivacy]
+    const [dockerfile, dockerignore, compose, server, containmentProbe, runner, relayFetch, playwright, databasePrivacy]
       = await Promise.all([
       Bun.file(`${directory}/Dockerfile`).text(),
       Bun.file(`${directory}/Dockerfile.dockerignore`).text(),
@@ -115,6 +133,7 @@ describe("command extension analytics Dockerlabs orchestration", () => {
       Bun.file(`${directory}/installed_server.py`).text(),
       Bun.file(`${directory}/installed_containment_probe.py`).text(),
       Bun.file(`${directory}/runner.ts`).text(),
+      Bun.file(`${directory}/relay-fetch.ts`).text(),
       Bun.file(`${directory}/../../../dashboard/playwright.installed.config.ts`).text(),
       Bun.file(`${directory}/database-privacy.ts`).text(),
     ]);
@@ -169,6 +188,9 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(runner).toContain("approveWorkflowAuthorization(origin, pending, session)");
     expect(runner).toContain('"-I"');
     expect(runner).toContain("HOL_GUARD_LAB_PYTHON");
+    expect(relayFetch).toContain("async function fetchLabGet");
+    expect(runner).toContain("init.method === undefined");
+    expect(runner).toContain("await fetch(request, options)");
     expect(runner.lastIndexOf("try {")).toBeLessThan(runner.lastIndexOf("runInstalledContainment(runner, version)"));
     expect(runner.lastIndexOf("runInstalledContainment(runner, version)")).toBeLessThan(
       runner.lastIndexOf('composeCommand(project, "up"'),
