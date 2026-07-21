@@ -9,7 +9,7 @@ import hashlib
 import os
 import secrets
 from collections.abc import Mapping
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
@@ -18,7 +18,6 @@ from ..workflow_capabilities import (
     WorkflowCapabilityError,
     canonical_framed_payload,
     format_utc_timestamp,
-    parse_utc_timestamp,
 )
 from .command_model import parse_shell_command
 from .github_workflow_approval_record import GitHubWorkflowApprovalRecord
@@ -72,7 +71,9 @@ def issue_resolved_github_workflow_capability(
         key, key_id = store._policy_integrity_secret_material(create=False)
         if key is None or key_id is None:
             return False
-        issued_at = parse_utc_timestamp(resolved_at)
+        issued_at = datetime.fromisoformat(resolved_at.replace("Z", "+00:00"))
+        if issued_at.tzinfo is None:
+            raise ValueError("resolution timestamp timezone required")
         signed = issue_github_workflow_capability_binding(
             store,
             record.binding,
@@ -122,6 +123,26 @@ def claim_resolved_github_workflow_authorization(
         )
     except (KeyError, TypeError, ValueError, WorkflowCapabilityError):
         return None
+
+
+def resolved_github_workflow_capability_preflight(
+    store: GitHubWorkflowRuntimeStore,
+    request_id: str,
+    descriptor: GitHubWorkflowDescriptor,
+) -> bool:
+    """Verify exact persisted workflow lineage and signed claim before revalidation."""
+
+    try:
+        request = store.get_approval_request(request_id)
+        if request is None or request.get("status") != "resolved" or request.get("resolution_action") != "allow":
+            return False
+        persisted_id, record, operation, session = _validated_lineage(store, request)
+        if persisted_id != request_id or not record.matches_descriptor(descriptor):
+            return False
+        signed = store.lookup_workflow_capability(_capability_id(request_id))
+        return signed is not None and _existing_matches(signed, request_id, operation, session, record)
+    except (KeyError, OSError, TypeError, ValueError, WorkflowCapabilityError):
+        return False
 
 
 def approval_record_from_approval_request(request: Mapping[str, object]) -> GitHubWorkflowApprovalRecord | None:
@@ -325,4 +346,5 @@ __all__ = (
     "github_workflow_requires_local_once",
     "issue_github_workflow_capability_for_resolution",
     "issue_resolved_github_workflow_capability",
+    "resolved_github_workflow_capability_preflight",
 )

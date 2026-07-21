@@ -80,12 +80,18 @@ def _record_in_process(guard_home: str) -> bool:
     return store.record_command_activity(evidence, shadow=shadow)
 
 
-def _legacy_shadow_database(path: Path, *, proposal_version: str = "proposal.multi.v1") -> sqlite3.Connection:
+def _legacy_shadow_database(
+    path: Path,
+    *,
+    proposal_version: str = "proposal.multi.v1",
+    statements: tuple[str, ...] = shadow_schema._LEGACY_SCHEMA_STATEMENTS,
+    migration_version: int = shadow_schema.COMMAND_SHADOW_LEGACY_MIGRATION_VERSION,
+) -> sqlite3.Connection:
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row
     connection.execute("create table schema_migrations (version integer primary key, applied_at text not null)")
     connection.execute("create table command_activity (activity_id text primary key, occurred_at text not null) strict")
-    for statement in shadow_schema._LEGACY_SCHEMA_STATEMENTS:
+    for statement in statements:
         connection.execute(statement)
     occurred_at = _OCCURRED_AT.isoformat()
     connection.execute("insert into command_activity values (?, ?)", ("activity:legacy", occurred_at))
@@ -101,7 +107,7 @@ def _legacy_shadow_database(path: Path, *, proposal_version: str = "proposal.mul
     connection.execute("insert into command_activity_shadow_cohorts values (?, 0, 'baseline')", ("activity:legacy",))
     connection.execute(
         "insert into schema_migrations values (?, ?)",
-        (shadow_schema.COMMAND_SHADOW_LEGACY_MIGRATION_VERSION, occurred_at),
+        (migration_version, occurred_at),
     )
     connection.commit()
     return connection
@@ -225,6 +231,33 @@ def test_migration_rolls_back_exact_legacy_schema_when_a_row_is_invalid(tmp_path
     assert actual == expected_legacy
     assert [tuple(version) for version in versions] == [(shadow_schema.COMMAND_SHADOW_LEGACY_MIGRATION_VERSION,)]
     assert tuple(row) == ("activity:legacy", "INVALID!")
+
+
+def test_migration_upgrades_previous_constrained_schema(tmp_path: Path) -> None:
+    with _legacy_shadow_database(
+        tmp_path / "previous.db",
+        statements=shadow_schema._PREVIOUS_SCHEMA_STATEMENTS,
+        migration_version=shadow_schema.COMMAND_SHADOW_PREVIOUS_MIGRATION_VERSION,
+    ) as connection:
+        shadow_schema.ensure_command_shadow_schema(connection, applied_at=_OCCURRED_AT.isoformat())
+
+        shadow_schema._validate_schema(connection)
+        evaluation = connection.execute(
+            "select activity_id, evaluator_schema_version from command_activity_shadow_evaluations"
+        ).fetchone()
+        versions = connection.execute(
+            "select version from schema_migrations where version in (?, ?) order by version",
+            (
+                shadow_schema.COMMAND_SHADOW_PREVIOUS_MIGRATION_VERSION,
+                shadow_schema.COMMAND_SHADOW_MIGRATION_VERSION,
+            ),
+        ).fetchall()
+
+    assert tuple(evaluation) == ("activity:legacy", "1.0.0")
+    assert [tuple(row) for row in versions] == [
+        (shadow_schema.COMMAND_SHADOW_PREVIOUS_MIGRATION_VERSION,),
+        (shadow_schema.COMMAND_SHADOW_MIGRATION_VERSION,),
+    ]
 
 
 def test_migration_rejects_unknown_near_legacy_schema_without_changes(tmp_path: Path) -> None:

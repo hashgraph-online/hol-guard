@@ -59,6 +59,7 @@ def record_pre_hook_command_activity_best_effort(
     receipt_id: str | None,
     prompted: bool,
     approval_reuse_status: ActivityApprovalReuseStatus = ActivityApprovalReuseStatus.NOT_APPLICABLE,
+    workflow_authorization_claimed: bool = False,
     cwd: Path | None = None,
     home_dir: Path | None = None,
 ) -> bool:
@@ -68,7 +69,7 @@ def record_pre_hook_command_activity_best_effort(
         if event not in _PRE_HOOK_EVENTS:
             return False
         evaluation = _evaluate_payload_command(payload, cwd=cwd, home_dir=home_dir)
-        if evaluation is None or not evaluation.matches:
+        if evaluation is None:
             return False
         key = load_or_create_installation_correlation_key(guard_home)
         correlation = derive_proven_request_correlation(
@@ -83,14 +84,15 @@ def record_pre_hook_command_activity_best_effort(
             evaluation,
             CommandActivityDecisionFacts(
                 policy_action=policy_action,
-                decision_reason_code=(
-                    ActivityDecisionReason.EXTENSION_MATCH
-                    if evaluation.command.confidence == "exact"
-                    else ActivityDecisionReason.UNCERTAINTY
+                decision_reason_code=_activity_decision_reason(
+                    evaluation,
+                    policy_action=policy_action,
+                    workflow_authorization_claimed=workflow_authorization_claimed,
                 ),
                 prompted=prompted,
                 approval_reuse_status=approval_reuse_status,
                 receipt_id=receipt_id,
+                workflow_authorization_claimed=workflow_authorization_claimed,
             ),
             activity_id=activity_id,
             occurred_at=occurred_at,
@@ -201,6 +203,21 @@ def command_activity_was_prompted(
     return approval_reuse_status is not ActivityApprovalReuseStatus.ACCEPTED and guard_action_severity(
         initial_policy_action
     ) >= guard_action_severity("review")
+
+
+def _activity_decision_reason(
+    evaluation: CompositeCommandEvaluation,
+    *,
+    policy_action: GuardAction,
+    workflow_authorization_claimed: bool,
+) -> ActivityDecisionReason:
+    if workflow_authorization_claimed and policy_action == "allow":
+        return ActivityDecisionReason.CAPABILITY
+    if not evaluation.matches:
+        return ActivityDecisionReason.NO_MATCH
+    if evaluation.command.confidence == "exact":
+        return ActivityDecisionReason.EXTENSION_MATCH
+    return ActivityDecisionReason.UNCERTAINTY
 
 
 def record_command_activity_failure_best_effort(store: GuardStore, error_code: str) -> None:

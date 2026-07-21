@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import shlex
+from dataclasses import replace
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
@@ -15,7 +16,6 @@ if TYPE_CHECKING:
         _record_cursor_pending_shell_permission,
     )
     from .commands_support_prompts import _runtime_artifact_native_reason
-    from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
     from .commands_support_runtime_policy import (
         _runtime_artifact_policy_action,
         _runtime_data_flow_summary,
@@ -50,10 +50,12 @@ from ..runtime.approval_context import approval_context_tokens_validation_reason
 from ..runtime.approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
     APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
+    APPROVAL_REUSE_REAPPROVAL_REQUIRED,
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
     evaluate_approval_reuse,
 )
+from ..runtime.github_workflow_runtime import resolved_github_workflow_capability_preflight
 from ..runtime.signals import GuardRiskSignalV3
 from ..shims import package_shim_status
 from ._commands_shared import *
@@ -65,6 +67,7 @@ from .commands_hook_github_workflow import (
 from .commands_hook_runtime_state import RuntimeArtifactHookState
 from .commands_parser_helpers import *
 from .commands_support_hook_state import _load_cursor_native_shell_allowance
+from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
 from .commands_support_runtime_policy import (
     _remembered_rule_rejection_reason,
     _runtime_artifact_exact_match_context,
@@ -245,6 +248,7 @@ def _evaluate_runtime_artifact_hook(
     _post_claim_refresh_failed: bool = False,
 ) -> int | RuntimeArtifactHookState:
     payload_map = dict(payload)
+    pre_workflow_metadata = dict(runtime_artifact.metadata)
 
     workflow_state = prepare_github_workflow_hook_state(
         runtime_artifact,
@@ -254,6 +258,15 @@ def _evaluate_runtime_artifact_hook(
         approval_request_id=_claimed_approval_request_id,
     )
     runtime_artifact = workflow_state.artifact
+    approval_context_artifact = runtime_artifact
+    if workflow_state.authorization_claimed:
+        approval_context_metadata = dict(runtime_artifact.metadata)
+        for key in ("command_action_floor", "command_decision_plane"):
+            if key in pre_workflow_metadata:
+                approval_context_metadata[key] = pre_workflow_metadata[key]
+            else:
+                approval_context_metadata.pop(key, None)
+        approval_context_artifact = replace(runtime_artifact, metadata=approval_context_metadata)
 
     def revalidate_claimed_allow(
         claimed_hash: str,
@@ -361,7 +374,7 @@ def _evaluate_runtime_artifact_hook(
             config=config,
         )
     else:
-        artifact_content_hash = artifact_hash(runtime_artifact)
+        artifact_content_hash = artifact_hash(approval_context_artifact)
     artifact_id = runtime_artifact.artifact_id
     artifact_name = runtime_artifact.name
     policy_harness = _canonical_harness_name(args.harness)
@@ -384,6 +397,10 @@ def _evaluate_runtime_artifact_hook(
         _runtime_artifact_policy_action(config, runtime_artifact, args.harness),
         "warn",
     )
+    approval_context_config_action = _resolved_guard_action(
+        _runtime_artifact_policy_action(config, approval_context_artifact, policy_harness),
+        "warn",
+    )
     current_action_override = config.resolve_action_override(
         policy_harness,
         runtime_artifact.artifact_id,
@@ -397,6 +414,10 @@ def _evaluate_runtime_artifact_hook(
         # but can never lower current local policy or suppress later scanners.
         current_action_inputs.append(payload_action_normalization.action)
     policy_action = most_restrictive_guard_action(*current_action_inputs)
+    approval_context_policy_action = most_restrictive_guard_action(
+        approval_context_config_action,
+        *(item for item in current_action_inputs[1:]),
+    )
     changed_capabilities = [runtime_artifact.artifact_type]
     artifact_metadata = runtime_artifact.metadata if isinstance(runtime_artifact.metadata, dict) else {}
     raw_shell_cwds = artifact_metadata.get("shell_execution_effective_cwds")
@@ -441,17 +462,28 @@ def _evaluate_runtime_artifact_hook(
     )
     if package_policy_action is not None:
         policy_action = most_restrictive_guard_action(policy_action, package_policy_action)
+        approval_context_policy_action = most_restrictive_guard_action(
+            approval_context_policy_action,
+            package_policy_action,
+        )
     data_flow_action: GuardAction | None = None
+    approval_context_data_flow_action: GuardAction | None = None
     if data_flow_signals:
-        data_flow_action = _resolved_guard_action(
-            resolve_risk_action(
-                config,
-                "data_flow_exfiltration",
-                harness=policy_harness,
-            ),
-            policy_action,
+        configured_data_flow_action = resolve_risk_action(
+            config,
+            "data_flow_exfiltration",
+            harness=policy_harness,
+        )
+        data_flow_action = _resolved_guard_action(configured_data_flow_action, policy_action)
+        approval_context_data_flow_action = _resolved_guard_action(
+            configured_data_flow_action,
+            approval_context_policy_action,
         )
         policy_action = most_restrictive_guard_action(policy_action, data_flow_action)
+        approval_context_policy_action = most_restrictive_guard_action(
+            approval_context_policy_action,
+            approval_context_data_flow_action,
+        )
     _pre_scanner_policy_action = policy_action
     package_controls_pre_scanner_summary = (
         package_evaluation is not None
@@ -466,6 +498,10 @@ def _evaluate_runtime_artifact_hook(
             harness=policy_harness,
         )
         policy_action = most_restrictive_guard_action(policy_action, scanner_action)
+        approval_context_policy_action = most_restrictive_guard_action(
+            approval_context_policy_action,
+            scanner_action,
+        )
     scanner_raised_to_block = (
         policy_action == "block" and _pre_scanner_policy_action != "block" and bool(scanner_evidence)
     )
@@ -526,20 +562,20 @@ def _evaluate_runtime_artifact_hook(
             )
     current_policy_action = policy_action
     runtime_artifact_hash = _runtime_hook_approval_context_token(
-        artifact=runtime_artifact,
+        artifact=approval_context_artifact,
         content_hash=artifact_content_hash,
         runtime_workspace=runtime_workspace,
         action_envelope=action_envelope,
         config=config,
-        current_config_action=current_config_action,
+        current_config_action=approval_context_config_action,
         trusted_cli_action=cli_action_normalization.action if cli_action_normalization is not None else None,
         untrusted_payload_action=(
             payload_action_normalization.action if payload_action_normalization is not None else None
         ),
         package_action=package_policy_action,
-        data_flow_action=data_flow_action,
+        data_flow_action=approval_context_data_flow_action,
         scanner_action=scanner_action,
-        current_action=current_policy_action,
+        current_action=approval_context_policy_action,
         data_flow_signals=data_flow_signals,
         scanner_evidence=scanner_evidence,
     )
@@ -808,7 +844,24 @@ def _evaluate_runtime_artifact_hook(
             saved_decision_present=saved_present,
             validation_reason=validation_reason,
         )
-        if approval_reuse.should_claim and stored_policy_decision is not None and _claim_saved_approval:
+        workflow_request_id = (
+            claimed_approval_request_id(stored_policy_decision) if stored_policy_decision is not None else None
+        )
+        workflow_reapproval_pending = (
+            approval_reuse.reason_code == APPROVAL_REUSE_REAPPROVAL_REQUIRED
+            and workflow_state.descriptor is not None
+            and workflow_request_id is not None
+            and resolved_github_workflow_capability_preflight(
+                store,
+                workflow_request_id,
+                workflow_state.descriptor,
+            )
+        )
+        if (
+            (approval_reuse.should_claim or workflow_reapproval_pending)
+            and stored_policy_decision is not None
+            and _claim_saved_approval
+        ):
             if not store.claim_approval_reuse_decision(stored_policy_decision, now=_now()):
                 approval_reuse = evaluate_approval_reuse(
                     current_policy_action,
@@ -820,7 +873,7 @@ def _evaluate_runtime_artifact_hook(
                 return revalidate_claimed_allow(
                     runtime_artifact_hash,
                     trusted_request_override=False,
-                    approval_request_id=claimed_approval_request_id(stored_policy_decision),
+                    approval_request_id=workflow_request_id,
                 )
         policy_action = approval_reuse.action
         if approval_reuse_source is not None:
@@ -913,6 +966,10 @@ def _evaluate_runtime_artifact_hook(
                 post_claim_current_action,
                 "require-reapproval",
             )
+        elif workflow_state.authorization_claimed and post_claim_current_action == "require-reapproval":
+            # The exact workflow capability is the fresh reapproval for this
+            # task. Stronger sandbox and block results remain authoritative.
+            post_claim_current_action = "review"
         elif _claimed_trusted_request_override and post_claim_current_action in {
             "review",
             "require-reapproval",
@@ -930,7 +987,13 @@ def _evaluate_runtime_artifact_hook(
         )
         policy_action = approval_reuse.action
         approval_reuse_source = (
-            "claimed_trusted_request_override" if _claimed_trusted_request_override else "claimed_saved_policy_decision"
+            "claimed_github_workflow_capability"
+            if workflow_state.authorization_claimed
+            else (
+                "claimed_trusted_request_override"
+                if _claimed_trusted_request_override
+                else "claimed_saved_policy_decision"
+            )
         )
         trusted_request_override_applied = (
             _claimed_trusted_request_override and approval_reuse.accepted and approval_reuse.action == "allow"
@@ -1117,6 +1180,7 @@ def _evaluate_runtime_artifact_hook(
         runtime_artifact_hash=runtime_artifact_hash,
         scanner_evidence_payload=scanner_evidence_payload,
         stored_policy_action=stored_policy_action,
+        workflow_authorization_claimed=workflow_state.authorization_claimed,
     )
 
 
