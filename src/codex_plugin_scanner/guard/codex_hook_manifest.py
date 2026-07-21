@@ -31,6 +31,7 @@ from .codex_hook_integrity import (
     load_or_create_hook_secret,
     sign_hook_manifest,
 )
+from .codex_hook_package_identity import assert_package_reauthentication_is_safe
 
 MANAGED_CODEX_HOOK_EVENTS = ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse")
 
@@ -145,28 +146,6 @@ def authenticated_manifest_for_ownership(spec: CodexHookManifestSpec) -> dict[st
     except (CodexHookIntegrityError, OSError):
         return None
     return manifest if _manifest_has_owned_installation_context(manifest, spec) else None
-
-
-def assert_package_reauthentication_is_safe(
-    previous_manifest: dict[str, object] | None,
-    replacement_manifest: dict[str, object],
-) -> None:
-    """Refuse to bless changed executable identities at the same package version."""
-
-    if previous_manifest is None:
-        return
-    if previous_manifest.get("schema_version") != HOOK_MANIFEST_SCHEMA_VERSION:
-        return
-    if previous_manifest.get("package_version") != replacement_manifest.get("package_version"):
-        return
-    if previous_manifest.get("interpreter") != replacement_manifest.get("interpreter") or previous_manifest.get(
-        "packaged_files"
-    ) != replacement_manifest.get("packaged_files"):
-        raise CodexHookIntegrityError(
-            "codex_hook_package_reauthentication_refused",
-            "Guard refused to authenticate changed same-version hook code or interpreter bytes. "
-            "Reinstall hol-guard from a trusted package, then run `hol-guard install codex` again.",
-        )
 
 
 def manifest_bindings(manifest: object) -> list[dict[str, object]]:
