@@ -5,7 +5,6 @@ from __future__ import annotations
 import select
 import socket
 import socketserver
-from contextlib import suppress
 from typing import cast
 
 from typing_extensions import override
@@ -21,20 +20,16 @@ class _RelayHandler(socketserver.BaseRequestHandler):
         client = cast(socket.socket, self.request)
         with socket.create_connection(_TARGET_ADDRESS, timeout=5) as target:
             sockets = (client, target)
-            active = set(sockets)
-            while active:
-                readable, _, _ = select.select(tuple(active), (), ())
+            while True:
+                readable, _, _ = select.select(sockets, (), ())
                 for source in readable:
                     try:
                         payload = source.recv(_BUFFER_BYTES)
                     except ConnectionResetError:
-                        payload = b""
-                    destination = target if source is client else client
+                        return
                     if not payload:
-                        active.remove(source)
-                        with suppress(OSError):
-                            destination.shutdown(socket.SHUT_WR)
-                        continue
+                        return
+                    destination = target if source is client else client
                     _ = destination.sendall(payload)
 
 

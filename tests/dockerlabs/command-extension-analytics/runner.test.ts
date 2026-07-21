@@ -160,8 +160,9 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(compose).not.toContain("SYS_ADMIN");
     expect(compose).not.toContain("seccomp:unconfined");
     expect(dockerfile).not.toContain("bubblewrap");
-    expect(relay).toContain("destination.shutdown(socket.SHUT_WR)");
-    expect(relay).toContain("active.remove(source)");
+    expect(relay).toContain("select.select(sockets, (), ())");
+    expect(relay).toContain("except ConnectionResetError:");
+    expect(relay).not.toContain("active.remove(source)");
     expect(relay).not.toContain("(), (), 30");
     for (const harness of ["codex", "claude-code", "cursor"]) {
       expect(server).toContain(`_run_installed_hook(\"${harness}\"`);
