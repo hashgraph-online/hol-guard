@@ -628,7 +628,9 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         assert not connect_failure_details, f"Guard Cloud connect failed: {connect_failure_details[0]}"
         deadline = time.monotonic() + 30
         refreshed = running
-        while not bool(refreshed["entitlement"]["allowed"]) and time.monotonic() < deadline:
+        while (
+            not bool(refreshed["entitlement"]["allowed"]) or refreshed["connect_flow"] is not None
+        ) and time.monotonic() < deadline:
             time.sleep(0.05)
             status, refreshed = _read_json_response(
                 _request(
