@@ -523,6 +523,7 @@ jobs:
             installed-canary/command-extension-analytics.json
             .artifacts/command-extension-analytics/*.png
           if-no-files-found: error
+          include-hidden-files: true
 
   publish-alpha-testpypi:
     name: Verify alpha artifact on TestPyPI

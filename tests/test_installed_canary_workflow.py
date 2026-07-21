@@ -117,6 +117,7 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "sudo apparmor_parser -r /etc/apparmor.d/hol-guard-bwrap" in workflow_text
     assert "installed-canary/command-extension-analytics.json" in workflow_text
     assert ".artifacts/command-extension-analytics/*.png" in workflow_text
+    assert "include-hidden-files: true" in workflow_text
     canonical_runner_text = (ROOT / "tests/dockerlabs/command-extension-analytics/runner.ts").read_text(
         encoding="utf-8"
     )
