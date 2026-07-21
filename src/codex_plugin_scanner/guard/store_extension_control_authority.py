@@ -420,7 +420,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             anchor = self._read_anchor(key=key) if key is not None else None
         except Exception:
             return self._degraded_view(catalog_digest)
-        if row is None and anchor is None and key is None:
+        if row is None and anchor is None:
             return ExtensionControlAuthorityView(AuthorityHealth.UNENROLLED, 0, catalog_digest, ())
         if row is None or key is None or anchor is None:
             return self._tampered_view(catalog_digest)

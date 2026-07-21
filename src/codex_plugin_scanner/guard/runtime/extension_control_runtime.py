@@ -43,7 +43,10 @@ class ExtensionControlRuntimeSnapshot:
         payload = {
             "catalog_digest": view.catalog_digest,
             "health": view.health.value,
-            "layers": [_layer_payload(layer) for layer in view.layers],
+            "layers": sorted(
+                (_layer_payload(layer) for layer in view.layers),
+                key=lambda item: str(item["kind"]),
+            ),
             "revision": view.revision,
             "schema_version": _RUNTIME_SNAPSHOT_SCHEMA,
         }
@@ -76,6 +79,10 @@ class ExtensionControlRuntime:
     def __init__(self, initial: ExtensionControlAuthorityView) -> None:
         self._lock = threading.Lock()
         self._snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(initial)
+        self._highest_protected_revision = initial.revision if initial.health is AuthorityHealth.PROTECTED else 0
+        self._highest_protected_digest = (
+            self._snapshot.effective_digest if initial.health is AuthorityHealth.PROTECTED else None
+        )
 
     def current(self) -> ExtensionControlRuntimeSnapshot:
         return self._snapshot
@@ -83,11 +90,19 @@ class ExtensionControlRuntime:
     def refresh(self, view: ExtensionControlAuthorityView) -> ExtensionControlRuntimeSnapshot:
         candidate = ExtensionControlRuntimeSnapshot.from_authority_view(view)
         with self._lock:
-            current = self._snapshot
-            if candidate.revision < current.revision:
+            if candidate.health is not AuthorityHealth.PROTECTED:
+                self._snapshot = candidate
+                return candidate
+            if candidate.revision < self._highest_protected_revision:
                 raise ValueError("extension control runtime revision cannot move backwards")
-            if candidate.revision == current.revision and candidate.effective_digest != current.effective_digest:
+            if (
+                candidate.revision == self._highest_protected_revision
+                and self._highest_protected_digest is not None
+                and candidate.effective_digest != self._highest_protected_digest
+            ):
                 raise ValueError("extension control runtime revision cannot be replaced")
+            self._highest_protected_digest = candidate.effective_digest
+            self._highest_protected_revision = candidate.revision
             self._snapshot = candidate
             return candidate
 
@@ -111,7 +126,7 @@ def current_extension_control_binding_digest() -> str:
 
 
 def extension_control_policy_version(base_version: str) -> str:
-    if not base_version.strip():
+    if not isinstance(base_version, str) or not base_version.strip():
         raise ValueError("base policy version is required")
     return f"{base_version}@{current_extension_control_binding_digest()}"
 
@@ -119,14 +134,17 @@ def extension_control_policy_version(base_version: str) -> str:
 def _layer_payload(layer: ExtensionControlLayer) -> dict[str, object]:
     return {
         "catalog_digest": layer.catalog_digest,
-        "controls": [
-            {
-                "state": control.state.value,
-                "target_id": control.target.target_id,
-                "target_kind": control.target.kind.value,
-            }
-            for control in layer.controls
-        ],
+        "controls": sorted(
+            (
+                {
+                    "state": control.state.value,
+                    "target_id": control.target.target_id,
+                    "target_kind": control.target.kind.value,
+                }
+                for control in layer.controls
+            ),
+            key=lambda item: (str(item["target_kind"]), str(item["target_id"])),
+        ),
         "global_lockdown": layer.global_lockdown,
         "kind": layer.kind.value,
         "schema_version": layer.schema_version,

@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import secrets
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TextIO
 
 from ..approval_gate import (
     ApprovalGateGrant,
@@ -24,6 +25,8 @@ EXTENSION_CONTROL_PROOF_ACTION = "commit-layers"
 EXTENSION_CONTROL_ENROLLMENT_SCHEMA = "guard.extension-control-enrollment.v1"
 EXTENSION_CONTROL_ENROLLMENT_ACTION = "enroll-authority"
 _MAX_IDENTITY_LENGTH = 256
+_ENROLLMENT_CONFIRMATION_PREFIX = "ENROLL EXTENSION CONTROL"
+_REMOTE_TERMINAL_ENVIRONMENT = ("SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY")
 
 
 class ExtensionControlProofError(PermissionError):
@@ -73,19 +76,74 @@ class ExtensionControlEnrollmentProof:
         return "ExtensionControlEnrollmentProof(<redacted>)"
 
 
+def _current_login_name() -> str | None:
+    try:
+        import pwd
+
+        return pwd.getpwuid(os.getuid()).pw_name
+    except (ImportError, KeyError, OSError):
+        return None
+
+
+def _terminal_session_is_local(terminal_name: str) -> bool:
+    """Require an OS login record for this TTY with no remote host."""
+
+    expected_user = _current_login_name()
+    if expected_user is None:
+        return False
+    try:
+        completed = subprocess.run(
+            ("/usr/bin/who",),
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            env={"LANG": "C", "LC_ALL": "C", "PATH": "/usr/bin:/bin"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    terminal_id = Path(terminal_name).name
+    for line in completed.stdout.splitlines():
+        fields = line.split()
+        if len(fields) < 2 or fields[0] != expected_user or fields[1] != terminal_id:
+            continue
+        return not (fields[-1].startswith("(") and fields[-1].endswith(")"))
+    return False
+
+
+def _require_local_terminal_confirmation(enrollment: ExtensionControlEnrollment) -> None:
+    if any(os.environ.get(name) for name in _REMOTE_TERMINAL_ENVIRONMENT):
+        raise ExtensionControlProofError("extension control enrollment requires a local terminal")
+    try:
+        descriptor = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY | getattr(os, "O_CLOEXEC", 0))
+    except OSError as exc:
+        raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal") from exc
+    try:
+        if not os.isatty(descriptor) or not _terminal_session_is_local(os.ttyname(descriptor)):
+            raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal")
+        expected = f"{_ENROLLMENT_CONFIRMATION_PREFIX} {enrollment.actor_id}"
+        with os.fdopen(os.dup(descriptor), "w", encoding="utf-8") as terminal_output:
+            terminal_output.write(f'Type "{expected}" to confirm first enrollment: ')
+            terminal_output.flush()
+        with os.fdopen(os.dup(descriptor), "r", encoding="utf-8") as terminal_input:
+            entered = terminal_input.readline().rstrip("\r\n")
+        if not hmac.compare_digest(entered, expected):
+            raise ExtensionControlProofError("extension control enrollment confirmation did not match")
+    finally:
+        os.close(descriptor)
+
+
 def issue_extension_control_enrollment_proof(
     guard_home: Path,
     enrollment: ExtensionControlEnrollment,
     *,
     approval_gate_input: ApprovalGateInput | None,
     session_nonce: str,
-    terminal_input: TextIO,
     now: str | None = None,
 ) -> ExtensionControlEnrollmentProof:
-    """Issue a one-shot enrollment proof only from an attested local terminal."""
+    """Issue a one-shot enrollment proof after direct local-terminal confirmation."""
 
-    if not terminal_input.isatty():
-        raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal")
+    _require_local_terminal_confirmation(enrollment)
     if not session_nonce.strip() or len(session_nonce) > _MAX_IDENTITY_LENGTH:
         raise ExtensionControlProofError("invalid proof session nonce")
     digest = enrollment.canonical_digest

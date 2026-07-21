@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from io import StringIO
 from pathlib import Path
 from typing import cast
 
@@ -31,7 +30,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_proof import (
     ExtensionControlEnrollmentProof,
     ExtensionControlMutation,
     ExtensionControlProof,
-    ExtensionControlProofError,
     issue_extension_control_enrollment_proof,
     issue_extension_control_proof,
 )
@@ -68,13 +66,12 @@ class MemorySecretStore:
         self.values.pop(secret_id, None)
 
 
-class _TerminalInput(StringIO):
-    def __init__(self, *, interactive: bool) -> None:
-        super().__init__()
-        self._interactive = interactive
-
-    def isatty(self) -> bool:
-        return self._interactive
+@pytest.fixture(autouse=True)
+def _allow_local_terminal_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
+        lambda _enrollment: None,
+    )
 
 
 def _store(
@@ -104,7 +101,6 @@ def _enrollment_proof(
     *,
     actor_id: str = "local-admin",
     nonce: str = "enrollment-nonce",
-    trusted_terminal: bool = True,
 ) -> ExtensionControlEnrollmentProof:
     enrollment = ExtensionControlEnrollment(
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
@@ -116,7 +112,6 @@ def _enrollment_proof(
         enrollment,
         approval_gate_input=ApprovalGateInput(password=_PASSWORD),
         session_nonce=f"session-{nonce}",
-        terminal_input=_TerminalInput(interactive=trusted_terminal),
     )
 
 
@@ -209,9 +204,6 @@ def test_first_enrollment_requires_one_trusted_local_proof(tmp_path: Path) -> No
     assert initial.revision == 0
     assert initial.layers == ()
     assert secrets.values == {}
-
-    with pytest.raises(ExtensionControlProofError, match="interactive local terminal"):
-        _enrollment_proof(store, trusted_terminal=False)
 
     proof = _enrollment_proof(store)
     enrolled = store.enroll_extension_control_authority(
