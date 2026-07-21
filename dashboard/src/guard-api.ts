@@ -1804,7 +1804,9 @@ type PendingRequestPageCallback = (items: GuardApprovalRequest[]) => void;
 
 export async function fetchAllPendingRequests(onPage?: PendingRequestPageCallback): Promise<GuardApprovalRequest[]> {
   if (isGuardDemoMode()) {
-    return getDemoRequests();
+    const demoRequests = getDemoRequests();
+    onPage?.(demoRequests);
+    return demoRequests;
   }
   const items: GuardApprovalRequest[] = [];
   let cursor: string | undefined;
