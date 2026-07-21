@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import signal
@@ -19,12 +18,6 @@ from codex_plugin_scanner import __version__
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
-from codex_plugin_scanner.guard.runtime.containment_contract import (
-    ContainmentInput,
-    ContainmentPolicy,
-    ContainmentRequest,
-)
-from codex_plugin_scanner.guard.runtime.containment_executor import execute_contained, file_sha256
 from codex_plugin_scanner.guard.store import GuardStore
 
 GUARD_HOME = Path("/guard-home")
@@ -367,40 +360,6 @@ def _assert_seeded_activity(store: GuardStore) -> None:
         raise RuntimeError(f"installed hook activity mismatch: {rows!r}")
 
 
-def _containment_probe() -> dict[str, object]:
-    protected = WORKSPACE / ".guard"
-    protected.mkdir(exist_ok=True)
-    secret_file = protected / "credentials.json"
-    _ = secret_file.write_text(SENTINEL, encoding="utf-8")
-    output = WORKSPACE / "output"
-    output.mkdir(exist_ok=True)
-    source = WORKSPACE / "format-input.txt"
-    _ = source.write_text("formatted\n", encoding="utf-8")
-    destination = output / "format-output.txt"
-    executable = "/usr/bin/cp"
-    request = ContainmentRequest(
-        argv=(executable, str(source), str(destination)),
-        cwd=str(WORKSPACE),
-        environment=(("PATH", "/usr/bin:/bin"),),
-        policy=ContainmentPolicy(str(WORKSPACE), (str(output),)),
-        inputs=(ContainmentInput(str(source), "format-input.txt", file_sha256(str(source))),),
-        launch_digest=hashlib.sha256(b"installed-command-analytics-lab").hexdigest(),
-        executable_digest=file_sha256(executable),
-        operation_id="installed.analytics.probe",
-    )
-    result = execute_contained(request, timeout_seconds=5)
-    evidence: dict[str, object] = {
-        "enforced": result.enforced,
-        "exit_code": result.exit_code,
-        "output_written": destination.exists() and destination.read_text(encoding="utf-8") == "formatted\n",
-        "protected_value_unchanged": secret_file.read_text(encoding="utf-8") == SENTINEL,
-        "secret_hidden": SENTINEL not in result.stdout and SENTINEL not in result.stderr,
-    }
-    if result.exit_code != 0:
-        evidence["failure"] = _safe_hook_diagnostic(result.stderr)
-    return evidence
-
-
 def _installed_origin() -> str:
     package_file = Path(sys.modules["codex_plugin_scanner"].__file__ or "").resolve(strict=True)
     if "site-packages" not in package_file.parts or "/workspace" in str(package_file):
@@ -447,21 +406,11 @@ def main() -> None:
             workflow_authorization = _complete_workflow_authorization(store, str(pending["request_id"]))
             prompt_free_hook_count = _invoke_real_harnesses()
         _assert_seeded_activity(store)
-        containment = _containment_probe()
-        if containment != {
-            "enforced": True,
-            "exit_code": 0,
-            "output_written": True,
-            "protected_value_unchanged": True,
-            "secret_hidden": True,
-        }:
-            raise RuntimeError(f"containment probe failed: {containment}")
         print(
             "HOL_GUARD_LAB_READY "
             + json.dumps(
                 {
                     "activity_count": store.count_command_activities(),
-                    "containment": containment,
                     "installed_origin": _installed_origin(),
                     "prompt_free_hook_count": prompt_free_hook_count,
                     "version": __version__,

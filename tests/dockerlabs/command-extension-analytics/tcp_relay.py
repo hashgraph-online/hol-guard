@@ -21,9 +21,7 @@ class _RelayHandler(socketserver.BaseRequestHandler):
         with socket.create_connection(_TARGET_ADDRESS, timeout=5) as target:
             sockets = (client, target)
             while True:
-                readable, _, _ = select.select(sockets, (), (), 30)
-                if not readable:
-                    return
+                readable, _, _ = select.select(sockets, (), ())
                 for source in readable:
                     payload = source.recv(_BUFFER_BYTES)
                     if not payload:

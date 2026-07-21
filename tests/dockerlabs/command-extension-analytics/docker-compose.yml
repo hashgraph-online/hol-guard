@@ -19,11 +19,8 @@ services:
       - guard-analytics
     cap_drop:
       - ALL
-    cap_add:
-      - SYS_ADMIN
     security_opt:
       - no-new-privileges:true
-      - seccomp:unconfined
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4781/healthz', timeout=2)"]
       interval: 1s
