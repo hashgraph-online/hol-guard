@@ -27643,7 +27643,10 @@ function ReviewDecisionCard(props) {
   }, [item?.request_id, item?.scope_contract_version, item?.scope_contract_digest]);
   reactExports.useEffect(() => {
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, []);
   const handleResolve = reactExports.useCallback(
@@ -27673,6 +27676,10 @@ function ReviewDecisionCard(props) {
         setUseCooldown(false);
         setPendingAction(null);
         setPendingContractKey(null);
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
         timerRef.current = setTimeout(() => setResolved(null), 2e3);
       } catch (err) {
         setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");

@@ -115,7 +115,10 @@ export function ReviewDecisionCard(props: {
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, []);
 
@@ -149,6 +152,10 @@ export function ReviewDecisionCard(props: {
         setUseCooldown(false);
         setPendingAction(null);
         setPendingContractKey(null);
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
         timerRef.current = setTimeout(() => setResolved(null), 2000);
       } catch (err) {
         setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
