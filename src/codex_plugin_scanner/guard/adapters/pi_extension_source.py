@@ -10,6 +10,7 @@ from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
 from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
 
 GUARD_HOOK_TIMEOUT_MS = 8_000
+GUARD_HOOK_DEADLINE_RESERVE_MS = 250
 GUARD_DAEMON_HOOK_TIMEOUT_MS = 7_000
 GUARD_CLI_HOOK_TIMEOUT_MS = 7_000
 GUARD_HOOK_TEXT_LIMIT_CHARS = 12_000
@@ -45,6 +46,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         f"const GUARD_CONFIG_PATH = {config_path_json};\n"
         f"const GUARD_PACKAGE_VERSION = {package_version_json};\n"
         f"const GUARD_TIMEOUT_MS = {GUARD_HOOK_TIMEOUT_MS};\n"
+        f"const GUARD_DEADLINE_RESERVE_MS = {GUARD_HOOK_DEADLINE_RESERVE_MS};\n"
         f"const GUARD_DAEMON_TIMEOUT_MS = {GUARD_DAEMON_HOOK_TIMEOUT_MS};\n"
         f"const GUARD_CLI_TIMEOUT_MS = {GUARD_CLI_HOOK_TIMEOUT_MS};\n"
         f"const GUARD_TEXT_LIMIT_CHARS = {GUARD_HOOK_TEXT_LIMIT_CHARS};\n"
@@ -137,6 +139,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  cwd?: string,\n"
         "  options?: { enforceSizeCap?: boolean },\n"
         "): Promise<GuardResponse> {\n"
+        "  const deadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS;\n"
         "  const args = [...GUARD_ARGS];\n"
         '  const workspace = typeof cwd === "string" && cwd ? cwd : process.cwd();\n'
         '  if (workspace) args.push("--workspace", workspace);\n'
@@ -189,11 +192,12 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    return daemonResponse;\n"
         "  }\n"
         "  let result: ReturnType<typeof spawnSync<string>> | null = null;\n"
+        "  const cliTimeoutMs = Math.min(GUARD_CLI_TIMEOUT_MS, Math.max(deadlineAt - Date.now(), 1));\n"
         "  for (const command of GUARD_COMMAND_CANDIDATES) {\n"
         "    result = spawnSync(command, args, {\n"
         "      input: `${serializedPayload}\\n`,\n"
         '      encoding: "utf-8",\n'
-        "      timeout: GUARD_CLI_TIMEOUT_MS,\n"
+        "      timeout: cliTimeoutMs,\n"
         "    });\n"
         "    const resultError = result.error as (Error & { code?: unknown }) | undefined;\n"
         "    if (!(result.error && resultError?.code === 'ENOENT')) break;\n"
@@ -212,7 +216,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    return {\n"
         '      decision: "deny",\n'
         "      reason: errorCode === 'ETIMEDOUT' || result.error?.name === 'TimeoutError'\n"
-        "        ? `HOL Guard Pi hook timed out after ${GUARD_CLI_TIMEOUT_MS}ms while reviewing this action.`\n"
+        "        ? `HOL Guard Pi hook timed out while reviewing this action.`\n"
         "        : `HOL Guard Pi hook failed before completing review: ${errorMessage}`,\n"
         "    };\n"
         "  }\n"

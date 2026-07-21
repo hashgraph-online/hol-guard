@@ -286,7 +286,7 @@ class TestPiInstall:
         assert '"hook", "--json"' in text
         assert '"--home"' in text
         assert "ctx.cwd" in text
-        assert "timeout: GUARD_CLI_TIMEOUT_MS" in text
+        assert "timeout: cliTimeoutMs" in text
         assert str(extension_path) in json.loads(settings_path.read_text(encoding="utf-8"))["extensions"]
         assert omp_extension_path.is_file()
         assert str(omp_extension_path) in json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"]

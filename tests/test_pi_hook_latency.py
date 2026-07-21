@@ -85,11 +85,13 @@ def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path)
     )
 
     assert "const GUARD_TIMEOUT_MS = 8000;" in source
+    assert "const GUARD_DEADLINE_RESERVE_MS = 250;" in source
     assert "const GUARD_DAEMON_TIMEOUT_MS = 7000;" in source
     assert "const GUARD_CLI_TIMEOUT_MS = 7000;" in source
     assert 'const GUARD_ARGS = ["hook", "--json"' in source
     assert "daemonState.package_version !== GUARD_PACKAGE_VERSION" in source
     assert "error.name === 'AbortError'" in source
     assert source.index("error.name === 'AbortError'") > source.index("await fetch")
-    assert "timeout: GUARD_CLI_TIMEOUT_MS" in source
-    assert "timed out after ${GUARD_CLI_TIMEOUT_MS}ms" in source
+    assert "const deadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS" in source
+    assert "Math.max(deadlineAt - Date.now(), 1)" in source
+    assert "timeout: cliTimeoutMs" in source
