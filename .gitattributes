@@ -1,0 +1,2 @@
+/tests/guard_command_corpus*.py text eol=lf
+/tests/fixtures/guard-command-corpus/*.json text eol=lf

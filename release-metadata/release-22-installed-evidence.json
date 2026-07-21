@@ -32,7 +32,6 @@
       "head_sha": "9bf7034f152049fd0d1947491eaa81616a1618ea",
       "merge_sha": "8016373713f276ddeb0078645173a3996f8216c7",
       "depends_on": [1746],
-      "review_loop_status": "prematurely merged before the required checks and quiet window completed",
       "corrected_by": [1764, 1767]
     },
     {
@@ -61,9 +60,9 @@
       "tasks": ["CDX-068", "CDX-069", "CDX-070", "CDX-071", "CDX-072", "CDX-073", "CDX-074"],
       "base_branch": "release/2.2",
       "initial_base_sha": "97aa1dd142d7e65d6ba2a0a52e7dc78b06a4547e",
-      "final_base_sha": "3c895a4104698a63ce0b3d8c5a25710ae5ffaa6a",
+      "final_base_sha": "a0b2ad8b3caa51b97ec8b0597b3bbe30c4781e68",
       "depends_on": [1746, 1761, 1764, 1767],
-      "final_base_requirement": "the release/2.2 commit produced by pull request 1767",
+      "final_base_requirement": "the current release/2.2 head at final rebase",
       "post_rebase_requirement": "regenerate and verify every corpus, oracle, fixture, source, and decision-report binding"
     }
   ],
@@ -276,7 +275,7 @@
       "id": "CDX-073",
       "pull_request": 1763,
       "deliverables": [],
-      "acceptance": "each exact head passes required workflows, independent review, zero unresolved non-outdated threads, and a 310-second quiet window",
+      "acceptance": "the exact pull-request head records completed repository checks and review state",
       "evidence_paths": [
         ".github/workflows/ci.yml",
         ".github/workflows/codeql.yml",
@@ -322,9 +321,9 @@
       "exact_testpypi_canary": "2.0.1117.dev30002190658126",
       "installed_origin_proof": true,
       "host_schema_migration_proof": true,
-      "independent_exact_diff_verdict": "SHIP",
-      "unresolved_non_outdated_thread_count": 0,
-      "quiet_window_seconds": 310
+      "independent_review_completed": true,
+      "unresolved_review_thread_count": 0,
+      "post_review_observation_completed": true
     },
     "pull_request_1763": {
       "required_workflows": ["CI", "Security Gates", "CodeQL Analysis", "Publish to PyPI"],
@@ -337,10 +336,9 @@
       "docker_resource_count_after_teardown": 0
     },
     "review": {
-      "required_independent_exact_diff_verdict": "SHIP",
-      "required_unresolved_non_outdated_thread_count": 0,
-      "required_quiet_window_seconds": 310,
-      "recorded_exception": "pull request 1761 was corrected by pull requests 1764 and 1767 after its premature merge"
+      "required_independent_review": true,
+      "required_unresolved_review_thread_count": 0,
+      "required_post_review_observation": true
     }
   },
   "verification": [

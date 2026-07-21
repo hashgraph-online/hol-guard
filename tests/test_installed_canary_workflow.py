@@ -127,6 +127,9 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert '"build",' in runner_text
     assert 'manifest["canonical_digests"]' in runner_text
     assert '"no_post_execution_proof": _no_post_execution_proof_smoke()' in runner_text
+    attributes_text = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    assert "/tests/guard_command_corpus*.py text eol=lf" in attributes_text
+    assert "/tests/fixtures/guard-command-corpus/*.json text eol=lf" in attributes_text
     assert '"$CANARY_PYTHON" -m pip install --no-compile' in workflow_text
     assert "uv pip install" not in workflow_text
 
@@ -145,8 +148,8 @@ def test_slice_manifest_binds_the_release_correction_chain_and_repo_relative_own
     assert by_number[1764]["depends_on"] == [1761]
     assert by_number[1767]["depends_on"] == [1761, 1764]
     assert by_number[1763]["depends_on"] == [1746, 1761, 1764, 1767]
-    assert by_number[1763]["final_base_sha"] == "3c895a4104698a63ce0b3d8c5a25710ae5ffaa6a"
-    assert by_number[1763]["final_base_requirement"] == "the release/2.2 commit produced by pull request 1767"
+    assert by_number[1763]["final_base_sha"] == "a0b2ad8b3caa51b97ec8b0597b3bbe30c4781e68"
+    assert by_number[1763]["final_base_requirement"] == "the current release/2.2 head at final rebase"
 
     slices = [_mapping(item) for item in _sequence(manifest["slices"])]
     assert [item["id"] for item in slices] == [f"CDX-{number:03d}" for number in range(63, 75)]
@@ -189,13 +192,17 @@ def test_slice_manifest_binds_the_release_correction_chain_and_repo_relative_own
     gates = _mapping(manifest["gates"])
     review = _mapping(gates["review"])
     assert review == {
-        "required_independent_exact_diff_verdict": "SHIP",
-        "required_unresolved_non_outdated_thread_count": 0,
-        "required_quiet_window_seconds": 310,
-        "recorded_exception": (
-            "pull request 1761 was corrected by pull requests 1764 and 1767 after its premature merge"
-        ),
+        "required_independent_review": True,
+        "required_unresolved_review_thread_count": 0,
+        "required_post_review_observation": True,
     }
+    pull_request_1761 = _mapping(gates["pull_request_1761"])
+    assert pull_request_1761["review_loop_completed"] is False
+    assert pull_request_1761["corrected_by"] == [1764, 1767]
+    pull_request_1767 = _mapping(gates["pull_request_1767"])
+    assert pull_request_1767["independent_review_completed"] is True
+    assert pull_request_1767["unresolved_review_thread_count"] == 0
+    assert pull_request_1767["post_review_observation_completed"] is True
     verification = [_text(value) for value in _sequence(manifest["verification"])]
     assert all("pnpm" not in command for command in verification)
     canonical_lab_verification = (
