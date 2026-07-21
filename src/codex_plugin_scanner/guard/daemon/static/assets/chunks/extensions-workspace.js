@@ -19,7 +19,7 @@ async function request(path, init) {
       typeof error.error === "string" ? error.error : `Request failed (${response.status})`,
       response.status,
       typeof error.error === "string" ? error.error : void 0,
-      typeof error.recovery_action === "string" ? error.recovery_action : void 0
+      typeof error.recovery === "object" && error.recovery !== null && typeof error.recovery.action === "string" ? error.recovery.action : void 0
     );
   }
   return payload;
