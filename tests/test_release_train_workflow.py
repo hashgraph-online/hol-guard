@@ -10,7 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLISH_WORKFLOW = ROOT / ".github" / "workflows" / "publish.yml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
-PUSH_BRANCHES = ["main"]
+CI_PUSH_BRANCHES = ["main"]
+PUBLISH_PUSH_BRANCHES = ["main", "release/2.1"]
 PR_BRANCHES = ["main", "release/2.1"]
 RELEASE_MAINTAINERS = {"@kantorcodes", "@deep-purple-boots"}
 
@@ -33,24 +34,31 @@ def test_release_branches_run_ci_and_pr_canaries() -> None:
     ci = _workflow(CI_WORKFLOW)
     publish = _workflow(PUBLISH_WORKFLOW)
 
-    assert ci[True]["push"]["branches"] == PUSH_BRANCHES
+    assert ci[True]["push"]["branches"] == CI_PUSH_BRANCHES
     assert ci[True]["pull_request"]["branches"] == PR_BRANCHES
-    assert publish[True]["push"]["branches"] == PUSH_BRANCHES
+    assert publish[True]["push"]["branches"] == PUBLISH_PUSH_BRANCHES
     assert publish[True]["pull_request"]["branches"] == PR_BRANCHES
     assert "tags" not in publish[True]["push"]
+    assert publish["concurrency"]["group"] == "hol-guard-publish-${{ github.ref }}"
+    assert publish["concurrency"]["cancel-in-progress"] is False
 
 
-def test_main_pushes_publish_stable_while_tag_pushes_cannot_publish() -> None:
+def test_branch_pushes_publish_their_channel_while_tag_pushes_cannot_publish() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     jobs = workflow["jobs"]
 
     for job_name in (
         "publish-alpha-testpypi",
         "publish-alpha-pypi",
+        "reserve-alpha-tag",
         "release-alpha",
         "publish-container",
     ):
-        assert "github.event_name == 'workflow_dispatch'" in jobs[job_name]["if"]
+        condition = jobs[job_name]["if"]
+        assert "github.event_name == 'workflow_dispatch'" in condition
+        assert "github.event_name == 'push'" in condition
+        assert "github.ref == 'refs/heads/release/2.1'" in condition
+        assert "needs.build.outputs.channel == 'alpha'" in condition
     for job_name in ("publish-main-testpypi", "publish-main-pypi", "release-main"):
         condition = jobs[job_name]["if"]
         assert "github.event_name == 'push'" in condition
@@ -89,6 +97,52 @@ def test_main_push_build_computes_a_registry_derived_stable_version() -> None:
     condition = '[[ "$CURRENT_VERSION" == "$VERSION" ]]'
     assert stamp_run.index("--check") < stamp_run.index(condition)
     assert stamp_run.index(condition) < stamp_run.index("--version")
+
+
+def test_release_21_push_computes_a_deterministic_source_bound_alpha() -> None:
+    workflow = _workflow(PUBLISH_WORKFLOW)
+    build_steps = workflow["jobs"]["build"]["steps"]
+    checkout = next(step for step in build_steps if str(step.get("uses", "")).startswith("actions/checkout@"))
+    compute_run = next(step["run"] for step in build_steps if step.get("name") == "Compute publish version")
+
+    assert _mapping(checkout["with"])["ref"] == (
+        "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+    )
+    assert 'elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/2.1" ]]' in compute_run
+    assert 'CHANNEL="alpha"' in compute_run
+    assert 'TRAIN="2.1"' in compute_run
+    assert "compute_alpha_release_version.py" in compute_run
+    assert '--release-train "$TRAIN"' in compute_run
+    assert "SOURCE_SHA=$(git rev-parse 'HEAD^{commit}')" in compute_run
+    assert '"$SOURCE_SHA" != "$GITHUB_SHA"' in compute_run
+
+    auto_alpha_block = compute_run[
+        compute_run.index(
+            'elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/2.1" ]]'
+        ) : compute_run.index('elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]')
+    ]
+    assert "list-versions --registry pypi" in auto_alpha_block
+    assert "list-versions --registry testpypi" in auto_alpha_block
+    assert "git tag --list 'alpha/v*'" in auto_alpha_block
+    assert "compute_alpha_release_version.py" in auto_alpha_block
+    assert 'awk -v candidate="$RELEASE_VERSION"' not in auto_alpha_block
+    assert "$0 != candidate" not in auto_alpha_block
+    assert 'git tag --points-at "$SOURCE_SHA" --list "alpha/v${TRAIN}.0a*"' in auto_alpha_block
+    assert '"${#SOURCE_ALPHA_TAGS[@]}" -gt 1' in auto_alpha_block
+    assert '"${#SOURCE_ALPHA_TAGS[@]}" -eq 1' in auto_alpha_block
+    assert 'RELEASE_VERSION="${SOURCE_ALPHA_TAGS[0]}"' in auto_alpha_block
+    assert "select(. != $candidate)" not in auto_alpha_block
+    assert "REUSING_RESERVED_ALPHA=true" in auto_alpha_block
+    assert "--validate-phase-only" in auto_alpha_block
+    assert 'if [[ "$REUSING_RESERVED_ALPHA" != "true" ]]' in auto_alpha_block
+    assert auto_alpha_block.index('"${#SOURCE_ALPHA_TAGS[@]}" -eq 1') < auto_alpha_block.index(
+        'if [[ "$REUSING_RESERVED_ALPHA" != "true" ]]'
+    )
+
+
+def _mapping(value: object) -> dict[str, object]:
+    assert isinstance(value, dict)
+    return value
 
 
 def test_alpha_only_dispatch_and_pr_version_stamping_contracts() -> None:
@@ -138,16 +192,22 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     assert jobs["build"]["needs"] == "authorize-release"
     build_condition = jobs["build"]["if"]
     assert "github.event_name != 'workflow_dispatch' || github.run_attempt == 1" in build_condition
-    assert "github.event_name != 'push' || github.run_attempt == 1" in build_condition
+    assert (
+        "github.event_name != 'push' || github.run_attempt == 1 || github.ref == 'refs/heads/release/2.1'"
+        in build_condition
+    )
     assert jobs["alpha-cross-platform"]["needs"] == "build"
     for job_name in (
         "alpha-cross-platform",
         "publish-alpha-testpypi",
         "publish-alpha-pypi",
+        "reserve-alpha-tag",
         "release-alpha",
         "publish-container",
     ):
         assert "github.run_attempt == 1" in jobs[job_name]["if"]
+        if job_name != "alpha-cross-platform":
+            assert "(github.event_name == 'push' && github.ref == 'refs/heads/release/2.1')" in jobs[job_name]["if"]
     compute_run = next(step["run"] for step in build_steps if step.get("name") == "Compute publish version")
     assert 'if [[ "$CHANNEL" != "alpha" ]]' in compute_run
     assert 'if [[ "$TRAIN" != "2.1" ]]' in compute_run
@@ -185,15 +245,53 @@ def test_alpha_release_test_paths_exist() -> None:
 def test_alpha_publication_is_independent_of_cross_platform_tests() -> None:
     jobs = _workflow(PUBLISH_WORKFLOW)["jobs"]
 
-    assert jobs["publish-alpha-testpypi"]["needs"] == ["build"]
+    assert jobs["reserve-alpha-tag"]["needs"] == ["build"]
+    assert jobs["publish-alpha-testpypi"]["needs"] == ["build", "reserve-alpha-tag"]
     assert jobs["publish-alpha-pypi"]["needs"] == [
         "build",
         "publish-alpha-testpypi",
     ]
-    for job_name in ("publish-alpha-testpypi", "publish-alpha-pypi"):
+    for job_name in ("reserve-alpha-tag", "publish-alpha-testpypi", "publish-alpha-pypi"):
         assert "alpha-cross-platform" not in jobs[job_name]["needs"]
         assert "needs.alpha-cross-platform" not in jobs[job_name]["if"]
     assert jobs["release-alpha"]["needs"] == ["build", "publish-alpha-pypi"]
+
+
+def test_alpha_tag_is_reserved_atomically_before_testpypi() -> None:
+    jobs = _workflow(PUBLISH_WORKFLOW)["jobs"]
+    reserve = jobs["reserve-alpha-tag"]
+
+    assert reserve["permissions"] == {"contents": "write"}
+    checkout = next(step for step in reserve["steps"] if str(step.get("uses", "")).startswith("actions/checkout@"))
+    assert _mapping(checkout["with"])["ref"] == "${{ needs.build.outputs.source_sha }}"
+    reserve_run = next(step["run"] for step in reserve["steps"] if step.get("name") == "Reserve exact alpha tag")
+    assert 'gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs"' in reserve_run
+    assert '-f ref="refs/tags/${tag}"' in reserve_run
+    assert '-f sha="$SOURCE_SHA"' in reserve_run
+    assert 'remote_tag_sha" != "$SOURCE_SHA"' in reserve_run
+
+
+def test_alpha_publication_uses_the_push_sha_without_branch_head_drift_gates() -> None:
+    jobs = _workflow(PUBLISH_WORKFLOW)["jobs"]
+
+    for job_name in (
+        "reserve-alpha-tag",
+        "publish-alpha-testpypi",
+        "publish-alpha-pypi",
+        "release-alpha",
+        "publish-container",
+    ):
+        checkout = next(
+            step for step in jobs[job_name]["steps"] if str(step.get("uses", "")).startswith("actions/checkout@")
+        )
+        assert _mapping(checkout["with"])["ref"] == "${{ needs.build.outputs.source_sha }}"
+
+    for job_name in ("publish-alpha-testpypi", "publish-alpha-pypi"):
+        commands = "\n".join(str(step.get("run", "")) for step in jobs[job_name]["steps"])
+        assert "remote_train_sha=$(git ls-remote" not in commands
+        assert '"$remote_train_sha" != "$SOURCE_SHA"' not in commands
+        assert "refs/tags/alpha/v${VERSION}" in commands
+        assert '"$remote_alpha_tag_sha" != "$SOURCE_SHA"' in commands
 
 
 def test_release_publication_reuses_one_hashed_build_artifact() -> None:
@@ -290,11 +388,11 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         for step in jobs["publish-alpha-pypi"]["steps"]
         if step.get("name") == "Revalidate alpha publication authorization"
     )
-    assert "list-versions --registry pypi" in alpha_run
-    assert "git ls-remote --exit-code origin" in alpha_run
+    assert "list-versions --registry pypi" not in alpha_run
+    assert 'git ls-remote --exit-code origin "refs/tags/alpha/v${VERSION}"' in alpha_run
     assert "validate_alpha_release.py" in alpha_run
     assert "refs/tags/alpha/v${VERSION}" in alpha_run
-    assert 'awk -v candidate="$VERSION"' in alpha_run
+    assert 'awk -v candidate="$VERSION"' not in alpha_run
 
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
     assert 'for registry in ("pypi.org", "test.pypi.org")' not in workflow_text
@@ -326,32 +424,33 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
         for step in jobs["publish-alpha-testpypi"]["steps"]
         if step.get("name") == "Revalidate alpha source before TestPyPI"
     )
-    assert 'git ls-remote --exit-code origin "$train_ref"' in alpha_test_run
+    assert 'git ls-remote --exit-code origin "$train_ref"' not in alpha_test_run
     assert "refs/tags/alpha/v${VERSION}" in alpha_test_run
-    assert '[[ -n "$remote_alpha_tag_sha" && "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]' in alpha_test_run
+    assert '[[ "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]' in alpha_test_run
 
     alpha_pypi_run = next(
         step["run"]
         for step in jobs["publish-alpha-pypi"]["steps"]
         if step.get("name") == "Revalidate alpha publication authorization"
     )
-    assert '[[ -n "$remote_alpha_tag_sha" && "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]' in alpha_pypi_run
+    assert '[[ "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]' in alpha_pypi_run
 
     release_run = next(
         step["run"]
         for step in jobs["release-alpha"]["steps"]
         if step.get("name") == "Create discoverable alpha prerelease"
     )
-    assert 'gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs"' in release_run
-    assert '-f ref="refs/tags/${tag}"' in release_run
     assert 'remote_tag_sha" != "$SOURCE_SHA"' in release_run
+    assert 'gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs"' not in release_run
     assert 'gh release view "$tag" --json isDraft,isPrerelease' in release_run
     assert 'gh release download "$tag"' in release_run
     assert 'cmp --silent "$local_file"' in release_run
     assert "mapfile -d '' local_files" in release_run
     assert 'gh attestation verify "$remote_file"' in release_run
     assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in release_run
+    assert '--target "$SOURCE_SHA"' in release_run
     assert "--verify-tag" in release_run
+    assert 'git ls-remote --exit-code origin "refs/tags/${tag}"' in release_run
 
     main_release_run = next(
         step["run"] for step in jobs["release-main"]["steps"] if step.get("name") == "Create discoverable main release"
