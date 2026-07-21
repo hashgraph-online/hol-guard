@@ -1062,5 +1062,4 @@ class TestProxyBrowserIntentMetadata:
             params={"arguments": arguments},
             signals=(),
         )
-        assert "hol.org" in payload["launch_target"]
-        assert "navigate_page" not in payload["launch_target"] or "chrome" in payload["launch_target"].lower()
+        assert payload["launch_target"] == "chrome-devtools navigate_page hol.org"
