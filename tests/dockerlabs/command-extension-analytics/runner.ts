@@ -426,13 +426,13 @@ export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvi
     HOL_GUARD_LAB_PORT: String(port),
     HOL_GUARD_LAB_WHEEL: wheel,
   };
-  const containment = await runInstalledContainment(runner, version);
   let cleanup: TeardownEvidence | null = null;
   try {
     const existing = await listProjectResources(project, runner);
     if (existing.containers.length || existing.volumes.length || existing.networks.length) {
       throw new Error(`Dockerlabs project is not clean before start: ${JSON.stringify(existing)}`);
     }
+    const containment = await runInstalledContainment(runner, version);
     requireSuccess(
       await runner(composeCommand(project, "up", "-d", "--build", "--wait"), { cwd: LAB_DIR, env: environment }),
       "Dockerlabs startup",

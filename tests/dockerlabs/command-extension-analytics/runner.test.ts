@@ -168,6 +168,10 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(runner).toContain("approveWorkflowAuthorization(origin, pending, session)");
     expect(runner).toContain('"-I"');
     expect(runner).toContain("HOL_GUARD_LAB_PYTHON");
+    expect(runner.lastIndexOf("try {")).toBeLessThan(runner.lastIndexOf("runInstalledContainment(runner, version)"));
+    expect(runner.lastIndexOf("runInstalledContainment(runner, version)")).toBeLessThan(
+      runner.lastIndexOf('composeCommand(project, "up"'),
+    );
     expect(playwright).toContain('trace: "off"');
     expect(databasePrivacy).toContain("command_activity(?:_[a-z0-9_]+)?");
     expect(databasePrivacy).toContain("envelope_redacted_json");
