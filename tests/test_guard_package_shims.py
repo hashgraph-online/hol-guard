@@ -507,10 +507,13 @@ def test_guard_store_init_does_not_hold_sqlite_writer_during_missing_policy_inte
     slow_process.start()
     assert refresh_started_event.wait(timeout=5)
 
-    fast_started = time.monotonic()
+    with sqlite3.connect(home_dir / "guard.db", timeout=1.0) as writer_probe:
+        writer_probe.execute("pragma busy_timeout=1000")
+        writer_probe.execute("BEGIN IMMEDIATE")
+        writer_probe.rollback()
+
     fast_results: Queue = Queue()
     _run_guard_protect_command(str(home_dir), str(workspace_dir), result_queue=fast_results)
-    fast_elapsed = time.monotonic() - fast_started
     fast_result = fast_results.get(timeout=1)
 
     slow_process.join(timeout=20)
@@ -519,7 +522,6 @@ def test_guard_store_init_does_not_hold_sqlite_writer_during_missing_policy_inte
 
     assert fast_result["returncode"] == 2
     assert slow_result["returncode"] == 2
-    assert fast_elapsed < 3.0
 
 
 def _write_npm_ci_workspace(workspace_dir: Path, *, package_name: str, package_version: str) -> None:
