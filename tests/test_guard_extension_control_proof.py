@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_proof import (
     ExtensionControlMutation,
     ExtensionControlProofError,
     _require_local_terminal_confirmation,
+    _terminal_session_is_local,
     consume_extension_control_enrollment_proof,
     consume_extension_control_proof,
     issue_extension_control_enrollment_proof,
@@ -161,6 +163,32 @@ def test_enrollment_proof_rejects_remote_terminal(tmp_path: Path, monkeypatch: p
 
     with pytest.raises(ExtensionControlProofError, match="requires a local terminal"):
         _require_local_terminal_confirmation(_enrollment())
+
+
+@pytest.mark.parametrize(
+    ("who_output", "expected"),
+    (
+        ("local-admin ttys020 Jul 21 09:07\n", True),
+        ("local-admin ttys020 Jul 21 09:07 (203.0.113.8)\n", False),
+        ("local-admin ttys021 Jul 21 09:07\n", False),
+    ),
+)
+def test_terminal_locality_requires_hostless_matching_login_record(
+    monkeypatch: pytest.MonkeyPatch,
+    who_output: str,
+    expected: bool,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof._current_login_name",
+        lambda: "local-admin",
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(("/usr/bin/who",), 0, who_output, ""),
+    )
+
+    assert _terminal_session_is_local("/dev/ttys020") is expected
 
 
 def test_extension_control_proof_rejects_stale_grant(tmp_path: Path) -> None:

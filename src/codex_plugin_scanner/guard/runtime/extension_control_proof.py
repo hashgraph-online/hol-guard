@@ -7,6 +7,7 @@ import hmac
 import json
 import os
 import secrets
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -75,6 +76,41 @@ class ExtensionControlEnrollmentProof:
         return "ExtensionControlEnrollmentProof(<redacted>)"
 
 
+def _current_login_name() -> str | None:
+    try:
+        import pwd
+
+        return pwd.getpwuid(os.getuid()).pw_name
+    except (ImportError, KeyError, OSError):
+        return None
+
+
+def _terminal_session_is_local(terminal_name: str) -> bool:
+    """Require an OS login record for this TTY with no remote host."""
+
+    expected_user = _current_login_name()
+    if expected_user is None:
+        return False
+    try:
+        completed = subprocess.run(
+            ("/usr/bin/who",),
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            env={"LANG": "C", "LC_ALL": "C", "PATH": "/usr/bin:/bin"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    terminal_id = Path(terminal_name).name
+    for line in completed.stdout.splitlines():
+        fields = line.split()
+        if len(fields) < 2 or fields[0] != expected_user or fields[1] != terminal_id:
+            continue
+        return not (fields[-1].startswith("(") and fields[-1].endswith(")"))
+    return False
+
+
 def _require_local_terminal_confirmation(enrollment: ExtensionControlEnrollment) -> None:
     if any(os.environ.get(name) for name in _REMOTE_TERMINAL_ENVIRONMENT):
         raise ExtensionControlProofError("extension control enrollment requires a local terminal")
@@ -83,13 +119,14 @@ def _require_local_terminal_confirmation(enrollment: ExtensionControlEnrollment)
     except OSError as exc:
         raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal") from exc
     try:
-        if not os.isatty(descriptor):
+        if not os.isatty(descriptor) or not _terminal_session_is_local(os.ttyname(descriptor)):
             raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal")
         expected = f"{_ENROLLMENT_CONFIRMATION_PREFIX} {enrollment.actor_id}"
-        with os.fdopen(descriptor, "r+", encoding="utf-8", closefd=False) as terminal:
-            terminal.write(f'Type "{expected}" to confirm first enrollment: ')
-            terminal.flush()
-            entered = terminal.readline().rstrip("\r\n")
+        with os.fdopen(os.dup(descriptor), "w", encoding="utf-8") as terminal_output:
+            terminal_output.write(f'Type "{expected}" to confirm first enrollment: ')
+            terminal_output.flush()
+        with os.fdopen(os.dup(descriptor), "r", encoding="utf-8") as terminal_input:
+            entered = terminal_input.readline().rstrip("\r\n")
         if not hmac.compare_digest(entered, expected):
             raise ExtensionControlProofError("extension control enrollment confirmation did not match")
     finally:
