@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLISH_WORKFLOW = ROOT / ".github" / "workflows" / "publish.yml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
-CI_BRANCHES = ["main", "release/2.1", "release/2.2"]
+CI_BRANCHES = ["main", "release/2.1"]
 PUBLISH_BRANCHES = ["main", "release/2.1"]
 RELEASE_MAINTAINERS = {"@kantorcodes", "@deep-purple-boots"}
 
@@ -156,6 +156,11 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     assert '"$GITHUB_ACTOR_ID" != "6068672"' in compute_run
     assert '"$GITHUB_ACTOR_ID" != "301892678"' in compute_run
     assert compute_run.index('"$GITHUB_RUN_ATTEMPT" != "1"') < compute_run.index("VALIDATOR_ARGS=(")
+    alpha_registry_block = compute_run[
+        compute_run.index("EXISTING_VERSION_FILE=$(mktemp)") : compute_run.index("VALIDATOR_ARGS=(")
+    ]
+    assert "list-versions --registry pypi" in alpha_registry_block
+    assert "list-versions --registry testpypi" in alpha_registry_block
     for job_name in ("publish-alpha-testpypi", "publish-alpha-pypi", "release-alpha"):
         assert "build" in workflow["jobs"][job_name]["needs"]
         assert workflow["jobs"][job_name]["permissions"]["id-token"] == "write"
@@ -193,13 +198,13 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     assert "skip-existing" not in workflow_text
 
 
-def test_publish_jobs_use_channel_specific_protected_environments() -> None:
+def test_publish_jobs_use_registered_protected_environments() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     jobs = workflow["jobs"]
 
     assert jobs["publish-testpypi"]["environment"] == "testpypi"
-    assert jobs["publish-alpha-testpypi"]["environment"] == "testpypi-alpha"
-    assert jobs["publish-alpha-pypi"]["environment"] == "pypi-alpha"
+    assert jobs["publish-alpha-testpypi"]["environment"] == "testpypi"
+    assert jobs["publish-alpha-pypi"]["environment"] == "pypi"
     assert jobs["publish-main-testpypi"]["environment"] == "testpypi"
     assert jobs["publish-main-pypi"]["environment"] == "pypi"
     assert jobs["publish-testpypi"]["permissions"] == {"id-token": "write"}

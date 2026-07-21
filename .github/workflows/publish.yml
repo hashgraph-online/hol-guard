@@ -166,6 +166,8 @@ jobs:
             EXISTING_VERSION_FILE=$(mktemp)
             uv run --no-sync python scripts/verify_release_registry.py \
               list-versions --registry pypi | jq -r '.[]' > "$EXISTING_VERSION_FILE"
+            uv run --no-sync python scripts/verify_release_registry.py \
+              list-versions --registry testpypi | jq -r '.[]' >> "$EXISTING_VERSION_FILE"
             git tag --list 'alpha/v*' | sed 's#^alpha/v##' >> "$EXISTING_VERSION_FILE"
             mapfile -t EXISTING_VERSIONS < <(
               awk -v candidate="$RELEASE_VERSION" '$0 != candidate' "$EXISTING_VERSION_FILE"
@@ -549,7 +551,7 @@ jobs:
       (needs.alpha-cross-platform.result == 'success' || needs.alpha-cross-platform.result == 'skipped')
     needs: [build, alpha-cross-platform]
     runs-on: ubuntu-latest
-    environment: testpypi-alpha
+    environment: testpypi
     permissions:
       contents: read
       id-token: write
@@ -647,7 +649,7 @@ jobs:
       (needs.alpha-cross-platform.result == 'success' || needs.alpha-cross-platform.result == 'skipped')
     needs: [build, alpha-cross-platform, publish-alpha-testpypi]
     runs-on: ubuntu-latest
-    environment: pypi-alpha
+    environment: pypi
     permissions:
       contents: read
       id-token: write
