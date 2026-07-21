@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -20,6 +19,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_proof import (
     ExtensionControlEnrollment,
     ExtensionControlMutation,
     ExtensionControlProofError,
+    _require_local_terminal_confirmation,
     consume_extension_control_enrollment_proof,
     consume_extension_control_proof,
     issue_extension_control_enrollment_proof,
@@ -30,9 +30,12 @@ _PASSWORD = "correct horse battery staple"
 _NOW = "2026-07-20T12:00:00+00:00"
 
 
-class _InteractiveTerminal(StringIO):
-    def isatty(self) -> bool:
-        return True
+@pytest.fixture(autouse=True)
+def _allow_local_terminal_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
+        lambda _enrollment: None,
+    )
 
 
 def _configure(guard_home: Path) -> None:
@@ -124,7 +127,6 @@ def test_enrollment_proof_is_exact_one_use_and_redacted(tmp_path: Path) -> None:
         enrollment,
         approval_gate_input=ApprovalGateInput(password=_PASSWORD),
         session_nonce="enrollment-session",
-        terminal_input=_InteractiveTerminal(),
         now=_NOW,
     )
 
@@ -151,6 +153,14 @@ def test_enrollment_proof_is_exact_one_use_and_redacted(tmp_path: Path) -> None:
     consume_extension_control_enrollment_proof(tmp_path, proof, enrollment, now=_NOW)
     with pytest.raises(ApprovalGateError, match="Approval proof is required"):
         consume_extension_control_enrollment_proof(tmp_path, proof, enrollment, now=_NOW)
+
+
+def test_enrollment_proof_rejects_remote_terminal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure(tmp_path)
+    monkeypatch.setenv("SSH_CONNECTION", "client server")
+
+    with pytest.raises(ExtensionControlProofError, match="requires a local terminal"):
+        _require_local_terminal_confirmation(_enrollment())
 
 
 def test_extension_control_proof_rejects_stale_grant(tmp_path: Path) -> None:

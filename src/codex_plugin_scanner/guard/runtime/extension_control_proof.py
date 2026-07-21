@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TextIO
 
 from ..approval_gate import (
     ApprovalGateGrant,
@@ -24,6 +24,8 @@ EXTENSION_CONTROL_PROOF_ACTION = "commit-layers"
 EXTENSION_CONTROL_ENROLLMENT_SCHEMA = "guard.extension-control-enrollment.v1"
 EXTENSION_CONTROL_ENROLLMENT_ACTION = "enroll-authority"
 _MAX_IDENTITY_LENGTH = 256
+_ENROLLMENT_CONFIRMATION_PREFIX = "ENROLL EXTENSION CONTROL"
+_REMOTE_TERMINAL_ENVIRONMENT = ("SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY")
 
 
 class ExtensionControlProofError(PermissionError):
@@ -73,19 +75,38 @@ class ExtensionControlEnrollmentProof:
         return "ExtensionControlEnrollmentProof(<redacted>)"
 
 
+def _require_local_terminal_confirmation(enrollment: ExtensionControlEnrollment) -> None:
+    if any(os.environ.get(name) for name in _REMOTE_TERMINAL_ENVIRONMENT):
+        raise ExtensionControlProofError("extension control enrollment requires a local terminal")
+    try:
+        descriptor = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY | getattr(os, "O_CLOEXEC", 0))
+    except OSError as exc:
+        raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal") from exc
+    try:
+        if not os.isatty(descriptor):
+            raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal")
+        expected = f"{_ENROLLMENT_CONFIRMATION_PREFIX} {enrollment.actor_id}"
+        with os.fdopen(descriptor, "r+", encoding="utf-8", closefd=False) as terminal:
+            terminal.write(f'Type "{expected}" to confirm first enrollment: ')
+            terminal.flush()
+            entered = terminal.readline().rstrip("\r\n")
+        if not hmac.compare_digest(entered, expected):
+            raise ExtensionControlProofError("extension control enrollment confirmation did not match")
+    finally:
+        os.close(descriptor)
+
+
 def issue_extension_control_enrollment_proof(
     guard_home: Path,
     enrollment: ExtensionControlEnrollment,
     *,
     approval_gate_input: ApprovalGateInput | None,
     session_nonce: str,
-    terminal_input: TextIO,
     now: str | None = None,
 ) -> ExtensionControlEnrollmentProof:
-    """Issue a one-shot enrollment proof only from an attested local terminal."""
+    """Issue a one-shot enrollment proof after direct local-terminal confirmation."""
 
-    if not terminal_input.isatty():
-        raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal")
+    _require_local_terminal_confirmation(enrollment)
     if not session_nonce.strip() or len(session_nonce) > _MAX_IDENTITY_LENGTH:
         raise ExtensionControlProofError("invalid proof session nonce")
     digest = enrollment.canonical_digest
