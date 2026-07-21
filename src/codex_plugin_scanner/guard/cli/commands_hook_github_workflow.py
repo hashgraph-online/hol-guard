@@ -11,6 +11,8 @@ from ..config import GuardConfig
 from ..models import GuardArtifact
 from ..runtime.command_decision_adapter import effect_decision_to_dict
 from ..runtime.command_evaluation import evaluate_command
+from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from ..runtime.extension_control_contract import ControlSurface
 from ..runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
 from ..runtime.github_workflow_context import GitHubWorkflowDescriptor, build_github_workflow_descriptor
 from ..runtime.github_workflow_runtime import (
@@ -54,12 +56,16 @@ def prepare_github_workflow_hook_state(
     if authorization is None:
         return GitHubWorkflowHookState(artifact, descriptor, record, False, required)
     metadata = dict(artifact.metadata)
+    extension_control_layers = store.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    ).layers_for(ControlSurface.COMMAND_EVALUATION)
     evaluation = evaluate_command(
         artifact.command or "",
         compatibility_action_class=_optional_string(metadata.get("action_class")),
         compatibility_reason=_optional_string(metadata.get("runtime_request_reason")),
         cwd=workspace,
         workflow_authorization=authorization,
+        extension_control_layers=extension_control_layers,
     )
     metadata["command_action_floor"] = evaluation.decision_plane.action
     metadata["command_decision_plane"] = effect_decision_to_dict(evaluation.decision_plane)

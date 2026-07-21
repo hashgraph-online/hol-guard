@@ -25,6 +25,7 @@ from .command_extension_interaction import classify_command_extension_interactio
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .command_model import CanonicalCommand, parse_shell_command
 from .data_flow import extract_heredocs
+from .extension_control_contract import ExtensionControlLayer
 from .false_positive_rules import (
     SOURCE_INSPECTION_BENIGN_DOTFILES,
     SOURCE_INSPECTION_EXTENSIONS,
@@ -3995,6 +3996,7 @@ def build_tool_action_request_artifact(
     *,
     config_path: str,
     source_scope: str,
+    extension_control_layers: tuple[ExtensionControlLayer, ...] = (),
 ) -> GuardArtifact:
     """Build a Guard artifact for a sensitive native tool action request."""
 
@@ -4004,6 +4006,7 @@ def build_tool_action_request_artifact(
         canonical_command=(request.canonical_command if request.raw_command_text is None else None),
         compatibility_action_class=request.action_class,
         compatibility_reason=request.reason,
+        extension_control_layers=extension_control_layers,
     )
     wrapper_chain = tuple(dict.fromkeys((*evaluation.command.wrapper_chain, *request.wrapper_chain)))
     fingerprint = hashlib.sha256(
@@ -4051,6 +4054,10 @@ def build_tool_action_request_artifact(
             "command_security_identity": evaluation.command.security_identity,
             "command_action_floor": evaluation.decision_plane.action,
             "command_decision_plane": effect_decision_to_dict(evaluation.decision_plane),
+            "extension_control_resolution": {
+                "blocked": evaluation.control_resolution.blocked,
+                "failures": [failure.code.value for failure in evaluation.control_resolution.failures],
+            },
             "command_rule_matches": [owned.to_dict() for owned in evaluation.matches],
             "risk_classes": list(evaluation.risk_classes),
             "command_parse_confidence": evaluation.command.confidence,

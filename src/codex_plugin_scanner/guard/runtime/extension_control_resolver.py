@@ -68,6 +68,7 @@ def resolve_extension_controls(
     observations: tuple[str, ...] = (),
 ) -> ControlResolution:
     """Resolve controls for classified catalog identities without suppressing observations."""
+
     layer_values = tuple(islice(layers, _MAX_LAYERS + 1))
     composed = compose_control_layers(layer_values)
     failures = set(composed.failures)

@@ -32,6 +32,8 @@ from .effect_decision import (
     EffectDecisionRequest,
     evaluate_effect_decision,
 )
+from .extension_control_contract import ControlResolution, ControlSurface, ExtensionControlLayer
+from .extension_control_resolver import resolve_extension_controls
 from .github_workflow_authorization import (
     GitHubWorkflowAuthorization,
     github_workflow_authorization_evidence,
@@ -77,6 +79,7 @@ class CompositeCommandEvaluation:
     decision_plane: EffectDecision
     baseline_factors: tuple[DecisionFactor, ...]
     baseline_uncertainties: tuple[UncertaintyKind, ...]
+    control_resolution: ControlResolution
 
     @property
     def risk_classes(self) -> tuple[str, ...]:
@@ -112,6 +115,7 @@ def evaluate_command(
     home_dir: Path | None = None,
     workflow_authorization: GitHubWorkflowAuthorization | None = None,
     registry: CommandSafetyExtensionRegistry = BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    extension_control_layers: tuple[ExtensionControlLayer, ...] = (),
 ) -> CompositeCommandEvaluation:
     """Evaluate every built-in rule without executing or persisting the command."""
 
@@ -233,6 +237,28 @@ def evaluate_command(
             )
         )
     )
+    extension_ids = tuple(sorted({observation.extension.extension_id for observation in observations}))
+    permission_ids = tuple(
+        sorted(
+            {
+                permission.permission_id
+                for owned in owned_matches
+                if (permission := registry.permission_for_rule_id(owned.match.rule.rule_id)) is not None
+            }
+        )
+    )
+    control_resolution = resolve_extension_controls(
+        extension_control_layers,
+        registry,
+        extension_ids=extension_ids,
+        permission_ids=permission_ids,
+        surface=ControlSurface.COMMAND_EVALUATION,
+        observations=tuple(
+            f"{observation.extension.extension_id}:{observation.rule.rule_id}" for observation in observations
+        ),
+    )
+    if control_resolution.blocked:
+        minimum_action = _stronger_floor(minimum_action, "block")
     decision_plane = evaluate_effect_decision(
         EffectDecisionRequest(
             factors=(
@@ -241,6 +267,7 @@ def evaluate_command(
                 *((verified_read_candidate,) if verified_read_candidate is not None else ()),
                 *workspace_write_candidates,
                 *critical_floor_factors,
+                *control_resolution.factors,
             ),
             uncertainties=decision_uncertainties,
         )
@@ -256,6 +283,7 @@ def evaluate_command(
         decision_plane=decision_plane,
         baseline_factors=baseline_factors,
         baseline_uncertainties=baseline_uncertainties,
+        control_resolution=control_resolution,
     )
 
 

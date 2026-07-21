@@ -27,12 +27,14 @@ from ..runtime.command_activity_lifecycle import (
     build_unpaired_post_evidence,
 )
 from ..runtime.command_evaluation import CompositeCommandEvaluation, evaluate_command
+from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.command_shadow_evaluation import (
     CommandShadowObservation,
     baseline_command_shadow_proposal,
     build_command_shadow_observation,
     load_command_shadow_control,
 )
+from ..runtime.extension_control_contract import ControlSurface, ExtensionControlLayer
 from ..runtime.secret_file_requests import extract_sensitive_tool_action_request
 from ..store import GuardStore
 
@@ -68,7 +70,15 @@ def record_pre_hook_command_activity_best_effort(
     try:
         if event not in _PRE_HOOK_EVENTS:
             return False
-        evaluation = _evaluate_payload_command(payload, cwd=cwd, home_dir=home_dir)
+        extension_control_layers = store.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        ).layers_for(ControlSurface.COMMAND_EVALUATION)
+        evaluation = _evaluate_payload_command(
+            payload,
+            cwd=cwd,
+            home_dir=home_dir,
+            extension_control_layers=extension_control_layers,
+        )
         if evaluation is None:
             return False
         key = load_or_create_installation_correlation_key(guard_home)
@@ -255,6 +265,7 @@ def _evaluate_payload_command(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    extension_control_layers: tuple[ExtensionControlLayer, ...],
 ):
     arguments = payload.get("tool_input", payload.get("arguments"))
     request = extract_sensitive_tool_action_request(
@@ -270,11 +281,12 @@ def _evaluate_payload_command(
             canonical_command=(request.canonical_command if request.raw_command_text is None else None),
             compatibility_action_class=request.action_class,
             compatibility_reason=request.reason,
+            extension_control_layers=extension_control_layers,
         )
     command_text = _payload_command_text(payload)
     if command_text is None:
         return None
-    return evaluate_command(command_text)
+    return evaluate_command(command_text, extension_control_layers=extension_control_layers)
 
 
 def _payload_command_text(payload: Mapping[str, object]) -> str | None:
