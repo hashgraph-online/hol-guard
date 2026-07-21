@@ -16406,7 +16406,14 @@ function normalizeApprovalRequest(item) {
     actionEnvelope?.policy_action,
     legacyActionMetadata.action
   ) : policyAction;
-  const hasScopeContract = item.scope_contract_version !== void 0 || item.scope_contract_digest !== void 0 || item.allowed_scopes_by_action !== void 0 || item.recommended_scope_by_action !== void 0 || item.scope_restrictions !== void 0 || item.task_capability_eligibility !== void 0;
+  const hasScopeContract = [
+    item.scope_contract_version,
+    item.scope_contract_digest,
+    item.allowed_scopes_by_action,
+    item.recommended_scope_by_action,
+    item.scope_restrictions,
+    item.task_capability_eligibility
+  ].some((value) => value !== void 0 && value !== null);
   const scopeContractVersion = parseOptionalString(item.scope_contract_version);
   const scopeContractDigest = parseOptionalString(item.scope_contract_digest);
   const hasCompleteScopeContract = scopeContractVersion !== null && scopeContractDigest !== null;

@@ -263,11 +263,23 @@ def _upgrade_schema(
     for statement in _SCHEMA_STATEMENTS:
         connection.execute(statement)
     connection.execute(
-        f"insert into command_activity_shadow_evaluations select * from command_activity_shadow_evaluations_{suffix}"
+        f"""insert into command_activity_shadow_evaluations (
+          activity_id, occurred_at, authoritative_action, current_action,
+          current_disposition, proposed_action, proposed_disposition, comparison,
+          proposal_version, evaluator_schema_version, control_generation,
+          sample_basis_points, schema_version
+        )
+        select
+          activity_id, occurred_at, authoritative_action, current_action,
+          current_disposition, proposed_action, proposed_disposition, comparison,
+          proposal_version, evaluator_schema_version, control_generation,
+          sample_basis_points, schema_version
+        from command_activity_shadow_evaluations_{suffix}"""
     )
     connection.execute(
-        f"""insert into command_activity_shadow_cohorts
-        select * from command_activity_shadow_cohorts_{suffix} order by activity_id, ordinal"""
+        f"""insert into command_activity_shadow_cohorts (activity_id, ordinal, cohort)
+        select activity_id, ordinal, cohort
+        from command_activity_shadow_cohorts_{suffix} order by activity_id, ordinal"""
     )
     connection.execute(f"drop table command_activity_shadow_cohorts_{suffix}")
     connection.execute(f"drop table command_activity_shadow_evaluations_{suffix}")

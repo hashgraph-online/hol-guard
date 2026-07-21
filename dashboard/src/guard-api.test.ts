@@ -580,6 +580,25 @@ assert(
   "T071c: incomplete scope contract bindings expose no recommendations",
 );
 
+const nullScopeContract = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  scope_contract_version: null,
+  scope_contract_digest: null,
+  allowed_scopes_by_action: null,
+  recommended_scope_by_action: null,
+  scope_restrictions: null,
+  task_capability_eligibility: null,
+});
+assert(
+  nullScopeContract.scope_contract_version === undefined &&
+    nullScopeContract.scope_contract_digest === undefined &&
+    nullScopeContract.allowed_scopes_by_action === undefined &&
+    nullScopeContract.recommended_scope_by_action === undefined &&
+    nullScopeContract.scope_restrictions === undefined &&
+    nullScopeContract.task_capability_eligibility === undefined,
+  "T071d: null-only scope metadata remains absent instead of rendering empty scope sections",
+);
+
 const BASE_DECISION_V2: GuardDecisionV2 = {
   guard_action: "block",
   action: "block",

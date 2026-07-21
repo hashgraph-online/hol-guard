@@ -115,6 +115,20 @@ def _node_resolver(node: Path) -> Callable[[str, Path], str]:
     return resolve
 
 
+def test_resolve_node_rejects_symlink_back_into_shim_directory(tmp_path: Path) -> None:
+    shim = tmp_path / "shim"
+    _write(shim / "node", "synthetic-node", executable=True)
+    path_directory = tmp_path / "path-bin"
+    path_directory.mkdir()
+    try:
+        (path_directory / "node").symlink_to(shim / "node")
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"symlink creation unavailable: {error}")
+
+    with pytest.raises(ValueError, match="not path-pinned"):
+        execution_module._resolve_node(str(path_directory), shim)
+
+
 def _result(request: ContainmentRequest, exit_code: int = 0) -> ContainmentExecutionResult:
     return ContainmentExecutionResult(
         exit_code=exit_code,

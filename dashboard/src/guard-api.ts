@@ -1371,13 +1371,14 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
         legacyActionMetadata.action,
       )
     : policyAction;
-  const hasScopeContract =
-    item.scope_contract_version !== undefined ||
-    item.scope_contract_digest !== undefined ||
-    item.allowed_scopes_by_action !== undefined ||
-    item.recommended_scope_by_action !== undefined ||
-    item.scope_restrictions !== undefined ||
-    item.task_capability_eligibility !== undefined;
+  const hasScopeContract = [
+    item.scope_contract_version,
+    item.scope_contract_digest,
+    item.allowed_scopes_by_action,
+    item.recommended_scope_by_action,
+    item.scope_restrictions,
+    item.task_capability_eligibility,
+  ].some((value) => value !== undefined && value !== null);
   const scopeContractVersion = parseOptionalString(item.scope_contract_version);
   const scopeContractDigest = parseOptionalString(item.scope_contract_digest);
   const hasCompleteScopeContract = scopeContractVersion !== null && scopeContractDigest !== null;

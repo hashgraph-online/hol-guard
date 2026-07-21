@@ -11,7 +11,7 @@ import secrets
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Protocol
+from typing import Final, Protocol
 
 from ..workflow_capabilities import (
     SignedWorkflowCapability,
@@ -33,6 +33,7 @@ from .github_workflow_operations import parse_github_workflow_operation
 _ISSUER_ID = "guard.local"
 _CAPABILITY_TTL = timedelta(minutes=10)
 _CAPABILITY_MAX_USES = 10
+_GRAPHQL_REPOSITORY_PARSE_PLACEHOLDER: Final = "guard/locator"
 
 
 class GitHubWorkflowRuntimeStore(WorkflowCapabilityStore, Protocol):
@@ -297,14 +298,19 @@ def _persisted_command_matches_record(command_text: str, record: GitHubWorkflowA
             or _file_sha256(path) != record.binding.executable_sha256
         ):
             return False
-        candidate = parse_github_workflow_operation(
-            command,
-            expected_executable=executable,
-        ) or parse_github_workflow_operation(
-            command,
-            repository="guard/locator",
-            expected_executable=executable,
-        )
+        candidate = parse_github_workflow_operation(command, expected_executable=executable)
+        if candidate is None:
+            # Review-thread GraphQL commands intentionally contain no repository.
+            # This parser-only placeholder recovers their kind and globally unique
+            # node ID; it is never accepted as repository authority. The signed
+            # approval record independently binds the real repository digest.
+            candidate = parse_github_workflow_operation(
+                command,
+                repository=_GRAPHQL_REPOSITORY_PARSE_PLACEHOLDER,
+                expected_executable=executable,
+            )
+            if candidate is not None and candidate.resource_type != "github-review-thread":
+                return False
         return (
             candidate is not None
             and candidate.kind == record.operation_kind
