@@ -510,7 +510,7 @@ jobs:
         shell: bash
         run: |
           WHEEL_REQUIREMENT=$(python -c 'import json; print(json.load(open("verified-download.json", encoding="utf-8"))["requirement"])')
-          python -m venv "$RUNNER_TEMP/hol-guard-canary-venv"
+          uv venv --seed --managed-python --python 3.12 "$RUNNER_TEMP/hol-guard-canary-venv"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             CANARY_PYTHON="$RUNNER_TEMP/hol-guard-canary-venv/Scripts/python.exe"
           else
