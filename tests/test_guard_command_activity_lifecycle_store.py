@@ -85,7 +85,7 @@ def _attempt_transition(guard_home: Path, current: CommandActivity) -> str:
         return "rejected"
 
 
-def test_health_migration_is_v11_atomic_and_reopens(tmp_path: Path) -> None:
+def test_health_migration_is_v14_atomic_and_reopens(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     first = GuardStore(guard_home, prime_policy_integrity=False)
     initial = first.get_command_activity_persistence_health()
@@ -97,7 +97,7 @@ def test_health_migration_is_v11_atomic_and_reopens(tmp_path: Path) -> None:
             (health_schema.COMMAND_ACTIVITY_HEALTH_MIGRATION_VERSION,),
         ).fetchone()
 
-    assert migration == (11,)
+    assert migration == (health_schema.COMMAND_ACTIVITY_HEALTH_MIGRATION_VERSION,)
     assert initial == reopened.get_command_activity_persistence_health()
     assert initial.dropped_event_count == 0
     assert initial.schema_version == health_schema.COMMAND_ACTIVITY_HEALTH_SCHEMA_VERSION
@@ -115,7 +115,10 @@ def test_health_migration_failure_rolls_back_table_and_version(
             health_schema.ensure_command_activity_health_schema(connection, applied_at=_NOW.isoformat())
 
         tables = connection.execute("select name from sqlite_schema where name = 'command_activity_health'").fetchall()
-        migration = connection.execute("select version from schema_migrations where version = 11").fetchone()
+        migration = connection.execute(
+            "select version from schema_migrations where version = ?",
+            (health_schema.COMMAND_ACTIVITY_HEALTH_MIGRATION_VERSION,),
+        ).fetchone()
 
     assert tables == []
     assert migration is None
@@ -134,9 +137,61 @@ def test_health_migration_rejects_weakened_existing_schema(tmp_path: Path) -> No
         with pytest.raises(RuntimeError, match="incompatible command_activity_health schema object"):
             health_schema.ensure_command_activity_health_schema(connection, applied_at=_NOW.isoformat())
 
-        migration = connection.execute("select version from schema_migrations where version = 11").fetchone()
+        migration = connection.execute(
+            "select version from schema_migrations where version = ?",
+            (health_schema.COMMAND_ACTIVITY_HEALTH_MIGRATION_VERSION,),
+        ).fetchone()
 
     assert migration is None
+
+
+def test_health_migration_repairs_only_legacy_post_record_failures(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home, prime_policy_integrity=False)
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "delete from schema_migrations where version = ?",
+            (health_schema.COMMAND_ACTIVITY_HEALTH_MIGRATION_VERSION,),
+        )
+        connection.execute(
+            "insert or ignore into schema_migrations (version, applied_at) values (11, ?)",
+            (_NOW.isoformat(),),
+        )
+        connection.execute(
+            """
+            update command_activity_health
+            set dropped_event_count = 68, persistence_error_count = 68,
+                last_error_code = 'post_record_failed', last_error_at = ?
+            where singleton = 1
+            """,
+            (_NOW.isoformat(),),
+        )
+
+    reopened = GuardStore(guard_home, prime_policy_integrity=False)
+    health = reopened.get_command_activity_persistence_health()
+    assert health.dropped_event_count == 0
+    assert health.persistence_error_count == 0
+    assert health.last_error_code is None
+
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "delete from schema_migrations where version = ?",
+            (health_schema.COMMAND_ACTIVITY_HEALTH_MIGRATION_VERSION,),
+        )
+        connection.execute(
+            """
+            update command_activity_health
+            set dropped_event_count = 1, persistence_error_count = 1,
+                last_error_code = 'sqlite.busy', last_error_at = ?
+            where singleton = 1
+            """,
+            (_NOW.isoformat(),),
+        )
+
+    unrelated = GuardStore(guard_home, prime_policy_integrity=False).get_command_activity_persistence_health()
+    assert unrelated.dropped_event_count == 1
+    assert unrelated.persistence_error_count == 1
+    assert unrelated.last_error_code == "sqlite.busy"
 
 
 def test_health_migration_rejects_incompatible_existing_singleton(tmp_path: Path) -> None:
@@ -151,7 +206,10 @@ def test_health_migration_rejects_incompatible_existing_singleton(tmp_path: Path
         )
         with pytest.raises(RuntimeError, match="incompatible command_activity_health singleton"):
             health_schema.ensure_command_activity_health_schema(connection, applied_at=_NOW.isoformat())
-        migration = connection.execute("select version from schema_migrations where version = 11").fetchone()
+        migration = connection.execute(
+            "select version from schema_migrations where version = ?",
+            (health_schema.COMMAND_ACTIVITY_HEALTH_MIGRATION_VERSION,),
+        ).fetchone()
 
     assert migration is None
 

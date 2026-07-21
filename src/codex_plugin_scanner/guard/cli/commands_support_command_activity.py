@@ -149,6 +149,8 @@ def record_post_hook_command_activity_best_effort(
         if correlation is not None:
             previous = store.get_command_activity_by_request_correlation(correlation)
             if previous is not None:
+                if previous.execution_status is CommandExecutionStatus.PREVENTED:
+                    return False
                 expected_status = (
                     CommandExecutionStatus.CONFIRMED_SUCCESS if succeeded else CommandExecutionStatus.CONFIRMED_FAILURE
                 )
