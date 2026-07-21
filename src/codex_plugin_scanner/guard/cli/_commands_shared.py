@@ -146,6 +146,7 @@ from ..runtime.cisco_preflight import (
     policy_action_for_cisco_signals,
     scan_action_for_cisco_evidence,
 )
+from ..runtime.compound_git_inspection import is_low_risk_compound_git_inspection
 from ..runtime.data_flow_rules import detect_data_flow_exfiltration
 from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_BENIGN_DOTFILES,

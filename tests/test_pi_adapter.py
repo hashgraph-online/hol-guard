@@ -268,7 +268,7 @@ class TestPiInstall:
         assert "const openedApprovalCenters = new Set<string>()" in text
         assert "return new URL(approvalUrl).origin" in text
         assert "openedApprovalCenters.has(approvalCenter)" in text
-        assert "void openApprovalUrl(response, openedApprovalCenters)" in text
+        assert "if (details.kind === 'input') void openApprovalUrl(response, openedApprovalCenters)" in text
         assert "trySpawnOpen(command, args)" in text
         assert "child.once('error', () => settle(false))" in text
         assert "pollApprovalResolution" in text

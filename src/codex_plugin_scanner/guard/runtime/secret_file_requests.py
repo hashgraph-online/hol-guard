@@ -27,6 +27,7 @@ from .command_evaluation import evaluate_command
 from .command_extension_interaction import classify_command_extension_interaction
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .command_model import CanonicalCommand, parse_shell_command
+from .compound_git_inspection import is_low_risk_compound_git_inspection
 from .data_flow import extract_heredocs
 from .env_wrapper import parse_env_wrapper
 from .extension_control_contract import ExtensionControlLayer
@@ -1560,6 +1561,28 @@ def _destructive_shell_tool_action_request(
             canonical_command=canonical_command,
             interpreter_executable_identities=interpreter_executable_identities,
         )
+    if not execution_context.complete and cwd is None and home_dir is not None:
+        git_home_execution_context = model_shell_execution_context(
+            detection_command_text,
+            cwd=home_dir,
+            workspace_root=home_dir,
+            home_dir=home_dir,
+        )
+        raw_git_home_execution_context = (
+            model_shell_execution_context(
+                raw_command_text,
+                cwd=home_dir,
+                workspace_root=home_dir,
+                home_dir=home_dir,
+            )
+            if raw_command_text is not None and raw_command_text != detection_command_text
+            else git_home_execution_context
+        )
+        if is_low_risk_compound_git_inspection(git_home_execution_context) and is_low_risk_compound_git_inspection(
+            raw_git_home_execution_context
+        ):
+            execution_context = git_home_execution_context
+            raw_execution_context = raw_git_home_execution_context
     github_assessment = classify_github_shell_capabilities(
         raw_command_text or detection_command_text,
         home_dir=home_dir,
