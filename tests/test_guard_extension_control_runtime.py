@@ -85,6 +85,42 @@ def test_refresh_swaps_atomically_and_rejects_rollback_or_equivocation() -> None
     assert runtime.current() is replacement
 
 
+def test_snapshot_digest_is_independent_of_layer_and_control_order() -> None:
+    controls = (
+        ExtensionControl(
+            target=ControlTarget(ControlTargetKind.EXTENSION, "command.test"),
+            state=ControlState.ENABLED,
+        ),
+        ExtensionControl(
+            target=ControlTarget(ControlTargetKind.PERMISSION, "command.test.permission.write"),
+            state=ControlState.DISABLED,
+        ),
+    )
+    local = ExtensionControlLayer(
+        CONTROL_SCHEMA_VERSION,
+        ControlLayerKind.LOCAL_ADMIN,
+        _CATALOG_DIGEST,
+        False,
+        controls,
+    )
+    cloud = ExtensionControlLayer(
+        CONTROL_SCHEMA_VERSION,
+        ControlLayerKind.SIGNED_CLOUD,
+        _CATALOG_DIGEST,
+        False,
+        tuple(reversed(controls)),
+    )
+
+    first = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 8, _CATALOG_DIGEST, (local, cloud))
+    )
+    second = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 8, _CATALOG_DIGEST, (cloud, local))
+    )
+
+    assert first.effective_digest == second.effective_digest
+
+
 def test_active_snapshot_is_request_local_and_restored_after_evaluation() -> None:
     snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(_view(7))
     inactive_digest = current_extension_control_binding_digest()

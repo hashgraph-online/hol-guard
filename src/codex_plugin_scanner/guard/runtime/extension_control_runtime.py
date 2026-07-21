@@ -43,7 +43,10 @@ class ExtensionControlRuntimeSnapshot:
         payload = {
             "catalog_digest": view.catalog_digest,
             "health": view.health.value,
-            "layers": [_layer_payload(layer) for layer in view.layers],
+            "layers": sorted(
+                (_layer_payload(layer) for layer in view.layers),
+                key=lambda item: str(item["kind"]),
+            ),
             "revision": view.revision,
             "schema_version": _RUNTIME_SNAPSHOT_SCHEMA,
         }
@@ -111,7 +114,7 @@ def current_extension_control_binding_digest() -> str:
 
 
 def extension_control_policy_version(base_version: str) -> str:
-    if not base_version.strip():
+    if not isinstance(base_version, str) or not base_version.strip():
         raise ValueError("base policy version is required")
     return f"{base_version}@{current_extension_control_binding_digest()}"
 
@@ -119,14 +122,17 @@ def extension_control_policy_version(base_version: str) -> str:
 def _layer_payload(layer: ExtensionControlLayer) -> dict[str, object]:
     return {
         "catalog_digest": layer.catalog_digest,
-        "controls": [
-            {
-                "state": control.state.value,
-                "target_id": control.target.target_id,
-                "target_kind": control.target.kind.value,
-            }
-            for control in layer.controls
-        ],
+        "controls": sorted(
+            (
+                {
+                    "state": control.state.value,
+                    "target_id": control.target.target_id,
+                    "target_kind": control.target.kind.value,
+                }
+                for control in layer.controls
+            ),
+            key=lambda item: (str(item["target_kind"]), str(item["target_id"])),
+        ),
         "global_lockdown": layer.global_lockdown,
         "kind": layer.kind.value,
         "schema_version": layer.schema_version,
