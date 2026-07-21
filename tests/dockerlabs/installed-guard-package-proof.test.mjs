@@ -9,13 +9,13 @@ import {
 } from "../../scripts/dockerlabs/installed-guard-package-proof.mjs";
 
 const SHA = "a".repeat(64);
-const URL = `https://test-files.pythonhosted.org/packages/aa/bb/${"c".repeat(64)}/hol_guard-2.2.0a1-py3-none-any.whl`;
+const URL = `https://test-files.pythonhosted.org/packages/aa/bb/${"c".repeat(64)}/hol_guard-2.1.0a1-py3-none-any.whl`;
 
 describe("installed Guard package proof", () => {
   test("accepts one exact local wheel", () => {
     expect(
-      parseProofArgs(["--wheel", "dist/hol_guard-2.2.0a1-py3-none-any.whl", "--version", "2.2.0a1", "--sha256", SHA]),
-    ).toMatchObject({ version: "2.2.0a1", sha256: SHA, testpypiWheelUrl: null });
+      parseProofArgs(["--wheel", "dist/hol_guard-2.1.0a1-py3-none-any.whl", "--version", "2.1.0a1", "--sha256", SHA]),
+    ).toMatchObject({ version: "2.1.0a1", sha256: SHA, testpypiWheelUrl: null });
   });
 
   test("accepts only immutable TestPyPI wheel URLs", () => {
@@ -31,9 +31,9 @@ describe("installed Guard package proof", () => {
   });
 
   test("rejects ranges, ambiguous sources, and uppercase hashes", () => {
-    expect(() => parseProofArgs(["--wheel", "x.whl", "--version", ">=2.2", "--sha256", SHA])).toThrow();
+    expect(() => parseProofArgs(["--wheel", "x.whl", "--version", ">=2.1", "--sha256", SHA])).toThrow();
     expect(() => parseProofArgs(["--wheel", "x.whl", "--version", "latest", "--sha256", SHA])).toThrow();
-    expect(() => parseProofArgs(["--wheel", "other-2.2-py3-none-any.whl", "--version", "2.2", "--sha256", SHA])).toThrow();
+    expect(() => parseProofArgs(["--wheel", "other-2.1-py3-none-any.whl", "--version", "2.1", "--sha256", SHA])).toThrow();
     expect(() =>
       parseProofArgs([
         "--wheel",
@@ -41,18 +41,18 @@ describe("installed Guard package proof", () => {
         "--testpypi-wheel-url",
         URL,
         "--version",
-        "2.2.0a1",
+        "2.1.0a1",
         "--sha256",
         SHA,
       ]),
     ).toThrow();
-    expect(() => parseProofArgs(["--wheel", "x.whl", "--version", "2.2.0a1", "--sha256", SHA.toUpperCase()])).toThrow();
+    expect(() => parseProofArgs(["--wheel", "x.whl", "--version", "2.1.0a1", "--sha256", SHA.toUpperCase()])).toThrow();
   });
 
   test("verifies fetched bytes and rejects redirects or hash drift", async () => {
     const bytes = new TextEncoder().encode("exact-wheel");
     const sha256 = createHash("sha256").update(bytes).digest("hex");
-    const config = { wheel: null, testpypiWheelUrl: URL, version: "2.2.0a1", sha256 };
+    const config = { wheel: null, testpypiWheelUrl: URL, version: "2.1.0a1", sha256 };
     const exactResponse = () => ({
       ok: true,
       url: URL,
@@ -83,12 +83,12 @@ describe("installed Guard package proof", () => {
     };
     const wheelLoader = async () => ({
       bytes: new Uint8Array([1, 2, 3]),
-      filename: "hol_guard-2.2.0a1-py3-none-any.whl",
+      filename: "hol_guard-2.1.0a1-py3-none-any.whl",
       source: "test",
     });
     await expect(
       runInstalledPackageProof(
-        { wheel: "unused.whl", testpypiWheelUrl: null, version: "2.2.0a1", sha256: SHA },
+        { wheel: "unused.whl", testpypiWheelUrl: null, version: "2.1.0a1", sha256: SHA },
         { runner, wheelLoader },
       ),
     ).rejects.toThrow("synthetic build failure");
@@ -106,13 +106,13 @@ describe("installed Guard package proof", () => {
     };
     const wheelLoader = async () => ({
       bytes: new Uint8Array([1, 2, 3]),
-      filename: "hol_guard-2.2.0a1-py3-none-any.whl",
+      filename: "hol_guard-2.1.0a1-py3-none-any.whl",
       source: "test",
     });
 
     await expect(
       runInstalledPackageProof(
-        { wheel: "unused.whl", testpypiWheelUrl: null, version: "2.2.0a1", sha256: SHA },
+        { wheel: "unused.whl", testpypiWheelUrl: null, version: "2.1.0a1", sha256: SHA },
         { runner, wheelLoader },
       ),
     ).rejects.toThrow("Dockerlab execution and teardown failed");

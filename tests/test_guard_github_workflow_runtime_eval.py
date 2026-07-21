@@ -18,13 +18,16 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli.commands_hook_github_workflow import claimed_approval_request_id
 from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _evaluate_runtime_artifact_hook
+from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _runtime_hook_approval_context_token
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact
 from codex_plugin_scanner.guard.runtime.approval_context import approval_context_tokens_validation_reason
 from codex_plugin_scanner.guard.runtime.command_decision_adapter import effect_decision_to_dict
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
+from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.github_capability_interaction import GITHUB_MAINTENANCE_ACTION_CLASS
 from codex_plugin_scanner.guard.runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
+from codex_plugin_scanner.guard.runtime.github_workflow_operations import parse_github_workflow_operation
 from codex_plugin_scanner.guard.runtime.github_workflow_runtime import (
     _capability_id,
     claim_resolved_github_workflow_authorization,
@@ -296,3 +299,73 @@ def test_exact_workflow_capability_satisfies_require_reapproval_on_normal_retry(
     replay = evaluate()
     assert not isinstance(replay, int)
     assert replay.policy_action == "require-reapproval"
+
+
+def test_workflow_approval_identity_accepts_exact_bytes_restored_after_drift(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    executable = workspace / "gh"
+    original = b"#!/bin/sh\nexit 0\n"
+    executable.write_bytes(original)
+    executable.chmod(0o755)
+    command = f"{executable} issue lock 17 --repo example/repo"
+    artifact = GuardArtifact(
+        artifact_id="codex:project:tool-action:github-restored",
+        name="Bash GitHub maintenance",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(workspace / ".codex" / "config.toml"),
+        command=command,
+    )
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=workspace,
+        default_action="require-reapproval",
+    )
+
+    def record() -> GitHubWorkflowApprovalRecord:
+        operation = parse_github_workflow_operation(
+            parse_shell_command(command),
+            repository="example/repo",
+            expected_executable=str(executable),
+        )
+        assert operation is not None
+        base = _descriptor_for_workspace(workspace)
+        descriptor = replace(
+            base,
+            operation=operation,
+            binding_context=replace(
+                base.binding_context,
+                executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
+            ),
+        )
+        return GitHubWorkflowApprovalRecord.from_descriptor(descriptor)
+
+    def token() -> str:
+        return _runtime_hook_approval_context_token(
+            artifact=artifact,
+            content_hash=hashlib.sha256(executable.read_bytes()).hexdigest(),
+            runtime_workspace=workspace,
+            action_envelope=None,
+            config=config,
+            current_config_action="require-reapproval",
+            trusted_cli_action=None,
+            untrusted_payload_action=None,
+            package_action=None,
+            data_flow_action=None,
+            scanner_action=None,
+            current_action="require-reapproval",
+            data_flow_signals=(),
+            scanner_evidence=(),
+            workflow_approval_record=record(),
+        )
+
+    approved = token()
+    executable.write_bytes(b"#!/bin/sh\nexit 1\n")
+    drifted = token()
+    executable.write_bytes(original)
+    restored = token()
+
+    assert approval_context_tokens_validation_reason(approved, drifted) is not None
+    assert restored == approved

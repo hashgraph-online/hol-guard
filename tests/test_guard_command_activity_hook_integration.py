@@ -317,6 +317,56 @@ def test_conflicting_terminal_post_is_counted_without_creating_unpaired_evidence
     assert health.last_error_code == "post_record_failed"
 
 
+def test_prevented_command_post_result_does_not_degrade_evidence_health(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = _store(guard_home)
+    payload = _command_payload(request_id="pi_toolcall_abcdef1234567890")
+    assert record_pre_hook_command_activity_best_effort(
+        store=store,
+        guard_home=guard_home,
+        harness="pi",
+        event="PreToolUse",
+        payload=payload,
+        policy_action="allow",
+        receipt_id="receipt_abcdef1234567890",
+        prompted=False,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            """
+            update command_activity
+            set execution_status = 'prevented', policy_action = 'review', prompted = 1
+            """
+        )
+
+    key = load_or_create_installation_correlation_key(guard_home)
+    correlation = derive_proven_request_correlation(
+        harness="pi",
+        event="PostToolUse",
+        payload=payload,
+        key=key,
+    )
+    assert correlation is not None
+    previous = store.get_command_activity_by_request_correlation(correlation)
+    assert previous is not None
+    assert previous.execution_status is CommandExecutionStatus.PREVENTED
+
+    assert not record_post_hook_command_activity_best_effort(
+        store=store,
+        guard_home=guard_home,
+        harness="pi",
+        event="PostToolUse",
+        payload=payload,
+        succeeded=False,
+    )
+
+    health = store.get_command_activity_persistence_health()
+    assert health.dropped_event_count == 0
+    assert health.persistence_error_count == 0
+
+
 def test_non_hook_command_event_does_not_create_pre_evidence(tmp_path: Path) -> None:
     store = _store(tmp_path / "guard-home")
     assert not record_pre_hook_command_activity_best_effort(

@@ -17,6 +17,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from ..path_support import resolves_within_root
 from ..version import __version__
+from .skill_directory_identity import validated_complete_skill_directory_hash
 
 InventoryItemKind = Literal[
     "agent",
@@ -177,6 +178,7 @@ _AIBOM_METADATA_KEYS = (
     "instructionRole",
     "localSecurity",
     "registryIdentity",
+    "skillDirectoryIdentity",
     "sourceLinks",
     "sourceOfTruth",
     "trustLayers",
@@ -733,6 +735,7 @@ def _item_from_artifact(
             safe_metadata,
             primary_content_hash=primary_content_hash,
         )
+        safe_metadata = _discard_unverified_skill_directory_hash(safe_metadata)
     semantic_text = fingerprint_mapping(
         {
             "artifact_id": artifact_id,
@@ -741,7 +744,9 @@ def _item_from_artifact(
             "metadata": _stable_snapshot_value(safe_metadata),
         }
     )
-    if artifact_type in {"skill", "instruction"}:
+    if artifact_type == "skill":
+        content_hash = validated_complete_skill_directory_hash(safe_metadata) or primary_content_hash or semantic_text
+    elif artifact_type == "instruction":
         content_hash = primary_content_hash or semantic_text
     else:
         content_hash = _resolve_item_content_hash(safe_metadata, semantic_text)
@@ -1396,6 +1401,14 @@ def _resolve_item_content_hash(metadata: dict[str, object], semantic_text: str) 
     return semantic_text
 
 
+def _discard_unverified_skill_directory_hash(metadata: dict[str, object]) -> dict[str, object]:
+    if "skillDirectoryIdentity" not in metadata or validated_complete_skill_directory_hash(metadata) is not None:
+        return metadata
+    sanitized = dict(metadata)
+    sanitized.pop("directory_hash", None)
+    return sanitized
+
+
 def _primary_artifact_content_hash(
     artifact: object,
     *,
@@ -1612,20 +1625,27 @@ def _bind_skill_document_evidence(
     *,
     primary_content_hash: str | None,
 ) -> dict[str, object]:
+    bound = dict(metadata)
+    # This value is derived from Guard's own full, safe read of SKILL.md.  It
+    # remains the authority for primary-body upload when the inventory item's
+    # public content hash is upgraded to the full directory identity.
+    if isinstance(primary_content_hash, str):
+        bound["primaryContentHash"] = primary_content_hash
+    else:
+        bound.pop("primaryContentHash", None)
+
     evidence = metadata.get("contentEvidence")
     if (
         isinstance(evidence, dict)
         and isinstance(primary_content_hash, str)
         and evidence.get("contentHash") == primary_content_hash
     ):
-        return metadata
+        return bound
 
     if isinstance(evidence, dict) and "contentHash" not in evidence:
-        bound = dict(metadata)
         bound.pop("documentedCapabilities", None)
         return bound
 
-    bound = dict(metadata)
     bound.pop("contentEvidence", None)
     bound.pop("documentedCapabilities", None)
     return bound

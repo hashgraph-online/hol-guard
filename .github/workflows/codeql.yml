@@ -2,11 +2,16 @@ name: CodeQL Analysis
 
 on:
   push:
+    branches: [main]
   pull_request:
   merge_group:
   schedule:
     - cron: "0 4 * * 1"
   workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

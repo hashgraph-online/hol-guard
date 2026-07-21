@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.metadata
 import json
 import shutil
 import sqlite3
@@ -18,12 +19,14 @@ from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from packaging.requirements import Requirement
+
 from scripts.installed_canary_proof import InstalledCanaryError, load_subject, verify_install
 
 if TYPE_CHECKING:
     from tests.guard_command_corpus_oracle_types import OracleRecord
 
-_FROZEN_MANIFEST_SHA256 = "d82b853120f88739fc52d791687393793519c2eb62a90e8bbe0099966ee22213"
+_FROZEN_MANIFEST_SHA256 = "6f072a56a3ec736b155d084d5990806158f79de31e3a5da1df0d426600ddf7dc"
 
 
 def _sha256(path: Path) -> str:
@@ -230,6 +233,77 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
         }
 
 
+def _runtime_dependency_smoke() -> dict[str, object]:
+    try:
+        requirements = importlib.metadata.requires("hol-guard") or ()
+    except importlib.metadata.PackageNotFoundError as exc:
+        raise InstalledCanaryError("Installed wheel is not available for runtime dependency verification") from exc
+    for raw_requirement in requirements:
+        requirement = Requirement(raw_requirement)
+        if requirement.name.lower() == "pyyaml" and requirement.marker is None:
+            return {
+                "name": "pyyaml",
+                "specifier": str(requirement.specifier),
+            }
+    raise InstalledCanaryError("Installed wheel does not declare PyYAML as a runtime dependency")
+
+
+def _codex_install_smoke() -> dict[str, object]:
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        home = root / "home"
+        workspace = root / "workspace"
+        guard_home = home / ".hol-guard"
+        workspace.mkdir()
+        try:
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-m",
+                    "codex_plugin_scanner.cli",
+                    "install",
+                    "codex",
+                    "--home",
+                    str(home),
+                    "--guard-home",
+                    str(guard_home),
+                    "--workspace",
+                    str(workspace),
+                    "--json",
+                ],
+                capture_output=True,
+                check=False,
+                cwd=workspace,
+                encoding="utf-8",
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise InstalledCanaryError("Installed hol-guard install codex smoke timed out") from exc
+        if completed.returncode != 0:
+            raise InstalledCanaryError(
+                f"Installed hol-guard install codex smoke failed with exit status {completed.returncode}"
+            )
+        decoded = cast(object, json.loads(completed.stdout))
+        if not isinstance(decoded, dict):
+            raise InstalledCanaryError("Installed Codex setup did not return an object")
+        payload = cast(dict[str, object], decoded)
+        managed_install = payload.get("managed_install")
+        if not isinstance(managed_install, dict):
+            raise InstalledCanaryError("Installed Codex setup did not return managed install evidence")
+        managed_payload = cast(dict[str, object], managed_install)
+        if managed_payload.get("harness") != "codex" or managed_payload.get("active") is not True:
+            raise InstalledCanaryError("Installed Codex setup did not activate Guard management")
+        config_path = home / ".codex" / "config.toml"
+        if not config_path.is_file():
+            raise InstalledCanaryError("Installed Codex setup did not write the managed configuration")
+        return {
+            "harness": "codex",
+            "active": True,
+            "managed_config": True,
+        }
+
+
 def _dashboard_smoke() -> dict[str, object]:
     import codex_plugin_scanner.guard.daemon.server as server
 
@@ -301,6 +375,8 @@ def main() -> int:
         report = {
             "schema_version": "hol-guard.installed-canary-evidence.v1",
             "installed": verify_install(subject, repo_root),
+            "runtime_dependencies": _runtime_dependency_smoke(),
+            "codex_install": _codex_install_smoke(),
             "corpus": _run_corpus(repo_root),
             "no_post_execution_proof": _no_post_execution_proof_smoke(),
             "dashboard": _dashboard_smoke(),

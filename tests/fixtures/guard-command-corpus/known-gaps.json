@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "introduced_in_corpus": "1.0.0",
-  "expires_by": "release/2.2-runtime-gate",
+  "expires_by": "release/2.1-runtime-gate",
   "status": "resolved",
   "gaps": []
 }

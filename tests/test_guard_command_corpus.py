@@ -317,7 +317,7 @@ def test_full_guard_evaluation_matches_exact_non_widening_known_gap_baseline() -
     known_payload = _decode_object(KNOWN_GAPS_PATH)
     assert known_payload["schema_version"] == "1.0.0"
     assert known_payload["introduced_in_corpus"] == "1.0.0"
-    assert known_payload["expires_by"] == "release/2.2-runtime-gate"
+    assert known_payload["expires_by"] == "release/2.1-runtime-gate"
     assert known_payload["status"] == "resolved"
     gaps_value = known_payload["gaps"]
     assert isinstance(gaps_value, list)

@@ -9,7 +9,6 @@ import json
 import math
 import ntpath
 import os
-import select
 import shlex
 import shutil
 import signal
@@ -25,7 +24,7 @@ from ctypes import wintypes
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import BinaryIO, Protocol, cast
+from typing import BinaryIO
 
 from packaging.version import InvalidVersion, Version
 
@@ -416,66 +415,6 @@ class _WindowsProcessJob:
 class _SpawnedProcess:
     process: subprocess.Popen[bytes]
     windows_job: _WindowsProcessJob | None
-    unix_exit_observer: _UnixProcessExitObserver | None = None
-
-
-class _KqueueHandle(Protocol):
-    def control(
-        self,
-        changelist: list[object] | None,
-        max_events: int,
-        timeout: float | None = None,
-    ) -> list[object]: ...
-
-    def close(self) -> None: ...
-
-
-@dataclass(slots=True)
-class _UnixProcessExitObserver:
-    """Observe direct-child exit without releasing its process-group identity."""
-
-    process: subprocess.Popen[bytes]
-    waitid: Callable[[int, int, int], object | None] | None = None
-    kqueue: _KqueueHandle | None = None
-    exited_once: bool = False
-
-    def exited(self) -> bool:
-        if self.exited_once:
-            return True
-        if self.waitid is not None:
-            try:
-                self.exited_once = (
-                    self.waitid(
-                        os.P_PID,
-                        self.process.pid,
-                        os.WEXITED | os.WNOHANG | os.WNOWAIT,
-                    )
-                    is not None
-                )
-                return self.exited_once
-            except (ChildProcessError, OSError):
-                pass
-        elif self.kqueue is not None:
-            try:
-                self.exited_once = bool(self.kqueue.control(None, 1, 0.0))
-                return self.exited_once
-            except OSError:
-                pass
-
-        # A platform without a non-reaping primitive can still run updates, but
-        # cleanup will refuse numeric process-group signals after this fallback
-        # has reaped the direct child.
-        self.exited_once = self.process.poll() is not None
-        return self.exited_once
-
-    def close(self) -> OSError | None:
-        if self.kqueue is None:
-            return None
-        try:
-            self.kqueue.close()
-            return None
-        except OSError as error:
-            return error
 
 
 @dataclass(frozen=True, slots=True)
@@ -1593,7 +1532,6 @@ def _run_bounded_process(
         raise UpdateSubprocessError("update_installer_failed", str(error)) from error
     process = spawned.process
     windows_job = spawned.windows_job
-    unix_exit_observer = spawned.unix_exit_observer
     overflow = threading.Event()
     stdout_capture = _BoundedStreamCapture()
     stderr_capture = _BoundedStreamCapture()
@@ -1637,8 +1575,7 @@ def _run_bounded_process(
             )
             input_thread.start()
             input_thread_started = True
-        direct_process_exited = _direct_process_exited(process, unix_exit_observer)
-        while not direct_process_exited:
+        while process.poll() is None:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 terminate_tree = True
@@ -1646,8 +1583,7 @@ def _run_bounded_process(
             if overflow.wait(min(_PROCESS_MONITOR_INTERVAL_SECONDS, remaining)):
                 terminate_tree = True
                 break
-            direct_process_exited = _direct_process_exited(process, unix_exit_observer)
-        if direct_process_exited and any(thread.is_alive() for thread in reader_threads):
+        if process.poll() is not None and any(thread.is_alive() for thread in reader_threads):
             _join_threads(reader_threads, _PROCESS_TERMINATE_GRACE_SECONDS)
             if any(thread.is_alive() for thread in reader_threads):
                 # A descendant inherited a pipe after the direct child exited.
@@ -1664,10 +1600,6 @@ def _run_bounded_process(
             windows_job=windows_job,
             terminate_tree=terminate_tree,
         )
-        if unix_exit_observer is not None:
-            observer_close_error = unix_exit_observer.close()
-            if observer_close_error is not None:
-                cleanup_errors = (*cleanup_errors, observer_close_error)
         started_readers = tuple(started_reader_threads)
         _join_threads(started_readers, _STREAM_THREAD_JOIN_SECONDS)
         if input_thread is not None and input_thread_started:
@@ -1735,79 +1667,19 @@ def _spawn_bounded_process(
             if not _cleanup_failed_windows_process(process, windows_job):
                 raise OSError("failed Windows updater process could not be reaped") from error
             raise
-    process = subprocess.Popen(
-        command,
-        stdin=stdin,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        cwd=str(cwd),
-        env=dict(environment),
-        bufsize=0,
-        start_new_session=True,
-    )
-    try:
-        unix_exit_observer = _create_unix_process_exit_observer(process)
-    except BaseException as error:
-        returncode, cleanup_errors = _terminate_process_group(process)
-        _close_process_streams(process)
-        if returncode is None or cleanup_errors:
-            raise OSError("failed Unix updater process could not be reaped") from error
-        raise
     return _SpawnedProcess(
-        process=process,
+        process=subprocess.Popen(
+            command,
+            stdin=stdin,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=str(cwd),
+            env=dict(environment),
+            bufsize=0,
+            start_new_session=True,
+        ),
         windows_job=None,
-        unix_exit_observer=unix_exit_observer,
     )
-
-
-def _direct_process_exited(
-    process: subprocess.Popen[bytes],
-    unix_exit_observer: _UnixProcessExitObserver | None,
-) -> bool:
-    if unix_exit_observer is not None:
-        return unix_exit_observer.exited()
-    return process.poll() is not None
-
-
-def _create_unix_process_exit_observer(
-    process: subprocess.Popen[bytes],
-) -> _UnixProcessExitObserver:
-    waitid = getattr(os, "waitid", None)
-    waitid_constants = ("P_PID", "WEXITED", "WNOHANG", "WNOWAIT")
-    if callable(waitid) and all(isinstance(getattr(os, name, None), int) for name in waitid_constants):
-        return _UnixProcessExitObserver(
-            process=process,
-            waitid=cast(Callable[[int, int, int], object | None], waitid),
-        )
-
-    kqueue_factory = getattr(select, "kqueue", None)
-    kevent_factory = getattr(select, "kevent", None)
-    kqueue_constants = ("KQ_FILTER_PROC", "KQ_EV_ADD", "KQ_EV_ENABLE", "KQ_NOTE_EXIT")
-    if (
-        callable(kqueue_factory)
-        and callable(kevent_factory)
-        and all(isinstance(getattr(select, name, None), int) for name in kqueue_constants)
-    ):
-        kqueue: _KqueueHandle | None = None
-        try:
-            kqueue = cast(_KqueueHandle, kqueue_factory())
-            event = kevent_factory(
-                process.pid,
-                filter=select.KQ_FILTER_PROC,
-                flags=select.KQ_EV_ADD | select.KQ_EV_ENABLE,
-                fflags=select.KQ_NOTE_EXIT,
-            )
-            _ = kqueue.control([event], 0, 0.0)
-            return _UnixProcessExitObserver(process=process, kqueue=kqueue)
-        except BaseException as error:
-            if kqueue is not None:
-                try:
-                    kqueue.close()
-                except OSError as close_error:
-                    raise OSError(f"failed to close Unix process exit observer: {close_error}") from error
-            raise
-
-    return _UnixProcessExitObserver(process=process)
 
 
 def _windows_kernel32():  # type: ignore[no-untyped-def]
@@ -2032,14 +1904,11 @@ def _terminate_process_group(
     """Terminate the process tree, close its Job, and explicitly reap Popen."""
 
     cleanup_errors: list[BaseException] = []
-    direct_process_reaped = process.returncode is not None
     if windows_job is not None:
         try:
             windows_job.terminate()
         except OSError as error:
             cleanup_errors.append(error)
-    elif terminate_tree and direct_process_reaped:
-        cleanup_errors.append(OSError("process tree identity unavailable after direct process reap"))
     elif terminate_tree and os.name == "nt":
         ctrl_break_event = getattr(signal, "CTRL_BREAK_EVENT", None)
         try:
@@ -2052,13 +1921,13 @@ def _terminate_process_group(
     elif terminate_tree:
         with contextlib.suppress(OSError):
             os.killpg(process.pid, signal.SIGTERM)
-        # Do not reap the session leader during the grace interval. Its zombie
-        # retains the numeric process-group identity until escalation completes.
-        time.sleep(_PROCESS_TERMINATE_GRACE_SECONDS)
-        with contextlib.suppress(OSError):
-            os.killpg(process.pid, signal.SIGKILL)
 
     returncode = _wait_for_direct_process(process, timeout=_PROCESS_TERMINATE_GRACE_SECONDS)
+    if terminate_tree and os.name != "nt":
+        # The direct child may have exited while a descendant in its process
+        # group ignored SIGTERM, so escalate the group independently of Popen.
+        with contextlib.suppress(OSError):
+            os.killpg(process.pid, signal.SIGKILL)
     if returncode is None:
         with contextlib.suppress(OSError):
             process.kill()

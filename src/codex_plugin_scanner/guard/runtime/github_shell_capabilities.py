@@ -275,7 +275,7 @@ def classify_github_shell_capabilities(
                 contains_github_command = True
                 assessments.append(indirect_assessment)
                 continue
-            if command_name != "gh" or command_index is None:
+            if command_index is None or not _bindings.value_names_github_executable(command_name or ""):
                 continue
             contains_github_command = True
             assessments.append(_classify_github_shell_segment(segment, command_index))

@@ -8,6 +8,9 @@ import re
 import sqlite3
 from typing import Final, cast
 
+from .runtime.effect_decision import EFFECT_DECISION_SCHEMA_VERSION
+from .store_command_shadow_schema_v18 import INITIAL_V18_SCHEMA_STATEMENTS
+
 COMMAND_SHADOW_LEGACY_MIGRATION_VERSION: Final = 15
 COMMAND_SHADOW_PREVIOUS_MIGRATION_VERSION: Final = 17
 COMMAND_SHADOW_MIGRATION_VERSION: Final = 18
@@ -23,6 +26,8 @@ _COHORTS: Final = (
     "'cdx-064-remote-mutation-floors', 'cdx-065-package-provenance-floors', "
     "'cdx-066-critical-block-floors'"
 )
+_EVALUATOR_SCHEMA_VERSIONS: Final = ("1.0.0", EFFECT_DECISION_SCHEMA_VERSION)
+_EVALUATOR_SCHEMA_VERSIONS_SQL: Final = ", ".join(f"'{version}'" for version in _EVALUATOR_SCHEMA_VERSIONS)
 _OWNED_TABLES: Final = (
     "command_activity_shadow_evaluations",
     "command_activity_shadow_cohorts",
@@ -47,7 +52,9 @@ _SCHEMA_STATEMENTS: Final = (
         and proposal_version glob '[a-z]*'
         and proposal_version not glob '*[^a-z0-9.-]*'
       ),
-      evaluator_schema_version text not null check (evaluator_schema_version in ('1.0.0', '1.1.0')),
+      evaluator_schema_version text not null check (
+        evaluator_schema_version in ({_EVALUATOR_SCHEMA_VERSIONS_SQL})
+      ),
       control_generation integer not null check (control_generation = 1),
       sample_basis_points integer not null check (sample_basis_points between 1 and 10000),
       schema_version text not null check (schema_version = 'guard.command-shadow.v1'),
@@ -126,6 +133,16 @@ _SCHEMA_STATEMENTS: Final = (
     end""",
 )
 
+_CURRENT_EVALUATOR_SCHEMA_CHECK: Final = f"""evaluator_schema_version text not null check (
+        evaluator_schema_version in ({_EVALUATOR_SCHEMA_VERSIONS_SQL})
+      )"""
+_PREVIOUS_SCHEMA_STATEMENTS: Final = tuple(
+    statement.replace(
+        _CURRENT_EVALUATOR_SCHEMA_CHECK,
+        "evaluator_schema_version text not null check (evaluator_schema_version = '1.0.0')",
+    )
+    for statement in _SCHEMA_STATEMENTS
+)
 _LEGACY_SCHEMA_STATEMENTS: Final = (
     f"""create table command_activity_shadow_evaluations (
       activity_id text primary key references command_activity(activity_id) on delete cascade,
@@ -185,30 +202,28 @@ _LEGACY_SCHEMA_STATEMENTS: Final = (
     end""",
 )
 
-_PREVIOUS_SCHEMA_STATEMENTS: Final = (
-    _SCHEMA_STATEMENTS[0].replace(
-        "evaluator_schema_version in ('1.0.0', '1.1.0')",
-        "evaluator_schema_version = '1.0.0'",
-    ),
-    *_SCHEMA_STATEMENTS[1:],
-)
-
 
 def ensure_command_shadow_schema(connection: sqlite3.Connection, *, applied_at: str) -> None:
-    """Apply the current schema atomically, upgrading either supported legacy shape."""
+    """Apply the current schema atomically, upgrading exact historical shapes."""
 
     connection.execute("savepoint command_shadow_schema_v18")
     try:
         current = _expected_schema(_SCHEMA_STATEMENTS)
-        legacy = _expected_schema(_LEGACY_SCHEMA_STATEMENTS)
         previous = _expected_schema(_PREVIOUS_SCHEMA_STATEMENTS)
-        actual = _read_schema(connection, frozenset(current) | frozenset(legacy) | frozenset(previous))
+        initial_v18 = _expected_schema(INITIAL_V18_SCHEMA_STATEMENTS)
+        legacy = _expected_schema(_LEGACY_SCHEMA_STATEMENTS)
+        actual = _read_schema(
+            connection,
+            frozenset(current) | frozenset(previous) | frozenset(initial_v18) | frozenset(legacy),
+        )
         _reject_external_foreign_keys(connection)
-        _reject_external_sql_dependencies(connection, (current, legacy, previous))
+        _reject_external_sql_dependencies(connection, (current, previous, initial_v18, legacy))
         if actual == legacy:
-            _upgrade_legacy_schema(connection, _LEGACY_SCHEMA_STATEMENTS)
+            _upgrade_schema(connection, source_statements=_LEGACY_SCHEMA_STATEMENTS, suffix="v15")
         elif actual == previous:
-            _upgrade_legacy_schema(connection, _PREVIOUS_SCHEMA_STATEMENTS)
+            _upgrade_schema(connection, source_statements=_PREVIOUS_SCHEMA_STATEMENTS, suffix="v17")
+        elif actual == initial_v18:
+            _upgrade_schema(connection, source_statements=INITIAL_V18_SCHEMA_STATEMENTS, suffix="initial_v18")
         elif actual and actual != current:
             raise RuntimeError("incompatible command shadow schema objects")
         elif not actual:
@@ -237,28 +252,44 @@ def ensure_command_shadow_schema(connection: sqlite3.Connection, *, applied_at: 
     connection.execute("release command_shadow_schema_v18")
 
 
-def _upgrade_legacy_schema(
+def _upgrade_schema(
     connection: sqlite3.Connection,
+    *,
     source_statements: tuple[str, ...],
+    suffix: str,
 ) -> None:
     for object_type, name in _schema_object_identities(source_statements):
         if object_type != "table":
             connection.execute(f"drop {object_type} {name}")
-    connection.execute("alter table command_activity_shadow_cohorts rename to command_activity_shadow_cohorts_v15")
     connection.execute(
-        "alter table command_activity_shadow_evaluations rename to command_activity_shadow_evaluations_v15"
+        f"alter table command_activity_shadow_cohorts rename to command_activity_shadow_cohorts_{suffix}"
+    )
+    connection.execute(
+        f"alter table command_activity_shadow_evaluations rename to command_activity_shadow_evaluations_{suffix}"
     )
     for statement in _SCHEMA_STATEMENTS:
         connection.execute(statement)
     connection.execute(
-        "insert into command_activity_shadow_evaluations select * from command_activity_shadow_evaluations_v15"
+        f"""insert into command_activity_shadow_evaluations (
+          activity_id, occurred_at, authoritative_action, current_action,
+          current_disposition, proposed_action, proposed_disposition, comparison,
+          proposal_version, evaluator_schema_version, control_generation,
+          sample_basis_points, schema_version
+        )
+        select
+          activity_id, occurred_at, authoritative_action, current_action,
+          current_disposition, proposed_action, proposed_disposition, comparison,
+          proposal_version, evaluator_schema_version, control_generation,
+          sample_basis_points, schema_version
+        from command_activity_shadow_evaluations_{suffix}"""
     )
     connection.execute(
-        """insert into command_activity_shadow_cohorts
-        select * from command_activity_shadow_cohorts_v15 order by activity_id, ordinal"""
+        f"""insert into command_activity_shadow_cohorts (activity_id, ordinal, cohort)
+        select activity_id, ordinal, cohort
+        from command_activity_shadow_cohorts_{suffix} order by activity_id, ordinal"""
     )
-    connection.execute("drop table command_activity_shadow_cohorts_v15")
-    connection.execute("drop table command_activity_shadow_evaluations_v15")
+    connection.execute(f"drop table command_activity_shadow_cohorts_{suffix}")
+    connection.execute(f"drop table command_activity_shadow_evaluations_{suffix}")
 
 
 def _validate_schema(connection: sqlite3.Connection) -> None:
@@ -403,5 +434,6 @@ def _canonical_sql(value: str) -> str:
 __all__ = (
     "COMMAND_SHADOW_LEGACY_MIGRATION_VERSION",
     "COMMAND_SHADOW_MIGRATION_VERSION",
+    "COMMAND_SHADOW_PREVIOUS_MIGRATION_VERSION",
     "ensure_command_shadow_schema",
 )

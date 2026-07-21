@@ -246,8 +246,7 @@ def test_normalize_codex_pre_tool_bash_payload(tmp_path: Path) -> None:
 
 def test_normalize_codex_apply_patch_as_file_write(tmp_path: Path) -> None:
     patch_path = (
-        "../../../../../private/"
-        "tmp/hol-guard-p01/src/codex_plugin_scanner/guard/runtime/secret_file_requests.py"
+        "../../../../../private/tmp/hol-guard-p01/src/codex_plugin_scanner/guard/runtime/secret_file_requests.py"
     )
     patch = f"""*** Begin Patch
 *** Update File: {patch_path}

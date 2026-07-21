@@ -8,6 +8,7 @@ import json
 import marshal
 import os
 import struct
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -28,7 +29,9 @@ from scripts.installed_canary_proof import (
     write_subject,
 )
 from scripts.run_installed_canary import (
+    _codex_install_smoke,  # pyright: ignore[reportPrivateUsage]
     _no_post_execution_proof_smoke,  # pyright: ignore[reportPrivateUsage]
+    _runtime_dependency_smoke,  # pyright: ignore[reportPrivateUsage]
     _validate_corpus_bindings,  # pyright: ignore[reportPrivateUsage]
 )
 
@@ -58,6 +61,41 @@ def test_harness_without_post_execution_proof_remains_unconfirmed() -> None:
         "policy_action": "warn",
         "decision_reason_code": "no_match",
     }
+
+
+def test_installed_codex_setup_uses_an_isolated_home() -> None:
+    assert _codex_install_smoke() == {
+        "harness": "codex",
+        "active": True,
+        "managed_config": True,
+    }
+
+
+def test_installed_wheel_declares_pyyaml_as_a_runtime_dependency() -> None:
+    assert _runtime_dependency_smoke() == {
+        "name": "pyyaml",
+        "specifier": ">=6.0.3",
+    }
+
+
+def test_runtime_dependency_check_normalizes_missing_installed_wheel(monkeypatch: pytest.MonkeyPatch) -> None:
+    def missing_distribution(_name: str) -> list[str] | None:
+        raise importlib.metadata.PackageNotFoundError("hol-guard")
+
+    monkeypatch.setattr(importlib.metadata, "requires", missing_distribution)
+
+    with pytest.raises(InstalledCanaryError, match="not available"):
+        _ = _runtime_dependency_smoke()
+
+
+def test_installed_codex_setup_normalizes_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    def timed_out(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(["hol-guard", "install", "codex"], timeout=60)
+
+    monkeypatch.setattr(subprocess, "run", timed_out)
+
+    with pytest.raises(InstalledCanaryError, match="timed out"):
+        _ = _codex_install_smoke()
 
 
 class _ConsoleScriptDistribution(importlib.metadata.Distribution):

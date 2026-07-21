@@ -15,7 +15,7 @@ on:
         required: true
         type: choice
         options:
-          - "2.2"
+          - "2.1"
       release_version:
         description: "Exact canonical release version"
         required: true
@@ -25,9 +25,10 @@ on:
         required: true
         type: string
   push:
-    branches: [main, release/2.2]
+    branches: [main, release/2.1]
   pull_request:
-    branches: [main, release/2.2]
+    branches: [main, release/2.1]
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: read
@@ -62,12 +63,12 @@ jobs:
             echo "Release dispatch actor is not an authorized maintainer" >&2
             exit 1
           fi
-          if [[ "$RELEASE_CHANNEL" != "alpha" || "$RELEASE_TRAIN" != "2.2" ]]; then
-            echo "Only the release/2.2 alpha train is authorized" >&2
+          if [[ "$RELEASE_CHANNEL" != "alpha" || "$RELEASE_TRAIN" != "2.1" ]]; then
+            echo "Only the release/2.1 alpha train is authorized" >&2
             exit 1
           fi
-          if [[ "$GITHUB_REF" != "refs/heads/release/2.2" ]]; then
-            echo "Alpha releases must run from refs/heads/release/2.2" >&2
+          if [[ "$GITHUB_REF" != "refs/heads/release/2.1" ]]; then
+            echo "Alpha releases must run from refs/heads/release/2.1" >&2
             exit 1
           fi
           if [[ "$EXPECTED_SHA" != "$GITHUB_SHA" ]]; then
@@ -79,7 +80,8 @@ jobs:
     name: Build + Verify
     if: >-
       (github.event_name != 'workflow_dispatch' || github.run_attempt == 1) &&
-      (github.event_name != 'push' || github.run_attempt == 1)
+      (github.event_name != 'push' || github.run_attempt == 1 || github.ref == 'refs/heads/release/2.1') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'run-testpypi-canary')
     needs: authorize-release
     runs-on: ubuntu-latest
     outputs:
@@ -115,6 +117,7 @@ jobs:
         id: version
         env:
           GITHUB_REF: ${{ github.ref }}
+          GITHUB_SHA: ${{ github.sha }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
@@ -148,14 +151,14 @@ jobs:
             fi
             CHANNEL="$RELEASE_CHANNEL"
             TRAIN="$RELEASE_TRAIN"
-            if [[ "$TRAIN" != "2.2" ]]; then
+            if [[ "$TRAIN" != "2.1" ]]; then
               echo "Unsupported release train: ${TRAIN}" >&2
               exit 1
             fi
             TRAIN_REF="refs/heads/release/${TRAIN}"
 
             if [[ "$CHANNEL" != "alpha" ]]; then
-              echo "The release/2.2 train is alpha-only" >&2
+              echo "The release/2.1 train is alpha-only" >&2
               exit 1
             fi
             if [[ "$GITHUB_REF" != "$TRAIN_REF" ]]; then
@@ -166,6 +169,8 @@ jobs:
             EXISTING_VERSION_FILE=$(mktemp)
             uv run --no-sync python scripts/verify_release_registry.py \
               list-versions --registry pypi | jq -r '.[]' > "$EXISTING_VERSION_FILE"
+            uv run --no-sync python scripts/verify_release_registry.py \
+              list-versions --registry testpypi | jq -r '.[]' >> "$EXISTING_VERSION_FILE"
             git tag --list 'alpha/v*' | sed 's#^alpha/v##' >> "$EXISTING_VERSION_FILE"
             mapfile -t EXISTING_VERSIONS < <(
               awk -v candidate="$RELEASE_VERSION" '$0 != candidate' "$EXISTING_VERSION_FILE"
@@ -194,6 +199,61 @@ jobs:
           print(f"{os.environ['BASE_VERSION']}.dev{pair(pair(int(os.environ['PR_NUMBER']), int(os.environ['GITHUB_RUN_NUMBER'])), int(os.environ['GITHUB_RUN_ATTEMPT']))}")
           PY
             )
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/2.1" ]]; then
+            if [[ "$RELEASE_PUBLISHING_ENABLED" != "true" ]]; then
+              echo "Release publishing is disabled until protected environments are verified" >&2
+              exit 1
+            fi
+            if [[ "$SOURCE_SHA" != "$GITHUB_SHA" ]]; then
+              echo "Checked-out source does not match the immutable push source" >&2
+              exit 1
+            fi
+            CHANNEL="alpha"
+            TRAIN="2.1"
+            TRAIN_REF="refs/heads/release/${TRAIN}"
+            PYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+              list-versions --registry pypi)
+            TESTPYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+              list-versions --registry testpypi)
+            TAG_VERSIONS=$(git tag --list 'alpha/v*' | sed 's#^alpha/v##' | jq -R -s 'split("\n") | map(select(length > 0))')
+            EXISTING_VERSIONS=$(jq -n \
+              --argjson pypi "$PYPI_VERSIONS" \
+              --argjson testpypi "$TESTPYPI_VERSIONS" \
+              --argjson tags "$TAG_VERSIONS" \
+              '$pypi + $testpypi + $tags | unique')
+            mapfile -t SOURCE_ALPHA_TAGS < <(
+              git tag --points-at "$SOURCE_SHA" --list "alpha/v${TRAIN}.0a*" | sed 's#^alpha/v##'
+            )
+            if [[ "${#SOURCE_ALPHA_TAGS[@]}" -gt 1 ]]; then
+              echo "Source commit has multiple reserved alpha versions" >&2
+              exit 1
+            fi
+            if [[ "${#SOURCE_ALPHA_TAGS[@]}" -eq 1 ]]; then
+              RELEASE_VERSION="${SOURCE_ALPHA_TAGS[0]}"
+              REUSING_RESERVED_ALPHA=true
+              uv run --no-sync python scripts/compute_alpha_release_version.py \
+                --release-train "$TRAIN" --validate-phase-only <<< "$EXISTING_VERSIONS"
+            else
+              RELEASE_VERSION=$(uv run --no-sync python scripts/compute_alpha_release_version.py \
+                --release-train "$TRAIN" <<< "$EXISTING_VERSIONS")
+              REUSING_RESERVED_ALPHA=false
+            fi
+            EXISTING_VERSIONS_ARRAY=()
+            if [[ "$REUSING_RESERVED_ALPHA" != "true" ]]; then
+              mapfile -t EXISTING_VERSIONS_ARRAY < <(jq -r '.[]' <<< "$EXISTING_VERSIONS")
+            fi
+            VALIDATOR_ARGS=(
+              --channel "$CHANNEL"
+              --version "$RELEASE_VERSION"
+              --git-ref "$TRAIN_REF"
+              --actual-ref "$GITHUB_REF"
+              --github-sha "$SOURCE_SHA"
+              --expected-sha "$SOURCE_SHA"
+            )
+            for existing_version in "${EXISTING_VERSIONS_ARRAY[@]}"; do
+              VALIDATOR_ARGS+=(--existing-version "$existing_version")
+            done
+            VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py "${VALIDATOR_ARGS[@]}")
           elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
             CHANNEL="stable"
             PYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
@@ -348,11 +408,14 @@ jobs:
         run: uv run --no-sync pytest --tb=short
       - name: Run Windows release suite
         if: runner.os == 'Windows'
-        run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py tests/test_policy_document_yaml.py tests/test_policy_bundle_v2.py --tb=short
+        run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py tests/test_policy.py tests/test_policy_bundle_parser.py --tb=short
 
   publish-testpypi:
     name: Publish PR canary to TestPyPI
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'run-testpypi-canary')
     needs: build
     runs-on: ubuntu-latest
     environment: testpypi
@@ -537,19 +600,75 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
+  reserve-alpha-tag:
+    name: Reserve alpha version
+    if: >-
+      always() &&
+      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      needs.build.result == 'success' &&
+      needs.build.outputs.channel == 'alpha' &&
+      (
+        (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/2.1')
+      )
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.build.outputs.source_sha }}
+      - name: Reserve exact alpha tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          tag="alpha/v${VERSION}"
+          for attempt in 1 2 3; do
+            remote_tag_sha=$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1}')
+            if [[ -n "$remote_tag_sha" ]]; then
+              break
+            fi
+            if gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${tag}" \
+              -f sha="$SOURCE_SHA" >/dev/null; then
+              remote_tag_sha=$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1}')
+              if [[ -n "$remote_tag_sha" ]]; then
+                break
+              fi
+            fi
+            if [[ "$attempt" != "3" ]]; then
+              sleep $((attempt * 5))
+            fi
+          done
+          if [[ -z "$remote_tag_sha" ]]; then
+            git tag "$tag" "$SOURCE_SHA"
+            git push origin "refs/tags/${tag}" || true
+            remote_tag_sha=$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1}')
+          fi
+          if [[ "$remote_tag_sha" != "$SOURCE_SHA" ]]; then
+            echo "Alpha tag reservation does not target the published source" >&2
+            exit 1
+          fi
+
   publish-alpha-testpypi:
     name: Verify alpha artifact on TestPyPI
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      github.event_name == 'workflow_dispatch' &&
-      github.run_attempt == 1 &&
-      github.event.inputs.release_channel == 'alpha' &&
       needs.build.result == 'success' &&
-      (needs.alpha-cross-platform.result == 'success' || needs.alpha-cross-platform.result == 'skipped')
-    needs: [build, alpha-cross-platform]
+      needs.reserve-alpha-tag.result == 'success' &&
+      needs.build.outputs.channel == 'alpha' &&
+      (
+        (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/2.1')
+      )
+    needs: [build, reserve-alpha-tag]
     runs-on: ubuntu-latest
-    environment: testpypi-alpha
+    environment: testpypi
     permissions:
       contents: read
       id-token: write
@@ -577,14 +696,8 @@ jobs:
           TRAIN: ${{ needs.build.outputs.release_train }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          train_ref="refs/heads/release/${TRAIN}"
-          remote_train_sha=$(git ls-remote --exit-code origin "$train_ref" | awk '{print $1}')
-          if [[ "$remote_train_sha" != "$SOURCE_SHA" ]]; then
-            echo "Alpha publication source is no longer the release train head" >&2
-            exit 1
-          fi
-          remote_alpha_tag_sha=$(git ls-remote origin "refs/tags/alpha/v${VERSION}" | awk '{print $1}')
-          if [[ -n "$remote_alpha_tag_sha" && "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]; then
+          remote_alpha_tag_sha=$(git ls-remote --exit-code origin "refs/tags/alpha/v${VERSION}" | awk '{print $1}')
+          if [[ "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]; then
             echo "Alpha tag targets a different source" >&2
             exit 1
           fi
@@ -639,15 +752,16 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      github.event_name == 'workflow_dispatch' &&
-      github.run_attempt == 1 &&
-      github.event.inputs.release_channel == 'alpha' &&
       needs.build.result == 'success' &&
       needs.publish-alpha-testpypi.result == 'success' &&
-      (needs.alpha-cross-platform.result == 'success' || needs.alpha-cross-platform.result == 'skipped')
-    needs: [build, alpha-cross-platform, publish-alpha-testpypi]
+      needs.build.outputs.channel == 'alpha' &&
+      (
+        (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/2.1')
+      )
+    needs: [build, publish-alpha-testpypi]
     runs-on: ubuntu-latest
-    environment: pypi-alpha
+    environment: pypi
     permissions:
       contents: read
       id-token: write
@@ -689,28 +803,17 @@ jobs:
       - name: Revalidate alpha publication authorization
         env:
           ACTUAL_REF: ${{ github.ref }}
-          EXPECTED_SHA: ${{ github.event.inputs.expected_sha }}
+          EXPECTED_SHA: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.expected_sha || needs.build.outputs.source_sha }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           TRAIN: ${{ needs.build.outputs.release_train }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           train_ref="refs/heads/release/${TRAIN}"
-          remote_train_sha=$(git ls-remote --exit-code origin "$train_ref" | awk '{print $1}')
-          if [[ "$remote_train_sha" != "$SOURCE_SHA" ]]; then
-            echo "Alpha publication source is no longer the release train head" >&2
-            exit 1
-          fi
-          remote_alpha_tag_sha=$(git ls-remote origin "refs/tags/alpha/v${VERSION}" | awk '{print $1}')
-          if [[ -n "$remote_alpha_tag_sha" && "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]; then
+          remote_alpha_tag_sha=$(git ls-remote --exit-code origin "refs/tags/alpha/v${VERSION}" | awk '{print $1}')
+          if [[ "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]; then
             echo "Alpha tag targets a different source" >&2
             exit 1
           fi
-          versions=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
-            list-versions --registry pypi)
-          mapfile -t existing_versions < <(jq -r --arg version "$VERSION" '.[] | select(. != $version)' <<< "$versions")
-          mapfile -t alpha_tags < <(
-            git tag --list 'alpha/v*' | sed 's#^alpha/v##' | awk -v candidate="$VERSION" '$0 != candidate'
-          )
           validator_args=(
             --channel alpha
             --version "$VERSION"
@@ -719,9 +822,6 @@ jobs:
             --github-sha "$SOURCE_SHA"
             --expected-sha "$EXPECTED_SHA"
           )
-          for existing_version in "${existing_versions[@]}" "${alpha_tags[@]}"; do
-            [[ -z "$existing_version" ]] || validator_args+=(--existing-version "$existing_version")
-          done
           uv run --with packaging==25.0 python scripts/validate_alpha_release.py "${validator_args[@]}"
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         if: steps.pypi.outputs.upload == 'true'
@@ -1069,9 +1169,11 @@ jobs:
     name: Create alpha GitHub prerelease
     if: >-
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      github.event_name == 'workflow_dispatch' &&
-      github.run_attempt == 1 &&
-      needs.build.outputs.channel == 'alpha'
+      needs.build.outputs.channel == 'alpha' &&
+      (
+        (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/2.1')
+      )
     needs: [build, publish-alpha-pypi]
     runs-on: ubuntu-latest
     permissions:
@@ -1115,13 +1217,7 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           tag="alpha/v${VERSION}"
-          remote_tag_sha=$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1}')
-          if [[ -z "$remote_tag_sha" ]]; then
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
-              -f ref="refs/tags/${tag}" \
-              -f sha="$SOURCE_SHA" >/dev/null
-            remote_tag_sha=$(git ls-remote --exit-code origin "refs/tags/${tag}" | awk '{print $1}')
-          fi
+          remote_tag_sha=$(git ls-remote --exit-code origin "refs/tags/${tag}" | awk '{print $1}')
           if [[ "$remote_tag_sha" != "$SOURCE_SHA" ]]; then
             echo "Alpha tag does not target the published source" >&2
             exit 1
@@ -1177,8 +1273,8 @@ jobs:
       needs.build.result == 'success' &&
       (
         (
-          github.event_name == 'workflow_dispatch' &&
-          github.run_attempt == 1 &&
+          ((github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
+           (github.event_name == 'push' && github.ref == 'refs/heads/release/2.1')) &&
           needs.build.outputs.channel == 'alpha' &&
           needs.publish-alpha-pypi.result == 'success' &&
           needs.release-alpha.result == 'success'
@@ -1199,6 +1295,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ needs.build.outputs.source_sha }}
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
@@ -1216,6 +1314,7 @@ jobs:
       - name: Prepare image tags
         id: tags
         env:
+          CHANNEL: ${{ needs.build.outputs.channel }}
           IMAGE_NAME: ghcr.io/${{ github.repository }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
@@ -1233,7 +1332,36 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Inspect existing immutable image
+        id: image
+        env:
+          CHANNEL: ${{ needs.build.outputs.channel }}
+          IMAGE_NAME: ghcr.io/${{ github.repository }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          if [[ "$CHANNEL" != "alpha" ]]; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          image="${IMAGE_NAME}:${VERSION}"
+          pull_output=$(mktemp)
+          if docker pull "$image" >"$pull_output" 2>&1; then
+            revision=$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")
+            if [[ "$revision" != "$SOURCE_SHA" ]]; then
+              echo "Existing image tag targets a different source" >&2
+              exit 1
+            fi
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          elif grep -Eqi 'manifest unknown' "$pull_output"; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          else
+            cat "$pull_output" >&2
+            echo "Unable to determine whether the image tag already exists" >&2
+            exit 1
+          fi
       - uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        if: steps.image.outputs.push == 'true'
         with:
           context: .
           file: ./Dockerfile
@@ -1242,4 +1370,4 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.build.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ needs.build.outputs.source_sha }}

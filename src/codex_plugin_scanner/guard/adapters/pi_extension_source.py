@@ -5,10 +5,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ...version import __version__
 from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
 from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
 
-GUARD_HOOK_TIMEOUT_MS = 10_000
+GUARD_HOOK_TIMEOUT_MS = 8_000
+GUARD_HOOK_DEADLINE_RESERVE_MS = 250
+GUARD_DAEMON_HOOK_TIMEOUT_MS = 7_000
+GUARD_CLI_HOOK_TIMEOUT_MS = 7_000
 GUARD_HOOK_TEXT_LIMIT_CHARS = 12_000
 GUARD_HOOK_CONTENT_ITEM_LIMIT = 24
 GUARD_HOOK_OBJECT_KEY_LIMIT = 24
@@ -17,7 +21,7 @@ GUARD_HOOK_MAX_SERIALIZED_PAYLOAD_CHARS = 24_000
 
 
 def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path: Path) -> str:
-    guard_args = ["hook", "--guard-home", str(guard_home), "--harness", "pi"]
+    guard_args = ["hook", "--json", "--guard-home", str(guard_home), "--harness", "pi"]
     if home_dir.resolve() != Path.home().resolve():
         guard_args.extend(["--home", str(home_dir)])
     guard_args_json = json.dumps(guard_args)
@@ -25,6 +29,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
     home_dir_json = json.dumps(str(home_dir))
     home_dir_is_default_json = "true" if home_dir.resolve() == Path.home().resolve() else "false"
     config_path_json = json.dumps(str(settings_path))
+    package_version_json = json.dumps(__version__)
     return (
         'import { spawn, spawnSync } from "node:child_process";\n'
         'import { createCipheriv, createHash, randomBytes } from "node:crypto";\n'
@@ -39,7 +44,11 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         f"const GUARD_HOME_DIR = {home_dir_json};\n"
         f"const GUARD_HOME_DIR_IS_DEFAULT = {home_dir_is_default_json};\n"
         f"const GUARD_CONFIG_PATH = {config_path_json};\n"
+        f"const GUARD_PACKAGE_VERSION = {package_version_json};\n"
         f"const GUARD_TIMEOUT_MS = {GUARD_HOOK_TIMEOUT_MS};\n"
+        f"const GUARD_DEADLINE_RESERVE_MS = {GUARD_HOOK_DEADLINE_RESERVE_MS};\n"
+        f"const GUARD_DAEMON_TIMEOUT_MS = {GUARD_DAEMON_HOOK_TIMEOUT_MS};\n"
+        f"const GUARD_CLI_TIMEOUT_MS = {GUARD_CLI_HOOK_TIMEOUT_MS};\n"
         f"const GUARD_TEXT_LIMIT_CHARS = {GUARD_HOOK_TEXT_LIMIT_CHARS};\n"
         f"const GUARD_CONTENT_ITEM_LIMIT = {GUARD_HOOK_CONTENT_ITEM_LIMIT};\n"
         f"const GUARD_OBJECT_KEY_LIMIT = {GUARD_HOOK_OBJECT_KEY_LIMIT};\n"
@@ -72,7 +81,8 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  try {\n"
         "    const daemonState = JSON.parse(\n"
         "      readFileSync(join(GUARD_HOME, 'daemon-state.json'), 'utf8'),\n"
-        "    ) as { port?: unknown };\n"
+        "    ) as { package_version?: unknown; port?: unknown };\n"
+        "    if (daemonState.package_version !== GUARD_PACKAGE_VERSION) return null;\n"
         "    port = typeof daemonState.port === 'number' ? daemonState.port : 0;\n"
         "    authToken = readFileSync(join(GUARD_HOME, 'daemon-auth-token'), 'utf8').trim();\n"
         "  } catch {\n"
@@ -94,7 +104,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  if (workspace) params.set('workspace', workspace);\n"
         "  if (!GUARD_HOME_DIR_IS_DEFAULT && GUARD_HOME_DIR) params.set('home', GUARD_HOME_DIR);\n"
         "  const controller = typeof AbortController === 'function' ? new AbortController() : undefined;\n"
-        "  const timeoutHandle = setTimeout(() => controller?.abort(), Math.max(GUARD_TIMEOUT_MS - 500, 1));\n"
+        "  const timeoutHandle = setTimeout(() => controller?.abort(), GUARD_DAEMON_TIMEOUT_MS);\n"
         "  try {\n"
         "    const response = await fetch(`http://127.0.0.1:${connection.port}/v1/hooks/pi?${params.toString()}`, {\n"
         "      method: 'POST',\n"
@@ -110,7 +120,14 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    if (!raw) return {};\n"
         "    const parsed = JSON.parse(raw) as GuardResponse;\n"
         "    return parsed && typeof parsed === 'object' ? parsed : null;\n"
-        "  } catch {\n"
+        "  } catch (error) {\n"
+        "    if (error instanceof Error && error.name === 'AbortError') {\n"
+        "      return {\n"
+        '        decision: "deny",\n'
+        "        reason: `HOL Guard Pi hook timed out after "
+        + "${GUARD_DAEMON_TIMEOUT_MS}ms while reviewing this action.`,\n"
+        "      };\n"
+        "    }\n"
         "    return null;\n"
         "  } finally {\n"
         "    clearTimeout(timeoutHandle);\n"
@@ -122,6 +139,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  cwd?: string,\n"
         "  options?: { enforceSizeCap?: boolean },\n"
         "): Promise<GuardResponse> {\n"
+        "  const deadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS;\n"
         "  const args = [...GUARD_ARGS];\n"
         '  const workspace = typeof cwd === "string" && cwd ? cwd : process.cwd();\n'
         '  if (workspace) args.push("--workspace", workspace);\n'
@@ -174,11 +192,12 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    return daemonResponse;\n"
         "  }\n"
         "  let result: ReturnType<typeof spawnSync<string>> | null = null;\n"
+        "  const cliTimeoutMs = Math.min(GUARD_CLI_TIMEOUT_MS, Math.max(deadlineAt - Date.now(), 1));\n"
         "  for (const command of GUARD_COMMAND_CANDIDATES) {\n"
         "    result = spawnSync(command, args, {\n"
         "      input: `${serializedPayload}\\n`,\n"
         '      encoding: "utf-8",\n'
-        "      timeout: GUARD_TIMEOUT_MS,\n"
+        "      timeout: cliTimeoutMs,\n"
         "    });\n"
         "    const resultError = result.error as (Error & { code?: unknown }) | undefined;\n"
         "    if (!(result.error && resultError?.code === 'ENOENT')) break;\n"
@@ -197,7 +216,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    return {\n"
         '      decision: "deny",\n'
         "      reason: errorCode === 'ETIMEDOUT' || result.error?.name === 'TimeoutError'\n"
-        "        ? `HOL Guard Pi hook timed out after ${GUARD_TIMEOUT_MS}ms while reviewing this action.`\n"
+        "        ? `HOL Guard Pi hook timed out while reviewing this action.`\n"
         "        : `HOL Guard Pi hook failed before completing review: ${errorMessage}`,\n"
         "    };\n"
         "  }\n"
@@ -253,7 +272,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "\n" + APPROVAL_RESUME_HELPERS_SOURCE + "export default function (pi: ExtensionAPI) {\n"
         "  const blockedToolResults = new Map<string, string>();\n"
         "  const pendingApprovalResumes = new Set<string>();\n"
-        "  const openedApprovalUrls = new Set<string>();\n"
+        "  const openedApprovalCenters = new Set<string>();\n"
         "  function scheduleApprovalResume(\n"
         "    response: GuardResponse,\n"
         "    ctx: { ui: { notify(message: string, kind?: 'info' | 'warning'): void } },\n"
@@ -262,7 +281,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    const requestId = approvalRequestId(response);\n"
         "    if (!requestId || pendingApprovalResumes.has(requestId)) return;\n"
         "    pendingApprovalResumes.add(requestId);\n"
-        "    void openApprovalUrl(response, openedApprovalUrls);\n"
+        "    if (details.kind === 'input') void openApprovalUrl(response, openedApprovalCenters);\n"
         "    const pollPath = approvalPollPath(response, requestId);\n"
         "    void (async () => {\n"
         "      try {\n"

@@ -29,6 +29,7 @@ COMMAND_SHADOW_SAMPLE_BASIS_POINTS_ENV: Final = "HOL_GUARD_DECISION_SHADOW_SAMPL
 _ACTIVITY_ID: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,255}")
 _PROPOSAL_VERSION: Final = re.compile(r"[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*")
 _BASIS_POINTS_MAX: Final = 10_000
+_EVALUATOR_SCHEMA_VERSIONS: Final = frozenset(("1.0.0", EFFECT_DECISION_SCHEMA_VERSION))
 
 
 class CommandShadowCohort(str, Enum):
@@ -158,7 +159,7 @@ class CommandShadowObservation:
             or _PROPOSAL_VERSION.fullmatch(self.proposal_version) is None
         ):
             raise ValueError("proposal_version must be a stable identifier")
-        if self.evaluator_schema_version != EFFECT_DECISION_SCHEMA_VERSION:
+        if self.evaluator_schema_version not in _EVALUATOR_SCHEMA_VERSIONS:
             raise ValueError("unsupported evaluator schema version")
         if self.control_generation != COMMAND_SHADOW_CONTROL_GENERATION:
             raise ValueError("unsupported shadow control generation")

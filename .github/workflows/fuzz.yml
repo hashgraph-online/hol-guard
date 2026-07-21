@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: fuzz-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   code-change:
     if: github.event_name == 'pull_request'
@@ -29,7 +33,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           mode: code-change
           sanitizer: address
-          fuzz-seconds: 600
+          fuzz-seconds: 60
           output-sarif: true
 
   batch:

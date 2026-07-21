@@ -54,7 +54,7 @@ from tests.guard_command_corpus_oracle_types import OracleRecord
 from tests.guard_command_corpus_runner import peak_rss_mib
 
 EVALUATION_SHARD_COUNT: Final = 4
-MAX_CONCURRENT_WORKERS: Final = 2
+MAX_CONCURRENT_WORKERS: Final = EVALUATION_SHARD_COUNT
 SYNTHETIC_CWD: Final = REPO_ROOT / "workspace"
 SYNTHETIC_HOME: Final = REPO_ROOT / "home"
 

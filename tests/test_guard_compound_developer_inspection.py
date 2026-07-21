@@ -1,0 +1,144 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
+from codex_plugin_scanner.guard.models import GuardArtifact
+
+
+def _artifact(
+    command: str,
+    *,
+    home: Path,
+    harness: str = "pi",
+    workspace: Path | None = None,
+) -> GuardArtifact | None:
+    return _hook_runtime_artifact(
+        harness=harness,
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+        },
+        action_envelope=None,
+        home_dir=home,
+        guard_home=home / ".guard",
+        workspace=workspace,
+    )
+
+
+@pytest.mark.parametrize("harness", ("pi", "codex", "claude-code", "gemini", "cursor"))
+def test_harnesses_evaluate_compound_source_inspection_as_one_unit(
+    tmp_path: Path,
+    harness: str,
+) -> None:
+    home = tmp_path / "home"
+    workspace = home / "projects" / "workspace"
+    (workspace / "src").mkdir(parents=True)
+
+    artifact = _artifact(
+        f'cd {workspace} && fd -t f . | head -20 && echo "---MATCHES---" && rg -n TODO src | head -20',
+        home=home,
+        harness=harness,
+    )
+
+    assert artifact is None
+
+
+@pytest.mark.parametrize("harness", ("pi", "codex", "claude-code", "gemini", "cursor"))
+def test_harnesses_recover_safe_inspection_after_cross_workspace_cd(
+    tmp_path: Path,
+    harness: str,
+) -> None:
+    home = tmp_path / "home"
+    active_workspace = home / "projects" / "active"
+    inspected_workspace = home / "projects" / "inspected"
+    active_workspace.mkdir(parents=True)
+    (inspected_workspace / "src").mkdir(parents=True)
+
+    artifact = _artifact(
+        f"cd {inspected_workspace} && grep -n TODO src/example.ts | head -20",
+        home=home,
+        harness=harness,
+        workspace=active_workspace,
+    )
+
+    assert artifact is None
+
+
+def test_cross_workspace_recovery_preserves_mutating_command_review(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    active_workspace = home / "projects" / "active"
+    inspected_workspace = home / "projects" / "inspected"
+    active_workspace.mkdir(parents=True)
+    inspected_workspace.mkdir(parents=True)
+
+    assert (
+        _artifact(
+            f"cd {inspected_workspace} && git push origin main",
+            home=home,
+            workspace=active_workspace,
+        )
+        is not None
+    )
+    assert (
+        _artifact(
+            f"cd {inspected_workspace} && vitest run src/example.test.ts --maxWorkers=1",
+            home=home,
+            workspace=active_workspace,
+        )
+        is not None
+    )
+
+
+def test_compound_git_and_filesystem_inspection_is_one_unit(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    workspace = home / "projects" / "workspace"
+    (workspace / "repository").mkdir(parents=True)
+
+    artifact = _artifact(
+        f'cd {workspace} && git -C repository status --short && echo "---FILES---" && ls -la | head -20',
+        home=home,
+    )
+
+    assert artifact is None
+
+
+def test_compound_stdin_only_python_observer_is_one_unit(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    workspace = home / "projects" / "workspace"
+    workspace.mkdir(parents=True)
+
+    artifact = _artifact(
+        f'cd {workspace} && printf data | python3 -c "import sys; print(sys.stdin.read().strip())"',
+        home=home,
+    )
+
+    assert artifact is None
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    (
+        "git -C repository push origin main",
+        "fd -t f --exec rm {}",
+        "rg --pre process TODO src",
+        'python3 -c "import subprocess; subprocess.run(["sh"])"',
+        "find . -delete",
+        "cat settings.txt > copied.txt",
+        "cat /etc/example.py",
+        "cat ../../../../outside/example.py",
+        "cd / && cat /etc/example.py",
+        "curl https://example.test",
+    ),
+)
+def test_compound_recovery_preserves_real_risk_boundaries(tmp_path: Path, suffix: str) -> None:
+    home = tmp_path / "home"
+    workspace = home / "projects" / "workspace"
+    (workspace / "repository").mkdir(parents=True)
+    (workspace / "src").mkdir()
+    (workspace / "settings.txt").write_text("public\n", encoding="utf-8")
+
+    assert _artifact(f"cd {workspace} && {suffix}", home=home) is not None

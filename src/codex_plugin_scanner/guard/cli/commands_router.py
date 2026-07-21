@@ -18,6 +18,7 @@ from .commands_parser_helpers import *
 _EARLY_HANDLERS = {
     "mdm": "_run_guard_mdm_command",
     "command": "_run_guard_command_inspection_command",
+    "pytest-contained": "_run_guard_pytest_contained_command",
     "verified-read": "_run_guard_verified_read_command",
     "scan": "_run_guard_scan_command",
     "preflight": "_run_guard_preflight_command",
@@ -119,6 +120,8 @@ def run_guard_command(
         workspace_dir=workspace,
         guard_home=guard_home,
         executable_overrides=executable_overrides,
+        home_override_explicit=bool(home_override),
+        workspace_override_explicit=bool(getattr(args, "workspace", None)),
     )
 
     handler = _resolve_guard_handler(_PRESTORE_HANDLERS, args.guard_command)

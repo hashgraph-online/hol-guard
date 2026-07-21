@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import os
+import shlex
 from dataclasses import replace
 from typing import TYPE_CHECKING, cast
 
@@ -38,6 +40,10 @@ from ..action_lattice import (
     normalize_guard_action_result,
 )
 from ..approval_scope_support import package_request_runtime_workspace_scope
+from ..local_supply_chain import (
+    _package_evaluation_requires_external_archive_binding,
+    _package_policy_override_evaluation,
+)
 from ..models import GuardAction
 from ..package_execution_context import PackageExecutionContext, build_package_execution_context
 from ..runtime.approval_context import approval_context_tokens_validation_reason
@@ -50,6 +56,8 @@ from ..runtime.approval_reuse import (
     evaluate_approval_reuse,
 )
 from ..runtime.github_workflow_runtime import resolved_github_workflow_capability_preflight
+from ..runtime.signals import GuardRiskSignalV3
+from ..shims import package_shim_status
 from ._commands_shared import *
 from .commands_hook_github_workflow import (
     claimed_approval_request_id,
@@ -97,6 +105,126 @@ def _cursor_native_saved_approval_hash(
     if approved is None:
         return None
     return _optional_string(approved.get("artifact_hash"))
+
+
+def _runtime_package_raw_command(
+    payload: Mapping[str, object],
+    action_envelope: GuardActionEnvelope | None,
+) -> str | None:
+    for candidate in (
+        payload.get("tool_input"),
+        payload.get("arguments"),
+        payload,
+    ):
+        if not isinstance(candidate, Mapping):
+            continue
+        for key in ("command", "cmd", "shell_command", "shellCommand"):
+            value = candidate.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+    return action_envelope.command if action_envelope is not None else None
+
+
+def _runtime_external_archive_command_matches_executable(raw_command: str | None, executable: str) -> bool:
+    if (
+        raw_command is None
+        or os.name == "nt"
+        or "`" in raw_command
+        or "$(" in raw_command
+        or "\n" in raw_command
+        or "\r" in raw_command
+    ):
+        return False
+    lexer = shlex.shlex(raw_command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    try:
+        tokens = list(lexer)
+    except ValueError:
+        return False
+    if not tokens or tokens[0] != executable:
+        return False
+    return not any(token and all(character in "();<>|&" for character in token) for token in tokens)
+
+
+def _runtime_external_archive_has_digest_binding_sink(
+    *,
+    artifact: GuardArtifact,
+    context: HarnessContext,
+    raw_command: str | None,
+    runtime_workspace: Path | None,
+) -> bool:
+    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
+    manager = _optional_string(metadata.get("package_manager"))
+    executable = _optional_string(metadata.get("package_executable"))
+    if manager is None or executable is None:
+        return False
+    if not any(separator in executable for separator in ("/", "\\")):
+        return False
+    if not _runtime_external_archive_command_matches_executable(raw_command, executable):
+        return False
+    try:
+        status = package_shim_status(context, path_env=os.environ.get("PATH", ""))
+    except (OSError, RuntimeError, ValueError):
+        return False
+    details = status.get("manager_details")
+    if not isinstance(details, list):
+        return False
+    detail = next(
+        (
+            item
+            for item in details
+            if isinstance(item, Mapping) and item.get("manager") == manager and item.get("integrity") == "ok"
+        ),
+        None,
+    )
+    if detail is None:
+        return False
+    shim_path_value = detail.get("shim_path")
+    if not isinstance(shim_path_value, str):
+        return False
+    try:
+        shim_path = Path(shim_path_value).resolve(strict=True)
+        candidate = Path(executable).expanduser()
+        if not candidate.is_absolute():
+            candidate = (runtime_workspace or Path.cwd()) / candidate
+        resolved_executable = candidate.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    return resolved_executable == shim_path
+
+
+def _runtime_cisco_scanner_evidence(
+    action_envelope: GuardActionEnvelope,
+    *,
+    runtime_workspace: Path | None,
+    raw_shell_cwds: object,
+) -> tuple[GuardRiskSignalV3, ...]:
+    """Scan every distinct proven shell cwd that may resolve a relative target."""
+
+    workspaces: list[Path | None] = []
+    if isinstance(raw_shell_cwds, list):
+        for value in raw_shell_cwds:
+            if not isinstance(value, str) or not value.strip():
+                continue
+            candidate = Path(value).expanduser().resolve(strict=False)
+            if candidate not in workspaces:
+                workspaces.append(candidate)
+    if not workspaces:
+        workspaces.append(runtime_workspace)
+
+    primary_workspace = runtime_workspace or next((item for item in workspaces if item is not None), None)
+    approved_scan_roots = tuple(item for item in workspaces if item is not None)
+    evidence: list[GuardRiskSignalV3] = []
+    for workspace in workspaces:
+        for signal in scan_action_for_cisco_evidence(
+            action_envelope,
+            workspace=workspace or primary_workspace,
+            approved_scan_roots=approved_scan_roots,
+        ):
+            if signal not in evidence:
+                evidence.append(signal)
+    return tuple(evidence)
 
 
 def _evaluate_runtime_artifact_hook(
@@ -186,7 +314,52 @@ def _evaluate_runtime_artifact_hook(
             artifact=runtime_artifact,
             store=store,
             workspace_dir=runtime_workspace,
+            external_archive_network_authorized=False,
         )
+        if _package_evaluation_requires_external_archive_binding(package_evaluation):
+            has_binding_sink = _runtime_external_archive_has_digest_binding_sink(
+                artifact=runtime_artifact,
+                context=context,
+                raw_command=_runtime_package_raw_command(payload_map, action_envelope),
+                runtime_workspace=runtime_workspace,
+            )
+            if not has_binding_sink:
+                package_evaluation = _package_policy_override_evaluation(
+                    package_evaluation,
+                    decision="block",
+                    policy_action="block",
+                    title="External archive binding unavailable",
+                    summary="Guard cannot prove this command will execute through its digest-binding package shim.",
+                    harness_message=(
+                        "HOL Guard blocked the external archive because the verified package shim is not the "
+                        "resolved executable. Repair or activate package shims and retry."
+                    ),
+                    reason_code="external_archive_binding_unavailable",
+                    reason_message=(
+                        "External archives may run only through a verified Guard package shim that installs the "
+                        "already inspected blob."
+                    ),
+                )
+            else:
+                # The verified shim is the sole approval owner: it performs
+                # the post-approval restricted download, digest binding, and
+                # launch.  Asking under the hook artifact as well would create
+                # a second, unrelated approval that cannot authorize the shim.
+                package_evaluation = _package_policy_override_evaluation(
+                    package_evaluation,
+                    decision="allow",
+                    policy_action="allow",
+                    title="External archive delegated to Guard shim",
+                    summary="The verified package shim will own approval and digest-bound execution.",
+                    harness_message=(
+                        "HOL Guard delegated this package request to its verified digest-binding package shim."
+                    ),
+                    reason_code="external_archive_delegated_to_binding_shim",
+                    reason_message=(
+                        "The runtime hook permits only the exact verified shim; that shim requires approval before "
+                        "restricted download and executes only the inspected digest-bound blob."
+                    ),
+                )
         effective_package_workspace = runtime_workspace or Path.cwd()
         package_execution_context = build_package_execution_context(
             workspace_dir=effective_package_workspace,
@@ -246,9 +419,22 @@ def _evaluate_runtime_artifact_hook(
         *(item for item in current_action_inputs[1:]),
     )
     changed_capabilities = [runtime_artifact.artifact_type]
+    artifact_metadata = runtime_artifact.metadata if isinstance(runtime_artifact.metadata, dict) else {}
+    raw_shell_cwds = artifact_metadata.get("shell_execution_effective_cwds")
+    shell_context_incomplete = (
+        bool(
+            artifact_metadata.get("shell_execution_context_hash")
+            or artifact_metadata.get("shell_execution_context_hashes")
+        )
+        and artifact_metadata.get("shell_execution_context_complete") is False
+    )
     scanner_evidence = (
-        scan_action_for_cisco_evidence(action_envelope, workspace=runtime_workspace)
-        if action_envelope is not None
+        _runtime_cisco_scanner_evidence(
+            action_envelope,
+            runtime_workspace=runtime_workspace,
+            raw_shell_cwds=raw_shell_cwds,
+        )
+        if action_envelope is not None and not shell_context_incomplete
         else ()
     )
     scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
@@ -319,22 +505,42 @@ def _evaluate_runtime_artifact_hook(
     scanner_raised_to_block = (
         policy_action == "block" and _pre_scanner_policy_action != "block" and bool(scanner_evidence)
     )
-    base_decision_signals = data_flow_signals or artifact_risk_signals_v2(runtime_artifact)
+    artifact_decision_signals = artifact_risk_signals_v2(runtime_artifact)
+    base_decision_signals = tuple(
+        {signal.signal_id: signal for signal in (*artifact_decision_signals, *data_flow_signals)}.values()
+    )
     scanner_decision_signals = tuple(cisco_risk_signal_v3_to_v2(signal) for signal in scanner_evidence)
     if scanner_raised_to_block and scanner_decision_signals:
         decision_signals = (*scanner_decision_signals, *base_decision_signals)
     else:
         decision_signals = (*base_decision_signals, *scanner_decision_signals)
+    compound_finding_count = artifact_metadata.get("compound_finding_count")
+    has_compound_findings = isinstance(compound_finding_count, int) and compound_finding_count > 1
     scanner_risk_signals = [signal.plain_language_summary for signal in scanner_evidence]
-    if data_flow_signals:
-        risk_signals = [signal.plain_reason for signal in data_flow_signals]
-        risk_summary = _runtime_data_flow_summary(data_flow_signals)
-    else:
-        risk_signals = list(artifact_risk_signals(runtime_artifact))
-        risk_summary = artifact_risk_summary(runtime_artifact)
-    if package_controls_pre_scanner_summary and package_evaluation is not None:
-        risk_signals = [str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons]
-        risk_summary = package_evaluation.risk_summary
+    risk_signals = list(
+        dict.fromkeys(
+            [
+                *artifact_risk_signals(runtime_artifact),
+                *(signal.plain_reason for signal in data_flow_signals),
+            ]
+        )
+    )
+    risk_summaries = [artifact_risk_summary(runtime_artifact)]
+    if data_flow_signals and not has_compound_findings:
+        risk_summaries.append(_runtime_data_flow_summary(data_flow_signals))
+    if package_evaluation is not None:
+        package_risk_signals = [
+            str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons
+        ]
+        if has_compound_findings and package_controls_pre_scanner_summary:
+            risk_signals = list(dict.fromkeys([*package_risk_signals, *risk_signals]))
+            risk_summaries.insert(0, package_evaluation.risk_summary)
+        elif has_compound_findings:
+            risk_signals = list(dict.fromkeys([*risk_signals, *package_risk_signals]))
+            risk_summaries.append(package_evaluation.risk_summary)
+        elif package_controls_pre_scanner_summary:
+            risk_signals = package_risk_signals
+            risk_summaries = [package_evaluation.risk_summary]
         scanner_evidence_payload.extend(
             {
                 "decision": package_evaluation.decision,
@@ -345,10 +551,15 @@ def _evaluate_runtime_artifact_hook(
             }
             for package in package_evaluation.packages
         )
+    risk_summary = " ".join(dict.fromkeys(summary for summary in risk_summaries if summary))
     if scanner_risk_signals:
-        risk_signals.extend(scanner_risk_signals)
+        risk_signals = list(dict.fromkeys([*risk_signals, *scanner_risk_signals]))
         if scanner_raised_to_block:
-            risk_summary = scanner_risk_signals[0]
+            risk_summary = (
+                " ".join(dict.fromkeys([scanner_risk_signals[0], risk_summary]))
+                if has_compound_findings
+                else scanner_risk_signals[0]
+            )
     current_policy_action = policy_action
     runtime_artifact_hash = _runtime_hook_approval_context_token(
         artifact=approval_context_artifact,
@@ -367,6 +578,7 @@ def _evaluate_runtime_artifact_hook(
         current_action=approval_context_policy_action,
         data_flow_signals=data_flow_signals,
         scanner_evidence=scanner_evidence,
+        workflow_approval_record=workflow_state.approval_record,
     )
     policy_workspace = str(runtime_workspace) if runtime_workspace else None
     if package_execution_context is not None:
@@ -824,11 +1036,27 @@ def _evaluate_runtime_artifact_hook(
         action_envelope = action_envelope.with_pre_execution_result(policy_action)
     decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=decision_signals)
     decision_v2_payload = decision_v2.to_dict()
-    if package_evaluation is not None and package_policy_action == policy_action:
+    package_only_decision = not has_compound_findings
+    if package_evaluation is not None and package_policy_action == policy_action and package_only_decision:
         decision_v2_payload["user_title"] = package_evaluation.user_copy.title
         decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
         decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
         decision_v2_payload["dashboard_primary_detail"] = package_evaluation.user_copy.summary
+    if has_compound_findings:
+        action_phrase = {
+            "allow": "allowed",
+            "warn": "allowed with a warning",
+            "sandbox-required": "requires a sandbox for",
+            "review": "paused for one review",
+            "require-reapproval": "paused for one review",
+            "block": "blocked",
+        }[policy_action]
+        compound_detail = f"Guard combined {compound_finding_count} findings for the complete command. {risk_summary}"
+        decision_v2_payload["user_body"] = compound_detail
+        decision_v2_payload["harness_message"] = (
+            f"HOL Guard {action_phrase} this complete command after combining "
+            f"{compound_finding_count} findings. {risk_summary}"
+        )
     incident = build_incident_context(
         harness=args.harness,
         artifact=runtime_artifact,

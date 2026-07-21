@@ -231,7 +231,13 @@ def _resolve_node(path_value: str, shim_directory: Path) -> str:
         raise ValueError("node executable unavailable")
     path = Path(candidate)
     canonical = path.resolve(strict=True)
-    if not canonical.is_file() or not os.access(canonical, os.X_OK):
+    shim_path = Path(shim)
+    if (
+        canonical == shim_path
+        or canonical.is_relative_to(shim_path)
+        or not canonical.is_file()
+        or not os.access(canonical, os.X_OK)
+    ):
         raise ValueError("node executable is not path-pinned")
     return str(canonical)
 

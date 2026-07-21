@@ -287,6 +287,46 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
     assert match is None
 
 
+def test_guard_keeps_leading_home_cd_and_github_read_prompt_free_without_cwd(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    destination = home / "projects" / "review-worktree"
+    destination.mkdir(parents=True)
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "cd ~/projects/review-worktree && gh pr view 17 --json state,mergedAt,mergeCommit 2>&1"},
+        cwd=None,
+        home_dir=home,
+    )
+
+    assert match is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "echo before && cd ~/projects/review-worktree && gh pr view 17 --json state",
+        "cd $TARGET && gh pr view 17 --json state",
+        "cd ~/projects/review-worktree && gh pr merge 17 --admin",
+    ),
+)
+def test_guard_does_not_relax_unproven_home_cd_github_compositions(
+    tmp_path: Path,
+    command: str,
+) -> None:
+    home = tmp_path / "home"
+    (home / "projects" / "review-worktree").mkdir(parents=True)
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=None,
+        home_dir=home,
+    )
+
+    assert match is not None
+
+
 @pytest.mark.parametrize(
     ("command", "action_class"),
     (
@@ -361,8 +401,8 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
         ("watch gh repo delete o/r --yes", "GitHub delete command"),
         ("builtin command gh repo delete o/r --yes", "GitHub delete command"),
         ("echo gh repo delete o/r --yes | sh", "Unverified GitHub command capability"),
-        ("eval 'gh repo delete o/r --yes'", "GitHub delete command"),
-        ("eval gh repo delete o/r --yes", "GitHub delete command"),
+        ("eval 'gh repo delete o/r --yes'", "unresolved shell execution context"),
+        ("eval gh repo delete o/r --yes", "unresolved shell execution context"),
         ("f(){ gh repo delete o/r --yes; }; f", "Unverified GitHub command capability"),
         ("g() { gh repo delete o/r --yes; }; g", "Unverified GitHub command capability"),
         ("g () { gh repo delete o/r --yes; }; g", "Unverified GitHub command capability"),
@@ -413,7 +453,7 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
         ),
         (
             "CMD='echo ok'; case x in x) CMD='gh repo delete o/r --yes';; esac; eval \"$CMD\"",
-            "Unverified GitHub command capability",
+            "unresolved shell execution context",
         ),
         (
             "TOOL=gh; while false; do TOOL=python; done; $TOOL repo delete o/r --yes",
@@ -439,7 +479,7 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
         ("case x in x) : ;;& x) gh repo delete o/r --yes;; esac", "GitHub delete command"),
         (
             "CMD='gh repo delete o/r --yes'; false && CMD='echo ok'; eval \"$CMD\"",
-            "Unverified GitHub command capability",
+            "unresolved shell execution context",
         ),
         (
             "CMD='gh repo delete o/r --yes'; true || CMD='echo ok'; sh -c \"$CMD\"",
@@ -447,9 +487,9 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
         ),
         ('TOOL="$(command -v gh)"; "$TOOL" repo delete o/r --yes', "Unverified GitHub command capability"),
         ('TOOL="$(which gh)"; "$TOOL" repo delete o/r --yes', "Unverified GitHub command capability"),
-        ('CMD="gh repo delete o/r --yes"; eval "$CMD"', "Unverified GitHub command capability"),
-        ('CMD="/usr/local/bin/gh repo delete o/r --yes"; eval "$CMD"', "Unverified GitHub command capability"),
-        ('CMD=\'"gh" repo delete o/r --yes\'; eval "$CMD"', "Unverified GitHub command capability"),
+        ('CMD="gh repo delete o/r --yes"; eval "$CMD"', "unresolved shell execution context"),
+        ('CMD="/usr/local/bin/gh repo delete o/r --yes"; eval "$CMD"', "unresolved shell execution context"),
+        ('CMD=\'"gh" repo delete o/r --yes\'; eval "$CMD"', "unresolved shell execution context"),
         ('CMD="gh secret set TOKEN --body x"; sh -c "$CMD"', "Unverified GitHub command capability"),
         ('CMD="gh repo delete o/r --yes"; echo "$CMD" | sh', "Unverified GitHub command capability"),
         ("f(){ $GH repo delete o/r --yes; }; f", "Unverified GitHub command capability"),
@@ -463,7 +503,7 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
         ("exec 'C:\\tools\\gh.exe' repo delete o/r --yes", "GitHub delete command"),
         ("timeout 5 'C:\\tools\\gh.exe' repo delete o/r --yes", "GitHub delete command"),
         ("TOOL='C:\\tools\\gh.exe'; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
-        ("CMD='C:\\tools\\gh.exe repo delete o/r --yes'; eval \"$CMD\"", "Unverified GitHub command capability"),
+        ("CMD='C:\\tools\\gh.exe repo delete o/r --yes'; eval \"$CMD\"", "unresolved shell execution context"),
         ('gh api repos/o/r --hostname "$HOST"', "Unverified GitHub command capability"),
         ('gh api repos/o/r --hostname "$(cat host.txt)"', "Unverified GitHub command capability"),
         ('gh api repos/o/r -H "Authorization: Bearer $TOKEN"', "Unverified GitHub command capability"),

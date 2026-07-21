@@ -12,9 +12,11 @@ import {
 } from "./lab-process";
 import { teardownLab, type TeardownEvidence } from "./teardown";
 import { runInstalledPlaywright } from "./installed-playwright";
-import { fetchLabGet } from "./relay-fetch";
+import { fetchLabGet, fetchLabIdempotent } from "./relay-fetch";
 import { readDashboardSession } from "./session-handoff";
 const SENTINEL = "guard-private-command-sentinel";
+const WORKFLOW_AUTHORIZATION_TIMEOUT_MS = 120_000;
+const MAX_GUARD_FAILURE_CHARS = 4_000;
 interface ReadyEvidence {
   activity_count: number;
   installed_origin: string;
@@ -112,8 +114,16 @@ export async function readyFromLogs(
     await runner(composeCommand(project, "logs", "--no-color", "guard"), { cwd: LAB_DIR, env: environment }),
     "Dockerlabs logs",
   );
+  const traceback = logs.lastIndexOf("Traceback (most recent call last):");
+  const readiness = logs.lastIndexOf("HOL_GUARD_LAB_READY ");
+  if (traceback > readiness) {
+    const diagnostic = logs.slice(traceback).replaceAll(SENTINEL, "[REDACTED]").slice(-MAX_GUARD_FAILURE_CHARS);
+    throw new Error(`installed daemon failed before readiness\n${diagnostic}`);
+  }
   const ready = logs.split("\n").filter((line) => line.includes("HOL_GUARD_LAB_READY ")).at(-1);
-  if (!ready) throw new Error("installed daemon did not emit readiness evidence");
+  if (!ready) {
+    throw new Error("installed daemon did not emit readiness evidence");
+  }
   const payload = ready.slice(ready.indexOf("HOL_GUARD_LAB_READY ") + "HOL_GUARD_LAB_READY ".length);
   return JSON.parse(payload) as ReadyEvidence;
 }
@@ -147,7 +157,11 @@ async function waitForReadyEvidence(
   environment: Record<string, string>,
   runner: CommandRunner,
 ): Promise<ReadyEvidence> {
-  const deadline = Date.now() + 30_000;
+  // Authorization deliberately exercises seven installed hooks before the
+  // daemon emits its evidence. Hosted runners can take longer than 30 seconds
+  // to complete that sequence even though every hook remains within its own
+  // subprocess timeout.
+  const deadline = Date.now() + WORKFLOW_AUTHORIZATION_TIMEOUT_MS;
   while (Date.now() < deadline) {
     try {
       return await readyFromLogs(project, environment, runner);
@@ -190,6 +204,7 @@ async function apiJson(
   path: string,
   session: string,
   init: RequestInit = {},
+  retryTransientReset = false,
 ): Promise<Record<string, unknown>> {
   const request = `${origin}${path}`;
   const options = {
@@ -202,7 +217,9 @@ async function apiJson(
   };
   const response = init.method === undefined
     ? await fetchLabGet(request, options)
-    : await fetch(request, options);
+    : retryTransientReset
+      ? await fetchLabIdempotent(request, options)
+      : await fetch(request, options);
   if (!response.ok) throw new Error(`${path} returned ${response.status}: ${await response.text()}`);
   return await response.json() as Record<string, unknown>;
 }
@@ -222,21 +239,29 @@ async function approveWorkflowAuthorization(
   ) {
     throw new Error("workflow request scope contract did not reconcile");
   }
-  const unauthenticated = await fetch(`${origin}${path}/approve`, {
+  const unauthenticated = await fetchLabIdempotent(`${origin}${path}/approve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "allow", scope: "artifact" }),
   });
   if (unauthenticated.status !== 401) throw new Error("workflow approval endpoint did not require authentication");
-  const response = await apiJson(origin, `${path}/approve`, session, {
-    method: "POST",
-    body: JSON.stringify({
-      action: "allow",
-      scope: "artifact",
-      scope_contract_digest: pending.scope_contract_digest,
-      scope_contract_version: pending.scope_contract_version,
-    }),
-  });
+  // The daemon guarantees exact action/scope replays are idempotent, so a
+  // relay reset after commit can safely repeat this one mutation.
+  const response = await apiJson(
+    origin,
+    `${path}/approve`,
+    session,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        action: "allow",
+        scope: "artifact",
+        scope_contract_digest: pending.scope_contract_digest,
+        scope_contract_version: pending.scope_contract_version,
+      }),
+    },
+    true,
+  );
   const resolved = response.resolved_request;
   if (
     response.resolved !== true

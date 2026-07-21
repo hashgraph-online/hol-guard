@@ -69,6 +69,7 @@ import type {
   GuardSettingsExport,
   GuardSettings,
   GuardUpdateScheduleResult,
+  GuardDaemonReconnectAuthorization,
   GuardUpdateReconnectOptions,
   GuardUpdateStatus,
   GuardUpdateVersionCheck,
@@ -96,10 +97,13 @@ const GUARD_DAEMON_PORT_RANGE = 1000;
 const GUARD_DAEMON_DISCOVERY_PROBE_COUNT = 25;
 const GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE = 5;
 const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
+const GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION = 1;
+const GUARD_DAEMON_RECONNECT_NONCE_BYTES = 32;
 const RUNTIME_HEARTBEAT_MAX_AGE_MS = 30_000;
 const RUNTIME_HEARTBEAT_FUTURE_TOLERANCE_MS = 5_000;
 let guardTokenOverride: string | null = null;
 let guardTokenLocationKey: string | null = null;
+let guardDaemonReconnectDiagnostic = "dashboard_reconnect_not_started";
 
 type RawGuardApprovalRequest = Omit<
   GuardApprovalRequest,
@@ -296,7 +300,17 @@ function saveGuardDaemonOrigin(daemonOrigin: string): void {
 }
 
 function preferredGuardDaemonPort(): number {
-  const fromOrigin = readGuardDaemonOrigin();
+  const establishedOrigin = establishedGuardDaemonOriginForReconnect();
+  const rawDaemonUrl = guardParam(GUARD_DAEMON_PARAM);
+  const suppliedToken = guardParam(GUARD_TOKEN_PARAM);
+  const mayUseUnboundHint = Boolean(suppliedToken?.trim()) || !readGuardStorage(GUARD_TOKEN_PARAM);
+  const fromOrigin =
+    establishedOrigin ??
+    (rawDaemonUrl && mayUseUnboundHint ? localGuardDaemonOrigin(rawDaemonUrl) : null) ??
+    (() => {
+      const storedDaemonUrl = readGuardStorage(GUARD_DAEMON_PARAM);
+      return storedDaemonUrl ? localGuardDaemonOrigin(storedDaemonUrl) : null;
+    })();
   if (fromOrigin) {
     try {
       const port = Number(new URL(fromOrigin).port);
@@ -333,20 +347,36 @@ export function buildGuardDaemonCandidatePorts(preferredPort: number): number[] 
 }
 
 async function probeGuardDaemonHealth(origin: string): Promise<boolean> {
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
+  const candidateOrigin = localGuardDaemonOrigin(origin);
+  if (!candidateOrigin) {
+    return false;
+  }
   try {
-    const response = await fetch(`${origin}/healthz`, { signal: controller.signal });
+    const { response, payload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/healthz`, {
+      redirect: "error",
+    });
     if (!response.ok) {
       return false;
     }
-    const payload: unknown = await response.json();
     if (!isRecord(payload)) {
       return false;
     }
     return payload.ok === true && payload.compatibility_version === 2;
   } catch {
     return false;
+  }
+}
+
+async function fetchGuardDaemonCandidateJson(
+  input: RequestInfo,
+  init: RequestInit,
+): Promise<{ response: Response; payload: unknown }> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetch(input, { ...init, signal: controller.signal });
+    const payload: unknown = await response.json();
+    return { response, payload };
   } finally {
     window.clearTimeout(timeoutId);
   }
@@ -403,12 +433,301 @@ export function updateReconnectSucceeded(
   return options.sawUpdateInProgress === true;
 }
 
+type GuardDaemonReconnectChallenge = {
+  protocol_version: 1;
+  reconnect_id: string;
+  client_nonce: string;
+  server_nonce: string;
+  state_id: string;
+  candidate_origin: string;
+  installation_id: string;
+  guard_home_id: string;
+  surface: "dashboard";
+  issued_at_ms: number;
+  expires_at_ms: number;
+};
+
+function isHexDigest(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+function randomHex(bytes: number): string {
+  const value = new Uint8Array(bytes);
+  globalThis.crypto.getRandomValues(value);
+  return [...value].map((item) => item.toString(16).padStart(2, "0")).join("");
+}
+
+function hexBytes(value: string): Uint8Array {
+  const bytes = new Uint8Array(value.length / 2);
+  for (let index = 0; index < value.length; index += 2) {
+    bytes[index / 2] = Number.parseInt(value.slice(index, index + 2), 16);
+  }
+  return bytes;
+}
+
+function canonicalReconnectPayload(value: Record<string, string | number>): string {
+  const entries = Object.entries(value).sort(([left], [right]) => {
+    if (left < right) return -1;
+    if (left > right) return 1;
+    return 0;
+  });
+  return JSON.stringify(Object.fromEntries(entries));
+}
+
+async function dashboardReconnectProof(
+  verifier: string,
+  proofContext: "server" | "client",
+  challenge: GuardDaemonReconnectChallenge,
+): Promise<string> {
+  const key = await globalThis.crypto.subtle.importKey(
+    "raw",
+    hexBytes(verifier).buffer as ArrayBuffer,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const message = new TextEncoder().encode(
+    canonicalReconnectPayload({ proof_context: proofContext, ...challenge }),
+  ).buffer as ArrayBuffer;
+  const signature = await globalThis.crypto.subtle.sign("HMAC", key, message);
+  return [...new Uint8Array(signature)].map((item) => item.toString(16).padStart(2, "0")).join("");
+}
+
+function constantTimeHexEqual(left: string, right: string): boolean {
+  if (!isHexDigest(left) || !isHexDigest(right)) {
+    return false;
+  }
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return difference === 0;
+}
+
+function parseReconnectAuthorization(payload: unknown): GuardDaemonReconnectAuthorization | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  if (
+    payload["protocol_version"] !== GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION ||
+    payload["surface"] !== "dashboard" ||
+    !isHexDigest(payload["reconnect_id"]) ||
+    !isHexDigest(payload["verifier"]) ||
+    !isHexDigest(payload["installation_id"]) ||
+    !isHexDigest(payload["guard_home_id"]) ||
+    typeof payload["issued_at_ms"] !== "number" ||
+    typeof payload["expires_at_ms"] !== "number" ||
+    payload["expires_at_ms"] <= payload["issued_at_ms"]
+  ) {
+    return null;
+  }
+  const now = Date.now();
+  if (payload["issued_at_ms"] > now + 5_000 || payload["expires_at_ms"] > now + 305_000) {
+    return null;
+  }
+  return {
+    protocolVersion: 1,
+    reconnectId: payload["reconnect_id"],
+    verifier: payload["verifier"],
+    surface: "dashboard",
+    issuedAtMs: payload["issued_at_ms"],
+    expiresAtMs: payload["expires_at_ms"],
+    installationId: payload["installation_id"],
+    guardHomeId: payload["guard_home_id"],
+  };
+}
+
+function parseReconnectChallenge(
+  payload: unknown,
+  authorization: GuardDaemonReconnectAuthorization,
+  candidateOrigin: string,
+  clientNonce: string,
+): { challenge: GuardDaemonReconnectChallenge; proof: string } | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  const stringFields = ["state_id"] as const;
+  if (
+    payload["protocol_version"] !== GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION ||
+    payload["reconnect_id"] !== authorization.reconnectId ||
+    payload["client_nonce"] !== clientNonce ||
+    payload["candidate_origin"] !== candidateOrigin ||
+    payload["installation_id"] !== authorization.installationId ||
+    payload["guard_home_id"] !== authorization.guardHomeId ||
+    payload["surface"] !== authorization.surface ||
+    !isHexDigest(payload["server_nonce"]) ||
+    !isHexDigest(payload["proof"]) ||
+    !stringFields.every((field) => typeof payload[field] === "string" && payload[field].length > 0) ||
+    typeof payload["issued_at_ms"] !== "number" ||
+    typeof payload["expires_at_ms"] !== "number"
+  ) {
+    return null;
+  }
+  const challenge: GuardDaemonReconnectChallenge = {
+    protocol_version: 1,
+    reconnect_id: authorization.reconnectId,
+    client_nonce: clientNonce,
+    server_nonce: payload["server_nonce"],
+    state_id: payload["state_id"] as string,
+    candidate_origin: candidateOrigin,
+    installation_id: authorization.installationId,
+    guard_home_id: authorization.guardHomeId,
+    surface: "dashboard",
+    issued_at_ms: payload["issued_at_ms"],
+    expires_at_ms: payload["expires_at_ms"],
+  };
+  const now = Date.now();
+  if (
+    challenge.issued_at_ms > now + 5_000 ||
+    challenge.expires_at_ms < now ||
+    challenge.expires_at_ms > authorization.expiresAtMs
+  ) {
+    return null;
+  }
+  return { challenge, proof: payload["proof"] };
+}
+
+export async function prepareGuardDaemonReconnect(): Promise<GuardDaemonReconnectAuthorization> {
+  const daemonOrigin = establishedGuardDaemonOriginForReconnect();
+  const guardToken = readGuardToken();
+  if (!daemonOrigin || !guardToken) {
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_prepare_origin_unavailable";
+    throw new Error("Guard could not identify the authenticated daemon for a secure reconnect.");
+  }
+  let response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+    redirect: "error",
+  }, guardToken));
+  if (response.status === 401) {
+    const refreshedToken = await initializeGuardDashboardSessionAtOrigin(daemonOrigin, guardToken);
+    if (refreshedToken && refreshedToken !== guardToken) {
+      saveGuardToken(refreshedToken);
+      response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        redirect: "error",
+      }, refreshedToken));
+    }
+  }
+  const authorization = response.ok ? parseReconnectAuthorization(await response.json()) : null;
+  if (!authorization || authorization.expiresAtMs <= Date.now()) {
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_prepare_failed";
+    throw new Error("Guard could not prepare a secure dashboard reconnect.");
+  }
+  guardDaemonReconnectDiagnostic = "dashboard_reconnect_prepared";
+  return authorization;
+}
+
+function establishedGuardDaemonOriginForReconnect(): string | null {
+  const pageOrigin = localGuardDaemonOrigin(window.location.origin);
+  if (pageOrigin) {
+    return pageOrigin;
+  }
+  const suppliedToken = guardParam(GUARD_TOKEN_PARAM);
+  if (suppliedToken?.trim()) {
+    const suppliedDaemon = guardParam(GUARD_DAEMON_PARAM);
+    const suppliedOrigin = suppliedDaemon ? localGuardDaemonOrigin(suppliedDaemon) : null;
+    if (suppliedOrigin) {
+      return suppliedOrigin;
+    }
+  }
+  const storedDaemon = readGuardStorage(GUARD_DAEMON_PARAM);
+  return storedDaemon ? localGuardDaemonOrigin(storedDaemon) : null;
+}
+
+export function readGuardDaemonReconnectDiagnostic(): string {
+  return guardDaemonReconnectDiagnostic;
+}
+
+async function authenticateGuardDaemonCandidate(
+  origin: string,
+  authorization: GuardDaemonReconnectAuthorization,
+): Promise<boolean> {
+  const candidateOrigin = localGuardDaemonOrigin(origin);
+  if (!candidateOrigin || authorization.expiresAtMs <= Date.now()) {
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_authorization_expired";
+    return false;
+  }
+  const clientNonce = randomHex(GUARD_DAEMON_RECONNECT_NONCE_BYTES);
+  try {
+    const { response: challengeResponse, payload: challengePayload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/v1/update/reconnect/challenge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        protocol_version: GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION,
+        reconnect_id: authorization.reconnectId,
+        client_nonce: clientNonce,
+        candidate_origin: candidateOrigin,
+      }),
+      redirect: "error",
+    });
+    if (!challengeResponse.ok) {
+      guardDaemonReconnectDiagnostic = "dashboard_reconnect_candidate_unavailable";
+      return false;
+    }
+    const parsed = parseReconnectChallenge(
+      challengePayload,
+      authorization,
+      candidateOrigin,
+      clientNonce,
+    );
+    if (!parsed) {
+      guardDaemonReconnectDiagnostic = "dashboard_reconnect_challenge_invalid";
+      return false;
+    }
+    const expectedServerProof = await dashboardReconnectProof(
+      authorization.verifier,
+      "server",
+      parsed.challenge,
+    );
+    if (!constantTimeHexEqual(parsed.proof, expectedServerProof)) {
+      guardDaemonReconnectDiagnostic = "dashboard_reconnect_server_proof_invalid";
+      return false;
+    }
+    const clientProof = await dashboardReconnectProof(
+      authorization.verifier,
+      "client",
+      parsed.challenge,
+    );
+    const { response: verificationResponse, payload: verificationPayload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/v1/update/reconnect/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        protocol_version: GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION,
+        challenge: parsed.challenge,
+        proof: clientProof,
+      }),
+      redirect: "error",
+    });
+    if (!verificationResponse.ok) {
+      guardDaemonReconnectDiagnostic = "dashboard_reconnect_client_proof_rejected";
+      return false;
+    }
+    if (!isRecord(verificationPayload) || verificationPayload["verified"] !== true) {
+      guardDaemonReconnectDiagnostic = "dashboard_reconnect_client_proof_rejected";
+      return false;
+    }
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_proof_accepted";
+    return true;
+  } catch {
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_candidate_unavailable";
+    return false;
+  }
+}
+
 async function initializeGuardDashboardSessionAtOrigin(
   origin: string,
   guardToken: string | null,
 ): Promise<string | null> {
+  const candidateOrigin = localGuardDaemonOrigin(origin);
+  if (!candidateOrigin) {
+    return null;
+  }
   try {
-    const response = await fetch(`${origin}/v1/initialize`, {
+    const { response, payload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/v1/initialize`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -419,11 +738,12 @@ async function initializeGuardDashboardSessionAtOrigin(
         surface: "dashboard",
         supported_protocol_versions: [...GUARD_SURFACE_PROTOCOL_VERSIONS],
       }),
+      redirect: "error",
     });
     if (!response.ok) {
       return null;
     }
-    return parseDashboardSessionToken(await response.json());
+    return parseDashboardSessionToken(payload);
   } catch {
     return null;
   }
@@ -433,27 +753,37 @@ export async function fetchGuardUpdateStatusAtOrigin(
   origin: string,
   guardToken: string | null,
 ): Promise<GuardUpdateStatus> {
-  const response = await fetch(`${origin}/v1/update/status`, {
+  const candidateOrigin = localGuardDaemonOrigin(origin);
+  if (!candidateOrigin) {
+    throw new Error("Invalid Guard daemon origin");
+  }
+  const { response, payload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/v1/update/status`, {
     headers: guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {},
+    redirect: "error",
   });
   if (!response.ok) {
     throw new Error(`Update status failed with ${response.status}`);
   }
-  return normalizeGuardUpdateStatus(await response.json());
+  return normalizeGuardUpdateStatus(payload);
 }
 
 export function redirectToGuardDaemonOrigin(
   origin: string,
   guardToken: string | null,
 ): void {
-  const url = new URL(origin);
+  const candidateOrigin = localGuardDaemonOrigin(origin);
+  if (!candidateOrigin) {
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_origin_invalid";
+    return;
+  }
+  const url = new URL(candidateOrigin);
   url.pathname = window.location.pathname;
   url.search = window.location.search;
   const fragmentPairs: string[] = [];
   if (guardToken) {
     fragmentPairs.push(`${GUARD_TOKEN_PARAM}=${encodeURIComponent(guardToken)}`);
   }
-  fragmentPairs.push(`${GUARD_DAEMON_PARAM}=${encodeURIComponent(origin)}`);
+  fragmentPairs.push(`${GUARD_DAEMON_PARAM}=${encodeURIComponent(candidateOrigin)}`);
   url.hash = fragmentPairs.join("&");
   window.location.replace(url.toString());
 }
@@ -461,8 +791,13 @@ export function redirectToGuardDaemonOrigin(
 export async function reconnectGuardDaemonAfterUpdate(
   options?: GuardUpdateReconnectOptions,
 ): Promise<{ origin: string | null; status: GuardUpdateStatus | null; sawUpdateInProgress: boolean } | null> {
-  const guardToken = readGuardToken();
   const reconnectOptions = options ?? {};
+  const authorization = reconnectOptions.authorization;
+  if (!authorization) {
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_authorization_missing";
+    return null;
+  }
+  const guardToken = readGuardToken();
   const awaitingVersionChange = Boolean(reconnectOptions.expectedPreviousVersion);
   const ports = buildGuardDaemonCandidatePorts(preferredGuardDaemonPort());
   let sawUpdateInProgress = reconnectOptions.sawUpdateInProgress === true;
@@ -473,6 +808,9 @@ export async function reconnectGuardDaemonAfterUpdate(
       batch.map(async (port) => {
         const origin = `http://127.0.0.1:${port}`;
         if (!(await probeGuardDaemonHealth(origin))) {
+          return null;
+        }
+        if (!(await authenticateGuardDaemonCandidate(origin, authorization))) {
           return null;
         }
         try {
@@ -492,11 +830,11 @@ export async function reconnectGuardDaemonAfterUpdate(
 
     const active = results.find((result) => result !== null && result.origin !== null && result.status !== null);
     if (active?.origin && active.status) {
-      saveGuardDaemonOrigin(active.origin);
       const refreshedToken = await initializeGuardDashboardSessionAtOrigin(active.origin, guardToken);
       if (refreshedToken) {
         saveGuardToken(refreshedToken);
       }
+      saveGuardDaemonOrigin(active.origin);
       return {
         origin: active.origin,
         status: active.status,
@@ -515,31 +853,52 @@ export async function reconnectGuardDaemonAfterUpdate(
 }
 
 function readGuardDaemonOrigin(): string | null {
+  const storedDaemonUrl = readGuardStorage(GUARD_DAEMON_PARAM);
+  const storedDaemonOrigin = storedDaemonUrl ? localGuardDaemonOrigin(storedDaemonUrl) : null;
   const rawDaemonUrl = guardParam(GUARD_DAEMON_PARAM);
   if (rawDaemonUrl) {
     const daemonOrigin = localGuardDaemonOrigin(rawDaemonUrl);
-    if (daemonOrigin) {
+    const suppliedToken = guardParam(GUARD_TOKEN_PARAM);
+    const hasStoredToken = Boolean(readGuardStorage(GUARD_TOKEN_PARAM));
+    if (daemonOrigin && (Boolean(suppliedToken?.trim()) || !hasStoredToken)) {
       saveGuardStorage(GUARD_DAEMON_PARAM, daemonOrigin);
       return daemonOrigin;
     }
   }
-  const storedDaemonUrl = readGuardStorage(GUARD_DAEMON_PARAM);
-  return storedDaemonUrl ? localGuardDaemonOrigin(storedDaemonUrl) : null;
+  return storedDaemonOrigin;
 }
 
-function localGuardDaemonOrigin(rawUrl: string): string | null {
+export function canonicalizeGuardDaemonOrigin(rawUrl: string): string | null {
   try {
-    const url = new URL(rawUrl);
-    if (url.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]", "::1"].includes(url.hostname)) {
+    const rawOrigin = rawUrl.trim();
+    const url = new URL(rawOrigin);
+    if (url.protocol !== "http:" || !["127.0.0.1", "[::1]"].includes(url.hostname)) {
       return null;
     }
-    if (url.username || url.password || (url.pathname && url.pathname !== "/") || url.search || url.hash) {
+    if (
+      url.username ||
+      url.password ||
+      (url.pathname && url.pathname !== "/") ||
+      url.search ||
+      url.hash ||
+      !url.port
+    ) {
       return null;
     }
-    return url.origin;
+    const port = Number(url.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+      return null;
+    }
+    const canonicalHost = url.hostname === "[::1]" ? "[::1]" : "127.0.0.1";
+    const canonical = `http://${canonicalHost}:${port}`;
+    return url.origin === canonical && (rawOrigin === canonical || rawOrigin === `${canonical}/`) ? canonical : null;
   } catch {
     return null;
   }
+}
+
+function localGuardDaemonOrigin(rawUrl: string): string | null {
+  return canonicalizeGuardDaemonOrigin(rawUrl);
 }
 
 function guardApiInput(input: RequestInfo): RequestInfo {
@@ -625,7 +984,8 @@ async function refreshGuardDashboardSession(guardToken: string): Promise<string 
         client_name: "guard-dashboard-web",
         surface: "dashboard",
         supported_protocol_versions: [...GUARD_SURFACE_PROTOCOL_VERSIONS]
-      })
+      }),
+      redirect: "error",
     });
     if (!response.ok) {
       return null;
@@ -930,6 +1290,7 @@ type LegacyPackageActionMetadata = Readonly<{
   action: GuardAction | null;
 }>;
 
+/** Recognize the historical package-receipt metadata shape without treating it as a typed action envelope. */
 function parseLegacyPackageActionMetadata(raw: unknown): LegacyPackageActionMetadata {
   if (
     !isRecord(raw) ||
@@ -1014,13 +1375,14 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
         legacyActionMetadata.action,
       )
     : policyAction;
-  const hasScopeContract =
-    item.scope_contract_version !== undefined ||
-    item.scope_contract_digest !== undefined ||
-    item.allowed_scopes_by_action !== undefined ||
-    item.recommended_scope_by_action !== undefined ||
-    item.scope_restrictions !== undefined ||
-    item.task_capability_eligibility !== undefined;
+  const hasScopeContract = [
+    item.scope_contract_version,
+    item.scope_contract_digest,
+    item.allowed_scopes_by_action,
+    item.recommended_scope_by_action,
+    item.scope_restrictions,
+    item.task_capability_eligibility,
+  ].some((value) => value !== undefined && value !== null);
   const scopeContractVersion = parseOptionalString(item.scope_contract_version);
   const scopeContractDigest = parseOptionalString(item.scope_contract_digest);
   const hasCompleteScopeContract = scopeContractVersion !== null && scopeContractDigest !== null;
@@ -1075,7 +1437,7 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
     ...(hasDecisionContractError
       ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT }
-      : {})
+      : {}),
   };
 }
 
@@ -1443,9 +1805,13 @@ function queuePath(basePath: string, params: URLSearchParams): string {
 const PENDING_QUEUE_PAGE_LIMIT = 200;
 const MAX_PENDING_QUEUE_PAGES = 50;
 
-export async function fetchAllPendingRequests(): Promise<GuardApprovalRequest[]> {
+type PendingRequestPageCallback = (items: GuardApprovalRequest[]) => void;
+
+export async function fetchAllPendingRequests(onPage?: PendingRequestPageCallback): Promise<GuardApprovalRequest[]> {
   if (isGuardDemoMode()) {
-    return getDemoRequests();
+    const demoRequests = getDemoRequests();
+    onPage?.(demoRequests);
+    return demoRequests;
   }
   const items: GuardApprovalRequest[] = [];
   let cursor: string | undefined;
@@ -1457,6 +1823,7 @@ export async function fetchAllPendingRequests(): Promise<GuardApprovalRequest[]>
       includeTotals: pageIndex === 0,
     });
     items.push(...page.items);
+    onPage?.([...items]);
     if (!page.next_cursor || page.next_cursor === cursor) {
       return items;
     }
@@ -2712,6 +3079,7 @@ export async function scheduleGuardUpdate(
       : undefined;
   const response = await fetchWithGuardAuth("/v1/update", {
     method: "POST",
+    redirect: "error",
     ...(body
       ? { headers: { "Content-Type": "application/json" }, body }
       : {}),

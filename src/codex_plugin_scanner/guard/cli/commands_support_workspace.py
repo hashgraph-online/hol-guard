@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._commands_shared import _now
-    from .commands_support_codex_git import _git_repo_root
+    from .commands_support_codex_git_config import _git_repo_root
     from .commands_support_connect import (
         _announce_guard_device_connect_copy,
         _finalize_guard_connect_payload,

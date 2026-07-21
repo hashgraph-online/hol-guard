@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { composeCommand, safeProjectName, type CommandResult } from "./lab-process";
 import { runInstalledPlaywright } from "./installed-playwright";
-import { fetchLabGet } from "./relay-fetch";
+import { fetchLabGet, fetchLabIdempotent } from "./relay-fetch";
 import { readyFromLogs } from "./runner";
 import { readDashboardSession } from "./session-handoff";
 import { teardownLab } from "./teardown";
@@ -43,6 +43,27 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     }
   });
 
+  test("retries an explicitly idempotent relay POST after a transient reset", async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async (_input, init) => {
+      calls += 1;
+      expect(init?.method).toBe("POST");
+      if (calls === 1) throw new TypeError("connection reset");
+      return Response.json({ resolved: true });
+    };
+    try {
+      const response = await fetchLabIdempotent("http://127.0.0.1:4781/v1/requests/id/approve", {
+        method: "POST",
+        body: JSON.stringify({ action: "allow", scope: "artifact" }),
+      });
+      expect(await response.json()).toEqual({ resolved: true });
+      expect(calls).toBe(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("keeps Guard internal and publishes only the fixed-target relay", async () => {
     const compose = await Bun.file(`${import.meta.dir}/docker-compose.yml`).text();
     const guardBlock = compose.slice(compose.indexOf("  guard:"), compose.indexOf("  relay:"));
@@ -70,6 +91,22 @@ describe("command extension analytics Dockerlabs orchestration", () => {
       return result('guard | HOL_GUARD_LAB_READY {"activity_count":7}\n');
     });
     expect(ready.activity_count).toBe(7);
+  });
+
+  test("surfaces redacted daemon tracebacks instead of timing out", async () => {
+    let failure: Error | null = null;
+    try {
+      await readyFromLogs("guard-command-analytics", {}, async () => result(
+        'guard | HOL_GUARD_LAB_READY {"activity_count":7}\n'
+        + "guard | Traceback (most recent call last):\n"
+        + "guard | RuntimeError: guard-private-command-sentinel\n",
+      ));
+    } catch (error) {
+      if (error instanceof Error) failure = error;
+    }
+    expect(failure?.message).toContain("installed daemon failed before readiness");
+    expect(failure?.message).toContain("[REDACTED]");
+    expect(failure?.message).not.toContain("guard-private-command-sentinel");
   });
 
   test("consumes the owner-only dashboard session handoff", async () => {
@@ -125,16 +162,25 @@ describe("command extension analytics Dockerlabs orchestration", () => {
 
   test("installed fixture is wheel-only and exercises the required evidence paths", async () => {
     const directory = import.meta.dir;
-    const [dockerfile, dockerignore, compose, server, containmentProbe, runner, relay, relayFetch, playwright,
-      databasePrivacy]
-      = await Promise.all([
+    const [
+      dockerfile,
+      dockerignore,
+      compose,
+      server,
+      containmentProbe,
+      relay,
+      runner,
+      relayFetch,
+      playwright,
+      databasePrivacy,
+    ] = await Promise.all([
       Bun.file(`${directory}/Dockerfile`).text(),
       Bun.file(`${directory}/Dockerfile.dockerignore`).text(),
       Bun.file(`${directory}/docker-compose.yml`).text(),
       Bun.file(`${directory}/installed_server.py`).text(),
       Bun.file(`${directory}/installed_containment_probe.py`).text(),
-      Bun.file(`${directory}/runner.ts`).text(),
       Bun.file(`${directory}/tcp_relay.py`).text(),
+      Bun.file(`${directory}/runner.ts`).text(),
       Bun.file(`${directory}/relay-fetch.ts`).text(),
       Bun.file(`${directory}/../../../dashboard/playwright.installed.config.ts`).text(),
       Bun.file(`${directory}/database-privacy.ts`).text(),
@@ -151,8 +197,9 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(compose).not.toContain("SYS_ADMIN");
     expect(compose).not.toContain("seccomp:unconfined");
     expect(dockerfile).not.toContain("bubblewrap");
-    expect(relay).toContain("destination.shutdown(socket.SHUT_WR)");
-    expect(relay).toContain("active.remove(source)");
+    expect(relay).toContain("select.select(sockets, (), ())");
+    expect(relay).toContain("except ConnectionResetError:");
+    expect(relay).not.toContain("active.remove(source)");
     expect(relay).not.toContain("(), (), 30");
     for (const harness of ["codex", "claude-code", "cursor"]) {
       expect(server).toContain(`_run_installed_hook(\"${harness}\"`);
@@ -192,10 +239,15 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(runner).toContain('"X-Guard-Dashboard-Session": session');
     expect(runner).toContain("scope_contract_digest: pending.scope_contract_digest");
     expect(runner).toContain("approveWorkflowAuthorization(origin, pending, session)");
+    expect(runner).toContain("const WORKFLOW_AUTHORIZATION_TIMEOUT_MS = 120_000");
+    expect(runner).toContain("Date.now() + WORKFLOW_AUTHORIZATION_TIMEOUT_MS");
     expect(runner).toContain('"-I"');
     expect(runner).toContain("HOL_GUARD_LAB_PYTHON");
     expect(relayFetch).toContain("async function fetchLabGet");
+    expect(relayFetch).toContain("async function fetchLabIdempotent");
     expect(runner).toContain("init.method === undefined");
+    expect(runner).toContain("retryTransientReset");
+    expect(runner).toContain("await fetchLabIdempotent(request, options)");
     expect(runner).toContain("await fetch(request, options)");
     expect(runner.lastIndexOf("try {")).toBeLessThan(runner.lastIndexOf("runInstalledContainment(runner, version)"));
     expect(runner.lastIndexOf("runInstalledContainment(runner, version)")).toBeLessThan(

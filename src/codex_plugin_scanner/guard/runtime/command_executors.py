@@ -350,6 +350,7 @@ def _execute_approval_operation(
         oauth=oauth,
         store=store,
     )
+    require_resolvable_approval_request(request_row)
     request_policy_action = _optional_string(request_row.get("policy_action"))
     envelope_decision = _optional_string(envelope.get("decision"))
     resolution_action = normalize_remote_approval_decision(envelope_decision)
@@ -374,6 +375,12 @@ def _execute_approval_operation(
     receipt_id = _optional_string(envelope.get("receiptId"))
     if receipt_id is None:
         raise ValueError("invalid_remote_approval_receipt")
+    envelope_decision = _optional_string(envelope.get("decision"))
+    resolution_action = normalize_remote_approval_decision(envelope_decision)
+    if resolution_action is None:
+        raise ValueError("invalid_remote_approval_decision")
+    if normalized_outer_action != resolution_action:
+        raise ValueError("remote_approval_decision_mismatch")
     if not store.claim_remote_once_receipt(
         receipt_id,
         request_id=local_request_id,

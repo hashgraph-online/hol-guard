@@ -118,7 +118,7 @@ def test_wheel_package_inventory_reconciles_every_installed_file(tmp_path: Path)
     }
     for name, payload in payloads.items():
         (root / name).write_bytes(payload)
-    wheel = tmp_path / "hol_guard-2.2.0a1-py3-none-any.whl"
+    wheel = tmp_path / "hol_guard-2.1.0a1-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         for name, payload in payloads.items():
             archive.writestr(name, payload)

@@ -310,7 +310,11 @@ export function App() {
       const runtimeErrorMessage = "Unable to load the local runtime snapshot.";
       let pendingRequests: Promise<void>;
       if (needsFullQueue) {
-        pendingRequests = fetchAllPendingRequests()
+        pendingRequests = fetchAllPendingRequests((items) => {
+          if (!cancelled && !resolutionInFlight.current) {
+            setRequests({ kind: "ready", items });
+          }
+        })
           .then((items) => {
             if (!cancelled && !resolutionInFlight.current) {
               setRequests({ kind: "ready", items });

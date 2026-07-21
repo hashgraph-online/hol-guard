@@ -113,6 +113,34 @@ def _legacy_shadow_database(
     return connection
 
 
+def _previous_shadow_database(path: Path) -> sqlite3.Connection:
+    connection = sqlite3.connect(path)
+    connection.row_factory = sqlite3.Row
+    connection.execute("create table schema_migrations (version integer primary key, applied_at text not null)")
+    connection.execute("create table command_activity (activity_id text primary key, occurred_at text not null) strict")
+    for statement in shadow_schema._PREVIOUS_SCHEMA_STATEMENTS:
+        connection.execute(statement)
+    occurred_at = _OCCURRED_AT.isoformat()
+    connection.execute("insert into command_activity values (?, ?)", ("activity:previous", occurred_at))
+    connection.execute(
+        """
+        insert into command_activity_shadow_evaluations values (
+          ?, ?, 'allow', 'allow', 'silent-verified', 'allow', 'silent-verified',
+          'unchanged', 'proposal.previous.v1', '1.0.0', 1, 10000, 'guard.command-shadow.v1'
+        )
+        """,
+        ("activity:previous", occurred_at),
+    )
+    connection.execute("insert into command_activity_shadow_cohorts values (?, 0, 'baseline')", ("activity:previous",))
+    for version in (
+        shadow_schema.COMMAND_SHADOW_LEGACY_MIGRATION_VERSION,
+        shadow_schema.COMMAND_SHADOW_PREVIOUS_MIGRATION_VERSION,
+    ):
+        connection.execute("insert into schema_migrations values (?, ?)", (version, occurred_at))
+    connection.commit()
+    return connection
+
+
 def test_migration_creates_validated_normalized_schema(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
 
@@ -159,6 +187,30 @@ def test_migration_upgrades_exact_legacy_schema_and_preserves_rows(tmp_path: Pat
     ]
     assert tuple(evaluation) == ("activity:legacy", "proposal.multi.v1")
     assert tuple(cohort) == ("activity:legacy", 0, "baseline")
+    assert tuple(temporary_tables) == (0,)
+
+
+def test_migration_upgrades_v17_schema_and_preserves_historical_evaluator_version(tmp_path: Path) -> None:
+    with _previous_shadow_database(tmp_path / "previous.db") as connection:
+        shadow_schema.ensure_command_shadow_schema(connection, applied_at=_OCCURRED_AT.isoformat())
+
+        shadow_schema._validate_schema(connection)
+        versions = connection.execute("select version from schema_migrations order by version").fetchall()
+        row = connection.execute("select * from command_activity_shadow_evaluations").fetchone()
+        assert row is not None
+        observation = shadow_store._observation_from_row(connection, row)
+        temporary_tables = connection.execute(
+            "select count(*) from sqlite_master where name in (?, ?)",
+            ("command_activity_shadow_evaluations_v17", "command_activity_shadow_cohorts_v17"),
+        ).fetchone()
+
+    assert [tuple(row) for row in versions] == [
+        (shadow_schema.COMMAND_SHADOW_LEGACY_MIGRATION_VERSION,),
+        (shadow_schema.COMMAND_SHADOW_PREVIOUS_MIGRATION_VERSION,),
+        (shadow_schema.COMMAND_SHADOW_MIGRATION_VERSION,),
+    ]
+    assert observation.activity_id == "activity:previous"
+    assert observation.evaluator_schema_version == "1.0.0"
     assert tuple(temporary_tables) == (0,)
 
 

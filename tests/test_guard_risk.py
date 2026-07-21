@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
+import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -62,6 +65,14 @@ from codex_plugin_scanner.guard.store import GuardStore
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _prefer_guard_interpreter_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    current_path = os.environ.get("PATH", "")
+    monkeypatch.setenv(
+        "PATH",
+        os.pathsep.join(part for part in (str(Path(sys.executable).parent), current_path) if part),
+    )
 
 
 def _symlink_or_skip(link_path: Path, target: Path) -> None:
@@ -1047,11 +1058,13 @@ def test_tool_action_request_classifier_blocks_mutating_python_module_invocation
     assert request.action_class == "destructive shell command"
 
 
-def test_tool_action_request_classifier_allows_safe_ruff_fix_invocations(tmp_path):
+def test_tool_action_request_classifier_allows_safe_ruff_fix_invocations(tmp_path, monkeypatch):
+    _prefer_guard_interpreter_on_path(monkeypatch)
+    (tmp_path / "repo").mkdir()
     for command in (
         "python -m ruff check --fix .",
         "python -m ruff check --fix-only .",
-        "cd repo && python3 -m ruff check --fix src/foo.py",
+        f"cd repo && {shlex.quote(sys.executable)} -m ruff check --fix src/foo.py",
     ):
         request = extract_sensitive_tool_action_request("bash", {"command": command}, cwd=tmp_path)
 
@@ -1139,7 +1152,8 @@ def test_tool_action_request_classifier_skips_perl_sleep_wait():
     assert request is None
 
 
-def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trailer():
+def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trailer(tmp_path):
+    (tmp_path / "hol-guard").mkdir()
     request = extract_sensitive_tool_action_request(
         "bash",
         {
@@ -1152,6 +1166,7 @@ def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trai
                 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>" 2>&1'
             )
         },
+        cwd=tmp_path,
     )
 
     assert request is None
@@ -1556,7 +1571,8 @@ NODE"""
     )
 
     assert request is not None
-    assert request.action_class == "destructive shell command"
+    assert request.action_class == "unresolved shell execution context"
+    assert request.shell_execution_context_reason_code == "shell_cwd_workspace_escape"
 
 
 def test_tool_action_request_classifier_detects_node_heredoc_setup_command_substitution():
@@ -1571,7 +1587,8 @@ NODE"""
     )
 
     assert request is not None
-    assert request.action_class == "destructive shell command"
+    assert request.action_class == "unresolved shell execution context"
+    assert request.shell_execution_context_reason_code == "shell_cwd_unresolved_expression"
 
 
 def test_tool_action_request_classifier_detects_node_heredoc_dynamic_path_traversal_placeholder():
@@ -2637,12 +2654,16 @@ def test_tool_action_request_classifier_allows_read_only_python_heredoc_debuggin
     assert request is None
 
 
-def test_tool_action_request_classifier_allows_read_only_python_heredoc_debugging_after_cd():
+def test_tool_action_request_classifier_allows_read_only_python_heredoc_debugging_after_cd(tmp_path, monkeypatch):
+    _prefer_guard_interpreter_on_path(monkeypatch)
+    fixture_dir = tmp_path / "hashgraph-online"
+    fixture_dir.mkdir()
+    (fixture_dir / "bounty_submissions.txt").write_text("fixture row\n", encoding="utf-8")
     request = extract_sensitive_tool_action_request(
         "bash",
         {
             "command": (
-                "cd /tmp/hol-guard-fixtures/hashgraph-online && python - <<'PY'\n"
+                f"cd {shlex.quote(str(fixture_dir))} && python - <<'PY'\n"
                 "from pathlib import Path\n"
                 "text = Path('bounty_submissions.txt').read_text()\n"
                 "print('bytes', len(text))\n"
@@ -2650,17 +2671,19 @@ def test_tool_action_request_classifier_allows_read_only_python_heredoc_debuggin
                 "PY"
             )
         },
+        cwd=tmp_path,
     )
 
     assert request is None
 
 
-def test_tool_action_request_classifier_allows_versioned_python_pdf_text_extraction_heredoc():
+def test_tool_action_request_classifier_allows_guard_python_pdf_text_extraction_heredoc(tmp_path):
+    interpreter = shlex.quote(sys.executable)
     request = extract_sensitive_tool_action_request(
         "bash",
         {
             "command": (
-                "/opt/codex-runtime/dependencies/python/bin/python3.12 - <<'PY'\n"
+                f"{interpreter} - <<'PY'\n"
                 "from pathlib import Path\n"
                 "pdf = Path('/tmp/HOL Coordination Layer-compressed.pdf')\n"
                 "mods = []\n"
@@ -2682,6 +2705,7 @@ def test_tool_action_request_classifier_allows_versioned_python_pdf_text_extract
                 "PY"
             )
         },
+        cwd=tmp_path,
     )
 
     assert request is None
@@ -2719,18 +2743,20 @@ def test_tool_action_request_classifier_detects_versioned_python_inline_file_wri
     assert request.action_class == "destructive shell command"
 
 
-def test_tool_action_request_classifier_allows_patch_versioned_python_pdf_text_extraction_heredoc():
+def test_tool_action_request_classifier_allows_guard_python_pdf_text_extraction_heredoc_with_short_body(tmp_path):
+    interpreter = shlex.quote(sys.executable)
     request = extract_sensitive_tool_action_request(
         "bash",
         {
             "command": (
-                "/opt/codex-runtime/dependencies/python/bin/python3.12.1 - <<'PY'\n"
+                f"{interpreter} - <<'PY'\n"
                 "from pathlib import Path\n"
                 "pdf = Path('/tmp/HOL Coordination Layer-compressed.pdf')\n"
                 "print(pdf.name)\n"
                 "PY"
             )
         },
+        cwd=tmp_path,
     )
 
     assert request is None
@@ -3252,8 +3278,13 @@ def test_tool_action_request_classifier_allows_python_time_sleep_one_liner():
     assert request is None
 
 
-def test_tool_action_request_classifier_allows_python_c_argument_named_like_module_flag():
-    request = extract_sensitive_tool_action_request("bash", {"command": "python -c 'print(1)' -m"})
+def test_tool_action_request_classifier_allows_python_c_argument_named_like_module_flag(tmp_path, monkeypatch):
+    _prefer_guard_interpreter_on_path(monkeypatch)
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python -c 'print(1)' -m"},
+        cwd=tmp_path,
+    )
 
     assert request is None
 

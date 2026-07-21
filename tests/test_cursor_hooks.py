@@ -15,13 +15,18 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor_hooks import (
     _MANAGED_HOOK_EVENTS,
     _MANAGED_HOOK_TIMEOUT_SECONDS,
+    HOOK_SCRIPT_NAME,
+    _hook_script_mode_is_executable,
     _strip_managed_hook_entries,
     cursor_hook_response_from_guard,
     cursor_hook_should_block,
+    cursor_hooks_path,
+    cursor_native_hook_state,
     install_cursor_hooks,
     prepare_cursor_hook_payload,
     uninstall_cursor_hooks,
 )
+from codex_plugin_scanner.guard.cli import update_commands as guard_update_commands_module
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.store import GuardStore
@@ -37,6 +42,15 @@ def _cursor_shell_artifact(*, workspace_dir: Path, command: str) -> GuardArtifac
         config_path=str(workspace_dir / ".cursor" / "mcp.json"),
         command=command,
     )
+
+
+def test_cursor_hook_executable_mode_is_platform_portable(monkeypatch) -> None:
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hooks.os.name", "nt")
+    assert _hook_script_mode_is_executable(0o600) is True
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hooks.os.name", "posix")
+    assert _hook_script_mode_is_executable(0o600) is False
+    assert _hook_script_mode_is_executable(0o700) is True
 
 
 def _record_cursor_pending_for_test(
@@ -188,7 +202,7 @@ def test_cursor_hook_script_source_routes_hook_argv_by_cli_entrypoint(
     context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-        lambda: ["hol-guard"],
+        lambda _context: ["hol-guard"],
     )
     hol_guard_source = cursor_hook_script_source(context)
     assert 'GUARD_HOOK_ARGV = ["hook"' in hol_guard_source
@@ -196,7 +210,7 @@ def test_cursor_hook_script_source_routes_hook_argv_by_cli_entrypoint(
 
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-        lambda: [sys.executable, "-m", "codex_plugin_scanner.cli"],
+        lambda _context: [sys.executable, "-m", "codex_plugin_scanner.cli"],
     )
     module_source = cursor_hook_script_source(context)
     assert 'GUARD_HOOK_ARGV = ["guard", "hook"' in module_source
@@ -229,7 +243,7 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
     try:
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-            lambda: [sys.executable, "-m", "codex_plugin_scanner.cli"],
+            lambda _context: [sys.executable, "-m", "codex_plugin_scanner.cli"],
         )
         context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
         script_path = tmp_path / "cursor-hook.py"
@@ -281,14 +295,12 @@ def test_generated_cursor_hook_fails_closed_for_missing_or_unknown_guard_action(
     workspace_dir.mkdir()
     fake_guard = tmp_path / "fake-guard.py"
     fake_guard.write_text(
-        "import json\n"
-        f"print(json.dumps({guard_payload!r}))\n"
-        f"raise SystemExit({guard_exit_code})\n",
+        f"import json\nprint(json.dumps({guard_payload!r}))\nraise SystemExit({guard_exit_code})\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-        lambda: [sys.executable, str(fake_guard)],
+        lambda _context: [sys.executable, str(fake_guard)],
     )
     context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
     script_path = tmp_path / "cursor-hook.py"
@@ -316,19 +328,207 @@ def test_generated_cursor_hook_fails_closed_for_missing_or_unknown_guard_action(
     assert "failed closed" in response["user_message"]
 
 
-def test_cursor_resolve_guard_cli_command_prefers_plugin_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cursor_resolve_guard_cli_command_ignores_path_collisions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import _resolve_guard_cli_command
 
-    def fake_which(command: str) -> str | None:
-        if command == "plugin-guard":
-            return "/usr/local/bin/plugin-guard"
-        if command == "hol-guard":
-            return "/usr/local/bin/hol-guard"
-        return None
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    marker = tmp_path / "path-collision-ran"
+    for name in ("plugin-guard", "hol-guard"):
+        collision = fake_bin / name
+        collision.write_text(f"#!/bin/sh\ntouch {marker}\n", encoding="utf-8")
+        collision.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard",
+        workspace_dir=tmp_path / "workspace",
+    )
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hooks.shutil.which", fake_which)
+    command = _resolve_guard_cli_command(context)
 
-    assert _resolve_guard_cli_command() == ["/usr/local/bin/plugin-guard"]
+    assert command == [str(Path(sys.executable).absolute()), "-I", "-s", "-m", "codex_plugin_scanner.cli"]
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize("collision_kind", ["executable", "symlink", "non-executable", "other-venv"])
+def test_cursor_install_persists_only_attested_cli_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    collision_kind: str,
+) -> None:
+    fake_bin = tmp_path / ("other-venv" if collision_kind == "other-venv" else "fake-bin") / "bin"
+    fake_bin.mkdir(parents=True)
+    marker = tmp_path / "path-collision-ran"
+    target = fake_bin / "collision-target"
+    target.write_text(f"#!/bin/sh\ntouch {marker}\n", encoding="utf-8")
+    target.chmod(0o755)
+    for name in ("plugin-guard", "hol-guard"):
+        collision = fake_bin / name
+        if collision_kind == "symlink":
+            collision.symlink_to(target)
+        else:
+            collision.write_text(target.read_text(encoding="utf-8"), encoding="utf-8")
+            collision.chmod(0o644 if collision_kind == "non-executable" else 0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    context = HarnessContext(home_dir=home, guard_home=tmp_path / "guard", workspace_dir=workspace)
+
+    manifest = install_cursor_hooks(context)
+
+    identity = manifest["guard_cli_identity"]
+    assert isinstance(identity, dict)
+    assert identity["command"] == [
+        str(Path(sys.executable).absolute()),
+        "-I",
+        "-s",
+        "-m",
+        "codex_plugin_scanner.cli",
+    ]
+    assert identity["entry_point"] == "codex_plugin_scanner.cli:main"
+    assert identity["package_root"] == str(Path(__file__).resolve().parents[1] / "src")
+    interpreter = identity["interpreter"]
+    assert isinstance(interpreter, dict)
+    assert Path(str(interpreter["target_path"])).is_absolute()
+    assert len(str(interpreter["target_sha256"])) == 64
+    assert not marker.exists()
+    assert cursor_native_hook_state(context)["protection_active"] is True
+
+
+def test_cursor_update_repairs_tampered_cli_binding(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    context = HarnessContext(home_dir=home, guard_home=tmp_path / "guard", workspace_dir=workspace)
+    hooks_manifest = install_cursor_hooks(context)
+    store = GuardStore(context.guard_home)
+    store.set_managed_install(
+        "cursor",
+        True,
+        str(workspace),
+        {"surface": "editor", **hooks_manifest},
+        "2026-07-20T00:00:00+00:00",
+    )
+    script_path = Path(str(hooks_manifest["managed_hook_script_path"]))
+    original_source = script_path.read_text(encoding="utf-8")
+    script_path.write_text(
+        original_source.replace("codex_plugin_scanner.cli", "attacker_controlled.cli", 1),
+        encoding="utf-8",
+    )
+    assert cursor_native_hook_state(context)["reason"] == "guard_cursor_hook_script_tampered"
+
+    repaired, warning = guard_update_commands_module._repair_cursor_install(
+        context=context,
+        store=store,
+        workspace=str(workspace),
+        now="2026-07-20T00:01:00+00:00",
+    )
+
+    assert warning is None
+    assert repaired is not None
+    assert cursor_native_hook_state(context)["protection_active"] is True
+    assert script_path.read_text(encoding="utf-8") == original_source
+
+
+def test_cursor_update_repairs_stale_attested_cli_identity(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    context = HarnessContext(home_dir=home, guard_home=tmp_path / "guard", workspace_dir=workspace)
+    hooks_manifest = install_cursor_hooks(context)
+    store = GuardStore(context.guard_home)
+    store.set_managed_install(
+        "cursor",
+        True,
+        str(workspace),
+        {"surface": "editor", **hooks_manifest},
+        "2026-07-20T00:00:00+00:00",
+    )
+    state_path = Path(str(hooks_manifest["state_path"]))
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["guard_cli_identity"]["guard_version"] = "0.0.0-stale"
+    state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    stale = cursor_native_hook_state(context)
+
+    repaired, warning = guard_update_commands_module._repair_cursor_install(
+        context=context,
+        store=store,
+        workspace=str(workspace),
+        now="2026-07-20T00:01:00+00:00",
+    )
+
+    assert stale["reason"] == "guard_cursor_cli_identity_mismatch"
+    assert warning is None
+    assert repaired is not None
+    assert cursor_native_hook_state(context)["protection_active"] is True
+
+
+def test_cursor_update_reports_context_resolution_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=None)
+    store = GuardStore(context.guard_home)
+    store.set_managed_install(
+        "cursor",
+        True,
+        str(tmp_path / "workspace"),
+        {"surface": "editor"},
+        "2026-07-20T00:00:00+00:00",
+    )
+
+    def _fail_context_resolution(*_args: object, **_kwargs: object) -> tuple[HarnessContext, str | None]:
+        raise RuntimeError("invalid repair context")
+
+    monkeypatch.setattr(
+        guard_update_commands_module,
+        "_repair_context_from_managed_install",
+        _fail_context_resolution,
+    )
+
+    repaired, warning = guard_update_commands_module._repair_cursor_install(
+        context=context,
+        store=store,
+        workspace=None,
+        now="2026-07-20T00:01:00+00:00",
+    )
+
+    assert repaired is None
+    assert warning == "Could not inspect Cursor protection during update: invalid repair context"
+
+
+def test_cursor_install_is_idempotent_across_path_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    context = HarnessContext(home_dir=home, guard_home=tmp_path / "guard", workspace_dir=workspace)
+    markers: list[Path] = []
+    manifests: list[dict[str, object]] = []
+    for index in range(2):
+        fake_bin = tmp_path / f"fake-bin-{index}"
+        fake_bin.mkdir()
+        marker = tmp_path / f"path-collision-{index}-ran"
+        markers.append(marker)
+        for name in ("plugin-guard", "hol-guard"):
+            collision = fake_bin / name
+            collision.write_text(f"#!/bin/sh\ntouch {marker}\n", encoding="utf-8")
+            collision.chmod(0o755)
+        monkeypatch.setenv("PATH", str(fake_bin))
+        manifests.append(install_cursor_hooks(context))
+
+    hooks = json.loads(cursor_hooks_path(context).read_text(encoding="utf-8"))["hooks"]
+    assert manifests[0]["guard_cli_identity"] == manifests[1]["guard_cli_identity"]
+    assert all(len(hooks[event_name]) == 1 for event_name in _MANAGED_HOOK_EVENTS)
+    assert not any(marker.exists() for marker in markers)
+    assert cursor_native_hook_state(context)["protection_active"] is True
 
 
 def test_strip_managed_hook_entries_removes_hol_guard_pretooluse(tmp_path: Path) -> None:
@@ -380,7 +580,7 @@ def test_install_cursor_hooks_strips_legacy_pretooluse_entry(tmp_path: Path, mon
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-        lambda: ["hol-guard"],
+        lambda _context: ["hol-guard"],
     )
     context = HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace)
     result = install_cursor_hooks(context)
@@ -393,6 +593,32 @@ def test_install_cursor_hooks_strips_legacy_pretooluse_entry(tmp_path: Path, mon
     for event_name in _MANAGED_HOOK_EVENTS:
         entry = installed["hooks"][event_name][-1]
         assert entry["timeout"] == _MANAGED_HOOK_TIMEOUT_SECONDS
+
+
+def test_install_cursor_hooks_preserves_top_level_event_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    hooks_path = home / ".cursor" / "hooks.json"
+    hooks_path.parent.mkdir(parents=True)
+    existing_entries = {event_name: [{"command": f"user-{event_name}"}] for event_name in _MANAGED_HOOK_EVENTS}
+    hooks_path.write_text(json.dumps({"version": 1, **existing_entries}) + "\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+        lambda _context: ["hol-guard"],
+    )
+
+    install_cursor_hooks(HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace))
+    installed = json.loads(hooks_path.read_text(encoding="utf-8"))
+
+    for event_name in _MANAGED_HOOK_EVENTS:
+        entries = installed["hooks"][event_name]
+        assert entries[0] == existing_entries[event_name][0]
+        assert entries[-1]["command"].endswith(HOOK_SCRIPT_NAME)
 
 
 def test_prepare_cursor_hook_payload_maps_before_mcp_execution() -> None:
@@ -561,7 +787,7 @@ def test_install_cursor_hooks_registers_after_shell_observer(tmp_path: Path, mon
     hooks_path.write_text('{"version": 1, "hooks": {}}\n', encoding="utf-8")
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-        lambda: ["hol-guard"],
+        lambda _context: ["hol-guard"],
     )
     context = HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace)
     install_cursor_hooks(context)
@@ -1370,7 +1596,7 @@ def test_uninstall_cursor_hooks_restores_backup(tmp_path: Path, monkeypatch: pyt
     hooks_path.write_text('{"version": 1, "hooks": {"preToolUse": []}}\n', encoding="utf-8")
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-        lambda: ["hol-guard"],
+        lambda _context: ["hol-guard"],
     )
     context = HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace)
     install_cursor_hooks(context)
@@ -1390,7 +1616,7 @@ def test_cursor_hook_daemon_fast_path_rejects_stale_pid(tmp_path: Path, monkeypa
 
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-        lambda: [sys.executable, "-m", "codex_plugin_scanner.cli"],
+        lambda _context: [sys.executable, "-m", "codex_plugin_scanner.cli"],
     )
     context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
     script_path = tmp_path / "cursor-hook.py"
@@ -1460,7 +1686,7 @@ def test_cursor_hook_daemon_fast_path_rejects_empty_response(tmp_path: Path, mon
     try:
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-            lambda: [sys.executable, "-m", "codex_plugin_scanner.cli"],
+            lambda _context: [sys.executable, "-m", "codex_plugin_scanner.cli"],
         )
         context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
         script_path = tmp_path / "cursor-hook.py"
@@ -1537,7 +1763,7 @@ def test_cursor_hook_daemon_fast_path_rejects_spoofed_healthz(tmp_path: Path, mo
     try:
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-            lambda: [sys.executable, "-m", "codex_plugin_scanner.cli"],
+            lambda _context: [sys.executable, "-m", "codex_plugin_scanner.cli"],
         )
         context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
         script_path = tmp_path / "cursor-hook.py"
@@ -1613,7 +1839,7 @@ def test_cursor_hook_daemon_fast_path_404_falls_through_to_cli(tmp_path: Path, m
     try:
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-            lambda: [sys.executable, "-m", "codex_plugin_scanner.cli"],
+            lambda _context: [sys.executable, "-m", "codex_plugin_scanner.cli"],
         )
         context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
         script_path = tmp_path / "cursor-hook.py"

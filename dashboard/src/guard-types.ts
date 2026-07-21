@@ -1057,6 +1057,18 @@ export type GuardUpdateReconnectOptions = {
   expectedPreviousVersion?: string | null;
   expectedLatestVersion?: string | null;
   sawUpdateInProgress?: boolean;
+  authorization?: GuardDaemonReconnectAuthorization | null;
+};
+
+export type GuardDaemonReconnectAuthorization = {
+  protocolVersion: 1;
+  reconnectId: string;
+  verifier: string;
+  surface: "dashboard";
+  issuedAtMs: number;
+  expiresAtMs: number;
+  installationId: string;
+  guardHomeId: string;
 };
 
 export type GuardUpdateScheduleResult = {

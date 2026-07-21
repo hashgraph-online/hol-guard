@@ -247,6 +247,7 @@ def _resolve_legacy_args(
         "run",
         "protect",
         "preflight",
+        "pytest-contained",
         "diff",
         "test-eval",
         "command",

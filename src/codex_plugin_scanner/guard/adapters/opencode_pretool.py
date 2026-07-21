@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 from .base import HarnessContext
-from .hook_python import package_root_from_python, resolve_guard_hook_python
+from .hook_python import (
+    HookPythonExecutableIdentity,
+    HookPythonFileMetadata,
+    attest_guard_hook_python,
+)
 
 PLUGIN_FILENAME = "hol-guard-pretool.ts"
 _INTERCEPT_TOOLS = ("bash", "ctx_shell", "shell", "sh", "zsh", "terminal")
@@ -15,7 +18,9 @@ _HOOK_ARGV_ENV = "HOL_GUARD_HOOK_ARGV"
 _INHERIT_ENV_KEYS = ("PATH", "HOME", "USER", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "SYSTEMROOT")
 
 _PLUGIN_TEMPLATE = """// Managed by HOL Guard. Re-run `hol-guard install opencode` after moving Guard home.
+import { createHash } from "node:crypto";
 import { spawn as nodeSpawn } from "node:child_process";
+import { lstatSync, readFileSync, readlinkSync, realpathSync } from "node:fs";
 
 const GUARD_HOME = __GUARD_HOME__;
 const GUARD_PYTHON = __GUARD_PYTHON__;
@@ -23,6 +28,69 @@ const GUARD_HOOK_LAUNCHER = __GUARD_HOOK_LAUNCHER__;
 const GUARD_HOOK_ENV = __GUARD_HOOK_ENV__;
 const GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__;
 const INTERCEPT_TOOLS = new Set(__INTERCEPT_TOOLS__);
+
+type GuardFileMetadata = {
+  device: string;
+  inode: string;
+  mode: string;
+  size: string;
+  mtimeNs: string;
+};
+
+function metadataMatches(
+  actual: { dev: bigint; ino: bigint; mode: bigint; size: bigint; mtimeNs: bigint },
+  expected: GuardFileMetadata,
+): boolean {
+  return (
+    actual.dev.toString() === expected.device &&
+    actual.ino.toString() === expected.inode &&
+    actual.mode.toString() === expected.mode &&
+    actual.size.toString() === expected.size &&
+    actual.mtimeNs.toString() === expected.mtimeNs
+  );
+}
+
+export function verifyGuardPythonIdentity(): void {
+  try {
+    const invocationStat = lstatSync(GUARD_PYTHON.invocationPath, { bigint: true });
+    let invocationType = "other";
+    if (invocationStat.isSymbolicLink()) {
+      invocationType = "symlink";
+    } else if (invocationStat.isFile()) {
+      invocationType = "file";
+    }
+    if (
+      invocationType !== GUARD_PYTHON.invocationType ||
+      !metadataMatches(invocationStat, GUARD_PYTHON.invocationStat)
+    ) {
+      throw new Error("invocation metadata changed");
+    }
+    const linkTarget = invocationStat.isSymbolicLink() ? readlinkSync(GUARD_PYTHON.invocationPath) : null;
+    if (linkTarget !== GUARD_PYTHON.invocationLinkTarget) {
+      throw new Error("invocation link changed");
+    }
+    if (realpathSync(GUARD_PYTHON.invocationPath) !== GUARD_PYTHON.targetPath) {
+      throw new Error("resolved target changed");
+    }
+    const targetStat = lstatSync(GUARD_PYTHON.targetPath, { bigint: true });
+    if (
+      !targetStat.isFile() ||
+      realpathSync(GUARD_PYTHON.targetPath) !== GUARD_PYTHON.targetPath ||
+      !metadataMatches(targetStat, GUARD_PYTHON.targetStat)
+    ) {
+      throw new Error("target metadata changed");
+    }
+    const digest = createHash("sha256").update(readFileSync(GUARD_PYTHON.targetPath)).digest("hex");
+    if (digest !== GUARD_PYTHON.targetSha256) {
+      throw new Error("target content changed");
+    }
+  } catch {
+    throw new Error(
+      "HOL Guard Python changed after this OpenCode plugin was generated. " +
+        "Re-run `hol-guard install opencode` before retrying.",
+    );
+  }
+}
 
 function hookProcessEnv(guardArgv: string[]) {
   const env: Record<string, string> = { ...GUARD_HOOK_ENV };
@@ -47,13 +115,19 @@ function normalizeCommand(command: unknown): string | null {
 }
 
 async function spawnGuardProcess(options: {
-  command: string[];
+  args: string[];
   cwd: string;
   env: Record<string, string>;
   stdin: string;
 }): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const proc = nodeSpawn(options.command[0], options.command.slice(1), {
+    try {
+      verifyGuardPythonIdentity();
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    const proc = nodeSpawn(GUARD_PYTHON.targetPath, options.args, {
       cwd: options.cwd,
       env: options.env,
       stdio: ["pipe", "pipe", "pipe"],
@@ -91,7 +165,7 @@ async function runGuardHook(directory: string, payload: Record<string, unknown>)
     "--json",
   ];
   return spawnGuardProcess({
-    command: [GUARD_PYTHON, "-c", GUARD_HOOK_LAUNCHER],
+    args: ["-I", "-S", "-s", "-c", GUARD_HOOK_LAUNCHER],
     cwd: GUARD_HOME,
     env: hookProcessEnv(guardArgv),
     stdin: JSON.stringify(payload),
@@ -242,24 +316,31 @@ def _trusted_pythonpath_entries(package_root: str) -> list[str]:
     return [trimmed] if trimmed else []
 
 
-def _pretool_hook_launcher_code(*, package_root: str) -> str:
-    trusted_entries = _trusted_pythonpath_entries(package_root)
+def _pretool_hook_launcher_code(
+    *,
+    import_roots: tuple[str, ...] = (),
+    package_root: str | None = None,
+) -> str:
+    trusted_entries = list(import_roots)
+    if not trusted_entries and package_root is not None:
+        trusted_entries = _trusted_pythonpath_entries(package_root)
     return (
         "import json,os,sys;"
         f"trusted={json.dumps(trusted_entries)};"
-        "sys.path=[entry for entry in sys.path if entry and os.path.realpath(entry) != os.path.realpath(os.getcwd())];"
         "sys.path[:0]=trusted;"
         "from codex_plugin_scanner.cli import main;"
         f"raise SystemExit(main(json.loads(os.environ[{_HOOK_ARGV_ENV!r}])))"
     )
 
 
-def _pretool_hook_env(*, package_root: str) -> dict[str, str]:
-    entries = _trusted_pythonpath_entries(package_root)
-    env = {"PYTHONSAFEPATH": "1", "PYTHONNOUSERSITE": "1"}
-    if entries:
-        env["PYTHONPATH"] = os.pathsep.join(entries)
-    return env
+def _pretool_hook_env(*, package_root: str | None = None) -> dict[str, str]:
+    del package_root
+    return {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONSAFEPATH": "1",
+    }
 
 
 def managed_plugin_path(context: HarnessContext) -> Path:
@@ -270,15 +351,37 @@ def global_plugin_path(context: HarnessContext) -> Path:
     return context.home_dir / ".config" / "opencode" / "plugins" / PLUGIN_FILENAME
 
 
+def _metadata_payload(metadata: HookPythonFileMetadata) -> dict[str, str]:
+    return {
+        "device": str(metadata.device),
+        "inode": str(metadata.inode),
+        "mode": str(metadata.mode),
+        "size": str(metadata.size),
+        "mtimeNs": str(metadata.mtime_ns),
+    }
+
+
+def _python_identity_payload(identity: HookPythonExecutableIdentity) -> dict[str, object]:
+    return {
+        "invocationPath": str(identity.invocation_path),
+        "invocationType": identity.invocation_type,
+        "invocationLinkTarget": identity.invocation_link_target,
+        "invocationStat": _metadata_payload(identity.invocation_stat),
+        "targetPath": str(identity.target_path),
+        "targetStat": _metadata_payload(identity.target_stat),
+        "targetSha256": identity.target_sha256,
+    }
+
+
 def pretool_plugin_source(context: HarnessContext) -> str:
-    guard_python = resolve_guard_hook_python(context)
-    package_root = package_root_from_python(guard_python)
+    attestation = attest_guard_hook_python(context)
+    import_roots = tuple(str(root) for root in attestation.import_roots)
     template = _PLUGIN_TEMPLATE.replace("__HOOK_ARGV_ENV__", _HOOK_ARGV_ENV)
     return (
         template.replace("__GUARD_HOME__", json.dumps(str(context.guard_home.resolve())))
-        .replace("__GUARD_PYTHON__", json.dumps(str(guard_python)))
-        .replace("__GUARD_HOOK_LAUNCHER__", json.dumps(_pretool_hook_launcher_code(package_root=package_root)))
-        .replace("__GUARD_HOOK_ENV__", json.dumps(_pretool_hook_env(package_root=package_root)))
+        .replace("__GUARD_PYTHON__", json.dumps(_python_identity_payload(attestation.identity)))
+        .replace("__GUARD_HOOK_LAUNCHER__", json.dumps(_pretool_hook_launcher_code(import_roots=import_roots)))
+        .replace("__GUARD_HOOK_ENV__", json.dumps(_pretool_hook_env()))
         .replace("__GUARD_INHERIT_ENV_KEYS__", json.dumps(list(_INHERIT_ENV_KEYS)))
         .replace("__INTERCEPT_TOOLS__", json.dumps(list(_INTERCEPT_TOOLS)))
     )

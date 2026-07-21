@@ -580,6 +580,25 @@ assert(
   "T071c: incomplete scope contract bindings expose no recommendations",
 );
 
+const nullScopeContract = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  scope_contract_version: null,
+  scope_contract_digest: null,
+  allowed_scopes_by_action: null,
+  recommended_scope_by_action: null,
+  scope_restrictions: null,
+  task_capability_eligibility: null,
+});
+assert(
+  nullScopeContract.scope_contract_version === undefined &&
+    nullScopeContract.scope_contract_digest === undefined &&
+    nullScopeContract.allowed_scopes_by_action === undefined &&
+    nullScopeContract.recommended_scope_by_action === undefined &&
+    nullScopeContract.scope_restrictions === undefined &&
+    nullScopeContract.task_capability_eligibility === undefined,
+  "T071d: null-only scope metadata remains absent instead of rendering empty scope sections",
+);
+
 const BASE_DECISION_V2: GuardDecisionV2 = {
   guard_action: "block",
   action: "block",
@@ -1187,6 +1206,10 @@ const claudePageItem: GuardApprovalRequest = {
   harness: "claude-code",
 };
 const pendingPageCalls: RecordedFetch[] = [];
+let releaseSecondPendingPage: (() => void) | undefined;
+const secondPendingPageGate = new Promise<void>((resolve) => {
+  releaseSecondPendingPage = resolve;
+});
 globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = input instanceof Request ? input.url : String(input);
   pendingPageCalls.push({ url, init });
@@ -1208,6 +1231,7 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
     );
   }
   if (cursor === "cursor-page-2") {
+    await secondPendingPageGate;
     return new Response(
       JSON.stringify({
         items: [claudePageItem],
@@ -1222,8 +1246,29 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
   return new Response(JSON.stringify({ error: "invalid_cursor" }), { status: 400 });
 };
 
-const pendingItems = await fetchAllPendingRequests();
+const progressivePendingPages: number[] = [];
+let publishFirstPendingPage: (() => void) | undefined;
+const firstPendingPagePublished = new Promise<void>((resolve) => {
+  publishFirstPendingPage = resolve;
+});
+const pendingItemsPromise = fetchAllPendingRequests((items) => {
+  progressivePendingPages.push(items.length);
+  if (items.length === 1) {
+    publishFirstPendingPage?.();
+  }
+});
+await firstPendingPagePublished;
+assert(
+  progressivePendingPages.join(",") === "1",
+  "L078b: fetchAllPendingRequests publishes the first page before the next page responds"
+);
+releaseSecondPendingPage?.();
+const pendingItems = await pendingItemsPromise;
 assert(pendingItems.length === 2, "L078b: fetchAllPendingRequests aggregates pending pages");
+assert(
+  progressivePendingPages.join(",") === "1,2",
+  "L078b: fetchAllPendingRequests publishes each accumulated page for progressive rendering"
+);
 assert(
   pendingItems.some((item) => item.harness === "claude-code"),
   "L078b: fetchAllPendingRequests includes later-page harnesses"

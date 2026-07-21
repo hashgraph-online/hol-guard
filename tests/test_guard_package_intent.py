@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
     parse_manifest_dependency_changes,
     parse_package_intent,
 )
+from codex_plugin_scanner.guard.runtime.shell_execution_context import model_shell_execution_context
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -126,6 +128,20 @@ def test_parse_package_intent_bun_install_uses_bun_lock_context(tmp_path: Path) 
     assert intent.flags == ("--lockfile-only",)
 
 
+def test_package_sync_does_not_treat_fd_merge_as_a_package_target(tmp_path: Path) -> None:
+    _write_text(tmp_path / "package.json", '{"name":"demo"}\n')
+
+    bun = parse_package_intent("bun install 2>&1 | tail -5", workspace=tmp_path)
+    pnpm = parse_package_intent("pnpm install 2>&1 | tail -5", workspace=tmp_path)
+
+    assert bun is not None
+    assert bun.intent_kind == "install"
+    assert bun.targets == ()
+    assert pnpm is not None
+    assert pnpm.intent_kind == "install"
+    assert pnpm.targets == ()
+
+
 def test_parse_package_intent_exec_commands_are_classified_as_execute_requests() -> None:
     commands = {
         "npx create-vite@latest": ("npx", "create-vite", "latest"),
@@ -149,6 +165,7 @@ def test_parse_package_intent_detects_package_command_after_control_operator() -
     commands = {
         "true && npx attacker-package": ("npx", "attacker-package"),
         "echo ok; npm install attacker-package": ("npm", "attacker-package"),
+        "echo ok\nnpm install attacker-package": ("npm", "attacker-package"),
         "false || pnpm dlx attacker-package": ("pnpm", "attacker-package"),
         "echo ok | bunx attacker-package": ("bunx", "attacker-package"),
         "echo ok & pip install attacker-package": ("pip", "attacker-package"),
@@ -162,6 +179,80 @@ def test_parse_package_intent_detects_package_command_after_control_operator() -
         assert intent.targets[0].package_name == package_name
 
     assert parse_package_intent("echo safe && grep foo src/file.ts") is None
+
+
+def test_local_execution_context_hash_contains_no_raw_command_or_secret(tmp_path: Path) -> None:
+    def _hash(command: str, segment_index: int) -> str:
+        context = model_shell_execution_context(command, cwd=tmp_path, workspace_root=tmp_path)
+        segment = context.segments[segment_index]
+        return package_intent_parser._execution_context_hash(
+            context,
+            segment,
+            control_shape=tuple(
+                operator for modeled_segment in context.segments for operator in modeled_segment.control_after
+            ),
+            effective_cwd=segment.effective_cwd,
+            cwd_source=segment.cwd_source,
+            path_source="inherited",
+            opaque_context_binding=None,
+        )
+
+    first = _hash("true && npm install fixture", 1)
+    repeated = _hash("true && npm install fixture", 1)
+    different_operator = _hash("true; npm install fixture", 1)
+    different_segment = _hash("npm install fixture && true", 0)
+
+    assert first == repeated
+    assert first.startswith("sha256:")
+    assert first != different_operator
+    assert first != different_segment
+
+
+def test_rebase_preserves_declared_paths_that_disappear_or_do_not_exist(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    requirements = project / "requirements.txt"
+    _write_text(requirements, "fixture==1.0\n")
+    intent = package_intent_parser._parse_pip_intent(
+        ("pip", "install", "-r", "requirements.txt"),
+        workspace=project,
+    )
+    assert intent is not None
+    requirements.unlink()
+    intent = replace(intent, lockfile_paths=("future.lock",))
+
+    rebased = package_intent_parser._rebase_intent_paths(
+        intent,
+        from_directory=project,
+        workspace=tmp_path,
+    )
+
+    assert rebased.manifest_paths == ("project/requirements.txt",)
+    assert rebased.lockfile_paths == ("project/future.lock",)
+
+
+def test_unresolved_context_uses_process_ephemeral_keyed_identity() -> None:
+    first = package_intent_parser._opaque_unresolved_context_binding(
+        ["PATH=$FIRST_UNKNOWN", "bunx", "--no-install", "vitest"],
+        path_source="inline_unresolved",
+        cwd_source="workspace",
+    )
+    repeated = package_intent_parser._opaque_unresolved_context_binding(
+        ["PATH=$FIRST_UNKNOWN", "bunx", "--no-install", "vitest"],
+        path_source="inline_unresolved",
+        cwd_source="workspace",
+    )
+    second = package_intent_parser._opaque_unresolved_context_binding(
+        ["PATH=$SECOND_UNKNOWN", "bunx", "--no-install", "vitest"],
+        path_source="inline_unresolved",
+        cwd_source="workspace",
+    )
+
+    assert first == repeated
+    assert first is not None
+    assert second is not None
+    assert first != second
+    assert "FIRST_UNKNOWN" not in first
 
 
 def test_parse_package_intent_reviews_declared_local_test_runner_execution(tmp_path: Path) -> None:

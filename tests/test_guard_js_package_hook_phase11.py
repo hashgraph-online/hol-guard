@@ -261,7 +261,7 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
         '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n', encoding="utf-8"
     )
     (workspace_dir / "bun.lock").write_text(
-        '[[package]]\nname = "vitest"\nversion = "4.1.8"\nresolved = "npm:vitest@4.1.8"\ndependencies = []\n',
+        '{"lockfileVersion":1,"packages":{"vitest":["vitest@4.1.8","",{}]}}\n',
         encoding="utf-8",
     )
     runner = workspace_dir / "node_modules" / ".bin" / "vitest"

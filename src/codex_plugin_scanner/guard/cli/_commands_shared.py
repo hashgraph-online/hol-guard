@@ -146,6 +146,7 @@ from ..runtime.cisco_preflight import (
     policy_action_for_cisco_signals,
     scan_action_for_cisco_evidence,
 )
+from ..runtime.compound_git_inspection import is_low_risk_compound_git_inspection
 from ..runtime.data_flow_rules import detect_data_flow_exfiltration
 from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_BENIGN_DOTFILES,
@@ -159,6 +160,7 @@ from ..runtime.false_positive_rules import (
     split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
+from ..runtime.github_capability_interaction import github_capability_requires_confirmation
 from ..runtime.harness_attribution import resolve_runtime_hook_harness
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
 from ..runtime.runner import (
@@ -177,11 +179,14 @@ from ..runtime.secret_file_requests import (
     build_file_read_request_artifact,
     build_file_write_request_artifact,
     build_tool_action_request_artifact,
+    classify_github_shell_capabilities,
     extract_sensitive_file_read_request,
     extract_sensitive_file_read_request_from_action,
     extract_sensitive_file_write_request,
     extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
+    low_risk_compound_developer_execution_context,
+    shell_execution_context_starts_with_literal_cd,
 )
 from ..runtime.secret_sensitivity import (
     SecretContentMatch,
