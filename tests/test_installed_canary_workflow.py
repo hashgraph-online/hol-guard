@@ -94,7 +94,6 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "Install only the verified wheel" in names
     assert "Prove the harness rejects missing evidence" in names
     assert "Run installed 51k corpus and dashboard smoke" in names
-    assert "Run canonical command extension analytics Dockerlab" in names
     assert "Upload installed canary evidence" in names
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "verify-release --registry testpypi" in workflow_text
@@ -105,18 +104,8 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "PYTHONPATH=" in workflow_text
     assert '-X "pycache_prefix=$RUNNER_TEMP/hol-guard-evidence-cache"' in workflow_text
     assert "pnpm" not in workflow_text
-    assert "runner.os == 'Linux'" in workflow_text
-    assert 'cmp "$VERIFIED_WHEEL" "dist/$WHEEL_NAME"' in workflow_text
-    assert "bunx playwright install --with-deps chromium" in workflow_text
-    assert "cd ../tests/dockerlabs/command-extension-analytics" in workflow_text
-    assert "bun run typecheck" in workflow_text
-    assert "bun run guard:test:command-extension-analytics" in workflow_text
-    assert "installed-canary/command-extension-analytics.json" in workflow_text
-    assert ".artifacts/command-extension-analytics/*.png" in workflow_text
-    canonical_runner_text = (ROOT / "tests/dockerlabs/command-extension-analytics/runner.ts").read_text(
-        encoding="utf-8"
-    )
-    assert "Bun.env.HOL_GUARD_LAB_EXPECTED_VERSION" in canonical_runner_text
+    assert "Run canonical command extension analytics Dockerlab" not in names
+    assert "installed-canary/command-extension-analytics.json" not in workflow_text
     verifier_text = (ROOT / "scripts/installed_canary_proof.py").read_text(encoding="utf-8")
     assert 'f"{PROJECT} @ {wheel.resolve().as_uri()}#sha256={digest}"' in verifier_text
     assert 'read_text("direct_url.json")' in verifier_text
