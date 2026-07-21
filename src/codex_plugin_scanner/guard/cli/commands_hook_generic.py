@@ -72,6 +72,7 @@ from ..runtime.approval_reuse import (
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from .commands_support_codex_paths import _codex_prompt_credential_file_artifact
 from .commands_support_command_activity import (
     command_activity_was_prompted,
     hook_is_post_event,
@@ -470,7 +471,19 @@ def _should_relax_configured_default(
         return False
     event_name = _hook_event_name(dict(payload))
     if event_name == "UserPromptSubmit":
-        return True
+        prompt_text = payload.get("prompt")
+        if not isinstance(prompt_text, str) or not prompt_text.strip():
+            return False
+        if extract_prompt_requests(prompt_text):
+            return False
+        return (
+            _codex_prompt_credential_file_artifact(
+                prompt_text=prompt_text,
+                cwd=runtime_workspace,
+                config_path="<runtime>",
+            )
+            is None
+        )
     return event_name == "PreToolUse" and is_explicitly_benign_tool_action_request(
         payload.get("tool_name"),
         payload.get("tool_input", payload.get("arguments")),
