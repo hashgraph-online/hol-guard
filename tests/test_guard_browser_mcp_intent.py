@@ -161,6 +161,7 @@ class TestBrowserAutomationIntentV1:
         assert intent.intent == "browser.navigation"
         # Should be serializable
         from dataclasses import asdict
+
         payload = json.dumps(asdict(intent), sort_keys=True)
         assert "browser.navigation" in payload
 
@@ -987,6 +988,7 @@ class TestProxyBrowserIntentMetadata:
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "https://hol.org/guard/integrations/slack"},
         )
+
         # Create a minimal proxy-like object to test the payload builder
         class _FakeProxy:
             _launch_target = staticmethod(lambda tool, args: f"{tool} {args}")

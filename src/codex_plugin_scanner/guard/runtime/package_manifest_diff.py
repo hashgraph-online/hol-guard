@@ -15,6 +15,7 @@ if TYPE_CHECKING or sys.version_info >= (3, 11):
 else:
     tomllib = importlib.import_module("tomli")
 
+from .jsonc import loads_jsonc
 from .package_intent_common import (
     ManifestDependencyChange,
     ManifestParseResult,
@@ -278,31 +279,56 @@ def _yarn_selector_name(selector: str) -> str | None:
 
 
 def _bun_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
-    _ensure_within_deadline(deadline)
-    payload = tomllib.loads(text or "")
-    packages = payload.get("package")
+    versions_by_name = _bun_lock_package_versions(text, deadline)
     dependencies: dict[str, str] = {}
-    if not isinstance(packages, list):
-        return dependencies
-    for package in packages:
-        _ensure_within_deadline(deadline)
-        if not isinstance(package, dict):
-            continue
-        name = package.get("name")
-        version = package.get("version")
-        if isinstance(name, str) and isinstance(version, str):
-            dependencies[name] = version
-        nested_dependencies = package.get("dependencies")
-        if not isinstance(nested_dependencies, list):
-            continue
-        for dependency in nested_dependencies:
-            if not isinstance(dependency, dict):
-                continue
-            dependency_name = dependency.get("name")
-            exact_version = _exact_dependency_version(dependency.get("version"))
-            if isinstance(dependency_name, str) and exact_version is not None:
-                dependencies.setdefault(dependency_name, exact_version)
+    for package_name, versions in versions_by_name.items():
+        if versions:
+            dependencies[package_name] = versions[0]
     return dependencies
+
+
+def _bun_lock_package_versions(text: str, deadline: float) -> dict[str, list[str]]:
+    _ensure_within_deadline(deadline)
+    payload = loads_jsonc(text or "{}", deadline_check=lambda: _ensure_within_deadline(deadline))
+    if not isinstance(payload, dict):
+        raise ValueError("unsupported Bun lockfile shape")
+    packages = payload.get("packages", {})
+    if not isinstance(packages, dict):
+        raise ValueError("unsupported Bun packages shape")
+    versions_by_name: dict[str, list[str]] = {}
+    for package in packages.values():
+        _ensure_within_deadline(deadline)
+        if not isinstance(package, list) or not package or not isinstance(package[0], str):
+            raise ValueError("unsupported Bun package entry")
+        identity = _bun_resolution_identity(package[0])
+        if identity is None:
+            continue
+        package_name, version = identity
+        versions = versions_by_name.setdefault(package_name, [])
+        if version not in versions:
+            versions.append(version)
+    return versions_by_name
+
+
+def _bun_resolution_identity(resolution: str) -> tuple[str, str] | None:
+    if resolution.startswith("@"):
+        scope_separator = resolution.find("/")
+        version_separator = resolution.find("@", scope_separator + 1)
+    else:
+        version_separator = resolution.find("@")
+    if version_separator <= 0:
+        return None
+    package_name = resolution[:version_separator]
+    version = resolution[version_separator + 1 :]
+    if version.startswith("npm:"):
+        version = version.removeprefix("npm:")
+    if (
+        not package_name
+        or not version
+        or version.startswith(("workspace:", "root:", "file:", "link:", "git:", "git+", "http:", "https:"))
+    ):
+        return None
+    return package_name, version
 
 
 def _exact_dependency_version(value: object) -> str | None:

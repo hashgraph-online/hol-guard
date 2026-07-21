@@ -650,8 +650,8 @@ def test_env_private_key_overrides_persistent_key(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from cryptography.hazmat.primitives.asymmetric import ec
     from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
 
     from codex_plugin_scanner.guard.runtime.trust_attestation import (
         resolve_trust_attestation_signing_config,

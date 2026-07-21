@@ -19,7 +19,8 @@ import {
 } from "./approval-center-primitives";
 import { harnessDisplayName, isDisplayableHarness } from "./approval-center-utils";
 import { SUPPORTED_APPS_BRIEF, resolveAppInstallStatus, APP_STATUS_LABELS } from "./apps/app-catalog";
-import type { GuardInventoryItem, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import { protectionHealthFor } from "./protection-health";
+import type { GuardInventoryItem, GuardPolicyDecision, GuardProtectionState, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
 type FleetWorkspaceProps = {
   runtime: GuardRuntimeSnapshot;
@@ -42,7 +43,7 @@ type FleetHeroUrls = {
 };
 
 export type FleetHeroCopy = {
-  status: "clear" | "setup_gap";
+  status: "clear" | "setup_gap" | "partial" | "degraded";
   headline: string;
   subheadline: string;
   primaryCtaLabel: string;
@@ -56,9 +57,24 @@ const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
 export function resolveFleetHeroCopy(
   cloudState: "local_only" | "paired_waiting" | "paired_active",
   activeInstallCount: number,
+  protectionState: GuardProtectionState,
   urls: FleetHeroUrls
 ): FleetHeroCopy {
   const hasApps = activeInstallCount > 0;
+  if (hasApps && protectionState !== "protected") {
+    return {
+      status: protectionState,
+      headline: protectionState === "partial" ? "Apps are partially protected" : "App protection is degraded",
+      subheadline:
+        protectionState === "partial"
+          ? "Core protection passes, but complete decision-stream evidence is not available."
+          : "One or more required protection checks failed or remain unproven.",
+      primaryCtaLabel: "Review app health",
+      primaryCtaHref: urls.dashboard_url,
+      secondaryCtaLabel: cloudState === "local_only" ? "Connect this machine" : "Open Cloud Devices",
+      secondaryCtaHref: cloudState === "local_only" ? urls.connect_url : urls.fleet_url,
+    };
+  }
   if (cloudState === "local_only") {
     return {
       status: hasApps ? "clear" : "setup_gap",
@@ -117,11 +133,13 @@ type AppStatus = "protected" | "partial" | "found_unprotected" | "needs_repair" 
 
 function resolveAppStatus(
   install: { active?: boolean } | undefined,
+  protectionState: GuardProtectionState,
   hasInventory: boolean,
   hasReceipts: boolean
 ): AppStatus {
   if (install !== undefined) {
-    if (install.active) return "protected";
+    if (install.active && protectionState === "protected") return "protected";
+    if (install.active && protectionState === "partial") return "partial";
     return "needs_repair";
   }
   if (!hasInventory && !hasReceipts) return "not_found";
@@ -130,6 +148,7 @@ function resolveAppStatus(
 
 function toInstallStatus(status: AppStatus): ReturnType<typeof resolveAppInstallStatus> {
   if (status === "protected") return "active";
+  if (status === "partial") return "partial";
   if (status === "needs_repair") return "partial";
   if (status === "found_unprotected") return "observed";
   return "not_installed";
@@ -144,6 +163,8 @@ function StatusIcon({ status }: { status: AppStatus }) {
 }
 
 function StatusBadge({ status }: { status: AppStatus }) {
+  if (status === "partial") return <span className="text-xs font-medium text-brand-blue">Partially protected</span>;
+  if (status === "needs_repair") return <span className="text-xs font-medium text-brand-attention">Degraded</span>;
   const installStatus = toInstallStatus(status);
   const label = APP_STATUS_LABELS[installStatus];
   if (installStatus === "active") return <span className="text-xs font-medium text-emerald-600">{label}</span>;
@@ -218,11 +239,13 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
     ].filter(isDisplayableHarness))
   ).sort((a, b) => a.localeCompare(b));
   const runtimeState = props.runtime.runtime_state;
+  const protectionHealth = protectionHealthFor(props.runtime);
   const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isDisplayableHarness));
 
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
     activeInstalls.length,
+    protectionHealth.state,
     {
       fleet_url: props.runtime.fleet_url,
       dashboard_url: props.runtime.dashboard_url,
@@ -248,7 +271,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
         items={[
           { label: "Needs review", value: `${props.runtime.pending_count}`, tone: props.runtime.pending_count > 0 ? "blue" : "slate" },
           { label: "History", value: `${props.runtime.receipt_count}`, tone: "purple" },
-          { label: "Watched apps", value: `${activeInstalls.length > 0 ? activeInstalls.length : visibleHarnesses.length}`, tone: activeInstalls.length > 0 ? "green" : "slate" },
+          { label: "Watched apps", value: `${activeInstalls.length > 0 ? activeInstalls.length : visibleHarnesses.length}`, tone: protectionHealth.state === "protected" ? "green" : "slate" },
           { label: "Runtime", value: runtimeState ? "active" : "offline", tone: runtimeState ? "green" : "slate" },
         ]}
       />
@@ -267,7 +290,8 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
                 const harnessInventory = inventory.filter((i) => i.harness === harness && i.present);
                 const harnessPolicies = props.policies.filter((p) => p.harness === harness);
                 const hasReceipts = receiptHarnesses.has(harness);
-                const status = resolveAppStatus(install, harnessInventory.length > 0, hasReceipts);
+                const appProtection = protectionHealthFor(props.runtime, harness);
+                const status = resolveAppStatus(install, appProtection.state, harnessInventory.length > 0, hasReceipts);
                 return (
                   <AppRow
                     key={harness}
@@ -346,7 +370,7 @@ function SetupGuide(props: { hasReceipts: boolean; hasInventory: boolean }) {
     {
       id: "verify",
       label: "Verify in dashboard",
-      description: "Check this dashboard to see Guard protecting your app. You will see receipts appear in History.",
+      description: "Check this dashboard to review app health and see receipts appear in History.",
       done: props.hasReceipts && props.hasInventory,
     },
   ];

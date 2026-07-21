@@ -409,7 +409,7 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
             {
                 "title": "Check local Guard status",
                 "command": f"{GUARD_COMMAND} status",
-                "detail": "See what is protected locally, what synced last, and what Guard thinks you should do next.",
+                "detail": "Review local protection health, recent sync, and Guard's recommended next step.",
             }
         ]
     steps.insert(
@@ -510,7 +510,7 @@ def _cloud_state_detail(
         )
     if connect_retry_refresh_race:
         return (
-            "This machine stays locally protected. The first shared Guard Cloud proof stalled after a refresh-token "
+            "Local Guard remains available. The first shared Guard Cloud proof stalled after a refresh-token "
             f"race. Run `{GUARD_COMMAND} connect` or reopen {connect_url} when you want shared proof restored."
         )
     if connect_retry_required:

@@ -10,19 +10,26 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shlex
 import shutil
 import stat
 import subprocess
+import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..models import GuardArtifact
 from .actions import GuardActionEnvelope, apply_patch_target_paths
+from .approval_context import build_runtime_executable_identity
+from .command_decision_adapter import effect_decision_to_dict
 from .command_evaluation import evaluate_command
+from .command_extension_interaction import classify_command_extension_interaction
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .command_model import CanonicalCommand, parse_shell_command
 from .data_flow import extract_heredocs
+from .env_wrapper import parse_env_wrapper
+from .extension_control_contract import ExtensionControlLayer
 from .false_positive_rules import (
     SOURCE_INSPECTION_BENIGN_DOTFILES,
     SOURCE_INSPECTION_EXTENSIONS,
@@ -35,9 +42,23 @@ from .false_positive_rules import (
     split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
-from .github_command_capabilities import GitHubCommandAssessment, classify_github_cli
+from .github_capability_contract import GitHubCommandAssessment
+from .github_capability_interaction import (
+    github_capability_action_class,
+    github_capability_requires_confirmation,
+)
+from .github_shell_capabilities import GitHubShellAnalysis
+from .github_shell_capabilities import classify_github_shell_capabilities as _classify_github_shell_capabilities
 from .interpreter_options import shell_interpreter_command_payload as _shell_interpreter_command_payload
 from .kubernetes_commands import kubernetes_secret_read_source
+from .pytest_config import (
+    PYTEST_CONFIG_PATH_INVALID,
+    PytestConfigAssessment,
+    assess_pytest_configs,
+    assess_selected_pytest_config,
+    combine_pytest_config_assessments,
+)
+from .restricted_pytest import PYTEST_RESTRICTED_PROFILE_VERSION
 from .secret_sensitivity import SecretPathMatch as SensitivePathMatch
 from .secret_sensitivity import classify_secret_path
 from .sed_scripts import sed_script_is_bounded_print
@@ -46,7 +67,12 @@ from .self_approval import (
     SELF_APPROVAL_REASON,
     is_guard_approval_mutation_command,
 )
-from .shell_command_wrappers import normalize_transparent_shell_command
+from .shell_command_wrappers import is_trusted_absolute_command_path, normalize_transparent_shell_command
+from .shell_execution_context import (
+    ShellExecutionContext,
+    model_shell_execution_context,
+    validate_shell_execution_segment,
+)
 
 _FILE_READ_TOOL_NAMES = frozenset(
     {
@@ -214,6 +240,12 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
     "sk-",
 )
 _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest", "ruff"})
+_TRUSTED_INTERPRETER_INSTALL_ROOTS = (
+    Path("/home/linuxbrew/.linuxbrew"),
+    Path("/opt/homebrew"),
+    Path("/opt/hostedtoolcache/Python"),
+    Path("/usr/local"),
+)
 _SAFE_PYTHON_MODULE_SHADOW_PATHS = {
     "pytest": (
         "pytest.py",
@@ -232,19 +264,17 @@ _SAFE_PYTHON_MODULE_SHADOW_PATHS = {
         "ruff/__main__.pyc",
     ),
 }
-_PYTEST_OPTION_CONFIG_PATHS = ("pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml")
-_PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS = (
-    "--basetemp",
-    "--cache-clear",
-    "--debug",
-    "--junitxml",
-    "--junit-xml",
-    "--log-file",
-    "-p",
+_PYTEST_OPTION_CONFIG_PATHS = (
+    "pytest.toml",
+    ".pytest.toml",
+    "pytest.ini",
+    ".pytest.ini",
+    "pyproject.toml",
+    "tox.ini",
+    "setup.cfg",
 )
 _PYTEST_UNSAFE_ENV_KEYS = frozenset({"PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE"})
 _SHELL_STARTUP_ENV_KEYS = frozenset({"BASH_ENV", "ENV", "ZDOTDIR"})
-_MAX_PYTEST_CONFIG_FILE_BYTES = 1_000_000
 _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
 _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES = frozenset({"--check-hash-based-pycs", "-W", "-X"})
@@ -425,7 +455,49 @@ _WGET_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE = frozenset(
     {"--body-data", "--header", "--method", "--password", "--post-data", "--user"}
 )
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
-_SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
+_SHELL_COMMAND_WRAPPERS = frozenset({"builtin", "command", "env", "exec", "nice", "nohup", "stdbuf", "sudo", "time"})
+_PYTEST_COMMAND_NAMES = frozenset({"py.test", "py.test.exe", "pytest", "pytest.exe"})
+_PYTEST_COMMAND_RUNNER_SUBCOMMANDS = {
+    "conda": frozenset({"run"}),
+    "direnv": frozenset({"exec"}),
+    "hatch": frozenset({"run"}),
+    "mise": frozenset({"exec", "x"}),
+    "pdm": frozenset({"run"}),
+    "pipenv": frozenset({"run"}),
+    "pipx": frozenset({"run"}),
+    "pixi": frozenset({"run"}),
+    "poetry": frozenset({"run"}),
+    "rye": frozenset({"run"}),
+    "uv": frozenset({"run"}),
+}
+_PYTEST_RUNNER_OPTIONS_WITH_VALUES = {
+    "conda": frozenset({"--cwd", "--name", "--prefix"}),
+    "hatch": frozenset({"--env", "--project"}),
+    "mise": frozenset({"--cwd", "--env", "--jobs"}),
+    "pdm": frozenset({"--config", "--project", "--site-packages"}),
+    "pipenv": frozenset({"--categories", "--extra-pip-args", "--python"}),
+    "pipx": frozenset({"--index-url", "--pip-args", "--suffix", "--with"}),
+    "pixi": frozenset({"--environment", "--manifest-path"}),
+    "poetry": frozenset({"--directory", "--project"}),
+    "rye": frozenset({"--pyproject"}),
+    "uv": frozenset(
+        {
+            "--cache-dir",
+            "--config-file",
+            "--directory",
+            "--env-file",
+            "--index",
+            "--index-url",
+            "--project",
+            "--python",
+            "--with",
+            "--with-editable",
+            "--with-requirements",
+        }
+    ),
+}
+_PYTEST_RUNNER_POSITIONAL_PREFIX_COUNTS = {"direnv": 1}
+_PYTEST_EXECUTOR_COMMANDS = frozenset({"parallel", "watch", "xargs"})
 _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS = frozenset({"cat", "curl", "echo", "printf", "sed", "tr", "wget"})
 _SHELL_NETWORK_SINK_COMMANDS = frozenset({"curl", "wget", "nc", "ncat", "netcat", "scp", "rsync", "ssh"})
 _SHELL_LOCAL_READ_COMMANDS = frozenset({"cat", "grep", "egrep", "fgrep", "head", "rg", "sed", "tail"})
@@ -434,7 +506,7 @@ _SHELL_NEWLINE_SEPARATOR = ";"
 _HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
 _SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN = r"(?:cd\b[^\n;&|<>$`]*)"
 _SINGLE_INTERPRETER_HEREDOC_PATTERN = re.compile(
-    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>[^\s;&|<>$`]*(?:perl|python(?:\d+(?:\.\d+)*)?|ruby))\b(?P<args>[^\n;&|]*)<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
+    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>[^\s;&|<>$`]*(?:perl|pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?|ruby))\b(?P<args>[^\n;&|]*)<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
     re.IGNORECASE | re.DOTALL,
 )
 _SINGLE_NODE_HEREDOC_PATTERN = re.compile(
@@ -545,7 +617,7 @@ _GIT_GLOBAL_OPTIONS_WITH_VALUE = frozenset(
     }
 )
 _WRAPPER_FLAGS_WITH_VALUES = {
-    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
+    "exec": frozenset({"-a"}),
     "nice": frozenset({"-n", "--adjustment"}),
     "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
     "sudo": frozenset(
@@ -685,6 +757,16 @@ class ToolActionRequestMatch:
     raw_command_text: str | None = None
     wrapper_chain: tuple[str, ...] = ()
     canonical_command: CanonicalCommand | None = None
+    shell_execution_context_hash: str | None = None
+    shell_execution_context_reason_code: str | None = None
+    shell_execution_effective_cwds: tuple[str, ...] = ()
+    guard_default_action: str | None = None
+    reason_code: str | None = None
+    restricted_profile_version: str | None = None
+    pytest_config_identity_sha256: str | None = None
+    pytest_config_sources: tuple[str, ...] = ()
+    pytest_config_reason_codes: tuple[str, ...] = ()
+    interpreter_executable_identities: tuple[dict[str, object], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -965,6 +1047,11 @@ def extract_sensitive_tool_action_request(
             command_text=command_text,
         )
         if docker_sensitive_request is not None:
+            docker_sensitive_request = _request_with_shell_execution_context(
+                docker_sensitive_request,
+                command_text=command_text,
+                cwd=cwd,
+            )
             if wrapper_chain:
                 docker_sensitive_request = _request_with_wrapper_context(
                     docker_sensitive_request,
@@ -979,6 +1066,11 @@ def extract_sensitive_tool_action_request(
                 command_text=raw_command_text,
             )
             if docker_sensitive_request is not None:
+                docker_sensitive_request = _request_with_shell_execution_context(
+                    docker_sensitive_request,
+                    command_text=normalized_command_text,
+                    cwd=cwd,
+                )
                 if wrapper_chain:
                     docker_sensitive_request = _request_with_wrapper_context(
                         replace(
@@ -997,6 +1089,11 @@ def extract_sensitive_tool_action_request(
             home_dir=home_dir,
         )
         if docker_config_request is not None:
+            docker_config_request = _request_with_shell_execution_context(
+                docker_config_request,
+                command_text=command_text,
+                cwd=cwd,
+            )
             if wrapper_chain:
                 docker_config_request = _request_with_wrapper_context(
                     docker_config_request,
@@ -1016,6 +1113,11 @@ def extract_sensitive_tool_action_request(
                     "they can expose cluster credentials or application secrets before the user confirms the action."
                 ),
             )
+            kubernetes_secret_request = _request_with_shell_execution_context(
+                kubernetes_secret_request,
+                command_text=command_text,
+                cwd=cwd,
+            )
             if wrapper_chain:
                 kubernetes_secret_request = _request_with_wrapper_context(
                     kubernetes_secret_request,
@@ -1023,6 +1125,20 @@ def extract_sensitive_tool_action_request(
                     wrapper_chain=wrapper_chain,
                 )
             return kubernetes_secret_request
+        destructive_execution_context = model_shell_execution_context(
+            command_text,
+            cwd=cwd,
+            workspace_root=cwd,
+        )
+        raw_destructive_execution_context = (
+            model_shell_execution_context(
+                raw_command_text,
+                cwd=cwd,
+                workspace_root=cwd,
+            )
+            if raw_command_text != command_text
+            else destructive_execution_context
+        )
         destructive_shell_request = _destructive_shell_tool_action_request(
             tool_name=requested_tool_name,
             normalized_tool_name=effective_tool_name,
@@ -1035,8 +1151,16 @@ def extract_sensitive_tool_action_request(
                 else None
             ),
             raw_command_text=raw_command_text,
+            execution_context=destructive_execution_context,
+            raw_execution_context=raw_destructive_execution_context,
         )
         if destructive_shell_request is not None:
+            destructive_shell_request = _request_with_shell_execution_context(
+                destructive_shell_request,
+                command_text=command_text,
+                cwd=cwd,
+                context=destructive_execution_context,
+            )
             if wrapper_chain:
                 destructive_shell_request = _request_with_wrapper_context(
                     destructive_shell_request,
@@ -1053,8 +1177,15 @@ def extract_sensitive_tool_action_request(
                 home_dir=home_dir,
                 canonical_command=candidate_canonical,
                 raw_command_text=raw_command_text,
+                execution_context=raw_destructive_execution_context,
+                raw_execution_context=raw_destructive_execution_context,
             )
             if destructive_shell_request is not None:
+                destructive_shell_request = _request_with_shell_execution_context(
+                    destructive_shell_request,
+                    command_text=normalized_command_text,
+                    cwd=cwd,
+                )
                 destructive_shell_request = _request_with_wrapper_context(
                     replace(
                         destructive_shell_request,
@@ -1079,6 +1210,13 @@ def is_explicitly_benign_tool_action_request(
         return False
     found_benign_candidate = False
     for command_text in _candidate_command_texts(arguments):
+        interpreter_evidence = _python_interpreter_executable_identities(
+            command_text,
+            cwd=cwd,
+            home_dir=home_dir,
+        )
+        if any(evidence.get("trust") not in {"trusted_guard", "trusted_system"} for evidence in interpreter_evidence):
+            return False
         if normalized_tool_name in _SHELL_TOOL_NAMES:
             command_text = normalize_transparent_shell_command(
                 command_text, cwd=cwd, home_dir=home_dir
@@ -1307,11 +1445,39 @@ def _destructive_shell_tool_action_request(
     home_dir: Path | None,
     canonical_command: CanonicalCommand | None = None,
     raw_command_text: str | None = None,
+    execution_context: ShellExecutionContext | None = None,
+    raw_execution_context: ShellExecutionContext | None = None,
 ) -> ToolActionRequestMatch | None:
     if normalized_tool_name not in _SHELL_TOOL_NAMES:
         return None
     canonical_command = canonical_command or parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
+    execution_context = execution_context or model_shell_execution_context(
+        command_text,
+        cwd=cwd,
+        workspace_root=cwd,
+    )
     detection_command_text = command_text
+    pytest_execution_requested = _shell_command_targets_pytest(detection_command_text)
+    pytest_config_assessment = (
+        _pytest_config_assessment_for_command(
+            detection_command_text,
+            cwd=cwd,
+            execution_context=execution_context,
+        )
+        if pytest_execution_requested
+        else PytestConfigAssessment((), True, False, (), None)
+    )
+    pytest_config_sources = tuple(result.source_path for result in pytest_config_assessment.results)
+    interpreter_executable_identities = _python_interpreter_executable_identities(
+        raw_command_text or detection_command_text,
+        cwd=cwd,
+        home_dir=home_dir,
+        execution_context=(
+            raw_execution_context
+            if raw_command_text is not None and raw_command_text != detection_command_text
+            else execution_context
+        ),
+    )
     if is_guard_approval_mutation_command(detection_command_text):
         return ToolActionRequestMatch(
             tool_name=tool_name,
@@ -1332,6 +1498,7 @@ def _destructive_shell_tool_action_request(
                 "payloads in-process without executing them during evaluation."
             ),
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     if _contains_shell_credential_exfiltration(detection_command_text, cwd=cwd, home_dir=home_dir):
         return ToolActionRequestMatch(
@@ -1344,6 +1511,7 @@ def _destructive_shell_tool_action_request(
                 "sensitive because they can exfiltrate local secrets before the user confirms the action."
             ),
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     if _contains_shell_network_file_upload(detection_command_text, cwd=cwd, home_dir=home_dir):
         return ToolActionRequestMatch(
@@ -1356,6 +1524,7 @@ def _destructive_shell_tool_action_request(
                 "contents to a network endpoint before the user confirms the action."
             ),
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     if _gh_pr_create_body_has_shell_command_substitution(detection_command_text) or (
         raw_command_text is not None
@@ -1373,125 +1542,206 @@ def _destructive_shell_tool_action_request(
                 "`--body-file` for PR descriptions."
             ),
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
-    for _extension, rule, _evidence in BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command):
-        if not rule.action_classes or rule.action_classes[0] != "GitHub Actions administrative command":
-            continue
+    extension_interaction = classify_command_extension_interaction(
+        canonical_command,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    )
+    if extension_interaction.priority is not None:
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
-            action_class=rule.action_classes[0],
-            reason=rule.description,
+            action_class=extension_interaction.priority.action_class,
+            reason=extension_interaction.priority.reason,
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
-    if _looks_destructive_shell_command(detection_command_text, cwd=cwd, home_dir=home_dir):
+    execution_context_reason = _shell_execution_context_validation_reason(execution_context)
+    if execution_context.directory_change_present and execution_context_reason is not None:
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="unresolved shell execution context",
+            reason=(
+                "Guard could not prove the working directory for every shell segment and requires one "
+                f"conservative decision before the user confirms execution ({execution_context_reason}). Use a "
+                "literal, existing in-workspace directory with deterministic cd/pushd/popd control flow, or run the "
+                "command from the intended directory."
+            ),
+            canonical_command=canonical_command,
+            shell_execution_context_hash=execution_context.context_hash,
+            shell_execution_context_reason_code=execution_context_reason,
+            shell_execution_effective_cwds=tuple(str(path) for path in execution_context.effective_cwds),
+            guard_default_action="sandbox-required" if pytest_execution_requested else None,
+            reason_code="pytest_restricted_profile_required" if pytest_execution_requested else None,
+            restricted_profile_version=PYTEST_RESTRICTED_PROFILE_VERSION if pytest_execution_requested else None,
+            pytest_config_identity_sha256=pytest_config_assessment.identity_sha256,
+            pytest_config_sources=pytest_config_sources,
+            pytest_config_reason_codes=pytest_config_assessment.reason_codes,
+            interpreter_executable_identities=interpreter_executable_identities,
+        )
+    detection_command_is_destructive = _looks_destructive_shell_command(
+        detection_command_text,
+        cwd=cwd,
+        home_dir=home_dir,
+        execution_context=execution_context,
+    )
+    raw_command_is_destructive = (
+        raw_command_text is not None
+        and raw_command_text != detection_command_text
+        and _looks_destructive_shell_command(
+            raw_command_text,
+            cwd=cwd,
+            home_dir=home_dir,
+            execution_context=raw_execution_context,
+        )
+    )
+    if detection_command_is_destructive or raw_command_is_destructive:
+        matched_execution_context = raw_execution_context if raw_command_is_destructive else execution_context
+        matched_execution_context = matched_execution_context or execution_context
+        destructive_reason = (
+            "Guard found execution-affecting pytest configuration or could not inspect the selected pytest "
+            "configuration completely. Keep plugin/output/config overrides inside the restricted pytest profile; "
+            "repair or remove malformed, missing, unreadable, oversized, or unsafe config inputs before retrying."
+            if pytest_execution_requested and pytest_config_assessment.unsafe
+            else (
+                "Guard treats destructive shell writes and delete operations as sensitive because they can mutate "
+                "the local machine before the user confirms the action."
+            )
+        )
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
             action_class="destructive shell command",
+            reason=destructive_reason,
+            canonical_command=canonical_command,
+            shell_execution_context_hash=(
+                matched_execution_context.context_hash if matched_execution_context.directory_change_present else None
+            ),
+            shell_execution_context_reason_code=matched_execution_context.reason_code,
+            shell_execution_effective_cwds=(
+                tuple(str(path) for path in matched_execution_context.effective_cwds)
+                if matched_execution_context.directory_change_present
+                else ()
+            ),
+            guard_default_action="sandbox-required" if pytest_execution_requested else None,
+            reason_code="pytest_restricted_profile_required" if pytest_execution_requested else None,
+            restricted_profile_version=PYTEST_RESTRICTED_PROFILE_VERSION if pytest_execution_requested else None,
+            pytest_config_identity_sha256=pytest_config_assessment.identity_sha256,
+            pytest_config_sources=pytest_config_sources,
+            pytest_config_reason_codes=pytest_config_assessment.reason_codes,
+            interpreter_executable_identities=interpreter_executable_identities,
+        )
+    if pytest_execution_requested:
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="pytest repository-code execution",
             reason=(
-                "Guard treats destructive shell writes and delete operations as sensitive because they can mutate "
-                "the local machine before the user confirms the action."
+                "pytest_restricted_profile_required: Pytest collection imports repository-controlled tests, "
+                "conftest.py files, and plugins. Run the exact pytest argv through "
+                "`hol-guard pytest-contained --workspace <workspace> -- ...`; Guard will not launch pytest when "
+                "the required operating-system sandbox is unavailable."
             ),
             canonical_command=canonical_command,
+            guard_default_action="sandbox-required",
+            reason_code="pytest_restricted_profile_required",
+            restricted_profile_version=PYTEST_RESTRICTED_PROFILE_VERSION,
+            pytest_config_identity_sha256=pytest_config_assessment.identity_sha256,
+            pytest_config_sources=pytest_config_sources,
+            pytest_config_reason_codes=pytest_config_assessment.reason_codes,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
-    github_assessment = _github_shell_capability_assessment(
-        detection_command_text,
-        cwd=cwd,
+    github_assessment = classify_github_shell_capabilities(
+        raw_command_text or detection_command_text,
         home_dir=home_dir,
     )
-    if github_assessment is not None:
-        is_remote_mutation = github_assessment.capability == "mutate_remote"
+    if github_assessment is not None and github_capability_requires_confirmation(github_assessment):
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
-            action_class=(
-                "GitHub remote mutation command" if is_remote_mutation else "Unverified GitHub command capability"
-            ),
+            action_class=github_capability_action_class(github_assessment),
             reason=(
-                f"{github_assessment.detail} Guard requires confirmation because the operation "
-                + (
-                    "can mutate GitHub-hosted state."
-                    if is_remote_mutation
-                    else "is not a statically proven read-only composition."
-                )
+                f"{github_assessment.detail} Guard requires confirmation because the operation is not a "
+                "statically proven read-only composition."
             ),
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
         )
-    for _extension, rule, _evidence in BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command):
-        if not rule.action_classes:
-            continue
+    if extension_interaction.fallback is not None:
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
-            action_class=rule.action_classes[0],
-            reason=rule.description,
+            action_class=extension_interaction.fallback.action_class,
+            reason=extension_interaction.fallback.reason,
             canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
+        )
+    untrusted_interpreters = tuple(
+        evidence
+        for evidence in interpreter_executable_identities
+        if evidence.get("trust") not in {"trusted_guard", "trusted_system"}
+    )
+    if untrusted_interpreters:
+        trust_reasons = ", ".join(
+            sorted({str(evidence.get("trust") or "unknown") for evidence in untrusted_interpreters})
+        )
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="untrusted Python interpreter",
+            reason=(
+                "Guard requires review because the Python command resolves through an interpreter path that is "
+                f"not an attested Guard or system runtime ({trust_reasons}). The decision is bound to the raw "
+                "interpreter token, launch path, symlink chain, executable mode, file identity, and content hash."
+            ),
+            canonical_command=canonical_command,
+            reason_code="interpreter_identity_untrusted",
+            interpreter_executable_identities=interpreter_executable_identities,
         )
     return None
 
 
-def _github_shell_capability_assessment(
+def _shell_execution_context_validation_reason(context: ShellExecutionContext) -> str | None:
+    if not context.complete:
+        return context.reason_code
+    for segment in context.segments:
+        _effective_cwd, reason = validate_shell_execution_segment(context, segment)
+        if reason is not None:
+            return reason
+    return None
+
+
+def classify_github_shell_capabilities(
     command_text: str,
     *,
-    cwd: Path | None,
     home_dir: Path | None,
-    depth: int = 0,
 ) -> GitHubCommandAssessment | None:
-    """Return the first GitHub capability that requires confirmation."""
+    """Adapt the shared shell parser to focused GitHub capability composition."""
 
-    if depth > 3 or _looks_like_safe_graphql_query_file_workflow(command_text.strip()):
-        return None
-    for nested_command in _shell_command_substitution_payloads(command_text):
-        assessment = _github_shell_capability_assessment(
-            nested_command,
-            cwd=cwd,
-            home_dir=home_dir,
-            depth=depth + 1,
-        )
-        if assessment is not None:
-            return assessment
-
-    parts = _split_shell_parts(command_text)
-    for nested_command in (*_env_split_string_payloads(parts), *_shell_command_scripts(parts)):
-        assessment = _github_shell_capability_assessment(
-            nested_command,
-            cwd=cwd,
-            home_dir=home_dir,
-            depth=depth + 1,
-        )
-        if assessment is not None:
-            return assessment
-
-    for pipeline in _iter_shell_pipelines(parts):
-        contains_github_read = False
-        for segment in pipeline:
-            if _shell_segment_is_command_builtin_lookup(segment):
-                continue
-            command_name, command_index = _shell_segment_primary_command(segment)
-            if command_name != "gh" or command_index is None:
-                continue
-            assessment = _classify_github_shell_segment(segment, command_index)
-            if assessment.capability not in {"read_local", "read_remote", "maintain_remote"}:
-                return assessment
-            contains_github_read = True
-        if not contains_github_read or len(pipeline) < 2:
-            continue
-        for segment in pipeline:
-            command_name, _command_index = _shell_segment_primary_command(segment)
-            if command_name == "gh":
-                continue
-            if not _github_pipeline_companion_is_read_only(segment, home_dir=home_dir):
-                return GitHubCommandAssessment(
-                    capability="unknown",
-                    reason_code="github.pipeline.unverified-companion",
-                    detail="A GitHub read is composed with a pipeline stage that has not been proven read-only.",
-                )
-    return None
+    return _classify_github_shell_capabilities(
+        command_text,
+        analysis=GitHubShellAnalysis(
+            command_substitution_payloads=_shell_command_substitution_payloads,
+            split_parts=_split_shell_parts,
+            nested_commands=lambda parts: (*_env_split_string_payloads(parts), *_shell_command_scripts(parts)),
+            pipelines=_iter_shell_pipelines,
+            command_builtin_is_lookup=_shell_segment_is_command_builtin_lookup,
+            primary_command=_shell_segment_primary_command,
+            pipeline_companion_is_read_only=lambda segment: _github_pipeline_companion_is_read_only(
+                segment,
+                home_dir=home_dir,
+            ),
+        ),
+    )
 
 
 def _shell_segment_is_command_builtin_lookup(segment: list[str]) -> bool:
@@ -1501,25 +1751,6 @@ def _shell_segment_is_command_builtin_lookup(segment: list[str]) -> bool:
         if command_name == "command":
             return _command_builtin_options_are_lookup_only(contextual_segment, index + 1)
     return False
-
-
-def _classify_github_shell_segment(segment: list[str], command_index: int) -> GitHubCommandAssessment:
-    args: list[str] = []
-    index = command_index + 1
-    while index < len(segment):
-        token = segment[index]
-        if token in {"2>&1", "1>&2"}:
-            index += 1
-            continue
-        if token in {">", ">>", ">|", "<", "<<", "<<<"} or any(marker in token for marker in (">", "<")):
-            return GitHubCommandAssessment(
-                capability="write_local",
-                reason_code="github.command.shell-redirection",
-                detail="The GitHub CLI invocation includes local input or output redirection.",
-            )
-        args.append(token)
-        index += 1
-    return classify_github_cli(args)
 
 
 def _github_pipeline_companion_is_read_only(
@@ -1605,42 +1836,15 @@ def _gh_pr_create_body_has_shell_command_substitution(command_text: str, *, dept
 
 
 def _gh_pr_env_split_string_payloads_with_substitution(segment: list[_ShellTokenWithQuoteContext]) -> tuple[str, ...]:
-    payloads: list[str] = []
     env_index = _shell_segment_env_index([token.plain for token in segment])
     if env_index is None:
         return ()
-    index = env_index + 1
-    while index < len(segment):
-        token = segment[index]
-        plain = token.plain
-        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(plain)):
-            index += 1
-            continue
-        if plain == "--":
-            break
-        if not plain.startswith("-"):
-            break
-        if plain in {"-S", "--split-string"} and index + 1 < len(segment):
-            payload_token = segment[index + 1]
-            if _shell_command_substitution_payloads(payload_token.raw):
-                payloads.append(payload_token.plain.strip())
-            index += _wrapper_option_tokens_consumed("env", plain)
-            continue
-        if plain.startswith("--split-string="):
-            if _shell_command_substitution_payloads(token.raw):
-                payloads.append(plain.split("=", 1)[1].strip())
-            index += _wrapper_option_tokens_consumed("env", plain)
-            continue
-        clustered_payload = _env_clustered_split_string_payload(plain)
-        if clustered_payload is not None:
-            if clustered_payload:
-                if _shell_command_substitution_payloads(token.raw):
-                    payloads.append(clustered_payload.strip())
-            elif index + 1 < len(segment) and _shell_command_substitution_payloads(segment[index + 1].raw):
-                payloads.append(segment[index + 1].plain.strip())
-            index += _wrapper_option_tokens_consumed("env", plain)
-            continue
-        index += _wrapper_option_tokens_consumed("env", plain)
+    parsed = parse_env_wrapper([token.plain for token in segment[env_index + 1 :]])
+    payloads: list[str] = []
+    for expansion in parsed.split_expansions:
+        source_index = env_index + 1 + expansion.source_index
+        if source_index < len(segment) and _shell_command_substitution_payloads(segment[source_index].raw):
+            payloads.append(expansion.payload.strip())
     return tuple(payload for payload in payloads if payload)
 
 
@@ -1789,28 +1993,10 @@ def _skip_shell_select_header(segment: list[_ShellTokenWithQuoteContext], index:
 
 
 def _skip_env_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
-    while index < len(segment):
-        plain = segment[index].plain
-        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(plain)):
-            index += 1
-            continue
-        if plain in {"-i", "-0", "--ignore-environment", "--null"}:
-            index += 1
-            continue
-        if plain == "--":
-            index += 1
-            break
-        if plain in {"-u", "-C", "-S", "--unset", "--chdir", "--split-string"}:
-            index += 2
-            continue
-        if any(plain.startswith(f"{flag}=") for flag in {"--unset", "--chdir", "--split-string"}):
-            index += 1
-            continue
-        if plain.startswith("-"):
-            index += 1
-            continue
-        break
-    return index
+    parsed = parse_env_wrapper([token.plain for token in segment[index:]])
+    if not parsed.complete or parsed.command_index is None or parsed.split_expansions:
+        return len(segment)
+    return index + parsed.command_index
 
 
 def _skip_sudo_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
@@ -4051,6 +4237,7 @@ def build_tool_action_request_artifact(
     *,
     config_path: str,
     source_scope: str,
+    extension_control_layers: tuple[ExtensionControlLayer, ...] = (),
 ) -> GuardArtifact:
     """Build a Guard artifact for a sensitive native tool action request."""
 
@@ -4060,19 +4247,22 @@ def build_tool_action_request_artifact(
         canonical_command=(request.canonical_command if request.raw_command_text is None else None),
         compatibility_action_class=request.action_class,
         compatibility_reason=request.reason,
+        extension_control_layers=extension_control_layers,
     )
     wrapper_chain = tuple(dict.fromkeys((*evaluation.command.wrapper_chain, *request.wrapper_chain)))
-    fingerprint = hashlib.sha256(
-        json.dumps(
-            {
-                "harness": harness,
-                "tool_name": request.normalized_tool_name,
-                "command_text": request.command_text,
-                "action_class": request.action_class,
-            },
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
+    fingerprint_payload = {
+        "harness": harness,
+        "tool_name": request.normalized_tool_name,
+        "command_text": request.command_text,
+        "action_class": request.action_class,
+        "shell_execution_context_hash": request.shell_execution_context_hash,
+        "interpreter_executable_identities": request.interpreter_executable_identities,
+    }
+    if request.restricted_profile_version is not None:
+        fingerprint_payload["restricted_profile_version"] = request.restricted_profile_version
+    if request.pytest_config_identity_sha256 is not None:
+        fingerprint_payload["pytest_config_identity_sha256"] = request.pytest_config_identity_sha256
+    fingerprint = hashlib.sha256(json.dumps(fingerprint_payload, sort_keys=True).encode("utf-8")).hexdigest()
     request_summary = f"Requested `{request.tool_name}` action `{request.command_text}` ({request.action_class})."
     if wrapper_chain:
         request_summary = (
@@ -4086,6 +4276,16 @@ def build_tool_action_request_artifact(
             f"Guard normalized the transparent wrapper chain {' -> '.join(wrapper_chain)} "
             f"before evaluation. {request.reason}"
         )
+    execution_context_metadata: dict[str, object] = {}
+    if request.shell_execution_context_hash is not None:
+        effective_cwds = list(request.shell_execution_effective_cwds)
+        execution_context_metadata = {
+            "shell_execution_context_hash": request.shell_execution_context_hash,
+            "shell_execution_context_complete": request.shell_execution_context_reason_code is None,
+            "shell_execution_context_reason_code": request.shell_execution_context_reason_code,
+            "shell_execution_effective_cwds": effective_cwds,
+            "effective_cwd": effective_cwds[-1] if effective_cwds else None,
+        }
     return GuardArtifact(
         artifact_id=f"{harness}:{source_scope}:tool-action:{fingerprint}",
         name=f"{request.tool_name} {request.action_class}",
@@ -4105,10 +4305,52 @@ def build_tool_action_request_artifact(
             "raw_command_text": request.raw_command_text,
             "wrapper_chain": list(wrapper_chain),
             "command_security_identity": evaluation.command.security_identity,
+            "command_action_floor": evaluation.decision_plane.action,
+            "command_decision_plane": effect_decision_to_dict(evaluation.decision_plane),
+            "extension_control_resolution": {
+                "blocked": evaluation.control_resolution.blocked,
+                "failures": [failure.code.value for failure in evaluation.control_resolution.failures],
+            },
             "command_rule_matches": [owned.to_dict() for owned in evaluation.matches],
             "risk_classes": list(evaluation.risk_classes),
             "command_parse_confidence": evaluation.command.confidence,
             "command_uncertainty_reason": evaluation.command.uncertainty_reason,
+            "interpreter_executable_identities": [
+                dict(identity) for identity in request.interpreter_executable_identities
+            ],
+            **execution_context_metadata,
+            **(
+                {"guard_default_action": request.guard_default_action}
+                if request.guard_default_action is not None
+                else {}
+            ),
+            **({"reason_code": request.reason_code} if request.reason_code is not None else {}),
+            **(
+                {
+                    "pytest_config_identity_sha256": request.pytest_config_identity_sha256,
+                    "pytest_config_sources": list(request.pytest_config_sources),
+                    "pytest_config_complete": not request.pytest_config_reason_codes,
+                    "pytest_config_reason_codes": list(request.pytest_config_reason_codes),
+                }
+                if request.pytest_config_identity_sha256 is not None
+                else {}
+            ),
+            **(
+                {
+                    "restricted_profile_version": request.restricted_profile_version,
+                    "restricted_capabilities": {
+                        "workspace": "read-write",
+                        "private_temporary_directory": "read-write",
+                        "host_home": "denied",
+                        "host_secret_environment": "denied",
+                        "network": "denied",
+                        "outside_writes": "denied",
+                        "process_execution": "approved-interpreter-runtime-only",
+                    },
+                }
+                if request.restricted_profile_version is not None
+                else {}
+            ),
         },
     )
 
@@ -4128,6 +4370,35 @@ def _request_with_wrapper_context(
         raw_command_text=raw_command_text,
         wrapper_chain=wrapper_chain,
         canonical_command=request.canonical_command,
+        shell_execution_context_hash=request.shell_execution_context_hash,
+        shell_execution_context_reason_code=request.shell_execution_context_reason_code,
+        shell_execution_effective_cwds=request.shell_execution_effective_cwds,
+        guard_default_action=request.guard_default_action,
+        reason_code=request.reason_code,
+        restricted_profile_version=request.restricted_profile_version,
+        pytest_config_identity_sha256=request.pytest_config_identity_sha256,
+        pytest_config_sources=request.pytest_config_sources,
+        pytest_config_reason_codes=request.pytest_config_reason_codes,
+        interpreter_executable_identities=request.interpreter_executable_identities,
+    )
+
+
+def _request_with_shell_execution_context(
+    request: ToolActionRequestMatch,
+    *,
+    command_text: str,
+    cwd: Path | None,
+    context: ShellExecutionContext | None = None,
+) -> ToolActionRequestMatch:
+    context = context or model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
+    if not context.directory_change_present:
+        return request
+    reason_code = _shell_execution_context_validation_reason(context)
+    return replace(
+        request,
+        shell_execution_context_hash=context.context_hash,
+        shell_execution_context_reason_code=reason_code,
+        shell_execution_effective_cwds=tuple(str(path) for path in context.effective_cwds),
     )
 
 
@@ -4427,32 +4698,18 @@ def _docker_sensitive_reason(command_text: str, *, _inherited_sensitive_env: boo
     exported_env_context: dict[str, bool] = {}
     for segment in _iter_shell_command_segments(parts):
         if segment and _normalized_shell_command_name(segment[0]) == "env":
-            env_tokens = segment[1:]
-            env_sensitive = _inherited_sensitive_env or _docker_env_context_is_sensitive(env_tokens)
-            remaining_tokens: list[str] = []
-            split_found = False
-            for i, tok in enumerate(env_tokens):
-                split_payload = _docker_env_split_string_payload(
-                    tok,
-                    env_tokens[i + 1] if i + 1 < len(env_tokens) else None,
+            parsed_env = parse_env_wrapper(segment[1:])
+            if not parsed_env.complete:
+                return "env-wrapper-unresolved"
+            env_sensitive = False if parsed_env.option_effects.ignore_environment else _inherited_sensitive_env
+            env_sensitive = env_sensitive or _docker_env_assignments_are_sensitive(
+                parsed_env.environment_delta.assignments
+            )
+            if parsed_env.executable_argv:
+                remaining_reason = _docker_sensitive_reason(
+                    shlex.join(parsed_env.executable_argv),
+                    _inherited_sensitive_env=env_sensitive,
                 )
-                if split_payload is not None:
-                    split_found = True
-                    nested_reason = _docker_sensitive_reason(split_payload)
-                    if nested_reason is not None:
-                        return nested_reason
-                    if _docker_env_context_is_sensitive(_split_shell_parts(split_payload)):
-                        env_sensitive = True
-                    consumed = 1 if tok in {"--split-string", "-S"} else 0
-                    remaining_tokens = env_tokens[i + consumed + 1 :]
-                    break
-            if not split_found:
-                remaining_tokens = [
-                    tok for tok in env_tokens if not tok.startswith("-") and not _SHELL_ASSIGNMENT_PATTERN.match(tok)
-                ]
-            remaining_cmd = " ".join(remaining_tokens)
-            if remaining_cmd:
-                remaining_reason = _docker_sensitive_reason(remaining_cmd, _inherited_sensitive_env=env_sensitive)
                 if remaining_reason is not None:
                     return remaining_reason
             continue
@@ -4596,22 +4853,27 @@ def _docker_global_context_value_is_sensitive(flag: str, value: str) -> bool:
 
 
 def _docker_env_context_is_sensitive(prefix_tokens: list[str]) -> bool:
-    index = 0
-    while index < len(prefix_tokens):
-        token = prefix_tokens[index]
-        assignment = _docker_env_assignment(token)
-        if assignment is not None:
-            key, value = assignment
-            if _docker_env_context_value_is_sensitive(key, value):
-                return True
-        split_payload = _docker_env_split_string_payload(
-            token,
-            prefix_tokens[index + 1] if index + 1 < len(prefix_tokens) else None,
-        )
-        if split_payload is not None and _docker_env_context_is_sensitive(_split_shell_parts(split_payload)):
+    env_index = next(
+        (index for index, token in enumerate(prefix_tokens) if _normalized_shell_command_name(token) == "env"),
+        None,
+    )
+    if env_index is not None:
+        parsed = parse_env_wrapper(prefix_tokens[env_index + 1 :])
+        if not parsed.complete:
             return True
-        index += 1
-    return False
+        return _docker_env_assignments_are_sensitive(parsed.environment_delta.assignments)
+    return any(
+        assignment is not None and _docker_env_context_value_is_sensitive(*assignment)
+        for assignment in (_docker_env_assignment(token) for token in prefix_tokens)
+    )
+
+
+def _docker_env_assignments_are_sensitive(assignments: tuple[tuple[str, str], ...]) -> bool:
+    return any(
+        name.upper() in _DOCKER_SENSITIVE_CONTEXT_ENV_KEYS
+        and _docker_env_context_value_is_sensitive(name.upper(), value)
+        for name, value in assignments
+    )
 
 
 def _docker_exported_env_context_sensitivity(args: list[str]) -> dict[str, bool]:
@@ -4636,19 +4898,6 @@ def _docker_env_assignment(token: str) -> tuple[str, str] | None:
     if key not in _DOCKER_SENSITIVE_CONTEXT_ENV_KEYS:
         return None
     return key, value.strip().strip("\"'")
-
-
-def _docker_env_split_string_payload(token: str, next_token: str | None) -> str | None:
-    if token in {"--split-string", "-S"}:
-        return next_token or ""
-    if token.startswith("--split-string="):
-        return token.split("=", 1)[1]
-    if token.startswith("-S"):
-        return token[2:] or (next_token or "")
-    clustered_payload = _env_clustered_split_string_payload(token)
-    if clustered_payload is None:
-        return None
-    return clustered_payload or (next_token or "")
 
 
 def _docker_env_context_value_is_sensitive(key: str, value: str) -> bool:
@@ -4896,10 +5145,62 @@ def _looks_destructive_shell_command(
     *,
     cwd: Path | None = None,
     home_dir: Path | None = None,
+    execution_context: ShellExecutionContext | None = None,
+    _execution_context_applied: bool = False,
 ) -> bool:
     normalized = command_text.strip()
     if not normalized:
         return False
+    if not _execution_context_applied:
+        execution_context = execution_context or model_shell_execution_context(
+            normalized,
+            cwd=cwd,
+            workspace_root=cwd,
+        )
+        if execution_context.directory_change_present:
+            if not execution_context.complete:
+                return True
+            has_heredoc = bool(extract_heredocs(normalized))
+            heredoc_segment_cwds: list[Path] = []
+            for context_segment in execution_context.segments:
+                if context_segment.directory_operation is not None:
+                    continue
+                segment_cwd, validation_reason = validate_shell_execution_segment(
+                    execution_context,
+                    context_segment,
+                )
+                if segment_cwd is None or validation_reason is not None:
+                    return True
+                command_name, command_index = _shell_segment_primary_command(list(context_segment.tokens))
+                if (
+                    command_name in _SAFE_STATIC_SHELL_COMMANDS
+                    and command_index is not None
+                    and not _static_shell_segment_is_safe(list(context_segment.tokens[command_index + 1 :]))
+                ):
+                    return True
+                segment_has_heredoc = any(token.startswith("<<") for token in context_segment.tokens)
+                if segment_has_heredoc:
+                    heredoc_segment_cwds.append(segment_cwd)
+                elif _looks_destructive_shell_command(
+                    context_segment.command_text,
+                    cwd=segment_cwd,
+                    home_dir=home_dir,
+                    _execution_context_applied=True,
+                ):
+                    return True
+            if has_heredoc:
+                if len(heredoc_segment_cwds) != 1:
+                    return True
+                return _looks_destructive_shell_command(
+                    normalized,
+                    cwd=heredoc_segment_cwds[0],
+                    home_dir=home_dir,
+                    _execution_context_applied=True,
+                )
+            contextual_parts = _split_shell_parts(normalized)
+            return _contains_prior_pytest_state_mutation(contextual_parts) or _contains_pytest_env_shell_script_wrapper(
+                contextual_parts
+            )
     if _is_literal_cat_heredoc_to_stdout(normalized):
         return False
     for substitution_payload in _shell_command_substitution_payloads(normalized):
@@ -6076,14 +6377,13 @@ def _shell_segment_primary_command(segment: list[str]) -> tuple[str | None, int 
             continue
         command_name = _normalized_shell_command_name(normalized_token)
         if command_name == "env":
-            index += 1
-            while index < len(segment):
-                token = segment[index]
-                if not token.startswith("-") and not _SHELL_ASSIGNMENT_PATTERN.match(token):
-                    break
-                tokens_consumed = _wrapper_option_tokens_consumed(command_name, token)
-                index += tokens_consumed
-                continue
+            parsed = parse_env_wrapper(segment[index + 1 :])
+            command_index = parsed.command_index
+            if parsed.complete and command_index is None:
+                return command_name, index
+            if not parsed.complete or parsed.split_expansions or command_index is None:
+                return None, None
+            index += command_index + 1
             continue
         if command_name in _SHELL_COMMAND_WRAPPERS:
             index += 1
@@ -6264,38 +6564,8 @@ def _env_split_string_payloads(parts: list[str]) -> tuple[str, ...]:
         env_index = _shell_segment_env_index(segment)
         if env_index is None:
             continue
-        index = env_index + 1
-        while index < len(segment):
-            token = segment[index]
-            if _SHELL_ASSIGNMENT_PATTERN.match(token):
-                index += 1
-                continue
-            if token == "--":
-                break
-            if not token.startswith("-"):
-                break
-            if token in {"-S", "--split-string"} and index + 1 < len(segment):
-                payload = segment[index + 1].strip()
-                if payload:
-                    payloads.append(payload)
-                index += _wrapper_option_tokens_consumed("env", token)
-                continue
-            if token.startswith("--split-string="):
-                payload = token.split("=", 1)[1].strip()
-                if payload:
-                    payloads.append(payload)
-                index += _wrapper_option_tokens_consumed("env", token)
-                continue
-            clustered_split_string_payload = _env_clustered_split_string_payload(token)
-            if clustered_split_string_payload is not None:
-                payload = clustered_split_string_payload.strip()
-                if not payload and index + 1 < len(segment):
-                    payload = segment[index + 1].strip()
-                if payload:
-                    payloads.append(payload)
-                index += _wrapper_option_tokens_consumed("env", token)
-                continue
-            index += _wrapper_option_tokens_consumed("env", token)
+        parsed = parse_env_wrapper(segment[env_index + 1 :])
+        payloads.extend(expansion.payload for expansion in parsed.split_expansions if expansion.payload.strip())
     return tuple(payloads)
 
 
@@ -6635,10 +6905,6 @@ def _replace_unquoted_newlines_with_separators(command_text: str) -> str:
 def _wrapper_option_tokens_consumed(command_name: str, token: str) -> int:
     if not token.startswith("-"):
         return 1
-    if command_name == "env":
-        env_short_option_tokens = _env_short_option_tokens_consumed(token)
-        if env_short_option_tokens is not None:
-            return env_short_option_tokens
     if command_name == "sudo":
         sudo_short_option_tokens = _sudo_short_option_tokens_consumed(token)
         if sudo_short_option_tokens is not None:
@@ -6648,18 +6914,6 @@ def _wrapper_option_tokens_consumed(command_name: str, token: str) -> int:
         return 2
     if _wrapper_flag_has_attached_value(command_name, token):
         return 1
-    return 1
-
-
-def _env_short_option_tokens_consumed(token: str) -> int | None:
-    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
-        return None
-    for index, flag_character in enumerate(token[1:], start=1):
-        if flag_character not in {"C", "S", "u"}:
-            continue
-        if index < len(token) - 1:
-            return 1
-        return 2
     return 1
 
 
@@ -6675,28 +6929,7 @@ def _sudo_short_option_tokens_consumed(token: str) -> int | None:
     return 1
 
 
-def _env_clustered_split_string_payload(token: str) -> str | None:
-    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
-        return None
-    split_index = token.find("S", 1)
-    if split_index == -1:
-        return None
-    if split_index + 1 >= len(token):
-        return ""
-    return token[split_index + 1 :]
-
-
 def _wrapper_flag_has_attached_value(command_name: str, token: str) -> bool:
-    if command_name == "env":
-        return any(
-            token.startswith(prefix)
-            for prefix in (
-                "--unset=",
-                "--chdir=",
-                "--split-string=",
-                "-C",
-            )
-        )
     if command_name == "nice":
         return token.startswith("--adjustment=") or (token.startswith("-n") and token != "-n")
     if command_name == "stdbuf":
@@ -6748,27 +6981,10 @@ def _is_shell_env_assignment_token(token: str) -> bool:
 
 def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
     command_names: list[str] = []
-    expect_command = True
-    for part in parts:
-        token = part.strip()
-        if not token:
-            continue
-        if token in _SHELL_COMMAND_SEPARATORS:
-            expect_command = True
-            continue
-        normalized_token = _shell_command_token_without_attached_redirection(token)
-        if not normalized_token:
-            continue
-        if not expect_command:
-            continue
-        if _is_shell_env_assignment_token(normalized_token):
-            continue
-        normalized_command = _normalized_shell_command_name(normalized_token)
-        if normalized_command in {"env", "command", "builtin", "nohup", "nice", "sudo", "time", "stdbuf"}:
-            expect_command = True
-            continue
-        command_names.append(normalized_command)
-        expect_command = False
+    for segment in _iter_shell_command_segments(parts):
+        command_name, _command_index = _shell_segment_primary_command(segment)
+        if command_name is not None:
+            command_names.append(command_name)
     return tuple(command_names)
 
 
@@ -6811,45 +7027,45 @@ def _shell_script_targets_pytest(script_text: str) -> bool:
     return False
 
 
+def _shell_command_targets_pytest(command_text: str, *, depth: int = 0) -> bool:
+    """Return whether shell evaluation can reach pytest outside Guard containment."""
+
+    if depth > 8:
+        return any(
+            _normalized_shell_command_name(token) in _PYTEST_COMMAND_NAMES for token in _split_shell_parts(command_text)
+        )
+    parts = _split_shell_parts(command_text)
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            continue
+        if _segment_targets_pytest(segment, command_name, command_index, depth=depth):
+            return True
+        if command_name in _SHELL_COMMAND_STRING_INTERPRETERS:
+            flag_payload = _shell_interpreter_command_payload(segment, command_index)
+            if flag_payload is not None and _shell_command_targets_pytest(flag_payload.script_text, depth=depth + 1):
+                return True
+    return any(
+        _shell_command_targets_pytest(payload, depth=depth + 1)
+        for payload in _shell_command_substitution_payloads(command_text)
+    )
+
+
 def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
     scripts: list[str] = []
-    current_command: str | None = None
-    expect_command = True
-    index = 0
-    while index < len(parts):
-        token = parts[index].strip()
-        if not token:
-            index += 1
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
             continue
-        if token in _SHELL_COMMAND_SEPARATORS:
-            current_command = None
-            expect_command = True
-            index += 1
+        if command_name not in _SHELL_COMMAND_STRING_INTERPRETERS and not _is_script_interpreter_command(command_name):
             continue
-        normalized_token = token.lstrip("(").rstrip(")")
-        if not normalized_token:
-            index += 1
-            continue
-        if expect_command:
-            if _is_shell_env_assignment_token(normalized_token):
-                index += 1
-                continue
-            normalized_command = _normalized_shell_command_name(normalized_token)
-            if normalized_command in {"env", "command", "builtin", "nohup", "nice", "time", "stdbuf"}:
-                current_command = None
-                index += 1
-                continue
-            current_command = normalized_command
-            expect_command = False
-            index += 1
-            continue
-        if current_command is not None and _is_script_interpreter_command(current_command):
-            flag_payload = _interpreter_flag_payload(parts, index)
+        index = command_index + 1
+        while index < len(segment):
+            flag_payload = _interpreter_flag_payload(segment, index)
             if flag_payload is not None:
                 scripts.append(flag_payload.script_text)
-                index += flag_payload.tokens_consumed
-                continue
-        index += 1
+                break
+            index += 1
     return tuple(scripts)
 
 
@@ -7048,12 +7264,331 @@ def _contains_prior_pytest_state_mutation(parts: list[str]) -> bool:
     return False
 
 
-def _segment_targets_pytest(segment: list[str], command_name: str, command_index: int) -> bool:
-    if command_name == "pytest":
+def _segment_targets_pytest(
+    segment: list[str],
+    command_name: str,
+    command_index: int,
+    *,
+    depth: int = 0,
+) -> bool:
+    if command_name in _PYTEST_COMMAND_NAMES:
         return True
-    return _is_python_interpreter_command(command_name) and _python_segment_targets_module(
-        segment[command_index + 1 :],
-        "pytest",
+    command_args = segment[command_index + 1 :]
+    if _is_pytest_python_interpreter_command(command_name):
+        return _python_segment_targets_module(command_args, "pytest") or _python_inline_script_runs_pytest(command_args)
+    if command_name == "uvx":
+        return _argument_sequence_targets_pytest(command_args)
+    runner_subcommands = _PYTEST_COMMAND_RUNNER_SUBCOMMANDS.get(command_name)
+    if runner_subcommands is not None:
+        return any(
+            token in runner_subcommands
+            and _pytest_args_from_runner_argument_sequence(command_name, command_args[index + 1 :]) is not None
+            for index, token in enumerate(command_args)
+        )
+    if command_name in _PYTEST_EXECUTOR_COMMANDS:
+        return _argument_sequence_targets_pytest(command_args)
+    if command_name == "eval":
+        return _shell_command_targets_pytest(" ".join(command_args), depth=depth + 1)
+    if command_name == "find":
+        return any(
+            token in _FIND_EXEC_ACTION_FLAGS and _argument_sequence_targets_pytest(command_args[index + 1 :])
+            for index, token in enumerate(command_args)
+        )
+    if command_name == "fd":
+        return any(
+            fd_arg_requests_exec(token) and _argument_sequence_targets_pytest(command_args[index + 1 :])
+            for index, token in enumerate(command_args)
+        )
+    return False
+
+
+def _argument_sequence_targets_pytest(args: list[str]) -> bool:
+    return _pytest_args_from_argument_sequence(args) is not None
+
+
+def _pytest_args_from_argument_sequence(args: list[str]) -> list[str] | None:
+    return _pytest_args_from_argument_sequence_ignoring(args, ignored_indices=frozenset())
+
+
+def _pytest_args_from_runner_argument_sequence(command_name: str, args: list[str]) -> list[str] | None:
+    value_options = _PYTEST_RUNNER_OPTIONS_WITH_VALUES.get(command_name, frozenset())
+    ignored_indices: set[int] = set()
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--":
+            break
+        if token in value_options:
+            if index + 1 >= len(args):
+                return None
+            ignored_indices.add(index + 1)
+            index += 2
+            continue
+        index += 1
+    positional_prefix_count = _PYTEST_RUNNER_POSITIONAL_PREFIX_COUNTS.get(command_name, 0)
+    for index, token in enumerate(args):
+        if index in ignored_indices or token == "--" or token.startswith("-"):
+            continue
+        if _SHELL_ASSIGNMENT_PATTERN.match(token):
+            continue
+        if positional_prefix_count:
+            positional_prefix_count -= 1
+            continue
+        return _pytest_args_from_command_position(args, index)
+    return None
+
+
+def _pytest_args_from_argument_sequence_ignoring(
+    args: list[str],
+    *,
+    ignored_indices: frozenset[int],
+) -> list[str] | None:
+    for index in range(len(args)):
+        if index in ignored_indices:
+            continue
+        pytest_args = _pytest_args_from_command_position(args, index)
+        if pytest_args is not None:
+            return pytest_args
+    return None
+
+
+def _pytest_args_from_command_position(args: list[str], index: int) -> list[str] | None:
+    command_token = args[index].rsplit(":", 1)[-1]
+    command_name = _normalized_shell_command_name(command_token)
+    if command_name in _PYTEST_COMMAND_NAMES:
+        return args[index + 1 :]
+    if not _is_pytest_python_interpreter_command(command_name):
+        return None
+    python_args = _pytest_args_from_python(args[index + 1 :])
+    if python_args is not None:
+        return python_args
+    if _python_inline_script_runs_pytest(args[index + 1 :]):
+        return []
+    return None
+
+
+def _python_inline_script_runs_pytest(args: list[str]) -> bool:
+    for index, token in enumerate(args):
+        if token in {"-c", "--command"} and index + 1 < len(args):
+            return _inline_python_payload_runs_pytest(args[index + 1])
+        if token.startswith("--command="):
+            return _inline_python_payload_runs_pytest(token.split("=", 1)[1])
+        if token.startswith("-c") and token != "-c":
+            return _inline_python_payload_runs_pytest(token[2:])
+        if not token.startswith("-"):
+            return False
+    return False
+
+
+def _inline_python_payload_runs_pytest(payload: str, *, depth: int = 0) -> bool:
+    if depth > 8:
+        return "pytest" in payload.casefold()
+    try:
+        tree = ast.parse(payload, mode="exec")
+    except (SyntaxError, ValueError):
+        return False
+
+    pytest_module_aliases = {"pytest"}
+    pytest_main_aliases: set[str] = set()
+    importlib_aliases = {"importlib"}
+    import_module_aliases: set[str] = set()
+    runpy_aliases = {"runpy"}
+    run_module_aliases: set[str] = set()
+    os_aliases = {"os"}
+    os_process_aliases: set[str] = set()
+    subprocess_aliases = {"subprocess"}
+    subprocess_process_aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "pytest":
+                    pytest_module_aliases.add(alias.asname or "pytest")
+                elif alias.name == "importlib":
+                    importlib_aliases.add(alias.asname or "importlib")
+                elif alias.name == "runpy":
+                    runpy_aliases.add(alias.asname or "runpy")
+                elif alias.name == "os":
+                    os_aliases.add(alias.asname or "os")
+                elif alias.name == "subprocess":
+                    subprocess_aliases.add(alias.asname or "subprocess")
+        elif isinstance(node, ast.ImportFrom):
+            if node.module == "pytest":
+                pytest_main_aliases.update(
+                    alias.asname or alias.name for alias in node.names if alias.name in {"console_main", "main"}
+                )
+            elif node.module == "importlib":
+                import_module_aliases.update(
+                    alias.asname or alias.name for alias in node.names if alias.name == "import_module"
+                )
+            elif node.module == "runpy":
+                run_module_aliases.update(
+                    alias.asname or alias.name for alias in node.names if alias.name == "run_module"
+                )
+            elif node.module == "os":
+                os_process_aliases.update(
+                    alias.asname or alias.name for alias in node.names if alias.name in {"popen", "system"}
+                )
+            elif node.module == "subprocess":
+                subprocess_process_aliases.update(
+                    alias.asname or alias.name
+                    for alias in node.names
+                    if alias.name in {"Popen", "call", "check_call", "check_output", "run"}
+                )
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        function = node.func
+        if isinstance(function, ast.Name) and function.id in pytest_main_aliases:
+            return True
+        if isinstance(function, ast.Call) and _python_call_resolves_pytest_main(
+            function,
+            pytest_module_aliases=pytest_module_aliases,
+            importlib_aliases=importlib_aliases,
+            import_module_aliases=import_module_aliases,
+        ):
+            return True
+        if isinstance(function, ast.Attribute) and function.attr in {"console_main", "main"}:
+            if isinstance(function.value, ast.Name) and function.value.id in pytest_module_aliases:
+                return True
+            if isinstance(function.value, ast.Call) and _python_call_imports_pytest(
+                function.value,
+                importlib_aliases=importlib_aliases,
+                import_module_aliases=import_module_aliases,
+            ):
+                return True
+        if _python_call_runs_pytest_module(
+            node,
+            runpy_aliases=runpy_aliases,
+            run_module_aliases=run_module_aliases,
+        ):
+            return True
+        if _python_process_call_targets_pytest(
+            node,
+            depth=depth,
+            os_aliases=os_aliases,
+            os_process_aliases=os_process_aliases,
+            subprocess_aliases=subprocess_aliases,
+            subprocess_process_aliases=subprocess_process_aliases,
+        ):
+            return True
+        if (
+            isinstance(function, ast.Name)
+            and function.id in {"eval", "exec"}
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+            and _inline_python_payload_runs_pytest(node.args[0].value, depth=depth + 1)
+        ):
+            return True
+    return False
+
+
+def _python_process_call_targets_pytest(
+    node: ast.Call,
+    *,
+    depth: int,
+    os_aliases: set[str],
+    os_process_aliases: set[str],
+    subprocess_aliases: set[str],
+    subprocess_process_aliases: set[str],
+) -> bool:
+    function = node.func
+    recognized = isinstance(function, ast.Name) and function.id in {
+        *os_process_aliases,
+        *subprocess_process_aliases,
+    }
+    if isinstance(function, ast.Attribute) and isinstance(function.value, ast.Name):
+        recognized = recognized or (function.value.id in os_aliases and function.attr in {"popen", "system"})
+        recognized = recognized or (
+            function.value.id in subprocess_aliases
+            and function.attr in {"Popen", "call", "check_call", "check_output", "run"}
+        )
+    if not recognized:
+        return False
+
+    command_node: ast.expr | None = node.args[0] if node.args else None
+    if command_node is None:
+        command_node = next((keyword.value for keyword in node.keywords if keyword.arg in {"args", "command"}), None)
+    if isinstance(command_node, ast.Constant) and isinstance(command_node.value, str):
+        return _shell_command_targets_pytest(command_node.value, depth=depth + 1)
+    literal_argv = _literal_python_argv(command_node)
+    return literal_argv is not None and _argument_sequence_targets_pytest(literal_argv)
+
+
+def _literal_python_argv(node: ast.expr | None) -> list[str] | None:
+    if not isinstance(node, (ast.List, ast.Tuple)):
+        return None
+    argv: list[str] = []
+    for element in node.elts:
+        if not isinstance(element, ast.Constant) or not isinstance(element.value, str):
+            return None
+        argv.append(element.value)
+    return argv
+
+
+def _python_call_resolves_pytest_main(
+    node: ast.Call,
+    *,
+    pytest_module_aliases: set[str],
+    importlib_aliases: set[str],
+    import_module_aliases: set[str],
+) -> bool:
+    if (
+        not isinstance(node.func, ast.Name)
+        or node.func.id != "getattr"
+        or len(node.args) < 2
+        or not isinstance(node.args[1], ast.Constant)
+        or node.args[1].value not in {"console_main", "main"}
+    ):
+        return False
+    target = node.args[0]
+    if isinstance(target, ast.Name):
+        return target.id in pytest_module_aliases
+    return isinstance(target, ast.Call) and _python_call_imports_pytest(
+        target,
+        importlib_aliases=importlib_aliases,
+        import_module_aliases=import_module_aliases,
+    )
+
+
+def _python_call_imports_pytest(
+    node: ast.Call,
+    *,
+    importlib_aliases: set[str],
+    import_module_aliases: set[str],
+) -> bool:
+    if not node.args or not isinstance(node.args[0], ast.Constant) or node.args[0].value != "pytest":
+        return False
+    if isinstance(node.func, ast.Name):
+        return node.func.id == "__import__" or node.func.id in import_module_aliases
+    return (
+        isinstance(node.func, ast.Attribute)
+        and node.func.attr == "import_module"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id in importlib_aliases
+    )
+
+
+def _python_call_runs_pytest_module(
+    node: ast.Call,
+    *,
+    runpy_aliases: set[str],
+    run_module_aliases: set[str],
+) -> bool:
+    if (
+        not node.args
+        or not isinstance(node.args[0], ast.Constant)
+        or node.args[0].value not in {"pytest", "pytest.__main__"}
+    ):
+        return False
+    if isinstance(node.func, ast.Name):
+        return node.func.id in run_module_aliases
+    return (
+        isinstance(node.func, ast.Attribute)
+        and node.func.attr == "run_module"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id in runpy_aliases
     )
 
 
@@ -7174,8 +7709,46 @@ def _pytest_binary_segment_is_safe(command_token: str, module_args: list[str], *
 
 
 def _shell_segment_sets_env_key(segment: list[str], command_index: int, env_key: str) -> bool:
+    is_set, _value, complete = _shell_segment_explicit_env_value(segment, command_index, env_key)
+    return is_set or not complete
+
+
+def _shell_segment_explicit_env_value(
+    segment: list[str],
+    command_index: int,
+    env_key: str,
+) -> tuple[bool, str | None, bool]:
     normalized_env_key = env_key.upper()
-    return any(_shell_env_assignment_key(token) == normalized_env_key for token in segment[:command_index])
+    is_set = False
+    value: str | None = None
+    index = 0
+    while index < command_index:
+        token = _shell_command_token_without_attached_redirection(segment[index])
+        assignment_key = _shell_env_assignment_key(token)
+        if assignment_key == normalized_env_key:
+            is_set = True
+            value = token.split("=", 1)[1] if "=" in token else ""
+            index += 1
+            continue
+        if _normalized_shell_command_name(token) != "env":
+            index += 1
+            continue
+        parsed = parse_env_wrapper(segment[index + 1 :])
+        if not parsed.complete:
+            return is_set, value, False
+        if parsed.option_effects.ignore_environment or any(
+            name.upper() == normalized_env_key for name in parsed.option_effects.unset_names
+        ):
+            is_set = False
+            value = None
+        for name, assignment_value in parsed.environment_delta.assignments:
+            if name.upper() == normalized_env_key:
+                is_set = True
+                value = assignment_value
+        if parsed.command_index is None or parsed.split_expansions:
+            break
+        index += parsed.command_index + 1
+    return is_set, value, True
 
 
 def _shell_directory_setup_segment_is_safe(command_name: str, segment_args: list[str]) -> bool:
@@ -7257,19 +7830,12 @@ def _shell_segment_uses_env_split_string_wrapper(segment: list[str], command_ind
         if command_name != "env":
             index += 1
             continue
-        index += 1
-        while index < command_index:
-            token = segment[index]
-            if _SHELL_ASSIGNMENT_PATTERN.match(token):
-                index += 1
-                continue
-            if token in {"-S", "--split-string"} or token.startswith("--split-string="):
-                return True
-            if _env_clustered_split_string_payload(token) is not None:
-                return True
-            if not token.startswith("-"):
-                break
-            index += _wrapper_option_tokens_consumed("env", token)
+        parsed = parse_env_wrapper(segment[index + 1 :])
+        if parsed.split_expansions:
+            return True
+        if not parsed.complete or parsed.command_index is None:
+            break
+        index += parsed.command_index + 1
     return False
 
 
@@ -7281,17 +7847,12 @@ def _shell_segment_uses_env_chdir(segment: list[str], command_index: int) -> boo
         if command_name != "env":
             index += 1
             continue
-        index += 1
-        while index < command_index:
-            token = segment[index]
-            if _SHELL_ASSIGNMENT_PATTERN.match(token):
-                index += 1
-                continue
-            if token in {"-C", "--chdir"} or token.startswith(("-C", "--chdir=")):
-                return True
-            if not token.startswith("-"):
-                break
-            index += _wrapper_option_tokens_consumed("env", token)
+        parsed = parse_env_wrapper(segment[index + 1 :])
+        if parsed.option_effects.chdir is not None:
+            return True
+        if not parsed.complete or parsed.command_index is None or parsed.split_expansions:
+            break
+        index += parsed.command_index + 1
     return False
 
 
@@ -7453,16 +8014,19 @@ def _pythonpath_search_roots_from_segment(
     if cwd is None:
         return []
     search_roots: list[Path] = []
-    for token in segment[:command_index]:
-        if _shell_env_assignment_key(token) != "PYTHONPATH":
+    is_set, path_value, complete = _shell_segment_explicit_env_value(
+        segment,
+        command_index,
+        "PYTHONPATH",
+    )
+    if not complete or not is_set or path_value is None:
+        return search_roots
+    for entry in path_value.split(":"):
+        normalized_entry = entry.strip()
+        if not normalized_entry:
             continue
-        path_value = token.split("=", 1)[1] if "=" in token else ""
-        for entry in path_value.split(":"):
-            normalized_entry = entry.strip()
-            if not normalized_entry:
-                continue
-            candidate = Path(normalized_entry)
-            search_roots.append(candidate if candidate.is_absolute() else cwd / candidate)
+        candidate = Path(normalized_entry)
+        search_roots.append(candidate if candidate.is_absolute() else cwd / candidate)
     return search_roots
 
 
@@ -7498,33 +8062,156 @@ def _pytest_local_entry_point_metadata_exists(cwd: Path) -> bool:
 def _pytest_config_may_add_unsafe_options(cwd: Path | None, module_args: list[str]) -> bool:
     if cwd is None:
         return True
+    return _pytest_config_assessment(cwd, module_args).unsafe
+
+
+def _pytest_config_assessment(cwd: Path, module_args: list[str]) -> PytestConfigAssessment:
+    explicit_config_paths = _pytest_explicit_config_paths(module_args, cwd=cwd)
+    if explicit_config_paths is None:
+        return assess_pytest_configs(cwd, ("../invalid-pytest-config-search",))
+    if explicit_config_paths:
+        return assess_pytest_configs(cwd, explicit_config_paths, require_present=True)
     config_dirs = _pytest_config_search_dirs(module_args, cwd=cwd)
     if config_dirs is None:
-        return True
-    for config_dir in config_dirs:
-        for config_path in _PYTEST_OPTION_CONFIG_PATHS:
-            if _pytest_config_file_has_unsafe_addopts(cwd, config_dir, config_path):
-                return True
-    return False
+        return assess_pytest_configs(cwd, ("../invalid-pytest-config-search",))
+    candidates = tuple(
+        (Path(config_dir) / config_path).as_posix()
+        for config_dir in config_dirs
+        for config_path in _PYTEST_OPTION_CONFIG_PATHS
+    )
+    return assess_selected_pytest_config(cwd, candidates)
+
+
+def _pytest_explicit_config_paths(module_args: list[str], *, cwd: Path) -> tuple[str, ...] | None:
+    paths: list[str] = []
+    index = 0
+    while index < len(module_args):
+        token = module_args[index]
+        path_text: str | None = None
+        if token in {"-c", "--config-file"}:
+            if index + 1 >= len(module_args):
+                return None
+            path_text = module_args[index + 1]
+            index += 2
+        elif token.startswith("--config-file="):
+            path_text = token.split("=", 1)[1]
+            index += 1
+        elif token.startswith("-c="):
+            path_text = token[3:]
+            index += 1
+        elif token.startswith("-c") and len(token) > 2:
+            path_text = token[2:]
+            index += 1
+        else:
+            index += 1
+            continue
+        selected_path = _pytest_selected_relative_path(path_text, cwd=cwd)
+        if selected_path is None or not selected_path:
+            return None
+        paths.append(selected_path)
+    return (paths[-1],) if paths else ()
+
+
+def _pytest_config_assessment_for_command(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    execution_context: ShellExecutionContext,
+) -> PytestConfigAssessment:
+    if cwd is None:
+        return PytestConfigAssessment((), False, True, (PYTEST_CONFIG_PATH_INVALID,), None)
+    assessments: list[PytestConfigAssessment] = []
+    for context_segment in execution_context.segments:
+        if context_segment.directory_operation is not None:
+            continue
+        segment = list(context_segment.tokens)
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            continue
+        if not _segment_targets_pytest(segment, command_name, command_index):
+            continue
+        segment_cwd, reason_code = validate_shell_execution_segment(execution_context, context_segment)
+        if segment_cwd is None or reason_code is not None:
+            assessments.append(
+                PytestConfigAssessment((), False, True, (reason_code or PYTEST_CONFIG_PATH_INVALID,), None)
+            )
+            continue
+        pytest_args = _pytest_args_from_segment(segment, command_index)
+        assessments.append(
+            _pytest_config_assessment(segment_cwd, pytest_args)
+            if pytest_args is not None
+            else PytestConfigAssessment((), False, True, (PYTEST_CONFIG_PATH_INVALID,), None)
+        )
+    if not assessments and _shell_command_targets_pytest(command_text):
+        assessments.append(_pytest_config_assessment(cwd, []))
+    return combine_pytest_config_assessments(assessments)
+
+
+def _pytest_args_from_segment(segment: list[str], command_index: int) -> list[str] | None:
+    command_name = _normalized_shell_command_name(segment[command_index])
+    command_args = segment[command_index + 1 :]
+    if command_name in _PYTEST_COMMAND_NAMES:
+        return command_args
+    if _is_pytest_python_interpreter_command(command_name):
+        return _pytest_args_from_python(command_args)
+    if command_name == "uvx" or command_name in _PYTEST_EXECUTOR_COMMANDS:
+        return _pytest_args_from_argument_sequence(command_args)
+    runner_subcommands = _PYTEST_COMMAND_RUNNER_SUBCOMMANDS.get(command_name)
+    if runner_subcommands is not None:
+        for index, token in enumerate(command_args):
+            if token in runner_subcommands:
+                return _pytest_args_from_runner_argument_sequence(command_name, command_args[index + 1 :])
+        return None
+    if command_name == "find":
+        for index, token in enumerate(command_args):
+            if token in _FIND_EXEC_ACTION_FLAGS:
+                return _pytest_args_from_argument_sequence(command_args[index + 1 :])
+        return None
+    if command_name == "fd":
+        for index, token in enumerate(command_args):
+            if fd_arg_requests_exec(token):
+                return _pytest_args_from_argument_sequence(command_args[index + 1 :])
+        return None
+    return None
+
+
+def _pytest_args_from_python(command_args: list[str]) -> list[str] | None:
+    index = 0
+    while index < len(command_args):
+        token = command_args[index]
+        if token == "-m" and index + 1 < len(command_args):
+            return command_args[index + 2 :] if command_args[index + 1].split(".", 1)[0] == "pytest" else None
+        if token.startswith("-m") and len(token) > 2:
+            return command_args[index + 1 :] if token[2:].split(".", 1)[0] == "pytest" else None
+        if token in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
+            index += 2
+            continue
+        index += 1
+    return None
 
 
 def _pytest_config_search_dirs(module_args: list[str], *, cwd: Path) -> tuple[str, ...] | None:
-    config_dirs: list[str] = [""]
-    for module_arg in _pytest_positional_args(module_args):
+    positional_args = _pytest_positional_args(module_args)
+    if not positional_args:
+        return ("",)
+    selected_paths: list[str] = []
+    for module_arg in positional_args:
         selected_path = _pytest_selected_relative_path(module_arg, cwd=cwd)
         if selected_path is None:
             return None
         if selected_path == "":
             continue
-        selected_root = Path(selected_path)
-        roots = [selected_root]
-        if selected_root.suffix != "":
-            roots.append(selected_root.parent)
-        for root in roots:
-            for candidate in _pytest_config_ancestor_dirs(root):
-                if candidate not in config_dirs:
-                    config_dirs.append(candidate)
-    return tuple(config_dirs)
+        config_root = Path(selected_path)
+        if not (cwd / config_root).is_dir():
+            config_root = config_root.parent
+        selected_paths.append("" if str(config_root) == "." else config_root.as_posix())
+    if not selected_paths:
+        return ("",)
+    try:
+        selected_root = Path(os.path.commonpath(selected_paths))
+    except ValueError:
+        return None
+    return _pytest_config_ancestor_dirs(selected_root)
 
 
 def _pytest_selected_relative_path(module_arg: str, *, cwd: Path) -> str | None:
@@ -7558,6 +8245,7 @@ def _pytest_config_ancestor_dirs(root: Path) -> tuple[str, ...]:
     while str(current) not in {"", "."}:
         dirs.append(current.as_posix())
         current = current.parent
+    dirs.append("")
     return tuple(dirs)
 
 
@@ -7574,6 +8262,9 @@ def _pytest_positional_args(module_args: list[str]) -> tuple[str, ...]:
         if arg in _PYTEST_SAFE_FLAGS_WITH_VALUES:
             index += 2
             continue
+        if arg in {"-c", "--config-file"}:
+            index += 2
+            continue
         if any(arg.startswith(f"{flag}=") for flag in _PYTEST_SAFE_FLAGS_WITH_VALUES):
             index += 1
             continue
@@ -7581,74 +8272,6 @@ def _pytest_positional_args(module_args: list[str]) -> tuple[str, ...]:
             positional_args.append(arg)
         index += 1
     return tuple(positional_args)
-
-
-def _pytest_config_file_has_unsafe_addopts(cwd: Path, config_dir: str, config_path: str) -> bool:
-    if Path(config_dir).is_absolute() or ".." in Path(config_dir).parts:
-        return True
-    dir_fd: int | None = None
-    file_handle: int | None = None
-    try:
-        # codeql[py/path-injection] config_dir is relative-only and config_path is from a fixed allowlist.
-        dir_fd = os.open(cwd / config_dir, os.O_RDONLY)
-        file_stat = os.stat(config_path, dir_fd=dir_fd)
-        if not stat.S_ISREG(file_stat.st_mode):
-            return False
-        if file_stat.st_size > _MAX_PYTEST_CONFIG_FILE_BYTES:
-            return True
-        file_handle = os.open(config_path, os.O_RDONLY, dir_fd=dir_fd)
-        with os.fdopen(file_handle, encoding="utf-8", errors="ignore") as config_file:
-            file_handle = None
-            config_text = config_file.read().lower()
-        if "addopts" not in config_text and "log_file" not in config_text:
-            return False
-        return _pytest_config_text_has_unsafe_addopts(config_text)
-    except (FileNotFoundError, NotADirectoryError):
-        return False
-    except OSError:
-        return True
-    finally:
-        if file_handle is not None:
-            os.close(file_handle)
-        if dir_fd is not None:
-            os.close(dir_fd)
-
-
-def _pytest_config_text_has_unsafe_addopts(config_text: str) -> bool:
-    in_addopts = False
-    for raw_line in config_text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith(("#", ";")):
-            continue
-        if re.match(r"^log_file\s*=", line):
-            return True
-        addopts_match = re.match(r"^addopts\s*=(.*)$", line)
-        if addopts_match is not None:
-            in_addopts = True
-            if _pytest_addopts_text_has_unsafe_marker(addopts_match.group(1)):
-                return True
-            continue
-        if in_addopts and (line.startswith("[") or re.match(r"^[a-z0-9_.-]+\s*=", line)):
-            in_addopts = False
-        if in_addopts and _pytest_addopts_text_has_unsafe_marker(line):
-            return True
-    return False
-
-
-def _pytest_addopts_text_has_unsafe_marker(addopts_text: str) -> bool:
-    try:
-        tokens = shlex.split(addopts_text, comments=True, posix=True)
-    except ValueError:
-        tokens = addopts_text.split()
-    for raw_token in tokens:
-        token = raw_token.strip("[],")
-        if token in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS:
-            return True
-        if any(marker != "-p" and token.startswith(f"{marker}=") for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS):
-            return True
-        if token.startswith("-p") and not token.startswith("--"):
-            return True
-    return False
 
 
 def _pytest_module_args_are_safe(module_args: list[str]) -> bool:
@@ -7730,7 +8353,415 @@ def _is_unmodeled_inline_interpreter_command(command_name: str) -> bool:
 
 
 def _is_python_interpreter_command(command_name: str) -> bool:
-    return re.fullmatch(r"python(?:\d+(?:\.\d+)*)?", command_name) is not None
+    normalized_name = _normalized_shell_command_name(command_name)
+    return re.fullmatch(r"pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?", normalized_name) is not None
+
+
+@dataclass(frozen=True, slots=True)
+class _ShellLaunchCandidate:
+    tokens: tuple[str, ...]
+    command_index: int
+    effective_cwd: Path
+    environment: dict[str, str]
+    resolution_reason: str | None = None
+
+
+def _python_interpreter_executable_identities(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    environment: dict[str, str] | None = None,
+    workspace_root: Path | None = None,
+    execution_context: ShellExecutionContext | None = None,
+    depth: int = 0,
+) -> tuple[dict[str, object], ...]:
+    """Resolve exact Python tokens without executing candidate interpreters."""
+
+    initial_cwd = _normalized_interpreter_cwd(cwd)
+    root = _normalized_interpreter_cwd(workspace_root or cwd)
+    inherited_environment = dict(os.environ if environment is None else environment)
+    if depth > 8:
+        return _ambiguous_python_evidence_from_tokens(
+            _split_shell_parts(command_text),
+            cwd=initial_cwd,
+            environment=inherited_environment,
+            workspace_root=root,
+            home_dir=home_dir,
+            reason="nested_shell_depth_exceeded",
+        )
+
+    execution_context = execution_context or model_shell_execution_context(
+        command_text,
+        cwd=initial_cwd,
+        workspace_root=root,
+    )
+    evidence: list[dict[str, object]] = []
+    for context_segment in execution_context.segments:
+        if context_segment.directory_operation is not None:
+            continue
+        segment_cwd, context_reason = validate_shell_execution_segment(execution_context, context_segment)
+        if segment_cwd is None or context_reason is not None:
+            evidence.extend(
+                _ambiguous_python_evidence_from_tokens(
+                    list(context_segment.tokens),
+                    cwd=initial_cwd,
+                    environment=inherited_environment,
+                    workspace_root=root,
+                    home_dir=home_dir,
+                    reason=context_reason or "interpreter_cwd_unresolved",
+                )
+            )
+            continue
+        candidate = _shell_launch_candidate(
+            list(context_segment.tokens),
+            cwd=segment_cwd,
+            environment=inherited_environment,
+        )
+        if candidate is None:
+            evidence.extend(
+                _ambiguous_python_evidence_from_tokens(
+                    list(context_segment.tokens),
+                    cwd=segment_cwd,
+                    environment=inherited_environment,
+                    workspace_root=root,
+                    home_dir=home_dir,
+                    reason="interpreter_wrapper_unresolved",
+                )
+            )
+            continue
+        raw_token = _shell_command_token_without_attached_redirection(candidate.tokens[candidate.command_index]).strip()
+        if _is_python_interpreter_command(raw_token):
+            evidence.append(
+                _python_interpreter_executable_identity(
+                    raw_token,
+                    cwd=candidate.effective_cwd,
+                    environment=candidate.environment,
+                    workspace_root=root,
+                    home_dir=home_dir,
+                    resolution_reason=candidate.resolution_reason,
+                )
+            )
+        command_name = _normalized_shell_command_name(raw_token)
+        if command_name in _SHELL_COMMAND_STRING_INTERPRETERS:
+            payload = _shell_interpreter_command_payload(
+                list(candidate.tokens),
+                candidate.command_index,
+            )
+            if payload is not None:
+                evidence.extend(
+                    _python_interpreter_executable_identities(
+                        payload.script_text,
+                        cwd=candidate.effective_cwd,
+                        home_dir=home_dir,
+                        environment=candidate.environment,
+                        workspace_root=root,
+                        depth=depth + 1,
+                    )
+                )
+    for payload in _shell_command_substitution_payloads(command_text):
+        evidence.extend(
+            _python_interpreter_executable_identities(
+                payload,
+                cwd=initial_cwd,
+                home_dir=home_dir,
+                environment=inherited_environment,
+                workspace_root=root,
+                depth=depth + 1,
+            )
+        )
+    unique: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for item in evidence:
+        stable_item = _without_interpreter_reuse_nonces(item)
+        key = json.dumps(stable_item, sort_keys=True, separators=(",", ":"), default=str)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return tuple(unique)
+
+
+def _normalized_interpreter_cwd(cwd: Path | None) -> Path:
+    candidate = cwd or Path.cwd()
+    try:
+        return candidate.expanduser().resolve(strict=False)
+    except (OSError, RuntimeError):
+        return candidate.expanduser().absolute()
+
+
+def _shell_launch_candidate(
+    tokens: list[str],
+    *,
+    cwd: Path,
+    environment: dict[str, str],
+    depth: int = 0,
+    resolution_reason: str | None = None,
+) -> _ShellLaunchCandidate | None:
+    if depth > 8:
+        return None
+    working = list(tokens)
+    effective_environment = dict(environment)
+    effective_cwd = cwd
+    index = 0
+    while index < len(working):
+        redirected = _leading_shell_redirection_tokens_consumed(working, index)
+        if redirected:
+            index += redirected
+            continue
+        token = _shell_command_token_without_attached_redirection(working[index]).strip()
+        if _SHELL_ASSIGNMENT_PATTERN.match(token):
+            name, _, value = token.partition("=")
+            if name.endswith("+"):
+                name = name[:-1]
+                value = f"{effective_environment.get(name, '')}{value}"
+            effective_environment[name] = value
+            index += 1
+            continue
+        command_name = _normalized_shell_command_name(token)
+        if command_name == "env":
+            parsed = parse_env_wrapper(
+                working[index + 1 :],
+                inherited_environment=effective_environment,
+                cwd=effective_cwd,
+            )
+            if not parsed.complete or not parsed.executable_argv:
+                return None
+            parsed_environment = parsed.environment_dict()
+            if parsed_environment is None or parsed.effective_cwd is None:
+                return None
+            path_value = parsed_environment.get("PATH")
+            env_reason = resolution_reason
+            if path_value is not None and ("$" in path_value or "`" in path_value):
+                env_reason = "path_expression_unresolved"
+            return _shell_launch_candidate(
+                list(parsed.executable_argv),
+                cwd=parsed.effective_cwd,
+                environment=parsed_environment,
+                depth=depth + 1,
+                resolution_reason=env_reason,
+            )
+        if command_name not in _SHELL_COMMAND_WRAPPERS:
+            path_value = effective_environment.get("PATH")
+            final_reason = resolution_reason
+            if path_value is not None and ("$" in path_value or "`" in path_value):
+                final_reason = "path_expression_unresolved"
+            return _ShellLaunchCandidate(
+                tokens=tuple(working),
+                command_index=index,
+                effective_cwd=effective_cwd,
+                environment=effective_environment,
+                resolution_reason=final_reason,
+            )
+        if command_name == "sudo":
+            index, effective_cwd, sudo_reason = _consume_sudo_wrapper_for_interpreter(
+                working,
+                index + 1,
+                cwd=effective_cwd,
+            )
+            resolution_reason = resolution_reason or sudo_reason
+            continue
+        index += 1
+        while index < len(working) and working[index].startswith("-"):
+            wrapper_token = working[index]
+            if command_name == "command" and "p" in wrapper_token.lstrip("-"):
+                effective_environment["PATH"] = os.defpath
+            index += _wrapper_option_tokens_consumed(command_name, wrapper_token)
+    return None
+
+
+def _consume_sudo_wrapper_for_interpreter(
+    tokens: list[str],
+    index: int,
+    *,
+    cwd: Path,
+) -> tuple[int, Path, str | None]:
+    chdir_value: str | None = None
+    reason: str | None = "sudo_path_resolution_unproven"
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            return index + 1, cwd, reason
+        if not token.startswith("-"):
+            break
+        if token in {"-R", "--chroot"} or token.startswith(("-R", "--chroot=")):
+            reason = "sudo_chroot_unresolved"
+        if token in {"-D", "--chdir"}:
+            if index + 1 >= len(tokens):
+                return len(tokens), cwd, "sudo_chdir_missing"
+            chdir_value = tokens[index + 1]
+        elif token.startswith("--chdir="):
+            chdir_value = token.split("=", 1)[1]
+        elif token.startswith("-D") and token != "-D":
+            chdir_value = token[2:]
+        index += _wrapper_option_tokens_consumed("sudo", token)
+    if chdir_value is not None:
+        if not chdir_value or any(marker in chdir_value for marker in ("$", "`", "\x00")):
+            return index, cwd, "sudo_chdir_unresolved"
+        candidate = Path(chdir_value).expanduser()
+        if not candidate.is_absolute():
+            candidate = cwd / candidate
+        try:
+            resolved_cwd = candidate.resolve(strict=True)
+        except (OSError, RuntimeError):
+            return index, cwd, "sudo_chdir_unresolved"
+        if not resolved_cwd.is_dir():
+            return index, cwd, "sudo_chdir_unresolved"
+        cwd = resolved_cwd
+    return index, cwd, reason
+
+
+def _ambiguous_python_evidence_from_tokens(
+    tokens: list[str],
+    *,
+    cwd: Path,
+    environment: dict[str, str],
+    workspace_root: Path,
+    home_dir: Path | None,
+    reason: str,
+) -> tuple[dict[str, object], ...]:
+    evidence: list[dict[str, object]] = []
+    for token in tokens:
+        raw_token = _shell_command_token_without_attached_redirection(token).strip()
+        if not _is_python_interpreter_command(raw_token):
+            continue
+        evidence.append(
+            _python_interpreter_executable_identity(
+                raw_token,
+                cwd=cwd,
+                environment=environment,
+                workspace_root=workspace_root,
+                home_dir=home_dir,
+                resolution_reason=reason,
+            )
+        )
+    return tuple(evidence)
+
+
+def _python_interpreter_executable_identity(
+    raw_token: str,
+    *,
+    cwd: Path,
+    environment: dict[str, str],
+    workspace_root: Path,
+    home_dir: Path | None,
+    resolution_reason: str | None,
+) -> dict[str, object]:
+    search_path = environment.get("PATH")
+    identity = build_runtime_executable_identity(raw_token, search_path=search_path, cwd=cwd)
+    if resolution_reason is not None and not _interpreter_token_has_path(raw_token):
+        identity = {**identity, "resolution_reason": resolution_reason, "reuse_nonce": secrets.token_hex(16)}
+    trust = _python_interpreter_trust(
+        raw_token,
+        identity=identity,
+        workspace_root=workspace_root,
+        home_dir=home_dir,
+        resolution_reason=resolution_reason,
+    )
+    return {
+        "effective_cwd": str(cwd),
+        "executable": identity,
+        "normalized_name": _normalized_shell_command_name(raw_token),
+        "raw_token": raw_token,
+        "search_path_sha256": hashlib.sha256((search_path or "").encode("utf-8")).hexdigest(),
+        "trust": trust,
+    }
+
+
+def _python_interpreter_trust(
+    raw_token: str,
+    *,
+    identity: dict[str, object],
+    workspace_root: Path,
+    home_dir: Path | None,
+    resolution_reason: str | None,
+) -> str:
+    status = str(identity.get("status") or "unknown")
+    if resolution_reason is not None and not _interpreter_token_has_path(raw_token):
+        return "ambiguous"
+    if status in {"unresolved", "unreadable", "path_unreadable"}:
+        return "missing"
+    if status == "not_executable":
+        return "non_executable"
+    if status != "verified":
+        return "ambiguous" if status in {"foreign_platform_path", "invalid_path", "path_changed"} else "unknown"
+    raw_launch_path = identity.get("launch_path")
+    canonical_path = identity.get("path")
+    if not isinstance(raw_launch_path, str) or not isinstance(canonical_path, str):
+        return "unknown"
+    launch_path = Path(raw_launch_path)
+    canonical = Path(canonical_path)
+    try:
+        guard_launch = Path(sys.executable).expanduser().absolute()
+        guard_canonical = guard_launch.resolve(strict=True)
+    except (OSError, RuntimeError):
+        guard_launch = Path(sys.executable).expanduser().absolute()
+        guard_canonical = guard_launch
+    if canonical == guard_canonical and (
+        launch_path in {guard_launch, guard_canonical} or launch_path.parent == guard_launch.parent
+    ):
+        return "trusted_guard"
+    if _interpreter_path_is_within(launch_path, workspace_root):
+        return "workspace_local"
+    if home_dir is not None and _interpreter_path_is_within(launch_path, home_dir):
+        return "user_controlled"
+    if os.name == "nt":
+        return "user_controlled"
+    if any(
+        _interpreter_path_is_within(launch_path, trusted_root) for trusted_root in _TRUSTED_INTERPRETER_INSTALL_ROOTS
+    ) and _interpreter_identity_path_chain_is_stable(identity):
+        return "trusted_system"
+    try:
+        if is_trusted_absolute_command_path(launch_path, cwd=workspace_root, home_dir=home_dir):
+            return "trusted_system"
+    except (OSError, RuntimeError):
+        pass
+    return "user_controlled"
+
+
+def _interpreter_identity_path_chain_is_stable(identity: dict[str, object]) -> bool:
+    path_chain = identity.get("path_chain")
+    if not isinstance(path_chain, list) or not path_chain:
+        return False
+    for item in path_chain:
+        if not isinstance(item, dict):
+            return False
+        mode = item.get("mode")
+        if not isinstance(mode, int) or mode & 0o022:
+            return False
+    return True
+
+
+def _interpreter_token_has_path(raw_token: str) -> bool:
+    normalized = raw_token.strip()
+    return (
+        "/" in normalized
+        or "\\" in normalized
+        or bool(re.match(r"^[A-Za-z]:", normalized))
+        or normalized.startswith("//")
+    )
+
+
+def _interpreter_path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.absolute().relative_to(root.absolute())
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return True
+
+
+def _without_interpreter_reuse_nonces(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            str(key): _without_interpreter_reuse_nonces(item) for key, item in value.items() if key != "reuse_nonce"
+        }
+    if isinstance(value, (list, tuple)):
+        return [_without_interpreter_reuse_nonces(item) for item in value]
+    return value
+
+
+def _is_pytest_python_interpreter_command(command_name: str) -> bool:
+    return re.fullmatch(r"pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?", command_name) is not None
 
 
 def _script_is_benign_wait(script_text: str) -> bool:
@@ -7791,7 +8822,7 @@ def _single_interpreter_heredoc_interpreter(command_text: str) -> str | None:
     match = _SINGLE_INTERPRETER_HEREDOC_PATTERN.fullmatch(command_text.strip())
     if match is None:
         return None
-    interpreter = _normalized_shell_command_name(match.group("interpreter").strip())
+    interpreter = match.group("interpreter").strip()
     return interpreter or None
 
 

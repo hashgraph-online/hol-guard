@@ -352,6 +352,7 @@ class TestReceiptPagination:
     @pytest.fixture()
     def server(self, tmp_path: Path):
         from codex_plugin_scanner.guard.mcp.server import GuardMCPServer
+
         return GuardMCPServer(guard_home=tmp_path)
 
     def test_search_finds_older_receipt_beyond_page(self, server, tmp_path: Path):
@@ -366,6 +367,7 @@ class TestReceiptPagination:
 
     def test_fetch_finds_older_receipt_beyond_scan_limit(self, server, tmp_path: Path):
         from codex_plugin_scanner.guard.mcp.schemas import make_opaque_id
+
         oldest_receipt_id = "rcpt-oldest-target-001"
         _seed_receipt(tmp_path, server, artifact_name="oldest-target")
         for i in range(250):
@@ -389,6 +391,7 @@ class TestCreatePolicyElicitationBinding:
     @pytest.fixture()
     def server(self, tmp_path: Path):
         from codex_plugin_scanner.guard.mcp.server import GuardMCPServer
+
         return GuardMCPServer(guard_home=tmp_path)
 
     @pytest.fixture()
@@ -457,6 +460,7 @@ class TestCreatePolicyElicitationBinding:
                 def decorator(fn):
                     captured[f"_fn_{name}"] = fn
                     return fn
+
                 return decorator
 
         from codex_plugin_scanner.guard.mcp.registry import get_tool_definition
@@ -481,6 +485,7 @@ class TestCreatePolicyElicitationBinding:
         candidate_digest = policy_document_digest(document)
 
         import asyncio
+
         result_text = asyncio.run(
             create_policy_fn(
                 policyYaml=yaml_text,
@@ -516,6 +521,7 @@ class TestCreatePolicyElicitationBinding:
                 def decorator(fn):
                     captured[f"_fn_{name}"] = fn
                     return fn
+
                 return decorator
 
         from codex_plugin_scanner.guard.mcp.registry import get_tool_definition
@@ -549,6 +555,7 @@ class TestCreatePolicyElicitationBinding:
         candidate_digest = policy_document_digest(document)
 
         import asyncio
+
         result_text = asyncio.run(
             create_policy_fn(
                 policyYaml=yaml_text,

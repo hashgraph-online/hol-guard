@@ -180,7 +180,7 @@ class TestLinuxAdapter:
         content = desktop_path.read_text()
         for line in content.splitlines():
             if line.startswith("Exec="):
-                exec_value = line[len("Exec="):]
+                exec_value = line[len("Exec=") :]
                 # Both the executable path and guard_home path must be quoted
                 assert exec_value.startswith('"')
                 # The value after --guard-home must be quoted
@@ -390,9 +390,7 @@ class TestLinuxAdapter:
             "auth",
         ]
         for pattern in secret_patterns:
-            assert pattern not in content.lower(), (
-                f"Desktop entry contains potential secret pattern: {pattern}"
-            )
+            assert pattern not in content.lower(), f"Desktop entry contains potential secret pattern: {pattern}"
 
     def test_desktop_entry_reflects_run_at_login_false(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.tray.platforms.linux import LinuxTrayAdapter
@@ -459,7 +457,7 @@ class TestLinuxAdapter:
         content = desktop_path.read_text()
         for line in content.splitlines():
             if line.startswith("Exec="):
-                exec_value = line[len("Exec="):]
+                exec_value = line[len("Exec=") :]
                 assert '--guard-home "' in exec_value
                 assert f'"{guard_home}"' in exec_value
                 break
@@ -480,7 +478,7 @@ class TestLinuxAdapter:
         content = desktop_path.read_text()
         for line in content.splitlines():
             if line.startswith("Exec="):
-                exec_value = line[len("Exec="):]
+                exec_value = line[len("Exec=") :]
                 # Paths are always quoted, even without spaces
                 assert f'"{guard_home}"' in exec_value
                 break

@@ -6,6 +6,12 @@ import json
 from pathlib import Path
 
 from ..models import GuardArtifact, HarnessDetection
+from ..skill_directory_identity import (
+    discover_skill_documents,
+    incomplete_skill_directory_identity,
+    inspect_skill_directory,
+    skill_directory_identity_metadata,
+)
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload
 
 
@@ -79,6 +85,7 @@ class AntigravityHarnessAdapter(HarnessAdapter):
     def detect(self, context: HarnessContext) -> HarnessDetection:
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []
+        warnings: list[str] = []
 
         extension_index = context.home_dir / ".antigravity" / "extensions" / "extensions.json"
         extension_payload = self._extension_index_payload(extension_index)
@@ -97,16 +104,26 @@ class AntigravityHarnessAdapter(HarnessAdapter):
             scope = self._scope_for(context, config_path)
             self._append_mcp_artifacts(artifacts, config_path, payload, scope)
 
-        skill_roots = [context.home_dir / ".gemini" / "antigravity" / "skills"]
+        skill_roots = [(context.home_dir / ".gemini" / "antigravity" / "skills", context.home_dir)]
         if context.workspace_dir is not None:
-            skill_roots.append(context.workspace_dir / ".gemini" / "antigravity" / "skills")
-        for skill_root in skill_roots:
-            if not skill_root.is_dir():
-                continue
+            skill_roots.append(
+                (
+                    context.workspace_dir / ".gemini" / "antigravity" / "skills",
+                    context.workspace_dir,
+                )
+            )
+        for skill_root, identity_scope_root in skill_roots:
             scope = self._scope_for(context, skill_root)
-            for skill_path in sorted(skill_root.rglob("SKILL.md")):
+            discovery = discover_skill_documents(skill_root)
+            for skill_path in discovery.documents:
                 self._append_found_path(found_paths, skill_path)
                 relative_id = f"skills/{skill_path.parent.relative_to(skill_root).as_posix()}"
+                identity = inspect_skill_directory(skill_path, scope_root=identity_scope_root)
+                metadata = skill_directory_identity_metadata(identity, version_label=relative_id)
+                if identity.status != "complete":
+                    warnings.append(
+                        f"Antigravity {scope} skill directory identity is incomplete; approval reuse is disabled."
+                    )
                 artifacts.append(
                     GuardArtifact(
                         artifact_id=f"antigravity:{scope}:skill:{relative_id}",
@@ -115,6 +132,24 @@ class AntigravityHarnessAdapter(HarnessAdapter):
                         artifact_type="skill",
                         source_scope=scope,
                         config_path=str(skill_path),
+                        metadata=metadata,
+                    )
+                )
+            for issue in discovery.issues:
+                self._append_found_path(found_paths, issue.path)
+                relative_id = f"skills/.guard-discovery/{issue.issue_id}"
+                identity = incomplete_skill_directory_identity(issue.failure_reason)
+                metadata = skill_directory_identity_metadata(identity, version_label=relative_id)
+                warnings.append(f"Antigravity {scope} skill discovery is incomplete; approval reuse is disabled.")
+                artifacts.append(
+                    GuardArtifact(
+                        artifact_id=f"antigravity:{scope}:skill-discovery:{issue.issue_id}",
+                        name="Incomplete Antigravity skill discovery",
+                        harness=self.harness,
+                        artifact_type="skill",
+                        source_scope=scope,
+                        config_path=str(issue.path),
+                        metadata=metadata,
                     )
                 )
 
@@ -147,7 +182,7 @@ class AntigravityHarnessAdapter(HarnessAdapter):
             command_available=_command_available(self.executable),
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
-            warnings=(),
+            warnings=tuple(dict.fromkeys(warnings)),
         )
 
     @staticmethod

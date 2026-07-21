@@ -756,48 +756,50 @@ function TrustCard(props: { title: string; body: string }) {
 }
 
 export function GuardHero(props: {
-  status: "clear" | "needs_review" | "setup_gap";
+  status: "clear" | "needs_review" | "setup_gap" | "partial" | "degraded" | "neutral";
   headline: string;
   subheadline: string;
   cta?: ReactNode;
   secondaryCta?: ReactNode;
 }) {
-  const bgClass =
-    props.status === "needs_review"
-      ? "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(245,158,11,0.08)_100%)]"
-      : props.status === "setup_gap"
-      ? "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.06)_100%)]"
-      : "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(72,223,123,0.10)_100%)]";
+  let bgClass = "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(72,223,123,0.10)_100%)]";
+  if (props.status === "needs_review" || props.status === "degraded") {
+    bgClass = "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(245,158,11,0.08)_100%)]";
+  } else if (props.status !== "clear") {
+    bgClass = "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.06)_100%)]";
+  }
 
-  const statusBadge =
-    props.status === "needs_review" ? (
-      <Badge tone="attention">Needs your choice</Badge>
-    ) : props.status === "setup_gap" ? (
-      <Badge tone="default">Setup needed</Badge>
-    ) : (
-      <Badge tone="success">Protected</Badge>
-    );
+  let statusBadge: ReactNode = <Badge tone="success">Protected</Badge>;
+  let HeroIcon = HiMiniShieldCheck;
+  let iconColorClass = "text-brand-green";
+  let iconBgClass = "bg-brand-green/10";
 
-  const HeroIcon =
-    props.status === "needs_review"
-      ? HiMiniExclamationTriangle
-      : props.status === "setup_gap"
-      ? HiMiniInformationCircle
-      : HiMiniShieldCheck;
-
-  const iconColorClass =
-    props.status === "needs_review"
-      ? "text-brand-attention"
-      : props.status === "setup_gap"
-      ? "text-brand-blue"
-      : "text-brand-green";
-
-  const iconBgClass =
-    props.status === "needs_review"
-      ? "bg-brand-attention/10"
-      : props.status === "setup_gap"
-      ? "bg-brand-blue/10"
-      : "bg-brand-green/10";
+  if (props.status === "needs_review") {
+    statusBadge = <Badge tone="attention">Needs your choice</Badge>;
+    HeroIcon = HiMiniExclamationTriangle;
+    iconColorClass = "text-brand-attention";
+    iconBgClass = "bg-brand-attention/10";
+  } else if (props.status === "degraded") {
+    statusBadge = <Badge tone="attention">Degraded</Badge>;
+    HeroIcon = HiMiniInformationCircle;
+    iconColorClass = "text-brand-attention";
+    iconBgClass = "bg-brand-attention/10";
+  } else if (props.status === "partial") {
+    statusBadge = <Badge tone="info">Partially protected</Badge>;
+    HeroIcon = HiMiniInformationCircle;
+    iconColorClass = "text-brand-blue";
+    iconBgClass = "bg-brand-blue/10";
+  } else if (props.status === "neutral") {
+    statusBadge = <Badge tone="info">Configuration</Badge>;
+    HeroIcon = HiMiniInformationCircle;
+    iconColorClass = "text-brand-blue";
+    iconBgClass = "bg-brand-blue/10";
+  } else if (props.status === "setup_gap") {
+    statusBadge = <Badge tone="default">Setup needed</Badge>;
+    HeroIcon = HiMiniInformationCircle;
+    iconColorClass = "text-brand-blue";
+    iconBgClass = "bg-brand-blue/10";
+  }
 
   return (
     <section

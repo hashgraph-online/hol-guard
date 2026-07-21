@@ -149,7 +149,7 @@ export function EvidenceInsightsShareModal({
       state: "idle",
       title: "Connect Guard Cloud to publish insights",
       detail:
-        "Guard keeps protecting this machine locally. Connect Guard Cloud here so the daemon can publish a public share link with preview image support.",
+        "Local Guard remains available. Connect Guard Cloud here so the daemon can publish a public share link with preview image support.",
       action_label: "Connect Guard Cloud",
       connect_url: runtime?.connect_url ?? "https://hol.org/guard/connect",
       authorize_url: null,

@@ -610,6 +610,20 @@
             "writes_state": false
         },
         {
+            "path": "/v1/command-activity/diagnostics",
+            "method": "GET",
+            "category": "unknown",
+            "auth_required": true,
+            "writes_state": false
+        },
+        {
+            "path": "/v1/command-activity",
+            "method": "DELETE",
+            "category": "destructive",
+            "auth_required": true,
+            "writes_state": true
+        },
+        {
             "path": "/v1/daemon/repair",
             "method": "POST",
             "category": "config",

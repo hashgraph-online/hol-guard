@@ -6,6 +6,12 @@ from pathlib import Path
 
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
+from ..skill_directory_identity import (
+    discover_skill_documents,
+    incomplete_skill_directory_identity,
+    inspect_skill_directory,
+    skill_directory_identity_metadata,
+)
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload
 
 
@@ -48,11 +54,13 @@ class GeminiHarnessAdapter(HarnessAdapter):
     def detect(self, context: HarnessContext) -> HarnessDetection:
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []
+        warnings: list[str] = []
         scope_specs = [
             (
                 context.home_dir / ".gemini" / "settings.json",
                 context.home_dir / ".gemini" / "extensions",
                 context.home_dir / ".gemini" / "skills",
+                context.home_dir,
             )
         ]
         if context.workspace_dir is not None:
@@ -61,23 +69,31 @@ class GeminiHarnessAdapter(HarnessAdapter):
                     context.workspace_dir / ".gemini" / "settings.json",
                     context.workspace_dir / ".gemini" / "extensions",
                     context.workspace_dir / ".gemini" / "skills",
+                    context.workspace_dir,
                 )
             )
-        for settings_path, extension_root, skill_root in scope_specs:
+        for settings_path, extension_root, skill_root, identity_scope_root in scope_specs:
             scope = self._scope_for(context, settings_path)
             self._append_extension_artifacts(artifacts, found_paths, extension_root, scope)
             payload = _json_payload(settings_path)
             if payload:
                 self._append_found_path(found_paths, settings_path)
                 self._append_settings_artifacts(artifacts, settings_path, payload, scope)
-            self._append_skill_artifacts(artifacts, found_paths, skill_root, scope)
+            self._append_skill_artifacts(
+                artifacts,
+                found_paths,
+                warnings,
+                skill_root,
+                identity_scope_root,
+                scope,
+            )
         detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),
             command_available=_command_available(self.executable),
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
-            warnings=(),
+            warnings=tuple(dict.fromkeys(warnings)),
         )
         return extend_detection_with_workspace_aibom(
             detection,
@@ -191,14 +207,19 @@ class GeminiHarnessAdapter(HarnessAdapter):
         self,
         artifacts: list[GuardArtifact],
         found_paths: list[str],
+        warnings: list[str],
         skill_root: Path,
+        identity_scope_root: Path,
         scope: str,
     ) -> None:
-        if not skill_root.is_dir():
-            return
-        for skill_path in sorted(skill_root.rglob("SKILL.md")):
+        discovery = discover_skill_documents(skill_root)
+        for skill_path in discovery.documents:
             self._append_found_path(found_paths, skill_path)
             relative_id = f"skills/{skill_path.parent.relative_to(skill_root).as_posix()}"
+            identity = inspect_skill_directory(skill_path, scope_root=identity_scope_root)
+            metadata = skill_directory_identity_metadata(identity, version_label=relative_id)
+            if identity.status != "complete":
+                warnings.append(f"Gemini {scope} skill directory identity is incomplete; approval reuse is disabled.")
             artifacts.append(
                 GuardArtifact(
                     artifact_id=f"gemini:{scope}:skill:{relative_id}",
@@ -207,6 +228,24 @@ class GeminiHarnessAdapter(HarnessAdapter):
                     artifact_type="skill",
                     source_scope=scope,
                     config_path=str(skill_path),
+                    metadata=metadata,
+                )
+            )
+        for issue in discovery.issues:
+            self._append_found_path(found_paths, issue.path)
+            relative_id = f"skills/.guard-discovery/{issue.issue_id}"
+            identity = incomplete_skill_directory_identity(issue.failure_reason)
+            metadata = skill_directory_identity_metadata(identity, version_label=relative_id)
+            warnings.append(f"Gemini {scope} skill discovery is incomplete; approval reuse is disabled.")
+            artifacts.append(
+                GuardArtifact(
+                    artifact_id=f"gemini:{scope}:skill-discovery:{issue.issue_id}",
+                    name="Incomplete Gemini skill discovery",
+                    harness=self.harness,
+                    artifact_type="skill",
+                    source_scope=scope,
+                    config_path=str(issue.path),
+                    metadata=metadata,
                 )
             )
 

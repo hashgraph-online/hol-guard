@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 import shlex
 
+from .env_wrapper import parse_env_wrapper
+
 _ENV_ASSIGNMENT_PATTERN = re.compile(r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)=.*$", re.DOTALL)
 _SUDO_OPTIONS_WITH_VALUES = frozenset({"-C", "-D", "-g", "-h", "-p", "-R", "-r", "-T", "-t", "-u"})
 _SUDO_LONG_OPTIONS_WITH_VALUES = frozenset(
@@ -57,8 +59,14 @@ def leading_environment(tokens: tuple[str, ...]) -> tuple[tuple[str, ...], int, 
             match = _ENV_ASSIGNMENT_PATTERN.fullmatch(tokens[index])
         executable = executable_name(tokens[index])
         if executable == "env":
+            parsed = parse_env_wrapper(tokens[index + 1 :])
+            if parsed.complete and parsed.command_index is None:
+                break
             wrappers.append("env")
-            index = _after_env_options(tokens, index + 1)
+            names.extend(name for name, _value in parsed.environment_delta.assignments)
+            if not parsed.complete or parsed.command_index is None or parsed.split_expansions:
+                return tuple(names), len(tokens), tuple(wrappers)
+            index += parsed.command_index + 1
             continue
         if executable == "sudo":
             wrappers.append("sudo")
@@ -66,23 +74,6 @@ def leading_environment(tokens: tuple[str, ...]) -> tuple[tuple[str, ...], int, 
             continue
         break
     return tuple(names), index, tuple(wrappers)
-
-
-def _after_env_options(tokens: tuple[str, ...], index: int) -> int:
-    while index < len(tokens):
-        token = tokens[index]
-        if token == "--":
-            return index + 1
-        if token in {"-u", "-C", "--unset", "--chdir"}:
-            index = min(index + 2, len(tokens))
-            continue
-        if token in {"-i", "-0", "--ignore-environment", "--null"} or token.startswith(("--unset=", "--chdir=")):
-            index += 1
-            continue
-        if _ENV_ASSIGNMENT_PATTERN.fullmatch(token) is not None:
-            return index
-        return index
-    return index
 
 
 def _after_sudo_options(tokens: tuple[str, ...], index: int) -> int:

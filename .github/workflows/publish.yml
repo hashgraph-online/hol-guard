@@ -91,6 +91,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
@@ -287,6 +288,17 @@ jobs:
       - name: Record immutable distribution hashes
         run: |
           find dist -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > distribution-sha256.txt
+      - name: Bind installed canary subject
+        if: github.event_name == 'pull_request'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SOURCE_SHA: ${{ steps.version.outputs.source_sha }}
+        run: |
+          uv run --no-sync python scripts/installed_canary_proof.py write-subject \
+            --dist-dir dist \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --output installed-canary-subject.json
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -297,6 +309,13 @@ jobs:
         with:
           name: distribution-sha256
           path: distribution-sha256.txt
+      - name: Upload installed canary subject
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: installed-canary-subject
+          path: installed-canary-subject.json
+          if-no-files-found: error
       - name: Upload release toolchain SBOM
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -359,6 +378,166 @@ jobs:
           echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
           echo "uv tool install --force --index https://pypi.org/simple --find-links https://test.pypi.org/simple/hol-guard/ 'hol-guard==$VERSION'" >> "$GITHUB_STEP_SUMMARY"
           echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+
+  pr-installed-canary:
+    name: Installed PR canary (${{ matrix.os }})
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [build, publish-testpypi]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ needs.build.outputs.source_sha }}
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.3.14"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: distributions
+          path: dist/
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: installed-canary-subject
+          path: installed-canary/
+      - name: Download exact TestPyPI wheel bytes
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          mkdir -p verified-testpypi
+          for attempt in {1..60}; do
+            if uv run --no-project --with packaging==25.0 python scripts/verify_release_registry.py \
+              verify-release --registry testpypi --version "$VERSION" \
+              --dist-dir dist --download-dir verified-testpypi > registry-result.json; then
+              STATUS=$(python -c 'import json; print(json.load(open("registry-result.json", encoding="utf-8"))["status"])')
+              if [[ "$STATUS" == "exact" ]]; then
+                break
+              fi
+            fi
+            if [[ "$attempt" == "60" ]]; then
+              echo "Exact TestPyPI canary did not become available" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+      - name: Verify PR head, version, and TestPyPI bytes
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          test "$(git rev-parse 'HEAD^{commit}')" = "$SOURCE_SHA"
+          uv run --no-project --with packaging==25.0 python scripts/installed_canary_proof.py verify-download \
+            --subject installed-canary/installed-canary-subject.json \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --download-dir verified-testpypi > verified-download.json
+      - name: Install only the verified wheel
+        shell: bash
+        run: |
+          WHEEL_REQUIREMENT=$(python -c 'import json; print(json.load(open("verified-download.json", encoding="utf-8"))["requirement"])')
+          python -m venv "$RUNNER_TEMP/hol-guard-canary-venv"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            CANARY_PYTHON="$RUNNER_TEMP/hol-guard-canary-venv/Scripts/python.exe"
+          else
+            CANARY_PYTHON="$RUNNER_TEMP/hol-guard-canary-venv/bin/python"
+          fi
+          "$CANARY_PYTHON" -m pip install --no-compile --index-url https://pypi.org/simple "$WHEEL_REQUIREMENT"
+          echo "CANARY_PYTHON=$CANARY_PYTHON" >> "$GITHUB_ENV"
+      - name: Prove the harness rejects missing evidence
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          if PYTHONPATH= "$CANARY_PYTHON" -X "pycache_prefix=$RUNNER_TEMP/hol-guard-missing-proof-cache" \
+            -m scripts.run_installed_canary \
+            --subject installed-canary/missing-subject.json \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output installed-canary/missing-proof-must-not-exist.json; then
+            echo "Installed canary harness accepted a run without proof" >&2
+            exit 1
+          fi
+          test ! -e installed-canary/missing-proof-must-not-exist.json
+      - name: Run installed 51k corpus and dashboard smoke
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          PYTHONPATH= "$CANARY_PYTHON" -X "pycache_prefix=$RUNNER_TEMP/hol-guard-evidence-cache" \
+            -m scripts.run_installed_canary \
+            --subject installed-canary/installed-canary-subject.json \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output installed-canary/evidence.json
+      - name: Run canonical command extension analytics Dockerlab
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          VERIFIED_WHEEL=$(python -c 'import json; print(json.load(open("verified-download.json", encoding="utf-8"))["wheel"])')
+          WHEEL_NAME=$(basename "$VERIFIED_WHEEL")
+          cmp "$VERIFIED_WHEEL" "dist/$WHEEL_NAME"
+          cd dashboard
+          bun install --frozen-lockfile --ignore-scripts
+          bunx playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends apparmor bubblewrap
+          sudo tee /etc/apparmor.d/hol-guard-bwrap >/dev/null <<'EOF'
+          abi <abi/4.0>,
+          include <tunables/global>
+          /usr/bin/bwrap flags=(unconfined) {
+            userns,
+          }
+          EOF
+          sudo apparmor_parser -r /etc/apparmor.d/hol-guard-bwrap
+          cd ../tests/dockerlabs/command-extension-analytics
+          bun run typecheck
+          HOL_GUARD_LAB_EXPECTED_VERSION="$VERSION" \
+            HOL_GUARD_LAB_PYTHON="$CANARY_PYTHON" \
+            HOL_GUARD_WHEEL="$GITHUB_WORKSPACE/dist/$WHEEL_NAME" \
+            bun run guard:test:command-extension-analytics \
+              > "$GITHUB_WORKSPACE/installed-canary/command-extension-analytics.json"
+      - name: Verify installed browser proof
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          proof_dir=.artifacts/command-extension-analytics/playwright-output
+          for screenshot in \
+            installed-command-activity-overview.png \
+            installed-command-activity-filtered.png \
+            installed-command-activity-detail-feedback.png; do
+            count=$(find "$proof_dir" -type f -name "$screenshot" | wc -l)
+            test "$count" -eq 1
+          done
+      - name: Upload installed canary evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: installed-canary-evidence-${{ runner.os }}
+          path: |
+            installed-canary/evidence.json
+            installed-canary/command-extension-analytics.json
+            .artifacts/command-extension-analytics/playwright-output/**/*.png
+          if-no-files-found: error
+          include-hidden-files: true
 
   publish-alpha-testpypi:
     name: Verify alpha artifact on TestPyPI

@@ -26,6 +26,7 @@ from packaging.version import InvalidVersion, Version
 
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
+from ..adapters.cursor_hooks import cursor_native_hook_state
 from ..adapters.opencode_pretool import (
     global_plugin_path,
     install_pretool_plugin,
@@ -107,6 +108,7 @@ _DAEMON_REFRESH_CLEANUP_TIMEOUT_SECONDS = 15.0
 _DAEMON_REFRESH_SCRIPT = """
 from __future__ import annotations
 
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -121,7 +123,12 @@ from codex_plugin_scanner.guard.daemon.manager import (
 
 payload = json.loads(sys.stdin.read())
 guard_home = Path(payload["guard_home"]).expanduser().resolve()
-home_dir = Path(payload["home_dir"]).expanduser().resolve()
+home_dir_value = payload.get("home_dir")
+home_dir = (
+    Path(home_dir_value).expanduser().resolve()
+    if isinstance(home_dir_value, str) and home_dir_value.strip()
+    else Path.home().resolve()
+)
 state_path = guard_home / "daemon-state.json"
 if not state_path.is_file():
     print(json.dumps({"status": "not_running"}))
@@ -137,12 +144,13 @@ if not guard_daemon_retirement_is_complete(guard_home):
     raise SystemExit(1)
 clear_guard_daemon_state(guard_home)
 repair_approval_center_locator(guard_home)
-daemon_url = ensure_guard_daemon_after_update(
-    guard_home,
-    home_dir=home_dir,
-    preferred_port=preferred_port,
-    allow_windows_job_breakaway=True,
-)
+refresh_parameters = inspect.signature(ensure_guard_daemon_after_update).parameters
+refresh_kwargs = {"preferred_port": preferred_port}
+if "home_dir" in refresh_parameters:
+    refresh_kwargs["home_dir"] = home_dir
+if "allow_windows_job_breakaway" in refresh_parameters:
+    refresh_kwargs["allow_windows_job_breakaway"] = True
+daemon_url = ensure_guard_daemon_after_update(guard_home, **refresh_kwargs)
 print(json.dumps({"status": "restarted", "retired": retired, "daemon_url": daemon_url}))
 """.strip()
 _DAEMON_REFRESH_CLEANUP_SCRIPT = """
@@ -208,7 +216,12 @@ home_dir = Path(payload["home_dir"]).resolve()
 guard_home = Path(payload["guard_home"]).resolve()
 workspace_value = payload.get("workspace_dir")
 workspace_dir = Path(workspace_value).resolve() if isinstance(workspace_value, str) else None
-context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
+context = HarnessContext(
+    home_dir=home_dir,
+    workspace_dir=workspace_dir,
+    guard_home=guard_home,
+    home_override_explicit=bool(payload.get("home_override_explicit")),
+)
 store = GuardStore(guard_home)
 managed_installs, notes = _repair_supported_harnesses_in_process(
     context=context,
@@ -1943,6 +1956,7 @@ def _repair_supported_harnesses(
         "home_dir": str(context.home_dir),
         "workspace_dir": str(context.workspace_dir) if context.workspace_dir is not None else workspace,
         "guard_home": str(context.guard_home),
+        "home_override_explicit": context.home_override_explicit,
         "now": now,
     }
     try:
@@ -1992,10 +2006,66 @@ def _repair_supported_harnesses_in_process(
     )
     repaired_installs = [repaired_codex] if repaired_codex is not None else []
     repair_notes = [codex_warning] if codex_warning is not None else []
+    repaired_cursor, cursor_warning = _repair_cursor_install(
+        context=context,
+        store=store,
+        workspace=workspace,
+        now=now,
+    )
+    if repaired_cursor is not None:
+        repaired_installs.append(repaired_cursor)
+    if cursor_warning is not None:
+        repair_notes.append(cursor_warning)
     opencode_note = _refresh_opencode_pretool_plugin(context=context, store=store)
     if opencode_note is not None:
         repair_notes.append(opencode_note)
     return repaired_installs, repair_notes
+
+
+def _repair_cursor_install(
+    *,
+    context: HarnessContext,
+    store: GuardStore,
+    workspace: str | None,
+    now: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    try:
+        managed_install = store.get_managed_install("cursor")
+    except (json.JSONDecodeError, sqlite3.Error):
+        return None, None
+    if managed_install is None or not bool(managed_install.get("active")):
+        return None, None
+    manifest = managed_install.get("manifest")
+    if not isinstance(manifest, dict):
+        return None, "Could not inspect Cursor protection during update: managed manifest is invalid"
+    surface_value = manifest.get("surface")
+    surface = surface_value if surface_value in {"editor", "all"} else None
+    if surface is None:
+        return None, None
+    try:
+        repair_context, repair_workspace = _repair_context_from_managed_install(context, managed_install)
+        hook_state = cursor_native_hook_state(repair_context)
+    except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
+        return None, f"Could not inspect Cursor protection during update: {error}"
+    if hook_state["protection_active"] is True:
+        return None, None
+    try:
+        payload = apply_managed_install(
+            "install",
+            "cursor",
+            False,
+            repair_context,
+            store,
+            repair_workspace or workspace,
+            now,
+            surface=surface,
+        )
+    except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
+        return None, f"Could not repair Cursor protection during update: {error}"
+    repaired = payload.get("managed_install")
+    if not isinstance(repaired, dict):
+        return None, "Could not repair Cursor protection during update: managed install was not recorded"
+    return repaired, None
 
 
 def _refresh_opencode_pretool_plugin(
@@ -2042,10 +2112,19 @@ def _repair_context_from_managed_install(
                 home_dir=context.home_dir,
                 workspace_dir=workspace_path,
                 guard_home=context.guard_home,
+                home_override_explicit=context.home_override_explicit,
             ),
             str(workspace_path),
         )
-    return HarnessContext(context.home_dir, None, context.guard_home), None
+    return (
+        HarnessContext(
+            home_dir=context.home_dir,
+            workspace_dir=None,
+            guard_home=context.guard_home,
+            home_override_explicit=context.home_override_explicit,
+        ),
+        None,
+    )
 
 
 def _repair_codex_install(
@@ -2063,7 +2142,11 @@ def _repair_codex_install(
         hook_state = codex_native_hook_state(repair_context)
     except (OSError, RuntimeError) as error:
         return None, f"Could not inspect Codex protection during update: {error}"
-    if bool(hook_state["protection_active"]):
+    if (
+        bool(hook_state["protection_active"])
+        and hook_state.get("integrity_status") == "valid"
+        and bool(hook_state["shell_protection_active"])
+    ):
         return None, None
     try:
         payload = apply_managed_install(
@@ -2077,6 +2160,13 @@ def _repair_codex_install(
         )
     except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
         return None, f"Could not repair Codex protection during update: {error}"
+    try:
+        repaired_state = codex_native_hook_state(repair_context)
+    except (OSError, RuntimeError) as error:
+        return None, f"Could not verify repaired Codex protection during update: {error}"
+    if not bool(repaired_state.get("protection_active")) or repaired_state.get("integrity_status") != "valid":
+        reason = str(repaired_state.get("integrity_reason") or "codex_hook_integrity_readback_failed")
+        return None, f"Could not verify repaired Codex protection during update: {reason}"
     managed_install = payload.get("managed_install")
     return (managed_install if isinstance(managed_install, dict) else None), None
 

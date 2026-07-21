@@ -47,6 +47,11 @@ class ValidatedRelease:
 
 RELEASE_TRAINS: Final[Mapping[str, ReleaseTrain]] = MappingProxyType(
     {
+        "refs/heads/release/2.1": ReleaseTrain(
+            git_ref="refs/heads/release/2.1",
+            major=2,
+            minor=1,
+        ),
         "refs/heads/release/2.2": ReleaseTrain(
             git_ref="refs/heads/release/2.2",
             major=2,

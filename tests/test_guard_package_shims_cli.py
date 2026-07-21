@@ -92,12 +92,19 @@ def _seed_retry_required_connect_state(home_dir: Path) -> None:
     )
 
 
-def _install_local_package_shim(guard_home: Path, home_dir: Path, manager: str) -> None:
+def _install_local_package_shim(
+    guard_home: Path,
+    home_dir: Path,
+    manager: str,
+    *,
+    home_override_explicit: bool = False,
+) -> None:
     install_package_shims(
         HarnessContext(
             home_dir=home_dir,
             workspace_dir=None,
             guard_home=guard_home,
+            home_override_explicit=home_override_explicit,
         ),
         managers=(manager,),
     )
@@ -504,7 +511,12 @@ def test_guard_doctor_repair_regenerates_stale_package_shim(
     monkeypatch.setenv("HOME", str(home_dir))
     monkeypatch.setenv("SHELL", "/bin/zsh")
     guard_home = tmp_path / "guard-home"
-    _install_local_package_shim(guard_home, home_dir, "npm")
+    _install_local_package_shim(
+        guard_home,
+        home_dir,
+        "npm",
+        home_override_explicit=True,
+    )
     shim_path = guard_home / "package-shims" / "bin" / "npm"
     current_content = shim_path.read_text(encoding="utf-8")
     stale_content = '#!/bin/sh\nexec npm "$@"\n'
@@ -557,7 +569,12 @@ def test_top_level_guard_doctor_repair_regenerates_stale_package_shim(
     monkeypatch.setenv("HOME", str(home_dir))
     monkeypatch.setenv("SHELL", "/bin/zsh")
     guard_home = tmp_path / "guard-home"
-    _install_local_package_shim(guard_home, home_dir, "npm")
+    _install_local_package_shim(
+        guard_home,
+        home_dir,
+        "npm",
+        home_override_explicit=True,
+    )
     shim_path = guard_home / "package-shims" / "bin" / "npm"
     current_content = shim_path.read_text(encoding="utf-8")
     stale_content = '#!/bin/sh\nexec npm "$@"\n'

@@ -127,12 +127,15 @@ class TestOpenDashboardAuthTokenMissing:
         mock_config = MagicMock()
         mock_config.approval_surface_policy = "auto-open-once"
 
-        with patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
-            return_value="http://127.0.0.1:4781/approvals",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
-            return_value=None,
+        with (
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
+                return_value="http://127.0.0.1:4781/approvals",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
+                return_value=None,
+            ),
         ):
             result = open_dashboard(
                 guard_home=tmp_path,
@@ -159,18 +162,23 @@ class TestOpenDashboardSuccess:
             "open_key": "dashboard",
         }
 
-        with patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
-            return_value="http://127.0.0.1:4781/approvals",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
-            return_value="test-token",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
-            return_value=mock_surface,
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
-            return_value="session-token-xyz",
+        with (
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
+                return_value="http://127.0.0.1:4781/approvals",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
+                return_value="test-token",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
+                return_value=mock_surface,
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
+                return_value="session-token-xyz",
+            ),
         ):
             result = open_dashboard(
                 guard_home=tmp_path,
@@ -195,18 +203,23 @@ class TestOpenDashboardSuccess:
             "reason": "opened",
         }
 
-        with patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
-            return_value="http://127.0.0.1:4781/approvals",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
-            return_value="secret-auth-token",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
-            return_value=mock_surface,
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
-            return_value="session-xyz",
+        with (
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
+                return_value="http://127.0.0.1:4781/approvals",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
+                return_value="secret-auth-token",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
+                return_value=mock_surface,
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
+                return_value="session-xyz",
+            ),
         ):
             result = open_dashboard(
                 guard_home=tmp_path,
@@ -229,18 +242,23 @@ class TestOpenDashboardSuccess:
             "reason": "policy-disabled",
         }
 
-        with patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
-            return_value="http://127.0.0.1:4781/approvals",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
-            return_value="tok",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
-            return_value=mock_surface,
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
-            return_value="session",
+        with (
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
+                return_value="http://127.0.0.1:4781/approvals",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
+                return_value="tok",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
+                return_value=mock_surface,
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
+                return_value="session",
+            ),
         ):
             result = open_dashboard(
                 guard_home=tmp_path,
@@ -263,18 +281,23 @@ class TestOpenDashboardSuccess:
             "reason": "already-opened",
         }
 
-        with patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
-            return_value="http://127.0.0.1:4781/approvals",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
-            return_value="tok",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
-            return_value=mock_surface,
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
-            return_value="session",
+        with (
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
+                return_value="http://127.0.0.1:4781/approvals",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
+                return_value="tok",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
+                return_value=mock_surface,
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
+                return_value="session",
+            ),
         ):
             result = open_dashboard(
                 guard_home=tmp_path,
@@ -296,18 +319,23 @@ class TestOpenDashboardSuccess:
             "reason": "live-client",
         }
 
-        with patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
-            return_value="http://127.0.0.1:4781/approvals",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
-            return_value="tok",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
-            return_value=mock_surface,
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
-            return_value="session",
+        with (
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
+                return_value="http://127.0.0.1:4781/approvals",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
+                return_value="tok",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
+                return_value=mock_surface,
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
+                return_value="session",
+            ),
         ):
             result = open_dashboard(
                 guard_home=tmp_path,
@@ -341,18 +369,23 @@ class TestOpenDashboardConcurrency:
 
         mock_surface.ensure_surface.side_effect = slow_ensure_surface
 
-        with patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
-            return_value="http://127.0.0.1:4781/approvals",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
-            return_value="tok",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
-            return_value=mock_surface,
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
-            return_value="session",
+        with (
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
+                return_value="http://127.0.0.1:4781/approvals",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
+                return_value="tok",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
+                return_value=mock_surface,
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
+                return_value="session",
+            ),
         ):
             results: list[DashboardLaunchResult] = []
             threads: list[threading.Thread] = []
@@ -413,18 +446,23 @@ class TestOpenDashboardSurfaceException:
         mock_surface = MagicMock()
         mock_surface.ensure_surface.side_effect = RuntimeError("surface exploded")
 
-        with patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
-            return_value="http://127.0.0.1:4781/approvals",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
-            return_value="test-token",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
-            return_value=mock_surface,
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
-            return_value="session-xyz",
+        with (
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
+                return_value="http://127.0.0.1:4781/approvals",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
+                return_value="test-token",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
+                return_value=mock_surface,
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
+                return_value="session-xyz",
+            ),
         ):
             result = open_dashboard(
                 guard_home=tmp_path,
@@ -447,18 +485,23 @@ class TestOpenDashboardSurfaceException:
         mock_surface = MagicMock()
         mock_surface.ensure_surface.side_effect = ValueError("boom")
 
-        with patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
-            return_value="http://127.0.0.1:4781/approvals",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
-            return_value="secret-auth-token",
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
-            return_value=mock_surface,
-        ), patch(
-            "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
-            return_value="session-xyz",
+        with (
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.ensure_guard_daemon",
+                return_value="http://127.0.0.1:4781/approvals",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.load_guard_daemon_auth_token",
+                return_value="secret-auth-token",
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.GuardSurfaceRuntime",
+                return_value=mock_surface,
+            ),
+            patch(
+                "codex_plugin_scanner.guard.dashboard_launcher.build_local_dashboard_session_token",
+                return_value="session-xyz",
+            ),
         ):
             result = open_dashboard(
                 guard_home=tmp_path,

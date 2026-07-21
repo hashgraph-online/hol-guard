@@ -3,14 +3,28 @@
 from __future__ import annotations
 
 import re
-from typing import Literal
 
-GitHubGraphQLCapability = Literal["read_remote", "maintain_remote", "mutate_remote", "unknown"]
-GitHubGraphQLAssessment = tuple[GitHubGraphQLCapability, str, str]
+from .github_capability_contract import GitHubCommandAssessment, GitHubCommandCapability, github_assessment
 
 _GRAPHQL_NAME = re.compile(r"\b[_A-Za-z][_0-9A-Za-z]*\b")
 _GRAPHQL_ALIAS = re.compile(r"\b(?P<name>[_A-Za-z][_0-9A-Za-z]*)\s*:")
-_ROUTINE_MUTATIONS = frozenset(
+_MAINTENANCE_MUTATIONS = frozenset(
+    {
+        "minimizeComment",
+        "resolveReviewThread",
+        "unminimizeComment",
+        "unresolveReviewThread",
+    }
+)
+_MERGE_MUTATIONS = frozenset(
+    {
+        "disablePullRequestAutoMerge",
+        "enablePullRequestAutoMerge",
+        "mergePullRequest",
+        "updatePullRequestBranch",
+    }
+)
+_CONTENT_MUTATIONS = frozenset(
     {
         "addComment",
         "addProjectV2DraftIssue",
@@ -24,33 +38,25 @@ _ROUTINE_MUTATIONS = frozenset(
         "createDiscussion",
         "createIssue",
         "createPullRequest",
-        "disablePullRequestAutoMerge",
-        "enablePullRequestAutoMerge",
         "markDiscussionCommentAsAnswer",
         "markPullRequestReadyForReview",
-        "mergePullRequest",
-        "minimizeComment",
         "reopenDiscussion",
         "reopenIssue",
-        "resolveReviewThread",
         "submitPullRequestReview",
         "unmarkDiscussionCommentAsAnswer",
-        "unminimizeComment",
-        "unresolveReviewThread",
         "updateDiscussion",
         "updateDiscussionComment",
         "updateIssue",
         "updateIssueComment",
         "updateProjectV2ItemFieldValue",
         "updatePullRequest",
-        "updatePullRequestBranch",
         "updatePullRequestReview",
         "updatePullRequestReviewComment",
     }
 )
 
 
-def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
+def classify_graphql_document(document: str) -> GitHubCommandAssessment:
     """Classify one static GraphQL document, allowing only narrow review maintenance."""
 
     sanitized = _strip_strings_and_comments(document)
@@ -60,25 +66,29 @@ def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
         if "mutation" in match.group("name").lower() or "subscription" in match.group("name").lower()
     ]
     if suspicious_aliases:
-        return (
+        return github_assessment(
             "unknown",
             "github.graphql.suspicious-alias",
             "A GraphQL alias resembles an operation type and is not classified automatically.",
         )
     has_fragment_definition = re.search(r"\bfragment\b", sanitized) is not None
     if has_fragment_definition and re.search(r"\bmutation\b", sanitized) is not None:
-        return (
+        return github_assessment(
             "mutate_remote",
             "github.graphql.remote-mutation",
             "GraphQL mutations with fragment definitions require confirmation.",
         )
     operations = _top_level_operations(sanitized)
     if operations is None:
-        return "unknown", "github.graphql.invalid-document", "The GraphQL document is not balanced."
+        return github_assessment("unknown", "github.graphql.invalid-document", "The GraphQL document is not balanced.")
     if not operations:
-        return "unknown", "github.graphql.missing-operation", "No static GraphQL operation was found."
+        return github_assessment(
+            "unknown",
+            "github.graphql.missing-operation",
+            "No static GraphQL operation was found.",
+        )
     if len(operations) != 1:
-        return (
+        return github_assessment(
             "unknown",
             "github.graphql.multiple-operations",
             "Multiple GraphQL operations or a batched document cannot be classified automatically.",
@@ -86,24 +96,53 @@ def classify_graphql_document(document: str) -> GitHubGraphQLAssessment:
     operation = operations[0]
     if operation == "mutation":
         root_fields = _root_fields(sanitized)
-        if not has_fragment_definition and root_fields and frozenset(root_fields) <= _ROUTINE_MUTATIONS:
-            return (
-                "maintain_remote",
-                "github.graphql.routine-mutation",
-                "The GraphQL mutation contains only statically understood routine root fields.",
-            )
-        return (
-            "mutate_remote",
-            "github.graphql.remote-mutation",
-            "The GraphQL operation can change GitHub-hosted state.",
+        capabilities: tuple[GitHubCommandCapability, ...] = tuple(
+            capability for field in root_fields or () for capability in _graphql_mutation_capabilities(field)
+        )
+        if has_fragment_definition or not capabilities:
+            capabilities = ("mutate_remote",)
+        return github_assessment(
+            capabilities,
+            "github.graphql.mixed-mutation" if len(set(capabilities)) > 1 else _graphql_reason(capabilities[0]),
+            "The GraphQL operation contains statically classified mutation root fields.",
         )
     if operation == "subscription":
-        return (
+        return github_assessment(
             "mutate_remote",
             "github.graphql.remote-mutation",
             "The GraphQL operation can change or subscribe to GitHub-hosted state.",
         )
-    return "read_remote", "github.graphql.proven-query", "The GraphQL document is a single static query."
+    return github_assessment(
+        "read_remote",
+        "github.graphql.proven-query",
+        "The GraphQL document is a single static query.",
+    )
+
+
+def _graphql_mutation_capabilities(field: str) -> tuple[GitHubCommandCapability, ...]:
+    if field in _MAINTENANCE_MUTATIONS:
+        return ("maintain_remote",)
+    if field in _MERGE_MUTATIONS:
+        return ("merge_remote",)
+    if field in _CONTENT_MUTATIONS:
+        return ("content_remote",)
+    lowered = field.lower()
+    capabilities: list[GitHubCommandCapability] = []
+    if lowered.startswith("delete") or lowered.startswith("remove"):
+        capabilities.append("delete_remote")
+    if any(marker in lowered for marker in ("secret", "token")):
+        capabilities.append("secret_remote")
+    if any(marker in lowered for marker in ("collaborator", "deploykey", "permission", "repository")):
+        capabilities.append("access_remote")
+    if "workflow" in lowered:
+        capabilities.append("workflow_remote")
+    if "release" in lowered:
+        capabilities.append("publish_remote")
+    return tuple(capabilities) or ("mutate_remote",)
+
+
+def _graphql_reason(capability: GitHubCommandCapability) -> str:
+    return f"github.graphql.{capability.replace('_remote', '').replace('_', '-')}"
 
 
 def _root_fields(document: str) -> tuple[str, ...] | None:

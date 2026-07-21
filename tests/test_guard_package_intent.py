@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -13,11 +14,45 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
     parse_manifest_dependency_changes,
     parse_package_intent,
 )
+from codex_plugin_scanner.guard.runtime.shell_execution_context import model_shell_execution_context
 
 
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _write_typescript_workspace(
+    workspace: Path,
+    *,
+    dependency: str = "^5.9.0",
+    locked_version: str = "5.9.0",
+    installed_version: str = "5.9.0",
+    wrong_executable: bool = False,
+) -> None:
+    _write_text(workspace / "package.json", f'{{"devDependencies":{{"typescript":"{dependency}"}}}}\n')
+    _write_text(
+        workspace / "package-lock.json",
+        (
+            '{"packages":{"node_modules/typescript":'
+            f'{{"version":"{locked_version}","integrity":"sha512-reviewed"}}}}}}\n'
+        ),
+    )
+    _write_text(workspace / "src" / "example.ts", "export const value: number = 1;\n")
+    runner = workspace / "node_modules" / ".bin" / "tsc"
+    if wrong_executable:
+        _write_text(runner, "#!/bin/sh\nexit 0\n")
+        runner.chmod(0o755)
+        return
+    compiler = workspace / "node_modules" / "typescript" / "bin" / "tsc"
+    _write_text(compiler, "#!/usr/bin/env node\nrequire('../lib/tsc.js')\n")
+    compiler.chmod(0o755)
+    _write_text(
+        workspace / "node_modules" / "typescript" / "package.json",
+        f'{{"name":"typescript","version":"{installed_version}","bin":{{"tsc":"./bin/tsc"}}}}\n',
+    )
+    runner.parent.mkdir(parents=True, exist_ok=True)
+    runner.symlink_to(Path("..") / "typescript" / "bin" / "tsc")
 
 
 def test_parse_package_intent_empty_command_returns_none() -> None:
@@ -116,6 +151,7 @@ def test_parse_package_intent_detects_package_command_after_control_operator() -
     commands = {
         "true && npx attacker-package": ("npx", "attacker-package"),
         "echo ok; npm install attacker-package": ("npm", "attacker-package"),
+        "echo ok\nnpm install attacker-package": ("npm", "attacker-package"),
         "false || pnpm dlx attacker-package": ("pnpm", "attacker-package"),
         "echo ok | bunx attacker-package": ("bunx", "attacker-package"),
         "echo ok & pip install attacker-package": ("pip", "attacker-package"),
@@ -129,6 +165,80 @@ def test_parse_package_intent_detects_package_command_after_control_operator() -
         assert intent.targets[0].package_name == package_name
 
     assert parse_package_intent("echo safe && grep foo src/file.ts") is None
+
+
+def test_local_execution_context_hash_contains_no_raw_command_or_secret(tmp_path: Path) -> None:
+    def _hash(command: str, segment_index: int) -> str:
+        context = model_shell_execution_context(command, cwd=tmp_path, workspace_root=tmp_path)
+        segment = context.segments[segment_index]
+        return package_intent_parser._execution_context_hash(
+            context,
+            segment,
+            control_shape=tuple(
+                operator for modeled_segment in context.segments for operator in modeled_segment.control_after
+            ),
+            effective_cwd=segment.effective_cwd,
+            cwd_source=segment.cwd_source,
+            path_source="inherited",
+            opaque_context_binding=None,
+        )
+
+    first = _hash("true && npm install fixture", 1)
+    repeated = _hash("true && npm install fixture", 1)
+    different_operator = _hash("true; npm install fixture", 1)
+    different_segment = _hash("npm install fixture && true", 0)
+
+    assert first == repeated
+    assert first.startswith("sha256:")
+    assert first != different_operator
+    assert first != different_segment
+
+
+def test_rebase_preserves_declared_paths_that_disappear_or_do_not_exist(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    requirements = project / "requirements.txt"
+    _write_text(requirements, "fixture==1.0\n")
+    intent = package_intent_parser._parse_pip_intent(
+        ("pip", "install", "-r", "requirements.txt"),
+        workspace=project,
+    )
+    assert intent is not None
+    requirements.unlink()
+    intent = replace(intent, lockfile_paths=("future.lock",))
+
+    rebased = package_intent_parser._rebase_intent_paths(
+        intent,
+        from_directory=project,
+        workspace=tmp_path,
+    )
+
+    assert rebased.manifest_paths == ("project/requirements.txt",)
+    assert rebased.lockfile_paths == ("project/future.lock",)
+
+
+def test_unresolved_context_uses_process_ephemeral_keyed_identity() -> None:
+    first = package_intent_parser._opaque_unresolved_context_binding(
+        ["PATH=$FIRST_UNKNOWN", "bunx", "--no-install", "vitest"],
+        path_source="inline_unresolved",
+        cwd_source="workspace",
+    )
+    repeated = package_intent_parser._opaque_unresolved_context_binding(
+        ["PATH=$FIRST_UNKNOWN", "bunx", "--no-install", "vitest"],
+        path_source="inline_unresolved",
+        cwd_source="workspace",
+    )
+    second = package_intent_parser._opaque_unresolved_context_binding(
+        ["PATH=$SECOND_UNKNOWN", "bunx", "--no-install", "vitest"],
+        path_source="inline_unresolved",
+        cwd_source="workspace",
+    )
+
+    assert first == repeated
+    assert first is not None
+    assert second is not None
+    assert first != second
+    assert "FIRST_UNKNOWN" not in first
 
 
 def test_parse_package_intent_reviews_declared_local_test_runner_execution(tmp_path: Path) -> None:
@@ -296,28 +406,92 @@ def test_parse_package_intent_reviews_declared_local_executable(tmp_path: Path) 
     assert parse_package_intent("bunx --no-install eslint .", workspace=tmp_path) is not None
 
 
-def test_parse_package_intent_allows_verified_local_typescript_check(
+def test_parse_package_intent_records_complete_typescript_launch_without_silent_verification(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = tmp_path / "workspace"
-    project = workspace / "crm-install-dropdowns"
-    project.mkdir(parents=True)
-    _write_text(project / "package.json", '{"devDependencies":{"typescript":"^5.9.0"}}\n')
-    _write_text(
-        project / "package-lock.json",
-        '{"packages":{"node_modules/typescript":{"version":"5.9.0"}}}\n',
-    )
-    runner = project / "node_modules" / ".bin" / "tsc"
-    _write_text(runner, "#!/bin/sh\n")
-    runner.chmod(0o755)
+    workspace.mkdir()
+    _write_typescript_workspace(workspace)
     manager = tmp_path / "bin" / "npx"
     _write_text(manager, "#!/bin/sh\n")
     manager.chmod(0o755)
     monkeypatch.setenv("PATH", str(manager.parent))
-    command = "cd crm-install-dropdowns && npx tsc --noEmit --pretty 2>&1 | head -40"
+    command = "npx --no-install tsc --noEmit --pretty src/example.ts"
 
-    assert parse_package_intent(command, workspace=workspace) is None
+    intent = parse_package_intent(command, workspace=workspace)
+
+    assert intent is not None
+    assert "local-execution-requires-review" in intent.notes
+    evidence = intent.local_executions[0].typescript_launch
+    assert evidence is not None
+    assert evidence.status == "complete"
+    assert evidence.reasons == ()
+    assert evidence.config_mode == "explicit_sources"
+    assert evidence.source_files == ("src/example.ts",)
+    assert evidence.evidence_scope == "launch_identity"
+    assert evidence.review_disposition == "review_required"
+    assert evidence.direct_silent_verification is False
+    assert evidence.binding_digest.startswith("sha256:")
+
+
+@pytest.mark.parametrize(
+    ("case", "command", "expected_reason"),
+    (
+        (
+            "explicit-package",
+            "npx --no-install --package typescript tsc --noEmit src/example.ts",
+            "explicit_package_source",
+        ),
+        ("source-drift", "npx --no-install tsc --noEmit src/example.ts", "manifest_source_drift"),
+        ("wrong-executable", "npx --no-install tsc --noEmit src/example.ts", "wrong_typescript_executable"),
+        ("config", "npx --no-install tsc --noEmit --project tsconfig.json", "compiler_arguments_not_read_only"),
+        ("launch-mismatch", "npx tsc --noEmit src/example.ts", "remote_install_not_disabled"),
+        ("lock-drift", "npx --no-install tsc --noEmit src/example.ts", "manifest_lock_version_drift"),
+    ),
+)
+def test_typescript_launch_evidence_rejects_minimal_exploit_deltas(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+    command: str,
+    expected_reason: str,
+) -> None:
+    baseline_workspace = tmp_path / "baseline"
+    baseline_workspace.mkdir()
+    _write_typescript_workspace(baseline_workspace)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _write_typescript_workspace(
+        workspace,
+        dependency="file:./substituted" if case == "source-drift" else "^5.9.0",
+        locked_version="5.8.4" if case == "lock-drift" else "5.9.0",
+        wrong_executable=case == "wrong-executable",
+    )
+    manager = tmp_path / "bin" / "npx"
+    _write_text(manager, "#!/bin/sh\n")
+    manager.chmod(0o755)
+    monkeypatch.setenv("PATH", str(manager.parent))
+
+    baseline_intent = parse_package_intent(
+        "npx --no-install tsc --noEmit src/example.ts",
+        workspace=baseline_workspace,
+    )
+    assert baseline_intent is not None
+    baseline_evidence = baseline_intent.local_executions[0].typescript_launch
+    assert baseline_evidence is not None
+    assert baseline_evidence.status == "complete"
+
+    intent = parse_package_intent(command, workspace=workspace)
+
+    assert intent is not None
+    evidence = intent.local_executions[0].typescript_launch
+    assert evidence is not None
+    assert evidence.status == "incomplete"
+    assert expected_reason in evidence.reasons
+    assert evidence.binding_digest != baseline_evidence.binding_digest
+    assert evidence.review_disposition == "review_required"
+    assert evidence.direct_silent_verification is False
 
 
 @pytest.mark.parametrize(

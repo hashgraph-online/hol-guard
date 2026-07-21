@@ -48,7 +48,7 @@ For security reviews, sales conversations, and GRC packets, see the
    hol-guard install codex
    ```
 
-   For Codex, install now enables Guard-owned `PreToolUse` Bash hooks in `.codex/hooks.json` and turns on the Codex hooks feature. That native hook path still runs when Codex itself is in YOLO mode, so Guard can pause sensitive Bash commands before execution instead of forcing a slower Codex approval mode.
+   For Codex, install enables Guard-owned `PreToolUse` and `PermissionRequest` hooks in `.codex/config.toml` and turns on the Codex hooks feature. `PreToolUse` receives the complete Bash tool command before a shell starts, so shell startup files, debug traps, and shell options are not part of the enforcement boundary. `hol-guard run codex` refuses to launch if those native hooks are missing or disabled.
 
    After upgrading later, run `hol-guard update` to update the installed `hol-guard` package in that environment.
 
@@ -415,7 +415,7 @@ For a real Codex canary, point `~/.codex/config.toml` or `<workspace>/.codex/con
 Guard now has three real runtime paths for Codex:
 
 1. native Codex Bash tool calls
-   Guard installs a Codex `PreToolUse` hook in `.codex/hooks.json`, so sensitive Bash commands are denied before they run and routed into HOL Guard approval
+   Guard installs a Codex `PreToolUse` hook in `.codex/config.toml`, so the complete outer command is evaluated and sensitive Bash commands are denied before any shell code runs; legacy Bash/zsh/fish trap and startup-profile controls are removed during install or repair
 2. interactive Codex CLI and Codex App MCP tool calls
    Guard sends an MCP `elicitation/create` approval request, so the user can approve or deny in the same Codex chat
 3. noninteractive Codex runs such as `codex exec`

@@ -201,6 +201,8 @@ class CursorHarnessAdapter(HarnessAdapter):
             "managed_config_path": editor_manifest.get("managed_config_path"),
             "backup_path": editor_manifest.get("backup_path"),
             "state_path": editor_manifest.get("state_path"),
+            "guard_cli_identity": editor_manifest.get("guard_cli_identity"),
+            "hook_script_sha256": editor_manifest.get("hook_script_sha256"),
             "shim_path": cli_manifest.get("shim_path"),
             "shim_command": cli_manifest.get("shim_command"),
         }
@@ -289,6 +291,8 @@ class CursorHarnessAdapter(HarnessAdapter):
             "skipped_servers": list(skipped_servers),
             "managed_hooks_path": hooks_manifest.get("managed_hooks_path"),
             "managed_hook_script_path": hooks_manifest.get("managed_hook_script_path"),
+            "guard_cli_identity": hooks_manifest.get("guard_cli_identity"),
+            "hook_script_sha256": hooks_manifest.get("hook_script_sha256"),
             "notes": notes,
         }
 

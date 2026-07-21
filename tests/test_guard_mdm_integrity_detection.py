@@ -131,9 +131,7 @@ def test_snapshot_detects_shadowed_command_without_exposing_path(
     assert str(shadow) not in serialized
 
 
-def test_snapshot_detects_shadow_when_runtime_root_is_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_snapshot_detects_shadow_when_runtime_root_is_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     shadow = tmp_path / "user-bin" / "hol-guard"
     shadow.parent.mkdir()
     shadow.write_text("shadow")

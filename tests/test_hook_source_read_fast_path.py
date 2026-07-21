@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import time
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -16,7 +14,6 @@ from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScann
 from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest, HookSourceFileRef
 from codex_plugin_scanner.guard.runtime.hook_source_read import (
-    SOURCE_READ_MAX_SCAN_BYTES,
     evaluate_source_file_ref,
     output_equivalent,
     sha256_text,
@@ -157,7 +154,14 @@ class TestOutputEquivalent:
 
 class TestSafeSourceRead:
     def test_safe_ts_file_returns_allow_original(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         content = "export const x = 1;\n"
         file_path = workspace / "src" / "foo.ts"
@@ -184,7 +188,14 @@ class TestSafeSourceRead:
         assert result.proof.output_sha256 == sha256_text(stripped)
 
     def test_safe_md_file_returns_allow_original(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         content = "# Spec\n\nThis is a markdown spec.\n"
         file_path = workspace / "docs" / "spec.md"
@@ -211,7 +222,14 @@ class TestSafeSourceRead:
 
 class TestSensitivePathRejection:
     def test_env_file_returns_risky_not_allow(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         content = "SECRET=abc123\n"
         file_path = workspace / ".env"
@@ -236,7 +254,14 @@ class TestSensitivePathRejection:
         assert result.reason_code == "sensitive_path"
 
     def test_npmrc_returns_risky(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         content = "authToken=abc\n"
         file_path = workspace / ".npmrc"
@@ -262,7 +287,14 @@ class TestSensitivePathRejection:
 
 class TestSecretDetection:
     def test_file_with_github_token_returns_risky(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         content = 'const token = "ghp_1234567890abcdefghijklmnopqrstuvwxyz";\n'
         file_path = workspace / "src" / "config.ts"
@@ -288,9 +320,16 @@ class TestSecretDetection:
         assert len(result.scanner_matches) > 0
 
     def test_file_with_env_reference_returns_allow_original(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
-        content = 'const key = process.env.NOTION_API_KEY;\n'
+        content = "const key = process.env.NOTION_API_KEY;\n"
         file_path = workspace / "src" / "app.ts"
         file_path.write_text(content)
 
@@ -315,7 +354,14 @@ class TestSecretDetection:
 
 class TestOutputMismatch:
     def test_output_hash_mismatch_returns_inconclusive(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         content = "export const x = 1;\n"
         file_path = workspace / "src" / "foo.ts"
@@ -342,7 +388,15 @@ class TestOutputMismatch:
 
 class TestTOCTOU:
     def test_file_modified_between_stat_and_read_returns_inconclusive(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float, monkeypatch
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
+        monkeypatch,
     ) -> None:
         """Test TOCTOU protection via stat_identity comparison.
 
@@ -378,7 +432,14 @@ class TestTOCTOU:
 
 class TestBinaryFile:
     def test_binary_file_returns_inconclusive(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         file_path = workspace / "src" / "data.bin"
         file_path.write_bytes(b"\x00\x01\x02\x03\x00")
@@ -403,7 +464,15 @@ class TestBinaryFile:
 
 class TestSymlinkRejection:
     def test_symlink_path_returns_inconclusive(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float, tmp_path: Path
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
+        tmp_path: Path,
     ) -> None:
         target = tmp_path / "outside.txt"
         target.write_text("secret data")
@@ -436,9 +505,17 @@ class TestSymlinkRejection:
             "absolute_path_outside_workspace",
         )
 
+
 class TestCacheBehavior:
     def test_cache_hit_returns_source_cache_hit(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         content = "export const x = 1;\n"
         file_path = workspace / "src" / "foo.ts"
@@ -475,7 +552,14 @@ class TestCacheBehavior:
         assert result2.reason_code == "source_cache_hit"
 
     def test_cache_invalidates_when_content_changes(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         file_path = workspace / "src" / "foo.ts"
         content1 = "export const x = 1;\n"
@@ -521,7 +605,14 @@ class TestCacheBehavior:
         assert result.reason_code == "source_full_scan_allow"
 
     def test_cache_invalidates_when_config_fingerprint_changes(
-        self, workspace: Path, home_dir: Path, store: GuardStore, scanner: ContentScanner, cache: HookDecisionCache, deadline: float, tmp_path: Path
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
+        tmp_path: Path,
     ) -> None:
         content = "export const x = 1;\n"
         file_path = workspace / "src" / "foo.ts"
@@ -562,7 +653,14 @@ class TestCacheBehavior:
 
 class TestShapeValidation:
     def test_not_post_tool_returns_inconclusive(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         ref = _source_ref()
         request = _request(source_ref=ref, event_name="PreToolUse", cwd=workspace, home_dir=home_dir)
@@ -582,7 +680,14 @@ class TestShapeValidation:
         assert result.reason_code == "not_post_tool"
 
     def test_missing_source_ref_returns_inconclusive(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         request = _request(source_ref=None, cwd=workspace, home_dir=home_dir)
         envelope = _envelope()
@@ -601,7 +706,14 @@ class TestShapeValidation:
         assert result.reason_code == "missing_source_ref"
 
     def test_not_file_read_returns_inconclusive(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         ref = _source_ref()
         request = _request(source_ref=ref, cwd=workspace, home_dir=home_dir)
@@ -621,7 +733,14 @@ class TestShapeValidation:
         assert result.reason_code == "not_file_read"
 
     def test_multiple_target_paths_returns_inconclusive(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         ref = _source_ref()
         request = _request(source_ref=ref, cwd=workspace, home_dir=home_dir)
@@ -641,7 +760,14 @@ class TestShapeValidation:
         assert result.reason_code == "not_single_target_path"
 
     def test_invalid_output_hash_returns_inconclusive(
-        self, workspace: Path, home_dir: Path, store: GuardStore, config: GuardConfig, scanner: ContentScanner, cache: HookDecisionCache, deadline: float
+        self,
+        workspace: Path,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
     ) -> None:
         ref = HookSourceFileRef(
             version=1,

@@ -63,13 +63,11 @@ class TestWindowsAdapterPlatform:
 
 class TestPythonwPath:
     def test_returns_pythonw_when_exists(self) -> None:
-        with patch("sys.executable", "/fake/python.exe"), \
-             patch("pathlib.Path.exists", return_value=True):
+        with patch("sys.executable", "/fake/python.exe"), patch("pathlib.Path.exists", return_value=True):
             assert "pythonw.exe" in _pythonw_path()
 
     def test_falls_back_to_sys_executable(self) -> None:
-        with patch("sys.executable", "/fake/python.exe"), \
-             patch("pathlib.Path.exists", return_value=False):
+        with patch("sys.executable", "/fake/python.exe"), patch("pathlib.Path.exists", return_value=False):
             assert _pythonw_path() == "/fake/python.exe"
 
     def test_returns_sys_executable_when_already_pythonw(self) -> None:
@@ -79,41 +77,34 @@ class TestPythonwPath:
 
 class TestBuildTaskXml:
     def test_xml_contains_pythonw_executable(self, tmp_path: Path) -> None:
-        with patch("sys.executable", "/fake/python.exe"), \
-             patch("pathlib.Path.exists", return_value=True):
+        with patch("sys.executable", "/fake/python.exe"), patch("pathlib.Path.exists", return_value=True):
             assert "pythonw.exe" in _build_task_xml(tmp_path)
 
     def test_xml_contains_guard_home(self, tmp_path: Path) -> None:
-        with patch("sys.executable", "/fake/python.exe"), \
-             patch("pathlib.Path.exists", return_value=True):
+        with patch("sys.executable", "/fake/python.exe"), patch("pathlib.Path.exists", return_value=True):
             assert str(tmp_path) in _build_task_xml(tmp_path)
 
     def test_xml_contains_codex_plugin_scanner(self, tmp_path: Path) -> None:
-        with patch("sys.executable", "/fake/python.exe"), \
-             patch("pathlib.Path.exists", return_value=True):
+        with patch("sys.executable", "/fake/python.exe"), patch("pathlib.Path.exists", return_value=True):
             assert "codex_plugin_scanner" in _build_task_xml(tmp_path)
 
     def test_xml_has_logon_trigger(self, tmp_path: Path) -> None:
-        with patch("sys.executable", "/fake/python.exe"), \
-             patch("pathlib.Path.exists", return_value=True):
+        with patch("sys.executable", "/fake/python.exe"), patch("pathlib.Path.exists", return_value=True):
             assert "LogonTrigger" in _build_task_xml(tmp_path)
 
     def test_xml_has_least_privilege(self, tmp_path: Path) -> None:
-        with patch("sys.executable", "/fake/python.exe"), \
-             patch("pathlib.Path.exists", return_value=True):
+        with patch("sys.executable", "/fake/python.exe"), patch("pathlib.Path.exists", return_value=True):
             assert "LeastPrivilege" in _build_task_xml(tmp_path)
 
     def test_xml_has_bounded_restart(self, tmp_path: Path) -> None:
-        with patch("sys.executable", "/fake/python.exe"), \
-             patch("pathlib.Path.exists", return_value=True):
+        with patch("sys.executable", "/fake/python.exe"), patch("pathlib.Path.exists", return_value=True):
             xml = _build_task_xml(tmp_path)
             assert "RestartOnFailure" in xml
             assert "PT60S" in xml
             assert "<Count>3</Count>" in xml
 
     def test_xml_has_interactive_token(self, tmp_path: Path) -> None:
-        with patch("sys.executable", "/fake/python.exe"), \
-             patch("pathlib.Path.exists", return_value=True):
+        with patch("sys.executable", "/fake/python.exe"), patch("pathlib.Path.exists", return_value=True):
             assert "InteractiveToken" in _build_task_xml(tmp_path)
 
     def test_xml_has_no_secrets(self) -> None:
@@ -124,23 +115,20 @@ class TestBuildTaskXml:
         Uses a fixed path (not tmp_path) to avoid the test name leaking
         'secret' into the guard_home path.
         """
-        with patch("sys.executable", "/fake/python.exe"), \
-             patch("pathlib.Path.exists", return_value=True):
+        with patch("sys.executable", "/fake/python.exe"), patch("pathlib.Path.exists", return_value=True):
             xml = _build_task_xml(Path("/tmp/guard-home")).lower()
             for secret in ("auth_token", "secret", "password", "bearer", "api_key", "credential"):
                 assert secret not in xml, f"Found '{secret}' in task XML"
 
     def test_xml_escapes_ampersand_in_path(self) -> None:
         """Paths with & must be escaped as &amp; in the XML."""
-        with patch("sys.executable", "/fake/python.exe"), \
-             patch("pathlib.Path.exists", return_value=True):
+        with patch("sys.executable", "/fake/python.exe"), patch("pathlib.Path.exists", return_value=True):
             assert "&amp;" in _build_task_xml(Path("/tmp/a&b"))
 
     def test_xml_escapes_double_quote_in_path(self) -> None:
         """Paths with \" must be escaped as &quot; to avoid breaking the
         --guard-home \"...\" argument quoting on the Windows side."""
-        with patch("sys.executable", "/fake/python.exe"), \
-             patch("pathlib.Path.exists", return_value=True):
+        with patch("sys.executable", "/fake/python.exe"), patch("pathlib.Path.exists", return_value=True):
             xml = _build_task_xml(Path('/tmp/a"b'))
             assert "&quot;" in xml
 
@@ -178,12 +166,16 @@ class TestInspectRegistration:
 class TestInstallRegistration:
     def test_install_creates_task(self, tmp_path: Path) -> None:
         adapter = WindowsTrayAdapter()
-        with patch("subprocess.run", side_effect=[
-            _mock_schtasks_result(returncode=1),
-            _mock_schtasks_result(returncode=0),
-        ]):
+        with patch(
+            "subprocess.run",
+            side_effect=[
+                _mock_schtasks_result(returncode=1),
+                _mock_schtasks_result(returncode=0),
+            ],
+        ):
             result = adapter.install_registration(
-                guard_home=tmp_path, capability=adapter.detect_capability(),
+                guard_home=tmp_path,
+                capability=adapter.detect_capability(),
             )
         assert result["installed"] is True
         assert result["task_name"] == TASK_NAME
@@ -192,30 +184,39 @@ class TestInstallRegistration:
         adapter = WindowsTrayAdapter()
         with patch("subprocess.run", return_value=_mock_schtasks_result(stdout=FOREIGN_TASK_XML)):
             result = adapter.install_registration(
-                guard_home=tmp_path, capability=adapter.detect_capability(),
+                guard_home=tmp_path,
+                capability=adapter.detect_capability(),
             )
         assert result["installed"] is False
         assert result["reason"] == "startup_registration_collision"
 
     def test_install_overwrites_owned_task(self, tmp_path: Path) -> None:
         adapter = WindowsTrayAdapter()
-        with patch("subprocess.run", side_effect=[
-            _mock_schtasks_result(stdout=OWNED_TASK_XML),
-            _mock_schtasks_result(returncode=0),
-        ]):
+        with patch(
+            "subprocess.run",
+            side_effect=[
+                _mock_schtasks_result(stdout=OWNED_TASK_XML),
+                _mock_schtasks_result(returncode=0),
+            ],
+        ):
             result = adapter.install_registration(
-                guard_home=tmp_path, capability=adapter.detect_capability(),
+                guard_home=tmp_path,
+                capability=adapter.detect_capability(),
             )
         assert result["installed"] is True
 
     def test_install_fails_on_schtasks_error(self, tmp_path: Path) -> None:
         adapter = WindowsTrayAdapter()
-        with patch("subprocess.run", side_effect=[
-            _mock_schtasks_result(returncode=1),
-            _mock_schtasks_result(returncode=1, stderr="Access denied"),
-        ]):
+        with patch(
+            "subprocess.run",
+            side_effect=[
+                _mock_schtasks_result(returncode=1),
+                _mock_schtasks_result(returncode=1, stderr="Access denied"),
+            ],
+        ):
             result = adapter.install_registration(
-                guard_home=tmp_path, capability=adapter.detect_capability(),
+                guard_home=tmp_path,
+                capability=adapter.detect_capability(),
             )
         assert result["installed"] is False
         assert result["reason"] == "startup_registration_failed"
@@ -224,10 +225,13 @@ class TestInstallRegistration:
 class TestRemoveRegistration:
     def test_remove_owned_task(self, tmp_path: Path) -> None:
         adapter = WindowsTrayAdapter()
-        with patch("subprocess.run", side_effect=[
-            _mock_schtasks_result(stdout=OWNED_TASK_XML),
-            _mock_schtasks_result(returncode=0),
-        ]):
+        with patch(
+            "subprocess.run",
+            side_effect=[
+                _mock_schtasks_result(stdout=OWNED_TASK_XML),
+                _mock_schtasks_result(returncode=0),
+            ],
+        ):
             result = adapter.remove_registration(guard_home=tmp_path)
         assert result["removed"] is True
 
@@ -250,11 +254,14 @@ class TestStartProcess:
     def test_start_uses_pythonw(self, tmp_path: Path) -> None:
         adapter = WindowsTrayAdapter()
         mock_proc = type("P", (), {"pid": 12345})()
-        with patch("sys.executable", "/fake/python.exe"), \
-             patch("pathlib.Path.exists", return_value=True), \
-             patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
+        with (
+            patch("sys.executable", "/fake/python.exe"),
+            patch("pathlib.Path.exists", return_value=True),
+            patch("subprocess.Popen", return_value=mock_proc) as mock_popen,
+        ):
             result = adapter.start_process(
-                guard_home=tmp_path, capability=adapter.detect_capability(),
+                guard_home=tmp_path,
+                capability=adapter.detect_capability(),
             )
         assert result["started"] is True
         assert result["pid"] == 12345
@@ -264,7 +271,8 @@ class TestStartProcess:
         adapter = WindowsTrayAdapter()
         with patch("subprocess.Popen", side_effect=OSError("spawn failed")):
             result = adapter.start_process(
-                guard_home=tmp_path, capability=adapter.detect_capability(),
+                guard_home=tmp_path,
+                capability=adapter.detect_capability(),
             )
         assert result["started"] is False
         assert result["reason"] == "internal_error"

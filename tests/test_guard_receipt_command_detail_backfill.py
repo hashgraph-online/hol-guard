@@ -204,11 +204,7 @@ def test_sync_receipts_persists_command_detail_backfill_progress_after_partial_s
         synced_at="2026-07-04T00:00:00+00:00",
     )
     assert preview_marker is not None
-    first_batch_rowids = [
-        row["receipt_rowid"]
-        for row in preview_rows[:2]
-        if isinstance(row.get("receipt_rowid"), int)
-    ]
+    first_batch_rowids = [row["receipt_rowid"] for row in preview_rows[:2] if isinstance(row.get("receipt_rowid"), int)]
     assert len(first_batch_rowids) == 2
 
     try:
@@ -233,10 +229,6 @@ def test_sync_receipts_persists_command_detail_backfill_progress_after_partial_s
         redaction_level="none",
         synced_at="2026-07-04T00:01:00+00:00",
     )
-    remaining_rowids = [
-        row["receipt_rowid"]
-        for row in remaining_rows
-        if isinstance(row.get("receipt_rowid"), int)
-    ]
+    remaining_rowids = [row["receipt_rowid"] for row in remaining_rows if isinstance(row.get("receipt_rowid"), int)]
     assert remaining_rowids
     assert all(rowid < min(first_batch_rowids) for rowid in remaining_rowids)

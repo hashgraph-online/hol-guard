@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
+from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
 from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
 from codex_plugin_scanner.guard.runtime.hook_review_engine import HookFailSafe, HookReviewEngine
 from codex_plugin_scanner.guard.runtime.hook_review_types import (
     HookOutputSummary,
     HookReviewRequest,
-    HookReviewResponse,
     HookSourceFileRef,
 )
 from codex_plugin_scanner.guard.runtime.hook_source_read import sha256_text
@@ -244,7 +242,13 @@ class TestNonPostToolEvents:
 
 class TestEngineException:
     def test_engine_exception_returns_deny_block(
-        self, store: GuardStore, scanner: ContentScanner, cache: HookDecisionCache, workspace: Path, home_dir: Path, guard_home: Path
+        self,
+        store: GuardStore,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        workspace: Path,
+        home_dir: Path,
+        guard_home: Path,
     ) -> None:
         def broken_config_loader(guard_home: Path, workspace: Path | None) -> GuardConfig:
             raise RuntimeError("config loading failed")
@@ -307,7 +311,13 @@ class TestScannerBudgetExhaustion:
 
 class TestMetricsExcludesRawContent:
     def test_metrics_payload_excludes_raw_content(
-        self, store: GuardStore, scanner: ContentScanner, cache: HookDecisionCache, workspace: Path, home_dir: Path, guard_home: Path
+        self,
+        store: GuardStore,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        workspace: Path,
+        home_dir: Path,
+        guard_home: Path,
     ) -> None:
         metrics = MagicMock()
         engine = HookReviewEngine(

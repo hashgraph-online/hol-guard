@@ -269,9 +269,7 @@ def test_computes_local_guard_wheel_and_sdist_hashes(tmp_path: Path) -> None:
     dist = _local_dist(tmp_path)
     (dist / f"plugin_scanner-{VERSION}-py3-none-any.whl").write_bytes(b"scanner")
     (dist / f"{WHEEL}.publish.attestation").write_bytes(b"wheel-attestation")
-    (dist / f"{SDIST}.publish.attestation.publish.attestation").write_bytes(
-        b"nested-sdist-attestation"
-    )
+    (dist / f"{SDIST}.publish.attestation.publish.attestation").write_bytes(b"nested-sdist-attestation")
     assert compute_local_distribution_hashes(dist, VERSION) == {
         SDIST: _sha(SDIST_BYTES),
         WHEEL: _sha(WHEEL_BYTES),
