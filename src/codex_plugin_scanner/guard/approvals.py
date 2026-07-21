@@ -69,6 +69,11 @@ from .store import (
     runtime_tool_action_exact_match_context,
 )
 from .synced_policy import synced_policy_bundle_validation
+from .temporary_mcp_approvals import (
+    TemporaryMcpGrantSelection,
+    parse_temporary_mcp_grant_selection,
+    temporary_mcp_grant_decision,
+)
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
@@ -593,6 +598,8 @@ def apply_approval_resolution(
     persist_policy: bool | None = None,
     scope_contract_version: str | None = None,
     scope_contract_digest: str | None = None,
+    mcp_grant_target: object | None = None,
+    mcp_grant_duration: object | None = None,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
     if request is None:
@@ -600,6 +607,19 @@ def apply_approval_resolution(
     if request["status"] != "pending":
         raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
     require_resolvable_approval_request(request)
+    resolved_at = now or _now()
+    temporary_mcp_selection: TemporaryMcpGrantSelection | None = None
+    if (mcp_grant_target is None) != (mcp_grant_duration is None):
+        raise ValueError("incomplete_temporary_mcp_approval")
+    if mcp_grant_target is not None:
+        if action != "allow" or scope != "artifact":
+            raise ValueError("temporary_mcp_approval_requires_artifact_allow")
+        temporary_mcp_selection = parse_temporary_mcp_grant_selection(
+            request,
+            target=mcp_grant_target,
+            duration=mcp_grant_duration,
+            now=resolved_at,
+        )
     selection = resolve_request_scope_selection(
         request,
         action=action,
@@ -667,7 +687,6 @@ def apply_approval_resolution(
         reason=reason,
         source="approval-gate",
     )
-    resolved_at = now or _now()
     resolved_gate_grant = require_approval_decision(
         store.guard_home,
         action=decision.action,
@@ -697,7 +716,11 @@ def apply_approval_resolution(
     elif persist_policy is None and scope == "artifact":
         once_decision = replace(
             decision,
-            expires_at=_approval_once_policy_expires_at(resolved_at),
+            expires_at=(
+                temporary_mcp_selection.expires_at
+                if temporary_mcp_selection is not None and temporary_mcp_selection.target == "exact"
+                else _approval_once_policy_expires_at(resolved_at)
+            ),
         )
         store.ensure_policy_integrity_ready_for_write(
             harness=once_decision.harness if once_decision.harness != "*" else None,
@@ -717,6 +740,25 @@ def apply_approval_resolution(
                 harness=str(request["harness"]),
                 created_at=resolved_at,
             )
+
+    if temporary_mcp_selection is not None:
+        temporary_decision = temporary_mcp_grant_decision(
+            harness=str(request["harness"]),
+            selection=temporary_mcp_selection,
+            reason=reason,
+            artifact_id=request_artifact_id or "",
+            artifact_hash=request_artifact_hash or "",
+        )
+        store.ensure_policy_integrity_ready_for_write(
+            harness=temporary_decision.harness,
+            approval_gate_grant=resolved_gate_grant,
+            now=resolved_at,
+        )
+        store.upsert_policy(
+            temporary_decision,
+            resolved_at,
+            approval_gate_grant=resolved_gate_grant,
+        )
 
     resolution_harness = None if scope == "global" else str(request["harness"])
     if return_queue_result:
@@ -770,6 +812,8 @@ def apply_approval_resolution(
         result["applied_scope"] = scope
         if selection.warning is not None:
             result["scope_warning"] = selection.warning
+        if temporary_mcp_selection is not None:
+            result["temporary_mcp_grant"] = _temporary_mcp_grant_result(temporary_mcp_selection)
         return result
     resolved_ids: list[str] = []
     if resolve_scope_matches and not exact_context_allow:
@@ -816,7 +860,19 @@ def apply_approval_resolution(
     updated["applied_scope"] = scope
     if selection.warning is not None:
         updated["scope_warning"] = selection.warning
+    if temporary_mcp_selection is not None:
+        updated["temporary_mcp_grant"] = _temporary_mcp_grant_result(temporary_mcp_selection)
     return updated
+
+
+def _temporary_mcp_grant_result(selection: TemporaryMcpGrantSelection) -> dict[str, object]:
+    return {
+        "target": selection.target,
+        "duration": selection.duration,
+        "expires_at": selection.expires_at,
+        "server_name": selection.eligibility.server_name,
+        "category": selection.eligibility.category,
+    }
 
 
 def _workspace_policy_artifact_keys(request: Mapping[str, object], scope: str) -> tuple[str | None, str | None]:

@@ -281,8 +281,12 @@ def _codex_install_smoke() -> dict[str, object]:
         except subprocess.TimeoutExpired as exc:
             raise InstalledCanaryError("Installed hol-guard install codex smoke timed out") from exc
         if completed.returncode != 0:
+            details = "\n".join(
+                output.strip() for output in (completed.stderr, completed.stdout) if output and output.strip()
+            )
+            detail_suffix = f": {details[-2000:]}" if details else ""
             raise InstalledCanaryError(
-                f"Installed hol-guard install codex smoke failed with exit status {completed.returncode}"
+                f"Installed hol-guard install codex smoke failed with exit status {completed.returncode}{detail_suffix}"
             )
         decoded = cast(object, json.loads(completed.stdout))
         if not isinstance(decoded, dict):

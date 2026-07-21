@@ -211,6 +211,36 @@ export type GuardApprovalRequest = {
   last_seen_at?: string | null;
   display_status?: string;
   scanner_evidence?: GuardScannerEvidence[];
+  temporary_mcp_approval?: GuardTemporaryMcpApproval | null;
+};
+
+export type GuardTemporaryMcpGrantTarget = "exact" | "category" | "server";
+export type GuardTemporaryMcpGrantDuration = "once" | "15m" | "1h" | "5h";
+
+export type GuardTemporaryMcpApproval = {
+  eligible: boolean;
+  server_name: string;
+  server_identity_hash: string;
+  category: string;
+  target_label: string | null;
+  allowed_targets: GuardTemporaryMcpGrantTarget[];
+  allowed_durations: GuardTemporaryMcpGrantDuration[];
+  hard_risk_exclusions: string[];
+};
+
+export type GuardApprovalResolutionInput = {
+  requestId: string;
+  action: "allow" | "block";
+  scope: DecisionScope;
+  workspace?: string;
+  reason: string;
+  approval_password?: string;
+  approval_totp_code?: string;
+  approval_gate_use_cooldown?: boolean;
+  scope_contract_version?: string;
+  scope_contract_digest?: string;
+  mcp_grant_target?: GuardTemporaryMcpGrantTarget;
+  mcp_grant_duration?: GuardTemporaryMcpGrantDuration;
 };
 
 export type GuardApprovalPageStatus = "pending" | "resolved" | "all";

@@ -98,6 +98,19 @@ def test_installed_codex_setup_normalizes_timeout(monkeypatch: pytest.MonkeyPatc
         _ = _codex_install_smoke()
 
 
+def test_installed_codex_setup_reports_bounded_child_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    child_error = "codex_hook_inventory_unsupported_event_shape"
+
+    def failed(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([], 1, stdout="", stderr=f"prefix-{child_error}" * 300)
+
+    monkeypatch.setattr(subprocess, "run", failed)
+
+    with pytest.raises(InstalledCanaryError, match=child_error) as failure:
+        _ = _codex_install_smoke()
+    assert len(str(failure.value)) < 2200
+
+
 class _ConsoleScriptDistribution(importlib.metadata.Distribution):
     @override
     def read_text(self, filename: str) -> str | None:

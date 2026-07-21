@@ -15334,6 +15334,97 @@ function protectionHealthFor(snapshot, harness = null) {
   const fallback = healthFromChecks(fallbackChecks());
   return { harness: STABLE_ID$1.test(harness) && harness.length <= 64 ? harness : "unknown", ...fallback };
 }
+const TARGETS = /* @__PURE__ */ new Set(["exact", "category", "server"]);
+const DURATIONS = /* @__PURE__ */ new Set(["once", "15m", "1h", "5h"]);
+function nonEmpty(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+function validTargets(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((item) => TARGETS.has(item)))];
+}
+function validDurations(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((item) => DURATIONS.has(item)))];
+}
+function parseTemporaryMcpApproval(value) {
+  if (typeof value !== "object" || value === null) return void 0;
+  const raw = value;
+  if (raw.eligible !== true || !nonEmpty(raw.server_name) || !nonEmpty(raw.server_identity_hash) || !nonEmpty(raw.category)) {
+    return void 0;
+  }
+  const allowedTargets = validTargets(raw.allowed_targets);
+  const allowedDurations = validDurations(raw.allowed_durations);
+  if (allowedTargets.length === 0 || allowedDurations.length === 0) return void 0;
+  return {
+    eligible: true,
+    server_name: raw.server_name.trim(),
+    server_identity_hash: raw.server_identity_hash,
+    category: raw.category.trim(),
+    target_label: nonEmpty(raw.target_label) ? raw.target_label.trim() : null,
+    allowed_targets: allowedTargets,
+    allowed_durations: allowedDurations,
+    hard_risk_exclusions: Array.isArray(raw.hard_risk_exclusions) ? raw.hard_risk_exclusions.filter(nonEmpty).map((entry) => entry.trim()) : []
+  };
+}
+function temporaryMcpApprovalOptions(item) {
+  const value = parseTemporaryMcpApproval(item.temporary_mcp_approval);
+  if (value === void 0) return null;
+  const { eligible: _, ...options } = value;
+  return options;
+}
+function defaultTemporaryMcpTarget(options) {
+  if (options.allowed_targets.includes("category")) return "category";
+  return options.allowed_targets[0];
+}
+function defaultTemporaryMcpDuration(options) {
+  if (options.allowed_durations.includes("1h")) return "1h";
+  return options.allowed_durations[0];
+}
+function validTemporaryMcpSelection(options, target, duration) {
+  if (options === null) return { target: "exact", duration: "once" };
+  return {
+    target: options.allowed_targets.includes(target) ? target : defaultTemporaryMcpTarget(options),
+    duration: options.allowed_durations.includes(duration) ? duration : defaultTemporaryMcpDuration(options)
+  };
+}
+function temporaryMcpTargetLabel(target, options) {
+  if (target === "exact") return "This exact call";
+  if (target === "category") return "This browser capability";
+  return `All routine calls from ${options.server_name}`;
+}
+function browserCapabilityLabel(category) {
+  const labels = {
+    browser_navigation: "Navigate",
+    browser_inspection: "Inspect",
+    browser_interaction: "Interact"
+  };
+  return labels[category] ?? category.replace(/^browser_/, "").replaceAll("_", " ");
+}
+function temporaryMcpDurationLabel(duration) {
+  return { once: "Once", "15m": "15 min", "1h": "1 hour", "5h": "5 hours" }[duration];
+}
+function temporaryMcpAllowButtonLabel(duration) {
+  return duration === "once" ? "Approve once" : `Allow for ${temporaryMcpDurationLabel(duration)}`;
+}
+function temporaryMcpExpiryLabel(duration, now2 = /* @__PURE__ */ new Date()) {
+  if (duration === "once") return null;
+  const milliseconds = { "15m": 15 * 6e4, "1h": 60 * 6e4, "5h": 5 * 60 * 6e4 }[duration];
+  return new Intl.DateTimeFormat(void 0, {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(new Date(now2.getTime() + milliseconds));
+}
+function temporaryMcpSummary(options, target, duration) {
+  const coverage = target === "server" ? "Routine tools" : browserCapabilityLabel(options.category);
+  return ["Allow", options.server_name, coverage, options.target_label, temporaryMcpDurationLabel(duration)].filter(nonEmpty).join(" · ");
+}
+function buildTemporaryMcpResolutionFields(options, target, duration) {
+  if (options === null || duration === "once" || !options.allowed_targets.includes(target) || !options.allowed_durations.includes(duration)) {
+    return {};
+  }
+  return { mcp_grant_target: target, mcp_grant_duration: duration };
+}
 const now = "2026-04-11T12:00:00Z";
 const demoRequests = [
   {
@@ -16444,6 +16535,7 @@ function normalizeApprovalRequest(item) {
     } : void 0,
     scope_restrictions: hasScopeContract ? scopeRestrictions ?? [] : void 0,
     task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : void 0,
+    temporary_mcp_approval: parseTemporaryMcpApproval(item.temporary_mcp_approval),
     action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
     ...hasDecisionContractError ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT } : {}
@@ -17595,6 +17687,8 @@ async function resolveRequestWithQueueResult(input) {
       reason: input.reason || void 0,
       ...input.scope_contract_version !== void 0 ? { scope_contract_version: input.scope_contract_version } : {},
       ...input.scope_contract_digest !== void 0 ? { scope_contract_digest: input.scope_contract_digest } : {},
+      ...input.mcp_grant_target !== void 0 ? { mcp_grant_target: input.mcp_grant_target } : {},
+      ...input.mcp_grant_duration !== void 0 ? { mcp_grant_duration: input.mcp_grant_duration } : {},
       ...input.approval_password !== void 0 ? { approval_password: input.approval_password } : {},
       ...input.approval_totp_code !== void 0 ? { approval_totp_code: input.approval_totp_code } : {},
       ...input.approval_gate_use_cooldown !== void 0 ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {}
@@ -27191,10 +27285,11 @@ function buildEvidenceItems(item) {
   return items;
 }
 function ReviewScopeControls(props) {
+  const showAllowScopes = props.showAllowScopes !== false;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval scope" }),
-    !props.hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "status", children: "This action cannot be approved under its current Guard policy." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Allow scope selection", children: props.commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: showAllowScopes ? "Approval scope" : "Block scope" }),
+    showAllowScopes && !props.hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "status", children: "This action cannot be approved under its current Guard policy." }),
+    showAllowScopes && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Allow scope selection", children: props.commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       ScopeChoiceButton,
       {
         choice,
@@ -27203,7 +27298,7 @@ function ReviewScopeControls(props) {
       },
       choice.value
     )) }),
-    props.broaderScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3", children: [
+    showAllowScopes && props.broaderScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "Save for project or app" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "These options save a decision that skips review for matching actions going forward. Choose the narrowest scope that fits what you meant to allow." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2 md:grid-cols-2", children: props.broaderScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -27216,7 +27311,7 @@ function ReviewScopeControls(props) {
         choice.value
       )) })
     ] }),
-    props.advancedScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-3", children: [
+    showAllowScopes && props.advancedScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-attention", children: "Advanced: save everywhere on this machine" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "This saves a decision that applies across all your projects on this machine. Matching actions skip review permanently. Only use this if you fully trust this action everywhere." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2", children: props.advancedScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -27229,7 +27324,7 @@ function ReviewScopeControls(props) {
         choice.value
       )) })
     ] }),
-    props.taskCapabilityCopy !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 pt-1 text-xs text-brand-dark/70", children: [
+    showAllowScopes && props.taskCapabilityCopy !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 pt-1 text-xs text-brand-dark/70", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: props.taskCapabilityCopy })
     ] }),
@@ -27435,6 +27530,73 @@ function pastDecisionVerb(decision) {
       return "blocked";
   }
 }
+const EXCLUSION_COPY = "Privileged browser access, file transfer, secrets, command execution, destructive actions, and shared-profile access still require review.";
+function TemporaryMcpApprovalControls(props) {
+  const expiry = temporaryMcpExpiryLabel(props.duration);
+  const descriptionId = "temporary-mcp-boundary";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { "aria-describedby": descriptionId, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "How long should this choice last?" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4", children: props.options.allowed_durations.map((duration) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "label",
+        {
+          className: `flex min-h-11 cursor-pointer items-center justify-center rounded-lg border px-3 text-sm font-medium transition-colors focus-within:ring-2 focus-within:ring-brand-blue/30 ${props.duration === duration ? "border-brand-blue bg-brand-blue/[0.06] text-brand-dark" : "border-slate-200/70 bg-white text-brand-dark hover:bg-slate-50"}`,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                className: "sr-only",
+                type: "radio",
+                name: "temporary-mcp-duration",
+                value: duration,
+                checked: props.duration === duration,
+                onChange: () => props.onDurationChange(duration)
+              }
+            ),
+            temporaryMcpDurationLabel(duration)
+          ]
+        },
+        duration
+      )) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { "aria-describedby": descriptionId, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "What should it cover?" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 grid grid-cols-1 gap-2 md:grid-cols-2", children: props.options.allowed_targets.map((target) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "label",
+        {
+          className: `flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-brand-blue/30 ${props.target === target ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200/70 bg-white hover:bg-slate-50"}`,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                className: "mt-0.5 h-4 w-4 shrink-0 accent-brand-blue",
+                type: "radio",
+                name: "temporary-mcp-target",
+                value: target,
+                checked: props.target === target,
+                onChange: () => props.onTargetChange(target)
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-medium text-brand-dark", children: temporaryMcpTargetLabel(target, props.options) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: target === "exact" ? "Only the current tool call." : target === "category" ? `${browserCapabilityLabel(props.options.category)} calls from this exact server.` : "Eligible routine browser calls from this exact server. High-risk calls stay blocked." })
+            ] })
+          ]
+        },
+        target
+      )) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-y border-slate-200/70 py-3", "aria-live": "polite", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: temporaryMcpSummary(props.options, props.target, props.duration) }),
+      expiry !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-muted-foreground", children: [
+        "Expires around ",
+        expiry,
+        ". The Guard service sets the final expiry."
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: descriptionId, className: "text-xs leading-5 text-brand-dark/70", children: EXCLUSION_COPY })
+  ] });
+}
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact"]);
 function resolvedActionCopy(item, action) {
   if (item !== null) return buildRetryAfterApprovalCopy(item, action);
@@ -27458,6 +27620,8 @@ function ReviewDecisionCard(props) {
   const [useCooldown, setUseCooldown] = reactExports.useState(false);
   const [pendingAction, setPendingAction] = reactExports.useState(null);
   const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
+  const [mcpGrantTarget, setMcpGrantTarget] = reactExports.useState("exact");
+  const [mcpGrantDuration, setMcpGrantDuration] = reactExports.useState("once");
   const timerRef = reactExports.useRef(null);
   const allowButtonRef = reactExports.useRef(null);
   const availableScopeChoices = reactExports.useMemo(
@@ -27481,6 +27645,10 @@ function ReviewDecisionCard(props) {
     [item]
   );
   const taskCapabilityCopy = item ? taskCapabilityExplanation(item) : null;
+  const temporaryMcpOptions = reactExports.useMemo(
+    () => item ? temporaryMcpApprovalOptions(item) : null,
+    [item]
+  );
   const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
   const decisionContractKey = item ? `${item.request_id}:${item.scope_contract_version ?? "legacy"}:${item.scope_contract_digest ?? "legacy"}` : null;
   reactExports.useEffect(() => {
@@ -27496,8 +27664,21 @@ function ReviewDecisionCard(props) {
       setUseCooldown(false);
       setPendingAction(null);
       setPendingContractKey(null);
+      const nextTemporaryOptions = temporaryMcpApprovalOptions(item);
+      if (nextTemporaryOptions !== null) {
+        setMcpGrantTarget(defaultTemporaryMcpTarget(nextTemporaryOptions));
+        setMcpGrantDuration(defaultTemporaryMcpDuration(nextTemporaryOptions));
+      } else {
+        setMcpGrantTarget("exact");
+        setMcpGrantDuration("once");
+      }
     }
   }, [item?.request_id, item?.scope_contract_version, item?.scope_contract_digest]);
+  reactExports.useEffect(() => {
+    const selection = validTemporaryMcpSelection(temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration);
+    if (selection.target !== mcpGrantTarget) setMcpGrantTarget(selection.target);
+    if (selection.duration !== mcpGrantDuration) setMcpGrantDuration(selection.duration);
+  }, [temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration]);
   reactExports.useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -27522,7 +27703,8 @@ function ReviewDecisionCard(props) {
           }),
           ...includeGateFields && needsPassword ? { approval_password: approvalPassword } : {},
           ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
-          ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
+          ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {},
+          ...action === "allow" ? buildTemporaryMcpResolutionFields(temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration) : {}
         });
         setResolved(action);
         setApprovalPassword("");
@@ -27546,7 +27728,10 @@ function ReviewDecisionCard(props) {
       approvalPassword,
       approvalTotpCode,
       useCooldown,
-      resolutionBlockReason
+      resolutionBlockReason,
+      temporaryMcpOptions,
+      mcpGrantTarget,
+      mcpGrantDuration
     ]
   );
   const handleRequestResolve = reactExports.useCallback(
@@ -27730,21 +27915,34 @@ function ReviewDecisionCard(props) {
         ),
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
-      resolutionBlockReason === null && /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ReviewScopeControls,
-        {
-          commonScopeOptions,
-          broaderScopeOptions,
-          advancedScopeOptions,
-          blockScopeOptions,
-          hasAllowScope,
-          taskCapabilityCopy,
-          allowScope,
-          blockScope,
-          onAllowScopeChange: setAllowScope,
-          onBlockScopeChange: setBlockScope
-        }
-      ),
+      resolutionBlockReason === null && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        temporaryMcpOptions !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          TemporaryMcpApprovalControls,
+          {
+            options: temporaryMcpOptions,
+            target: mcpGrantTarget,
+            duration: mcpGrantDuration,
+            onTargetChange: setMcpGrantTarget,
+            onDurationChange: setMcpGrantDuration
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ReviewScopeControls,
+          {
+            commonScopeOptions,
+            broaderScopeOptions,
+            advancedScopeOptions,
+            blockScopeOptions,
+            hasAllowScope,
+            taskCapabilityCopy,
+            allowScope,
+            blockScope,
+            showAllowScopes: temporaryMcpOptions === null,
+            onAllowScopeChange: setAllowScope,
+            onBlockScopeChange: setBlockScope
+          }
+        )
+      ] }),
       errorMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in mt-4 rounded-xl border border-brand-purple/25 bg-brand-purple/[0.05] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-purple", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
@@ -27773,7 +27971,7 @@ function ReviewDecisionCard(props) {
               "Approving..."
             ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4", "aria-hidden": "true" }),
-              allowButtonLabel(allowScope)
+              temporaryMcpOptions === null ? allowButtonLabel(allowScope) : temporaryMcpAllowButtonLabel(mcpGrantDuration)
             ] })
           }
         ),
@@ -27840,7 +28038,7 @@ function ReviewDecisionCard(props) {
         onUseCooldownChange: handleUseCooldownChange,
         onSubmit: handleModalSubmit,
         onCancel: handleModalCancel,
-        submitLabel: pendingAction === "allow" ? allowButtonLabel(allowScope) : blockButtonLabel(blockScope)
+        submitLabel: pendingAction === "allow" ? temporaryMcpOptions === null ? allowButtonLabel(allowScope) : temporaryMcpAllowButtonLabel(mcpGrantDuration) : blockButtonLabel(blockScope)
       }
     )
   ] });

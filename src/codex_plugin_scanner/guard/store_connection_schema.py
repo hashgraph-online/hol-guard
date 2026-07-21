@@ -705,6 +705,7 @@ class StoreConnectionSchemaMixin:
             self._ensure_approval_column(connection, "last_seen_at", "text")
             self._ensure_approval_column(connection, "fallback_cli_command", "text")
             self._ensure_approval_column(connection, "scanner_evidence_json", "text not null default '[]'")
+            self._ensure_approval_column(connection, "browser_intent_json", "text")
             self._ensure_approval_column(connection, "desktop_notified_at", "text")
             self._ensure_approval_column(connection, "raw_command_text", "text")
             self._ensure_approval_column(connection, "oauth_source", "text")

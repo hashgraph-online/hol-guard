@@ -186,6 +186,7 @@ def approval_schema_statement() -> str:
           decision_v2_json text,
           fallback_cli_command text,
           scanner_evidence_json text not null default '[]',
+          browser_intent_json text,
           desktop_notified_at text,
           raw_command_text text,
           review_command text not null,
@@ -291,7 +292,8 @@ def add_approval_request(
                 transport = ?, risk_summary = ?, risk_signals_json = ?,
                 artifact_label = ?, source_label = ?, trigger_summary = ?, why_now = ?, launch_summary = ?,
                 risk_headline = ?, action_envelope_json = ?, decision_v2_json = ?, fallback_cli_command = ?,
-                scanner_evidence_json = ?, review_command = ?, approval_url = ?, raw_command_text = ?
+                scanner_evidence_json = ?, browser_intent_json = ?, review_command = ?, approval_url = ?,
+                raw_command_text = ?
             where request_id = ? and oauth_source = ?
             """,
             (
@@ -332,6 +334,7 @@ def add_approval_request(
                     else None
                 ),
                 json.dumps(list(request.scanner_evidence), sort_keys=True),
+                json.dumps(request.browser_intent, sort_keys=True) if request.browser_intent is not None else None,
                 review_command,
                 approval_url,
                 request.raw_command_text,
@@ -348,14 +351,14 @@ def add_approval_request(
           launch_target, normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at,
           transport, risk_summary,
           risk_signals_json, artifact_label, source_label, trigger_summary, why_now, launch_summary, risk_headline,
-          action_envelope_json, decision_v2_json, fallback_cli_command, scanner_evidence_json,
+          action_envelope_json, decision_v2_json, fallback_cli_command, scanner_evidence_json, browser_intent_json,
           review_command, approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
           raw_command_text
         )
         values (
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?
+          ?, ?, ?
             )
         """,
         (
@@ -396,6 +399,7 @@ def add_approval_request(
             json.dumps(canonical_decision.decision_v2_json),
             request.fallback_cli_command,
             json.dumps(list(request.scanner_evidence), sort_keys=True),
+            json.dumps(request.browser_intent, sort_keys=True) if request.browser_intent is not None else None,
             request.review_command,
             request.approval_url,
             "pending",
@@ -472,7 +476,7 @@ def list_approval_requests(
                 normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at, transport,
                 risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
                 launch_summary, risk_headline, action_envelope_json, decision_v2_json,
-                fallback_cli_command, scanner_evidence_json, review_command,
+                fallback_cli_command, scanner_evidence_json, browser_intent_json, review_command,
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
                 raw_command_text
         from approval_requests
@@ -503,7 +507,8 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
                 launch_summary, risk_headline, action_envelope_json, decision_v2_json,
                 {_column_expr(columns, "fallback_cli_command", "NULL")},
                 {_column_expr(columns, "raw_command_text", "NULL")},
-                {_column_expr(columns, "scanner_evidence_json", "'[]'")}, review_command,
+                {_column_expr(columns, "scanner_evidence_json", "'[]'")},
+                {_column_expr(columns, "browser_intent_json", "NULL")}, review_command,
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
         from approval_requests
         where request_id = ?
@@ -644,6 +649,7 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "fallback_cli_command": row["fallback_cli_command"],
         "raw_command_text": row["raw_command_text"],
         "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
+        "browser_intent": _json_object(row["browser_intent_json"]),
         "review_command": str(row["review_command"]),
         "approval_url": str(row["approval_url"]),
         "status": str(row["status"]),

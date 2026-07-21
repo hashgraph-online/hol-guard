@@ -3386,6 +3386,7 @@ class RuntimeMcpGuardProxy:
 
         if browser_intent is not None:
             changed_fields.append("runtime_browser_tool_call")
+            risk_categories = tool_call_risk_categories(artifact, arguments)
             # Build a safer browser-specific launch target label
             target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
             launch_target = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
@@ -3409,6 +3410,7 @@ class RuntimeMcpGuardProxy:
                         "mcp_schema_hash": browser_intent.mcp_schema_hash,
                         "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
                         "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
+                        "risk_categories": list(risk_categories),
                     }
                 ),
             )
@@ -3574,6 +3576,7 @@ class RuntimeMcpGuardProxy:
                     "mcp_schema_hash": browser_intent.mcp_schema_hash,
                     "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
                     "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
+                    "risk_categories": list(tool_call_risk_categories(artifact, params.get("arguments"))),
                 }
             )
         if decision_v2_payload is not None:

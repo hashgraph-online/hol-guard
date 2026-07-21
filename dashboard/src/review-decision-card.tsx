@@ -28,6 +28,7 @@ import { approvalProofRequiresPassword } from "./approval-proof-inline";
 import { ConsolidatedEvidenceAlert } from "./consolidated-evidence-alert";
 import { plainEnglishRequestTitle } from "./evidence/plain-english";
 import type { DecisionScope, GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
+import type { GuardTemporaryMcpGrantDuration, GuardTemporaryMcpGrantTarget } from "./guard-types";
 import { guardActionPresentation } from "./guard-action";
 import { requiresApprovalPasswordPrompt } from "./approval-gate-utils";
 import { buildEvidenceItems, buildTopAlertItems } from "./review-evidence";
@@ -38,6 +39,15 @@ import {
 } from "./review-scope-controls";
 import { buildWhatWouldHappen, pastDecisionVerb, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
+import { TemporaryMcpApprovalControls } from "./temporary-mcp-approval-controls";
+import {
+  defaultTemporaryMcpDuration,
+  defaultTemporaryMcpTarget,
+  buildTemporaryMcpResolutionFields,
+  temporaryMcpAllowButtonLabel,
+  temporaryMcpApprovalOptions,
+  validTemporaryMcpSelection,
+} from "./temporary-mcp-approval";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact"]);
 
@@ -69,6 +79,8 @@ export function ReviewDecisionCard(props: {
   const [useCooldown, setUseCooldown] = useState(false);
   const [pendingAction, setPendingAction] = useState<"allow" | "block" | null>(null);
   const [pendingContractKey, setPendingContractKey] = useState<string | null>(null);
+  const [mcpGrantTarget, setMcpGrantTarget] = useState<GuardTemporaryMcpGrantTarget>("exact");
+  const [mcpGrantDuration, setMcpGrantDuration] = useState<GuardTemporaryMcpGrantDuration>("once");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allowButtonRef = useRef<HTMLButtonElement>(null);
   const availableScopeChoices = useMemo(
@@ -92,6 +104,10 @@ export function ReviewDecisionCard(props: {
     [item],
   );
   const taskCapabilityCopy = item ? taskCapabilityExplanation(item) : null;
+  const temporaryMcpOptions = useMemo(
+    () => (item ? temporaryMcpApprovalOptions(item) : null),
+    [item],
+  );
   const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
   const decisionContractKey = item
     ? `${item.request_id}:${item.scope_contract_version ?? "legacy"}:${item.scope_contract_digest ?? "legacy"}`
@@ -110,8 +126,22 @@ export function ReviewDecisionCard(props: {
       setUseCooldown(false);
       setPendingAction(null);
       setPendingContractKey(null);
+      const nextTemporaryOptions = temporaryMcpApprovalOptions(item);
+      if (nextTemporaryOptions !== null) {
+        setMcpGrantTarget(defaultTemporaryMcpTarget(nextTemporaryOptions));
+        setMcpGrantDuration(defaultTemporaryMcpDuration(nextTemporaryOptions));
+      } else {
+        setMcpGrantTarget("exact");
+        setMcpGrantDuration("once");
+      }
     }
   }, [item?.request_id, item?.scope_contract_version, item?.scope_contract_digest]);
+
+  useEffect(() => {
+    const selection = validTemporaryMcpSelection(temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration);
+    if (selection.target !== mcpGrantTarget) setMcpGrantTarget(selection.target);
+    if (selection.duration !== mcpGrantDuration) setMcpGrantDuration(selection.duration);
+  }, [temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration]);
 
   useEffect(() => {
     return () => {
@@ -142,6 +172,9 @@ export function ReviewDecisionCard(props: {
           ...(includeGateFields && needsPassword ? { approval_password: approvalPassword } : {}),
           ...(includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {}),
           ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),
+          ...(action === "allow"
+            ? buildTemporaryMcpResolutionFields(temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration)
+            : {}),
         });
         setResolved(action);
         setApprovalPassword("");
@@ -166,6 +199,9 @@ export function ReviewDecisionCard(props: {
       approvalTotpCode,
       useCooldown,
       resolutionBlockReason,
+      temporaryMcpOptions,
+      mcpGrantTarget,
+      mcpGrantDuration,
     ]
   );
 
@@ -383,18 +419,30 @@ export function ReviewDecisionCard(props: {
         )}
 
         {resolutionBlockReason === null && (
-          <ReviewScopeControls
-            commonScopeOptions={commonScopeOptions}
-            broaderScopeOptions={broaderScopeOptions}
-            advancedScopeOptions={advancedScopeOptions}
-            blockScopeOptions={blockScopeOptions}
-            hasAllowScope={hasAllowScope}
-            taskCapabilityCopy={taskCapabilityCopy}
-            allowScope={allowScope}
-            blockScope={blockScope}
-            onAllowScopeChange={setAllowScope}
-            onBlockScopeChange={setBlockScope}
-          />
+          <>
+            {temporaryMcpOptions !== null && (
+              <TemporaryMcpApprovalControls
+                options={temporaryMcpOptions}
+                target={mcpGrantTarget}
+                duration={mcpGrantDuration}
+                onTargetChange={setMcpGrantTarget}
+                onDurationChange={setMcpGrantDuration}
+              />
+            )}
+            <ReviewScopeControls
+              commonScopeOptions={commonScopeOptions}
+              broaderScopeOptions={broaderScopeOptions}
+              advancedScopeOptions={advancedScopeOptions}
+              blockScopeOptions={blockScopeOptions}
+              hasAllowScope={hasAllowScope}
+              taskCapabilityCopy={taskCapabilityCopy}
+              allowScope={allowScope}
+              blockScope={blockScope}
+              showAllowScopes={temporaryMcpOptions === null}
+              onAllowScopeChange={setAllowScope}
+              onBlockScopeChange={setBlockScope}
+            />
+          </>
         )}
         {errorMessage && (
           <div className="guard-fade-in mt-4 rounded-xl border border-brand-purple/25 bg-brand-purple/[0.05] p-4">
@@ -429,7 +477,9 @@ export function ReviewDecisionCard(props: {
             ) : (
               <span className="flex items-center gap-2">
                 <HiMiniCheckCircle className="h-4 w-4" aria-hidden="true" />
-                {allowButtonLabel(allowScope)}
+                {temporaryMcpOptions === null
+                  ? allowButtonLabel(allowScope)
+                  : temporaryMcpAllowButtonLabel(mcpGrantDuration)}
               </span>
             )}
           </ActionButton>
@@ -511,7 +561,11 @@ export function ReviewDecisionCard(props: {
           onUseCooldownChange={handleUseCooldownChange}
           onSubmit={handleModalSubmit}
           onCancel={handleModalCancel}
-          submitLabel={pendingAction === "allow" ? allowButtonLabel(allowScope) : blockButtonLabel(blockScope)}
+          submitLabel={pendingAction === "allow"
+            ? temporaryMcpOptions === null
+              ? allowButtonLabel(allowScope)
+              : temporaryMcpAllowButtonLabel(mcpGrantDuration)
+            : blockButtonLabel(blockScope)}
         />
       )}
     </div>

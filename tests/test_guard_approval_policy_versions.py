@@ -213,7 +213,7 @@ def test_mcp_tool_call_evaluator_policy_version_is_the_only_changed_component(
     monkeypatch.setattr(
         mcp_tool_calls_module,
         "_MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION",
-        "mcp-tool-call-evaluation-v2-test",
+        "mcp-tool-call-evaluation-v3-test",
     )
     _assert_only_policy_component_changed(
         saved_token,
