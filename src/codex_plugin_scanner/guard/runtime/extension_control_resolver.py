@@ -66,12 +66,15 @@ def resolve_extension_controls(
     permission_ids: tuple[str, ...],
     surface: ControlSurface,
     observations: tuple[str, ...] = (),
+    authority_failure: ResolverFailureCode | None = None,
 ) -> ControlResolution:
     """Resolve controls for classified catalog identities without suppressing observations."""
 
     layer_values = tuple(islice(layers, _MAX_LAYERS + 1))
     composed = compose_control_layers(layer_values)
     failures = set(composed.failures)
+    if authority_failure is not None and surface is not ControlSurface.TRUSTED_LOCAL_PROOF:
+        failures.add(ControlResolverFailure(authority_failure))
     if (
         len(layer_values) > _MAX_LAYERS
         or any(len(layer.controls) > _MAX_CONTROLS_PER_LAYER for layer in layer_values)

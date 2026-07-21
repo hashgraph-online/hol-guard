@@ -15,6 +15,14 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
     build_runtime_executable_identity,
     parse_approval_context_token,
 )
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
+    ExtensionControlRuntimeSnapshot,
+    use_extension_control_snapshot,
+)
 
 
 def _context(**overrides: object) -> dict[str, object]:
@@ -74,6 +82,23 @@ def test_token_serializes_only_component_hashes_and_not_source_values() -> None:
             parsed.sandbox_hash,
         )
     )
+
+
+def test_token_is_invalidated_when_extension_control_snapshot_changes() -> None:
+    first_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 1, "a" * 64, ())
+    )
+    second_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 2, "a" * 64, ())
+    )
+
+    with use_extension_control_snapshot(first_snapshot):
+        saved = _token()
+    with use_extension_control_snapshot(second_snapshot):
+        current = _token()
+
+    assert saved != current
+    assert approval_context_tokens_validation_reason(saved, current) == "approval_reuse_policy_changed"
 
 
 def test_arbitrary_artifact_hash_text_is_bound_without_interpretation() -> None:
