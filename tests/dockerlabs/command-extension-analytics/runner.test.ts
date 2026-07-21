@@ -201,6 +201,8 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(runner).toContain('"X-Guard-Dashboard-Session": session');
     expect(runner).toContain("scope_contract_digest: pending.scope_contract_digest");
     expect(runner).toContain("approveWorkflowAuthorization(origin, pending, session)");
+    expect(runner).toContain("const WORKFLOW_AUTHORIZATION_TIMEOUT_MS = 120_000");
+    expect(runner).toContain("Date.now() + WORKFLOW_AUTHORIZATION_TIMEOUT_MS");
     expect(runner).toContain('"-I"');
     expect(runner).toContain("HOL_GUARD_LAB_PYTHON");
     expect(relayFetch).toContain("async function fetchLabGet");

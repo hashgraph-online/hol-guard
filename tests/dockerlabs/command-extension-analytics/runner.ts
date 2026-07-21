@@ -15,6 +15,7 @@ import { runInstalledPlaywright } from "./installed-playwright";
 import { fetchLabGet } from "./relay-fetch";
 import { readDashboardSession } from "./session-handoff";
 const SENTINEL = "guard-private-command-sentinel";
+const WORKFLOW_AUTHORIZATION_TIMEOUT_MS = 120_000;
 interface ReadyEvidence {
   activity_count: number;
   installed_origin: string;
@@ -147,7 +148,11 @@ async function waitForReadyEvidence(
   environment: Record<string, string>,
   runner: CommandRunner,
 ): Promise<ReadyEvidence> {
-  const deadline = Date.now() + 30_000;
+  // Authorization deliberately exercises seven installed hooks before the
+  // daemon emits its evidence. Hosted runners can take longer than 30 seconds
+  // to complete that sequence even though every hook remains within its own
+  // subprocess timeout.
+  const deadline = Date.now() + WORKFLOW_AUTHORIZATION_TIMEOUT_MS;
   while (Date.now() < deadline) {
     try {
       return await readyFromLogs(project, environment, runner);
