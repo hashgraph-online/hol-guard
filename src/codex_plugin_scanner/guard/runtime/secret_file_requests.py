@@ -22,11 +22,14 @@ from pathlib import Path
 from ..models import GuardArtifact
 from .actions import GuardActionEnvelope, apply_patch_target_paths
 from .approval_context import build_runtime_executable_identity
+from .command_decision_adapter import effect_decision_to_dict
 from .command_evaluation import evaluate_command
+from .command_extension_interaction import classify_command_extension_interaction
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .command_model import CanonicalCommand, parse_shell_command
 from .data_flow import extract_heredocs
 from .env_wrapper import parse_env_wrapper
+from .extension_control_contract import ExtensionControlLayer
 from .false_positive_rules import (
     SOURCE_INSPECTION_BENIGN_DOTFILES,
     SOURCE_INSPECTION_EXTENSIONS,
@@ -39,7 +42,13 @@ from .false_positive_rules import (
     split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
-from .github_command_capabilities import GitHubCommandAssessment, classify_github_cli
+from .github_capability_contract import GitHubCommandAssessment
+from .github_capability_interaction import (
+    github_capability_action_class,
+    github_capability_requires_confirmation,
+)
+from .github_shell_capabilities import GitHubShellAnalysis
+from .github_shell_capabilities import classify_github_shell_capabilities as _classify_github_shell_capabilities
 from .interpreter_options import shell_interpreter_command_payload as _shell_interpreter_command_payload
 from .kubernetes_commands import kubernetes_secret_read_source
 from .pytest_config import (
@@ -1533,15 +1542,17 @@ def _destructive_shell_tool_action_request(
             canonical_command=canonical_command,
             interpreter_executable_identities=interpreter_executable_identities,
         )
-    for _extension, rule, _evidence in BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command):
-        if not rule.action_classes or rule.action_classes[0] != "GitHub Actions administrative command":
-            continue
+    extension_interaction = classify_command_extension_interaction(
+        canonical_command,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    )
+    if extension_interaction.priority is not None:
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
-            action_class=rule.action_classes[0],
-            reason=rule.description,
+            action_class=extension_interaction.priority.action_class,
+            reason=extension_interaction.priority.reason,
             canonical_command=canonical_command,
             interpreter_executable_identities=interpreter_executable_identities,
         )
@@ -1554,8 +1565,9 @@ def _destructive_shell_tool_action_request(
             action_class="unresolved shell execution context",
             reason=(
                 "Guard could not prove the working directory for every shell segment and requires one "
-                f"conservative decision ({execution_context_reason}). Use a literal, existing in-workspace directory "
-                "with deterministic cd/pushd/popd control flow, or run the command from the intended directory."
+                f"conservative decision before the user confirms execution ({execution_context_reason}). Use a "
+                "literal, existing in-workspace directory with deterministic cd/pushd/popd control flow, or run the "
+                "command from the intended directory."
             ),
             canonical_command=canonical_command,
             shell_execution_context_hash=execution_context.context_hash,
@@ -1643,40 +1655,30 @@ def _destructive_shell_tool_action_request(
             pytest_config_reason_codes=pytest_config_assessment.reason_codes,
             interpreter_executable_identities=interpreter_executable_identities,
         )
-    github_assessment = _github_shell_capability_assessment(
-        detection_command_text,
-        cwd=cwd,
+    github_assessment = classify_github_shell_capabilities(
+        raw_command_text or detection_command_text,
         home_dir=home_dir,
     )
-    if github_assessment is not None:
-        is_remote_mutation = github_assessment.capability == "mutate_remote"
+    if github_assessment is not None and github_capability_requires_confirmation(github_assessment):
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
-            action_class=(
-                "GitHub remote mutation command" if is_remote_mutation else "Unverified GitHub command capability"
-            ),
+            action_class=github_capability_action_class(github_assessment),
             reason=(
-                f"{github_assessment.detail} Guard requires confirmation because the operation "
-                + (
-                    "can mutate GitHub-hosted state."
-                    if is_remote_mutation
-                    else "is not a statically proven read-only composition."
-                )
+                f"{github_assessment.detail} Guard requires confirmation because the operation is not a "
+                "statically proven read-only composition."
             ),
             canonical_command=canonical_command,
             interpreter_executable_identities=interpreter_executable_identities,
         )
-    for _extension, rule, _evidence in BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command):
-        if not rule.action_classes:
-            continue
+    if extension_interaction.fallback is not None:
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
-            action_class=rule.action_classes[0],
-            reason=rule.description,
+            action_class=extension_interaction.fallback.action_class,
+            reason=extension_interaction.fallback.reason,
             canonical_command=canonical_command,
             interpreter_executable_identities=interpreter_executable_identities,
         )
@@ -1716,63 +1718,28 @@ def _shell_execution_context_validation_reason(context: ShellExecutionContext) -
     return None
 
 
-def _github_shell_capability_assessment(
+def classify_github_shell_capabilities(
     command_text: str,
     *,
-    cwd: Path | None,
     home_dir: Path | None,
-    depth: int = 0,
 ) -> GitHubCommandAssessment | None:
-    """Return the first GitHub capability that requires confirmation."""
+    """Adapt the shared shell parser to focused GitHub capability composition."""
 
-    if depth > 3 or _looks_like_safe_graphql_query_file_workflow(command_text.strip()):
-        return None
-    for nested_command in _shell_command_substitution_payloads(command_text):
-        assessment = _github_shell_capability_assessment(
-            nested_command,
-            cwd=cwd,
-            home_dir=home_dir,
-            depth=depth + 1,
-        )
-        if assessment is not None:
-            return assessment
-
-    parts = _split_shell_parts(command_text)
-    for nested_command in (*_env_split_string_payloads(parts), *_shell_command_scripts(parts)):
-        assessment = _github_shell_capability_assessment(
-            nested_command,
-            cwd=cwd,
-            home_dir=home_dir,
-            depth=depth + 1,
-        )
-        if assessment is not None:
-            return assessment
-
-    for pipeline in _iter_shell_pipelines(parts):
-        contains_github_read = False
-        for segment in pipeline:
-            if _shell_segment_is_command_builtin_lookup(segment):
-                continue
-            command_name, command_index = _shell_segment_primary_command(segment)
-            if command_name != "gh" or command_index is None:
-                continue
-            assessment = _classify_github_shell_segment(segment, command_index)
-            if assessment.capability not in {"read_local", "read_remote", "maintain_remote"}:
-                return assessment
-            contains_github_read = True
-        if not contains_github_read or len(pipeline) < 2:
-            continue
-        for segment in pipeline:
-            command_name, _command_index = _shell_segment_primary_command(segment)
-            if command_name == "gh":
-                continue
-            if not _github_pipeline_companion_is_read_only(segment, home_dir=home_dir):
-                return GitHubCommandAssessment(
-                    capability="unknown",
-                    reason_code="github.pipeline.unverified-companion",
-                    detail="A GitHub read is composed with a pipeline stage that has not been proven read-only.",
-                )
-    return None
+    return _classify_github_shell_capabilities(
+        command_text,
+        analysis=GitHubShellAnalysis(
+            command_substitution_payloads=_shell_command_substitution_payloads,
+            split_parts=_split_shell_parts,
+            nested_commands=lambda parts: (*_env_split_string_payloads(parts), *_shell_command_scripts(parts)),
+            pipelines=_iter_shell_pipelines,
+            command_builtin_is_lookup=_shell_segment_is_command_builtin_lookup,
+            primary_command=_shell_segment_primary_command,
+            pipeline_companion_is_read_only=lambda segment: _github_pipeline_companion_is_read_only(
+                segment,
+                home_dir=home_dir,
+            ),
+        ),
+    )
 
 
 def _shell_segment_is_command_builtin_lookup(segment: list[str]) -> bool:
@@ -1782,25 +1749,6 @@ def _shell_segment_is_command_builtin_lookup(segment: list[str]) -> bool:
         if command_name == "command":
             return _command_builtin_options_are_lookup_only(contextual_segment, index + 1)
     return False
-
-
-def _classify_github_shell_segment(segment: list[str], command_index: int) -> GitHubCommandAssessment:
-    args: list[str] = []
-    index = command_index + 1
-    while index < len(segment):
-        token = segment[index]
-        if token in {"2>&1", "1>&2"}:
-            index += 1
-            continue
-        if token in {">", ">>", ">|", "<", "<<", "<<<"} or any(marker in token for marker in (">", "<")):
-            return GitHubCommandAssessment(
-                capability="write_local",
-                reason_code="github.command.shell-redirection",
-                detail="The GitHub CLI invocation includes local input or output redirection.",
-            )
-        args.append(token)
-        index += 1
-    return classify_github_cli(args)
 
 
 def _github_pipeline_companion_is_read_only(
@@ -4287,6 +4235,7 @@ def build_tool_action_request_artifact(
     *,
     config_path: str,
     source_scope: str,
+    extension_control_layers: tuple[ExtensionControlLayer, ...] = (),
 ) -> GuardArtifact:
     """Build a Guard artifact for a sensitive native tool action request."""
 
@@ -4296,6 +4245,7 @@ def build_tool_action_request_artifact(
         canonical_command=(request.canonical_command if request.raw_command_text is None else None),
         compatibility_action_class=request.action_class,
         compatibility_reason=request.reason,
+        extension_control_layers=extension_control_layers,
     )
     wrapper_chain = tuple(dict.fromkeys((*evaluation.command.wrapper_chain, *request.wrapper_chain)))
     fingerprint_payload = {
@@ -4353,6 +4303,12 @@ def build_tool_action_request_artifact(
             "raw_command_text": request.raw_command_text,
             "wrapper_chain": list(wrapper_chain),
             "command_security_identity": evaluation.command.security_identity,
+            "command_action_floor": evaluation.decision_plane.action,
+            "command_decision_plane": effect_decision_to_dict(evaluation.decision_plane),
+            "extension_control_resolution": {
+                "blocked": evaluation.control_resolution.blocked,
+                "failures": [failure.code.value for failure in evaluation.control_resolution.failures],
+            },
             "command_rule_matches": [owned.to_dict() for owned in evaluation.matches],
             "risk_classes": list(evaluation.risk_classes),
             "command_parse_confidence": evaluation.command.confidence,

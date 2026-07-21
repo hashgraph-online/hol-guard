@@ -1,0 +1,3 @@
+/tests/guard_command_corpus*.py text eol=lf
+/tests/fixtures/guard-command-corpus/*.json text eol=lf
+/src/codex_plugin_scanner/guard/daemon/static/index.html text eol=lf

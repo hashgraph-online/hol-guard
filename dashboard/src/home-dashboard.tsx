@@ -28,12 +28,15 @@ import { approvalProofRequiresPassword } from "./approval-proof-inline";
 import { EvidenceInsightsHomePreview } from "./evidence/evidence-insights-home-preview";
 import { EvidenceInsightsShareModal } from "./evidence/evidence-insights-share-modal";
 import { useReceiptAnalytics } from "./evidence/use-receipt-analytics";
+import { HomeCommandActivityCard } from "./command-activity/command-activity-home-card";
+import { protectionHealthFor } from "./protection-health";
 import { guardActionActivityCopy, guardActionDisposition } from "./guard-action";
 import type {
   GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
   GuardManagedInstall,
   GuardPolicyDecision,
+  GuardProtectionState,
   GuardReceipt,
   GuardRuntimeSnapshot,
 } from "./guard-types";
@@ -136,6 +139,7 @@ export function HomeWorkspace(props: {
   onOpenFleet: () => void;
   onOpenEvidence: () => void;
   onOpenInsights?: () => void;
+  onOpenCommands: () => void;
   onOpenSettings: () => void;
   onOpenSupplyChain?: () => void;
   onClearPolicies: (scope: { harness?: string; all?: boolean }) => void;
@@ -227,6 +231,7 @@ export function HomeWorkspace(props: {
     : [];
   const clearHarnesses = activeInstalls.length > 0 ? activeInstalls.map((i: GuardManagedInstall) => i.harness) : observedHarnesses;
   const watchedAppsCount = activeInstalls.length > 0 ? activeInstalls.length : observedHarnesses.length;
+  const protectionState = snapshot ? protectionHealthFor(snapshot).state : "degraded";
 
   const state = useMemo(
     () =>
@@ -235,8 +240,9 @@ export function HomeWorkspace(props: {
         hasObservedHarnesses: observedHarnesses.length > 0,
         queuedCount,
         watchedAppsCount,
+        protectionState,
       }),
-    [activeInstalls.length, observedHarnesses.length, queuedCount, watchedAppsCount]
+    [activeInstalls.length, observedHarnesses.length, protectionState, queuedCount, watchedAppsCount]
   );
 
   const dailyStory = useMemo(
@@ -328,6 +334,8 @@ export function HomeWorkspace(props: {
         onOpenInsights={props.onOpenInsights}
         onShare={handleShareOpen}
       />
+
+      <HomeCommandActivityCard onOpen={props.onOpenCommands} />
 
       <StreakMilestoneBanner streak={streak} />
 
@@ -530,14 +538,15 @@ export function deriveHomeState(input: {
   hasObservedHarnesses: boolean;
   queuedCount: number;
   watchedAppsCount: number;
+  protectionState: GuardProtectionState;
 }): {
-  heroStatus: "clear" | "needs_review" | "setup_gap";
+  heroStatus: "clear" | "needs_review" | "setup_gap" | "partial" | "degraded";
   headline: string;
   subheadline: string;
   ctaLabel: string;
   ctaTarget: "inbox" | "protect" | "evidence";
 } {
-  const { hasActiveInstalls, hasObservedHarnesses, queuedCount, watchedAppsCount } = input;
+  const { hasActiveInstalls, hasObservedHarnesses, protectionState, queuedCount, watchedAppsCount } = input;
 
   if (queuedCount > 0) {
     return {
@@ -565,6 +574,26 @@ export function deriveHomeState(input: {
       headline: "Finish setup",
       subheadline: "Guard detected apps but they need setup to be fully protected.",
       ctaLabel: "Open Protect",
+      ctaTarget: "protect",
+    };
+  }
+
+  if (protectionState === "degraded") {
+    return {
+      heroStatus: "degraded",
+      headline: "Protection is degraded",
+      subheadline: "Guard is running, but one or more required protection checks failed or remain unproven.",
+      ctaLabel: "Review protection",
+      ctaTarget: "protect",
+    };
+  }
+
+  if (protectionState === "partial") {
+    return {
+      heroStatus: "partial",
+      headline: "Protection is partial",
+      subheadline: "Core protection passes, but complete decision-stream evidence is not available.",
+      ctaLabel: "Review protection",
       ctaTarget: "protect",
     };
   }
@@ -629,6 +658,23 @@ export function buildDailyStory(
   return null;
 }
 
+function harnessPriorityScore(
+  install: GuardManagedInstall | undefined,
+  observed: boolean,
+  pendingCount: number,
+): number {
+  let score = 0;
+  if (install?.active) {
+    score = 3;
+  } else if (install !== undefined) {
+    score = 2;
+  } else if (observed) {
+    score = 1;
+  }
+  if (pendingCount > 0) score += 4;
+  return score;
+}
+
 export function computeStreak(receipts: GuardReceipt[]): number {
   if (receipts.length === 0) return 0;
   const sortedByTime = [...receipts].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
@@ -682,8 +728,8 @@ function AppsAtAGlance(props: {
       const bInstall = props.managedInstalls.find((i) => i.harness === b);
       const aPending = pendingByHarness.get(a) ?? 0;
       const bPending = pendingByHarness.get(b) ?? 0;
-      const aScore = (aInstall?.active ? 3 : aInstall !== undefined ? 2 : props.observedHarnesses.includes(a) ? 1 : 0) + (aPending > 0 ? 4 : 0);
-      const bScore = (bInstall?.active ? 3 : bInstall !== undefined ? 2 : props.observedHarnesses.includes(b) ? 1 : 0) + (bPending > 0 ? 4 : 0);
+      const aScore = harnessPriorityScore(aInstall, props.observedHarnesses.includes(a), aPending);
+      const bScore = harnessPriorityScore(bInstall, props.observedHarnesses.includes(b), bPending);
       return bScore - aScore;
     });
   }, [props.managedInstalls, props.observedHarnesses, pendingByHarness]);

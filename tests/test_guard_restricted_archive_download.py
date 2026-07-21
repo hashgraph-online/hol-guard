@@ -355,8 +355,10 @@ def test_restricted_archive_download_enforces_deadline_while_writing_blob(
 ) -> None:
     response = _FakeResponse(200, body=b"archive bytes")
     real_write = downloader.os.write
+    worker_descriptors: list[int] = []
 
     def slow_write(file_descriptor: int, payload: bytes | memoryview) -> int:
+        worker_descriptors.append(file_descriptor)
         time.sleep(0.25)
         return real_write(file_descriptor, payload)
 
@@ -376,6 +378,17 @@ def test_restricted_archive_download_enforces_deadline_while_writing_blob(
     assert result.code == "external_archive_download_timeout"
     assert elapsed < 0.15
     assert list(tmp_path.iterdir()) == []
+
+    protected_payload = b"SQLite format 3\x00protected database bytes"
+    protected_path = tmp_path / "protected.db"
+    with protected_path.open("w+b") as protected_file:
+        protected_file.write(protected_payload)
+        protected_file.flush()
+        assert worker_descriptors
+        assert protected_file.fileno() != worker_descriptors[0]
+        time.sleep(0.3)
+        protected_file.seek(0)
+        assert protected_file.read() == protected_payload
 
 
 def test_restricted_archive_download_rejects_oversized_response_headers(

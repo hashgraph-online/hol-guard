@@ -1975,6 +1975,12 @@ def _current_guard_daemon_runtime_fingerprint() -> str:
     return _runtime_fingerprint_cache
 
 
+def current_guard_daemon_runtime_fingerprint() -> str:
+    """Return the installed runtime identity used for daemon compatibility."""
+
+    return _current_guard_daemon_runtime_fingerprint()
+
+
 def _guard_daemon_start_in_progress(guard_home: Path) -> bool:
     payload = _load_state(guard_home)
     if not isinstance(payload, dict):

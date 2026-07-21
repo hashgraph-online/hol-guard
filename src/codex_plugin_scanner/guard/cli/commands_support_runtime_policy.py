@@ -25,6 +25,7 @@ from ..runtime.approval_context import (
     build_runtime_launch_identity,
 )
 from ..runtime.command_extensions import risk_classes_for_command_action
+from ..runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
 from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
@@ -432,6 +433,7 @@ def _runtime_hook_approval_context_token(
     current_action: GuardAction,
     data_flow_signals: Sequence[object],
     scanner_evidence: Sequence[object],
+    workflow_approval_record: GitHubWorkflowApprovalRecord | None = None,
 ) -> str:
     """Bind a saved hook approval to the exact reviewed runtime context.
 
@@ -485,6 +487,31 @@ def _runtime_hook_approval_context_token(
                 "identity": executable_identity,
             },
         )
+    elif workflow_approval_record is not None:
+        # GitHub workflow capabilities intentionally permit a retry after an
+        # executable's original bytes are restored. Their signed binding
+        # already covers the canonical executable content, command, workspace,
+        # environment, configuration, manifests, lockfiles, and sandbox. Do
+        # not add mutable inode timestamps to that independently verified
+        # identity or an exact restored retry can never reach the capability
+        # claim that revalidates it.
+        executable_identity = {
+            "launch_cwd": _normalized_runtime_context_path(launch_cwd),
+            "record": workflow_approval_record.to_dict(),
+            "status": "github_workflow_capability_bound",
+        }
+        if shell_context_present:
+            shell_executable_identities = tuple(
+                {
+                    "cwd": cwd,
+                    "identity": {
+                        "launch_cwd": cwd,
+                        "record": workflow_approval_record.to_dict(),
+                        "status": "github_workflow_capability_bound",
+                    },
+                }
+                for cwd in shell_effective_cwds
+            )
     else:
         executable_identity = _runtime_hook_executable_identity(
             artifact,
@@ -750,13 +777,15 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         artifact.artifact_id,
         artifact.publisher,
     )
+    command_action_floor = _runtime_artifact_command_action_floor(artifact)
 
     def with_config_policy(action: GuardAction) -> GuardAction:
         # Artifact/publisher/harness settings are more-specific resolutions of
         # the global default, not additional inputs.  Scanner/risk results are
         # independent and therefore remain a floor even for an exact allow.
         current_config_action = configured_override if configured_override is not None else config.default_action
-        return most_restrictive_guard_action(action, current_config_action)
+        actions = (action, current_config_action, command_action_floor)
+        return most_restrictive_guard_action(*(item for item in actions if item is not None))
 
     risk_classes = _runtime_artifact_risk_classes(artifact)
     has_configured_risk_action = any(
@@ -798,6 +827,13 @@ def _resolve_configured_risk_action(config: GuardConfig, risk_class: str, *, har
 def _runtime_artifact_guard_default_action(artifact: GuardArtifact) -> GuardAction | None:
     value = artifact.metadata.get("guard_default_action")
     return normalize_guard_action(value, unknown_action="require-reapproval") if value is not None else None
+
+def _runtime_artifact_command_action_floor(artifact: GuardArtifact) -> GuardAction | None:
+    if artifact.artifact_type != "tool_action_request":
+        return None
+    if "command_action_floor" not in artifact.metadata:
+        return None
+    return normalize_guard_action(artifact.metadata.get("command_action_floor"), unknown_action="block")
 
 def _runtime_action_data_flow_signals(
     action_envelope: GuardActionEnvelope | None,

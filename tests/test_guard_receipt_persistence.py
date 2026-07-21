@@ -472,6 +472,13 @@ class TestReceiptAnalytics:
         store.add_receipt(_make_receipt(receipt_id="r-warn-upgrade", policy_decision="warn"))
 
         with store._connect() as connection:
+            migration_versions = {
+                int(row["version"])
+                for row in connection.execute(
+                    "select version from schema_migrations where version in (10, 16)"
+                ).fetchall()
+            }
+            assert migration_versions == {10, 16}
             for table in (
                 "receipt_aggregate_totals",
                 "receipt_daily_rollups",
@@ -479,7 +486,7 @@ class TestReceiptAnalytics:
                 "receipt_artifact_rollups",
             ):
                 connection.execute(f"update {table} set allowed = 0, reviewed = 1")
-            connection.execute("delete from schema_migrations where version = 10")
+            connection.execute("delete from schema_migrations where version = 16")
 
         upgraded = GuardStore(guard_home)
         analytics = upgraded.receipt_analytics(top_limit=5)

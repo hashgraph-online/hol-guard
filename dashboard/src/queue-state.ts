@@ -1,5 +1,6 @@
 import { useRef, useCallback } from "react";
-import type { GuardApprovalRequest, GuardQueueResolutionResult } from "./guard-types";
+import type { GuardApprovalRequest, GuardProtectionState, GuardQueueResolutionResult } from "./guard-types";
+import { requestSupportsScope } from "./approval-scopes";
 
 export type QueueSortDirection = "newest" | "oldest" | "category" | "highest_risk";
 
@@ -413,7 +414,10 @@ export function bulkApprovalRiskTier(group: QueueGroup): BulkApprovalTier {
 }
 
 export function isBulkApprovableGroup(group: QueueGroup): boolean {
-  return bulkApprovalRiskTier(group) !== "blocked";
+  return (
+    bulkApprovalRiskTier(group) !== "blocked" &&
+    requestSupportsScope(group.primary, "allow", "artifact")
+  );
 }
 
 export function countSensitiveFileReadGroups(groups: QueueGroup[]): number {
@@ -1188,7 +1192,8 @@ export function buildNextUpChipText(item: GuardApprovalRequest): string {
 
 export function buildHomePrimaryState(
   pendingCount: number,
-  watchedAppsCount: number
+  watchedAppsCount: number,
+  protectionState: GuardProtectionState = "degraded",
 ): HomePrimaryState {
   if (pendingCount > 0) {
     return {
@@ -1202,6 +1207,15 @@ export function buildHomePrimaryState(
       status: "setup_needed",
       copy: "Guard is running but no apps are connected yet.",
       ctaLabel: "Set up protection",
+    };
+  }
+  if (protectionState !== "protected") {
+    return {
+      status: "setup_needed",
+      copy: protectionState === "partial"
+        ? "App protection is partial. Review the missing evidence before relying on it."
+        : "App protection is degraded. Review required checks before relying on it.",
+      ctaLabel: "Review protection",
     };
   }
   return {

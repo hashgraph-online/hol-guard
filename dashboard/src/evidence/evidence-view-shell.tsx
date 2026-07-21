@@ -2,6 +2,7 @@ import type { EvidenceView } from "./evidence-types";
 
 export const VIEW_TABS: { key: EvidenceView; label: string }[] = [
   { key: "actions", label: "All actions" },
+  { key: "commands", label: "Commands" },
   { key: "insights", label: "Insights" },
   { key: "apps", label: "Apps" },
   { key: "categories", label: "Categories" },

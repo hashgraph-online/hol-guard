@@ -62,8 +62,6 @@ def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch) -> None:
         "record_local_wheel_receipt",
         lambda _artifact, *, guard_home, installed_version: guard_home / "local-wheel-source.json",
     )
-
-
 def _command_handler_argv(handler: dict[str, object]) -> tuple[str, ...]:
     command = handler.get("command")
     args = handler.get("args")
@@ -8895,9 +8893,9 @@ url = http://127.0.0.1:8787/guard-canary
 
         output = capsys.readouterr().out
 
-        assert "This device is protected locally" in output
+        assert "Guard is running locally" in output
         assert "Sign in to finish Guard Cloud setup" in output
-        assert "Local protection is active." in output
+        assert "Local Guard is available." in output
         assert "Sign in on the Guard connect page" in output
         assert "Machine registered, first proof pending" not in output
         assert "Dashboard proof is still syncing" not in output
@@ -8922,9 +8920,9 @@ url = http://127.0.0.1:8787/guard-canary
 
         output = capsys.readouterr().out
 
-        assert "This device is protected locally" in output
+        assert "Guard is running locally" in output
         assert "Upgrade to sync this device to Guard Cloud" in output
-        assert "Local protection is active." in output
+        assert "Local Guard is available." in output
         assert "Upgrade your Guard plan" in output
         assert "shared proof" in output
         assert "Fleet history to Guard Cloud" in output
@@ -8947,7 +8945,7 @@ url = http://127.0.0.1:8787/guard-canary
 
         output = capsys.readouterr().out
 
-        assert "This device is protected locally" in output
+        assert "Guard is running locally" in output
         assert "Upgrade to sync this device to Guard Cloud" in output
         assert "First Guard Cloud proof is on the way" not in output
 

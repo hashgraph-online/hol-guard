@@ -8,6 +8,7 @@ import {
   CODEX_RESUME_STATUSES
 } from "./guard-types";
 import { computeTrendBuckets } from "./evidence/evidence-metrics";
+import { normalizeProtectionHealth, protectionHeadlineFor } from "./protection-health";
 import {
   AUTHORITATIVE_DECISION_INCONSISTENT,
   guardActionDisposition,
@@ -58,6 +59,7 @@ import type {
   GuardReceiptArtifactStat,
   GuardReceiptDailyActivity,
   GuardReceiptHarnessStat,
+  GuardRuntimeState,
   GuardRuntimeSnapshot,
   GuardCloudConnectStatusResponse,
   SupplyChainBundle,
@@ -95,18 +97,39 @@ const GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE = 5;
 const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
 const GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION = 1;
 const GUARD_DAEMON_RECONNECT_NONCE_BYTES = 32;
+const RUNTIME_HEARTBEAT_MAX_AGE_MS = 30_000;
+const RUNTIME_HEARTBEAT_FUTURE_TOLERANCE_MS = 5_000;
 let guardTokenOverride: string | null = null;
 let guardTokenLocationKey: string | null = null;
 let guardDaemonReconnectDiagnostic = "dashboard_reconnect_not_started";
 
 type RawGuardApprovalRequest = Omit<
   GuardApprovalRequest,
-  "action_envelope_json" | "decision_v2_json" | "policy_action" | "decision_contract_error"
+  | "action_envelope_json"
+  | "decision_v2_json"
+  | "policy_action"
+  | "decision_contract_error"
+  | "recommended_scope"
+  | "allowed_scopes"
+  | "scope_contract_version"
+  | "scope_contract_digest"
+  | "allowed_scopes_by_action"
+  | "recommended_scope_by_action"
+  | "scope_restrictions"
+  | "task_capability_eligibility"
 > & {
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
   policy_action?: unknown;
   decision_contract_error?: unknown;
+  recommended_scope?: unknown;
+  allowed_scopes?: unknown;
+  scope_contract_version?: unknown;
+  scope_contract_digest?: unknown;
+  allowed_scopes_by_action?: unknown;
+  recommended_scope_by_action?: unknown;
+  scope_restrictions?: unknown;
+  task_capability_eligibility?: unknown;
 };
 
 type RawGuardReceipt = Omit<GuardReceipt, "action_envelope_json" | "policy_decision"> & {
@@ -133,6 +156,8 @@ type RuntimeSnapshotPayload = Omit<
   | "supply_chain"
   | "managed_installs"
   | "cloud_command_capability"
+  | "protection_health"
+  | "runtime_state"
   | "latest_receipts"
   | "inventory"
 > & {
@@ -143,6 +168,8 @@ type RuntimeSnapshotPayload = Omit<
   supply_chain?: unknown;
   managed_installs?: unknown;
   cloud_command_capability?: unknown;
+  protection_health?: unknown;
+  runtime_state?: unknown;
 };
 
 type QueueResolutionPayload = Omit<
@@ -912,6 +939,18 @@ async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promi
   return fetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
 }
 
+export async function fetchCommandActivityApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    typeof input === "string" &&
+    /^\/v1\/(?:command-activity(?:\/(?:analytics|diagnostics|events|feedback))?|command-extensions)(?:\?[^#]*)?$/.test(
+      input,
+    );
+  if (!approvedPath) {
+    throw new Error("Invalid command activity API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
 function guardAuthHeaders(): HeadersInit {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
@@ -1266,6 +1305,36 @@ function parseLegacyPackageActionMetadata(raw: unknown): LegacyPackageActionMeta
   return { recognized: true, action: isRecognizedGuardActionInput(action) ? normalizeGuardAction(action) : null };
 }
 
+const DECISION_SCOPE_VALUES: ReadonlySet<string> = new Set([
+  "artifact",
+  "workspace",
+  "publisher",
+  "harness",
+  "global",
+]);
+
+function isDecisionScope(value: unknown): value is DecisionScope {
+  return typeof value === "string" && DECISION_SCOPE_VALUES.has(value);
+}
+
+function parseDecisionScopeList(value: unknown): DecisionScope[] | null {
+  if (!Array.isArray(value) || !value.every(isDecisionScope)) {
+    return null;
+  }
+  return [...new Set(value)];
+}
+
+function parseStringList(value: unknown): string[] | null {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+    return null;
+  }
+  return [...new Set(value)];
+}
+
+function parseOptionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
 export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardApprovalRequest {
   const { decision_contract_error: rawContractError, ...baseItem } = item;
   const policyAction = normalizeGuardAction(item.policy_action);
@@ -1302,9 +1371,63 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
         legacyActionMetadata.action,
       )
     : policyAction;
+  const hasScopeContract = [
+    item.scope_contract_version,
+    item.scope_contract_digest,
+    item.allowed_scopes_by_action,
+    item.recommended_scope_by_action,
+    item.scope_restrictions,
+    item.task_capability_eligibility,
+  ].some((value) => value !== undefined && value !== null);
+  const scopeContractVersion = parseOptionalString(item.scope_contract_version);
+  const scopeContractDigest = parseOptionalString(item.scope_contract_digest);
+  const hasCompleteScopeContract = scopeContractVersion !== null && scopeContractDigest !== null;
+  const rawAllowedByAction = isRecord(item.allowed_scopes_by_action)
+    ? item.allowed_scopes_by_action
+    : {};
+  const rawRecommendedByAction = isRecord(item.recommended_scope_by_action)
+    ? item.recommended_scope_by_action
+    : {};
+  const rawTaskEligibility = isRecord(item.task_capability_eligibility)
+    ? item.task_capability_eligibility
+    : null;
+  const taskReasonCodes = parseStringList(rawTaskEligibility?.reason_codes);
+  const taskCapabilityEligibility =
+    typeof rawTaskEligibility?.eligible === "boolean" && taskReasonCodes !== null
+      ? {
+          eligible: rawTaskEligibility.eligible,
+          reason_codes: taskReasonCodes,
+        }
+      : undefined;
+  const allowedScopes = parseDecisionScopeList(item.allowed_scopes);
+  const scopeRestrictions = parseStringList(item.scope_restrictions);
   return {
     ...baseItem,
     policy_action: failClosedPolicyAction,
+    recommended_scope: isDecisionScope(item.recommended_scope) ? item.recommended_scope : null,
+    allowed_scopes: allowedScopes ?? undefined,
+    scope_contract_version: hasScopeContract ? scopeContractVersion : undefined,
+    scope_contract_digest: hasScopeContract ? scopeContractDigest : undefined,
+    allowed_scopes_by_action: hasScopeContract
+      ? {
+          allow: hasCompleteScopeContract ? parseDecisionScopeList(rawAllowedByAction.allow) ?? [] : [],
+          block: hasCompleteScopeContract ? parseDecisionScopeList(rawAllowedByAction.block) ?? [] : [],
+        }
+      : undefined,
+    recommended_scope_by_action: hasScopeContract
+      ? {
+          allow:
+            hasCompleteScopeContract && isDecisionScope(rawRecommendedByAction.allow)
+              ? rawRecommendedByAction.allow
+              : null,
+          block:
+            hasCompleteScopeContract && isDecisionScope(rawRecommendedByAction.block)
+              ? rawRecommendedByAction.block
+              : null,
+        }
+      : undefined,
+    scope_restrictions: hasScopeContract ? scopeRestrictions ?? [] : undefined,
+    task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : undefined,
     action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
     ...(hasDecisionContractError
@@ -1480,8 +1603,17 @@ function normalizeCloudCommandCapability(raw: unknown): GuardRuntimeSnapshot["cl
 }
 
 export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): GuardRuntimeSnapshot {
+  const protectionHealth = normalizeProtectionHealth(snapshot.protection_health);
+  const runtimeState = normalizeRuntimeState(snapshot.runtime_state);
+  const headline = protectionHeadlineFor({
+    health: protectionHealth,
+    runtimeActive: runtimeState !== null,
+    pendingCount: snapshot.pending_count,
+  });
   return {
     ...snapshot,
+    ...headline,
+    runtime_state: runtimeState,
     items: normalizeApprovalRequests(snapshot.items),
     latest_receipts: normalizeReceipts(snapshot.latest_receipts),
     inventory: normalizeInventory(snapshot.inventory),
@@ -1489,7 +1621,89 @@ export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): Guar
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
     managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
     cloud_command_capability: normalizeCloudCommandCapability(snapshot.cloud_command_capability),
+    protection_health: protectionHealth,
   };
+}
+
+function normalizeRuntimeState(raw: unknown): GuardRuntimeState | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const sessionId = raw["session_id"];
+  const daemonHost = raw["daemon_host"];
+  const daemonPort = raw["daemon_port"];
+  const startedAt = raw["started_at"];
+  const lastHeartbeatAt = raw["last_heartbeat_at"];
+  const approvalCenterUrl = raw["approval_center_url"];
+  if (
+    typeof sessionId !== "string" ||
+    sessionId.length === 0 ||
+    typeof daemonHost !== "string" ||
+    !isLoopbackRuntimeHost(daemonHost) ||
+    typeof daemonPort !== "number" ||
+    !Number.isInteger(daemonPort) ||
+    daemonPort <= 0 ||
+    daemonPort > 65_535 ||
+    typeof startedAt !== "string" ||
+    parseAwareTimestamp(startedAt) === null ||
+    typeof lastHeartbeatAt !== "string" ||
+    !isFreshAwareTimestamp(lastHeartbeatAt) ||
+    typeof approvalCenterUrl !== "string" ||
+    !isMatchingRuntimeUrl(approvalCenterUrl, daemonHost, daemonPort)
+  ) {
+    return null;
+  }
+  return {
+    session_id: sessionId,
+    daemon_host: daemonHost,
+    daemon_port: daemonPort,
+    started_at: startedAt,
+    last_heartbeat_at: lastHeartbeatAt,
+    approval_center_url: approvalCenterUrl,
+  };
+}
+
+function parseAwareTimestamp(value: string): number | null {
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/u.test(value)) {
+    return null;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function isFreshAwareTimestamp(value: string): boolean {
+  const timestamp = parseAwareTimestamp(value);
+  if (timestamp === null) {
+    return false;
+  }
+  const now = Date.now();
+  return (
+    timestamp >= now - RUNTIME_HEARTBEAT_MAX_AGE_MS &&
+    timestamp <= now + RUNTIME_HEARTBEAT_FUTURE_TOLERANCE_MS
+  );
+}
+
+function isLoopbackRuntimeHost(value: string): boolean {
+  return value === "127.0.0.1" || value === "localhost" || value === "::1";
+}
+
+function isMatchingRuntimeUrl(value: string, daemonHost: string, daemonPort: number): boolean {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.startsWith("[") ? url.hostname.slice(1, -1) : url.hostname;
+    return (
+      url.protocol === "http:" &&
+      hostname === daemonHost &&
+      Number(url.port) === daemonPort &&
+      url.username.length === 0 &&
+      url.password.length === 0 &&
+      url.pathname === "/" &&
+      url.search.length === 0 &&
+      url.hash.length === 0
+    );
+  } catch {
+    return false;
+  }
 }
 
 function normalizeQueueCopy(raw: unknown): GuardQueueResolutionCopy | null {
@@ -2552,6 +2766,8 @@ export async function resolveRequest(input: {
   scope: DecisionScope;
   workspace?: string;
   reason: string;
+  scope_contract_version?: string;
+  scope_contract_digest?: string;
 }): Promise<void> {
   await resolveRequestWithQueueResult(input);
 }
@@ -2672,6 +2888,8 @@ export async function resolveRequestWithQueueResult(input: {
   approval_password?: string;
   approval_totp_code?: string;
   approval_gate_use_cooldown?: boolean;
+  scope_contract_version?: string;
+  scope_contract_digest?: string;
 }): Promise<GuardQueueResolutionResult> {
   if (isGuardDemoMode()) {
     return {
@@ -2701,6 +2919,12 @@ export async function resolveRequestWithQueueResult(input: {
       scope: input.scope,
       workspace: input.workspace || undefined,
       reason: input.reason || undefined,
+      ...(input.scope_contract_version !== undefined
+        ? { scope_contract_version: input.scope_contract_version }
+        : {}),
+      ...(input.scope_contract_digest !== undefined
+        ? { scope_contract_digest: input.scope_contract_digest }
+        : {}),
       ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
       ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
       ...(input.approval_gate_use_cooldown !== undefined ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {})

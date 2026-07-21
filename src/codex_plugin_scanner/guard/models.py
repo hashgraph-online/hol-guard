@@ -255,5 +255,10 @@ class GuardRuntimeState:
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
-        payload["approval_center_url"] = f"http://{self.daemon_host}:{self.daemon_port}"
+        payload["approval_center_url"] = format_local_http_origin(self.daemon_host, self.daemon_port)
         return payload
+
+
+def format_local_http_origin(host: str, port: int) -> str:
+    authority_host = f"[{host}]" if ":" in host and not host.startswith("[") else host
+    return f"http://{authority_host}:{port}"

@@ -45,7 +45,15 @@ def package_shim_command_requires_guard(
         return False
     if normalized_manager not in _PACKAGE_SHIM_PARSER_MANAGERS:
         return True
-    command = [normalized_manager, *[str(argument) for argument in argv]]
+    normalized_argv = tuple(str(argument) for argument in argv)
+    if normalized_manager == "bun":
+        return normalized_argv not in {
+            ("--help",),
+            ("--version",),
+            ("-v",),
+            ("help",),
+        }
+    command = [normalized_manager, *normalized_argv]
     from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 
     intent = parse_package_intent(shlex.join(command), workspace=workspace)

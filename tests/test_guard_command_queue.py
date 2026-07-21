@@ -3346,9 +3346,11 @@ def test_executor_resolves_harness_scope_with_block(tmp_path: Path) -> None:
             super().__init__(guard_home)
             self.request_row = _approval_request_row(
                 "request-harness-block",
+                artifact_id="cursor:project:tool-action:request-harness-block",
                 policy_action="require-reapproval",
                 recommended_scope="harness",
             )
+            self.request_row["artifact_type"] = "tool_action_request"
             self.resolved: list[dict[str, object]] = []
             self.claimed_receipts: list[dict[str, str]] = []
 

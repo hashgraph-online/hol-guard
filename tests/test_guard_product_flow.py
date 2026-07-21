@@ -540,7 +540,8 @@ args = ["workspace-skill.js", "--changed"]
 
         assert rc == 0
         assert output["cloud_state"] == "paired_waiting"
-        assert "stays locally protected" in output["cloud_state_detail"]
+        assert "Local Guard remains available" in output["cloud_state_detail"]
+        assert "protected" not in output["cloud_state_detail"].lower()
         assert "needs repair before the first shared proof can land" not in output["cloud_state_detail"]
 
     def test_guard_status_reports_post_sync_reauth_as_local_only(self, tmp_path, capsys):
