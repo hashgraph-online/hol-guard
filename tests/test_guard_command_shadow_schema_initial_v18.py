@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from codex_plugin_scanner.guard import store_command_shadow_schema as shadow_schema
+from codex_plugin_scanner.guard.store_command_shadow_schema_v18 import INITIAL_V18_SCHEMA_STATEMENTS
 
 _OCCURRED_AT = datetime(2026, 7, 21, 12, 0, tzinfo=timezone.utc)
 
@@ -20,7 +21,7 @@ def test_migration_upgrades_initial_v18_evaluator_schema_and_preserves_rows(tmp_
         connection.execute(
             "create table command_activity (activity_id text primary key, occurred_at text not null) strict"
         )
-        for statement in shadow_schema._INITIAL_V18_SCHEMA_STATEMENTS:
+        for statement in INITIAL_V18_SCHEMA_STATEMENTS:
             connection.execute(statement)
         occurred_at = _OCCURRED_AT.isoformat()
         connection.execute("insert into command_activity values (?, ?)", ("activity:initial-v18", occurred_at))
@@ -41,9 +42,9 @@ def test_migration_upgrades_initial_v18_evaluator_schema_and_preserves_rows(tmp_
             (shadow_schema.COMMAND_SHADOW_MIGRATION_VERSION, occurred_at),
         )
 
-        assert shadow_schema._expected_schema(
-            shadow_schema._INITIAL_V18_SCHEMA_STATEMENTS
-        ) != shadow_schema._expected_schema(shadow_schema._SCHEMA_STATEMENTS)
+        assert shadow_schema._expected_schema(INITIAL_V18_SCHEMA_STATEMENTS) != shadow_schema._expected_schema(
+            shadow_schema._SCHEMA_STATEMENTS
+        )
 
         shadow_schema.ensure_command_shadow_schema(connection, applied_at=occurred_at)
 

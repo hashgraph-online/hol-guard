@@ -9,6 +9,7 @@ import sqlite3
 from typing import Final, cast
 
 from .runtime.effect_decision import EFFECT_DECISION_SCHEMA_VERSION
+from .store_command_shadow_schema_v18 import INITIAL_V18_SCHEMA_STATEMENTS
 
 COMMAND_SHADOW_LEGACY_MIGRATION_VERSION: Final = 15
 COMMAND_SHADOW_PREVIOUS_MIGRATION_VERSION: Final = 17
@@ -132,13 +133,9 @@ _SCHEMA_STATEMENTS: Final = (
     end""",
 )
 
-_CURRENT_EVALUATOR_SCHEMA_CHECK: Final = "\n".join(
-    (
-        "evaluator_schema_version text not null check (",
-        f"        evaluator_schema_version in ({_EVALUATOR_SCHEMA_VERSIONS_SQL})",
-        "      )",
-    )
-)
+_CURRENT_EVALUATOR_SCHEMA_CHECK: Final = f"""evaluator_schema_version text not null check (
+        evaluator_schema_version in ({_EVALUATOR_SCHEMA_VERSIONS_SQL})
+      )"""
 _PREVIOUS_SCHEMA_STATEMENTS: Final = tuple(
     statement.replace(
         _CURRENT_EVALUATOR_SCHEMA_CHECK,
@@ -146,23 +143,6 @@ _PREVIOUS_SCHEMA_STATEMENTS: Final = tuple(
     )
     for statement in _SCHEMA_STATEMENTS
 )
-_INITIAL_V18_EVALUATOR_SCHEMA_VERSIONS_SQL: Final = "'1.0.0', '1.1.0'"
-_INITIAL_V18_EVALUATOR_SCHEMA_CHECK: Final = "".join(
-    (
-        "evaluator_schema_version text not null check (",
-        "evaluator_schema_version in (",
-        _INITIAL_V18_EVALUATOR_SCHEMA_VERSIONS_SQL,
-        "))",
-    )
-)
-_INITIAL_V18_SCHEMA_STATEMENTS: Final = tuple(
-    statement.replace(
-        _CURRENT_EVALUATOR_SCHEMA_CHECK,
-        _INITIAL_V18_EVALUATOR_SCHEMA_CHECK,
-    )
-    for statement in _SCHEMA_STATEMENTS
-)
-
 _LEGACY_SCHEMA_STATEMENTS: Final = (
     f"""create table command_activity_shadow_evaluations (
       activity_id text primary key references command_activity(activity_id) on delete cascade,
@@ -230,7 +210,7 @@ def ensure_command_shadow_schema(connection: sqlite3.Connection, *, applied_at: 
     try:
         current = _expected_schema(_SCHEMA_STATEMENTS)
         previous = _expected_schema(_PREVIOUS_SCHEMA_STATEMENTS)
-        initial_v18 = _expected_schema(_INITIAL_V18_SCHEMA_STATEMENTS)
+        initial_v18 = _expected_schema(INITIAL_V18_SCHEMA_STATEMENTS)
         legacy = _expected_schema(_LEGACY_SCHEMA_STATEMENTS)
         actual = _read_schema(
             connection,
@@ -243,7 +223,7 @@ def ensure_command_shadow_schema(connection: sqlite3.Connection, *, applied_at: 
         elif actual == previous:
             _upgrade_schema(connection, source_statements=_PREVIOUS_SCHEMA_STATEMENTS, suffix="v17")
         elif actual == initial_v18:
-            _upgrade_schema(connection, source_statements=_INITIAL_V18_SCHEMA_STATEMENTS, suffix="initial_v18")
+            _upgrade_schema(connection, source_statements=INITIAL_V18_SCHEMA_STATEMENTS, suffix="initial_v18")
         elif actual and actual != current:
             raise RuntimeError("incompatible command shadow schema objects")
         elif not actual:
