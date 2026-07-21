@@ -237,7 +237,7 @@ def evaluate_command(
             )
         )
     )
-    extension_ids = tuple(sorted({owned.extension.extension_id for owned in owned_matches}))
+    extension_ids = tuple(sorted({observation.extension.extension_id for observation in observations}))
     permission_ids = tuple(
         sorted(
             {
