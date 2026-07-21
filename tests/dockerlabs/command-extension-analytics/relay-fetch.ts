@@ -1,4 +1,4 @@
-export async function fetchLabGet(url: string, init?: RequestInit): Promise<Response> {
+export async function fetchLabIdempotent(url: string, init?: RequestInit): Promise<Response> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -9,4 +9,8 @@ export async function fetchLabGet(url: string, init?: RequestInit): Promise<Resp
     }
   }
   throw lastError;
+}
+
+export async function fetchLabGet(url: string, init?: RequestInit): Promise<Response> {
+  return await fetchLabIdempotent(url, init);
 }

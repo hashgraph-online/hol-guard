@@ -12,7 +12,7 @@ import {
 } from "./lab-process";
 import { teardownLab, type TeardownEvidence } from "./teardown";
 import { runInstalledPlaywright } from "./installed-playwright";
-import { fetchLabGet } from "./relay-fetch";
+import { fetchLabGet, fetchLabIdempotent } from "./relay-fetch";
 import { readDashboardSession } from "./session-handoff";
 const SENTINEL = "guard-private-command-sentinel";
 const WORKFLOW_AUTHORIZATION_TIMEOUT_MS = 120_000;
@@ -204,6 +204,7 @@ async function apiJson(
   path: string,
   session: string,
   init: RequestInit = {},
+  retryTransientReset = false,
 ): Promise<Record<string, unknown>> {
   const request = `${origin}${path}`;
   const options = {
@@ -216,7 +217,9 @@ async function apiJson(
   };
   const response = init.method === undefined
     ? await fetchLabGet(request, options)
-    : await fetch(request, options);
+    : retryTransientReset
+      ? await fetchLabIdempotent(request, options)
+      : await fetch(request, options);
   if (!response.ok) throw new Error(`${path} returned ${response.status}: ${await response.text()}`);
   return await response.json() as Record<string, unknown>;
 }
@@ -236,21 +239,29 @@ async function approveWorkflowAuthorization(
   ) {
     throw new Error("workflow request scope contract did not reconcile");
   }
-  const unauthenticated = await fetch(`${origin}${path}/approve`, {
+  const unauthenticated = await fetchLabIdempotent(`${origin}${path}/approve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "allow", scope: "artifact" }),
   });
   if (unauthenticated.status !== 401) throw new Error("workflow approval endpoint did not require authentication");
-  const response = await apiJson(origin, `${path}/approve`, session, {
-    method: "POST",
-    body: JSON.stringify({
-      action: "allow",
-      scope: "artifact",
-      scope_contract_digest: pending.scope_contract_digest,
-      scope_contract_version: pending.scope_contract_version,
-    }),
-  });
+  // The daemon guarantees exact action/scope replays are idempotent, so a
+  // relay reset after commit can safely repeat this one mutation.
+  const response = await apiJson(
+    origin,
+    `${path}/approve`,
+    session,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        action: "allow",
+        scope: "artifact",
+        scope_contract_digest: pending.scope_contract_digest,
+        scope_contract_version: pending.scope_contract_version,
+      }),
+    },
+    true,
+  );
   const resolved = response.resolved_request;
   if (
     response.resolved !== true
