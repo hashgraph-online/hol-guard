@@ -10,8 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLISH_WORKFLOW = ROOT / ".github" / "workflows" / "publish.yml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
-CI_BRANCHES = ["main", "release/2.1"]
-PUBLISH_BRANCHES = ["main", "release/2.1"]
+PUSH_BRANCHES = ["main"]
+PR_BRANCHES = ["main", "release/2.1"]
 RELEASE_MAINTAINERS = {"@kantorcodes", "@deep-purple-boots"}
 
 
@@ -33,10 +33,10 @@ def test_release_branches_run_ci_and_pr_canaries() -> None:
     ci = _workflow(CI_WORKFLOW)
     publish = _workflow(PUBLISH_WORKFLOW)
 
-    assert ci[True]["push"]["branches"] == CI_BRANCHES
-    assert ci[True]["pull_request"]["branches"] == CI_BRANCHES
-    assert publish[True]["push"]["branches"] == PUBLISH_BRANCHES
-    assert publish[True]["pull_request"]["branches"] == PUBLISH_BRANCHES
+    assert ci[True]["push"]["branches"] == PUSH_BRANCHES
+    assert ci[True]["pull_request"]["branches"] == PR_BRANCHES
+    assert publish[True]["push"]["branches"] == PUSH_BRANCHES
+    assert publish[True]["pull_request"]["branches"] == PR_BRANCHES
     assert "tags" not in publish[True]["push"]
 
 
@@ -182,20 +182,18 @@ def test_alpha_release_test_paths_exist() -> None:
                 assert (ROOT / argument).is_file(), f"release workflow references missing {argument}"
 
 
-def test_alpha_publication_requires_cross_platform_test_success() -> None:
+def test_alpha_publication_is_independent_of_cross_platform_tests() -> None:
     jobs = _workflow(PUBLISH_WORKFLOW)["jobs"]
 
-    assert jobs["publish-alpha-testpypi"]["needs"] == [
-        "build",
-        "alpha-cross-platform",
-    ]
+    assert jobs["publish-alpha-testpypi"]["needs"] == ["build"]
     assert jobs["publish-alpha-pypi"]["needs"] == [
         "build",
-        "alpha-cross-platform",
         "publish-alpha-testpypi",
     ]
     for job_name in ("publish-alpha-testpypi", "publish-alpha-pypi"):
-        assert "needs.alpha-cross-platform.result == 'success'" in jobs[job_name]["if"]
+        assert "alpha-cross-platform" not in jobs[job_name]["needs"]
+        assert "needs.alpha-cross-platform" not in jobs[job_name]["if"]
+    assert jobs["release-alpha"]["needs"] == ["build", "publish-alpha-pypi"]
 
 
 def test_release_publication_reuses_one_hashed_build_artifact() -> None:
@@ -207,7 +205,6 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     }
     assert jobs["publish-alpha-pypi"]["needs"] == [
         "build",
-        "alpha-cross-platform",
         "publish-alpha-testpypi",
     ]
     for job_name in (

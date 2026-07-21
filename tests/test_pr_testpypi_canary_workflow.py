@@ -11,11 +11,16 @@ def test_pr_canary_uses_trusted_publishing_for_same_repository_prs() -> None:
     workflow_path = ROOT / ".github/workflows/publish.yml"
     workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
 
-    assert workflow[True]["pull_request"] == {"branches": ["main", "release/2.1"]}
+    assert workflow[True]["pull_request"] == {
+        "branches": ["main", "release/2.1"],
+        "types": ["opened", "synchronize", "reopened", "labeled"],
+    }
     assert workflow["permissions"] == {"contents": "read", "pull-requests": "read"}
     job = workflow["jobs"]["publish-testpypi"]
     assert job["permissions"] == {"id-token": "write"}
     assert "github.event.pull_request.head.repo.full_name == github.repository" in job["if"]
+    assert "run-testpypi-canary" in job["if"]
+    assert "github.event.label.name == 'run-testpypi-canary'" in workflow["jobs"]["build"]["if"]
     assert job["environment"] == "testpypi"
     assert "github.event_name == 'pull_request'" in job["if"]
     publish_step = next(
