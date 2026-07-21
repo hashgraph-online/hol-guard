@@ -1800,7 +1800,9 @@ function queuePath(basePath: string, params: URLSearchParams): string {
 const PENDING_QUEUE_PAGE_LIMIT = 200;
 const MAX_PENDING_QUEUE_PAGES = 50;
 
-export async function fetchAllPendingRequests(): Promise<GuardApprovalRequest[]> {
+type PendingRequestPageCallback = (items: GuardApprovalRequest[]) => void;
+
+export async function fetchAllPendingRequests(onPage?: PendingRequestPageCallback): Promise<GuardApprovalRequest[]> {
   if (isGuardDemoMode()) {
     return getDemoRequests();
   }
@@ -1814,6 +1816,7 @@ export async function fetchAllPendingRequests(): Promise<GuardApprovalRequest[]>
       includeTotals: pageIndex === 0,
     });
     items.push(...page.items);
+    onPage?.([...items]);
     if (!page.next_cursor || page.next_cursor === cursor) {
       return items;
     }

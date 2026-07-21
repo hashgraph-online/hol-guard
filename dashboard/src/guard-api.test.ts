@@ -1206,6 +1206,10 @@ const claudePageItem: GuardApprovalRequest = {
   harness: "claude-code",
 };
 const pendingPageCalls: RecordedFetch[] = [];
+let releaseSecondPendingPage: (() => void) | undefined;
+const secondPendingPageGate = new Promise<void>((resolve) => {
+  releaseSecondPendingPage = resolve;
+});
 globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = input instanceof Request ? input.url : String(input);
   pendingPageCalls.push({ url, init });
@@ -1227,6 +1231,7 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
     );
   }
   if (cursor === "cursor-page-2") {
+    await secondPendingPageGate;
     return new Response(
       JSON.stringify({
         items: [claudePageItem],
@@ -1241,8 +1246,29 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
   return new Response(JSON.stringify({ error: "invalid_cursor" }), { status: 400 });
 };
 
-const pendingItems = await fetchAllPendingRequests();
+const progressivePendingPages: number[] = [];
+let publishFirstPendingPage: (() => void) | undefined;
+const firstPendingPagePublished = new Promise<void>((resolve) => {
+  publishFirstPendingPage = resolve;
+});
+const pendingItemsPromise = fetchAllPendingRequests((items) => {
+  progressivePendingPages.push(items.length);
+  if (items.length === 1) {
+    publishFirstPendingPage?.();
+  }
+});
+await firstPendingPagePublished;
+assert(
+  progressivePendingPages.join(",") === "1",
+  "L078b: fetchAllPendingRequests publishes the first page before the next page responds"
+);
+releaseSecondPendingPage?.();
+const pendingItems = await pendingItemsPromise;
 assert(pendingItems.length === 2, "L078b: fetchAllPendingRequests aggregates pending pages");
+assert(
+  progressivePendingPages.join(",") === "1,2",
+  "L078b: fetchAllPendingRequests publishes each accumulated page for progressive rendering"
+);
 assert(
   pendingItems.some((item) => item.harness === "claude-code"),
   "L078b: fetchAllPendingRequests includes later-page harnesses"
