@@ -287,6 +287,46 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
     assert match is None
 
 
+def test_guard_keeps_leading_home_cd_and_github_read_prompt_free_without_cwd(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    destination = home / "projects" / "review-worktree"
+    destination.mkdir(parents=True)
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "cd ~/projects/review-worktree && gh pr view 17 --json state,mergedAt,mergeCommit 2>&1"},
+        cwd=None,
+        home_dir=home,
+    )
+
+    assert match is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "echo before && cd ~/projects/review-worktree && gh pr view 17 --json state",
+        "cd $TARGET && gh pr view 17 --json state",
+        "cd ~/projects/review-worktree && gh pr merge 17 --admin",
+    ),
+)
+def test_guard_does_not_relax_unproven_home_cd_github_compositions(
+    tmp_path: Path,
+    command: str,
+) -> None:
+    home = tmp_path / "home"
+    (home / "projects" / "review-worktree").mkdir(parents=True)
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=None,
+        home_dir=home,
+    )
+
+    assert match is not None
+
+
 @pytest.mark.parametrize(
     ("command", "action_class"),
     (
