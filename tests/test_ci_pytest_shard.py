@@ -27,6 +27,7 @@ def test_ci_workflow_cancels_stale_runs_and_executes_each_shard() -> None:
 
     assert "cancel-in-progress: true" in workflow
     assert "timeout-minutes: 25" in tests_job
+    assert workflow.count('version: "0.9.26"') == workflow.count("astral-sh/setup-uv@")
     assert "python scripts/ci/pytest_shard.py" in workflow
     assert "name: ci (3.12)" in workflow
     assert "needs: [quality, tests, windows-updater]" in workflow

@@ -23,6 +23,7 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
+          version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
       - run: uv run --no-sync python -m ruff check src/
@@ -54,6 +55,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
+          version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
       - name: Secure the CI virtualenv interpreter
@@ -128,6 +130,7 @@ jobs:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
+          version: "0.9.26"
           enable-cache: true
       - run: python3.13 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt
       - run: uv sync --frozen --extra dev --extra cisco --group cisco-mcp --python 3.13
@@ -146,6 +149,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
+          version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
       - name: Run cross-platform Guard regressions
@@ -189,6 +193,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
+          version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
       - name: Run trusted updater and daemon regressions
