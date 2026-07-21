@@ -72,6 +72,22 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(ready.activity_count).toBe(7);
   });
 
+  test("surfaces redacted daemon tracebacks instead of timing out", async () => {
+    let failure: Error | null = null;
+    try {
+      await readyFromLogs("guard-command-analytics", {}, async () => result(
+        'guard | HOL_GUARD_LAB_READY {"activity_count":7}\n'
+        + "guard | Traceback (most recent call last):\n"
+        + "guard | RuntimeError: guard-private-command-sentinel\n",
+      ));
+    } catch (error) {
+      if (error instanceof Error) failure = error;
+    }
+    expect(failure?.message).toContain("installed daemon failed before readiness");
+    expect(failure?.message).toContain("[REDACTED]");
+    expect(failure?.message).not.toContain("guard-private-command-sentinel");
+  });
+
   test("consumes the owner-only dashboard session handoff", async () => {
     const session = await readDashboardSession("guard-command-analytics", {}, async (command) => {
       expect(command).toContain("exec");
@@ -186,6 +202,7 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(server).not.toContain("record_command_activity(");
     expect(server).not.toContain("ActivityDecisionReason.CAPABILITY");
     expect(server).toContain("HOL_GUARD_LAB_PENDING");
+    expect(server).toContain('READY_MARKER = GUARD_HOME / ".hol-guard-command-analytics-ready"');
     expect(server).not.toContain('"dashboard_session"');
     expect(server).toContain("os.O_NOFOLLOW");
     expect(server).toContain("request_scope_contract(");

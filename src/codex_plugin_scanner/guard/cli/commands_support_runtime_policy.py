@@ -25,6 +25,7 @@ from ..runtime.approval_context import (
     build_runtime_launch_identity,
 )
 from ..runtime.command_extensions import risk_classes_for_command_action
+from ..runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
 from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
@@ -432,6 +433,7 @@ def _runtime_hook_approval_context_token(
     current_action: GuardAction,
     data_flow_signals: Sequence[object],
     scanner_evidence: Sequence[object],
+    workflow_approval_record: GitHubWorkflowApprovalRecord | None = None,
 ) -> str:
     """Bind a saved hook approval to the exact reviewed runtime context.
 
@@ -485,6 +487,31 @@ def _runtime_hook_approval_context_token(
                 "identity": executable_identity,
             },
         )
+    elif workflow_approval_record is not None:
+        # GitHub workflow capabilities intentionally permit a retry after an
+        # executable's original bytes are restored. Their signed binding
+        # already covers the canonical executable content, command, workspace,
+        # environment, configuration, manifests, lockfiles, and sandbox. Do
+        # not add mutable inode timestamps to that independently verified
+        # identity or an exact restored retry can never reach the capability
+        # claim that revalidates it.
+        executable_identity = {
+            "launch_cwd": _normalized_runtime_context_path(launch_cwd),
+            "record": workflow_approval_record.to_dict(),
+            "status": "github_workflow_capability_bound",
+        }
+        if shell_context_present:
+            shell_executable_identities = tuple(
+                {
+                    "cwd": cwd,
+                    "identity": {
+                        "launch_cwd": cwd,
+                        "record": workflow_approval_record.to_dict(),
+                        "status": "github_workflow_capability_bound",
+                    },
+                }
+                for cwd in shell_effective_cwds
+            )
     else:
         executable_identity = _runtime_hook_executable_identity(
             artifact,

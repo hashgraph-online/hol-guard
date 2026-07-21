@@ -16,6 +16,7 @@ import { fetchLabGet } from "./relay-fetch";
 import { readDashboardSession } from "./session-handoff";
 const SENTINEL = "guard-private-command-sentinel";
 const WORKFLOW_AUTHORIZATION_TIMEOUT_MS = 120_000;
+const MAX_GUARD_FAILURE_CHARS = 4_000;
 interface ReadyEvidence {
   activity_count: number;
   installed_origin: string;
@@ -113,8 +114,16 @@ export async function readyFromLogs(
     await runner(composeCommand(project, "logs", "--no-color", "guard"), { cwd: LAB_DIR, env: environment }),
     "Dockerlabs logs",
   );
+  const traceback = logs.lastIndexOf("Traceback (most recent call last):");
+  const readiness = logs.lastIndexOf("HOL_GUARD_LAB_READY ");
+  if (traceback > readiness) {
+    const diagnostic = logs.slice(traceback).replaceAll(SENTINEL, "[REDACTED]").slice(-MAX_GUARD_FAILURE_CHARS);
+    throw new Error(`installed daemon failed before readiness\n${diagnostic}`);
+  }
   const ready = logs.split("\n").filter((line) => line.includes("HOL_GUARD_LAB_READY ")).at(-1);
-  if (!ready) throw new Error("installed daemon did not emit readiness evidence");
+  if (!ready) {
+    throw new Error("installed daemon did not emit readiness evidence");
+  }
   const payload = ready.slice(ready.indexOf("HOL_GUARD_LAB_READY ") + "HOL_GUARD_LAB_READY ".length);
   return JSON.parse(payload) as ReadyEvidence;
 }

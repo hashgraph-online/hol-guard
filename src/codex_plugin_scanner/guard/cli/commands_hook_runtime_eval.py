@@ -578,6 +578,7 @@ def _evaluate_runtime_artifact_hook(
         current_action=approval_context_policy_action,
         data_flow_signals=data_flow_signals,
         scanner_evidence=scanner_evidence,
+        workflow_approval_record=workflow_state.approval_record,
     )
     policy_workspace = str(runtime_workspace) if runtime_workspace else None
     if package_execution_context is not None:

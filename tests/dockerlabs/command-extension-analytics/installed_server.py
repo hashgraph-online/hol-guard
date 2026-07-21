@@ -23,7 +23,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 GUARD_HOME = Path("/guard-home")
 WORKSPACE = Path("/workspace")
 SENTINEL = "guard-private-command-sentinel"
-READY_MARKER = Path.home() / ".hol-guard-command-analytics-ready"
+READY_MARKER = GUARD_HOME / ".hol-guard-command-analytics-ready"
 SESSION_HANDOFF = GUARD_HOME / ".installed-dashboard-session"
 _MAX_HOOK_DIAGNOSTIC_CHARS = 2_000
 _GH_EXECUTABLE = GUARD_HOME / "bin" / "gh"
