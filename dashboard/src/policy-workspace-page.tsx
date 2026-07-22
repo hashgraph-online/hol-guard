@@ -25,7 +25,7 @@ export function PolicyWorkspacePage(props: {
   snapshot: GuardRuntimeSnapshot;
   policies: GuardPolicyDecision[];
   onClearPolicy: (policy: GuardPolicyDecision) => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (pathname?: string) => void;
   onOpenInbox: () => void;
   onRefreshPolicies: () => void;
   onNavigate?: (pathname: string) => void;
@@ -37,11 +37,12 @@ export function PolicyWorkspacePage(props: {
   const cloudConnected = resolveCloudExceptionsConnected(props.snapshot);
 
   const handleOpenSettings = useCallback(() => {
+    const settingsPath = resolveProtectionRulesPath(window.location.search);
     if (props.onNavigate) {
-      props.onNavigate(resolveProtectionRulesPath(window.location.search));
+      props.onNavigate(settingsPath);
       return;
     }
-    props.onOpenSettings();
+    props.onOpenSettings(settingsPath);
   }, [props]);
   const handleOpenInbox = useCallback(() => props.onOpenInbox(), [props]);
   const handleViewChange = useCallback((view: PolicyPageView) => setActiveView(view), []);

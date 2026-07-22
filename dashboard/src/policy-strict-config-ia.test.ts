@@ -25,6 +25,7 @@ assert(enforcementSource.includes("sm:grid-cols-2"), "decision order adapts for 
 assert(enforcementSource.includes("xl:grid-cols-5"), "decision order uses a compact desktop grid");
 assert(workspaceSource.includes("cloudControlsUrl={resolveCloudPolicyControlsUrl(snapshot)}"), "strict config receives cloud controls url");
 assert(pageSource.includes("resolveProtectionRulesPath(window.location.search)"), "policy links directly to canonical protection rules");
+assert(pageSource.includes("props.onOpenSettings(settingsPath)"), "policy fallback opens the promised rules editor");
 assert(pageSource.includes('params.set("demo", "1")'), "policy keeps local demo verification isolated from the daemon");
 
 console.log("policy-strict-config-ia.test.ts: all assertions passed");

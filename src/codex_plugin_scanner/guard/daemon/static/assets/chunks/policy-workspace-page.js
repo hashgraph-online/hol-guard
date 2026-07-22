@@ -4176,11 +4176,12 @@ function PolicyWorkspacePage(props) {
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(props.snapshot);
   const cloudConnected = resolveCloudExceptionsConnected(props.snapshot);
   const handleOpenSettings = reactExports.useCallback(() => {
+    const settingsPath = resolveProtectionRulesPath(window.location.search);
     if (props.onNavigate) {
-      props.onNavigate(resolveProtectionRulesPath(window.location.search));
+      props.onNavigate(settingsPath);
       return;
     }
-    props.onOpenSettings();
+    props.onOpenSettings(settingsPath);
   }, [props]);
   const handleOpenInbox = reactExports.useCallback(() => props.onOpenInbox(), [props]);
   const handleViewChange = reactExports.useCallback((view) => setActiveView(view), []);

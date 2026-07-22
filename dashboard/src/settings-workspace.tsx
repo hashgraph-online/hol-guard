@@ -74,9 +74,6 @@ export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
 
 export function resolveInitialSettingsTab(search: string): LocalSettingsTabKey {
   const section = new URLSearchParams(search).get("section");
-  if (section === "risk" || section === "defaults") {
-    return "rules";
-  }
   return section !== null && isLocalSettingsTabKey(section) ? section : "protection";
 }
 
@@ -539,6 +536,15 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
 
   useEffect(() => {
     return () => { if (saveSuccessTimerRef.current !== null) clearTimeout(saveSuccessTimerRef.current); };
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setActiveTab(resolveInitialSettingsTab(window.location.search));
+      setActionMessage(null);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   useEffect(() => {

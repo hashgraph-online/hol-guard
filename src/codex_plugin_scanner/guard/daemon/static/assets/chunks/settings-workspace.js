@@ -2373,9 +2373,6 @@ function SettingsToggleRow({
 const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
 function resolveInitialSettingsTab(search) {
   const section = new URLSearchParams(search).get("section");
-  if (section === "risk" || section === "defaults") {
-    return "rules";
-  }
   return section !== null && isLocalSettingsTabKey(section) ? section : "protection";
 }
 function resolveSecurityLevelCardDescription(level) {
@@ -2753,6 +2750,14 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     return () => {
       if (saveSuccessTimerRef.current !== null) clearTimeout(saveSuccessTimerRef.current);
     };
+  }, []);
+  reactExports.useEffect(() => {
+    const handlePopState = () => {
+      setActiveTab(resolveInitialSettingsTab(window.location.search));
+      setActionMessage(null);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
   reactExports.useEffect(() => {
     function handleBeforeUnload(event) {

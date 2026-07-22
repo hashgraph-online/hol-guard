@@ -15,6 +15,8 @@ import {
   resolveInitialSettingsTab,
 } from "./settings-workspace";
 import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -100,9 +102,13 @@ assert(isFineTuningEditable("balanced") === false, "fine-tuning: balanced level 
 assert(isFineTuningEditable("relaxed") === false, "fine-tuning: relaxed level is locked until custom");
 
 assert(resolveInitialSettingsTab("?section=rules") === "rules", "settings routing: canonical rules deep link");
-assert(resolveInitialSettingsTab("?section=risk") === "rules", "settings routing: legacy fine-tuning deep link migrates");
-assert(resolveInitialSettingsTab("?section=defaults") === "rules", "settings routing: legacy fallback deep link migrates");
+assert(resolveInitialSettingsTab("?section=risk") === "protection", "settings routing: retired fine-tuning link falls back safely");
+assert(resolveInitialSettingsTab("?section=defaults") === "protection", "settings routing: retired fallback link falls back safely");
 assert(resolveInitialSettingsTab("?section=unknown") === "protection", "settings routing: unknown sections fall back safely");
+
+const settingsWorkspaceSource = readFileSync(fileURLToPath(import.meta.url).replace(/\.test\.ts$/, ".tsx"), "utf8");
+assert(settingsWorkspaceSource.includes('window.addEventListener("popstate", handlePopState)'), "settings routing: browser history resyncs the visible section");
+assert(settingsWorkspaceSource.includes('window.removeEventListener("popstate", handlePopState)'), "settings routing: history listener is cleaned up");
 
 assert(resolveTotpSetupStep(null) === "confirm", "totp-setup: fresh setup starts at password confirmation");
 assert(

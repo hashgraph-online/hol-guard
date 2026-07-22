@@ -29541,7 +29541,7 @@ function App() {
   const handleOpenEvidence = reactExports.useCallback(() => navigate("/evidence"), []);
   const handleOpenInsights = reactExports.useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenCommands = reactExports.useCallback(() => navigate("/evidence?view=commands"), [navigate]);
-  const handleOpenSettings = reactExports.useCallback(() => navigate("/settings"), []);
+  const handleOpenSettings = reactExports.useCallback((pathname2 = "/settings") => navigate(pathname2), []);
   const handleOpenSupplyChain = reactExports.useCallback(() => navigate("/supply-chain"), []);
   reactExports.useCallback(() => navigate("/policy"), []);
   const handleOpenHelp = reactExports.useCallback(() => setHelpOpen(true), []);
