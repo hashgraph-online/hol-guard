@@ -5573,7 +5573,7 @@ def _looks_destructive_shell_command(
         return False
     lowered = normalized.lower()
     redacted_command_text = _redacted_shell_text_for_command_names(lowered)
-    redirection_parts = _split_shell_parts(redacted_command_text)
+    redirection_parts = _split_shell_parts(_shell_text_for_redirection_scan(lowered))
     if _contains_mutating_shell_redirection(redirection_parts):
         return True
     if _contains_prior_pytest_state_mutation(parts):
@@ -7170,6 +7170,41 @@ def _shell_command_token_without_attached_redirection(token: str) -> str:
 
 def _redacted_shell_text_for_command_names(command_text: str) -> str:
     return re.sub(r"'[^']*'|\"[^\"]*\"", "Q", command_text)
+
+
+def _shell_text_for_redirection_scan(command_text: str) -> str:
+    """Hide quoted arguments while retaining quoted redirect targets."""
+
+    result: list[str] = []
+    index = 0
+    while index < len(command_text):
+        quote = command_text[index]
+        if quote not in {"'", '"'}:
+            result.append(quote)
+            index += 1
+            continue
+        previous_index = index - 1
+        while previous_index >= 0 and command_text[previous_index].isspace():
+            previous_index -= 1
+        preserve = previous_index >= 0 and command_text[previous_index] == ">"
+        result.append(quote if preserve else "Q")
+        index += 1
+        while index < len(command_text):
+            character = command_text[index]
+            if quote == '"' and character == "\\" and index + 1 < len(command_text):
+                if preserve:
+                    result.extend((character, command_text[index + 1]))
+                index += 2
+                continue
+            if character == quote:
+                if preserve:
+                    result.append(character)
+                index += 1
+                break
+            if preserve:
+                result.append(character)
+            index += 1
+    return "".join(result)
 
 
 def _split_shell_parts(command_text: str) -> list[str]:
