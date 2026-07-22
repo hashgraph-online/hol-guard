@@ -148,6 +148,12 @@ class TestGuardSurfaceServer:
             "setup_policy_integrity",
             lambda self, **_kwargs: {"mode": "protected"},
         )
+        containment_probes: list[bool] = []
+        monkeypatch.setattr(
+            daemon_server_module._GuardDaemonHandler,
+            "_containment_health_payload",
+            lambda self, *, force_refresh=False: containment_probes.append(force_refresh) or {},
+        )
         maintained: list[bool] = []
         monkeypatch.setattr(
             GuardStore,
@@ -181,6 +187,7 @@ class TestGuardSurfaceServer:
         assert payload["check_ids"] == ["policy_engine", "rule_packs", "tamper_checks", "decision_stream"]
         assert payload["message"] == "Integrity protection restored."
         assert maintained
+        assert containment_probes == [True]
 
     def test_protection_repair_failure_explains_safe_inline_retry(
         self,

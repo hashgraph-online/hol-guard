@@ -4095,6 +4095,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             reason_count = len(degraded_reasons) if isinstance(degraded_reasons, list) else 0
             repaired_check_ids = ["policy_engine", "rule_packs", "tamper_checks"]
             if check_id == "all" and repaired:
+                with suppress(OSError, RuntimeError, TypeError, ValueError):
+                    self._containment_health_payload(force_refresh=True)
                 try:
                     config = load_guard_config(store.guard_home)
                     store.maintain_command_activity(

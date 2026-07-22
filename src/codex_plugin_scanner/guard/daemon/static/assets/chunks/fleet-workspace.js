@@ -19,15 +19,15 @@ const PROTECTION_CHECK_ACTIONS = {
   },
   decision_plane_compatibility: {
     label: "Decision plane",
-    detail: "Run a protected action to refresh decision-plane proof. Retry repair here if it remains unproven."
+    detail: "Guard reruns the decision-plane compatibility probe during repair. Retry here if it remains unproven."
   },
   containment_compatibility: {
     label: "Containment",
-    detail: "Run a protected action to refresh containment proof. Retry repair here if it remains unproven."
+    detail: "Guard reruns the containment compatibility probe during repair. Retry here if it remains unproven."
   },
   sandbox: {
     label: "Sandbox",
-    detail: "Run a protected action to refresh sandbox proof. Retry repair here if it remains unproven."
+    detail: "Guard reruns the sandbox enforcement probe during repair. Retry here if it remains unproven."
   },
   decision_stream: {
     label: "Command evidence",
