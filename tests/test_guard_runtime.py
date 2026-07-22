@@ -48,6 +48,7 @@ from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, overlay_synced_guard_policy
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon.manager import current_guard_daemon_runtime_fingerprint
 from codex_plugin_scanner.guard.models import (
     GuardAction,
     GuardApprovalRequest,
@@ -19933,6 +19934,8 @@ def test_guard_daemon_serves_health_and_receipt_state(tmp_path):
     assert "receipts" not in health_payload
     assert detailed_health_payload["ok"] is True
     assert detailed_health_payload["receipts"] == 1
+    assert detailed_health_payload["package_version"]
+    assert detailed_health_payload["runtime_fingerprint"] == current_guard_daemon_runtime_fingerprint()
     assert runtime_error is not None
     assert runtime_error.code == 404
 

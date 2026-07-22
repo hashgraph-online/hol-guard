@@ -5639,6 +5639,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "tables": store.list_table_names(),
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
             "package_version": __version__,
+            "runtime_fingerprint": current_guard_daemon_runtime_fingerprint(),
             "guard_home": str(store.guard_home.resolve()),
             "command_activity_evidence": {
                 "state": "degraded" if activity_health.persistence_error_count else "healthy",
