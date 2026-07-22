@@ -55,7 +55,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             with self._extension_control_authority_lock():
                 return self._read_extension_control_authority_locked(catalog_digest)
         except ExtensionControlAuthorityError:
-            raise
+            return self._tampered_view(catalog_digest)
         except Exception:
             return self._degraded_view(catalog_digest)
 

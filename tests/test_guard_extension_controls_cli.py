@@ -4,10 +4,12 @@ import argparse
 import io
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.cli import extension_controls_commands
 from codex_plugin_scanner.guard.cli.extension_controls_commands import (
     _mutation_payload,
     run_extension_controls_command,
@@ -84,4 +86,77 @@ def test_controls_help_is_available_from_every_installed_alias(
         main(["guard", "command", "controls", "--help"])
 
     assert exit_info.value.code == 0
-    assert "{status,list,show,preview,apply,global-preview,global-apply,enroll}" in capsys.readouterr().out
+    assert (
+        "{status,list,show,preview,apply,global-preview,global-apply,enroll,recover-authority,acknowledge-degraded}"
+    ) in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("command", "expected_calls"),
+    (
+        ("recover-authority", ("recover", "refresh")),
+        ("acknowledge-degraded", ("acknowledge",)),
+    ),
+)
+def test_authority_recovery_requires_and_consumes_fresh_local_approval(
+    command: str,
+    expected_calls: tuple[str, ...],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    view = SimpleNamespace(
+        health=SimpleNamespace(value="tampered"),
+        revision=7,
+        catalog_digest="catalog",
+    )
+
+    class FakeStore:
+        def __init__(self, guard_home: Path) -> None:
+            assert guard_home == tmp_path
+
+        def read_extension_control_authority(self, *, catalog_digest: str) -> object:
+            assert catalog_digest
+            return view
+
+        def recover_extension_control_authority(self, *, catalog_digest: str) -> object:
+            assert catalog_digest
+            calls.append("recover")
+            return view
+
+    class FakeClient:
+        def refresh_extension_controls(self) -> dict[str, object]:
+            calls.append("refresh")
+            return {"health": "protected", "revision": 7}
+
+        def acknowledge_degraded_extension_controls(self) -> dict[str, object]:
+            calls.append("acknowledge")
+            return {"health": "degraded-acknowledged", "revision": 0}
+
+    monkeypatch.setattr(extension_controls_commands, "GuardStore", FakeStore)
+    monkeypatch.setattr(extension_controls_commands, "_client", lambda _guard_home: FakeClient())
+    monkeypatch.setattr(
+        extension_controls_commands,
+        "prompt_for_approval_gate",
+        lambda *_args, **_kwargs: calls.append("prompt") or object(),
+    )
+    monkeypatch.setattr(
+        extension_controls_commands,
+        "require_extension_control",
+        lambda *_args, **_kwargs: calls.append("require") or object(),
+    )
+    monkeypatch.setattr(
+        extension_controls_commands,
+        "consume_extension_control_grant",
+        lambda *_args, **_kwargs: calls.append("consume"),
+    )
+    output = io.StringIO()
+
+    exit_code = extension_controls_commands._recover_authority(
+        tmp_path,
+        command=command,
+        output_stream=output,
+    )
+
+    assert exit_code == 0
+    assert calls == ["prompt", "require", "consume", *expected_calls]

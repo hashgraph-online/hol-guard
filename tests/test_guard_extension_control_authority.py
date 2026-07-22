@@ -7,7 +7,9 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard import store_extension_control_authority_schema as authority_schema
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
+from codex_plugin_scanner.guard.config import load_guard_config, update_guard_settings
 from codex_plugin_scanner.guard.extension_control_events import extension_control_change_payload
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -466,13 +468,65 @@ def test_transition_records_are_purpose_separated_and_replay_safe(tmp_path: Path
     assert tampered.health is AuthorityHealth.TAMPERED
 
 
+def test_v1_install_migrates_without_enrolling_or_changing_behavior(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    checksum_v1 = cast(str, vars(authority_schema)["_SCHEMA_CHECKSUM_V1"])
+    with sqlite3.connect(guard_home / "guard.db") as connection:
+        connection.execute(
+            """
+            create table extension_control_schema_migration (
+                singleton integer primary key check (singleton = 1),
+                version integer not null,
+                checksum text not null
+            )
+            """
+        )
+        connection.execute(
+            "insert into extension_control_schema_migration (singleton, version, checksum) values (1, 1, ?)",
+            (checksum_v1,),
+        )
+    store = GuardStore(guard_home)
+
+    view = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    with store._connect() as connection:
+        version = connection.execute(
+            "select version from extension_control_schema_migration where singleton = 1"
+        ).fetchone()[0]
+        snapshots = connection.execute("select count(*) from extension_control_authority_snapshot").fetchone()[0]
+
+    assert version == authority_schema.EXTENSION_CONTROL_SCHEMA_VERSION
+    assert snapshots == 0
+    assert view.health is AuthorityHealth.UNENROLLED
+
+
+def test_existing_settings_survive_authority_schema_migration_and_enrollment(tmp_path: Path) -> None:
+    update_guard_settings(tmp_path, {"mode": "enforce"})
+    before = load_guard_config(tmp_path)
+    assert not (tmp_path / "guard.db").exists()
+
+    store = _store(tmp_path, MemorySecretStore())
+    _commit(store)
+    after = load_guard_config(tmp_path)
+    authority = store.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    )
+
+    assert after.mode == before.mode
+    assert authority.health is AuthorityHealth.PROTECTED
+    assert authority.revision == 1
+
+
 def test_extension_control_schema_rejects_future_or_gapped_versions(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     with store._connect() as connection:
         connection.execute("update extension_control_schema_migration set version = 99 where singleton = 1")
-    with pytest.raises(ExtensionControlAuthorityError, match="schema"):
-        store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    view = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+
+    assert view.health is AuthorityHealth.TAMPERED
+    assert view.layers == ()
+    assert view.layers_for(ControlSurface.COMMAND_EVALUATION)[0].global_lockdown is True
 
 
 def test_non_protected_authority_requires_exact_trusted_surface_enum() -> None:
