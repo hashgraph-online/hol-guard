@@ -6,8 +6,10 @@ resolution-markers = [
     "python_full_version == '3.13.*' and sys_platform != 'win32'",
     "python_full_version == '3.12.*' and sys_platform == 'win32'",
     "python_full_version == '3.12.*' and sys_platform != 'win32'",
-    "python_full_version == '3.11.*' and sys_platform == 'win32'",
-    "python_full_version == '3.11.*' and sys_platform != 'win32'",
+    "python_full_version >= '3.11.4' and python_full_version < '3.12' and sys_platform == 'win32'",
+    "python_full_version >= '3.11' and python_full_version < '3.11.4' and sys_platform == 'win32'",
+    "python_full_version >= '3.11.4' and python_full_version < '3.12' and sys_platform != 'win32'",
+    "python_full_version >= '3.11' and python_full_version < '3.11.4' and sys_platform != 'win32'",
     "python_full_version >= '3.14' and sys_platform == 'win32'",
     "python_full_version >= '3.14' and sys_platform != 'win32'",
     "python_full_version < '3.11' and sys_platform == 'win32'",
@@ -321,8 +323,8 @@ name = "cachecontrol"
 version = "0.14.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "msgpack", marker = "python_full_version >= '3.12'" },
-    { name = "requests", marker = "python_full_version >= '3.12'" },
+    { name = "msgpack", marker = "python_full_version >= '3.11.4'" },
+    { name = "requests", marker = "python_full_version >= '3.11.4'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2d/f6/c972b32d80760fb79d6b9eeb0b3010a46b89c0b23cf6329417ff7886cd22/cachecontrol-0.14.4.tar.gz", hash = "sha256:e6220afafa4c22a47dd0badb319f84475d79108100d04e26e8542ef7d3ab05a1", size = 16150, upload-time = "2025-11-14T04:32:13.138Z" }
 wheels = [
@@ -331,7 +333,7 @@ wheels = [
 
 [package.optional-dependencies]
 filecache = [
-    { name = "filelock", marker = "python_full_version >= '3.12'" },
+    { name = "filelock", marker = "python_full_version >= '3.11.4'" },
 ]
 
 [[package]]
@@ -535,28 +537,29 @@ name = "cisco-ai-mcp-scanner"
 version = "4.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "expandvars", marker = "python_full_version >= '3.12'" },
-    { name = "fastapi", marker = "python_full_version >= '3.12'" },
-    { name = "httpx", marker = "python_full_version >= '3.12'" },
-    { name = "litellm", marker = "python_full_version >= '3.12'" },
-    { name = "mcp", extra = ["cli"], marker = "python_full_version >= '3.12'" },
-    { name = "pip-audit", marker = "python_full_version >= '3.12'" },
-    { name = "puremagic", marker = "python_full_version >= '3.12'" },
-    { name = "pydantic", marker = "python_full_version >= '3.12'" },
-    { name = "python-dotenv", marker = "python_full_version >= '3.12'" },
-    { name = "tree-sitter", marker = "python_full_version >= '3.12'" },
-    { name = "tree-sitter-c-sharp", marker = "python_full_version >= '3.12'" },
-    { name = "tree-sitter-go", marker = "python_full_version >= '3.12'" },
-    { name = "tree-sitter-java", marker = "python_full_version >= '3.12'" },
-    { name = "tree-sitter-javascript", marker = "python_full_version >= '3.12'" },
-    { name = "tree-sitter-kotlin", marker = "python_full_version >= '3.12'" },
-    { name = "tree-sitter-php", marker = "python_full_version >= '3.12'" },
-    { name = "tree-sitter-python", marker = "python_full_version >= '3.12'" },
-    { name = "tree-sitter-ruby", marker = "python_full_version >= '3.12'" },
-    { name = "tree-sitter-rust", marker = "python_full_version >= '3.12'" },
-    { name = "tree-sitter-typescript", marker = "python_full_version >= '3.12'" },
-    { name = "uvicorn", marker = "python_full_version >= '3.12'" },
-    { name = "yara-python", marker = "python_full_version >= '3.12'" },
+    { name = "expandvars", marker = "python_full_version >= '3.11.4'" },
+    { name = "fastapi", marker = "python_full_version >= '3.11.4'" },
+    { name = "httpx", marker = "python_full_version >= '3.11.4'" },
+    { name = "litellm", marker = "python_full_version >= '3.11.4'" },
+    { name = "mcp", extra = ["cli"], marker = "python_full_version >= '3.11.4'" },
+    { name = "pip-audit", marker = "python_full_version >= '3.11.4'" },
+    { name = "puremagic", version = "1.30", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11.4' and python_full_version < '3.12'" },
+    { name = "puremagic", version = "2.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pydantic", marker = "python_full_version >= '3.11.4'" },
+    { name = "python-dotenv", marker = "python_full_version >= '3.11.4'" },
+    { name = "tree-sitter", marker = "python_full_version >= '3.11.4'" },
+    { name = "tree-sitter-c-sharp", marker = "python_full_version >= '3.11.4'" },
+    { name = "tree-sitter-go", marker = "python_full_version >= '3.11.4'" },
+    { name = "tree-sitter-java", marker = "python_full_version >= '3.11.4'" },
+    { name = "tree-sitter-javascript", marker = "python_full_version >= '3.11.4'" },
+    { name = "tree-sitter-kotlin", marker = "python_full_version >= '3.11.4'" },
+    { name = "tree-sitter-php", marker = "python_full_version >= '3.11.4'" },
+    { name = "tree-sitter-python", marker = "python_full_version >= '3.11.4'" },
+    { name = "tree-sitter-ruby", marker = "python_full_version >= '3.11.4'" },
+    { name = "tree-sitter-rust", marker = "python_full_version >= '3.11.4'" },
+    { name = "tree-sitter-typescript", marker = "python_full_version >= '3.11.4'" },
+    { name = "uvicorn", marker = "python_full_version >= '3.11.4'" },
+    { name = "yara-python", marker = "python_full_version >= '3.11.4'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/4f/ba/06769744615e2cf7b765dbc161c2368fa94b0d08470b515e9cc326d9df56/cisco_ai_mcp_scanner-4.8.1.tar.gz", hash = "sha256:7555dad407e50f5cd144de682732cba1a471bc507e87661f6001bdf054c208c5", size = 552101, upload-time = "2026-07-21T19:10:55.721Z" }
 wheels = [
@@ -824,12 +827,12 @@ name = "cyclonedx-python-lib"
 version = "11.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "jsonschema", marker = "python_full_version >= '3.12'" },
-    { name = "license-expression", marker = "python_full_version >= '3.12'" },
-    { name = "packageurl-python", marker = "python_full_version >= '3.12'" },
-    { name = "py-serializable", marker = "python_full_version >= '3.12'" },
-    { name = "sortedcontainers", marker = "python_full_version >= '3.12'" },
-    { name = "typing-extensions", marker = "python_full_version == '3.12.*'" },
+    { name = "jsonschema", marker = "python_full_version >= '3.11.4'" },
+    { name = "license-expression", marker = "python_full_version >= '3.11.4'" },
+    { name = "packageurl-python", marker = "python_full_version >= '3.11.4'" },
+    { name = "py-serializable", marker = "python_full_version >= '3.11.4'" },
+    { name = "sortedcontainers", marker = "python_full_version >= '3.11.4'" },
+    { name = "typing-extensions", marker = "python_full_version >= '3.11.4' and python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/75/c9/5d0ccdd19bc7d8ab803b90695c1706aa2ea8529685d18e682dc2524d2630/cyclonedx_python_lib-11.11.0.tar.gz", hash = "sha256:4b3194db72b613717f2912447e67ab618c75ff7dcac6c4af3c0e9e1ac617c102", size = 1442983, upload-time = "2026-06-17T11:57:49.055Z" }
 wheels = [
@@ -1206,7 +1209,7 @@ publish = [
 
 [package.dev-dependencies]
 cisco-mcp = [
-    { name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.12'" },
+    { name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.11.4'" },
 ]
 
 [package.metadata]
@@ -1233,7 +1236,7 @@ requires-dist = [
 provides-extras = ["cisco", "dev", "mdm-build", "publish"]
 
 [package.metadata.requires-dev]
-cisco-mcp = [{ name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.12'", specifier = "==4.8.1" }]
+cisco-mcp = [{ name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.11.4'", specifier = "==4.8.1" }]
 
 [[package]]
 name = "httpcore"
@@ -1593,7 +1596,7 @@ name = "license-expression"
 version = "30.4.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "boolean-py", marker = "python_full_version >= '3.12'" },
+    { name = "boolean-py", marker = "python_full_version >= '3.11.4'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/40/71/d89bb0e71b1415453980fd32315f2a037aad9f7f70f695c7cec7035feb13/license_expression-30.4.4.tar.gz", hash = "sha256:73448f0aacd8d0808895bdc4b2c8e01a8d67646e4188f887375398c761f340fd", size = 186402, upload-time = "2025-07-22T11:13:32.17Z" }
 wheels = [
@@ -1802,8 +1805,8 @@ wheels = [
 
 [package.optional-dependencies]
 cli = [
-    { name = "python-dotenv", marker = "python_full_version >= '3.12'" },
-    { name = "typer", marker = "python_full_version >= '3.12'" },
+    { name = "python-dotenv", marker = "python_full_version >= '3.11.4'" },
+    { name = "typer", marker = "python_full_version >= '3.11.4'" },
 ]
 
 [[package]]
@@ -2194,8 +2197,10 @@ resolution-markers = [
     "python_full_version == '3.13.*' and sys_platform != 'win32'",
     "python_full_version == '3.12.*' and sys_platform == 'win32'",
     "python_full_version == '3.12.*' and sys_platform != 'win32'",
-    "python_full_version == '3.11.*' and sys_platform == 'win32'",
-    "python_full_version == '3.11.*' and sys_platform != 'win32'",
+    "python_full_version >= '3.11.4' and python_full_version < '3.12' and sys_platform == 'win32'",
+    "python_full_version >= '3.11' and python_full_version < '3.11.4' and sys_platform == 'win32'",
+    "python_full_version >= '3.11.4' and python_full_version < '3.12' and sys_platform != 'win32'",
+    "python_full_version >= '3.11' and python_full_version < '3.11.4' and sys_platform != 'win32'",
     "python_full_version >= '3.14' and sys_platform == 'win32'",
     "python_full_version >= '3.14' and sys_platform != 'win32'",
 ]
@@ -2307,8 +2312,10 @@ source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version == '3.12.*' and sys_platform == 'win32'",
     "python_full_version == '3.12.*' and sys_platform != 'win32'",
-    "python_full_version == '3.11.*' and sys_platform == 'win32'",
-    "python_full_version == '3.11.*' and sys_platform != 'win32'",
+    "python_full_version >= '3.11.4' and python_full_version < '3.12' and sys_platform == 'win32'",
+    "python_full_version >= '3.11' and python_full_version < '3.11.4' and sys_platform == 'win32'",
+    "python_full_version >= '3.11.4' and python_full_version < '3.12' and sys_platform != 'win32'",
+    "python_full_version >= '3.11' and python_full_version < '3.11.4' and sys_platform != 'win32'",
     "python_full_version < '3.11' and sys_platform == 'win32'",
     "python_full_version < '3.11' and sys_platform != 'win32'",
 ]
@@ -2470,7 +2477,7 @@ name = "pip-api"
 version = "0.0.34"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pip", marker = "python_full_version >= '3.12'" },
+    { name = "pip", marker = "python_full_version >= '3.11.4'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b9/f1/ee85f8c7e82bccf90a3c7aad22863cc6e20057860a1361083cd2adacb92e/pip_api-0.0.34.tar.gz", hash = "sha256:9b75e958f14c5a2614bae415f2adf7eeb54d50a2cfbe7e24fd4826471bac3625", size = 123017, upload-time = "2024-07-09T20:32:30.641Z" }
 wheels = [
@@ -2482,16 +2489,16 @@ name = "pip-audit"
 version = "2.10.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cachecontrol", extra = ["filecache"], marker = "python_full_version >= '3.12'" },
-    { name = "cyclonedx-python-lib", marker = "python_full_version >= '3.12'" },
-    { name = "packaging", marker = "python_full_version >= '3.12'" },
-    { name = "pip-api", marker = "python_full_version >= '3.12'" },
-    { name = "pip-requirements-parser", marker = "python_full_version >= '3.12'" },
-    { name = "platformdirs", marker = "python_full_version >= '3.12'" },
-    { name = "requests", marker = "python_full_version >= '3.12'" },
-    { name = "rich", marker = "python_full_version >= '3.12'" },
-    { name = "tomli", marker = "python_full_version >= '3.12'" },
-    { name = "tomli-w", marker = "python_full_version >= '3.12'" },
+    { name = "cachecontrol", extra = ["filecache"], marker = "python_full_version >= '3.11.4'" },
+    { name = "cyclonedx-python-lib", marker = "python_full_version >= '3.11.4'" },
+    { name = "packaging", marker = "python_full_version >= '3.11.4'" },
+    { name = "pip-api", marker = "python_full_version >= '3.11.4'" },
+    { name = "pip-requirements-parser", marker = "python_full_version >= '3.11.4'" },
+    { name = "platformdirs", marker = "python_full_version >= '3.11.4'" },
+    { name = "requests", marker = "python_full_version >= '3.11.4'" },
+    { name = "rich", marker = "python_full_version >= '3.11.4'" },
+    { name = "tomli", marker = "python_full_version >= '3.11.4'" },
+    { name = "tomli-w", marker = "python_full_version >= '3.11.4'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/66/a4/f21d5f0a0edabcbce31560b73c7c5a6f72ae87af4236fd1069c8f59a353d/pip_audit-2.10.1.tar.gz", hash = "sha256:1eb4565d19ebe5d48996f4b770b4d2b32887e12cb12cfa637f1a064011b55ffc", size = 54275, upload-time = "2026-06-10T22:17:01.744Z" }
 wheels = [
@@ -2503,8 +2510,8 @@ name = "pip-requirements-parser"
 version = "32.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", marker = "python_full_version >= '3.12'" },
-    { name = "pyparsing", marker = "python_full_version >= '3.12'" },
+    { name = "packaging", marker = "python_full_version >= '3.11.4'" },
+    { name = "pyparsing", marker = "python_full_version >= '3.11.4'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/5e/2a/63b574101850e7f7b306ddbdb02cb294380d37948140eecd468fae392b54/pip-requirements-parser-32.0.1.tar.gz", hash = "sha256:b4fa3a7a0be38243123cf9d1f3518da10c51bdb165a2b2985566247f9155a7d3", size = 209359, upload-time = "2022-12-21T15:25:22.732Z" }
 wheels = [
@@ -2660,8 +2667,29 @@ wheels = [
 
 [[package]]
 name = "puremagic"
+version = "1.30"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.11.4' and python_full_version < '3.12' and sys_platform == 'win32'",
+    "python_full_version >= '3.11.4' and python_full_version < '3.12' and sys_platform != 'win32'",
+]
+sdist = { url = "https://files.pythonhosted.org/packages/dd/7f/9998706bc516bdd664ccf929a1da6c6e5ee06e48f723ce45aae7cf3ff36e/puremagic-1.30.tar.gz", hash = "sha256:f9ff7ac157d54e9cf3bff1addfd97233548e75e685282d84ae11e7ffee1614c9", size = 314785, upload-time = "2025-07-04T18:48:36.061Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/91/ed/1e347d85d05b37a8b9a039ca832e5747e1e5248d0bd66042783ef48b4a37/puremagic-1.30-py3-none-any.whl", hash = "sha256:5eeeb2dd86f335b9cfe8e205346612197af3500c6872dffebf26929f56e9d3c1", size = 43304, upload-time = "2025-07-04T18:48:34.801Z" },
+]
+
+[[package]]
+name = "puremagic"
 version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version == '3.13.*' and sys_platform == 'win32'",
+    "python_full_version == '3.13.*' and sys_platform != 'win32'",
+    "python_full_version == '3.12.*' and sys_platform == 'win32'",
+    "python_full_version == '3.12.*' and sys_platform != 'win32'",
+    "python_full_version >= '3.14' and sys_platform == 'win32'",
+    "python_full_version >= '3.14' and sys_platform != 'win32'",
+]
 sdist = { url = "https://files.pythonhosted.org/packages/24/74/ce5987ab9b8aec4ced06e2723ebb604205c9eb58abdad91453da93166380/puremagic-2.2.0.tar.gz", hash = "sha256:eb4bddf07c177c4b434554b92165b67449f5a51e152b976202d6254498810eef", size = 1189752, upload-time = "2026-04-08T01:39:55.562Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/95/81/314320aeffd88dadeac553ff9eb10f54507ab41deccd0c69f6221d254a0a/puremagic-2.2.0-py3-none-any.whl", hash = "sha256:c4f7ed7307f056c787199acfda839555921be1df13abba61e8e6db0c787ae1d0", size = 71971, upload-time = "2026-04-08T01:39:54.169Z" },
@@ -2672,7 +2700,7 @@ name = "py-serializable"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "defusedxml", marker = "python_full_version >= '3.12'" },
+    { name = "defusedxml", marker = "python_full_version >= '3.11.4'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/73/21/d250cfca8ff30c2e5a7447bc13861541126ce9bd4426cd5d0c9f08b5547d/py_serializable-2.1.0.tar.gz", hash = "sha256:9d5db56154a867a9b897c0163b33a793c804c80cee984116d02d49e4578fc103", size = 52368, upload-time = "2025-07-21T09:56:48.07Z" }
 wheels = [

@@ -76,7 +76,7 @@ publish = [
 
 [dependency-groups]
 cisco-mcp = [
-    "cisco-ai-mcp-scanner==4.8.1; python_version >= '3.11.4'",
+    "cisco-ai-mcp-scanner==4.8.1; python_full_version >= '3.11.4'",
 ]
 
 [tool.uv]
