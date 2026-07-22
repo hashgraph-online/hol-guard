@@ -47,7 +47,7 @@ from .false_positive_rules import (
     split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
-from .github_actions_read_workflow import is_bounded_github_actions_read_workflow
+from .github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from .github_capability_contract import GitHubCommandAssessment
 from .github_capability_interaction import (
     github_capability_action_class,
@@ -1236,7 +1236,7 @@ def is_explicitly_benign_tool_action_request(
         if not parts:
             return False
         parsed_command_names = list(_shell_command_names_from_parts(parts))
-        if is_bounded_github_actions_read_workflow(stripped_command):
+        if is_nonexecuting_github_actions_read_workflow(stripped_command):
             found_benign_candidate = True
             continue
         if _looks_like_benign_interpreter_wait(stripped_command, parts, parsed_command_names):
@@ -1715,10 +1715,10 @@ def _destructive_shell_tool_action_request(
             canonical_command=canonical_command,
             interpreter_executable_identities=interpreter_executable_identities,
         )
-    if is_bounded_github_actions_read_workflow(detection_command_text) and (
+    if is_nonexecuting_github_actions_read_workflow(detection_command_text) and (
         raw_command_text is None
         or raw_command_text == detection_command_text
-        or is_bounded_github_actions_read_workflow(raw_command_text)
+        or is_nonexecuting_github_actions_read_workflow(raw_command_text)
     ):
         return None
     if not execution_context.complete and home_dir is not None:

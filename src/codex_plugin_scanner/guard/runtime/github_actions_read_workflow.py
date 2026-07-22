@@ -1,4 +1,4 @@
-"""Typed validation for bounded GitHub Actions inspection workflows."""
+"""Typed validation for non-executing GitHub Actions inspection workflows."""
 
 from __future__ import annotations
 
@@ -23,8 +23,12 @@ _FILTERED_JOB_ID_QUERY: Final = re.compile(r'\.jobs\[\]\|select\(\.name\|test\("
 _MAX_FILTER_LINES: Final = 100
 
 
-def is_bounded_github_actions_read_workflow(command_text: str) -> bool:
-    """Prove a small shell workflow reads Actions metadata without executable data flow."""
+def is_nonexecuting_github_actions_read_workflow(command_text: str) -> bool:
+    """Prove a small shell workflow reads Actions data without executable data flow.
+
+    Fixed filters constrain emitted output and shell behavior. Network response
+    size is not an approval boundary for an authenticated GitHub.com read.
+    """
 
     if not command_text.strip() or "`" in command_text or "\\\n" in command_text:
         return False
@@ -97,7 +101,7 @@ def _safe_github_read_pipeline(command_text: str, values: dict[str, _ValueKind])
     if github_tokens is None or not _safe_actions_github_command(github_tokens):
         return None
     for segment in segments[1:]:
-        if not _safe_output_filter(segment):
+        if not _safe_emitted_output_filter(segment):
             return None
     return _github_output_kind(github_tokens)
 
@@ -213,7 +217,7 @@ def _github_output_kind(tokens: list[str]) -> _ValueKind:
     return "text"
 
 
-def _safe_output_filter(tokens: list[str]) -> bool:
+def _safe_emitted_output_filter(tokens: list[str]) -> bool:
     if not tokens:
         return False
     if tokens[0] == "head":
@@ -243,7 +247,7 @@ def _safe_text_filter_pipeline(command_text: str, values: dict[str, _ValueKind])
         and segments[0]
         and segments[0][0] == "echo"
         and _safe_echo_tokens(segments[0][1:], values)
-        and _safe_output_filter(segments[1])
+        and _safe_emitted_output_filter(segments[1])
     )
 
 
@@ -265,4 +269,4 @@ def _safe_echo_tokens(tokens: list[str], values: dict[str, _ValueKind]) -> bool:
     return True
 
 
-__all__ = ("is_bounded_github_actions_read_workflow",)
+__all__ = ("is_nonexecuting_github_actions_read_workflow",)
