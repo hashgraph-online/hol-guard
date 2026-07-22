@@ -58,6 +58,7 @@ def test_guard_action_envelope_round_trips_to_dict() -> None:
         "mcp_tool": None,
         "package_manager": None,
         "package_name": None,
+        "command_category": None,
         "package_intent_kind": None,
         "package_targets": [],
         "pre_execution_result": None,

@@ -448,6 +448,11 @@ def queue_blocked_approvals(
         policy_action = normalization.action
         if policy_action not in {"require-reapproval", "review"}:
             continue
+        artifact_id = str(item.get("artifact_id") or "")
+        if not artifact_id:
+            continue
+        artifact = artifacts_by_id.get(artifact_id)
+        item = _item_with_command_category(item, artifact)
         raw_action_envelope_json = item.get("action_envelope_json")
         action_envelope_json = _item_action_envelope_json(item)
         if raw_action_envelope_json is not None and action_envelope_json is None:
@@ -480,9 +485,6 @@ def queue_blocked_approvals(
                 *scanner_evidence,
                 normalization_evidence,
             )
-        artifact_id = str(item.get("artifact_id") or "")
-        if not artifact_id:
-            continue
         approval_context_hash = item.get("approval_context_hash")
         request_artifact_hash = (
             approval_context_hash
@@ -490,7 +492,6 @@ def queue_blocked_approvals(
             and parse_approval_context_token(approval_context_hash) is not None
             else str(item.get("artifact_hash") or "unknown")
         )
-        artifact = artifacts_by_id.get(artifact_id)
         request_id = uuid.uuid4().hex
         risk_summary = _item_risk_summary(item, artifact)
         launch_target = _launch_target(artifact, item)
@@ -1521,6 +1522,24 @@ def _item_action_envelope_json(item: Mapping[str, object]) -> dict[str, object] 
     if isinstance(value, Mapping):
         return {str(key): item_value for key, item_value in value.items() if isinstance(key, str)}
     return None
+
+
+def _item_with_command_category(item: dict[str, object], artifact) -> dict[str, object]:
+    envelope = _item_action_envelope_json(item)
+    if envelope is None or isinstance(envelope.get("command_category"), str):
+        return item
+    matches = artifact.metadata.get("command_rule_matches") if artifact is not None else None
+    if not isinstance(matches, list):
+        matches = item.get("command_rule_matches")
+    if not isinstance(matches, list):
+        return item
+    for match in matches:
+        if not isinstance(match, Mapping):
+            continue
+        extension_id = match.get("extension_id")
+        if isinstance(extension_id, str) and extension_id.startswith("command."):
+            return {**item, "action_envelope_json": {**envelope, "command_category": extension_id}}
+    return item
 
 
 def _item_scanner_evidence(item: dict[str, object]) -> tuple[dict[str, object], ...]:

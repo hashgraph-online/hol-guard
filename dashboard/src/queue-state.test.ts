@@ -375,6 +375,28 @@ assert(
   "T-QS-31: container and deploy commands get a specific category"
 );
 
+const categorizedDockerItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-categorized-docker",
+  action_envelope_json: { ...shellEnvelope, command: "opaque-wrapper action", command_category: "command.container-runtime" },
+};
+
+assert(
+  resolveQueueCategory(categorizedDockerItem).label === "Docker command",
+  "T-QS-31a: first-class Docker metadata drives the queue category"
+);
+
+const categorizedGitHubItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-categorized-github",
+  action_envelope_json: { ...shellEnvelope, command: "opaque-wrapper action", command_category: "command.github" },
+};
+
+assert(
+  resolveQueueCategory(categorizedGitHubItem).label === "GitHub command",
+  "T-QS-31b: first-class GitHub metadata drives the queue category"
+);
+
 const persistenceItem: GuardApprovalRequest = {
   ...BASE_REQUEST,
   request_id: "req-persistence",

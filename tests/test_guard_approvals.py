@@ -508,6 +508,68 @@ class TestGuardApprovals:
         assert queued[0]["risk_signals"] == ["call arguments mention sensitive local files or secrets"]
         assert queued[0]["launch_summary"] == "Launches with `dangerous_delete .env`."
 
+    def test_guard_queue_projects_command_category_from_artifact_metadata(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        envelope = {
+            "schema_version": 1,
+            "action_id": "action-docker",
+            "harness": "codex",
+            "event_name": "PreToolUse",
+            "action_type": "shell_command",
+            "workspace": "/workspace",
+            "workspace_hash": "workspace-hash",
+            "tool_name": "Bash",
+            "command": "docker ps",
+            "prompt_excerpt": None,
+            "prompt_text": None,
+            "target_paths": [],
+            "network_hosts": [],
+            "mcp_server": None,
+            "mcp_tool": None,
+            "package_manager": None,
+            "package_name": None,
+            "script_name": None,
+            "raw_payload_redacted": {},
+        }
+        artifact = GuardArtifact(
+            artifact_id="codex:runtime:docker",
+            name="docker ps",
+            harness="codex",
+            artifact_type="command",
+            source_scope="runtime",
+            config_path=str(tmp_path / "workspace" / "guard.toml"),
+            metadata={"command_rule_matches": [{"extension_id": "command.container-runtime"}]},
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation={
+                "artifacts": [
+                    {
+                        "artifact_id": artifact.artifact_id,
+                        "artifact_name": artifact.name,
+                        "artifact_hash": "hash-docker",
+                        "artifact_type": artifact.artifact_type,
+                        "source_scope": artifact.source_scope,
+                        "policy_action": "require-reapproval",
+                        "action_envelope_json": envelope,
+                    }
+                ]
+            },
+            store=store,
+            approval_center_url="http://127.0.0.1:4455",
+            now="2026-07-22T00:00:00+00:00",
+        )
+
+        assert queued[0]["action_envelope_json"]["command_category"] == "command.container-runtime"
+
     @pytest.mark.parametrize(
         ("artifact_name", "action_envelope_json", "expected"),
         [
