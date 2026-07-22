@@ -1,6 +1,7 @@
 """Transactional lifecycle and health tests for command activity persistence."""
 
-# pyright: reportAny=false, reportPrivateUsage=false, reportUnusedCallResult=false
+# pyright: reportAny=false, reportMissingImports=false, reportPrivateUsage=false
+# pyright: reportUnknownMemberType=false, reportUnknownParameterType=false, reportUnusedCallResult=false
 
 from __future__ import annotations
 
@@ -101,6 +102,33 @@ def test_health_migration_is_v11_atomic_and_reopens(tmp_path: Path) -> None:
     assert initial == reopened.get_command_activity_persistence_health()
     assert initial.dropped_event_count == 0
     assert initial.schema_version == health_schema.COMMAND_ACTIVITY_HEALTH_SCHEMA_VERSION
+
+
+def test_health_active_domain_migration_maps_existing_error_without_resetting_counts(tmp_path: Path) -> None:
+    path = tmp_path / "legacy-health.db"
+    with sqlite3.connect(path) as connection:
+        connection.execute("pragma foreign_keys = on")
+        connection.execute("create table schema_migrations (version integer primary key, applied_at text not null)")
+        connection.execute(health_schema._HEALTH_TABLE_SQL)
+        connection.execute(
+            """
+            insert into command_activity_health values (
+              1, 337, 337, 'post_record_failed', '2026-07-18T20:00:00+00:00', '1.0.0'
+            )
+            """
+        )
+
+        health_schema.ensure_command_activity_health_schema(connection, applied_at=_NOW.isoformat())
+        health = connection.execute("select * from command_activity_health where singleton = 1").fetchone()
+        active = connection.execute("select * from command_activity_health_active where singleton = 1").fetchone()
+        migration = connection.execute(
+            "select version from schema_migrations where version = ?",
+            (health_schema.COMMAND_ACTIVITY_HEALTH_ACTIVE_MIGRATION_VERSION,),
+        ).fetchone()
+
+    assert health == (1, 337, 337, "post_record_failed", "2026-07-18T20:00:00+00:00", "1.0.0")
+    assert active == (1, 1, 0, 0)
+    assert migration == (19,)
 
 
 def test_health_migration_failure_rolls_back_table_and_version(

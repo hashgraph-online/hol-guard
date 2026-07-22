@@ -92,6 +92,15 @@ class StoreCommandActivityPrivacyMixin:
             )
             connection.execute(
                 """
+                update command_activity_health_active
+                set command_error_active = 0,
+                    shadow_error_active = 0,
+                    maintenance_error_active = 0
+                where singleton = 1
+                """
+            )
+            connection.execute(
+                """
                 update command_activity_maintenance
                 set last_completed_day = null,
                     last_run_at = null,

@@ -424,12 +424,29 @@ def _health_payload(connection: sqlite3.Connection) -> dict[str, object]:
     )
     if row is None:
         return {"status": "degraded", "dropped_events": 0, "persistence_errors": 0}
+    active = cast(
+        sqlite3.Row | None,
+        connection.execute("select * from command_activity_health_active where singleton = 1").fetchone(),
+    )
+    last_error_at = str(row["last_error_at"]) if row["last_error_at"] is not None else None
     return {
-        "status": ("degraded" if int(row["dropped_event_count"]) or int(row["persistence_error_count"]) else "healthy"),
+        "status": (
+            "degraded"
+            if active is None
+            or any(
+                int(active[column])
+                for column in (
+                    "command_error_active",
+                    "shadow_error_active",
+                    "maintenance_error_active",
+                )
+            )
+            else "healthy"
+        ),
         "dropped_events": int(row["dropped_event_count"]),
         "persistence_errors": int(row["persistence_error_count"]),
         "last_error_class": str(row["last_error_code"]) if row["last_error_code"] is not None else None,
-        "last_error_at": str(row["last_error_at"]) if row["last_error_at"] is not None else None,
+        "last_error_at": last_error_at,
     }
 
 
