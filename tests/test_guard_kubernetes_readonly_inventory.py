@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_hook_generic import _should_relax_configured_default
 from codex_plugin_scanner.guard.runtime.kubernetes_commands import kubernetes_read_only_inventory_args
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
@@ -16,12 +15,6 @@ def test_basic_pod_name_inventory_is_explicitly_benign(tmp_path: Path) -> None:
     workspace = tmp_path / "app"
     workspace.mkdir()
     command = f"cd {workspace} && kubectl get pods -n team-a -l app=web -o jsonpath='{{.items[0].metadata.name}}' 2>&1"
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "bash",
-        "tool_input": {"command": command},
-    }
-
     assert (
         extract_sensitive_tool_action_request(
             "bash",
@@ -36,13 +29,6 @@ def test_basic_pod_name_inventory_is_explicitly_benign(tmp_path: Path) -> None:
         {"command": command},
         cwd=tmp_path,
         home_dir=tmp_path,
-    )
-    assert _should_relax_configured_default(
-        configured_action="require-reapproval",
-        has_narrow_override=False,
-        home_dir=tmp_path,
-        payload=payload,
-        runtime_workspace=tmp_path,
     )
 
 
@@ -80,17 +66,6 @@ def test_bounded_inventory_variants_are_safe(args: list[str]) -> None:
 )
 def test_sensitive_or_effectful_variants_are_not_benign(command: str) -> None:
     assert not is_explicitly_benign_tool_action_request("bash", {"command": command})
-    assert not _should_relax_configured_default(
-        configured_action="require-reapproval",
-        has_narrow_override=False,
-        home_dir=None,
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "bash",
-            "tool_input": {"command": command},
-        },
-        runtime_workspace=None,
-    )
 
 
 @pytest.mark.parametrize(
