@@ -121,12 +121,12 @@ def test_upgraded_running_process_does_not_refresh_shared_oauth_grant(monkeypatc
         refresh_attempted = True
         raise AssertionError("stale runtime must not exchange the shared refresh token")
 
-    loaded_version = guard_runner_module._LOADED_HOL_GUARD_DISTRIBUTION_VERSION
-    assert loaded_version is not None
+    loaded_identity = guard_runner_module._LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY
+    assert loaded_identity is not None
     monkeypatch.setattr(
-        guard_runner_module.importlib.metadata,
-        "version",
-        lambda package: f"{loaded_version}.post1" if package == "hol-guard" else loaded_version,
+        guard_runner_module,
+        "_hol_guard_runtime_package_identity",
+        lambda: (loaded_identity[0], "0" * 64),
     )
     monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _unexpected_urlopen)
 
@@ -141,6 +141,14 @@ def test_upgraded_running_process_does_not_refresh_shared_oauth_grant(monkeypatc
     assert error.value.retryable is True
     assert "Restart the agent application" in str(error.value)
     assert refresh_attempted is False
+
+
+def test_missing_package_metadata_after_load_blocks_oauth_refresh(monkeypatch) -> None:
+    loaded_identity = guard_runner_module._LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY
+    assert loaded_identity is not None
+    monkeypatch.setattr(guard_runner_module, "_hol_guard_runtime_package_identity", lambda: None)
+
+    assert guard_runner_module._guard_runtime_was_upgraded() is True
 
 
 def test_prepare_guard_cloud_connect_authorization_tolerates_network_errors(tmp_path, monkeypatch) -> None:

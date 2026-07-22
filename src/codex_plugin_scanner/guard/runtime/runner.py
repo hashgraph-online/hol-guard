@@ -107,14 +107,16 @@ from .supply_chain_bundle_models import SupplyChainVerificationKey
 from .supply_chain_support import ecosystem_support_matrix
 
 
-def _loaded_hol_guard_distribution_version() -> str | None:
+def _hol_guard_runtime_package_identity() -> tuple[str, str] | None:
     try:
-        return importlib.metadata.version("hol-guard")
-    except importlib.metadata.PackageNotFoundError:
+        distribution_version = importlib.metadata.version("hol-guard")
+        source_sha256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    except (importlib.metadata.PackageNotFoundError, OSError):
         return None
+    return distribution_version, source_sha256
 
 
-_LOADED_HOL_GUARD_DISTRIBUTION_VERSION = _loaded_hol_guard_distribution_version()
+_LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY = _hol_guard_runtime_package_identity()
 
 
 def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
@@ -3907,14 +3909,10 @@ def _guard_oauth_reconnect_after_revoked_message() -> str:
 
 
 def _guard_runtime_was_upgraded() -> bool:
-    loaded_version = _LOADED_HOL_GUARD_DISTRIBUTION_VERSION
-    if loaded_version is None:
+    loaded_identity = _LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY
+    if loaded_identity is None:
         return False
-    try:
-        installed_version = importlib.metadata.version("hol-guard")
-    except importlib.metadata.PackageNotFoundError:
-        return False
-    return installed_version != loaded_version
+    return _hol_guard_runtime_package_identity() != loaded_identity
 
 
 def _guard_runtime_upgrade_restart_message() -> str:
