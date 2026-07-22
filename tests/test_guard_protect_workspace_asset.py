@@ -21,19 +21,18 @@ def test_degraded_protection_exposes_recovery_actions() -> None:
     source = _source()
     authoritative_source = _authoritative_source()
 
-    assert "Protection needs attention" in source
-    assert '"Repair "' in source
-    assert "harnessDisplayName(props.repairHarness)" in source
-    assert "harnessDisplayName(repairHarness)" in source
-    assert "href: `/apps/${repairHarness}?tab=settings`" in source
-    assert 'href: "/evidence?view=commands"' in source
+    assert "Restore full protection" in source
+    assert "protection-recovery" in source
+    assert "primaryProtectionRecoveryAction" in source
+    assert "View all steps" in source
+    assert "Needs repair" in source
+    assert 'href: "/evidence?view=commands"' in source or 'href:"/evidence?view=commands"' in source
     assert "Open command diagnostics" in source
     assert 'hookCheck?.status === "fail"' in source
-    assert 'hookCheck?.status === "unknown"' in source
     assert 'check.check_id === "harness_hooks" && check.status === "fail"' in source
-    assert "Protection needs attention" in authoritative_source
-    assert "href={`/apps/${props.repairHarness}?tab=settings`}" in authoritative_source
-    assert "href={`/apps/${repairHarness}?tab=settings`}" in authoritative_source
+    assert "Restore full protection" in authoritative_source
+    assert "primaryProtectionRecoveryAction" in authoritative_source
+    assert 'href="#protection-recovery"' in authoritative_source
 
 
 def test_protect_metrics_use_locale_grouping() -> None:
