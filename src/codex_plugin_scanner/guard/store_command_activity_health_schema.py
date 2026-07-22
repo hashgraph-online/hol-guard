@@ -56,7 +56,11 @@ def ensure_command_activity_health_schema(connection: sqlite3.Connection, *, app
             insert or ignore into command_activity_health_active (
               singleton, command_error_active, shadow_error_active, maintenance_error_active
             )
-            select singleton, 0, 0, 0 from command_activity_health where singleton = 1
+            select singleton,
+              case when last_error_code is null then 0 else 1 end,
+              case when last_error_code is null then 0 else 1 end,
+              case when last_error_code is null then 0 else 1 end
+            from command_activity_health where singleton = 1
             """
         )
         _validate_health_active_row(connection)

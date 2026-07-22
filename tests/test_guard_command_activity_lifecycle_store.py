@@ -104,7 +104,7 @@ def test_health_migration_is_v11_atomic_and_reopens(tmp_path: Path) -> None:
     assert initial.schema_version == health_schema.COMMAND_ACTIVITY_HEALTH_SCHEMA_VERSION
 
 
-def test_health_active_domain_migration_starts_new_observation_without_resetting_counts(tmp_path: Path) -> None:
+def test_health_active_domain_migration_requires_each_pipeline_to_prove_recovery(tmp_path: Path) -> None:
     path = tmp_path / "legacy-health.db"
     with sqlite3.connect(path) as connection:
         connection.execute("pragma foreign_keys = on")
@@ -127,7 +127,7 @@ def test_health_active_domain_migration_starts_new_observation_without_resetting
         ).fetchone()
 
     assert health == (1, 337, 337, "post_record_failed", "2026-07-18T20:00:00+00:00", "1.0.0")
-    assert active == (1, 0, 0, 0)
+    assert active == (1, 1, 1, 1)
     assert migration == (19,)
 
 
