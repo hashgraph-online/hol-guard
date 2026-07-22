@@ -2067,35 +2067,20 @@ def literal_cd_execution_context(
         return None
     if _shell_execution_context_validation_reason(context) is not None:
         return None
-    if not 2 <= len(context.segments) <= 4:
+    if len(context.segments) not in {2, 3}:
         return None
     runner = context.segments[1]
-    runner_tokens = list(runner.tokens)
-    command_name, command_index = _shell_segment_primary_command(runner_tokens)
-    if command_name == "timeout" and command_index is not None:
-        timeout_args = runner_tokens[command_index + 1 :]
-        if not timeout_args or not timeout_args[0].isdigit() or not 1 <= int(timeout_args[0]) <= 3600:
-            return None
-        runner_tokens = timeout_args[1:]
-        command_name, command_index = _shell_segment_primary_command(runner_tokens)
-    if command_name not in {"bun", "bunx", "npx"} or command_index is None:
+    command_name, command_index = _shell_segment_primary_command(list(runner.tokens))
+    if command_name not in {"bunx", "npx"} or command_index is None:
         return None
-    args = _without_safe_inspection_redirections(list(runner_tokens[command_index + 1 :]))
+    args = _without_safe_inspection_redirections(list(runner.tokens[command_index + 1 :]))
     if args is None:
         return None
     while args and args[0] in {"--bun", "--no", "--no-install"}:
-        _ = args.pop(0)
-    if command_name == "bun":
-        while args and args[0] in {"--smol"}:
-            _ = args.pop(0)
-        if args and args[0] == "x":
-            _ = args.pop(0)
-    if not args:
+        args.pop(0)
+    if not args or args[0] not in {"eslint", "jest", "tsc", "vitest"}:
         return None
-    runner_token = args[0]
-    runner_name = Path(runner_token).name
-    if runner_name not in {"tsc", "vitest"} or not _runner_invocation_is_read_only(runner_name, args[1:]):
-        return None
+    runner_name = args[0]
     if any(
         _runner_argument_escapes_root(
             arg,
@@ -2109,50 +2094,22 @@ def literal_cd_execution_context(
     if runner_cwd is None:
         return None
     try:
-        executable = (
-            (runner_cwd / runner_token).resolve(strict=True)
-            if "/" in runner_token
-            else (runner_cwd / "node_modules" / ".bin" / runner_name).resolve(strict=True)
-        )
-        _ = executable.relative_to((runner_cwd / "node_modules").resolve(strict=True))
+        executable = (runner_cwd / "node_modules" / ".bin" / runner_name).resolve(strict=True)
+        executable.relative_to((runner_cwd / "node_modules").resolve(strict=True))
     except (OSError, RuntimeError, ValueError):
         return None
-    for output_filter in context.segments[2:]:
+    if len(context.segments) == 3:
+        output_filter = context.segments[2]
         filter_name, filter_index = _shell_segment_primary_command(list(output_filter.tokens))
-        if filter_name not in {"grep", "head", "tail"} or filter_index is None:
+        if filter_name not in {"head", "tail"} or filter_index is None:
             return None
         filter_args = list(output_filter.tokens[filter_index + 1 :])
-        if output_filter.control_before != ("|",):
+        if output_filter.control_before != ("|",) or len(filter_args) != 1:
             return None
-        if filter_name in {"head", "tail"}:
-            if len(filter_args) != 1:
-                return None
-            count = filter_args[0]
-            if not count.startswith("-") or not count[1:].isdigit() or not 1 <= int(count[1:]) <= 1000:
-                return None
-        elif not _read_only_lookup_filter_segment_is_safe(
-            filter_name,
-            filter_args,
-            home_dir=output_filter.effective_cwd or home_dir,
-        ):
+        count = filter_args[0]
+        if not count.startswith("-") or not count[1:].isdigit() or not 1 <= int(count[1:]) <= 1000:
             return None
     return context
-
-
-def _runner_invocation_is_read_only(runner_name: str, args: list[str]) -> bool:
-    if runner_name == "tsc":
-        return "--noEmit" in args and "--emitDeclarationOnly" not in args and "--incremental" not in args
-    if not args or args[0] != "run":
-        return False
-    mutating_flags = {
-        "-u",
-        "--coverage",
-        "--merge-reports",
-        "--outputFile",
-        "--update",
-        "--updateSnapshot",
-    }
-    return not any(arg in mutating_flags or any(arg.startswith(f"{flag}=") for flag in mutating_flags) for arg in args)
 
 
 def _runner_argument_escapes_root(arg: str, *, cwd: Path, root: Path) -> bool:
