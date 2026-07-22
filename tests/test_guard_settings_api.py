@@ -10,6 +10,7 @@ from typing import Any
 
 from codex_plugin_scanner.guard.config import load_guard_config, resolve_risk_action, update_guard_settings
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -84,7 +85,12 @@ def test_relaxed_security_level_persists_granular_risk_settings(tmp_path: Path) 
     assert settings["harness_risk_actions"]["codex"]["local_secret_read"] == "block"
 
 
-def test_settings_export_import_and_reset_round_trip(tmp_path: Path) -> None:
+def test_settings_export_import_and_reset_round_trip(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        daemon_server_module,
+        "resolve_package_firewall_entitlement",
+        lambda _store: {"allowed": True, "reason": "paid_entitlement_active", "tier": "team"},
+    )
     _store, daemon = _with_daemon(tmp_path / "guard-home")
     try:
         update_status, _update_payload = _json_request(
@@ -131,7 +137,7 @@ def test_settings_export_import_and_reset_round_trip(tmp_path: Path) -> None:
     assert import_payload["settings"]["sync"] is True
 
 
-def test_cloud_sync_requires_paid_team_gate(tmp_path: Path) -> None:
+def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monkeypatch) -> None:
     _store, daemon = _with_daemon(tmp_path / "guard-home")
     try:
         blocked_status, blocked_payload = _json_request(
@@ -141,20 +147,34 @@ def test_cloud_sync_requires_paid_team_gate(tmp_path: Path) -> None:
             method="POST",
             payload={"settings": {"sync": True}},
         )
-        allowed_status, allowed_payload = _json_request(
+        asserted_billing_status, asserted_billing_payload = _json_request(
             daemon.port,
             daemon._server.auth_token,
             "/v1/settings",
             method="POST",
             payload={"settings": {"billing": True, "sync": True}},
         )
+        monkeypatch.setattr(
+            daemon_server_module,
+            "resolve_package_firewall_entitlement",
+            lambda _store: {"allowed": True, "reason": "paid_entitlement_active", "tier": "team"},
+        )
+        allowed_status, allowed_payload = _json_request(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/settings",
+            method="POST",
+            payload={"settings": {"billing": False, "sync": True}},
+        )
     finally:
         daemon.stop()
 
     assert blocked_status == 400
     assert blocked_payload["message"] == "Cloud sync requires a paid team plan."
+    assert asserted_billing_status == 400
+    assert asserted_billing_payload["message"] == "Cloud sync requires a paid team plan."
     assert allowed_status == 200
-    assert allowed_payload["settings"]["billing"] is True
+    assert allowed_payload["settings"]["billing"] is False
     assert allowed_payload["settings"]["sync"] is True
 
 
