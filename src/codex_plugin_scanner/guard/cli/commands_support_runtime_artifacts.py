@@ -234,9 +234,10 @@ def _routine_local_runner_has_complete_evidence(intent: PackageIntent) -> bool:
         return False
     try:
         workspace = Path(execution.effective_cwd).resolve(strict=True)
-        Path(executable.resolved_path).resolve(strict=True).relative_to(
-            (workspace / "node_modules").resolve(strict=True)
-        )
+        node_modules = (workspace / "node_modules").resolve(strict=True)
+        package_root = (node_modules / execution.package_name).resolve(strict=True)
+        package_root.relative_to(node_modules)
+        Path(executable.resolved_path).resolve(strict=True).relative_to(package_root)
     except (OSError, RuntimeError, ValueError):
         return False
     return not intent.execution_context_reason_codes and _routine_local_runner_versions_match(

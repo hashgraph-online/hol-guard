@@ -207,6 +207,51 @@ def test_local_vitest_without_lock_evidence_still_requires_review(tmp_path: Path
     assert artifact is not None
 
 
+def test_local_vitest_runner_retargeted_to_another_package_requires_review(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    active_workspace = home / "projects" / "active"
+    test_workspace = home / "projects" / "tested"
+    active_workspace.mkdir(parents=True)
+    _write_local_vitest(test_workspace, with_lock=True)
+    unrelated_package = test_workspace / "node_modules" / "unrelated"
+    unrelated_package.mkdir()
+    payload = unrelated_package / "payload.mjs"
+    payload.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+    payload.chmod(0o755)
+    runner = test_workspace / "node_modules" / ".bin" / "vitest"
+    runner.unlink()
+    runner.symlink_to("../unrelated/payload.mjs")
+
+    artifact = _artifact(
+        f"cd {test_workspace} && npx vitest run tests/example.test.tsx",
+        home=home,
+        workspace=active_workspace,
+    )
+
+    assert artifact is not None
+
+
+def test_local_vitest_package_symlinked_outside_node_modules_requires_review(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    active_workspace = home / "projects" / "active"
+    test_workspace = home / "projects" / "tested"
+    active_workspace.mkdir(parents=True)
+    _write_local_vitest(test_workspace, with_lock=True)
+    package_root = test_workspace / "node_modules" / "vitest"
+    outside_package = home / "outside" / "vitest"
+    outside_package.parent.mkdir()
+    package_root.rename(outside_package)
+    package_root.symlink_to(outside_package, target_is_directory=True)
+
+    artifact = _artifact(
+        f"cd {test_workspace} && npx vitest run tests/example.test.tsx",
+        home=home,
+        workspace=active_workspace,
+    )
+
+    assert artifact is not None
+
+
 @pytest.mark.parametrize(
     "runner_request",
     ("vitest@99.0.0", "vitest@file:./evil", "--package vitest@99.0.0 vitest"),
