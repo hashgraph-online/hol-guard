@@ -35,6 +35,7 @@ class StoreCommandActivityMixin:
         evidence: CommandActivityEvidence,
         *,
         shadow: CommandShadowObservation | None = None,
+        shadow_evaluation_succeeded: bool = False,
     ) -> bool:
         """Persist one logical command and its rule hits; return false for an exact replay."""
 
@@ -122,7 +123,7 @@ class StoreCommandActivityMixin:
                 connection,
                 error_domain=COMMAND_PERSISTENCE_ERROR_DOMAIN,
             )
-            if shadow is not None:
+            if shadow is not None or shadow_evaluation_succeeded:
                 recover_command_activity_persistence(
                     connection,
                     error_domain=SHADOW_PERSISTENCE_ERROR_DOMAIN,
