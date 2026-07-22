@@ -33,6 +33,7 @@ from ..adapters.opencode_pretool import (
     managed_plugin_path,
     pretool_plugin_source,
 )
+from ..codex_hook_integrity import CodexHookIntegrityError, load_authenticated_hook_manifest
 from ..config import resolve_guard_home
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
@@ -2150,12 +2151,20 @@ def _repair_context_from_managed_install(
     managed_workspace = managed_install.get("workspace")
     if isinstance(managed_workspace, str) and managed_workspace.strip():
         workspace_path = Path(managed_workspace).expanduser().resolve()
+        manifest = managed_install.get("manifest")
+        explicit_value = manifest.get("hook_workspace_explicit") if isinstance(manifest, dict) else None
+        workspace_override_explicit = (
+            explicit_value
+            if isinstance(explicit_value, bool)
+            else _legacy_codex_workspace_was_explicit(context, managed_install, workspace_path)
+        )
         return (
             HarnessContext(
                 home_dir=context.home_dir,
                 workspace_dir=workspace_path,
                 guard_home=context.guard_home,
                 home_override_explicit=context.home_override_explicit,
+                workspace_override_explicit=workspace_override_explicit,
             ),
             str(workspace_path),
         )
@@ -2168,6 +2177,25 @@ def _repair_context_from_managed_install(
         ),
         None,
     )
+
+
+def _legacy_codex_workspace_was_explicit(
+    context: HarnessContext,
+    managed_install: dict[str, object],
+    workspace_path: Path,
+) -> bool:
+    if managed_install.get("harness") != "codex":
+        return True
+    try:
+        authenticated = load_authenticated_hook_manifest(
+            context.guard_home,
+            CodexHarnessAdapter._hook_config_path(context),
+        )
+    except (CodexHookIntegrityError, OSError):
+        return False
+    manifest_context = authenticated.get("context")
+    bound_workspace = manifest_context.get("workspace_dir") if isinstance(manifest_context, dict) else None
+    return isinstance(bound_workspace, str) and Path(bound_workspace).resolve() == workspace_path
 
 
 def _repair_codex_install(

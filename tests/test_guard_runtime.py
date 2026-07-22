@@ -148,6 +148,7 @@ def _install_codex_native_hooks(home_dir: Path, workspace_dir: Path) -> None:
         workspace_dir=workspace_dir,
         guard_home=home_dir,
         home_override_explicit=True,
+        workspace_override_explicit=True,
     )
     config_path = home_dir / ".codex" / "config.toml"
     payload = read_toml_payload(config_path)
