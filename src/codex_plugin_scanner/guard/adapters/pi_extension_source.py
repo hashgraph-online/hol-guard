@@ -130,8 +130,8 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      return {\n"
         '        decision: "allow",\n'
         '        notice: "warning",\n'
-        "        reason: `HOL Guard Pi hook timed out after "
-        + "${GUARD_DAEMON_TIMEOUT_MS}ms while reviewing this action; continuing without a completed review.`,\n"
+        "        reason: `HOL Guard Pi hook timed out after ${GUARD_DAEMON_TIMEOUT_MS}ms `\n"
+        "          + `while reviewing this action; continuing without a completed review.`,\n"
         "      };\n"
         "    }\n"
         "    return null;\n"
@@ -223,7 +223,8 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      return {\n"
         '        decision: "allow",\n'
         '        notice: "warning",\n'
-        "        reason: `HOL Guard Pi hook timed out while reviewing this action; continuing without a completed review.`,\n"
+        "        reason: `HOL Guard Pi hook timed out while reviewing this action; `\n"
+        "          + `continuing without a completed review.`,\n"
         "      };\n"
         "    }\n"
         "    return {\n"
