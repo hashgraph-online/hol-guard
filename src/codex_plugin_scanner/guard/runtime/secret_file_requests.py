@@ -1594,11 +1594,7 @@ def _destructive_shell_tool_action_request(
         raw_command_text or detection_command_text,
         home_dir=home_dir,
     )
-    if (
-        execution_context.reason_code == SHELL_CWD_WORKSPACE_ESCAPE
-        and home_dir is not None
-        and cwd is None
-    ):
+    if execution_context.reason_code == SHELL_CWD_WORKSPACE_ESCAPE and home_dir is not None and cwd is None:
         home_risk_context = model_shell_execution_context(
             detection_command_text,
             cwd=home_dir,
