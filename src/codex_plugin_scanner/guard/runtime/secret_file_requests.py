@@ -22,6 +22,7 @@ from pathlib import Path
 from ..models import GuardArtifact
 from .actions import GuardActionEnvelope, apply_patch_target_paths
 from .approval_context import build_runtime_executable_identity
+from .command_critical_floors import command_critical_floor_factors
 from .command_decision_adapter import effect_decision_to_dict
 from .command_evaluation import evaluate_command
 from .command_extension_interaction import classify_command_extension_interaction
@@ -5449,6 +5450,10 @@ def _looks_destructive_shell_command(
     normalized = command_text.strip()
     if not normalized:
         return False
+    if "hol-guard" in normalized or "plugin-guard" in normalized:
+        critical_factors = command_critical_floor_factors(parse_shell_command(normalized, cwd=cwd, home_dir=home_dir))
+        if any(factor.basis.action_floor == "block" for factor in critical_factors):
+            return True
     if not _execution_context_applied:
         execution_context = execution_context or model_shell_execution_context(
             normalized,
