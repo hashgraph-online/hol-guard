@@ -74,13 +74,13 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
     if operation == "rev-parse":
         return args in {("--show-toplevel",), ("--show-prefix",), ("--is-inside-work-tree",), ("HEAD",)}
     if operation == "diff":
-        return bool(args) and all(
-            arg in {"--check", "--stat", "--name-only", "--name-status", "--cached", "HEAD"} or _safe_ref(arg)
-            for arg in args
-        )
+        return _safe_diff_args(args)
     if operation == "show":
         return bool(args) and all(
-            arg in {"--stat", "--oneline", "--name-only", "--name-status", "HEAD"} or _safe_ref(arg) for arg in args
+            arg in {"--stat", "--oneline", "--name-only", "--name-status", "HEAD"}
+            or _safe_ref(arg)
+            or _safe_object_path(arg)
+            for arg in args
         )
     return False
 
@@ -107,6 +107,34 @@ def _safe_repository_path(value: str) -> bool:
         component not in {"", ".", ".."} and _REPOSITORY_PATH_COMPONENT.fullmatch(component) is not None
         for component in components
     )
+
+
+def _safe_diff_args(args: tuple[str, ...]) -> bool:
+    if not args:
+        return False
+    if "--" not in args:
+        return all(
+            arg in {"--check", "--stat", "--name-only", "--name-status", "--cached", "HEAD"} or _safe_ref(arg)
+            for arg in args
+        )
+    separator = args.index("--")
+    revisions = args[:separator]
+    paths = args[separator + 1 :]
+    return (
+        bool(paths)
+        and all(
+            arg in {"--check", "--stat", "--name-only", "--name-status", "--cached", "HEAD"} or _safe_ref(arg)
+            for arg in revisions
+        )
+        and all(_safe_repository_path(path) for path in paths)
+    )
+
+
+def _safe_object_path(value: str) -> bool:
+    if value.count(":") != 1:
+        return False
+    revision, path = value.split(":", 1)
+    return _safe_ref(revision) and _safe_repository_path(path)
 
 
 def _without_stderr_merge(tokens: tuple[str, ...]) -> tuple[str, ...] | None:

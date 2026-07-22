@@ -1825,6 +1825,11 @@ def low_risk_compound_developer_execution_context(
 ) -> ShellExecutionContext | None:
     """Model a deterministic whole-command developer inspection from the user's home."""
 
+    delayed = re.fullmatch(r"\s*sleep\s+([1-9]\d{0,3})\s*&&\s*(.+)", command_text, re.DOTALL)
+    if delayed is not None and int(delayed.group(1)) <= 3600:
+        recovered = low_risk_compound_developer_execution_context(delayed.group(2), home_dir=home_dir)
+        return replace(recovered, command_text=command_text) if recovered is not None else None
+
     context = model_shell_execution_context(
         command_text,
         cwd=home_dir,
@@ -1846,7 +1851,9 @@ def low_risk_compound_developer_execution_context(
         command_name, command_index = _shell_segment_primary_command(list(segment.tokens))
         if command_name is None or command_index is None:
             return None
-        args = list(segment.tokens[command_index + 1 :])
+        args = _without_safe_inspection_redirections(list(segment.tokens[command_index + 1 :]))
+        if args is None:
+            return None
         segment_root = segment.effective_cwd or home_dir
         if not _path_text_is_within_root(os.fspath(segment_root), home_dir) or any(
             _shell_token_escapes_root(arg, cwd=segment_root, root=home_dir) for arg in args
@@ -1902,6 +1909,24 @@ def low_risk_compound_developer_execution_context(
                 continue
         return None
     return context if saw_inspection else None
+
+
+def _without_safe_inspection_redirections(args: list[str]) -> list[str] | None:
+    filtered: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token in {"2>&1", "2>/dev/null"}:
+            index += 1
+            continue
+        if token == "2>" and index + 1 < len(args) and args[index + 1] == "/dev/null":
+            index += 2
+            continue
+        if any(marker in token for marker in (">", "<")):
+            return None
+        filtered.append(token)
+        index += 1
+    return filtered
 
 
 def _shell_syntax_check_segment_is_safe(command_name: str, args: list[str]) -> bool:
