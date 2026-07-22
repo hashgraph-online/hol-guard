@@ -51,6 +51,7 @@ GUARD_DAEMON_COMPATIBILITY_VERSION = 2
 GUARD_DAEMON_START_TIMEOUT_SECONDS = 5.0
 GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS = 30.0
 GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
+GUARD_DAEMON_HOOK_RECOVERY_COOLDOWN_SECONDS = 5.0
 _EPHEMERAL_GUARD_DAEMON_REAP_INTERVAL_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_MAX_STATES = 512
@@ -433,6 +434,46 @@ def ensure_guard_daemon_after_update(
         preferred_port=preferred_port,
         allow_windows_job_breakaway=allow_windows_job_breakaway,
     )
+
+
+def recover_guard_daemon_after_hook_failure(
+    guard_home: Path,
+    *,
+    home_dir: Path | None = None,
+) -> str:
+    """Restart an older daemon after its authenticated hook endpoint fails.
+
+    The normal health endpoint can remain responsive while hook workers or the
+    identity challenge are wedged. The managed bridge invokes this only after
+    an authenticated hook request fails. A short generation cooldown prevents
+    concurrent failed hooks from repeatedly retiring the replacement daemon.
+    """
+
+    with _guard_daemon_start_lock(guard_home):
+        state = load_authenticated_daemon_state(guard_home)
+        current_url = load_guard_daemon_url(guard_home)
+        if current_url is not None and _daemon_generation_is_recent(state):
+            return current_url
+        retire_all_guard_daemons_for_home(guard_home)
+        if not guard_daemon_retirement_is_complete(guard_home):
+            raise RuntimeError("Unresponsive Guard daemon could not be retired safely.")
+    return ensure_guard_daemon(guard_home, home_dir=home_dir)
+
+
+def _daemon_generation_is_recent(state: dict[str, object] | None) -> bool:
+    if not isinstance(state, dict):
+        return False
+    started_at = state.get("started_at")
+    if not isinstance(started_at, str):
+        return False
+    try:
+        started = datetime.fromisoformat(started_at)
+    except ValueError:
+        return False
+    if started.tzinfo is None:
+        return False
+    age_seconds = (datetime.now(timezone.utc) - started.astimezone(timezone.utc)).total_seconds()
+    return 0 <= age_seconds <= GUARD_DAEMON_HOOK_RECOVERY_COOLDOWN_SECONDS
 
 
 def retire_all_guard_daemons_for_home(
