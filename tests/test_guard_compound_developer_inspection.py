@@ -196,6 +196,52 @@ def test_harnesses_keep_compound_destructive_commands_guarded(
     assert artifact.metadata["action_class"] == "destructive shell command"
 
 
+@pytest.mark.parametrize("harness", ("pi", "codex", "claude-code", "gemini", "cursor"))
+def test_harnesses_keep_guard_removal_at_the_destructive_floor(
+    tmp_path: Path,
+    harness: str,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+
+    artifact = _artifact("hol-guard uninstall --all", home=home, harness=harness)
+
+    assert artifact is not None
+    assert artifact.metadata["action_class"] == "destructive shell command"
+
+
+def test_guard_removal_help_stays_non_destructive(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+
+    artifact = _artifact("hol-guard uninstall --help", home=home)
+
+    assert artifact is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "xargs hol-guard uninstall --all",
+        "sh -c 'hol-guard policy disable'",
+        "parallel plugin-guard clear --all ::: value",
+        "HOL-GUARD.EXE uninstall --all",
+        "Plugin-Guard.EXE policy disable",
+    ),
+)
+def test_guard_removal_wrappers_keep_the_destructive_floor(
+    tmp_path: Path,
+    command: str,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+
+    artifact = _artifact(command, home=home)
+
+    assert artifact is not None
+    assert artifact.metadata["action_class"] == "destructive shell command"
+
+
 def test_compound_shell_syntax_check_is_inspection_only(tmp_path: Path) -> None:
     home = tmp_path / "home"
     workspace = home / "workspace"
