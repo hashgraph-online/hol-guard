@@ -206,6 +206,8 @@ export type GuardApprovalRequest = {
   decision_contract_error?: string;
   fallback_cli_command?: string | null;
   raw_command_text?: string | null;
+  queue_preview?: string | null;
+  queue_command_category?: string | null;
   action_identity?: string | null;
   queue_group_id?: string | null;
   dedupe_count?: number;

@@ -13736,7 +13736,7 @@ function queueCategoriesForItems(items) {
 function resolveQueueCategoryId(item) {
   const envelope = item.action_envelope_json;
   const decisionCategories = item.decision_v2_json?.signals.map((signal) => signal.category) ?? [];
-  const command = envelope?.command ?? item.launch_target ?? "";
+  const command = envelope?.command ?? item.queue_preview ?? item.launch_target ?? "";
   const text = queueCategoryText(item);
   const isPromptReview = envelope?.action_type === "prompt" || decisionCategories.includes("prompt");
   const isWriteReview = envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command);
@@ -13770,7 +13770,9 @@ function resolveQueueCategoryId(item) {
   if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete files", "wipe", "force-clean", "git clean -fd", "truncate"])) {
     return "destructive_shell";
   }
-  const commandCategory = categoryFromCommandExtension(envelope?.command_category);
+  const commandCategory = categoryFromCommandExtension(
+    envelope?.command_category ?? item.queue_command_category
+  );
   if (commandCategory !== null) {
     return commandCategory;
   }
@@ -13844,6 +13846,7 @@ function queueCategoryText(item) {
     item.launch_summary ?? "",
     item.why_now ?? "",
     item.launch_target ?? "",
+    item.queue_preview ?? "",
     envelope?.action_type ?? "",
     envelope?.command ?? "",
     envelope?.tool_name ?? "",
@@ -14124,6 +14127,7 @@ function searchQueue(items, term) {
       item.launch_summary ?? "",
       item.why_now ?? "",
       envelope?.command ?? "",
+      item.queue_preview ?? "",
       item.raw_command_text ?? "",
       item.fallback_cli_command ?? "",
       item.review_command ?? "",
@@ -16418,6 +16422,7 @@ function parseActionEnvelope(raw) {
   const mcpTool = raw["mcp_tool"];
   const packageManager = raw["package_manager"];
   const packageName = raw["package_name"];
+  const commandCategory = raw["command_category"];
   const packageIntentKind = raw["package_intent_kind"];
   const packageTargets = raw["package_targets"];
   const preExecutionResult = aliasedPreExecutionResult.value;
@@ -16427,7 +16432,7 @@ function parseActionEnvelope(raw) {
   if (typeof schemaVersion !== "number" || typeof actionId !== "string" || typeof harness !== "string" || typeof eventName !== "string" || !isGuardActionType(actionType)) {
     return null;
   }
-  if (!isStringOrNull(workspace) || !isStringOrNull(workspaceHash) || !isStringOrNull(toolName) || !isStringOrNull(command) || !isStringOrNull(promptExcerpt) || promptText !== void 0 && !isStringOrNull(promptText) || !isStringOrNull(mcpServer) || !isStringOrNull(mcpTool) || !isStringOrNull(packageManager) || !isStringOrNull(packageName) || packageIntentKind !== void 0 && !isStringOrNull(packageIntentKind) || preExecutionResult !== void 0 && preExecutionResult !== null && !isGuardAction(preExecutionResult) || policyAction !== void 0 && policyAction !== null && !isGuardAction(policyAction) || !isStringOrNull(scriptName)) {
+  if (!isStringOrNull(workspace) || !isStringOrNull(workspaceHash) || !isStringOrNull(toolName) || !isStringOrNull(command) || !isStringOrNull(promptExcerpt) || promptText !== void 0 && !isStringOrNull(promptText) || !isStringOrNull(mcpServer) || !isStringOrNull(mcpTool) || !isStringOrNull(packageManager) || !isStringOrNull(packageName) || commandCategory !== void 0 && !isStringOrNull(commandCategory) || packageIntentKind !== void 0 && !isStringOrNull(packageIntentKind) || preExecutionResult !== void 0 && preExecutionResult !== null && !isGuardAction(preExecutionResult) || policyAction !== void 0 && policyAction !== null && !isGuardAction(policyAction) || !isStringOrNull(scriptName)) {
     return null;
   }
   if (!isStringArray(targetPaths) || !isStringArray(networkHosts) || packageTargets !== void 0 && !isStringArray(packageTargets)) {
@@ -16454,6 +16459,7 @@ function parseActionEnvelope(raw) {
     mcp_tool: mcpTool,
     package_manager: packageManager,
     package_name: packageName,
+    command_category: isStringOrNull(commandCategory) ? commandCategory : null,
     package_intent_kind: isStringOrNull(packageIntentKind) ? packageIntentKind : null,
     package_targets: isStringArray(packageTargets) ? packageTargets : [],
     pre_execution_result: isGuardAction(preExecutionResult) ? preExecutionResult : null,
@@ -28329,7 +28335,7 @@ function iconForQueueCategory(categoryId) {
 }
 function queueItemPreview(item) {
   const envelope = item.action_envelope_json;
-  return envelope?.command ?? item.raw_command_text ?? envelope?.mcp_tool ?? (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? envelope?.package_name ?? resolveStoppedCommandText(item);
+  return envelope?.command ?? item.queue_preview ?? item.raw_command_text ?? envelope?.mcp_tool ?? (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? envelope?.package_name ?? resolveStoppedCommandText(item);
 }
 const QUEUE_PAGE_SIZE$1 = 10;
 function ReviewHeader({
