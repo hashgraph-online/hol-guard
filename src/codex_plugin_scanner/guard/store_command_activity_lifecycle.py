@@ -204,6 +204,26 @@ class StoreCommandActivityLifecycleMixin:
                 """
             )
 
+    def record_command_activity_observation_conflict(
+        self: _ConnectionOwner,
+        *,
+        occurred_at: datetime,
+    ) -> None:
+        """Retain one conflicting terminal observation without claiming a persistence outage."""
+
+        _require_utc_datetime(occurred_at)
+        with self._connect() as connection:
+            connection.execute("begin immediate")
+            connection.execute(
+                """
+                update command_activity_health
+                set dropped_event_count = min(dropped_event_count + 1, ?),
+                    last_error_code = 'post_result_conflict', last_error_at = ?
+                where singleton = 1
+                """,
+                (_MAX_COUNTER, occurred_at.isoformat()),
+            )
+
     def get_command_activity_persistence_health(
         self: _ConnectionOwner,
     ) -> CommandActivityPersistenceHealth:
