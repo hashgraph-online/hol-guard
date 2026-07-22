@@ -6,7 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
+from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
+    _hook_runtime_artifact,
+    _routine_semver_spec_matches,
+)
 from codex_plugin_scanner.guard.models import GuardArtifact
 
 
@@ -148,6 +151,142 @@ def test_cross_workspace_recovery_preserves_mutating_command_review(tmp_path: Pa
         )
         is not None
     )
+
+
+def _write_local_vitest(workspace: Path, *, with_lock: bool) -> None:
+    (workspace / "node_modules" / ".bin").mkdir(parents=True)
+    (workspace / "node_modules" / "vitest").mkdir()
+    (workspace / "package.json").write_text(
+        '{"devDependencies":{"vitest":"^4.1.8"}}\n',
+        encoding="utf-8",
+    )
+    if with_lock:
+        (workspace / "bun.lock").write_text(
+            '{"lockfileVersion":1,"packages":{"vitest":["vitest@4.1.8"]}}\n',
+            encoding="utf-8",
+        )
+    runner = workspace / "node_modules" / "vitest" / "vitest.mjs"
+    runner.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+    runner.chmod(0o755)
+    (workspace / "node_modules" / "vitest" / "package.json").write_text(
+        '{"name":"vitest","version":"4.1.8"}\n',
+        encoding="utf-8",
+    )
+    (workspace / "node_modules" / ".bin" / "vitest").symlink_to("../vitest/vitest.mjs")
+
+
+def test_declared_local_vitest_runner_does_not_require_repeated_review(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    active_workspace = home / "projects" / "active"
+    test_workspace = home / "projects" / "tested"
+    active_workspace.mkdir(parents=True)
+    _write_local_vitest(test_workspace, with_lock=True)
+
+    artifact = _artifact(
+        f"cd {test_workspace} && npx vitest run tests/example.test.tsx 2>&1 | tail -15",
+        home=home,
+        workspace=active_workspace,
+    )
+
+    assert artifact is None
+
+
+def test_local_vitest_without_lock_evidence_still_requires_review(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    active_workspace = home / "projects" / "active"
+    test_workspace = home / "projects" / "tested"
+    active_workspace.mkdir(parents=True)
+    _write_local_vitest(test_workspace, with_lock=False)
+
+    artifact = _artifact(
+        f"cd {test_workspace} && npx vitest run tests/example.test.tsx",
+        home=home,
+        workspace=active_workspace,
+    )
+
+    assert artifact is not None
+
+
+def test_local_vitest_runner_retargeted_to_another_package_requires_review(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    active_workspace = home / "projects" / "active"
+    test_workspace = home / "projects" / "tested"
+    active_workspace.mkdir(parents=True)
+    _write_local_vitest(test_workspace, with_lock=True)
+    unrelated_package = test_workspace / "node_modules" / "unrelated"
+    unrelated_package.mkdir()
+    payload = unrelated_package / "payload.mjs"
+    payload.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+    payload.chmod(0o755)
+    runner = test_workspace / "node_modules" / ".bin" / "vitest"
+    runner.unlink()
+    runner.symlink_to("../unrelated/payload.mjs")
+
+    artifact = _artifact(
+        f"cd {test_workspace} && npx vitest run tests/example.test.tsx",
+        home=home,
+        workspace=active_workspace,
+    )
+
+    assert artifact is not None
+
+
+def test_local_vitest_package_symlinked_outside_node_modules_requires_review(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    active_workspace = home / "projects" / "active"
+    test_workspace = home / "projects" / "tested"
+    active_workspace.mkdir(parents=True)
+    _write_local_vitest(test_workspace, with_lock=True)
+    package_root = test_workspace / "node_modules" / "vitest"
+    outside_package = home / "outside" / "vitest"
+    outside_package.parent.mkdir()
+    package_root.rename(outside_package)
+    package_root.symlink_to(outside_package, target_is_directory=True)
+
+    artifact = _artifact(
+        f"cd {test_workspace} && npx vitest run tests/example.test.tsx",
+        home=home,
+        workspace=active_workspace,
+    )
+
+    assert artifact is not None
+
+
+@pytest.mark.parametrize(
+    "runner_request",
+    ("vitest@99.0.0", "vitest@file:./evil", "--package vitest@99.0.0 vitest"),
+)
+def test_local_runner_override_requests_still_require_review(tmp_path: Path, runner_request: str) -> None:
+    home = tmp_path / "home"
+    active_workspace = home / "projects" / "active"
+    test_workspace = home / "projects" / "tested"
+    active_workspace.mkdir(parents=True)
+    _write_local_vitest(test_workspace, with_lock=True)
+    (test_workspace / "evil").mkdir()
+
+    artifact = _artifact(
+        f"cd {test_workspace} && npx {runner_request} run tests/example.test.tsx",
+        home=home,
+        workspace=active_workspace,
+    )
+
+    assert artifact is not None
+
+
+@pytest.mark.parametrize(
+    ("specifier", "version", "expected"),
+    (
+        ("4.1.8", "4.1.8", True),
+        ("^4.1.8", "4.9.0", True),
+        ("^4.1.8", "5.0.0", False),
+        ("^0.2.3", "0.2.9", True),
+        ("^0.2.3", "0.3.0", False),
+        ("~4.1.8", "4.1.9", True),
+        ("~4.1.8", "4.2.0", False),
+    ),
+)
+def test_routine_runner_semver_matching(specifier: str, version: str, expected: bool) -> None:
+    assert _routine_semver_spec_matches(specifier, version) is expected
 
 
 def test_compound_git_and_filesystem_inspection_is_one_unit(tmp_path: Path) -> None:
