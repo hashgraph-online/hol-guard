@@ -6306,6 +6306,7 @@ class GuardDaemonServer:
             self._command_activity_maintenance_thread = None
 
     def _command_activity_maintenance_loop(self) -> None:
+        self._maintain_command_activity_best_effort()
         while not self._shutdown_started.wait(3_600):
             self._maintain_command_activity_best_effort()
 

@@ -112,7 +112,11 @@ def record_pre_hook_command_activity_best_effort(
             occurred_at=occurred_at,
         )
         try:
-            recorded = store.record_command_activity(evidence, shadow=shadow)
+            recorded = store.record_command_activity(
+                evidence,
+                shadow=shadow,
+                shadow_evaluation_succeeded=not shadow_failed,
+            )
         except Exception:
             if correlation is not None and store.is_exact_command_activity_pre_replay(evidence):
                 return False

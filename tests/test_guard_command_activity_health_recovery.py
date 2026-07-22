@@ -111,3 +111,13 @@ def test_shadow_failure_requires_successful_shadow_persistence_to_recover(tmp_pa
     recovered_evidence, recovered_shadow = _shadow_evidence("activity:shadow-recovered")
     store.record_command_activity(recovered_evidence, shadow=recovered_shadow)
     assert _health(store)["status"] == "healthy"
+
+
+def test_successful_disabled_shadow_evaluation_recovers_shadow_health(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    store.record_command_activity_persistence_failure(error_code="shadow_evaluation_failed", occurred_at=_NOW)
+    activity_evidence, _shadow = _shadow_evidence("activity:shadow-disabled")
+
+    store.record_command_activity(activity_evidence, shadow_evaluation_succeeded=True)
+
+    assert _health(store)["status"] == "healthy"

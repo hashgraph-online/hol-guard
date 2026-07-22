@@ -64,7 +64,7 @@ def test_long_lived_daemon_rechecks_daily_and_uses_global_retention(monkeypatch:
     maintenance_calls: list[int] = []
     service._maintain_command_activity_best_effort = lambda: maintenance_calls.append(1)
     service._command_activity_maintenance_loop()
-    assert len(maintenance_calls) == 2
+    assert len(maintenance_calls) == 3
 
     loaded: list[tuple[Path, Path | None]] = []
     object.__setattr__(service, "_server", _FakeServer(_FakeStore()))
