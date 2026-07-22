@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Final, Protocol, cast
 
+from .store_command_activity_lifecycle import MAINTENANCE_ERROR_DOMAIN, recover_command_activity_persistence
 from .store_command_activity_rollups import (
     CommandActivityRollupBackfillResult,
     backfill_command_activity_rollups_batch,
@@ -58,6 +59,7 @@ class StoreCommandActivityMaintenanceMixin:
             last_completed_day = str(state["last_completed_day"]) if state["last_completed_day"] is not None else None
             pending = connection.execute("select 1 from command_activity_rollup_pending limit 1").fetchone()
             if last_completed_day == today and pending is None:
+                recover_command_activity_persistence(connection, error_domain=MAINTENANCE_ERROR_DOMAIN)
                 return CommandActivityMaintenanceResult(False, True, 0, 0, 0, 0)
 
             backfill = _backfill_batch(connection, state=state, batch_size=batch_size, now=now)
@@ -102,6 +104,7 @@ class StoreCommandActivityMaintenanceMixin:
                     backfill.cursor_complete,
                 ),
             )
+            recover_command_activity_persistence(connection, error_domain=MAINTENANCE_ERROR_DOMAIN)
             return CommandActivityMaintenanceResult(
                 True,
                 completed,

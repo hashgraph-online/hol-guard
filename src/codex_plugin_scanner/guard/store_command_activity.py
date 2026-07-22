@@ -16,6 +16,11 @@ from .runtime.command_activity_contract import (
     CorrelationHandle,
 )
 from .runtime.command_shadow_evaluation import CommandShadowObservation
+from .store_command_activity_lifecycle import (
+    COMMAND_PERSISTENCE_ERROR_DOMAIN,
+    SHADOW_PERSISTENCE_ERROR_DOMAIN,
+    recover_command_activity_persistence,
+)
 from .store_command_activity_rollups import record_command_activity_rollups
 from .store_command_shadow import record_command_shadow_observation
 
@@ -113,6 +118,15 @@ class StoreCommandActivityMixin:
             if shadow is not None:
                 record_command_shadow_observation(connection, shadow)
             record_command_activity_rollups(connection, evidence)
+            recover_command_activity_persistence(
+                connection,
+                error_domain=COMMAND_PERSISTENCE_ERROR_DOMAIN,
+            )
+            if shadow is not None:
+                recover_command_activity_persistence(
+                    connection,
+                    error_domain=SHADOW_PERSISTENCE_ERROR_DOMAIN,
+                )
             return True
 
     def count_command_activities(self: _ConnectionOwner) -> int:
