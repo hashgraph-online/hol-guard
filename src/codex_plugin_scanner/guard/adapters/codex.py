@@ -322,9 +322,7 @@ def _hook_command_parts_for_home_mode(
                 python_executable=python_executable,
             )
         ),
-        "start_command": list(
-            _daemon_start_command(guard_home, context.home_dir, python_executable=python_executable)
-        ),
+        "start_command": list(_daemon_start_command(guard_home, context.home_dir, python_executable=python_executable)),
         "query": urlencode(query),
         "hook_timeouts": {
             "PreToolUse": long_timeout,
