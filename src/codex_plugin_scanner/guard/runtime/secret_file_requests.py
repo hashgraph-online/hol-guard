@@ -1827,8 +1827,18 @@ def low_risk_compound_developer_execution_context(
 
     delayed = re.fullmatch(r"\s*sleep\s+([1-9]\d{0,3})\s*&&\s*(.+)", command_text, re.DOTALL)
     if delayed is not None and int(delayed.group(1)) <= 3600:
-        recovered = low_risk_compound_developer_execution_context(delayed.group(2), home_dir=home_dir)
+        recovered = _low_risk_compound_developer_execution_context(delayed.group(2), home_dir=home_dir)
         return replace(recovered, command_text=command_text) if recovered is not None else None
+
+    return _low_risk_compound_developer_execution_context(command_text, home_dir=home_dir)
+
+
+def _low_risk_compound_developer_execution_context(
+    command_text: str,
+    *,
+    home_dir: Path,
+) -> ShellExecutionContext | None:
+    """Recognize one inspection chain after optional delay handling."""
 
     context = model_shell_execution_context(
         command_text,

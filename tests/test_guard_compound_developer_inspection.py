@@ -87,6 +87,24 @@ def test_harnesses_accept_safe_leading_delay_before_cross_workspace_inspection(
     )
 
 
+@pytest.mark.parametrize(
+    "delay_prefix",
+    (
+        "sleep 3601",
+        "sleep 3600 && sleep 1",
+        " && ".join(["sleep 1"] * 1100),
+    ),
+)
+def test_compound_inspection_rejects_excessive_or_repeated_delays(tmp_path: Path, delay_prefix: str) -> None:
+    home = tmp_path / "home"
+    workspace = home / "projects" / "workspace"
+    (workspace / "src").mkdir(parents=True)
+
+    command = f"{delay_prefix} && cd {workspace} && grep -n TODO src/example.ts | head -20"
+
+    assert _artifact(command, home=home) is not None
+
+
 @pytest.mark.parametrize("pattern", ("TODO", "component.property", "module-name.tsx"))
 def test_compound_inspection_accepts_safe_stderr_suppression(tmp_path: Path, pattern: str) -> None:
     home = tmp_path / "home"
