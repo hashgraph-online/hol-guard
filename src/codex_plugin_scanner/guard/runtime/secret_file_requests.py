@@ -55,7 +55,7 @@ from .github_capability_interaction import (
 from .github_shell_capabilities import GitHubShellAnalysis
 from .github_shell_capabilities import classify_github_shell_capabilities as _classify_github_shell_capabilities
 from .interpreter_options import shell_interpreter_command_payload as _shell_interpreter_command_payload
-from .kubernetes_commands import kubernetes_secret_read_source
+from .kubernetes_commands import kubernetes_read_only_inventory_args, kubernetes_secret_read_source
 from .pytest_config import (
     PYTEST_CONFIG_PATH_INVALID,
     PytestConfigAssessment,
@@ -1251,8 +1251,47 @@ def is_explicitly_benign_tool_action_request(
         if _looks_like_safe_git_status_command(stripped_command, parts, cwd=cwd):
             found_benign_candidate = True
             continue
+        if _looks_like_safe_kubernetes_inventory_command(stripped_command, parts, cwd=cwd):
+            found_benign_candidate = True
+            continue
         return False
     return found_benign_candidate
+
+
+def _looks_like_safe_kubernetes_inventory_command(
+    command_text: str,
+    parts: list[str],
+    *,
+    cwd: Path | None,
+) -> bool:
+    if any(marker in command_text for marker in ("$(", "`", "<(", ">(")):
+        return False
+    segments = _iter_shell_command_segments(parts)
+    if not segments:
+        return False
+    try:
+        effective_cwd = (cwd or Path.cwd()).resolve()
+    except OSError:
+        return False
+    saw_inventory = False
+    for segment in segments:
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index != 0:
+            return False
+        args = _without_safe_inspection_redirections(segment[command_index + 1 :])
+        if args is None:
+            return False
+        next_cwd = _safe_git_status_cd_target(command_name, args, cwd=effective_cwd)
+        if next_cwd is not None:
+            effective_cwd = next_cwd
+            continue
+        executable = segment[command_index]
+        if "/" in executable or "\\" in executable:
+            return False
+        if not kubernetes_read_only_inventory_args(command_name, args):
+            return False
+        saw_inventory = True
+    return saw_inventory
 
 
 def _looks_like_safe_git_status_command(

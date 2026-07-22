@@ -115,6 +115,73 @@ _CP_OPTIONS_WITH_VALUES = frozenset({"--container", "--namespace", "--retries", 
 _CP_BOOLEAN_OPTIONS = frozenset({"--no-preserve"})
 _REMOTE_CP_OPTIONS_WITH_VALUES = frozenset({"--target-directory", "-t"})
 _SHELL_EXECUTABLES = frozenset({"ash", "bash", "dash", "ksh", "sh", "zsh"})
+_READ_ONLY_INVENTORY_RESOURCES = frozenset(
+    {
+        "cronjob",
+        "cronjobs",
+        "cj",
+        "daemonset",
+        "daemonsets",
+        "ds",
+        "deploy",
+        "deployment",
+        "deployments",
+        "ep",
+        "endpoint",
+        "endpoints",
+        "endpointslice",
+        "endpointslices",
+        "event",
+        "events",
+        "ev",
+        "ing",
+        "ingress",
+        "ingresses",
+        "job",
+        "jobs",
+        "namespace",
+        "namespaces",
+        "no",
+        "node",
+        "nodes",
+        "ns",
+        "po",
+        "pod",
+        "pods",
+        "pv",
+        "pvc",
+        "persistentvolume",
+        "persistentvolumeclaim",
+        "persistentvolumeclaims",
+        "persistentvolumes",
+        "rs",
+        "replicaset",
+        "replicasets",
+        "sts",
+        "svc",
+        "service",
+        "services",
+        "statefulset",
+        "statefulsets",
+    }
+)
+_READ_ONLY_GET_BOOLEAN_OPTIONS = frozenset(
+    {
+        "--ignore-not-found",
+        "--no-headers",
+        "--show-kind",
+        "--show-labels",
+        "--use-openapi-print-columns",
+        "--watch",
+        "--watch-only",
+        "-w",
+    }
+)
+_SAFE_INVENTORY_OUTPUTS = frozenset({"name", "wide"})
+_SAFE_JSONPATH_FIELD = re.compile(
+    r"^\{?\.?(?:items(?:\[-?\d+\]|\[\*\])?\.)?(?:metadata\.(?:name|namespace|uid)|status\.phase)\}?$",
+    re.IGNORECASE,
+)
 
 
 def kubernetes_secret_read_source(command: str | None) -> str | None:
@@ -125,6 +192,74 @@ def kubernetes_secret_read_source(command: str | None) -> str | None:
         if source is not None:
             return source
     return None
+
+
+def kubernetes_read_only_inventory_args(command_name: str, args: list[str]) -> bool:
+    """Return whether one kubectl/oc argv is a bounded, non-secret inventory read."""
+
+    if command_name.lower() not in {"kubectl", "oc"} or not args:
+        return False
+    tokens = tuple(args)
+    subcommand_index = _skip_kubectl_options(tokens, 0)
+    if subcommand_index >= len(tokens) or tokens[subcommand_index].lower() != "get":
+        return False
+    get_args = tokens[subcommand_index + 1 :]
+    resource, output = _read_only_get_resource_and_output(get_args)
+    if resource is None or resource not in _READ_ONLY_INVENTORY_RESOURCES:
+        return False
+    if output is None or output in _SAFE_INVENTORY_OUTPUTS:
+        return True
+    output_kind, separator, template = output.partition("=")
+    if output_kind not in {"jsonpath", "jsonpath-as-json"} or not separator:
+        return False
+    return _SAFE_JSONPATH_FIELD.fullmatch(template.strip().strip("'\"")) is not None
+
+
+def _read_only_get_resource_and_output(args: tuple[str, ...]) -> tuple[str | None, str | None]:
+    resource: str | None = None
+    output: str | None = None
+    index = 0
+    while index < len(args):
+        token = args[index]
+        normalized = token.lower()
+        if token == "--":
+            return None, None
+        if normalized in {"--raw", "--output", "-o"}:
+            if index + 1 >= len(args):
+                return None, None
+            if normalized == "--raw":
+                return None, None
+            output = args[index + 1]
+            index += 2
+            continue
+        if normalized.startswith("--raw="):
+            return None, None
+        if normalized.startswith("--output="):
+            output = token.split("=", 1)[1]
+            index += 1
+            continue
+        if normalized.startswith("-o") and len(token) > 2:
+            output = token[2:]
+            index += 1
+            continue
+        option_consumed = kubernetes_option_tokens_consumed(
+            args,
+            index,
+            base_value_flags=_KUBECTL_OPTIONS_WITH_VALUES,
+            base_boolean_flags=_KUBECTL_BOOLEAN_OPTIONS | _READ_ONLY_GET_BOOLEAN_OPTIONS,
+            base_boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+        )
+        if option_consumed is not None:
+            index += option_consumed
+            continue
+        if token.startswith("-"):
+            return None, None
+        if resource is None:
+            resource = token.lower().split("/", 1)[0].split(".", 1)[0]
+            if "," in resource or resource_token_includes_secret(resource):
+                return None, None
+        index += 1
+    return resource, output
 
 
 def _command_candidates(command: str, *, depth: int = 0) -> tuple[str, ...]:
@@ -477,4 +612,4 @@ def _option_tokens_consumed(command_name: str, token: str) -> int:
     return 1
 
 
-__all__ = ["kubernetes_secret_read_source"]
+__all__ = ["kubernetes_read_only_inventory_args", "kubernetes_secret_read_source"]
