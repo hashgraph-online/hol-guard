@@ -1297,6 +1297,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             "managed_hook_config_path": str(hook_config_path),
             "managed_hook_manifest_path": str(hook_state["manifest_path"]),
             "managed_hook_integrity": str(hook_state["integrity_status"]),
+            "hook_workspace_explicit": context.workspace_override_explicit,
             "managed_hooks_path": str(hooks_path),
             "enforcement_boundary": _AUTHORITATIVE_ENFORCEMENT_BOUNDARY,
             "legacy_shell_guard_cleanup": "complete",

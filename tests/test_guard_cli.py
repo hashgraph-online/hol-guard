@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -4593,6 +4594,11 @@ args = ["workspace-skill.js", "--changed"]
         assert "hooks = true" in config_text
         assert "codex_hooks" not in config_text
         assert hooks_payload["PreToolUse"]
+        hook_command = hooks_payload["PreToolUse"][0]["hooks"][0]["command"]
+        bridge_config = json.loads(shlex.split(hook_command)[3])
+        fallback_command = bridge_config["fallback_command"]
+        workspace_index = fallback_command.index("--workspace")
+        assert fallback_command[workspace_index + 1] == str(workspace_dir)
         assert (workspace_dir / ".codex" / "config.toml").exists() is False
 
     def test_guard_update_fails_closed_on_malformed_codex_config(self, tmp_path, monkeypatch, capsys):
