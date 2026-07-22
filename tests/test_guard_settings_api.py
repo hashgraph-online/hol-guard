@@ -166,6 +166,18 @@ def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monke
             method="POST",
             payload={"settings": {"billing": False, "sync": True}},
         )
+        monkeypatch.setattr(
+            daemon_server_module,
+            "resolve_package_firewall_entitlement",
+            lambda _store: {"allowed": False, "reason": "paid_guard_cloud_required", "tier": "free"},
+        )
+        expired_status, expired_payload = _json_request(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/settings",
+            method="POST",
+            payload={"settings": {"mode": "enforce", "sync": True}},
+        )
     finally:
         daemon.stop()
 
@@ -176,6 +188,8 @@ def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monke
     assert allowed_status == 200
     assert allowed_payload["settings"]["billing"] is False
     assert allowed_payload["settings"]["sync"] is True
+    assert expired_status == 400
+    assert expired_payload["message"] == "Cloud sync requires a paid team plan."
 
 
 def test_risk_settings_drive_runtime_policy_resolution(tmp_path: Path) -> None:
