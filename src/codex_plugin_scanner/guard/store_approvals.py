@@ -13,11 +13,24 @@ from .approval_scope_support import request_scope_contract_payload, supported_re
 from .decision_boundaries import canonical_approval_surfaces
 from .models import GuardApprovalRequest
 from .runtime.action_identity import normalize_command_identity
+from .runtime.browser_mcp_intent import _classify_operation
 
 MAX_APPROVAL_PAGE_LIMIT = 200
 APPROVAL_QUEUE_BACKFILL_BATCH_SIZE = 500
 _APPROVAL_RESOLUTION_BATCH_SIZE = 500
 _QUEUE_IDENTITY_VERSION = "v1"
+_LEGACY_BROWSER_MULTI_ELEMENT_OPERATIONS = frozenset({"drag", "drag_drop_file", "fill_form"})
+_LEGACY_BROWSER_ELEMENT_OPERATIONS = frozenset(
+    {
+        "click",
+        "fill",
+        "fill_input",
+        "focus_element",
+        "hover",
+        "select_dropdown",
+        "upload_file",
+    }
+)
 _VOLATILE_PAYLOAD_KEY_TOKENS = frozenset(
     {
         "callid",
@@ -39,6 +52,42 @@ class InvalidApprovalCursorError(ValueError):
 
 def _normalized_identity_key(launch_target: str | None) -> str:
     return normalize_command_identity(launch_target or "")
+
+
+def _browser_launch_target_for_display(value: object) -> tuple[object, str | None]:
+    """Repair legacy browser labels without changing persisted approval identity."""
+    if not isinstance(value, str):
+        return value, None
+    parts = value.split()
+    if len(parts) != 3 or parts[2] != "unknown":
+        return value, None
+    server_name, operation, _unknown = parts
+    intent = _classify_operation(operation, server_name)
+    if intent is None:
+        return value, None
+
+    operation_lower = operation.lower()
+    if "network" in operation_lower:
+        target = "network request" if operation_lower.startswith(("get_", "read_")) else "network activity"
+    elif "console" in operation_lower:
+        target = "console message" if operation_lower.startswith(("get_", "read_")) else "console messages"
+    elif operation_lower in _LEGACY_BROWSER_MULTI_ELEMENT_OPERATIONS:
+        target = "page elements"
+    elif operation_lower in _LEGACY_BROWSER_ELEMENT_OPERATIONS:
+        target = "page element"
+    elif operation_lower in {"list_pages", "browser_list_pages"}:
+        target = "open pages"
+    elif operation_lower in {"select_page", "close_page", "browser_select_page", "browser_close_page"}:
+        target = "browser page"
+    else:
+        target = "current page"
+    return f"{server_name} {operation} {target}", target
+
+
+def _browser_risk_signals_for_display(signals: list[object], target: str | None) -> list[object]:
+    if target is None:
+        return signals
+    return [signal.replace("unknown target", target) if isinstance(signal, str) else signal for signal in signals]
 
 
 def _begin_immediate(connection: sqlite3.Connection) -> None:
@@ -612,6 +661,8 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         parsed_action_envelope if parsed_action_envelope is not None else row["action_envelope_json"],
         reject_contradiction=False,
     )
+    launch_target, browser_target = _browser_launch_target_for_display(row["launch_target"])
+    risk_signals = _browser_risk_signals_for_display(_safe_json_list(row["risk_signals_json"]), browser_target)
     payload: dict[str, object] = {
         "request_id": str(row["request_id"]),
         "harness": str(row["harness"]),
@@ -627,7 +678,7 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "oauth_source": row["oauth_source"],
         "config_path": str(row["config_path"]),
         "workspace": row["workspace"],
-        "launch_target": row["launch_target"],
+        "launch_target": launch_target,
         "normalized_identity_key": row["normalized_identity_key"],
         "action_identity": row["action_identity"],
         "queue_group_id": row["queue_group_id"],
@@ -637,7 +688,7 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "resolution_intent": row["resolution_action"],
         "transport": row["transport"],
         "risk_summary": row["risk_summary"],
-        "risk_signals": _safe_json_list(row["risk_signals_json"]),
+        "risk_signals": risk_signals,
         "artifact_label": row["artifact_label"],
         "source_label": row["source_label"],
         "trigger_summary": row["trigger_summary"],
@@ -796,6 +847,7 @@ def _row_to_approval_summary(row: sqlite3.Row) -> dict[str, object]:
         parsed_action_envelope if parsed_action_envelope is not None else row["action_envelope_json"],
         reject_contradiction=False,
     )
+    launch_target, _browser_target = _browser_launch_target_for_display(row["launch_target"])
     payload: dict[str, object] = {
         "request_id": str(row["request_id"]),
         "harness": str(row["harness"]),
@@ -807,7 +859,7 @@ def _row_to_approval_summary(row: sqlite3.Row) -> dict[str, object]:
         "source_scope": str(row["source_scope"]),
         "config_path": str(row["config_path"]),
         "workspace": row["workspace"],
-        "launch_target": row["launch_target"],
+        "launch_target": launch_target,
         "risk_summary": row["risk_summary"],
         "risk_headline": row["risk_headline"],
         "raw_command_text": row["raw_command_text"],
