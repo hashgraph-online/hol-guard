@@ -663,6 +663,7 @@ class TestHookWorkerOutputScanning:
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
             "tool_input": {"file_path": "src/foo.ts"},
+            "stdout": "",
         }
 
         result = worker.review_http_payload(

@@ -198,11 +198,13 @@ class HookReviewEngine:
         inline output here; allow output-free completions and keep oversized
         or risky output on conservative paths.
         """
-        from .hook_output_text import extract_payload_output
+        from .hook_output_text import PAYLOAD_OUTPUT_KEYS, extract_payload_output
 
         extracted = extract_payload_output(request.payload)
 
         if not extracted.text:
+            if not any(key in request.payload for key in PAYLOAD_OUTPUT_KEYS):
+                return self._review_standard(request, envelope, config, start)
             # The action already completed and produced nothing for the model.
             # A second permission review cannot protect any output and only
             # creates an unresolvable PostToolUse approval.
