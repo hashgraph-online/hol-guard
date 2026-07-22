@@ -766,6 +766,8 @@ def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None
     if artifact.artifact_type != "tool_action_request":
         return None
     raw_command_text = artifact.metadata.get("raw_command_text")
+    if not isinstance(raw_command_text, str) or not raw_command_text:
+        raw_command_text = artifact.command
     wrapper_chain = artifact.metadata.get("wrapper_chain")
     normalized_wrapper_chain = (
         wrapper_chain if isinstance(wrapper_chain, Sequence) and not isinstance(wrapper_chain, str) else None
