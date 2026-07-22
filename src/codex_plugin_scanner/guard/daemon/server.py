@@ -4101,7 +4101,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     approval_gate_grant=approval_gate_grant,
                 )
             config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
-            config = update_guard_settings(guard_home, config_settings, approval_gate_grant=approval_gate_grant)
+            entitlement = resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
+            config = update_guard_settings(
+                guard_home,
+                config_settings,
+                approval_gate_grant=approval_gate_grant,
+                cloud_sync_entitled=bool(entitlement.get("allowed")),
+            )
             if isinstance(gate_payload, dict):
                 update_approval_gate_settings(
                     guard_home,
@@ -4146,7 +4152,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     approval_gate_grant=approval_gate_grant,
                 )
             config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
-            config = update_guard_settings(guard_home, config_settings, approval_gate_grant=approval_gate_grant)
+            entitlement = resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
+            config = update_guard_settings(
+                guard_home,
+                config_settings,
+                approval_gate_grant=approval_gate_grant,
+                cloud_sync_entitled=bool(entitlement.get("allowed")),
+            )
             if isinstance(gate_payload, dict):
                 update_approval_gate_settings(
                     guard_home,

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 
 from ..action_lattice import coerce_guard_action
+from ..package_firewall_entitlement import resolve_package_firewall_entitlement
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -149,7 +150,13 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
     )
 
     def persist_settings(payload: dict[str, object]) -> GuardConfig:
-        return update_guard_settings(guard_home, payload, approval_gate_grant=approval_gate_grant)
+        entitlement = resolve_package_firewall_entitlement(GuardStore(guard_home))
+        return update_guard_settings(
+            guard_home,
+            payload,
+            approval_gate_grant=approval_gate_grant,
+            cloud_sync_entitled=bool(entitlement.get("allowed")),
+        )
 
     if settings_command == "security-level":
         payload: dict[str, object] = {"security_level": args.security_level}
