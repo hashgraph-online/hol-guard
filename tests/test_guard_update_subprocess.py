@@ -754,10 +754,6 @@ def test_pipx_execution_argv_is_absolute_and_source_pinned(
     assert command == [
         str(manager),
         "install",
-        "--backend",
-        "pip",
-        "--fetch-python",
-        "never",
         "--index-url",
         "https://pypi.org/simple",
         "--python",

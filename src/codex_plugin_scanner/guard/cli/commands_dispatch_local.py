@@ -185,6 +185,7 @@ def _run_guard_update_command(
         now=_now(),
         wheel=getattr(args, "wheel", None),
         guard_home=guard_home,
+        include_alpha=bool(getattr(args, "alpha", False)),
         force_pypi_reinstall=bool(getattr(args, "force_pypi_reinstall", False)),
     )
     if update_store_error is not None:

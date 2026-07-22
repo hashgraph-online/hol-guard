@@ -62,6 +62,8 @@ def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch) -> None:
         "record_local_wheel_receipt",
         lambda _artifact, *, guard_home, installed_version: guard_home / "local-wheel-source.json",
     )
+
+
 def _command_handler_argv(handler: dict[str, object]) -> tuple[str, ...]:
     command = handler.get("command")
     args = handler.get("args")
@@ -4253,6 +4255,26 @@ args = ["workspace-skill.js", "--changed"]
 
         assert rc == 0
         assert captured_wheels == ["dist"]
+        assert output["status"] == "planned"
+
+    def test_guard_update_forwards_alpha_opt_in(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        captured_alpha: list[object] = []
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "run_guard_update",
+            lambda **kwargs: (
+                captured_alpha.append(kwargs.get("include_alpha")) or {"status": "planned", "message": "ok"},
+                0,
+            ),
+        )
+
+        rc = main(["guard", "update", "--home", str(home_dir), "--alpha", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert captured_alpha == [True]
         assert output["status"] == "planned"
 
     def test_guard_update_repairs_stale_codex_native_hooks(self, tmp_path, monkeypatch, capsys):
