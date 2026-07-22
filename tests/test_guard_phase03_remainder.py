@@ -91,10 +91,40 @@ def test_update_alpha_pins_latest_alpha_in_installed_major(monkeypatch: pytest.M
     payload, exit_code = update_commands.run_guard_update(dry_run=True, include_alpha=True)
 
     assert exit_code == 0
-    assert payload["command"] == ["pipx", "install", "--force", "hol-guard==2.1.0a35"]
+    assert payload["command"] == [
+        "pipx",
+        "install",
+        "--force",
+        "hol-guard==2.1.0a35",
+        "--pip-args",
+        "--pre",
+    ]
     assert payload["retry_command"] == "hol-guard update --alpha"
     assert payload["release_channel"] == "alpha"
     assert payload["version_check"]["release_channel"] == "alpha"
+
+
+def test_update_command_allows_prerelease_for_alpha_pins() -> None:
+    assert update_commands._update_command(
+        "uv",
+        use_pypi=True,
+        target_version="2.1.0a51",
+    ) == ["uv", "tool", "install", "--force", "--prerelease=allow", "hol-guard==2.1.0a51"]
+    assert update_commands._update_command(
+        "pipx",
+        use_pypi=True,
+        target_version="2.1.0a51",
+    ) == ["pipx", "install", "--force", "hol-guard==2.1.0a51", "--pip-args", "--pre"]
+    assert update_commands._update_command(
+        "pip",
+        use_pypi=True,
+        target_version="2.1.0a51",
+    )[-2:] == ["--pre", "hol-guard==2.1.0a51"]
+    assert update_commands._update_command(
+        "uv",
+        use_pypi=True,
+        target_version="2.0.1127",
+    ) == ["uv", "tool", "install", "--force", "hol-guard==2.0.1127"]
 
 
 def test_latest_alpha_version_stays_in_current_major_and_skips_yanked(
