@@ -9,6 +9,7 @@ import {
   fetchPolicy,
   fetchReceipts,
   fetchRequest,
+  fetchMcpPolicyRequest,
   fetchApprovalPage,
   fetchAllPendingRequests,
   fetchInboxState,
@@ -32,6 +33,9 @@ import { useRouteFocus } from "./use-route-focus";
 const HomeWorkspace = lazy(() => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazy(() => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
 const SettingsWorkspace = lazy(() => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
+const ExtensionsWorkspace = lazy(() =>
+  import("./extensions-workspace").then((module) => ({ default: module.ExtensionsWorkspace }))
+);
 const AppDetailWorkspace = lazy(() => import("./apps/app-detail-workspace").then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazy(() => import("./help-modal").then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazy(() =>
@@ -39,6 +43,9 @@ const SupplyChainHubWorkspace = lazy(() =>
 );
 const PolicyWorkspacePage = lazy(() =>
   import("./policy-workspace-page").then((m) => ({ default: m.PolicyWorkspacePage }))
+);
+const McpPolicyRequestPanel = lazy(() =>
+  import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 const AboutWorkspace = lazy(() =>
   import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
@@ -79,7 +86,8 @@ type DetailState =
       diff: GuardArtifactDiff | null;
       receipt: GuardReceipt | null;
       policy: GuardPolicyDecision[];
-    };
+    }
+  | { kind: "mcp-policy"; requestId: string };
 
 type ReceiptsState =
   | { kind: "loading" }
@@ -163,6 +171,9 @@ export function resolveView(pathname: string): AppView {
   if (pathname.startsWith("/apps/")) {
     return "fleet";
   }
+  if (pathname === "/extensions") {
+    return "extensions";
+  }
   if (pathname === "/settings") {
     return "settings";
   }
@@ -211,6 +222,18 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("404")) {
+      // VPC045-047/056: a 404 on /v1/requests/<id> may mean this is a staged
+      // MCP policy creation request rather than a regular approval. Probe the
+      // MCP endpoint; if it exists, render the MCP panel. Otherwise fall back
+      // to the stale state so the inbox shows an honest "gone" message.
+      try {
+        const mcpRequest = await fetchMcpPolicyRequest(requestId);
+        if (mcpRequest !== null) {
+          return { kind: "mcp-policy", requestId };
+        }
+      } catch {
+        // Swallow — the original 404 is the source of truth here.
+      }
       return { kind: "stale" };
     }
     return {
@@ -496,6 +519,7 @@ export function App() {
   const handleOpenFleet = useCallback(() => navigate(PROTECT_ROUTE), []);
   const handleOpenEvidence = useCallback(() => navigate("/evidence"), []);
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
+  const handleOpenCommands = useCallback(() => navigate("/evidence?view=commands"), [navigate]);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);
   const handleOpenSupplyChain = useCallback(() => navigate("/supply-chain"), []);
   const handleOpenPolicy = useCallback(() => navigate("/policy"), []);
@@ -642,6 +666,8 @@ export function App() {
     approval_password?: string;
     approval_totp_code?: string;
     approval_gate_use_cooldown?: boolean;
+    scope_contract_version?: string;
+    scope_contract_digest?: string;
   }) => {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
@@ -846,6 +872,7 @@ export function App() {
             onOpenFleet={handleOpenFleet}
             onOpenEvidence={handleOpenEvidence}
             onOpenInsights={handleOpenInsights}
+            onOpenCommands={handleOpenCommands}
             onOpenSettings={handleOpenSettings}
             onOpenSupplyChain={handleOpenSupplyChain}
             onClearPolicies={handleClearPolicies}
@@ -889,6 +916,11 @@ export function App() {
             {appDetailContent}
           </Suspense>
         </ErrorBoundary>
+      }
+      extensionsContent={
+        <Suspense fallback={<LazyFallback />}>
+          <ExtensionsWorkspace />
+        </Suspense>
       }
       settingsContent={
         <Suspense fallback={<LazyFallback />}>

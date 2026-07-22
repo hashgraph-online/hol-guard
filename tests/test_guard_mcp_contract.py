@@ -47,7 +47,7 @@ class TestMCPServerInitialization:
     def test_server_has_tools(self, server):
         tools = server.list_tools()
         assert isinstance(tools, list)
-        assert len(tools) >= 3
+        assert len(tools) == 6
 
     def test_server_tool_names(self, server):
         tools = server.list_tools()
@@ -55,6 +55,9 @@ class TestMCPServerInitialization:
         assert "search" in names
         assert "fetch" in names
         assert "get_guard_status" in names
+        assert "validate_policy" in names
+        assert "create_policy" in names
+        assert "get_policy_creation" in names
 
     def test_no_mutation_tools(self, server):
         """Only read-only tools are registered."""
@@ -349,6 +352,7 @@ class TestReceiptPagination:
     @pytest.fixture()
     def server(self, tmp_path: Path):
         from codex_plugin_scanner.guard.mcp.server import GuardMCPServer
+
         return GuardMCPServer(guard_home=tmp_path)
 
     def test_search_finds_older_receipt_beyond_page(self, server, tmp_path: Path):
@@ -363,6 +367,7 @@ class TestReceiptPagination:
 
     def test_fetch_finds_older_receipt_beyond_scan_limit(self, server, tmp_path: Path):
         from codex_plugin_scanner.guard.mcp.schemas import make_opaque_id
+
         oldest_receipt_id = "rcpt-oldest-target-001"
         _seed_receipt(tmp_path, server, artifact_name="oldest-target")
         for i in range(250):
@@ -373,3 +378,196 @@ class TestReceiptPagination:
         data = json.loads(text)
         assert data["found"] is True
         assert "oldest-target" in data.get("title", "")
+
+
+class TestCreatePolicyElicitationBinding:
+    """The create_policy tool must tie its URL elicitation to the opaque request ID.
+
+    VPC044: the MCP request URL ties to an opaque request_id via
+    ``elicitation_id`` so the client can correlate the human-approval URL
+    with the staged pending request.
+    """
+
+    @pytest.fixture()
+    def server(self, tmp_path: Path):
+        from codex_plugin_scanner.guard.mcp.server import GuardMCPServer
+
+        return GuardMCPServer(guard_home=tmp_path)
+
+    @pytest.fixture()
+    def env_flags(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HOL_GUARD_POLICY_YAML_IMPORT", "1")
+        monkeypatch.setenv("HOL_GUARD_MCP_POLICY_WRITE", "1")
+
+    @staticmethod
+    def _basic_policy_yaml() -> str:
+        return (
+            "apiVersion: guard.hashgraphonline.com/v1alpha1\n"
+            "kind: GuardPolicy\n"
+            "metadata:\n"
+            "  id: policy.elicitation-binding-test\n"
+            "  name: Elicitation binding test\n"
+            "  revision: 1\n"
+            "spec:\n"
+            "  defaults:\n"
+            "    mode: prompt\n"
+            "    defaultAction: warn\n"
+            "  rolloutState: draft\n"
+            "  rules:\n"
+            "    - id: rule.block-bad-package\n"
+            "      description: Block bad package installs\n"
+            "      enabled: true\n"
+            "      effect: block\n"
+            "      match:\n"
+            "        artifacts:\n"
+            "          - npm:bad-package\n"
+            "        harnesses:\n"
+            "          - claude-code\n"
+            "      lifetime:\n"
+            "        mode: permanent\n"
+            "        expiresAt: null\n"
+            "      provenance:\n"
+            "        source: suggested-memory\n"
+            "        createdAt: 2026-07-15T12:00:00Z\n"
+            "        createdBy: user-001\n"
+        )
+
+    def test_elicit_url_receives_opaque_request_id_as_elicitation_id(
+        self, server, tmp_path: Path, env_flags: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from codex_plugin_scanner.guard.policy_document import policy_document_digest
+        from codex_plugin_scanner.guard.policy_document_yaml import (
+            parse_policy_document_yaml,
+        )
+
+        captured: dict[str, object] = {}
+
+        class _FakeContext:
+            async def elicit_url(self, *, url: str, message: str, elicitation_id: str) -> object:
+                captured["url"] = url
+                captured["message"] = message
+                captured["elicitation_id"] = elicitation_id
+                return object()
+
+        # Provide a trusted loopback origin so create_policy sets approvalUrl.
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.mcp.server.GuardMCPServer._build_approval_url_builder",
+            lambda self: lambda request_id: f"http://127.0.0.1:5474/requests/{request_id}",
+        )
+
+        class _CapturingMCP:
+            def tool(self, *, name: str, description: str, annotations: object):
+                def decorator(fn):
+                    captured[f"_fn_{name}"] = fn
+                    return fn
+
+                return decorator
+
+        from codex_plugin_scanner.guard.mcp.registry import get_tool_definition
+        from codex_plugin_scanner.guard.mcp.server import (
+            _ORIGINAL_TOOL_DESCRIPTIONS,
+            _create_annotations,
+        )
+
+        mcp = _CapturingMCP()
+        td = get_tool_definition("create_policy")
+        assert td is not None
+        server._register_fastmcp_tool(
+            mcp,
+            td,
+            _ORIGINAL_TOOL_DESCRIPTIONS.get(td.name, td.description),
+            _create_annotations(read_only=td.annotations.read_only, destructive=td.annotations.destructive),
+        )
+
+        create_policy_fn = captured["_fn_create_policy"]
+        yaml_text = self._basic_policy_yaml()
+        document = parse_policy_document_yaml(yaml_text)
+        candidate_digest = policy_document_digest(document)
+
+        import asyncio
+
+        result_text = asyncio.run(
+            create_policy_fn(
+                policyYaml=yaml_text,
+                mode="merge",
+                candidateDigest=candidate_digest,
+                expectedCurrentDigest=None,
+                idempotencyKey="elicit-binding-fixture",
+                ctx=_FakeContext(),
+            )
+        )
+        result = json.loads(result_text)
+
+        assert result["status"] == "pending"
+        request_id = result["requestId"]
+        assert request_id  # opaque, non-empty
+        assert "approvalUrl" in result
+        assert captured.get("elicitation_id") == request_id
+        assert captured.get("url") == result["approvalUrl"]
+
+    def test_elicit_url_not_called_when_approval_url_absent(
+        self, server, tmp_path: Path, env_flags: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When the loopback origin is unavailable, no elicitation fires."""
+        captured: dict[str, object] = {}
+
+        class _FakeContext:
+            async def elicit_url(self, *, url: str, message: str, elicitation_id: str) -> object:
+                captured["called"] = True
+                return object()
+
+        class _CapturingMCP:
+            def tool(self, *, name: str, description: str, annotations: object):
+                def decorator(fn):
+                    captured[f"_fn_{name}"] = fn
+                    return fn
+
+                return decorator
+
+        from codex_plugin_scanner.guard.mcp.registry import get_tool_definition
+        from codex_plugin_scanner.guard.mcp.server import (
+            _ORIGINAL_TOOL_DESCRIPTIONS,
+            _create_annotations,
+        )
+        from codex_plugin_scanner.guard.policy_document import policy_document_digest
+        from codex_plugin_scanner.guard.policy_document_yaml import (
+            parse_policy_document_yaml,
+        )
+
+        # Force resolve_loopback_origin to return None so no approvalUrl is set.
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.mcp.server.GuardMCPServer._build_approval_url_builder",
+            lambda self: lambda request_id: None,
+        )
+
+        mcp = _CapturingMCP()
+        td = get_tool_definition("create_policy")
+        server._register_fastmcp_tool(
+            mcp,
+            td,
+            _ORIGINAL_TOOL_DESCRIPTIONS.get(td.name, td.description),
+            _create_annotations(read_only=td.annotations.read_only, destructive=td.annotations.destructive),
+        )
+
+        create_policy_fn = captured["_fn_create_policy"]
+        yaml_text = self._basic_policy_yaml()
+        document = parse_policy_document_yaml(yaml_text)
+        candidate_digest = policy_document_digest(document)
+
+        import asyncio
+
+        result_text = asyncio.run(
+            create_policy_fn(
+                policyYaml=yaml_text,
+                mode="merge",
+                candidateDigest=candidate_digest,
+                expectedCurrentDigest=None,
+                idempotencyKey="no-url-fixture-request",
+                ctx=_FakeContext(),
+            )
+        )
+        result = json.loads(result_text)
+
+        assert result["status"] == "pending"
+        assert "approvalUrl" not in result
+        assert "called" not in captured

@@ -18,7 +18,9 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.consumer.service import diff_artifact
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
@@ -67,6 +69,24 @@ command = "node"
 args = ["workspace-skill.js"]
 """.strip()
         + "\n",
+    )
+
+
+def _install_codex_native_hooks(home_dir: Path, workspace_dir: Path) -> None:
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        guard_home=home_dir,
+        home_override_explicit=True,
+    )
+    config_path = home_dir / ".codex" / "config.toml"
+    payload = read_toml_payload(config_path)
+    CodexHarnessAdapter._install_config_hooks(payload, context)
+    CodexHarnessAdapter._write_authenticated_hook_config(
+        context,
+        config_path=config_path,
+        payload=payload,
+        previous_manifest=None,
     )
 
 
@@ -151,6 +171,7 @@ def test_guard_run_launches_with_configured_home(monkeypatch, tmp_path, capsys):
     _build_guard_fixture(home_dir, workspace_dir)
     fake_codex = _make_pinnable_harness_executable(tmp_path, monkeypatch, "codex")
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+    _install_codex_native_hooks(home_dir, workspace_dir)
     captured_env: dict[str, str] = {}
     captured_cwd: Path | None = None
     captured_command: list[str] = []
@@ -1194,6 +1215,7 @@ def test_guard_run_allows_debug_prompt_with_quoted_publish_error(monkeypatch, tm
     marker_path = tmp_path / "codex-args.txt"
     _build_guard_fixture(home_dir, workspace_dir)
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\nmode = "prompt"\n')
+    _install_codex_native_hooks(home_dir, workspace_dir)
     _make_fake_codex(fake_bin, marker_path)
     monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")

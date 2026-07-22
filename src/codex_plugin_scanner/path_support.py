@@ -68,6 +68,7 @@ def resolve_path_within_allowed_roots(
     if not stripped or stripped.lower() in {"none", "null"}:
         return None
     try:
+        # codeql[py/path-injection] The resolved candidate is accepted only after an allowed-root containment check.
         resolved = Path(stripped).expanduser().resolve()
     except OSError:
         return None

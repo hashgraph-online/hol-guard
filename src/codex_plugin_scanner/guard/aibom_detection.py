@@ -10,9 +10,15 @@ from typing import Literal
 from ..marketplace_support import extract_marketplace_source, load_marketplace_context
 from ..path_support import is_safe_relative_path, iter_safe_matching_files, resolves_within_root
 from .codex_skill_config import load_codex_skill_config_rules, resolve_codex_skill_enabled
-from .inventory_contract import fingerprint_mapping, fingerprint_path_tree, fingerprint_text
+from .inventory_contract import fingerprint_mapping, fingerprint_text
 from .models import GuardArtifact, HarnessDetection
 from .runtime.approval_context import build_configured_environment_hash, build_configured_header_values_hash
+from .skill_directory_identity import (
+    discover_skill_documents,
+    incomplete_skill_directory_identity,
+    inspect_skill_directory,
+    skill_directory_identity_metadata,
+)
 
 InstructionRole = Literal[
     "agents_md",
@@ -113,10 +119,6 @@ def file_content_hash(path: Path, *, max_bytes: int | None = None) -> str | None
         return None
 
 
-def directory_content_hash(root: Path, *, home_dir: Path) -> str:
-    return fingerprint_path_tree(root, home_dir=home_dir)
-
-
 def mcp_server_content_hash(
     *,
     command: str | None,
@@ -192,6 +194,7 @@ def discover_shared_workspace_aibom_artifacts(
     home_dir: Path,
     workspace_dir: Path,
 ) -> tuple[GuardArtifact, ...]:
+    _ = home_dir  # Retained for API compatibility; skill containment is workspace-relative.
     if not workspace_dir.is_dir():
         return ()
     try:
@@ -207,7 +210,6 @@ def discover_shared_workspace_aibom_artifacts(
             _discover_codex_skills(
                 harness,
                 workspace_dir=workspace_dir,
-                home_dir=home_dir,
                 skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
                 source_scope="project",
                 artifact_scope="project",
@@ -330,7 +332,6 @@ def discover_codex_skill_artifacts(
             _discover_codex_skills(
                 harness,
                 workspace_dir=workspace_dir,
-                home_dir=home_dir,
                 skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
                 source_scope="project",
                 artifact_scope="project",
@@ -340,7 +341,6 @@ def discover_codex_skill_artifacts(
         _discover_codex_skills(
             harness,
             workspace_dir=home_dir,
-            home_dir=home_dir,
             skill_roots=_CODEX_HOME_SKILL_ROOTS,
             source_scope="global",
             artifact_scope="global",
@@ -383,7 +383,6 @@ def _discover_codex_skills(
     harness: str,
     *,
     workspace_dir: Path,
-    home_dir: Path,
     skill_roots: tuple[str, ...],
     source_scope: str,
     artifact_scope: str,
@@ -391,23 +390,15 @@ def _discover_codex_skills(
     artifacts: list[GuardArtifact] = []
     for relative_root in skill_roots:
         skill_root = workspace_dir / relative_root
-        if not skill_root.is_dir() or not resolves_within_root(workspace_dir, skill_root, require_exists=True):
-            continue
-        for skill_md in sorted(skill_root.rglob("SKILL.md")):
-            if skill_md.is_symlink() or not skill_md.is_file():
-                continue
-            if not resolves_within_root(workspace_dir, skill_md, require_exists=True):
-                continue
+        discovery = discover_skill_documents(skill_root)
+        for skill_md in discovery.documents:
             skill_dir = skill_md.parent
             relative_id = skill_dir.relative_to(skill_root).as_posix()
-            content_hash = directory_content_hash(skill_dir, home_dir=home_dir)
-            digest = file_content_hash(skill_md)
+            identity = inspect_skill_directory(skill_md, scope_root=workspace_dir)
             metadata: dict[str, object] = {
                 "enabled": True,
                 "skill_root": relative_root,
-                "content_hash": digest,
-                "directory_hash": content_hash,
-                **version_info_metadata(content_hash=content_hash, version_label=relative_id or skill_dir.name),
+                **skill_directory_identity_metadata(identity, version_label=relative_id or skill_dir.name),
             }
             artifacts.append(
                 GuardArtifact(
@@ -417,6 +408,25 @@ def _discover_codex_skills(
                     artifact_type="skill",
                     source_scope=source_scope,
                     config_path=str(skill_md),
+                    metadata=metadata,
+                )
+            )
+        for issue in discovery.issues:
+            relative_id = f".guard-discovery/{issue.issue_id}"
+            identity = incomplete_skill_directory_identity(issue.failure_reason)
+            metadata = {
+                "enabled": True,
+                "skill_root": relative_root,
+                **skill_directory_identity_metadata(identity, version_label=relative_id),
+            }
+            artifacts.append(
+                GuardArtifact(
+                    artifact_id=f"{harness}:{artifact_scope}:skill-discovery:{relative_root}:{issue.issue_id}",
+                    name="Incomplete skill discovery",
+                    harness=harness,
+                    artifact_type="skill",
+                    source_scope=source_scope,
+                    config_path=str(issue.path),
                     metadata=metadata,
                 )
             )

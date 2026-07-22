@@ -13,6 +13,11 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     risk_classes_for_command_action,
 )
 from codex_plugin_scanner.guard.runtime.command_inspection import command_extensions_payload, inspect_command
+from codex_plugin_scanner.guard.runtime.extension_control_contract import (
+    CONTROL_SCHEMA_VERSION,
+    ControlLayerKind,
+    ExtensionControlLayer,
+)
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     ToolActionRequestMatch,
     build_tool_action_request_artifact,
@@ -97,7 +102,9 @@ def test_command_extension_registry_is_deterministic_and_complete() -> None:
     assert "command.shell-mutations" in ids
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("destructive shell command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("destructive shell command") is not None
-    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 69
+    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("GitHub merge command") is not None
+    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("GitHub merge command") is not None
+    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 84
 
 
 @pytest.mark.parametrize(
@@ -372,6 +379,7 @@ def test_runtime_risk_class_mapping_remains_compatible() -> None:
         "destructive_shell",
         "network_egress",
     )
+    assert risk_classes_for_command_action("GitHub local configuration write") == ("destructive_shell",)
     assert risk_classes_for_command_action("Guard approval self-authorization command") == ("policy_bypass",)
 
 
@@ -398,6 +406,22 @@ def test_command_cli_emits_stable_json_without_creating_guard_state(
     assert payload["extensions"][0]["extension_id"] == "command.git"
     assert payload["rules"][0]["rule_id"] == "command.git.force-clean"
     assert [item["step"] for item in payload["trace"]][-1] == "risk-signal-derivation"
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_command_extensions_cli_remains_stateless(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    exit_code = main(["guard", "command", "extensions", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["count"] == len(BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions)
     assert list(tmp_path.iterdir()) == []
 
 
@@ -454,6 +478,42 @@ def test_runtime_artifact_preserves_composite_rule_and_risk_evidence(tmp_path: P
         "command.encoded-execution.decode-and-execute",
     }
     assert set(artifact.metadata["risk_classes"]) == {"destructive_shell", "encoded_" + "execution"}
+
+
+def test_runtime_artifact_applies_global_extension_lockdown(tmp_path: Path) -> None:
+    command = "rm -rf ./build"
+    request = extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    layer = ExtensionControlLayer(
+        schema_version=CONTROL_SCHEMA_VERSION,
+        kind=ControlLayerKind.LOCAL_ADMIN,
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        global_lockdown=True,
+        controls=(),
+    )
+
+    assert request is not None
+    artifact = build_tool_action_request_artifact(
+        "codex",
+        request,
+        config_path="config.toml",
+        source_scope="project",
+        extension_control_layers=(layer,),
+    )
+
+    assert artifact.metadata["command_action_floor"] == "block"
+    assert artifact.metadata["extension_control_resolution"] == {
+        "blocked": True,
+        "failures": [],
+    }
+    decision_plane = artifact.metadata["command_decision_plane"]
+    assert isinstance(decision_plane, dict)
+    assert decision_plane["action"] == "block"
+    assert any(reason["source"] == "control" for reason in decision_plane["reasons"] if isinstance(reason, dict))
 
 
 def test_inspection_and_runtime_artifact_share_canonical_wrapper_evidence(tmp_path: Path) -> None:

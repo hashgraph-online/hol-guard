@@ -165,6 +165,9 @@ class ApprovalAttentionCoordinator:
         config = self._config_for_requests(requests)
         if config.approval_surface_policy != "attention-aware" or self._runtime.has_live_surface("approval-center"):
             return
+        open_key = f"approval-request:{item.request_ids[0]}"
+        if self._runtime.has_surface_opened("approval-center", open_key):
+            return
         if self._last_opened_at is not None:
             elapsed = now - self._last_opened_at
             if item.urgent and elapsed < _CRITICAL_BURST_COOLDOWN_SECONDS:
@@ -179,7 +182,7 @@ class ApprovalAttentionCoordinator:
         if opened is False:
             return
         self._last_opened_at = now
-        self._runtime.record_surface_open(surface="approval-center", open_key=f"attention:{item.request_ids[0]}")
+        self._runtime.record_surface_open(surface="approval-center", open_key=open_key)
 
     def _reschedule(self, item: _PendingAttention, *, due_at: float) -> None:
         with self._condition:

@@ -315,7 +315,7 @@ def test_skill_types_do_not_claim_observed_file_reading() -> None:
 def test_rejected_document_evidence_is_preserved_without_capabilities(
     readability_status: str,
 ) -> None:
-    metadata = {
+    metadata: dict[str, object] = {
         "contentEvidence": {"readabilityStatus": readability_status},
         "documentedCapabilities": [{"capability": "network_egress"}],
     }
@@ -326,22 +326,16 @@ def test_rejected_document_evidence_is_preserved_without_capabilities(
 
 
 def test_unbound_document_evidence_is_removed_before_inventory_serialization() -> None:
-    metadata = {
+    metadata: dict[str, object] = {
         "contentEvidence": {"contentHash": "sha256:first"},
         "documentedCapabilities": [{"capability": "network_egress"}],
     }
 
-    assert (
-        _bind_skill_document_evidence(
-            metadata,
-            primary_content_hash="sha256:second",
-        )
-        == {}
-    )
-    assert (
-        _bind_skill_document_evidence(
-            metadata,
-            primary_content_hash="sha256:first",
-        )
-        == metadata
-    )
+    assert _bind_skill_document_evidence(
+        metadata,
+        primary_content_hash="sha256:second",
+    ) == {"primaryContentHash": "sha256:second"}
+    assert _bind_skill_document_evidence(
+        metadata,
+        primary_content_hash="sha256:first",
+    ) == {**metadata, "primaryContentHash": "sha256:first"}

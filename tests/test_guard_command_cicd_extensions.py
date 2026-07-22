@@ -67,7 +67,6 @@ def test_cicd_rules_feed_inspection_and_runtime_hooks(
 @pytest.mark.parametrize(
     "command",
     [
-        "gh run cancel --help",
         "gh workflow view release.yml",
         "gh run view 123",
         "glab ci cancel pipeline 1504182795 --dry-run",
@@ -91,6 +90,21 @@ def test_cicd_help_preview_and_read_commands_remain_safe(command: str, tmp_path:
         )
         is None
     )
+
+
+def test_github_workflow_mutation_trailing_help_does_not_suppress_review(tmp_path: Path) -> None:
+    payload = inspect_command("gh run cancel --help", cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert payload["classification"]["action_class"] == "GitHub workflow mutation command"
+    runtime_match = extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": "gh run cancel --help"},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    assert runtime_match is not None
+    assert runtime_match.action_class == "GitHub workflow mutation command"
 
 
 def test_cicd_safe_variant_does_not_hide_destructive_segment(tmp_path: Path) -> None:

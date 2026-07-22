@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import stat
@@ -60,6 +61,38 @@ def test_loads_active_policy_and_redacts_network_secrets(tmp_path: Path) -> None
         "caBundleConfigured": False,
         "allowPublicRegistries": True,
     }
+
+
+def test_integrity_trust_parses_pins_without_disclosing_key_material(tmp_path: Path) -> None:
+    path = tmp_path / "policy.json"
+    key = base64.b64encode(b"k" * 32).decode()
+    path.write_text(
+        json.dumps(
+            _policy(
+                integrityTrust={
+                    "releasePublicKeys": {"release-1": key},
+                    "macosTeamId": "TEAM123",
+                    "windowsSignerThumbprints": ["01 23 45 67 89 AB CD EF 01 23 45 67 89 AB CD EF 01 23 45 67"],
+                }
+            )
+        )
+    )
+
+    state = load_managed_policy(policy_path=path)
+
+    assert state.policy is not None
+    assert state.policy.integrity_trust.release_public_keys == {"release-1": b"k" * 32}
+    assert state.policy.to_public_dict()["integrityTrust"] == {
+        "releaseKeyIds": ["release-1"],
+        "macosTeamIdConfigured": True,
+        "windowsSignerThumbprintsConfigured": True,
+    }
+
+
+@pytest.mark.parametrize("encoded", ["not-base64", base64.b64encode(b"short").decode()])
+def test_integrity_trust_rejects_invalid_release_keys(encoded: str) -> None:
+    with pytest.raises(ValueError, match="release public key"):
+        policy_module.parse_managed_policy(_policy(integrityTrust={"releasePublicKeys": {"release-1": encoded}}))
 
 
 def test_managed_policy_normalizes_policy_bundle_keyring_and_redacts_key_material(
@@ -575,6 +608,27 @@ def test_removed_profile_retains_last_valid_machine_floor(tmp_path: Path, monkey
     assert cached.reason_code == "managed_policy_profile_removed_cached"
     assert cached.policy is not None
     assert cached.policy.content_hash == active.policy.content_hash
+
+
+def test_read_only_policy_load_does_not_refresh_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    native_path = tmp_path / "managed-policy.json"
+    paths = MachinePaths(
+        tmp_path / "runtime",
+        tmp_path / "state",
+        native_path,
+        tmp_path / "logs",
+        tmp_path / "manifest",
+    )
+    writes: list[tuple[dict[str, object], str]] = []
+    native_path.write_text(json.dumps(_policy()))
+    monkeypatch.setattr(policy_module, "default_machine_paths", lambda **_kwargs: paths)
+    monkeypatch.setattr(policy_module, "_machine_policy_source_is_trusted", lambda *_args: True)
+    monkeypatch.setattr(policy_module, "_write_policy_cache", lambda payload, system: writes.append((payload, system)))
+
+    state = load_managed_policy(system_name="Linux", write_cache=False)
+
+    assert state.status == "active"
+    assert writes == []
 
 
 def test_windows_cache_is_never_promoted_to_managed_signing_authority(

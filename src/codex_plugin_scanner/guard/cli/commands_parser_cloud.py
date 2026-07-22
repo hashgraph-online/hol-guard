@@ -147,6 +147,17 @@ def _configure_guard_cloud_parsers(
         help="Also refresh AIBOM inventory during this foreground sync.",
     )
 
+    health_leases_parser = guard_subparsers.add_parser(
+        "health-leases",
+        help="Manage opt-in lower-assurance health reporting for this user installation",
+    )
+    _add_guard_common_args(health_leases_parser)
+    health_leases_parser.add_argument(
+        "health_leases_command",
+        choices=("enable", "disable", "status", "report"),
+    )
+    health_leases_parser.add_argument("--json", action="store_true")
+
     commands_parser = guard_subparsers.add_parser(
         "commands",
         help="Inspect Guard Cloud command queue state",

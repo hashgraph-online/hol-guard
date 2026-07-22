@@ -9,6 +9,7 @@ import { computeMetrics } from "./evidence/evidence-metrics";
 import { filterByDecision } from "./evidence/evidence-filters";
 import { plainEnglishDescription } from "./evidence/plain-english";
 import { nextSafeStep } from "./evidence/evidence-action-detail";
+import { pastDecisionVerb } from "./review-states";
 
 const NOW = new Date();
 
@@ -77,6 +78,19 @@ assert.ok(descriptions.review.includes("paused it for review"), "review copy doe
 assert.ok(descriptions["require-reapproval"].includes("paused it for fresh approval"), "reapproval copy requires a fresh decision");
 assert.ok(descriptions["sandbox-required"].includes("sandbox requirements are met"), "sandbox copy preserves enforcement");
 assert.ok(descriptions.block.includes("blocked it"), "block copy remains blocked");
+
+assert.deepEqual(
+  Object.fromEntries(GUARD_ACTIONS.map((action) => [action, pastDecisionVerb(action)])),
+  {
+    allow: "allowed",
+    warn: "allowed with a warning",
+    review: "sent for review",
+    "require-reapproval": "required fresh approval for",
+    "sandbox-required": "required sandboxing for",
+    block: "blocked",
+  },
+  "review history copy preserves every authoritative action",
+);
 
 const blockStep = nextSafeStep(receipt("block"));
 assert.ok(blockStep?.includes("cannot be approved"), "blocked receipts do not advertise queue approval");

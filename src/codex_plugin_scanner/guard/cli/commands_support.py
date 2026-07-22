@@ -14,6 +14,7 @@ from . import _commands_shared as __commands_shared
 from . import commands_support_workspace as _commands_support_workspace
 from . import commands_support_interaction as _commands_support_interaction
 from . import commands_support_hook_state as _commands_support_hook_state
+from . import commands_support_command_activity as _commands_support_command_activity
 from . import commands_support_permission_store as _commands_support_permission_store
 from . import commands_support_claude_approval as _commands_support_claude_approval
 from . import commands_support_runtime_policy as _commands_support_runtime_policy
@@ -22,15 +23,19 @@ from . import commands_support_hook_payload as _commands_support_hook_payload
 from . import commands_support_runtime_artifacts as _commands_support_runtime_artifacts
 from . import commands_support_codex_commands as _commands_support_codex_commands
 from . import commands_support_codex_reads as _commands_support_codex_reads
+from . import commands_support_codex_git_config as _commands_support_codex_git_config
 from . import commands_support_codex_git as _commands_support_codex_git
 from . import commands_support_codex_paths as _commands_support_codex_paths
 from . import commands_support_runtime_resolution as _commands_support_runtime_resolution
 from . import commands_support_connect as _commands_support_connect
 from . import commands_support_service as _commands_support_service
+from . import commands_verified_read as _commands_verified_read
+from . import commands_contained_write as _commands_contained_write
 from . import commands_dispatch_local as _commands_dispatch_local
 from . import commands_dispatch_mdm as _commands_dispatch_mdm
 from . import commands_dispatch_proxy as _commands_dispatch_proxy
 from . import commands_dispatch_records as _commands_dispatch_records
+from . import commands_dispatch_policy_document as _commands_dispatch_policy_document
 from . import commands_dispatch_trust as _commands_dispatch_trust
 from . import commands_dispatch_admin as _commands_dispatch_admin
 from . import commands_dispatch_cloud as _commands_dispatch_cloud
@@ -49,6 +54,7 @@ _SOURCE_MODULES: tuple[ModuleType, ...] = (
     _commands_support_workspace,
     _commands_support_interaction,
     _commands_support_hook_state,
+    _commands_support_command_activity,
     _commands_support_permission_store,
     _commands_support_claude_approval,
     _commands_support_runtime_policy,
@@ -57,15 +63,19 @@ _SOURCE_MODULES: tuple[ModuleType, ...] = (
     _commands_support_runtime_artifacts,
     _commands_support_codex_commands,
     _commands_support_codex_reads,
+    _commands_support_codex_git_config,
     _commands_support_codex_git,
     _commands_support_codex_paths,
     _commands_support_runtime_resolution,
     _commands_support_connect,
     _commands_support_service,
+    _commands_verified_read,
+    _commands_contained_write,
     _commands_dispatch_local,
     _commands_dispatch_mdm,
     _commands_dispatch_proxy,
     _commands_dispatch_records,
+    _commands_dispatch_policy_document,
     _commands_dispatch_trust,
     _commands_dispatch_admin,
     _commands_dispatch_cloud,

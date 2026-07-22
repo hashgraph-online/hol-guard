@@ -1,7 +1,18 @@
 #!/bin/zsh
 set -euo pipefail
 
+readonly LAUNCH_DAEMON="/Library/LaunchDaemons/org.hol.guard.machine-health.plist"
+readonly ROLLBACK_PLIST="/private/var/root/org.hol.guard.machine-health.rollback.plist"
+
 [[ "$(uname -s)" == "Darwin" ]] || exit 1
 [[ "$(uname -m)" == "arm64" || "$(uname -m)" == "x86_64" ]] || exit 1
 df -Pk / | awk 'NR == 2 { exit !($4 >= 524288) }'
+if [[ -L "${LAUNCH_DAEMON}" || ( -e "${LAUNCH_DAEMON}" && ! -f "${LAUNCH_DAEMON}" ) ]]; then
+  exit 1
+fi
+if [[ -f "${LAUNCH_DAEMON}" ]]; then
+  /usr/bin/install -o root -g wheel -m 0600 "${LAUNCH_DAEMON}" "${ROLLBACK_PLIST}"
+else
+  /bin/rm -f "${ROLLBACK_PLIST}"
+fi
 exit 0

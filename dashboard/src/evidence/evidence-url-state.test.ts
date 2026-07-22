@@ -86,4 +86,7 @@ const dayDrillSerialized = serializeEvidenceUrlState({
 assert(dayDrillSerialized.get("day") === "2026-06-07", "day serialize: includes day");
 assert(dayDrillSerialized.get("view") === "actions", "day serialize: includes actions view");
 
+const commandView = parseEvidenceUrlState(new URLSearchParams({ view: "commands" }));
+assert(commandView.view === "commands", "commands view: parses as a valid evidence tab");
+
 console.log("evidence-url-state.test.ts: all tests passed");

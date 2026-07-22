@@ -24,6 +24,7 @@ except ModuleNotFoundError:
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import claude_code as claude_adapter_module
+from codex_plugin_scanner.guard.adapters import codex as codex_adapter_module
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
@@ -34,6 +35,7 @@ from codex_plugin_scanner.guard.cli import product as guard_product_module
 from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli import update_commands as guard_update_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
+from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, resolve_risk_action
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.policy_bundle_parser import (
@@ -60,6 +62,15 @@ def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch) -> None:
         "record_local_wheel_receipt",
         lambda _artifact, *, guard_home, installed_version: guard_home / "local-wheel-source.json",
     )
+
+
+def _command_handler_argv(handler: dict[str, object]) -> tuple[str, ...]:
+    command = handler.get("command")
+    args = handler.get("args")
+    assert isinstance(command, str)
+    assert isinstance(args, list)
+    assert all(isinstance(arg, str) for arg in args)
+    return (command, *args)
 
 
 def _seed_guard_cloud(
@@ -2887,34 +2898,28 @@ args = ["workspace-skill.js", "--changed"]
         assert pretool_entries[0] == {"command": "python guard-pre.py"}
         guard_pretool_entry = pretool_entries[1]
         assert install_output["managed_install"]["manifest"]["notes"][0]
-        expected_session_start_command = ClaudeCodeHarnessAdapter._session_start_command(
-            HarnessContext(
-                home_dir=home_dir,
-                workspace_dir=workspace_dir,
-                guard_home=home_dir,
-            )
+        context = HarnessContext(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            guard_home=home_dir,
         )
+        expected_session_start_argv = ClaudeCodeHarnessAdapter._session_start_command_parts(context)
         assert guard_pretool_entry["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
         assert (
-            install_settings_payload["hooks"]["SessionStart"][0]["hooks"][0]["command"]
-            == expected_session_start_command
+            _command_handler_argv(install_settings_payload["hooks"]["SessionStart"][0]["hooks"][0])
+            == expected_session_start_argv
         )
-        expected_hook_command = ClaudeCodeHarnessAdapter._daemon_hook_command(
-            HarnessContext(
-                home_dir=home_dir,
-                workspace_dir=workspace_dir,
-                guard_home=home_dir,
-            )
-        )
+        expected_hook_argv = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)
         assert guard_pretool_entry["hooks"][0]["type"] == "command"
-        assert guard_pretool_entry["hooks"][0]["command"] == expected_hook_command
+        assert _command_handler_argv(guard_pretool_entry["hooks"][0]) == expected_hook_argv
         assert "url" not in guard_pretool_entry["hooks"][0]
         assert install_settings_payload["hooks"].get("UserPromptSubmit", []) == []
         assert install_settings_payload["hooks"]["Notification"][0]["matcher"] == "permission_prompt"
-        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["type"] == "command"
-        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["command"] == expected_hook_command
-        assert "url" not in install_settings_payload["hooks"]["Notification"][0]["hooks"][0]
-        assert install_settings_payload["hooks"]["Stop"][0]["hooks"][0]["command"] == expected_hook_command
+        notification_handler = install_settings_payload["hooks"]["Notification"][0]["hooks"][0]
+        assert notification_handler["type"] == "command"
+        assert _command_handler_argv(notification_handler) == expected_hook_argv
+        assert "url" not in notification_handler
+        assert _command_handler_argv(install_settings_payload["hooks"]["Stop"][0]["hooks"][0]) == expected_hook_argv
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
         assert settings_payload["hooks"]["SessionStart"] == []
@@ -3172,7 +3177,7 @@ args = ["workspace-skill.js", "--changed"]
         assert len(payload["hooks"]["Notification"]) == 1
         assert len(payload["hooks"]["Stop"]) == 1
         pretool_hook_commands = [
-            hook["command"]
+            "\0".join(_command_handler_argv(hook))
             for hook in payload["hooks"]["PreToolUse"][0]["hooks"]
             if isinstance(hook, dict) and isinstance(hook.get("command"), str)
         ]
@@ -3180,7 +3185,7 @@ args = ["workspace-skill.js", "--changed"]
         assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in pretool_hook_commands[0]
         assert "legacy-guard-home" not in pretool_hook_commands[0]
         notification_hook_commands = [
-            hook["command"]
+            "\0".join(_command_handler_argv(hook))
             for hook in payload["hooks"]["Notification"][0]["hooks"]
             if isinstance(hook, dict) and isinstance(hook.get("command"), str)
         ]
@@ -4254,17 +4259,45 @@ args = ["workspace-skill.js", "--changed"]
 
     def test_guard_update_repairs_stale_codex_native_hooks(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
-        _write_text(
-            home_dir / ".codex" / "config.toml",
-            """
-approval_policy = "never"
-
-[mcp_servers.test-stdio]
-command = "/bin/sh"
-args = ["-lc", "echo hi"]
-""".strip()
-            + "\n",
+        context = HarnessContext(
+            home_dir=home_dir,
+            workspace_dir=None,
+            guard_home=home_dir,
+            home_override_explicit=True,
         )
+        config_payload: dict[str, object] = {
+            "approval_policy": "never",
+            "features": {"hooks": True},
+            "mcp_servers": {
+                "test-stdio": {
+                    "command": "/bin/sh",
+                    "args": ["-lc", "echo hi"],
+                }
+            },
+        }
+        guard_update_commands_module.CodexHarnessAdapter._install_config_hooks(config_payload, context)
+        hooks = config_payload["hooks"]
+        assert isinstance(hooks, dict)
+        pre_tool_groups = hooks["PreToolUse"]
+        assert isinstance(pre_tool_groups, list)
+        pre_tool_group = pre_tool_groups[-1]
+        assert isinstance(pre_tool_group, dict)
+        entries = pre_tool_group["hooks"]
+        assert isinstance(entries, list)
+        entry = entries[0]
+        assert isinstance(entry, dict)
+        config_path = home_dir / ".codex" / "config.toml"
+        guard_update_commands_module.CodexHarnessAdapter._write_authenticated_hook_config(
+            context,
+            config_path=config_path,
+            payload=config_payload,
+            previous_manifest=None,
+        )
+        entry["command"] = f"{entry['command']} --tampered"
+        _write_text(config_path, dump_toml(config_payload))
+        stale_state = guard_update_commands_module.codex_native_hook_state(context)
+        assert stale_state["protection_active"] is False
+        assert stale_state["shell_protection_active"] is False
         GuardStore(home_dir).set_managed_install(
             "codex",
             True,
@@ -4292,8 +4325,9 @@ args = ["-lc", "echo hi"]
 
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
-        config_text = (home_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
-        hooks_payload = _read_codex_hooks(home_dir / ".codex" / "config.toml")
+        config_text = config_path.read_text(encoding="utf-8")
+        hooks_payload = _read_codex_hooks(config_path)
+        repaired_state = guard_update_commands_module.codex_native_hook_state(context)
 
         assert rc == 0
         assert output["status"] == "current"
@@ -4302,6 +4336,163 @@ args = ["-lc", "echo hi"]
         assert "hooks = true" in config_text
         assert "codex_hooks" not in config_text
         assert hooks_payload["PreToolUse"]
+        assert repaired_state["shell_protection_active"] is True
+
+    def test_guard_update_repairs_authenticated_codex_hook_tampering_despite_shape_match(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        home_dir = tmp_path / "home"
+        install_rc = main(["guard", "install", "codex", "--home", str(home_dir), "--json"])
+        json.loads(capsys.readouterr().out)
+        config_path = home_dir / ".codex" / "config.toml"
+        config_payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        managed_handler = config_payload["hooks"]["PreToolUse"][-1]["hooks"][0]
+        managed_handler["statusMessage"] = "HOL Guard checking tool action (tampered)"
+        _write_text(config_path, codex_adapter_module.dump_toml(config_payload))
+        context = HarnessContext(home_dir=home_dir, workspace_dir=Path.cwd(), guard_home=home_dir)
+
+        before = codex_adapter_module.codex_native_hook_state(context)
+
+        assert install_rc == 0
+        assert before["protection_active"] is False
+        assert before["integrity_reason"] == "codex_hook_registration_mismatch"
+
+        monkeypatch.setattr(
+            guard_update_commands_module.subprocess,
+            "run",
+            lambda command, **_: subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="hol-guard is already at latest version 2.0.39",
+                stderr="",
+            ),
+        )
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
+        monkeypatch.setattr(
+            guard_update_commands_module, "_current_version_from_subprocess", lambda *_args, **_kwargs: "2.0.39"
+        )
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
+
+        update_rc = main(["guard", "update", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+        repaired = codex_adapter_module.codex_native_hook_state(context)
+
+        assert update_rc == 0
+        assert output["managed_install"]["active"] is True
+        assert repaired["protection_active"] is True
+        assert repaired["integrity_status"] == "valid"
+
+    def test_guard_update_refuses_to_replace_altered_codex_identity_record(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        assert main(["guard", "install", "codex", "--home", str(home_dir), "--json"]) == 0
+        json.loads(capsys.readouterr().out)
+        context = HarnessContext(home_dir=home_dir, workspace_dir=Path.cwd(), guard_home=home_dir)
+        installed_state = codex_adapter_module.codex_native_hook_state(context)
+        manifest_path = Path(str(installed_state["manifest_path"]))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        bridge_identity = next(item for item in manifest["packaged_files"] if item["role"] == "bridge")
+        bridge_identity["sha256"] = "0" * 64
+        _write_text(manifest_path, json.dumps(manifest, sort_keys=True) + "\n")
+        altered_manifest = manifest_path.read_bytes()
+
+        altered_state = codex_adapter_module.codex_native_hook_state(context)
+
+        assert altered_state["protection_active"] is False
+        assert altered_state["integrity_status"] == "tampered"
+        assert altered_state["integrity_reason"] == "codex_hook_manifest_mac_invalid"
+
+        monkeypatch.setattr(
+            guard_update_commands_module.subprocess,
+            "run",
+            lambda command, **_: subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="hol-guard is already at latest version 2.0.39",
+                stderr="",
+            ),
+        )
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
+        monkeypatch.setattr(
+            guard_update_commands_module, "_current_version_from_subprocess", lambda *_args, **_kwargs: "2.0.39"
+        )
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
+
+        update_rc = main(["guard", "update", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+        final_state = codex_adapter_module.codex_native_hook_state(context)
+
+        assert update_rc == 0
+        assert "managed_install" not in output
+        assert any("Reinstall hol-guard from a trusted package" in note for note in output["notes"])
+        assert manifest_path.read_bytes() == altered_manifest
+        assert final_state["protection_active"] is False
+        assert final_state["integrity_reason"] == "codex_hook_manifest_mac_invalid"
+
+    def test_guard_update_does_not_reauthenticate_same_version_tampered_packaged_hook(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        home_dir = tmp_path / "home"
+        bridge_path = tmp_path / "package" / "codex_daemon_hook_bridge.py"
+        bridge_path.parent.mkdir(parents=True)
+        original_bridge = Path(codex_adapter_module.__file__).with_name("codex_daemon_hook_bridge.py").read_bytes()
+        bridge_path.write_bytes(original_bridge)
+        bridge_path.chmod(0o644)
+        original_command_parts = codex_adapter_module._hook_command_parts
+        original_packaged_paths = codex_adapter_module._hook_packaged_file_paths
+
+        def relocated_command_parts(hook_context: HarnessContext) -> tuple[str, ...]:
+            parts = list(original_command_parts(hook_context))
+            parts[1] = str(bridge_path)
+            return tuple(parts)
+
+        def relocated_packaged_paths() -> tuple[tuple[str, Path], ...]:
+            return tuple((role, bridge_path if role == "bridge" else path) for role, path in original_packaged_paths())
+
+        monkeypatch.setattr(codex_adapter_module, "_hook_command_parts", relocated_command_parts)
+        monkeypatch.setattr(codex_adapter_module, "_hook_packaged_file_paths", relocated_packaged_paths)
+        assert main(["guard", "install", "codex", "--home", str(home_dir), "--json"]) == 0
+        json.loads(capsys.readouterr().out)
+        context = HarnessContext(home_dir=home_dir, workspace_dir=Path.cwd(), guard_home=home_dir)
+        installed_state = codex_adapter_module.codex_native_hook_state(context)
+        manifest_path = Path(str(installed_state["manifest_path"]))
+        original_manifest = manifest_path.read_bytes()
+        tampered_bridge = original_bridge + b"\n# local tamper\n"
+        bridge_path.write_bytes(tampered_bridge)
+
+        altered_state = codex_adapter_module.codex_native_hook_state(context)
+
+        assert altered_state["protection_active"] is False
+        assert altered_state["integrity_reason"] == "codex_hook_bridge_hash_mismatch"
+
+        def fake_update(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="hol-guard is already at latest version 2.0.39",
+                stderr="",
+            )
+
+        monkeypatch.setattr(guard_update_commands_module.subprocess, "run", fake_update)
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
+        monkeypatch.setattr(
+            guard_update_commands_module, "_current_version_from_subprocess", lambda *_args, **_kwargs: "2.0.39"
+        )
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
+
+        update_rc = main(["guard", "update", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+        final_state = codex_adapter_module.codex_native_hook_state(context)
+
+        assert update_rc == 0
+        assert "managed_install" not in output
+        assert any("refused to authenticate changed same-version hook code" in note for note in output["notes"])
+        assert bridge_path.read_bytes() == tampered_bridge
+        assert manifest_path.read_bytes() == original_manifest
+        assert final_state["protection_active"] is False
+        assert final_state["integrity_reason"] == "codex_hook_bridge_hash_mismatch"
 
     def test_guard_update_repairs_missing_codex_config_for_managed_install(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
@@ -4384,7 +4575,7 @@ args = ["-lc", "echo hi"]
         assert hooks_payload["PreToolUse"]
         assert (workspace_dir / ".codex" / "config.toml").exists() is False
 
-    def test_guard_update_repairs_malformed_codex_config(self, tmp_path, monkeypatch, capsys):
+    def test_guard_update_fails_closed_on_malformed_codex_config(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         _write_text(home_dir / ".codex" / "config.toml", "[broken\n")
         GuardStore(home_dir).set_managed_install(
@@ -4416,8 +4607,9 @@ args = ["-lc", "echo hi"]
 
         assert rc == 0
         assert output["status"] == "current"
-        assert output["managed_install"]["harness"] == "codex"
-        assert output["managed_install"]["active"] is True
+        assert "managed_install" not in output
+        assert any("codex_hook_inventory_source_malformed" in note for note in output["notes"])
+        assert (home_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == "[broken\n"
 
     def test_guard_update_does_not_adopt_unmanaged_codex_config(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
@@ -7304,8 +7496,8 @@ url = http://127.0.0.1:8787/guard-canary
         assert status_output["oauth_storage_health"] == {
             "configured": True,
             "state": "healthy",
-            "backend": "encrypted-file",
-            "fallback_backend": None,
+            "backend": "system-keyring",
+            "fallback_backend": "encrypted-file",
             "issuer": "https://hol.org",
             "client_id": "guard-local-daemon",
             "grant_id": "grant-123",
@@ -8096,35 +8288,33 @@ url = http://127.0.0.1:8787/guard-canary
 
     def test_guard_dashboard_opens_local_approval_center(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
-        opened_urls: list[str] = []
-        open_keys: list[str | None] = []
-        force_open_flags: list[bool] = []
+        from unittest.mock import MagicMock
+
+        from codex_plugin_scanner.guard import dashboard_launcher
 
         monkeypatch.setattr(
-            guard_commands_module,
+            dashboard_launcher,
             "ensure_guard_daemon",
             lambda guard_home: "http://127.0.0.1:5474",
         )
         monkeypatch.setattr(
-            guard_commands_module,
-            "_open_approval_center",
-            lambda approval_center_url, *, store, config, open_key=None, force_open=False: (
-                opened_urls.append(approval_center_url),
-                open_keys.append(open_key),
-                force_open_flags.append(force_open),
-                {"opened": True, "reason": "opened", "browser_url": approval_center_url},
-            )[-1],
+            dashboard_launcher,
+            "load_guard_daemon_auth_token",
+            lambda guard_home: "fake-token",
         )
+        mock_surface = MagicMock()
+        mock_surface.ensure_surface.return_value = {
+            "opened": True,
+            "reason": "opened",
+            "browser_url": "http://127.0.0.1:5474",
+        }
+        monkeypatch.setattr(dashboard_launcher, "GuardSurfaceRuntime", lambda store: mock_surface)
 
         rc = main(["guard", "dashboard", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert opened_urls == ["http://127.0.0.1:5474"]
-        assert open_keys == ["dashboard"]
-        assert force_open_flags == [True]
         assert output["approval_center_url"] == "http://127.0.0.1:5474"
-        assert output["browser_url"] == "http://127.0.0.1:5474"
         assert output["opened"] is True
         assert output["reason"] == "opened"
         assert "notification_setup_started" not in output
@@ -8172,11 +8362,13 @@ url = http://127.0.0.1:8787/guard-canary
             "apps",
             "cloud",
             "notifications",
+            "tray",
         ]
         assert output["dashboard"] == {"skipped": True, "reason": "needs_approval"}
         assert output["apps"] == {"skipped": True, "reason": "needs_approval"}
         assert output["cloud"] == {"skipped": True, "reason": "needs_approval"}
         assert output["desktop_notifications"] == {"skipped": True, "reason": "needs_approval"}
+        assert output["tray"] == {"skipped": True, "reason": "needs_approval"}
         assert output["next_command"] == "hol-guard init --yes"
 
     def test_guard_init_runs_apps_cloud_notifications_and_dashboard_with_yes(self, tmp_path, capsys, monkeypatch):
@@ -8248,12 +8440,41 @@ url = http://127.0.0.1:8787/guard-canary
 
         monkeypatch.setattr(guard_commands_module, "ensure_desktop_notification_setup", fake_setup)
 
+        # Mock tray lifecycle so init doesn't shell out on CI (no display).
+        from unittest.mock import MagicMock as _MagicMock
+
+        from codex_plugin_scanner.guard.tray.contracts import TrayState
+
+        mock_adapter = _MagicMock()
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.platforms.detect_platform_adapter",
+            lambda: mock_adapter,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.install_registration",
+            lambda *a, **kw: None,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.start_tray",
+            _MagicMock(return_value=_MagicMock(ok=True)),
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.get_status",
+            _MagicMock(return_value=(TrayState.RUNNING, None, None)),
+        )
+
         rc = main(["guard", "init", "--yes", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
         assert output["mode"] == "auto_approved"
-        assert [step["decision"] for step in output["plan"]] == ["approved", "approved", "approved", "approved"]
+        assert [step["decision"] for step in output["plan"]] == [
+            "approved",
+            "approved",
+            "approved",
+            "approved",
+            "approved",
+        ]
         assert dashboard_calls == [("http://127.0.0.1:5474", "init", True)]
         assert install_calls == [("install", None, True)]
         assert output["dashboard"]["opened"] is True
@@ -8299,6 +8520,27 @@ url = http://127.0.0.1:8787/guard-canary
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("notification permission failed")),
         )
 
+        # Tray step runs even after init_failed (loop continues). Mock it.
+        from unittest.mock import MagicMock as _MagicMock
+
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.platforms.detect_platform_adapter",
+            lambda: _MagicMock(),
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.install_registration",
+            lambda *a, **kw: None,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.start_tray",
+            _MagicMock(return_value=_MagicMock(ok=True)),
+        )
+        from codex_plugin_scanner.guard.tray.contracts import TrayState
+
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.get_status",
+            _MagicMock(return_value=(TrayState.RUNNING, None, None)),
+        )
         rc = main(["guard", "init", "--yes", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
         output = json.loads(capsys.readouterr().out)
 
@@ -8371,6 +8613,29 @@ url = http://127.0.0.1:8787/guard-canary
             ),
         )
 
+        # Tray step runs even after a step fails (loop continues). Mock it
+        # so init doesn't write a real autostart file on Linux CI.
+        from unittest.mock import MagicMock as _MagicMock
+
+        from codex_plugin_scanner.guard.tray.contracts import TrayState
+
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.platforms.detect_platform_adapter",
+            lambda: _MagicMock(),
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.install_registration",
+            lambda *a, **kw: None,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.start_tray",
+            _MagicMock(return_value=_MagicMock(ok=True)),
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.get_status",
+            _MagicMock(return_value=(TrayState.RUNNING, None, None)),
+        )
+
         rc = main(["guard", "init", "--yes", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
         output = json.loads(capsys.readouterr().out)
 
@@ -8412,6 +8677,28 @@ url = http://127.0.0.1:8787/guard-canary
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("notification permission failed")),
         )
 
+        # Tray step runs even after notification failure. Mock it.
+        from unittest.mock import MagicMock as _MagicMock
+
+        from codex_plugin_scanner.guard.tray.contracts import TrayState
+
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.platforms.detect_platform_adapter",
+            lambda: _MagicMock(),
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.install_registration",
+            lambda *a, **kw: None,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.start_tray",
+            _MagicMock(return_value=_MagicMock(ok=True)),
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.get_status",
+            _MagicMock(return_value=(TrayState.RUNNING, None, None)),
+        )
+
         rc = main(["guard", "init", "--yes", "--home", str(home_dir), "--guard-home", str(guard_home)])
         output = capsys.readouterr().out
 
@@ -8423,7 +8710,7 @@ url = http://127.0.0.1:8787/guard-canary
     def test_guard_init_interactive_no_skips_only_cloud_step(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         guard_home = tmp_path / "guard-home"
-        answers = iter(["y", "y", "n", "y"])
+        answers = iter(["y", "y", "n", "y", "n"])
         dashboard_calls: list[str] = []
         install_calls: list[bool] = []
         notification_calls: list[bool] = []
@@ -8477,6 +8764,14 @@ url = http://127.0.0.1:8787/guard-canary
 
         monkeypatch.setattr(guard_commands_module, "ensure_desktop_notification_setup", fake_setup)
 
+        # Tray step: user skips it ("n"). Mock detect_platform_adapter so the
+        # skip path doesn't shell out on CI.
+        from unittest.mock import MagicMock as _MagicMock
+
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.platforms.detect_platform_adapter",
+            lambda: _MagicMock(),
+        )
         rc = main(["guard", "init", "--home", str(home_dir), "--guard-home", str(guard_home)])
         output = capsys.readouterr().out
 
@@ -8491,7 +8786,7 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         guard_home = tmp_path / "guard-home"
         events: list[str] = []
-        answers = iter(["y", "y", "y", "y"])
+        answers = iter(["y", "y", "y", "y", "y"])
 
         monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
 
@@ -8547,6 +8842,38 @@ url = http://127.0.0.1:8787/guard-canary
 
         monkeypatch.setattr(guard_commands_module, "ensure_desktop_notification_setup", fake_setup)
 
+        # Mock tray lifecycle so interactive init doesn't shell out on CI.
+        from unittest.mock import MagicMock as _MagicMock
+
+        from codex_plugin_scanner.guard.tray.contracts import TrayState
+
+        mock_adapter = _MagicMock()
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.platforms.detect_platform_adapter",
+            lambda: mock_adapter,
+        )
+
+        def fake_install_registration(*_a, **_kw):
+            events.append("run:tray-install")
+
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.install_registration",
+            fake_install_registration,
+        )
+
+        def fake_start_tray(*_a, **_kw):
+            events.append("run:tray-start")
+            return _MagicMock(ok=True)
+
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.start_tray",
+            fake_start_tray,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.tray.lifecycle.get_status",
+            _MagicMock(return_value=(TrayState.RUNNING, None, None)),
+        )
+
         rc = main(["guard", "init", "--home", str(home_dir), "--guard-home", str(guard_home)])
 
         assert rc == 0
@@ -8560,12 +8887,14 @@ url = http://127.0.0.1:8787/guard-canary
             "run:cloud",
             "prompt:notifications",
             "run:notifications",
+            "prompt:tray",
+            "run:tray-install",
+            "run:tray-start",
         ]
 
     def test_guard_init_skip_flags_do_not_run_install_cloud_or_notifications(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         guard_home = tmp_path / "guard-home"
-
         monkeypatch.setattr(
             guard_commands_module,
             "ensure_guard_daemon",
@@ -8603,6 +8932,7 @@ url = http://127.0.0.1:8787/guard-canary
                 "--skip-apps",
                 "--skip-cloud",
                 "--skip-notifications",
+                "--skip-tray",
                 "--home",
                 str(home_dir),
                 "--guard-home",
@@ -8619,46 +8949,46 @@ url = http://127.0.0.1:8787/guard-canary
             "skipped": True,
             "reason": "skip_notifications",
         }
+        assert output["tray"] == {"skipped": True, "reason": "skip_tray"}
 
     def test_guard_admin_alias_opens_local_approval_center(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
-        opened_urls: list[str] = []
-        open_keys: list[str | None] = []
-        force_open_flags: list[bool] = []
+        from unittest.mock import MagicMock
+
+        from codex_plugin_scanner.guard import dashboard_launcher
 
         monkeypatch.setattr(
-            guard_commands_module,
+            dashboard_launcher,
             "ensure_guard_daemon",
             lambda guard_home: "http://127.0.0.1:5474",
         )
         monkeypatch.setattr(
-            guard_commands_module,
-            "_open_approval_center",
-            lambda approval_center_url, *, store, config, open_key=None, force_open=False: (
-                opened_urls.append(approval_center_url),
-                open_keys.append(open_key),
-                force_open_flags.append(force_open),
-                {"opened": False, "reason": "policy-disabled", "browser_url": approval_center_url},
-            )[-1],
+            dashboard_launcher,
+            "load_guard_daemon_auth_token",
+            lambda guard_home: "fake-token",
         )
+        mock_surface = MagicMock()
+        mock_surface.ensure_surface.return_value = {
+            "opened": False,
+            "reason": "policy-disabled",
+            "browser_url": "http://127.0.0.1:5474",
+        }
+        monkeypatch.setattr(dashboard_launcher, "GuardSurfaceRuntime", lambda store: mock_surface)
 
         rc = main(["guard", "admin", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert opened_urls == ["http://127.0.0.1:5474"]
-        assert open_keys == ["dashboard"]
-        assert force_open_flags == [True]
         assert output["approval_center_url"] == "http://127.0.0.1:5474"
-        assert output["browser_url"] == "http://127.0.0.1:5474"
         assert output["opened"] is False
         assert output["reason"] == "policy-disabled"
 
     def test_guard_dashboard_returns_error_when_daemon_start_fails(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
+        from codex_plugin_scanner.guard import dashboard_launcher
 
         monkeypatch.setattr(
-            guard_commands_module,
+            dashboard_launcher,
             "ensure_guard_daemon",
             lambda guard_home: (_ for _ in ()).throw(RuntimeError("dashboard_unavailable")),
         )
@@ -8703,9 +9033,9 @@ url = http://127.0.0.1:8787/guard-canary
 
         output = capsys.readouterr().out
 
-        assert "This device is protected locally" in output
+        assert "Guard is running locally" in output
         assert "Sign in to finish Guard Cloud setup" in output
-        assert "Local protection is active." in output
+        assert "Local Guard is available." in output
         assert "Sign in on the Guard connect page" in output
         assert "Machine registered, first proof pending" not in output
         assert "Dashboard proof is still syncing" not in output
@@ -8730,9 +9060,9 @@ url = http://127.0.0.1:8787/guard-canary
 
         output = capsys.readouterr().out
 
-        assert "This device is protected locally" in output
+        assert "Guard is running locally" in output
         assert "Upgrade to sync this device to Guard Cloud" in output
-        assert "Local protection is active." in output
+        assert "Local Guard is available." in output
         assert "Upgrade your Guard plan" in output
         assert "shared proof" in output
         assert "Fleet history to Guard Cloud" in output
@@ -8755,7 +9085,7 @@ url = http://127.0.0.1:8787/guard-canary
 
         output = capsys.readouterr().out
 
-        assert "This device is protected locally" in output
+        assert "Guard is running locally" in output
         assert "Upgrade to sync this device to Guard Cloud" in output
         assert "First Guard Cloud proof is on the way" not in output
 

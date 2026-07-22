@@ -840,7 +840,12 @@ def test_package_retry_validates_context_and_retained_authority_before_forward(
     )
     claim_completed = False
 
-    def resolve_package_policy(*, artifact: GuardArtifact) -> object:
+    def resolve_package_policy(
+        *,
+        artifact: GuardArtifact,
+        external_archive_network_authorized: bool = False,
+    ) -> object:
+        del external_archive_network_authorized
         assert artifact.artifact_id == package_artifact.artifact_id
         return postclaim_resolution if claim_completed else preclaim_resolution
 
@@ -1082,6 +1087,8 @@ def test_package_observe_mode_queues_each_authority_source_once_and_records_exec
     else:
         assert event["observed_policy_action"] == expected_observed
         assert forwarded["scanner_evidence"][-1]["observed_policy_action"] == expected_observed
+
+
 def test_mcp_executable_identity_uses_launch_cwd_and_stays_pinned_after_spawn(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

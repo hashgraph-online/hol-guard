@@ -6,13 +6,43 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from .command_contained_routine_candidates import contained_routine_candidate_factor
+from .command_critical_floors import command_critical_floor_factors
+from .command_decision_adapter import (
+    command_uncertainties,
+    decision_factors,
+    effect_decision_to_dict,
+    extension_evidence_batch,
+    extension_uncertainties,
+)
+from .command_extension_observations import CommandExtensionObservation
 from .command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtension,
     CommandSafetyExtensionRegistry,
 )
 from .command_model import CanonicalCommand, parse_shell_command
-from .command_rules import CommandRuleMatch, CommandRuleMode
+from .command_rules import CommandRuleMatch, CommandRuleMode, CommandSafetyRule
+from .command_verified_read_candidates import verified_read_candidate_factor
+from .command_workspace_write_candidates import workspace_write_candidate_factors
+from .effect_contract import UncertaintyKind
+from .effect_decision import (
+    DecisionFactor,
+    EffectDecision,
+    EffectDecisionRequest,
+    evaluate_effect_decision,
+)
+from .extension_control_contract import ControlResolution, ControlSurface, ExtensionControlLayer
+from .extension_control_resolver import resolve_extension_controls
+from .extension_control_runtime import (
+    ExtensionControlDecisionEvidence,
+    ExtensionControlRuntimeSnapshot,
+    current_extension_control_snapshot,
+)
+from .github_workflow_authorization import (
+    GitHubWorkflowAuthorization,
+    github_workflow_authorization_evidence,
+)
 
 CommandDecisionFloor = Literal["allow", "monitor", "review", "block"]
 _FLOOR_RANK: dict[CommandDecisionFloor, int] = {"allow": 0, "monitor": 1, "review": 2, "block": 3}
@@ -50,6 +80,12 @@ class CompositeCommandEvaluation:
     controlling_reason: str | None
     controlling_rule_id: str | None
     minimum_action: CommandDecisionFloor
+    extension_observations: tuple[CommandExtensionObservation[CommandSafetyExtension], ...]
+    decision_plane: EffectDecision
+    baseline_factors: tuple[DecisionFactor, ...]
+    baseline_uncertainties: tuple[UncertaintyKind, ...]
+    control_resolution: ControlResolution
+    private_control_evidence: ExtensionControlDecisionEvidence | None
 
     @property
     def risk_classes(self) -> tuple[str, ...]:
@@ -68,6 +104,8 @@ class CompositeCommandEvaluation:
             "minimum_action": self.minimum_action,
             "risk_classes": list(self.risk_classes),
             "matches": [owned.to_dict() for owned in self.matches],
+            "extension_observations": [item.to_dict() for item in self.extension_observations],
+            "decision_plane": effect_decision_to_dict(self.decision_plane),
             "parse_confidence": self.command.confidence,
             "uncertainty_reason": self.command.uncertainty_reason,
         }
@@ -81,19 +119,34 @@ def evaluate_command(
     compatibility_reason: str | None = None,
     cwd: Path | None = None,
     home_dir: Path | None = None,
+    workflow_authorization: GitHubWorkflowAuthorization | None = None,
     registry: CommandSafetyExtensionRegistry = BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    extension_control_layers: tuple[ExtensionControlLayer, ...] | None = None,
+    extension_control_snapshot: ExtensionControlRuntimeSnapshot | None = None,
 ) -> CompositeCommandEvaluation:
     """Evaluate every built-in rule without executing or persisting the command."""
 
+    if extension_control_layers is not None and extension_control_snapshot is not None:
+        raise ValueError("provide extension control layers or a runtime snapshot, not both")
+    runtime_snapshot = extension_control_snapshot
+    if extension_control_layers is None and runtime_snapshot is None:
+        runtime_snapshot = current_extension_control_snapshot()
+    control_layers = runtime_snapshot.layers if runtime_snapshot is not None else (extension_control_layers or ())
+
     command = canonical_command or parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
-    structured = registry.matching_rules(command)
+    observations = registry.observations(command)
+    structured = tuple(
+        (item.extension, item.rule, item.effective_evidence) for item in observations if item.effective_evidence
+    )
     selected = list(structured)
     selected_rule_ids = {rule.rule_id for _extension, rule, _evidence in selected}
+    compatibility_rule: tuple[CommandSafetyExtension, CommandSafetyRule] | None = None
     if compatibility_action_class is not None:
         extension = registry.for_action_class(compatibility_action_class)
         rule = registry.rule_for_action_class(compatibility_action_class)
         if extension is not None and rule is not None and rule.rule_id not in selected_rule_ids:
             selected.append((extension, rule, ()))
+            compatibility_rule = (extension, rule)
 
     owned_matches: list[OwnedCommandRuleMatch] = []
     for extension, rule, evidence in selected:
@@ -127,6 +180,113 @@ def evaluate_command(
         minimum_action = _stronger_floor(minimum_action, "review")
     if command.confidence != "exact" and (compatibility_action_class is not None or owned_matches):
         minimum_action = _stronger_floor(minimum_action, "review")
+    observation_uncertainties = extension_uncertainties(observations)
+    if observation_uncertainties:
+        minimum_action = "block"
+    evidence_batch = extension_evidence_batch(command, observations)
+    contained_routine_candidate = contained_routine_candidate_factor(command)
+    verified_read_candidate = verified_read_candidate_factor(command)
+    workspace_write_candidates = workspace_write_candidate_factors(command)
+    authorization_evidence = github_workflow_authorization_evidence(
+        workflow_authorization,
+        command_identity=command.security_identity,
+    )
+    baseline_critical_floor_factors = command_critical_floor_factors(command)
+    critical_floor_factors = (
+        baseline_critical_floor_factors
+        if workflow_authorization is None
+        else command_critical_floor_factors(command, workflow_authorization)
+    )
+    authorized_action_class = authorization_evidence[1] if authorization_evidence is not None else None
+    if contained_routine_candidate is not None:
+        minimum_action = _stronger_floor(minimum_action, "review")
+    if verified_read_candidate is not None:
+        minimum_action = _stronger_floor(minimum_action, "review")
+    for candidate in workspace_write_candidates:
+        candidate_floor: CommandDecisionFloor = "block" if candidate.basis.action_floor == "block" else "review"
+        minimum_action = _stronger_floor(minimum_action, candidate_floor)
+    baseline_decision_factors = decision_factors(
+        evidence_batch,
+        compatibility_action_class=None,
+        compatibility_rule=None,
+    )
+    decision_compatibility_action_class = (
+        None
+        if authorized_action_class is not None and compatibility_action_class == authorized_action_class
+        else compatibility_action_class
+    )
+    current_decision_factors = (
+        baseline_decision_factors
+        if decision_compatibility_action_class is None
+        else decision_factors(
+            evidence_batch,
+            compatibility_action_class=decision_compatibility_action_class,
+            compatibility_rule=compatibility_rule,
+        )
+    )
+    baseline_factors = (
+        *baseline_decision_factors,
+        *workspace_write_candidates,
+        *baseline_critical_floor_factors,
+    )
+    baseline_uncertainties = tuple(
+        sorted(
+            {
+                *command_uncertainties(command, sensitive=bool(owned_matches)),
+                *observation_uncertainties,
+            },
+            key=lambda item: item.value,
+        )
+    )
+    decision_uncertainties = (
+        baseline_uncertainties
+        if compatibility_action_class is None
+        else tuple(
+            sorted(
+                {
+                    *command_uncertainties(command, sensitive=True),
+                    *observation_uncertainties,
+                },
+                key=lambda item: item.value,
+            )
+        )
+    )
+    extension_ids = tuple(sorted({observation.extension.extension_id for observation in observations}))
+    permission_ids = tuple(
+        sorted(
+            {
+                permission.permission_id
+                for owned in owned_matches
+                if (permission := registry.permission_for_rule_id(owned.match.rule.rule_id)) is not None
+            }
+        )
+    )
+    control_resolution = resolve_extension_controls(
+        control_layers,
+        registry,
+        extension_ids=extension_ids,
+        permission_ids=permission_ids,
+        surface=ControlSurface.COMMAND_EVALUATION,
+        observations=tuple(
+            f"{observation.extension.extension_id}:{observation.rule.rule_id}" for observation in observations
+        ),
+        authority_failure=runtime_snapshot.authority_failure if runtime_snapshot is not None else None,
+    )
+    if control_resolution.blocked:
+        minimum_action = _stronger_floor(minimum_action, "block")
+    decision_plane = evaluate_effect_decision(
+        EffectDecisionRequest(
+            factors=(
+                *current_decision_factors,
+                *((contained_routine_candidate,) if contained_routine_candidate is not None else ()),
+                *((verified_read_candidate,) if verified_read_candidate is not None else ()),
+                *workspace_write_candidates,
+                *critical_floor_factors,
+                *control_resolution.factors,
+            ),
+            uncertainties=decision_uncertainties,
+        )
+    )
     return CompositeCommandEvaluation(
         command=command,
         matches=tuple(owned_matches),
@@ -134,6 +294,12 @@ def evaluate_command(
         controlling_reason=controlling_reason,
         controlling_rule_id=controlling_match.match.rule.rule_id if controlling_match is not None else None,
         minimum_action=minimum_action,
+        extension_observations=observations,
+        decision_plane=decision_plane,
+        baseline_factors=baseline_factors,
+        baseline_uncertainties=baseline_uncertainties,
+        control_resolution=control_resolution,
+        private_control_evidence=runtime_snapshot.private_evidence if runtime_snapshot is not None else None,
     )
 
 

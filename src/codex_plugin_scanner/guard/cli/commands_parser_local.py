@@ -13,6 +13,12 @@ from .commands_parser_helpers import *
 def _configure_guard_local_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    pytest_contained_parser = guard_subparsers.add_parser("pytest-contained", help=argparse.SUPPRESS)
+    pytest_contained_parser.add_argument("--workspace", required=True)
+    pytest_contained_parser.add_argument("--cwd")
+    pytest_contained_parser.add_argument("--timeout-seconds", type=int, default=30 * 60)
+    pytest_contained_parser.add_argument("pytest_command", nargs=argparse.REMAINDER)
+
     start_parser = guard_subparsers.add_parser("start", help="Show the first Guard steps for a local harness")
     _add_guard_common_args(start_parser)
     start_parser.add_argument("--json", action="store_true")
@@ -39,6 +45,11 @@ def _configure_guard_local_parsers(
         "--skip-notifications",
         action="store_true",
         help="Do not initialize desktop notifications",
+    )
+    init_parser.add_argument(
+        "--skip-tray",
+        action="store_true",
+        help="Do not install the menu bar / tray icon",
     )
     init_parser.add_argument(
         "--yes",
@@ -176,6 +187,56 @@ def _configure_guard_local_parsers(
     protect_parser.add_argument("--package-shim-ui", action="store_true", help=argparse.SUPPRESS)
     protect_parser.add_argument("protect_command", nargs=argparse.REMAINDER)
 
+    verified_read_parser = guard_subparsers.add_parser(
+        "verified-read",
+        help="Run a bounded workspace or public GitHub read entirely inside Guard",
+    )
+    verified_read_subparsers = verified_read_parser.add_subparsers(
+        dest="verified_read_command",
+        required=True,
+        metavar="{local,github-pr}",
+    )
+    local_read_parser = verified_read_subparsers.add_parser("local", help="Run a bounded local read")
+    local_read_parser.add_argument("--json", action="store_true")
+    local_read_parser.add_argument("read_argv", nargs=argparse.REMAINDER)
+    github_read_parser = verified_read_subparsers.add_parser("github-pr", help="Read one public pull request")
+    github_read_parser.add_argument("owner")
+    github_read_parser.add_argument("repository")
+    github_read_parser.add_argument("number", type=int)
+    github_read_parser.add_argument(
+        "--field",
+        action="append",
+        choices=("mergeable", "number", "state"),
+        default=None,
+    )
+    github_read_parser.add_argument("--json", action="store_true")
+
+    contained_write_parser = guard_subparsers.add_parser(
+        "contained-write",
+        help="Run one bounded workspace write through Guard-owned containment",
+    )
+    _add_guard_common_args(contained_write_parser)
+    contained_write_subparsers = contained_write_parser.add_subparsers(
+        dest="contained_write_command",
+        required=True,
+        metavar="{patch-check,patch-apply,format,copy}",
+    )
+    patch_check_parser = contained_write_subparsers.add_parser("patch-check")
+    patch_check_parser.add_argument("source")
+    patch_check_parser.add_argument("--json", action="store_true")
+    patch_apply_parser = contained_write_subparsers.add_parser("patch-apply")
+    patch_apply_parser.add_argument("source")
+    patch_apply_parser.add_argument("target")
+    patch_apply_parser.add_argument("--json", action="store_true")
+    format_parser = contained_write_subparsers.add_parser("format")
+    format_parser.add_argument("source")
+    format_parser.add_argument("target", nargs="?", default=None)
+    format_parser.add_argument("--json", action="store_true")
+    copy_parser = contained_write_subparsers.add_parser("copy")
+    copy_parser.add_argument("source")
+    copy_parser.add_argument("target")
+    copy_parser.add_argument("--json", action="store_true")
+
     command_parser = guard_subparsers.add_parser(
         "command",
         help="Inspect commands and built-in command safety extensions without executing anything",
@@ -204,6 +265,51 @@ def _configure_guard_local_parsers(
     setup_parser.add_argument("--detect", action="store_true", required=True)
     setup_parser.add_argument("--workspace", default=".")
     setup_parser.add_argument("--json", action="store_true")
+    controls_parser = command_subparsers.add_parser(
+        "controls",
+        help="Inspect or change extension controls",
+    )
+    controls_subparsers = controls_parser.add_subparsers(
+        dest="controls_command",
+        required=True,
+    )
+    controls_subparsers.add_parser("status", help="Show authority status")
+    controls_subparsers.add_parser("list", help="List catalog extensions")
+    controls_show = controls_subparsers.add_parser("show", help="Show one catalog target")
+    controls_show.add_argument("target_id")
+    for action in ("preview", "apply"):
+        mutation_parser = controls_subparsers.add_parser(action, help=f"{action.title()} a control")
+        mutation_parser.add_argument("target_id")
+        mutation_parser.add_argument(
+            "--target-kind",
+            choices=("extension", "permission"),
+            default="extension",
+        )
+        mutation_parser.add_argument(
+            "--state",
+            choices=("enabled", "disabled"),
+            required=True,
+        )
+    for action in ("global-preview", "global-apply"):
+        global_parser = controls_subparsers.add_parser(action, help=f"{action.title()} lockdown")
+        global_parser.add_argument(
+            "--state",
+            choices=("enabled", "disabled"),
+            required=True,
+        )
+    enroll_parser = controls_subparsers.add_parser(
+        "enroll",
+        help="Enroll this local authority using direct terminal confirmation",
+    )
+    enroll_parser.add_argument("--actor", default="local-admin")
+    controls_subparsers.add_parser(
+        "recover-authority",
+        help="Authenticate and recover interrupted local authority state",
+    )
+    controls_subparsers.add_parser(
+        "acknowledge-degraded",
+        help="Authenticate and acknowledge degraded local authority mode",
+    )
 
     preflight_parser = guard_subparsers.add_parser(
         "preflight",
@@ -313,6 +419,75 @@ def _configure_guard_local_parsers(
         _add_guard_common_args(policy_parser)
         policy_parser.add_argument("--json", action="store_true")
         policy_parser.set_defaults(policy_action=action)
+
+    tray_parser = guard_subparsers.add_parser(
+        "tray",
+        help="Manage the HOL Guard menu bar / system tray icon",
+    )
+    _add_guard_common_args(tray_parser)
+    tray_parser.add_argument("--json", action="store_true")
+    tray_subparsers = tray_parser.add_subparsers(
+        dest="tray_command",
+        required=True,
+        parser_class=FriendlyArgumentParser,
+    )
+
+    tray_status_parser = tray_subparsers.add_parser(
+        "status",
+        help="Show whether the tray icon is running and supported on this platform",
+    )
+    _add_guard_common_args(tray_status_parser)
+    tray_status_parser.add_argument("--json", action="store_true")
+
+    tray_start_parser = tray_subparsers.add_parser(
+        "start",
+        help="Start the tray icon process",
+    )
+    _add_guard_common_args(tray_start_parser)
+    tray_start_parser.add_argument("--force", action="store_true", help="Stop any existing tray before starting")
+    tray_start_parser.add_argument("--json", action="store_true")
+
+    tray_stop_parser = tray_subparsers.add_parser(
+        "stop",
+        help="Stop the running tray icon process",
+    )
+    _add_guard_common_args(tray_stop_parser)
+    tray_stop_parser.add_argument("--json", action="store_true")
+
+    tray_restart_parser = tray_subparsers.add_parser(
+        "restart",
+        help="Stop and start the tray icon process",
+    )
+    _add_guard_common_args(tray_restart_parser)
+    tray_restart_parser.add_argument("--json", action="store_true")
+
+    tray_repair_parser = tray_subparsers.add_parser(
+        "repair",
+        help="Reset tray state after crashes or corruption",
+    )
+    _add_guard_common_args(tray_repair_parser)
+    tray_repair_parser.add_argument("--json", action="store_true")
+
+    tray_install_parser = tray_subparsers.add_parser(
+        "install",
+        help="Install the tray icon to start automatically at login",
+    )
+    _add_guard_common_args(tray_install_parser)
+    tray_install_parser.add_argument("--no-run-at-login", action="store_true", help="Do not set run-at-login")
+    tray_install_parser.add_argument("--json", action="store_true")
+
+    tray_uninstall_parser = tray_subparsers.add_parser(
+        "uninstall",
+        help="Remove the tray icon from automatic login startup",
+    )
+    _add_guard_common_args(tray_uninstall_parser)
+    tray_uninstall_parser.add_argument("--json", action="store_true")
+
+    tray_run_parser = tray_subparsers.add_parser(
+        "run",
+        help=argparse.SUPPRESS,  # internal: run the tray icon in-process (called by start)
+    )
+    tray_run_parser.add_argument("--guard-home", required=True)
 
 __all__ = [
     "_configure_guard_local_parsers",

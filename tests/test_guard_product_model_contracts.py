@@ -224,6 +224,8 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     assert apis_by_method[("POST", "/v1/policy/clear")].writes_state is True
     assert apis_by_method[("GET", "/v1/artifacts/{id}/diff")].writes_state is False
     assert apis_by_method[("DELETE", "/v1/evidence")].category == "destructive"
+    assert apis_by_method[("GET", "/v1/command-activity/diagnostics")].writes_state is False
+    assert apis_by_method[("DELETE", "/v1/command-activity")].category == "destructive"
     assert apis_by_method[("POST", "/v1/daemon/repair")].writes_state is True
     assert apis_by_method[("GET", "/v1/evidence/export")].auth_required is True
     assert apis_by_method[("GET", "/v1/settings")].writes_state is False

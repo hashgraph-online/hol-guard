@@ -13,6 +13,7 @@ import base64
 import hashlib
 import hmac
 import json
+import ntpath
 import os
 import re
 import secrets
@@ -24,6 +25,9 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, TypeGuard, cast
+
+from .env_wrapper import parse_env_wrapper
+from .extension_control_runtime import current_extension_control_binding_digest
 
 APPROVAL_CONTEXT_TOKEN_PREFIX = "guard-approval-context:v1:"
 
@@ -89,7 +93,13 @@ def build_approval_context_token(
         identity_hash=_component_hash("identity", identity),
         content_hash=_component_hash("content", content),
         capabilities_hash=_component_hash("capabilities", capabilities),
-        policy_hash=_component_hash("policy", policy),
+        policy_hash=_component_hash(
+            "policy",
+            {
+                "extension_control_digest": current_extension_control_binding_digest(),
+                "policy": policy,
+            },
+        ),
         sandbox_hash=_component_hash("sandbox", sandbox),
     )
     payload = json.dumps(
@@ -201,6 +211,7 @@ def build_runtime_executable_identity(
     *,
     search_path: str | None = None,
     cwd: Path | None = None,
+    require_executable: bool = True,
 ) -> dict[str, object]:
     """Resolve and content-bind an executable without launching it.
 
@@ -226,7 +237,10 @@ def build_runtime_executable_identity(
     if not isinstance(command, str) or not command.strip():
         return with_launch_cwd(_unreusable_executable_identity(command, status="invalid_command"))
     candidate = Path(command).expanduser()
-    has_explicit_path = os.sep in command or (os.altsep is not None and os.altsep in command)
+    has_windows_path = "\\" in command or bool(ntpath.splitdrive(command)[0]) or command.startswith("//")
+    if has_windows_path and os.name != "nt":
+        return with_launch_cwd(_unreusable_executable_identity(command, status="foreign_platform_path", path=candidate))
+    has_explicit_path = os.sep in command or (os.altsep is not None and os.altsep in command) or has_windows_path
     if candidate.is_absolute():
         resolved = candidate
     elif has_explicit_path:
@@ -248,14 +262,26 @@ def build_runtime_executable_identity(
             return with_launch_cwd(_unreusable_executable_identity(command, status="unresolved"))
         resolved = Path(located)
     try:
-        canonical = resolved.resolve(strict=True)
+        launch_path = Path(os.path.abspath(os.fspath(resolved)))
+    except (OSError, TypeError, ValueError):
+        return with_launch_cwd(_unreusable_executable_identity(command, status="invalid_path", path=resolved))
+    initial_path_chain = _executable_path_chain_snapshot(launch_path)
+    if initial_path_chain is None:
+        return with_launch_cwd(_unreusable_executable_identity(command, status="unreadable", path=launch_path))
+    try:
+        canonical = launch_path.resolve(strict=True)
         metadata = canonical.stat()
     except (OSError, RuntimeError):
-        return with_launch_cwd(_unreusable_executable_identity(command, status="unreadable", path=resolved))
+        return with_launch_cwd(_unreusable_executable_identity(command, status="unreadable", path=launch_path))
     if not stat.S_ISREG(metadata.st_mode):
         return with_launch_cwd(_unreusable_executable_identity(command, status="not_regular", path=canonical))
+    if require_executable and os.name != "nt" and metadata.st_mode & 0o111 == 0:
+        return with_launch_cwd(_unreusable_executable_identity(command, status="not_executable", path=canonical))
     stat_key = _executable_stat_key(metadata)
     digest, hash_status, shebang, shebang_status = _cached_executable_hash(str(canonical), stat_key)
+    final_path_chain = _executable_path_chain_snapshot(launch_path)
+    if final_path_chain is None or final_path_chain != initial_path_chain:
+        return with_launch_cwd(_unreusable_executable_identity(command, status="path_changed", path=launch_path))
     if shebang_status == "verified":
         file_format = "script"
     elif shebang_status == "not_script":
@@ -264,9 +290,15 @@ def build_runtime_executable_identity(
         file_format = "unverified"
     identity: dict[str, object] = {
         "command": command,
+        "launch_path": str(launch_path),
         "file_format": file_format,
         "path": str(canonical),
+        "path_chain": [dict(item) for item in initial_path_chain],
         "shebang_status": shebang_status,
+        "device": metadata.st_dev,
+        "inode": metadata.st_ino,
+        "modified_time_ns": metadata.st_mtime_ns,
+        "change_time_ns": metadata.st_ctime_ns,
         "size": metadata.st_size,
         "mode": stat.S_IMODE(metadata.st_mode),
         "status": hash_status,
@@ -278,6 +310,58 @@ def build_runtime_executable_identity(
     if shebang is not None:
         identity["shebang_sha256"] = hashlib.sha256(shebang.encode("utf-8")).hexdigest()
     return with_launch_cwd(identity)
+
+
+def _executable_path_chain_snapshot(path: Path) -> tuple[tuple[tuple[str, object], ...], ...] | None:
+    """Snapshot every lexical symlink hop used to reach an executable.
+
+    The canonical target hash alone does not bind a PATH entry or explicit
+    symlink.  Capturing stable lstat identity before and after content hashing
+    detects ordinary path swaps during evaluation and makes later approval
+    checks sensitive to changes in any symlink hop.
+    """
+
+    try:
+        canonical = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+    snapshots: list[tuple[tuple[str, object], ...]] = []
+    seen_paths: set[str] = set()
+    for endpoint in (path, canonical):
+        parts = endpoint.parts
+        if not parts:
+            return None
+        current = Path(parts[0])
+        for index, part in enumerate(parts[1:], start=1):
+            current /= part
+            try:
+                metadata = current.lstat()
+            except OSError:
+                return None
+            is_endpoint = index == len(parts) - 1
+            if not is_endpoint and not stat.S_ISLNK(metadata.st_mode):
+                continue
+            current_text = str(current)
+            if current_text in seen_paths:
+                continue
+            seen_paths.add(current_text)
+            target: str | None = None
+            if stat.S_ISLNK(metadata.st_mode):
+                try:
+                    target = os.readlink(current)
+                except OSError:
+                    return None
+            snapshot = {
+                "change_time_ns": metadata.st_ctime_ns,
+                "device": metadata.st_dev,
+                "inode": metadata.st_ino,
+                "mode": stat.S_IMODE(metadata.st_mode),
+                "modified_time_ns": metadata.st_mtime_ns,
+                "path": current_text,
+                "target_sha256": hashlib.sha256(target.encode("utf-8")).hexdigest() if target is not None else None,
+            }
+            snapshots.append(tuple(sorted(snapshot.items())))
+    return tuple(snapshots) if snapshots else None
 
 
 _PYTHON_LAUNCHER_PATTERN = re.compile(
@@ -637,6 +721,16 @@ def _normalized_launch_cwd(cwd: Path | None) -> Path:
 
 def _launch_argv_digest(argv: Sequence[str]) -> str:
     material = json.dumps(list(argv), ensure_ascii=True, separators=(",", ":"))
+    return _opaque_identity_digest(material)
+
+
+def _opaque_identity_digest(material: str) -> str:
+    """Return a stable launch-identity digest, not a credential verifier."""
+
+    # Launch material can contain password-like values, but this digest is used
+    # only for exact approval-context change detection. It is never used to
+    # authenticate a secret, so a password KDF would be the wrong primitive.
+    # codeql[py/weak-sensitive-data-hashing]
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -949,15 +1043,10 @@ def _nested_shebang_interpreter_identity(
 
 
 def _env_shebang_command(args: tuple[str, ...]) -> tuple[str, tuple[str, ...]] | None:
-    if not args:
+    parsed = parse_env_wrapper(args)
+    if not parsed.complete or not parsed.executable_argv:
         return None
-    if args[0] in {"-S", "--split-string"}:
-        if len(args) < 2:
-            return None
-        return args[1], args[2:]
-    if args[0].startswith("-") or "=" in args[0]:
-        return None
-    return args[0], args[1:]
+    return parsed.executable_argv[0], parsed.executable_argv[1:]
 
 
 def _identity_shebang_status(identity: Mapping[str, object]) -> Literal["native", "script", "unverified"]:
@@ -1142,7 +1231,7 @@ def _python_module_runtime_entrypoint_identity(
             argument=str(entrypoint_path),
             launch_cwd=launch_cwd,
         )
-        identity["module_sha256"] = hashlib.sha256(module.encode("utf-8")).hexdigest()
+        identity["module_sha256"] = _opaque_identity_digest(module)
         identity["package_initializers"] = _python_package_initializer_identities(
             root=root,
             relative_module=relative_module,
@@ -1404,8 +1493,13 @@ def _file_runtime_entrypoint(*, kind: str, argument: str, launch_cwd: Path) -> d
     candidate = Path(argument).expanduser()
     if not candidate.is_absolute():
         candidate = launch_cwd / candidate
-    identity = build_runtime_executable_identity(str(candidate), search_path=None, cwd=launch_cwd)
-    identity["argument_sha256"] = hashlib.sha256(argument.encode("utf-8")).hexdigest()
+    identity = build_runtime_executable_identity(
+        str(candidate),
+        search_path=None,
+        cwd=launch_cwd,
+        require_executable=False,
+    )
+    identity["argument_sha256"] = _opaque_identity_digest(argument)
     identity["kind"] = kind
     return identity
 
@@ -1413,7 +1507,7 @@ def _file_runtime_entrypoint(*, kind: str, argument: str, launch_cwd: Path) -> d
 def _inline_runtime_entrypoint(*, kind: str, source: str) -> dict[str, object]:
     return {
         "kind": kind,
-        "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+        "sha256": _opaque_identity_digest(source),
         "status": "verified",
     }
 

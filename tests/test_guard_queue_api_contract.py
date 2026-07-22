@@ -151,10 +151,13 @@ def _post_error(port: int, token: str, path: str, payload: dict[str, object]) ->
 
 
 def _start_fake_codex_app_server(socket_path: Path, received: list[dict[str, object]]) -> threading.Thread:
+    ready = threading.Event()
+
     def server() -> None:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
             listener.bind(str(socket_path))
             listener.listen(1)
+            ready.set()
             connection, _ = listener.accept()
             with connection:
                 headers = _recv_until(connection, b"\r\n\r\n").decode("iso-8859-1")
@@ -217,18 +220,18 @@ def _start_fake_codex_app_server(socket_path: Path, received: list[dict[str, obj
 
     thread = threading.Thread(target=server, daemon=True)
     thread.start()
-    for _ in range(50):
-        if socket_path.exists():
-            break
-        time.sleep(0.01)
+    assert ready.wait(timeout=1)
     return thread
 
 
 def _start_fake_streaming_codex_app_server(socket_path: Path, received: list[dict[str, object]]) -> threading.Thread:
+    ready = threading.Event()
+
     def server() -> None:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
             listener.bind(str(socket_path))
             listener.listen(1)
+            ready.set()
             connection, _ = listener.accept()
             with connection:
                 headers = _recv_until(connection, b"\r\n\r\n").decode("iso-8859-1")
@@ -289,20 +292,20 @@ def _start_fake_streaming_codex_app_server(socket_path: Path, received: list[dic
 
     thread = threading.Thread(target=server, daemon=True)
     thread.start()
-    for _ in range(50):
-        if socket_path.exists():
-            break
-        time.sleep(0.01)
+    assert ready.wait(timeout=1)
     return thread
 
 
 def _start_fake_pre_ack_streaming_codex_app_server(
     socket_path: Path, received: list[dict[str, object]]
 ) -> threading.Thread:
+    ready = threading.Event()
+
     def server() -> None:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
             listener.bind(str(socket_path))
             listener.listen(1)
+            ready.set()
             connection, _ = listener.accept()
             with connection:
                 headers = _recv_until(connection, b"\r\n\r\n").decode("iso-8859-1")
@@ -361,10 +364,7 @@ def _start_fake_pre_ack_streaming_codex_app_server(
 
     thread = threading.Thread(target=server, daemon=True)
     thread.start()
-    for _ in range(50):
-        if socket_path.exists():
-            break
-        time.sleep(0.01)
+    assert ready.wait(timeout=1)
     return thread
 
 
@@ -682,10 +682,12 @@ def test_broad_scope_resolution_keeps_other_reviews_pending(tmp_path: Path) -> N
     assert payload["remaining_pending_count"] == 1
     assert payload["next_selectable_request_id"] == "req-covered"
     assert payload.get("resolved_scope_ids") in (None, [])
+    assert payload["requested_scope"] == "harness"
+    assert payload["applied_scope"] == "artifact"
+    assert payload["scope_warning"] == "legacy_scope_narrowed_to_artifact"
     assert store.get_approval_request("req-covered")["status"] == "pending"
     decisions = store.list_policy_decisions("codex")
-    assert len(decisions) == 1
-    assert decisions[0]["scope"] == "harness"
+    assert decisions == []
 
 
 def test_artifact_scope_resolution_keeps_same_artifact_review_pending(tmp_path: Path) -> None:
@@ -718,7 +720,7 @@ def test_artifact_scope_resolution_keeps_same_artifact_review_pending(tmp_path: 
     assert store.get_approval_request("req-covered")["status"] == "pending"
 
 
-def test_resolving_stale_item_returns_recovery_payload(tmp_path: Path) -> None:
+def test_same_resolution_is_idempotent_and_different_resolution_conflicts(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _populate(store, [_request("req-stale")])
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -731,18 +733,26 @@ def test_resolving_stale_item_returns_recovery_payload(tmp_path: Path) -> None:
             "/v1/requests/req-stale/approve",
             {"scope": "artifact", "reason": "reviewed"},
         )
-        status, payload = _post_error(
+        payload = _post_json(
             daemon.port,
             daemon._server.auth_token,
             "/v1/requests/req-stale/approve",
             {"scope": "artifact", "reason": "reviewed again"},
         )
+        status, conflict = _post_error(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-stale/block",
+            {"scope": "artifact", "reason": "different decision"},
+        )
     finally:
         daemon.stop()
 
+    assert payload["resolved"] is True
+    assert payload["idempotent"] is True
     assert status == 409
-    assert payload["error"] == "already_resolved"
-    assert payload["recovery"]["code"] == "request_resolved"
+    assert conflict["error"] == "already_resolved"
+    assert conflict["recovery"]["code"] == "request_resolved"
 
 
 def test_resolving_missing_item_returns_recovery_payload(tmp_path: Path) -> None:

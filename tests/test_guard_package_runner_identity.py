@@ -142,6 +142,29 @@ def test_env_search_path_option_resolves_the_executed_manager(tmp_path: Path) ->
     assert evidence.manager.resolved_path == str(manager.resolve())
 
 
+def test_option_like_unset_operand_does_not_replace_inherited_runner_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _write_workspace(workspace)
+    manager = tmp_path / "manager-bin" / "npx"
+    _write_executable(manager, "manager")
+    monkeypatch.setenv("PATH", str(manager.parent))
+
+    intent = parse_package_intent(
+        "env -u -i npx --no-install vitest --help",
+        workspace=workspace,
+    )
+
+    assert intent is not None
+    evidence = intent.local_executions[0]
+    assert evidence.path_source == "inherited"
+    assert evidence.manager is not None
+    assert evidence.manager.resolved_path == str(manager.resolve())
+
+
 @pytest.mark.parametrize("option", ["-S", "--split-string"])
 def test_env_split_string_preserves_package_runner_identity(
     tmp_path: Path,

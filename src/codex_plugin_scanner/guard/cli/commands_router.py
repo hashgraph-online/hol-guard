@@ -18,6 +18,8 @@ from .commands_parser_helpers import *
 _EARLY_HANDLERS = {
     "mdm": "_run_guard_mdm_command",
     "command": "_run_guard_command_inspection_command",
+    "pytest-contained": "_run_guard_pytest_contained_command",
+    "verified-read": "_run_guard_verified_read_command",
     "scan": "_run_guard_scan_command",
     "preflight": "_run_guard_preflight_command",
     "mcp": "_run_guard_mcp_command",
@@ -45,6 +47,7 @@ _COMMON_HANDLERS = {
     "hermes-mcp-proxy": "_run_guard_hermes_mcp_proxy_command",
     "uninstall": "_run_guard_uninstall_command",
     "package-shims": "_run_guard_package_shims_command",
+    "contained-write": "_run_guard_contained_write_command",
     "run": "_run_guard_run_command",
     "diff": "_run_guard_diff_command",
     "test-eval": "_run_guard_test_eval_command",
@@ -53,6 +56,7 @@ _COMMON_HANDLERS = {
     "inventory": "_run_guard_inventory_command",
     "aibom": "_run_guard_aibom_command",
     "abom": "_run_guard_abom_command",
+    "policy": "_run_guard_policy_document_command",
     "policies": "_run_guard_policies_command",
     "trust": "_run_guard_trust_command",
     "settings": "_run_guard_settings_command",
@@ -70,12 +74,14 @@ _COMMON_HANDLERS = {
     "disconnect": "_run_guard_disconnect_command",
     "bridge": "_run_guard_bridge_command",
     "sync": "_run_guard_sync_command",
+    "health-leases": "_run_guard_health_leases_command",
     "cloud": "_run_guard_cloud_command",
     "supply-chain": "_run_guard_supply_chain_command",
     "service": "_run_guard_service_command",
     "device": "_run_guard_device_command",
     "commands": "_run_guard_commands_command",
     "daemon": "_run_guard_daemon_command",
+    "tray": "_run_guard_tray_command",
     "hook": "_run_guard_hook_command",
 }
 
@@ -117,6 +123,7 @@ def run_guard_command(
         workspace_dir=workspace,
         guard_home=guard_home,
         executable_overrides=executable_overrides,
+        home_override_explicit=bool(home_override),
     )
 
     handler = _resolve_guard_handler(_PRESTORE_HANDLERS, args.guard_command)

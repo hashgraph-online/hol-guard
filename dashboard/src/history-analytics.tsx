@@ -22,6 +22,20 @@ import { guardActionDisposition } from "./guard-action";
 
 type TimePeriod = "7d" | "30d" | "90d" | "all";
 
+const TIME_PERIOD_DAYS: Readonly<Record<TimePeriod, number>> = {
+  "7d": 7,
+  "30d": 30,
+  "90d": 90,
+  all: 0,
+};
+
+const TIME_PERIOD_LABELS: Readonly<Record<TimePeriod, string>> = {
+  "7d": "7 days",
+  "30d": "30 days",
+  "90d": "90 days",
+  all: "All time",
+};
+
 interface InsightCard {
   id: string;
   icon: React.ReactNode;
@@ -29,6 +43,24 @@ interface InsightCard {
   value: string;
   tone: "blue" | "green" | "purple" | "attention";
   action?: { label: string; onClick: () => void };
+}
+
+function formatBlockRateValue(hasPreviousData: boolean, blockRate: number, change: number): string {
+  if (!hasPreviousData) return `${blockRate}%`;
+  if (change === 0) return `${blockRate}% (flat)`;
+  return `${blockRate}% (${change > 0 ? "+" : ""}${change}%)`;
+}
+
+function blockRateTone(hasPreviousData: boolean, change: number): InsightCard["tone"] {
+  if (!hasPreviousData) return "blue";
+  return change > 0 ? "attention" : "green";
+}
+
+function activityIntensity(count: number): 0 | 1 | 2 | 3 {
+  if (count === 0) return 0;
+  if (count <= 2) return 1;
+  if (count <= 5) return 2;
+  return 3;
 }
 
 // ──────────────────────────────────────────
@@ -193,11 +225,7 @@ function computeInsights(
       ? Math.round((prevBlockedCount / prevWeekReceipts.length) * 100)
       : 0;
     const change = hasPrevWeekData ? blockRate - prevBlockRate : 0;
-    const value = !hasPrevWeekData
-      ? `${blockRate}%`
-      : change === 0
-        ? `${blockRate}% (flat)`
-        : `${blockRate}% (${change > 0 ? "+" : ""}${change}%)`;
+    const value = formatBlockRateValue(hasPrevWeekData, blockRate, change);
     insights.push({
       id: "block-rate",
       icon: change < 0
@@ -205,7 +233,7 @@ function computeInsights(
         : <HiOutlineArrowTrendingUp className="h-4 w-4" />,
       label: "Block rate this week",
       value,
-      tone: !hasPrevWeekData ? "blue" : change > 0 ? "attention" : "green",
+      tone: blockRateTone(hasPrevWeekData, change),
     });
   }
 
@@ -350,7 +378,7 @@ export function ActivityCalendar({
           const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayIndex).padStart(2, "0")}`;
           const count = activityByDay.get(dateKey) ?? 0;
           const isToday = dateKey === todayKey;
-          const intensity = count === 0 ? 0 : count <= 2 ? 1 : count <= 5 ? 2 : 3;
+          const intensity = activityIntensity(count);
           const intensityClasses = [
             "bg-white text-slate-300 hover:bg-slate-50",
             "bg-blue-100 text-blue-700 hover:bg-blue-200",
@@ -400,7 +428,7 @@ export function TopActions({
 
   const periodReceipts = useMemo(() => {
     if (period === "all") return receipts;
-    const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
+    const days = TIME_PERIOD_DAYS[period];
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
     return receipts.filter((r) => new Date(r.timestamp) >= cutoff);
@@ -436,7 +464,7 @@ export function TopActions({
                   : "text-slate-500 hover:bg-slate-100"
               }`}
             >
-              {p === "7d" ? "7 days" : p === "30d" ? "30 days" : p === "90d" ? "90 days" : "All time"}
+              {TIME_PERIOD_LABELS[p]}
             </button>
           ))}
         </div>

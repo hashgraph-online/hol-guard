@@ -6,10 +6,19 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from .mcp.policy_store import ensure_mcp_policy_request_schema
+
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_command_activity_api_schema import ensure_command_activity_api_schema
+from .store_command_activity_health_schema import ensure_command_activity_health_schema
+from .store_command_activity_maintenance_schema import ensure_command_activity_maintenance_schema
+from .store_command_activity_schema import ensure_command_activity_schema
+from .store_command_shadow_schema import ensure_command_shadow_schema
+from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
 from .store_live_request_outbox import ensure_live_request_outbox_schema, seed_live_request_outbox
 from .store_secret_policy_integrity import _POLICY_INTEGRITY_LOOKUP_UNSET
+from .store_workflow_capabilities_schema import ensure_workflow_capability_schema
 
 
 def _facade_store_attr(name: str, fallback: object) -> object:
@@ -118,6 +127,8 @@ _POLICY_INDEX_STATEMENTS = (
     """,
 )
 
+_RECEIPT_WARN_ROLLUP_MIGRATION_VERSION = 16
+
 
 class StoreConnectionSchemaMixin:
     _startup_prefetched_policy_integrity_secret_material: object | tuple[bytes | None, str | None] = (
@@ -187,6 +198,16 @@ class StoreConnectionSchemaMixin:
             timeout_seconds=timeout_seconds,
             poll_seconds=_OAUTH_CREDENTIAL_LOCK_POLL_SECONDS,
             timeout_message="Timed out waiting for Guard OAuth credential lock.",
+        ):
+            yield
+
+    @contextmanager
+    def hold_workflow_capability_authority_lock(self) -> Iterator[None]:
+        with self._hold_advisory_file_lock(
+            path=self.guard_home / "workflow-capability-authority.lock",
+            timeout_seconds=30.0,
+            poll_seconds=0.05,
+            timeout_message="Timed out waiting for the workflow capability authority lock.",
         ):
             yield
 
@@ -324,6 +345,11 @@ class StoreConnectionSchemaMixin:
               owner text,
               source text not null default 'local',
               expires_at text,
+              policy_document_schema_version text,
+              policy_document_id text,
+              policy_document_digest text,
+              policy_rule_id text,
+              policy_provenance_json text,
               updated_at text not null
             )
             """,
@@ -623,7 +649,14 @@ class StoreConnectionSchemaMixin:
         with self._connect() as connection:
             for statement in statements:
                 connection.execute(statement)
+            ensure_command_activity_schema(connection, applied_at=_now())
+            ensure_command_activity_health_schema(connection, applied_at=_now())
+            ensure_command_activity_maintenance_schema(connection, applied_at=_now())
+            ensure_command_activity_api_schema(connection, applied_at=_now())
             ensure_evidence_schema(connection)
+            ensure_extension_control_authority_schema(connection)
+            ensure_workflow_capability_schema(connection, applied_at=_now())
+            ensure_command_shadow_schema(connection, applied_at=_now())
             if not self._schema_version_applied(connection, version=4):
                 self._record_schema_version(connection, version=4)
             for idx_stmt in supply_chain_index_statements():
@@ -641,8 +674,14 @@ class StoreConnectionSchemaMixin:
             self._ensure_policy_column(connection, "payload_mac", "text")
             self._ensure_policy_column(connection, "integrity_key_id", "text")
             self._ensure_policy_column(connection, "signed_at", "text")
+            self._ensure_policy_column(connection, "policy_document_schema_version", "text")
+            self._ensure_policy_column(connection, "policy_document_id", "text")
+            self._ensure_policy_column(connection, "policy_document_digest", "text")
+            self._ensure_policy_column(connection, "policy_rule_id", "text")
+            self._ensure_policy_column(connection, "policy_provenance_json", "text")
             for index_statement in _POLICY_INDEX_STATEMENTS:
                 connection.execute(index_statement)
+            ensure_mcp_policy_request_schema(connection)
             self._ensure_column(connection, "guard_local_once_approvals", "integrity_version", "integer")
             self._ensure_column(connection, "guard_local_once_approvals", "payload_hash", "text")
             self._ensure_column(connection, "guard_local_once_approvals", "payload_mac", "text")
@@ -703,13 +742,19 @@ class StoreConnectionSchemaMixin:
                 if receipt_rollups_need_backfill(connection):
                     backfill_receipt_rollups(connection)
                 self._record_schema_version(connection, version=6)
-            if not self._schema_version_applied(connection, version=10):
+            if not self._schema_version_applied(
+                connection,
+                version=_RECEIPT_WARN_ROLLUP_MIGRATION_VERSION,
+            ):
                 # P45 changes ``warn`` from the reviewed bucket to allowed.
                 # Existing v6 rollups can have the right total while retaining
                 # the old bucket semantics, so this migration must rebuild them
                 # unconditionally before incremental deltas are applied.
                 backfill_receipt_rollups(connection)
-                self._record_schema_version(connection, version=10)
+                self._record_schema_version(
+                    connection,
+                    version=_RECEIPT_WARN_ROLLUP_MIGRATION_VERSION,
+                )
             if not self._schema_version_applied(connection, version=7):
                 self._record_schema_version(connection, version=7)
             if not self._schema_version_applied(connection, version=8):

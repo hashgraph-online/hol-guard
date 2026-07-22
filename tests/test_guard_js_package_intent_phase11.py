@@ -189,32 +189,22 @@ def test_parse_manifest_dependency_changes_ignores_yarn_berry_metadata_sections(
 
 
 def test_parse_manifest_dependency_changes_supports_bun_text_lock() -> None:
-    before_text = """
-[[package]]
-name = "minimist"
-version = "1.2.7"
-resolved = "npm:minimist@1.2.7"
-dependencies = [{ name = "brace-expansion", version = "^1.1.11" }]
-
-[[package]]
-name = "brace-expansion"
-version = "1.1.11"
-resolved = "npm:brace-expansion@1.1.11"
-dependencies = []
-"""
-    after_text = """
-[[package]]
-name = "minimist"
-version = "1.2.8"
-resolved = "npm:minimist@1.2.8"
-dependencies = [{ name = "brace-expansion", version = "^1.1.12" }]
-
-[[package]]
-name = "brace-expansion"
-version = "1.1.12"
-resolved = "npm:brace-expansion@1.1.12"
-dependencies = []
-"""
+    before_text = """{
+      "lockfileVersion": 1,
+      "packages": {
+        "minimist": ["minimist@1.2.7", "", {"brace-expansion": "^1.1.11"}],
+        "brace-expansion": ["brace-expansion@1.1.11", "", {}],
+      },
+    }
+    """
+    after_text = """{
+      "lockfileVersion": 1,
+      "packages": {
+        "minimist": ["minimist@1.2.8", "", {"brace-expansion": "^1.1.12"}],
+        "brace-expansion": ["brace-expansion@1.1.12", "", {}],
+      },
+    }
+    """
 
     result = parse_manifest_dependency_changes(
         path="bun.lock",

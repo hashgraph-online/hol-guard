@@ -247,6 +247,7 @@ def _resolve_legacy_args(
         "run",
         "protect",
         "preflight",
+        "pytest-contained",
         "diff",
         "test-eval",
         "command",
@@ -259,6 +260,7 @@ def _resolve_legacy_args(
         "allow",
         "deny",
         "policies",
+        "policy",
         "trust",
         "settings",
         "exceptions",
@@ -284,7 +286,7 @@ def _resolve_legacy_args(
         "cursor-mcp-proxy",
         "hermes-mcp-proxy",
     }
-    if program_mode == "combined" and argv[0] in _guard_subcommands and "--format" not in argv:
+    if program_mode == "combined" and argv[0] in _guard_subcommands and ("--format" not in argv or argv[0] == "policy"):
         return ["guard", *argv]
     if not should_default_to_scan_target(argv[0], known_commands=known_commands):
         return argv
@@ -293,15 +295,16 @@ def _resolve_legacy_args(
 
 def main(argv: list[str] | None = None) -> int:
     program_name = Path(sys.argv[0]).name or "plugin-scanner"
+    requested_argv = argv or sys.argv[1:]
     if _is_guard_program(program_name):
         program_mode = "guard"
-    elif _is_scanner_program(program_name):
+    elif _is_scanner_program(program_name) and (not requested_argv or requested_argv[0] != "guard"):
         program_mode = "scanner"
     else:
         program_mode = "combined"
     parser = _build_parser(program_name, program_mode=program_mode)
     resolved_argv = _resolve_legacy_args(
-        argv or sys.argv[1:],
+        requested_argv,
         program_mode=program_mode,
         program_name=program_name,
     )
