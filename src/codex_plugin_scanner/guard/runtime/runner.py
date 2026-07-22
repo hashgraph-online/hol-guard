@@ -107,10 +107,23 @@ from .supply_chain_bundle_models import SupplyChainVerificationKey
 from .supply_chain_support import ecosystem_support_matrix
 
 
+def _hol_guard_runtime_source_sha256(package_root: Path | None = None) -> str:
+    resolved_package_root = package_root or Path(__file__).parents[2]
+    digest = hashlib.sha256()
+    for source_path in sorted(resolved_package_root.rglob("*.py")):
+        relative_path = source_path.relative_to(resolved_package_root).as_posix().encode("utf-8")
+        source_bytes = source_path.read_bytes()
+        digest.update(len(relative_path).to_bytes(8, "big"))
+        digest.update(relative_path)
+        digest.update(len(source_bytes).to_bytes(8, "big"))
+        digest.update(source_bytes)
+    return digest.hexdigest()
+
+
 def _hol_guard_runtime_package_identity() -> tuple[str, str] | None:
     try:
         distribution_version = importlib.metadata.version("hol-guard")
-        source_sha256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+        source_sha256 = _hol_guard_runtime_source_sha256()
     except (importlib.metadata.PackageNotFoundError, OSError):
         return None
     return distribution_version, source_sha256

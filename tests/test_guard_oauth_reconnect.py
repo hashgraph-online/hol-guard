@@ -151,6 +151,20 @@ def test_missing_package_metadata_after_load_blocks_oauth_refresh(monkeypatch) -
     assert guard_runner_module._guard_runtime_was_upgraded() is True
 
 
+def test_runtime_source_identity_covers_non_runner_modules(tmp_path) -> None:
+    package_root = tmp_path / "codex_plugin_scanner"
+    runtime_root = package_root / "guard" / "runtime"
+    runtime_root.mkdir(parents=True)
+    (runtime_root / "runner.py").write_text("RUNNER = True\n", encoding="utf-8")
+    adjacent_module = runtime_root / "oauth_support.py"
+    adjacent_module.write_text("REVISION = 1\n", encoding="utf-8")
+
+    initial_digest = guard_runner_module._hol_guard_runtime_source_sha256(package_root)
+    adjacent_module.write_text("REVISION = 2\n", encoding="utf-8")
+
+    assert guard_runner_module._hol_guard_runtime_source_sha256(package_root) != initial_digest
+
+
 def test_prepare_guard_cloud_connect_authorization_tolerates_network_errors(tmp_path, monkeypatch) -> None:
     store = _store_with_oauth_credentials(tmp_path)
 
