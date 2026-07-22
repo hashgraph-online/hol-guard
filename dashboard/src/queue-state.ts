@@ -21,7 +21,7 @@ export const REVIEW_SEMANTIC_GROUPS: { id: SemanticGroupId; label: string; match
   {
     id: "shell",
     label: "Shell execution",
-    matches: ["shell_command", "destructive_shell", "encoded_shell", "git_operation", "process_control"],
+    matches: ["shell_command", "destructive_shell", "encoded_shell", "git_operation", "process_control", "docker_command", "github_command"],
   },
   {
     id: "network",
@@ -64,6 +64,8 @@ export type QueueCategoryId =
   | "file_upload"
   | "file_delete_cleanup"
   | "git_operation"
+  | "docker_command"
+  | "github_command"
   | "process_control"
   | "container_or_deploy"
   | "persistence_change"
@@ -171,6 +173,18 @@ export const QUEUE_CATEGORIES: QueueCategory[] = [
     description: "Mutates repository state through git add, commit, merge, rebase, push, pull, reset, or checkout.",
   },
   {
+    id: "docker_command",
+    label: "Docker command",
+    shortLabel: "Docker",
+    description: "Runs Docker containers, images, builds, Compose services, or registries.",
+  },
+  {
+    id: "github_command",
+    label: "GitHub command",
+    shortLabel: "GitHub",
+    description: "Reads or changes GitHub repositories, pull requests, workflows, or releases.",
+  },
+  {
     id: "process_control",
     label: "Process control",
     shortLabel: "Process",
@@ -273,6 +287,8 @@ const CATEGORY_RISK_SCORE = new Map<QueueCategoryId, number>([
   ["file_delete_cleanup", 3],
   ["network", 3],
   ["container_or_deploy", 4],
+  ["docker_command", 4],
+  ["github_command", 4],
   ["git_operation", 4],
   ["process_control", 4],
   ["file_upload", 4],
@@ -674,6 +690,15 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
     return "file_delete_cleanup";
   }
 
+  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete files", "wipe", "force-clean", "git clean -fd", "truncate"])) {
+    return "destructive_shell";
+  }
+
+  const commandCategory = categoryFromCommandExtension(envelope?.command_category);
+  if (commandCategory !== null) {
+    return commandCategory;
+  }
+
   if (gitOperationCommand(command)) {
     return "git_operation";
   }
@@ -730,10 +755,6 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
     return "source_edit";
   }
 
-  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete files", "wipe", "force-clean", "git clean -fd", "truncate"])) {
-    return "destructive_shell";
-  }
-
   if (networkCommand(command, text) || decisionCategories.includes("network")) {
     return "network";
   }
@@ -742,6 +763,13 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
     return "shell_command";
   }
   return "other";
+}
+
+function categoryFromCommandExtension(extensionId: string | null | undefined): QueueCategoryId | null {
+  if (extensionId === "command.git") return "git_operation";
+  if (extensionId === "command.container-runtime") return "docker_command";
+  if (extensionId === "command.github" || extensionId === "command.cicd.github") return "github_command";
+  return null;
 }
 
 function queueCategoryText(item: GuardApprovalRequest): string {

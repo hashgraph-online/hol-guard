@@ -143,6 +143,7 @@ export type GuardActionEnvelope = {
   mcp_tool: string | null;
   package_manager: string | null;
   package_name: string | null;
+  command_category?: string | null;
   package_intent_kind?: string | null;
   package_targets?: string[];
   /** Exact Guard action projected immediately before execution. */

@@ -20,6 +20,7 @@ import {
   HiMiniServerStack,
   HiMiniShieldCheck,
 } from "react-icons/hi2";
+import { FaDocker, FaGitAlt, FaGithub } from "react-icons/fa";
 import { harnessDisplayName, resolveStoppedCommandText } from "./approval-center-utils";
 import type { GuardApprovalRequest } from "./guard-types";
 import {
@@ -204,7 +205,11 @@ function iconForQueueCategory(categoryId: QueueCategoryId) {
     case "file_delete_cleanup":
       return HiMiniNoSymbol;
     case "git_operation":
-      return HiMiniCodeBracket;
+      return FaGitAlt;
+    case "docker_command":
+      return FaDocker;
+    case "github_command":
+      return FaGithub;
     case "process_control":
       return HiMiniArrowPath;
     case "container_or_deploy":

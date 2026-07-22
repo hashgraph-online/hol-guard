@@ -13289,7 +13289,7 @@ const REVIEW_SEMANTIC_GROUPS = [
   {
     id: "shell",
     label: "Shell execution",
-    matches: ["shell_command", "destructive_shell", "encoded_shell", "git_operation", "process_control"]
+    matches: ["shell_command", "destructive_shell", "encoded_shell", "git_operation", "process_control", "docker_command", "github_command"]
   },
   {
     id: "network",
@@ -13402,6 +13402,18 @@ const QUEUE_CATEGORIES = [
     description: "Mutates repository state through git add, commit, merge, rebase, push, pull, reset, or checkout."
   },
   {
+    id: "docker_command",
+    label: "Docker command",
+    shortLabel: "Docker",
+    description: "Runs Docker containers, images, builds, Compose services, or registries."
+  },
+  {
+    id: "github_command",
+    label: "GitHub command",
+    shortLabel: "GitHub",
+    description: "Reads or changes GitHub repositories, pull requests, workflows, or releases."
+  },
+  {
     id: "process_control",
     label: "Process control",
     shortLabel: "Process",
@@ -13501,6 +13513,8 @@ const CATEGORY_RISK_SCORE = /* @__PURE__ */ new Map([
   ["file_delete_cleanup", 3],
   ["network", 3],
   ["container_or_deploy", 4],
+  ["docker_command", 4],
+  ["github_command", 4],
   ["git_operation", 4],
   ["process_control", 4],
   ["file_upload", 4],
@@ -13756,6 +13770,13 @@ function resolveQueueCategoryId(item) {
   if (fileDeleteOrCleanupCommand(command, text)) {
     return "file_delete_cleanup";
   }
+  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete files", "wipe", "force-clean", "git clean -fd", "truncate"])) {
+    return "destructive_shell";
+  }
+  const commandCategory = categoryFromCommandExtension(envelope?.command_category);
+  if (commandCategory !== null) {
+    return commandCategory;
+  }
   if (gitOperationCommand(command)) {
     return "git_operation";
   }
@@ -13801,9 +13822,6 @@ function resolveQueueCategoryId(item) {
   if (sourceEditCommand(command, text) || envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command)) {
     return "source_edit";
   }
-  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete files", "wipe", "force-clean", "git clean -fd", "truncate"])) {
-    return "destructive_shell";
-  }
   if (networkCommand(command, text) || decisionCategories.includes("network")) {
     return "network";
   }
@@ -13811,6 +13829,12 @@ function resolveQueueCategoryId(item) {
     return "shell_command";
   }
   return "other";
+}
+function categoryFromCommandExtension(extensionId) {
+  if (extensionId === "command.git") return "git_operation";
+  if (extensionId === "command.container-runtime") return "docker_command";
+  if (extensionId === "command.github" || extensionId === "command.cicd.github") return "github_command";
+  return null;
 }
 function queueCategoryText(item) {
   const envelope = item.action_envelope_json;
@@ -28107,6 +28131,15 @@ function ReviewDecisionCard(props) {
     )
   ] });
 }
+function FaGithub(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 496 512" }, "child": [{ "tag": "path", "attr": { "d": "M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" }, "child": [] }] })(props);
+}
+function FaGitAlt(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 448 512" }, "child": [{ "tag": "path", "attr": { "d": "M439.55 236.05L244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z" }, "child": [] }] })(props);
+}
+function FaDocker(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 640 512" }, "child": [{ "tag": "path", "attr": { "d": "M349.9 236.3h-66.1v-59.4h66.1v59.4zm0-204.3h-66.1v60.7h66.1V32zm78.2 144.8H362v59.4h66.1v-59.4zm-156.3-72.1h-66.1v60.1h66.1v-60.1zm78.1 0h-66.1v60.1h66.1v-60.1zm276.8 100c-14.4-9.7-47.6-13.2-73.1-8.4-3.3-24-16.7-44.9-41.1-63.7l-14-9.3-9.3 14c-18.4 27.8-23.4 73.6-3.7 103.8-8.7 4.7-25.8 11.1-48.4 10.7H2.4c-8.7 50.8 5.8 116.8 44 162.1 37.1 43.9 92.7 66.2 165.4 66.2 157.4 0 273.9-72.5 328.4-204.2 21.4.4 67.6.1 91.3-45.2 1.5-2.5 6.6-13.2 8.5-17.1l-13.3-8.9zm-511.1-27.9h-66v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1v-59.4zm-78.1-72.1h-66.1v60.1h66.1v-60.1z" }, "child": [] }] })(props);
+}
 function riskLevelFromScore(score) {
   if (score <= 2) return "high";
   if (score <= 4) return "medium";
@@ -28264,7 +28297,11 @@ function iconForQueueCategory(categoryId) {
     case "file_delete_cleanup":
       return HiMiniNoSymbol;
     case "git_operation":
-      return HiMiniCodeBracket;
+      return FaGitAlt;
+    case "docker_command":
+      return FaDocker;
+    case "github_command":
+      return FaGithub;
     case "process_control":
       return HiMiniArrowPath;
     case "container_or_deploy":

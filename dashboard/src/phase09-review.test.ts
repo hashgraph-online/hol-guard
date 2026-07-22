@@ -280,7 +280,7 @@ const ALL_VALID_CATEGORY_IDS = new Set<QueueCategoryId>([
   "credential_output", "secret_file_read", "file_read", "secret_exfiltration",
   "system_prompt_access", "prompt_injection", "guard_bypass", "generated_inventory_edit",
   "docs_edit", "source_edit", "config_change", "file_upload", "file_delete_cleanup",
-  "git_operation", "process_control", "container_or_deploy", "persistence_change",
+  "git_operation", "docker_command", "github_command", "process_control", "container_or_deploy", "persistence_change",
   "package_install", "package_script", "destructive_shell", "encoded_shell",
   "network", "mcp_tool", "browser_action", "harness_start", "shell_command", "other",
 ]);
