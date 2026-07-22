@@ -5450,7 +5450,8 @@ def _looks_destructive_shell_command(
     normalized = command_text.strip()
     if not normalized:
         return False
-    if "hol-guard" in normalized or "plugin-guard" in normalized:
+    normalized_casefolded = normalized.casefold()
+    if "hol-guard" in normalized_casefolded or "plugin-guard" in normalized_casefolded:
         critical_factors = command_critical_floor_factors(parse_shell_command(normalized, cwd=cwd, home_dir=home_dir))
         if any(factor.basis.action_floor == "block" for factor in critical_factors):
             return True

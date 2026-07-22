@@ -225,6 +225,8 @@ def test_guard_removal_help_stays_non_destructive(tmp_path: Path) -> None:
         "xargs hol-guard uninstall --all",
         "sh -c 'hol-guard policy disable'",
         "parallel plugin-guard clear --all ::: value",
+        "HOL-GUARD.EXE uninstall --all",
+        "Plugin-Guard.EXE policy disable",
     ),
 )
 def test_guard_removal_wrappers_keep_the_destructive_floor(
