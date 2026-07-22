@@ -107,8 +107,40 @@ def test_invalid_grant_refresh_preserves_sign_in_until_explicit_repair(tmp_path,
     with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError) as error:
         guard_runner_module._resolve_guard_sync_auth_context(store)
 
-    assert "hol-guard disconnect" in str(error.value)
+    assert "hol-guard connect" in str(error.value)
+    assert "hol-guard disconnect" not in str(error.value)
     assert store.get_oauth_local_credentials(allow_primary=True) is not None
+
+
+def test_upgraded_running_process_does_not_refresh_shared_oauth_grant(monkeypatch) -> None:
+    refresh_attempted = False
+
+    def _unexpected_urlopen(request, timeout):
+        del request, timeout
+        nonlocal refresh_attempted
+        refresh_attempted = True
+        raise AssertionError("stale runtime must not exchange the shared refresh token")
+
+    loaded_version = guard_runner_module._LOADED_HOL_GUARD_DISTRIBUTION_VERSION
+    assert loaded_version is not None
+    monkeypatch.setattr(
+        guard_runner_module.importlib.metadata,
+        "version",
+        lambda package: f"{loaded_version}.post1" if package == "hol-guard" else loaded_version,
+    )
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _unexpected_urlopen)
+
+    with pytest.raises(guard_runner_module.GuardSyncNotAvailableError) as error:
+        guard_runner_module._refresh_guard_oauth_access_token(
+            token_endpoint="https://hol.org/api/guard/oauth/token",
+            client_id="guard-local-daemon",
+            refresh_token="refresh-token-1",
+            dpop_key_material=generate_dpop_key_pair(),
+        )
+
+    assert error.value.retryable is True
+    assert "Restart the agent application" in str(error.value)
+    assert refresh_attempted is False
 
 
 def test_prepare_guard_cloud_connect_authorization_tolerates_network_errors(tmp_path, monkeypatch) -> None:

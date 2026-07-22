@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib.metadata
 import io
 import json
 import os
@@ -104,6 +105,16 @@ from .supply_chain_bundle import (
 )
 from .supply_chain_bundle_models import SupplyChainVerificationKey
 from .supply_chain_support import ecosystem_support_matrix
+
+
+def _loaded_hol_guard_distribution_version() -> str | None:
+    try:
+        return importlib.metadata.version("hol-guard")
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
+_LOADED_HOL_GUARD_DISTRIBUTION_VERSION = _loaded_hol_guard_distribution_version()
 
 
 def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
@@ -3891,8 +3902,25 @@ def _guard_oauth_reauthorization_message() -> str:
 
 def _guard_oauth_reconnect_after_revoked_message() -> str:
     return (
-        "Guard Cloud sign-in on this device is no longer valid. "
-        "Run `hol-guard disconnect` then `hol-guard connect` to sign in again."
+        "Guard Cloud sign-in on this device is no longer valid. Run `hol-guard connect` to repair it and sign in again."
+    )
+
+
+def _guard_runtime_was_upgraded() -> bool:
+    loaded_version = _LOADED_HOL_GUARD_DISTRIBUTION_VERSION
+    if loaded_version is None:
+        return False
+    try:
+        installed_version = importlib.metadata.version("hol-guard")
+    except importlib.metadata.PackageNotFoundError:
+        return False
+    return installed_version != loaded_version
+
+
+def _guard_runtime_upgrade_restart_message() -> str:
+    return (
+        "HOL Guard was upgraded while this process was running. Restart the agent application "
+        "before Guard Cloud access resumes."
     )
 
 
@@ -3985,6 +4013,8 @@ def _refresh_guard_oauth_access_token(
     refresh_token: str,
     dpop_key_material: GuardDpopKeyMaterial,
 ) -> dict[str, object]:
+    if _guard_runtime_was_upgraded():
+        raise GuardSyncNotAvailableError(_guard_runtime_upgrade_restart_message(), retryable=True)
     request_body = urllib.parse.urlencode(
         {
             "grant_type": "refresh_token",

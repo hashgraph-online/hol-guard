@@ -25,7 +25,7 @@ export function insightsSharePublishErrorMessage(raw: string): string {
     lower.includes("already consumed") ||
     lower.includes("no longer valid")
   ) {
-    return "Guard Cloud sign-in on this device expired. Run hol-guard disconnect, then hol-guard connect, and try again.";
+    return "Guard Cloud sign-in on this device expired. Run hol-guard connect to repair it, then try again.";
   }
 
   if (lower.includes("unauthorized") || lower.includes("401")) {
