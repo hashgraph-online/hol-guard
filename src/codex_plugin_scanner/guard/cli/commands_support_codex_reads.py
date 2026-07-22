@@ -434,6 +434,8 @@ def _codex_command_is_bounded_read_only_filter(command_text: str) -> bool:
     executable = Path(parts[0]).name
     if executable not in _CODEX_READ_ONLY_PIPE_FILTERS:
         return False
+    if executable == "cat":
+        return not _codex_cat_targets(parts[1:])
     if executable == "sed":
         return _codex_sed_args_are_bounded_filter(parts[1:])
     if executable == "nl":

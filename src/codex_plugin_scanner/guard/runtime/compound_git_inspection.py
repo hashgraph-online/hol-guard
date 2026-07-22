@@ -8,7 +8,7 @@ from typing import Final
 from .shell_execution_context import ShellExecutionContext, ShellExecutionSegment
 
 _REF: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,255}")
-_REPOSITORY_PATH_COMPONENT: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+_REPOSITORY_PATH_COMPONENT: Final = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}")
 _BOUND: Final = 1000
 
 
@@ -145,12 +145,13 @@ def _safe_object_path(value: str) -> bool:
 
 
 def _without_stderr_merge(tokens: tuple[str, ...]) -> tuple[str, ...] | None:
-    redirects = tuple(token for token in tokens if token == "2>&1")
+    safe_redirects = {"2>&1", "2>/dev/null"}
+    redirects = tuple(token for token in tokens if token in safe_redirects)
     if len(redirects) > 1:
         return None
-    if any(any(marker in token for marker in (">", "<")) and token != "2>&1" for token in tokens):
+    if any(any(marker in token for marker in (">", "<")) and token not in safe_redirects for token in tokens):
         return None
-    return tuple(token for token in tokens if token != "2>&1")
+    return tuple(token for token in tokens if token not in safe_redirects)
 
 
 def _safe_ref(value: str) -> bool:
