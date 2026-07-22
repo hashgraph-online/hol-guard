@@ -47,6 +47,20 @@ def _text(*parts: str) -> str:
                 "api",
                 "graphql",
                 "-f",
+                'query=query($owner:String!){repository(owner:$owner,name:"project"){pullRequests(last:100){nodes{number}}}}',
+                "-f",
+                "owner=example",
+                "--jq",
+                "[.data.repository.pullRequests.nodes[] | .number as $n | {number:$n}]",
+            ),
+            "read_remote",
+            "github.graphql.proven-query",
+        ),
+        (
+            (
+                "api",
+                "graphql",
+                "-f",
                 "query=mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}",
                 "-f",
                 "threadId=PRRT_example",
@@ -285,6 +299,34 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
     match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
 
     assert match is None
+
+
+def test_guard_keeps_static_graphql_query_with_jq_bindings_prompt_free(tmp_path: Path) -> None:
+    command = _text(
+        "gh api graphql -f query='query($owner:String!,$repo:String!){repository(owner:$owner,name:$repo)",
+        '{pullRequests(last:100,baseRefName:"release/3.1"){nodes{number files(first:100){nodes{path}}}}}}\' ',
+        "-f owner=hashgraph-online -f repo=hol-guard --jq ",
+        "'[.data.repository.pullRequests.nodes[] | select(.number==1778 or .number==1816) | .number as $n | ",
+        ".files.nodes[] | select(.path|test(",
+        '"(^|/)(\\.claude|\\.codex|research|planning|local://|continuity)";"i")) ',
+        "| {number:$n,path}]'",
+    )
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+
+    assert match is None
+
+
+def test_guard_preserves_graphql_mutation_floor_with_jq_bindings(tmp_path: Path) -> None:
+    command = _text(
+        "gh api graphql -f query='mutation($id:ID!){deleteProjectV2(input:{projectV2Id:$id})",
+        "{projectV2{id}}}' -f id=PVT_example --jq '.data as $result | $result'",
+    )
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+
+    assert match is not None
+    assert match.action_class == "GitHub delete command"
 
 
 def test_guard_keeps_leading_home_cd_and_github_read_prompt_free_without_cwd(tmp_path: Path) -> None:
