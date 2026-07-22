@@ -10,6 +10,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -147,6 +148,18 @@ class TestGuardSurfaceServer:
             "setup_policy_integrity",
             lambda self, **_kwargs: {"mode": "protected"},
         )
+        maintained: list[bool] = []
+        monkeypatch.setattr(
+            GuardStore,
+            "maintain_command_activity",
+            lambda self, **_kwargs: maintained.append(True),
+        )
+        monkeypatch.setattr(
+            GuardStore,
+            "get_command_activity_persistence_health",
+            lambda self: SimpleNamespace(active_error_count=0),
+        )
+        monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 1)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
         request = urllib.request.Request(
@@ -165,8 +178,9 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         assert payload["repaired"] is True
-        assert payload["check_ids"] == ["policy_engine", "rule_packs", "tamper_checks"]
+        assert payload["check_ids"] == ["policy_engine", "rule_packs", "tamper_checks", "decision_stream"]
         assert payload["message"] == "Integrity protection restored."
+        assert maintained
 
     def test_protection_repair_failure_explains_safe_inline_retry(
         self,

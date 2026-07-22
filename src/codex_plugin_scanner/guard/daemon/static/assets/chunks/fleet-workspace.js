@@ -31,7 +31,7 @@ const PROTECTION_CHECK_ACTIONS = {
   },
   decision_stream: {
     label: "Command evidence",
-    detail: "Run a protected command to create fresh evidence. Guard will recheck it here."
+    detail: "Guard attempts evidence-store recovery during repair. Run a protected command only if fresh proof is still needed."
   },
   tamper_checks: {
     label: "Integrity checks",

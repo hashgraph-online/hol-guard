@@ -4093,10 +4093,23 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             repaired = status.get("mode") == "protected"
             degraded_reasons = status.get("degraded_reasons")
             reason_count = len(degraded_reasons) if isinstance(degraded_reasons, list) else 0
+            repaired_check_ids = ["policy_engine", "rule_packs", "tamper_checks"]
+            if check_id == "all" and repaired:
+                try:
+                    config = load_guard_config(store.guard_home)
+                    store.maintain_command_activity(
+                        now=datetime.now(timezone.utc),
+                        detail_retain_days=config.evidence_retain_days,
+                    )
+                    evidence_health = store.get_command_activity_persistence_health()
+                    if evidence_health.active_error_count == 0 and store.count_command_activities() > 0:
+                        repaired_check_ids.append("decision_stream")
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    pass
             self._write_json(
                 {
                     "repaired": repaired,
-                    "check_ids": ["policy_engine", "rule_packs", "tamper_checks"],
+                    "check_ids": repaired_check_ids,
                     "message": (
                         "Integrity protection restored."
                         if repaired
@@ -4112,6 +4125,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if check_id == "decision_stream":
             try:
+                config = load_guard_config(store.guard_home)
+                store.maintain_command_activity(
+                    now=datetime.now(timezone.utc),
+                    detail_retain_days=config.evidence_retain_days,
+                )
                 health = store.get_command_activity_persistence_health()
                 observed = store.count_command_activities() > 0
             except (OSError, RuntimeError, TypeError, ValueError):
