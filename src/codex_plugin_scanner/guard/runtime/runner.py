@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib.metadata
 import io
 import json
 import os
@@ -104,6 +105,34 @@ from .supply_chain_bundle import (
 )
 from .supply_chain_bundle_models import SupplyChainVerificationKey
 from .supply_chain_support import ecosystem_support_matrix
+
+
+def _hol_guard_runtime_source_sha256(package_root: Path | None = None) -> str:
+    resolved_package_root = package_root or Path(__file__).parents[2]
+    digest = hashlib.sha256()
+    for source_path in sorted(resolved_package_root.rglob("*.py")):
+        relative_path = source_path.relative_to(resolved_package_root).as_posix().encode("utf-8")
+        source_bytes = source_path.read_bytes()
+        digest.update(len(relative_path).to_bytes(8, "big"))
+        digest.update(relative_path)
+        digest.update(len(source_bytes).to_bytes(8, "big"))
+        digest.update(source_bytes)
+    return digest.hexdigest()
+
+
+def _hol_guard_runtime_package_identity() -> tuple[str | None, str] | None:
+    try:
+        source_sha256 = _hol_guard_runtime_source_sha256()
+    except OSError:
+        return None
+    try:
+        distribution_version = importlib.metadata.version("hol-guard")
+    except importlib.metadata.PackageNotFoundError:
+        distribution_version = None
+    return distribution_version, source_sha256
+
+
+_LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY = _hol_guard_runtime_package_identity()
 
 
 def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
@@ -3891,8 +3920,21 @@ def _guard_oauth_reauthorization_message() -> str:
 
 def _guard_oauth_reconnect_after_revoked_message() -> str:
     return (
-        "Guard Cloud sign-in on this device is no longer valid. "
-        "Run `hol-guard disconnect` then `hol-guard connect` to sign in again."
+        "Guard Cloud sign-in on this device is no longer valid. Run `hol-guard connect` to repair it and sign in again."
+    )
+
+
+def _guard_runtime_was_upgraded() -> bool:
+    loaded_identity = _LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY
+    if loaded_identity is None:
+        return True
+    return _hol_guard_runtime_package_identity() != loaded_identity
+
+
+def _guard_runtime_upgrade_restart_message() -> str:
+    return (
+        "HOL Guard was upgraded while this process was running. Restart the agent application "
+        "before Guard Cloud access resumes."
     )
 
 
@@ -3985,6 +4027,8 @@ def _refresh_guard_oauth_access_token(
     refresh_token: str,
     dpop_key_material: GuardDpopKeyMaterial,
 ) -> dict[str, object]:
+    if _guard_runtime_was_upgraded():
+        raise GuardSyncNotAvailableError(_guard_runtime_upgrade_restart_message(), retryable=True)
     request_body = urllib.parse.urlencode(
         {
             "grant_type": "refresh_token",
