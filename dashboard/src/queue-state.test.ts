@@ -408,6 +408,20 @@ assert(
   "T-QS-31c: first-class GitHub metadata drives the queue category"
 );
 
+const paginatedGitHubItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-paginated-github",
+  launch_target: "Compound command findings: review required",
+  queue_preview: "opaque-wrapper action",
+  queue_command_category: "command.github",
+  action_envelope_json: null,
+};
+
+assert(
+  resolveQueueCategory(paginatedGitHubItem).label === "GitHub command",
+  "T-QS-31d: lightweight queue metadata preserves the command category"
+);
+
 const persistenceItem: GuardApprovalRequest = {
   ...BASE_REQUEST,
   request_id: "req-persistence",

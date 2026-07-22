@@ -387,6 +387,16 @@ assert(
 );
 
 const parsedShell = parseActionEnvelope({ ...BASE_ENVELOPE, action_type: "shell_command", command: "git diff HEAD~1 -- src/" });
+const parsedCategorizedShell = parseActionEnvelope({
+  ...BASE_ENVELOPE,
+  action_type: "shell_command",
+  command: "opaque-wrapper action",
+  command_category: "command.github",
+});
+assert(
+  parsedCategorizedShell?.command_category === "command.github",
+  "T070: command category survives action-envelope normalization",
+);
 assert(parsedShell !== null && parsedShell.action_type === "shell_command", "T070: valid shell_command envelope parses correctly");
 
 const parsedPrompt = parseActionEnvelope({

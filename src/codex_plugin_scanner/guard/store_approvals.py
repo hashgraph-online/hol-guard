@@ -16,6 +16,7 @@ from .runtime.action_identity import normalize_command_identity
 from .runtime.browser_mcp_intent import _classify_operation
 
 MAX_APPROVAL_PAGE_LIMIT = 200
+APPROVAL_QUEUE_PREVIEW_MAX_LENGTH = 512
 APPROVAL_QUEUE_BACKFILL_BATCH_SIZE = 500
 _APPROVAL_RESOLUTION_BATCH_SIZE = 500
 _QUEUE_IDENTITY_VERSION = "v1"
@@ -88,6 +89,25 @@ def _browser_risk_signals_for_display(signals: list[object], target: str | None)
     if target is None:
         return signals
     return [signal.replace("unknown target", target) if isinstance(signal, str) else signal for signal in signals]
+
+
+def _approval_queue_preview(
+    action_envelope: dict[str, object] | None,
+    launch_target: object,
+) -> str | None:
+    command = action_envelope.get("command") if action_envelope is not None else None
+    candidate = command if isinstance(command, str) and command.strip() else launch_target
+    if not isinstance(candidate, str) or not candidate.strip():
+        return None
+    normalized = candidate.strip()
+    if len(normalized) <= APPROVAL_QUEUE_PREVIEW_MAX_LENGTH:
+        return normalized
+    return f"{normalized[: APPROVAL_QUEUE_PREVIEW_MAX_LENGTH - 1]}…"
+
+
+def _approval_queue_command_category(action_envelope: dict[str, object] | None) -> str | None:
+    value = action_envelope.get("command_category") if action_envelope is not None else None
+    return value if isinstance(value, str) and value.startswith("command.") else None
 
 
 def _begin_immediate(connection: sqlite3.Connection) -> None:
@@ -848,6 +868,7 @@ def _row_to_approval_summary(row: sqlite3.Row) -> dict[str, object]:
         reject_contradiction=False,
     )
     launch_target, _browser_target = _browser_launch_target_for_display(row["launch_target"])
+    action_envelope = canonical_decision.action_envelope_json
     payload: dict[str, object] = {
         "request_id": str(row["request_id"]),
         "harness": str(row["harness"]),
@@ -860,6 +881,8 @@ def _row_to_approval_summary(row: sqlite3.Row) -> dict[str, object]:
         "config_path": str(row["config_path"]),
         "workspace": row["workspace"],
         "launch_target": launch_target,
+        "queue_preview": _approval_queue_preview(action_envelope, launch_target),
+        "queue_command_category": _approval_queue_command_category(action_envelope),
         "risk_summary": row["risk_summary"],
         "risk_headline": row["risk_headline"],
         "raw_command_text": row["raw_command_text"],

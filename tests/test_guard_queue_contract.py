@@ -386,6 +386,35 @@ def test_pending_summary_pagination_uses_stable_cursor() -> None:
     assert second_page["next_cursor"] is None
 
 
+def test_pending_summary_preserves_bounded_command_preview_and_category() -> None:
+    connection = _connection()
+    request = _request("req-compound", command="git status && bun test")
+    envelope = dict(request.action_envelope_json or {})
+    envelope["command_category"] = "command.git"
+    request = replace(
+        request,
+        launch_target="Compound command findings: review required",
+        action_envelope_json=envelope,
+    )
+    add_approval_request(connection, request, "2026-05-08T10:00:00+00:00")
+    long_command = "x" * 600
+    add_approval_request(
+        connection,
+        _request("req-long", command=long_command),
+        "2026-05-08T10:01:00+00:00",
+    )
+
+    items = list_pending_approval_summaries(connection, limit=2)["items"]
+    item = next(value for value in items if value["request_id"] == "req-compound")
+    long_item = next(value for value in items if value["request_id"] == "req-long")
+
+    assert item["queue_preview"] == "git status && bun test"
+    assert item["queue_command_category"] == "command.git"
+    assert "action_envelope_json" not in item
+    assert len(long_item["queue_preview"]) == 512
+    assert long_item["queue_preview"].endswith("…")
+
+
 def test_pending_summary_rejects_invalid_cursor() -> None:
     connection = _connection()
     add_approval_request(connection, _request("req-only"), "2026-05-08T10:00:00+00:00")

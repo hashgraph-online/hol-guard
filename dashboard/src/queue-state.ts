@@ -649,7 +649,7 @@ export function queueCategoriesForItems(items: GuardApprovalRequest[]): QueueCat
 function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
   const envelope = item.action_envelope_json;
   const decisionCategories = item.decision_v2_json?.signals.map((signal) => signal.category) ?? [];
-  const command = envelope?.command ?? item.launch_target ?? "";
+  const command = envelope?.command ?? item.queue_preview ?? item.launch_target ?? "";
   const text = queueCategoryText(item);
   const isPromptReview = envelope?.action_type === "prompt" || decisionCategories.includes("prompt");
   const isWriteReview = envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command);
@@ -694,7 +694,9 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
     return "destructive_shell";
   }
 
-  const commandCategory = categoryFromCommandExtension(envelope?.command_category);
+  const commandCategory = categoryFromCommandExtension(
+    envelope?.command_category ?? item.queue_command_category,
+  );
   if (commandCategory !== null) {
     return commandCategory;
   }
@@ -783,6 +785,7 @@ function queueCategoryText(item: GuardApprovalRequest): string {
     item.launch_summary ?? "",
     item.why_now ?? "",
     item.launch_target ?? "",
+    item.queue_preview ?? "",
     envelope?.action_type ?? "",
     envelope?.command ?? "",
     envelope?.tool_name ?? "",
@@ -1163,6 +1166,7 @@ export function searchQueue(items: GuardApprovalRequest[], term: string): GuardA
       item.launch_summary ?? "",
       item.why_now ?? "",
       envelope?.command ?? "",
+      item.queue_preview ?? "",
       item.raw_command_text ?? "",
       item.fallback_cli_command ?? "",
       item.review_command ?? "",
