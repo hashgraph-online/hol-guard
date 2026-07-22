@@ -155,6 +155,22 @@ def test_authority_health_maps_to_fail_closed_runtime_failure() -> None:
     assert tampered.authority_failure is ResolverFailureCode.AUTHORITY_TAMPERED
 
 
+def test_daemon_starts_fail_closed_with_future_authority_schema(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    with store._connect() as connection:
+        connection.execute("update extension_control_schema_migration set version = 99 where singleton = 1")
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        snapshot = daemon._server.extension_control_runtime.current()
+        assert snapshot.health is AuthorityHealth.TAMPERED
+        assert snapshot.authority_failure is ResolverFailureCode.AUTHORITY_TAMPERED
+    finally:
+        daemon.stop()
+
+
 def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

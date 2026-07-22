@@ -6,11 +6,16 @@ import hashlib
 import json
 import threading
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, cast
 
-from ..approval_gate import ApprovalGateError, input_from_mapping
+from ..approval_gate import (
+    ApprovalGateError,
+    consume_extension_control_grant,
+    input_from_mapping,
+    require_extension_control,
+)
 from ..runtime.command_extensions import CommandSafetyExtensionRegistry
 from ..runtime.extension_control_authority import (
     AuthorityHealth,
@@ -18,7 +23,12 @@ from ..runtime.extension_control_authority import (
     layers_from_json,
     layers_to_json,
 )
-from ..runtime.extension_control_contract import CONTROL_SCHEMA_VERSION, ControlTargetKind
+from ..runtime.extension_control_contract import (
+    CONTROL_SCHEMA_VERSION,
+    ControlTargetKind,
+    ExtensionControl,
+    ExtensionControlLayer,
+)
 from ..runtime.extension_control_proof import (
     ExtensionControlMutation,
     ExtensionControlProof,
@@ -141,6 +151,34 @@ class ExtensionControlApiService:
         _ = self._runtime.refresh(view)
         return self.effective()
 
+    def acknowledge_degraded(self, payload: dict[str, object]) -> dict[str, object]:
+        if self._runtime.current().health is not AuthorityHealth.DEGRADED_UNACKNOWLEDGED:
+            raise ExtensionControlApiError(409, "authority_not_degraded")
+        session_nonce = self._required_string(payload, "session_nonce")
+        current = self._store.read_extension_control_authority(catalog_digest=self._registry.catalog_digest)
+        action = "acknowledge-degraded"
+        subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
+        try:
+            grant = require_extension_control(
+                self._store.guard_home,
+                approval_gate_input=input_from_mapping(payload),
+                action=action,
+                subject=subject,
+                session_nonce=session_nonce,
+            )
+            consume_extension_control_grant(
+                self._store.guard_home,
+                grant,
+                action=action,
+                subject=subject,
+                session_nonce=session_nonce,
+            )
+        except ApprovalGateError as exc:
+            raise ExtensionControlApiError(exc.status, exc.code) from exc
+        view = self._store.acknowledge_extension_control_degraded_mode()
+        _ = self._runtime.refresh(view)
+        return self.effective()
+
     def preview(self, payload: dict[str, object]) -> dict[str, object]:
         current = self._runtime.current()
         mutation = self._mutation_from_payload(payload)
@@ -228,6 +266,31 @@ class ExtensionControlApiService:
                 _ = self._applied_mutations.popitem(last=False)
         return dict(response)
 
+    def _canonicalize_extension_ids(
+        self,
+        layers: tuple[ExtensionControlLayer, ...],
+    ) -> tuple[ExtensionControlLayer, ...]:
+        canonical_layers: list[ExtensionControlLayer] = []
+        for layer in layers:
+            canonical_controls: list[ExtensionControl] = []
+            seen_targets: set[tuple[ControlTargetKind, str]] = set()
+            for control in layer.controls:
+                if control.target.kind is ControlTargetKind.EXTENSION:
+                    extension = self._registry.get(control.target.target_id)
+                    if extension is None:
+                        raise ExtensionControlApiError(400, "unknown_extension")
+                    control = replace(
+                        control,
+                        target=replace(control.target, target_id=extension.extension_id),
+                    )
+                target_key = (control.target.kind, control.target.target_id)
+                if target_key in seen_targets:
+                    raise ExtensionControlApiError(400, "duplicate_control_target")
+                seen_targets.add(target_key)
+                canonical_controls.append(control)
+            canonical_layers.append(replace(layer, controls=tuple(canonical_controls)))
+        return tuple(canonical_layers)
+
     def _mutation_from_payload(self, payload: dict[str, object]) -> ExtensionControlMutation:
         previous_revision = payload.get("previous_revision")
         raw_layers = payload.get("layers")
@@ -239,6 +302,7 @@ class ExtensionControlApiService:
             raise ExtensionControlApiError(400, "layer_limit_exceeded")
         try:
             layers = layers_from_json(json.dumps(raw_layers, separators=(",", ":")))
+            layers = self._canonicalize_extension_ids(layers)
             if sum(len(layer.controls) for layer in layers) > _MAX_CONTROLS:
                 raise ExtensionControlApiError(400, "control_limit_exceeded")
             mutation = ExtensionControlMutation(
@@ -267,8 +331,7 @@ class ExtensionControlApiService:
             for control in layer.controls:
                 target_id = control.target.target_id
                 if control.target.kind is ControlTargetKind.EXTENSION:
-                    extension = self._registry.get(target_id)
-                    if extension is None or extension.extension_id != target_id:
+                    if self._registry.get(target_id) is None:
                         raise ExtensionControlApiError(400, "unknown_extension")
                 elif self._registry.permission(target_id) is None:
                     raise ExtensionControlApiError(400, "unknown_permission")

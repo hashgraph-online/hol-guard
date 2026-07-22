@@ -38,6 +38,8 @@ from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
 from ..redaction import redact_sensitive_text
+from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from ..runtime.extension_control_authority import AuthorityHealth
 from ..store import GuardStore
 from .install_commands import apply_managed_install
 from .update_artifact import (
@@ -241,6 +243,27 @@ def _read_direct_url_dir_info(direct_url: dict[str, object] | None) -> dict[str,
     return dir_info if isinstance(dir_info, dict) else {}
 
 
+def _authority_blocks_downgrade(
+    store: GuardStore | None,
+    *,
+    guard_home: Path,
+    current_version: str,
+    candidate_version: str | None,
+) -> bool:
+    if candidate_version is None:
+        return False
+    try:
+        if Version(candidate_version) >= Version(current_version):
+            return False
+    except InvalidVersion:
+        return False
+    authority_store = store or GuardStore(guard_home)
+    authority = authority_store.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    )
+    return authority.health is not AuthorityHealth.UNENROLLED
+
+
 def run_guard_update(
     *,
     dry_run: bool,
@@ -425,6 +448,24 @@ def run_guard_update(
             )
         except UpdateArtifactError as error:
             return _trusted_update_failure(payload, UpdateSubprocessError(error.reason_code))
+    downgrade_candidate = trusted_wheel.version if trusted_wheel is not None else target_version
+    if _authority_blocks_downgrade(
+        store,
+        guard_home=resolved_guard_home,
+        current_version=current_version,
+        candidate_version=downgrade_candidate,
+    ):
+        if trusted_wheel is not None:
+            trusted_wheel.cleanup()
+        payload.update(
+            {
+                "status": "blocked",
+                "changed": False,
+                "reason_code": "extension_control_authority_downgrade_blocked",
+                "message": "HOL Guard cannot downgrade while extension-control authority is active.",
+            }
+        )
+        return payload, 1
     command = _update_command(
         installer,
         use_pypi=use_pypi,

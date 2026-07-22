@@ -9,6 +9,7 @@ import subprocess
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -19,6 +20,10 @@ from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.approval_commands import run_approval_open_command
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
 from codex_plugin_scanner.guard.shims import _trusted_import_root, _trusted_python_flags
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.update_context_test_support import (
@@ -46,6 +51,82 @@ def _context(tmp_path: Path) -> HarnessContext:
     guard_home = tmp_path / "guard-home"
     workspace.mkdir(parents=True, exist_ok=True)
     return HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=guard_home)
+
+
+@pytest.mark.parametrize(
+    ("health", "candidate_version", "expected"),
+    (
+        (AuthorityHealth.PROTECTED, "3.0.9", True),
+        (AuthorityHealth.TAMPERED, "3.0.9", True),
+        (AuthorityHealth.DEGRADED_ACKNOWLEDGED, "3.0.9", True),
+        (AuthorityHealth.UNENROLLED, "3.0.9", False),
+        (AuthorityHealth.PROTECTED, "3.1.0", False),
+        (AuthorityHealth.PROTECTED, "3.1.1", False),
+    ),
+)
+def test_extension_control_authority_blocks_only_downgrades_after_enrollment(
+    health: AuthorityHealth,
+    candidate_version: str,
+    expected: bool,
+    tmp_path: Path,
+) -> None:
+    class FakeStore:
+        def read_extension_control_authority(
+            self,
+            *,
+            catalog_digest: str,
+        ) -> ExtensionControlAuthorityView:
+            return ExtensionControlAuthorityView(health, 0, catalog_digest, ())
+
+    store = cast(GuardStore, FakeStore())
+
+    assert (
+        update_commands._authority_blocks_downgrade(
+            store,
+            guard_home=tmp_path,
+            current_version="3.1.0",
+            candidate_version=candidate_version,
+        )
+        is expected
+    )
+
+
+def test_update_blocks_protected_authority_downgrade_before_installer_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wheel = tmp_path / "hol_guard-3.0.9-py3-none-any.whl"
+    wheel.write_bytes(b"fake-wheel")
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "3.1.0")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "3.1.0")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(
+        update_commands.subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("installer must not execute")),
+    )
+
+    class ProtectedAuthorityStore:
+        def read_extension_control_authority(
+            self,
+            *,
+            catalog_digest: str,
+        ) -> ExtensionControlAuthorityView:
+            return ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 1, catalog_digest, ())
+
+    payload, exit_code = update_commands.run_guard_update(
+        dry_run=False,
+        wheel=str(wheel),
+        guard_home=guard_home,
+        store=cast(GuardStore, ProtectedAuthorityStore()),
+    )
+
+    assert exit_code == 1
+    assert payload["status"] == "blocked"
+    assert payload["changed"] is False
+    assert payload["reason_code"] == "extension_control_authority_downgrade_blocked"
 
 
 def test_daemon_refresh_after_update_uses_fresh_interpreter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

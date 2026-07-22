@@ -302,6 +302,14 @@ def _configure_guard_local_parsers(
         help="Enroll this local authority using direct terminal confirmation",
     )
     enroll_parser.add_argument("--actor", default="local-admin")
+    controls_subparsers.add_parser(
+        "recover-authority",
+        help="Authenticate and recover interrupted local authority state",
+    )
+    controls_subparsers.add_parser(
+        "acknowledge-degraded",
+        help="Authenticate and acknowledge degraded local authority mode",
+    )
 
     preflight_parser = guard_subparsers.add_parser(
         "preflight",

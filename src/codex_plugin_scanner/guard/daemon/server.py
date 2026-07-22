@@ -1858,6 +1858,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "/v1/extension-controls/preview",
                 "/v1/extension-controls/apply",
                 "/v1/extension-controls/refresh",
+                "/v1/extension-controls/acknowledge-degraded",
             }
             and not self._header_token_is_valid()
         ):
@@ -1867,6 +1868,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/extension-controls/preview",
             "/v1/extension-controls/apply",
             "/v1/extension-controls/refresh",
+            "/v1/extension-controls/acknowledge-degraded",
         }:
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
@@ -1942,12 +1944,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/extension-controls/preview",
             "/v1/extension-controls/apply",
             "/v1/extension-controls/refresh",
+            "/v1/extension-controls/acknowledge-degraded",
         }:
             try:
                 if parsed.path.endswith("/preview"):
                     response = self._daemon_server().extension_control_api.preview(payload)
                 elif parsed.path.endswith("/apply"):
                     response = self._daemon_server().extension_control_api.apply(payload)
+                elif parsed.path.endswith("/acknowledge-degraded"):
+                    response = self._daemon_server().extension_control_api.acknowledge_degraded(payload)
                 else:
                     response = self._daemon_server().extension_control_api.refresh()
             except ExtensionControlApiError as error:
