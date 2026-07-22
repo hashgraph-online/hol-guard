@@ -173,16 +173,19 @@ def test_disabled_extension_permission_dependency_and_implied_permission_each_bl
             (owner.extension_id,),
             (),
             _control(ControlTargetKind.EXTENSION, owner.extension_id, ControlState.DISABLED),
+            "control.disabled-extension",
         ),
         (
             (),
             (owner_permission.permission_id,),
             _control(ControlTargetKind.PERMISSION, owner_permission.permission_id, ControlState.DISABLED),
+            "control.disabled-permission",
         ),
         (
             (owner.extension_id,),
             (),
             _control(ControlTargetKind.EXTENSION, dependency.extension_id, ControlState.DISABLED),
+            "control.disabled-extension",
         ),
         (
             (),
@@ -192,10 +195,11 @@ def test_disabled_extension_permission_dependency_and_implied_permission_each_bl
                 dependency_permission.permission_id,
                 ControlState.DISABLED,
             ),
+            "control.disabled-permission",
         ),
     )
 
-    for extension_ids, permission_ids, control in scenarios:
+    for extension_ids, permission_ids, control, expected_reason in scenarios:
         layer = ExtensionControlLayer(
             schema_version=CONTROL_SCHEMA_VERSION,
             kind=ControlLayerKind.LOCAL_ADMIN,
@@ -212,6 +216,7 @@ def test_disabled_extension_permission_dependency_and_implied_permission_each_bl
         )
         assert resolution.blocked is True
         assert evaluate_effect_decision(EffectDecisionRequest(resolution.factors)).action == "block"
+        assert resolution.factors[0].reason_code == expected_reason
 
 
 def test_resolver_failures_are_typed_privacy_safe_and_fail_closed() -> None:

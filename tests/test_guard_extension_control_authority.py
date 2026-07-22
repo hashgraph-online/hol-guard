@@ -8,6 +8,7 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
+from codex_plugin_scanner.guard.extension_control_events import extension_control_change_payload
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -391,6 +392,10 @@ def test_idempotent_retry_after_prepared_transition_commits_once(tmp_path: Path)
     assert retried.revision == 1
     with store._connect() as connection:
         count = connection.execute("select count(*) from extension_control_authority_transition").fetchone()[0]
+        event_count = connection.execute(
+            "select count(*) from guard_cloud_events where event_type = 'policy.changed'"
+        ).fetchone()[0]
+    assert event_count == 1
     assert count == 1
 
 
@@ -401,6 +406,11 @@ def test_recovery_finalizes_database_commit_when_final_anchor_write_failed(tmp_p
     secrets.fail_anchor_set_number = secrets.anchor_set_count + 2
     with pytest.raises(ExtensionControlAuthorityError, match="final anchor"):
         _commit(store)
+    with store._connect() as connection:
+        premature_events = connection.execute(
+            "select count(*) from guard_cloud_events where event_type = 'policy.changed'"
+        ).fetchone()[0]
+    assert premature_events == 0
 
     interrupted = store.read_extension_control_authority(
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
@@ -412,6 +422,11 @@ def test_recovery_finalizes_database_commit_when_final_anchor_write_failed(tmp_p
     assert recovered.health is AuthorityHealth.PROTECTED
     assert recovered.revision == 1
     assert recovered.layers == (_disabled_layer(),)
+    with store._connect() as connection:
+        recovered_events = connection.execute(
+            "select count(*) from guard_cloud_events where event_type = 'policy.changed'"
+        ).fetchone()[0]
+    assert recovered_events == 1
 
 
 def test_transition_records_are_purpose_separated_and_replay_safe(tmp_path: Path) -> None:
@@ -700,3 +715,58 @@ def test_prepared_transition_retries_with_same_reserved_proof(tmp_path: Path) ->
         proof=proof,
     )
     assert committed.revision == 1
+
+
+def test_control_change_queues_privacy_safe_append_only_cloud_event(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+
+    _commit(store, actor_id="private-admin-identity")
+
+    with store._connect() as connection:
+        rows = connection.execute(
+            "select event_type, payload_json from guard_cloud_events where event_type = 'policy.changed'"
+        ).fetchall()
+    assert len(rows) == 1
+    envelope = json.loads(str(rows[0]["payload_json"]))
+    assert envelope["source"] == "policy"
+    payload = envelope["payload"]
+    assert payload["schema"] == "guard.extension-control-authority-change.v1"
+    assert payload["revision"] == 1
+    assert payload["previousRevision"] == 0
+    assert payload["disabledExtensionCount"] == 1
+    assert payload["blockSource"] == "extension-control-authority"
+    serialized = json.dumps(envelope)
+    assert "private-admin-identity" not in serialized
+    assert "nonce-change-1" not in serialized
+    assert _PASSWORD not in serialized
+
+
+def test_control_change_payload_counts_extension_and_permission_blocks() -> None:
+    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[0]
+    permission = extension.permissions[0]
+    layer = ExtensionControlLayer(
+        schema_version=CONTROL_SCHEMA_VERSION,
+        kind=ControlLayerKind.LOCAL_ADMIN,
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        global_lockdown=False,
+        controls=(
+            ExtensionControl(
+                ControlTarget(ControlTargetKind.EXTENSION, extension.extension_id),
+                ControlState.DISABLED,
+            ),
+            ExtensionControl(
+                ControlTarget(ControlTargetKind.PERMISSION, permission.permission_id),
+                ControlState.DISABLED,
+            ),
+        ),
+    )
+
+    payload = extension_control_change_payload(
+        revision=2,
+        previous_revision=1,
+        layers=(layer,),
+    )
+
+    assert payload["disabledExtensionCount"] == 1
+    assert payload["disabledPermissionCount"] == 1

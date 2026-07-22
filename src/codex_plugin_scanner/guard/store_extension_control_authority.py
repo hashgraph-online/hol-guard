@@ -341,6 +341,14 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 )
             except Exception as exc:
                 raise ExtensionControlAuthorityError("extension control authority final anchor unavailable") from exc
+            with self._connect() as connection:
+                self._queue_extension_control_change_event(
+                    connection,
+                    revision=revision,
+                    previous_revision=current.revision,
+                    layers_json=layers_json,
+                    occurred_at=created_at,
+                )
             return self._read_extension_control_authority_locked(catalog_digest)
 
     def recover_extension_control_authority(self, *, catalog_digest: str) -> ExtensionControlAuthorityView:
@@ -401,6 +409,21 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                                 AuthorityPhase.COMMITTED,
                             ),
                             key=key,
+                        )
+                    if current_revision > 0:
+                        committed = connection.execute(
+                            """select previous_revision, layers_json, created_at
+                               from extension_control_authority_transition where revision = ? and phase = ?""",
+                            (current_revision, AuthorityPhase.COMMITTED.value),
+                        ).fetchone()
+                        if committed is None:
+                            return self._tampered_view(catalog_digest)
+                        self._queue_extension_control_change_event(
+                            connection,
+                            revision=current_revision,
+                            previous_revision=_row_int(committed, "previous_revision"),
+                            layers_json=_row_str(committed, "layers_json"),
+                            occurred_at=_row_str(committed, "created_at"),
                         )
                     return self._read_extension_control_authority_locked(catalog_digest)
             return self._tampered_view(catalog_digest)
