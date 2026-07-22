@@ -30,11 +30,16 @@ def _install_evaluator_packages() -> None:
         ("codex_plugin_scanner.guard.runtime", package_root / "guard" / "runtime"),
     )
     for name, path in packages:
-        if name in sys.modules:
-            continue
-        package = types.ModuleType(name)
-        package.__dict__["__path__"] = [str(path)]
-        sys.modules[name] = package
+        package = sys.modules.get(name)
+        if package is None:
+            package = types.ModuleType(name)
+            package.__dict__["__path__"] = [str(path)]
+            sys.modules[name] = package
+        parent_name, separator, child_name = name.rpartition(".")
+        if separator:
+            parent = sys.modules.get(parent_name)
+            if parent is not None:
+                setattr(parent, child_name, package)
 
 
 _install_evaluator_packages()

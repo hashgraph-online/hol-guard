@@ -1594,6 +1594,60 @@ def _destructive_shell_tool_action_request(
         raw_command_text or detection_command_text,
         home_dir=home_dir,
     )
+    if execution_context.reason_code == SHELL_CWD_WORKSPACE_ESCAPE and home_dir is not None and cwd is None:
+        home_risk_context = model_shell_execution_context(
+            detection_command_text,
+            cwd=home_dir,
+            workspace_root=home_dir,
+            home_dir=home_dir,
+        )
+        raw_home_risk_context = (
+            model_shell_execution_context(
+                raw_command_text,
+                cwd=home_dir,
+                workspace_root=home_dir,
+                home_dir=home_dir,
+            )
+            if raw_command_text is not None and raw_command_text != detection_command_text
+            else home_risk_context
+        )
+        home_context_is_destructive = (
+            home_risk_context.complete
+            and raw_home_risk_context.complete
+            and shell_execution_context_starts_with_literal_cd(home_risk_context)
+            and shell_execution_context_starts_with_literal_cd(raw_home_risk_context)
+            and (
+                _looks_destructive_shell_command(
+                    detection_command_text,
+                    cwd=home_dir,
+                    home_dir=home_dir,
+                    execution_context=home_risk_context,
+                )
+                or (
+                    raw_command_text is not None
+                    and raw_command_text != detection_command_text
+                    and _looks_destructive_shell_command(
+                        raw_command_text,
+                        cwd=home_dir,
+                        home_dir=home_dir,
+                        execution_context=raw_home_risk_context,
+                    )
+                )
+            )
+        )
+        if home_context_is_destructive:
+            execution_context = home_risk_context
+            raw_execution_context = raw_home_risk_context
+            interpreter_executable_identities = _python_interpreter_executable_identities(
+                raw_command_text or detection_command_text,
+                cwd=home_dir,
+                home_dir=home_dir,
+                execution_context=(
+                    raw_execution_context
+                    if raw_command_text is not None and raw_command_text != detection_command_text
+                    else execution_context
+                ),
+            )
     if (
         github_assessment is not None
         and not github_capability_requires_confirmation(github_assessment)
