@@ -270,10 +270,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
     ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some(
       (check) => check.check_id === "harness_hooks" && check.status === "fail"
     ));
-  const repairHarnesses = Array.from(new Set([
-    ...managedInstalls.map((install) => install.harness),
-    ...visibleHarnesses,
-  ]));
+  const repairHarnesses = Array.from(new Set(managedInstalls.map((install) => install.harness)));
 
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,

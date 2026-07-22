@@ -39,19 +39,23 @@ const PROTECTION_CHECK_ACTIONS: Record<string, GapAction> = {
   },
   decision_plane_compatibility: {
     label: "Decision plane",
-    detail: "Local decision-plane compatibility is unproven or failed.",
+    detail:
+      "Run a protected action to refresh decision-plane proof. Retry repair here if it remains unproven.",
   },
   containment_compatibility: {
     label: "Containment",
-    detail: "Containment compatibility is unproven or failed.",
+    detail:
+      "Run a protected action to refresh containment proof. Retry repair here if it remains unproven.",
   },
   sandbox: {
     label: "Sandbox",
-    detail: "Sandbox enforcement could not be confirmed.",
+    detail:
+      "Run a protected action to refresh sandbox proof. Retry repair here if it remains unproven.",
   },
   decision_stream: {
     label: "Command evidence",
-    detail: "Command activity evidence is incomplete or unavailable.",
+    detail:
+      "Run a protected command to create fresh evidence. Guard will recheck it here.",
   },
   tamper_checks: {
     label: "Integrity checks",
@@ -125,6 +129,12 @@ function recoverySummary(failCount: number, unknownCount: number): string {
   return `Repair the ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every protection layer in one pass.`;
 }
 
+function repairButtonLabel(repairState: RepairState | null): string {
+  if (repairState?.status === "working") return "Repairing…";
+  if (repairState?.status === "error") return "Retry repair";
+  return "Repair protection";
+}
+
 export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   const [repairState, setRepairState] = useState<RepairState | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -140,6 +150,7 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
     try {
       const message = await props.onRepairProtection(props.repairHarnesses);
       setRepairState({ status: "success", message });
+      setDetailsOpen(true);
     } catch (error: unknown) {
       const message =
         error instanceof Error
@@ -180,11 +191,7 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
           </p>
         </div>
         <ActionButton onClick={handleRepairClick} disabled={working}>
-          {working
-            ? "Repairing…"
-            : repairState?.status === "error"
-              ? "Retry repair"
-              : "Repair protection"}
+          {repairButtonLabel(repairState)}
         </ActionButton>
       </div>
       {repairState ? (

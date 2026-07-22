@@ -767,10 +767,8 @@ export function App() {
         failures.push(`${harnessDisplayName(harness)} hooks`);
       }
     }
-    let message = "Protection repair completed.";
     try {
-      const result = await repairProtectionCheck("all");
-      message = result.message;
+      await repairProtectionCheck("all");
     } catch (error: unknown) {
       failures.push(error instanceof Error ? error.message : "integrity protection");
     }
@@ -778,7 +776,7 @@ export function App() {
     if (failures.length > 0) {
       throw new Error(`Repair paused at ${failures.join(", ")}. Retry repair to continue from this page.`);
     }
-    return message;
+    return "Automatic repairs completed. Guard rechecked every protection layer below.";
   }, [refreshStateAfterAction]);
 
   const appDetailContent = useMemo(() => {

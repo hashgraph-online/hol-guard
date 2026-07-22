@@ -164,7 +164,8 @@ test("one inline action repairs failed protection checks without leaving Protect
   await page.getByRole("button", { name: "Repair protection" }).click();
 
   await expect(page).toHaveURL(/\/protect/);
-  await expect(page.getByText("Integrity protection restored.")).toBeVisible();
+  await expect(page.getByText("Automatic repairs completed. Guard rechecked every protection layer below.")).toBeVisible();
+  await expect(page.getByText("Run a protected command to create fresh evidence.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Open diagnostics" })).toHaveCount(0);
   await expect(page.locator("#protection-recovery").getByRole("link", { name: /settings/i })).toHaveCount(0);
 });

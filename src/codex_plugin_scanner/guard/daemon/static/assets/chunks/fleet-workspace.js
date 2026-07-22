@@ -19,19 +19,19 @@ const PROTECTION_CHECK_ACTIONS = {
   },
   decision_plane_compatibility: {
     label: "Decision plane",
-    detail: "Local decision-plane compatibility is unproven or failed."
+    detail: "Run a protected action to refresh decision-plane proof. Retry repair here if it remains unproven."
   },
   containment_compatibility: {
     label: "Containment",
-    detail: "Containment compatibility is unproven or failed."
+    detail: "Run a protected action to refresh containment proof. Retry repair here if it remains unproven."
   },
   sandbox: {
     label: "Sandbox",
-    detail: "Sandbox enforcement could not be confirmed."
+    detail: "Run a protected action to refresh sandbox proof. Retry repair here if it remains unproven."
   },
   decision_stream: {
     label: "Command evidence",
-    detail: "Command activity evidence is incomplete or unavailable."
+    detail: "Run a protected command to create fresh evidence. Guard will recheck it here."
   },
   tamper_checks: {
     label: "Integrity checks",
@@ -81,6 +81,11 @@ function recoverySummary(failCount, unknownCount) {
   }
   return `Repair the ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every protection layer in one pass.`;
 }
+function repairButtonLabel(repairState) {
+  if (repairState?.status === "working") return "Repairing…";
+  if (repairState?.status === "error") return "Retry repair";
+  return "Repair protection";
+}
 function FleetProtectionRecovery(props) {
   const [repairState, setRepairState] = reactExports.useState(null);
   const [detailsOpen, setDetailsOpen] = reactExports.useState(false);
@@ -95,6 +100,7 @@ function FleetProtectionRecovery(props) {
     try {
       const message = await props.onRepairProtection(props.repairHarnesses);
       setRepairState({ status: "success", message });
+      setDetailsOpen(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Repair paused before every protection step completed. Retry to continue safely.";
       setRepairState({ status: "error", message });
@@ -129,7 +135,7 @@ function FleetProtectionRecovery(props) {
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: recoverySummary(failCount, unknownCount) })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairClick, disabled: working, children: working ? "Repairing…" : repairState?.status === "error" ? "Retry repair" : "Repair protection" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairClick, disabled: working, children: repairButtonLabel(repairState) })
         ] }),
         repairState ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "p",
@@ -340,10 +346,7 @@ function FleetWorkspace(props) {
   const repairHarness = managedInstalls.find((install) => !install.active)?.harness ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some(
     (check) => check.check_id === "harness_hooks" && check.status === "fail"
   ));
-  const repairHarnesses = Array.from(/* @__PURE__ */ new Set([
-    ...managedInstalls.map((install) => install.harness),
-    ...visibleHarnesses
-  ]));
+  const repairHarnesses = Array.from(new Set(managedInstalls.map((install) => install.harness)));
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
     activeInstalls.length,
