@@ -585,6 +585,10 @@
     bottom: 0;
   }
 
+  .bottom-2 {
+    bottom: calc(var(--spacing) * 2);
+  }
+
   .bottom-4 {
     bottom: calc(var(--spacing) * 4);
   }
@@ -1369,16 +1373,8 @@
     min-width: calc(var(--spacing) * 7);
   }
 
-  .min-w-\[9\.75rem\] {
-    min-width: 9.75rem;
-  }
-
   .min-w-\[44px\] {
     min-width: 44px;
-  }
-
-  .min-w-\[52rem\] {
-    min-width: 52rem;
   }
 
   .min-w-\[120px\] {
@@ -1546,6 +1542,10 @@
     flex-direction: column-reverse;
   }
 
+  .flex-nowrap {
+    flex-wrap: nowrap;
+  }
+
   .flex-wrap {
     flex-wrap: wrap;
   }
@@ -1564,10 +1564,6 @@
 
   .items-start {
     align-items: flex-start;
-  }
-
-  .items-stretch {
-    align-items: stretch;
   }
 
   .justify-between {
@@ -4779,6 +4775,10 @@
     --tw-ring-inset: inset;
   }
 
+  .group-open\:rotate-180:is(:where(.group):is([open], :popover-open, :open) *) {
+    rotate: 180deg;
+  }
+
   @media (hover: hover) {
     .group-hover\:bg-\[color-mix\(in_srgb\,var\(--brand-blue\)_85\%\,var\(--brand-dark\)\)\]:is(:where(.group):hover *) {
       background-color: var(--brand-blue);
@@ -4819,6 +4819,10 @@
 
   .last\:pb-0:last-child {
     padding-bottom: 0;
+  }
+
+  .open\:bg-white:is([open], :popover-open, :open) {
+    background-color: var(--color-white);
   }
 
   .focus-within\:border-brand-blue:focus-within {
@@ -5512,12 +5516,20 @@
   }
 
   @media (min-width: 40rem) {
+    .sm\:bottom-4 {
+      bottom: calc(var(--spacing) * 4);
+    }
+
     .sm\:col-span-2 {
       grid-column: span 2 / span 2;
     }
 
     .sm\:mt-0 {
       margin-top: 0;
+    }
+
+    .sm\:block {
+      display: block;
     }
 
     .sm\:flex {
@@ -5652,6 +5664,10 @@
       gap: calc(var(--spacing) * 4);
     }
 
+    .sm\:gap-6 {
+      gap: calc(var(--spacing) * 6);
+    }
+
     .sm\:gap-x-8 {
       column-gap: calc(var(--spacing) * 8);
     }
@@ -5732,6 +5748,10 @@
 
     .sm\:pt-0\.5 {
       padding-top: calc(var(--spacing) * .5);
+    }
+
+    .sm\:pt-1 {
+      padding-top: var(--spacing);
     }
 
     .sm\:pl-0 {
@@ -6104,16 +6124,16 @@
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
+    .xl\:grid-cols-5 {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
     .xl\:grid-cols-7 {
       grid-template-columns: repeat(7, minmax(0, 1fr));
     }
 
     .xl\:grid-cols-\[360px_minmax\(0\,1fr\)\] {
       grid-template-columns: 360px minmax(0, 1fr);
-    }
-
-    .xl\:grid-cols-\[minmax\(0\,1fr\)_280px\] {
-      grid-template-columns: minmax(0, 1fr) 280px;
     }
 
     .xl\:grid-cols-\[minmax\(0\,1fr\)_360px\] {
@@ -6139,6 +6159,10 @@
 
   .\[\&_button\]\:min-h-11 button {
     min-height: calc(var(--spacing) * 11);
+  }
+
+  .\[\&\:\:-webkit-details-marker\]\:hidden::-webkit-details-marker {
+    display: none;
   }
 
   .\[\&\>svg\]\:pointer-events-none > svg {

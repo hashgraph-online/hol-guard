@@ -14,6 +14,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 assert(resolvePolicyViewLabel("exceptions") === "Cloud exceptions", "exceptions view label is Cloud exceptions");
 assert(resolvePolicyViewLabel("rules") === "Remembered rules", "rules view label unchanged");
+assert(resolvePolicyViewLabel("strict") === "How Guard decides", "decision-order view uses explanatory label");
 
 const workspaceSource = readFileSync(join(here, "policy-workspace.tsx"), "utf8");
 const tabSource = readFileSync(join(here, "policy-cloud-exceptions-tab.tsx"), "utf8");
@@ -31,7 +32,7 @@ assert(tabSource.includes("PolicyCloudExceptionDetailPanel"), "cloud exceptions 
 assert(tabSource.includes("PolicyCloudExceptionsList"), "cloud exceptions tab renders grouped lists");
 assert(chromeSource.includes("Open Guard Cloud"), "policy header exposes Open Guard Cloud on exceptions tab");
 assert(tabSource.includes("Guard Cloud is not connected"), "disconnected Cloud copy present");
-assert(pageSource.includes("add custom exceptions here"), "page header uses mockup description");
+assert(pageSource.includes("Configure protection behavior in Settings."), "page header explains configuration ownership");
 assert(!workspaceSource.includes("bypass"), "policy workspace removes bypass copy");
 const sidebarSource = readFileSync(join(here, "approval-center-primitives.tsx"), "utf8");
 assert(sidebarSource.includes('label: "Policy"'), "sidebar Policy label unchanged");

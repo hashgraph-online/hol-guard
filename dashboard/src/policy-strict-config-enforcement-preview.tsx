@@ -1,5 +1,4 @@
-import { Fragment } from "react";
-import { HiMiniArrowRight, HiMiniArrowTopRightOnSquare } from "react-icons/hi2";
+import { HiMiniArrowTopRightOnSquare } from "react-icons/hi2";
 import { ActionButton, SectionLabel } from "./approval-center-primitives";
 import {
   POLICY_PANEL_CARD_CLASS,
@@ -14,31 +13,26 @@ type PolicyEnforcementPreviewCardProps = {
 export function PolicyEnforcementPreviewCard({ cloudControlsUrl }: PolicyEnforcementPreviewCardProps) {
   return (
     <div className={`${POLICY_PANEL_CARD_CLASS} p-4`}>
-      <SectionLabel>Local enforcement preview</SectionLabel>
+      <SectionLabel>How Guard decides</SectionLabel>
       <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
         Evaluation order when Guard decides what to do next.
       </p>
 
-      <div className="mt-4 -mx-1 overflow-x-auto px-1 pb-1">
-        <div className="flex min-w-[52rem] items-stretch">
+      <div className="mt-4">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           {STRICT_CONFIG_EVALUATION_STEPS.map((step, index) => {
             const Icon = step.icon;
-            const isLast = index === STRICT_CONFIG_EVALUATION_STEPS.length - 1;
             return (
-              <Fragment key={step.label}>
-                <div className={`flex min-w-[9.75rem] flex-1 flex-col rounded-xl border p-3 ${step.surfaceClass}`}>
-                  <span className={`flex h-8 w-8 items-center justify-center rounded-lg bg-white/80 ${step.iconClass}`}>
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                  </span>
-                  <p className="mt-2 text-sm font-semibold text-brand-dark">{step.label}</p>
-                  <p className="mt-1 text-xs leading-relaxed text-slate-600">{step.description}</p>
-                </div>
-                {!isLast ? (
-                  <div className="flex w-7 shrink-0 items-center justify-center" aria-hidden="true">
-                    <HiMiniArrowRight className="h-4 w-4 text-slate-300" />
-                  </div>
-                ) : null}
-              </Fragment>
+              <div key={step.label} className={`relative flex min-w-0 flex-col rounded-xl border p-3 ${step.surfaceClass}`}>
+                <span className="absolute right-3 top-3 text-[10px] font-semibold tabular-nums text-slate-400" aria-hidden="true">
+                  {index + 1}
+                </span>
+                <span className={`flex h-8 w-8 items-center justify-center rounded-lg bg-white/80 ${step.iconClass}`}>
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <p className="mt-2 text-sm font-semibold text-brand-dark">{step.label}</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600">{step.description}</p>
+              </div>
             );
           })}
         </div>
