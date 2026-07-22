@@ -134,21 +134,21 @@ def _recover_authority(
         use_cooldown=False,
         summary=f"Authenticate extension-control authority {command}.",
     )
-    grant = require_extension_control(
-        guard_home,
-        approval_gate_input=gate_input,
-        action=command,
-        subject=subject,
-        session_nonce=session_nonce,
-    )
-    consume_extension_control_grant(
-        guard_home,
-        grant,
-        action=command,
-        subject=subject,
-        session_nonce=session_nonce,
-    )
     if command == "recover-authority":
+        grant = require_extension_control(
+            guard_home,
+            approval_gate_input=gate_input,
+            action=command,
+            subject=subject,
+            session_nonce=session_nonce,
+        )
+        consume_extension_control_grant(
+            guard_home,
+            grant,
+            action=command,
+            subject=subject,
+            session_nonce=session_nonce,
+        )
         view = store.recover_extension_control_authority(catalog_digest=catalog_digest)
         with contextlib.suppress(GuardDaemonRequestError):
             _ = _client(guard_home).refresh_extension_controls()
@@ -158,7 +158,11 @@ def _recover_authority(
             "catalog_digest": view.catalog_digest,
         }
     else:
-        response = _client(guard_home).acknowledge_degraded_extension_controls()
+        payload: dict[str, object] = {"session_nonce": session_nonce}
+        if gate_input is not None:
+            payload["approval_password"] = gate_input.password
+            payload["approval_totp_code"] = gate_input.totp_code
+        response = _client(guard_home).acknowledge_degraded_extension_controls(payload)
     _emit(response, output_stream)
     return 0
 

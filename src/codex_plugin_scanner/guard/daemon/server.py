@@ -1952,7 +1952,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 elif parsed.path.endswith("/apply"):
                     response = self._daemon_server().extension_control_api.apply(payload)
                 elif parsed.path.endswith("/acknowledge-degraded"):
-                    response = self._daemon_server().extension_control_api.acknowledge_degraded()
+                    response = self._daemon_server().extension_control_api.acknowledge_degraded(payload)
                 else:
                     response = self._daemon_server().extension_control_api.refresh()
             except ExtensionControlApiError as error:

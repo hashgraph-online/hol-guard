@@ -94,8 +94,8 @@ def test_controls_help_is_available_from_every_installed_alias(
 @pytest.mark.parametrize(
     ("command", "expected_calls"),
     (
-        ("recover-authority", ("recover", "refresh")),
-        ("acknowledge-degraded", ("acknowledge",)),
+        ("recover-authority", ("prompt", "require", "consume", "recover", "refresh")),
+        ("acknowledge-degraded", ("prompt", "acknowledge")),
     ),
 )
 def test_authority_recovery_requires_and_consumes_fresh_local_approval(
@@ -129,7 +129,13 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
             calls.append("refresh")
             return {"health": "protected", "revision": 7}
 
-        def acknowledge_degraded_extension_controls(self) -> dict[str, object]:
+        def acknowledge_degraded_extension_controls(
+            self,
+            payload: dict[str, object],
+        ) -> dict[str, object]:
+            assert payload["approval_password"] == "password"
+            assert payload["approval_totp_code"] == "123456"
+            assert isinstance(payload["session_nonce"], str)
             calls.append("acknowledge")
             return {"health": "degraded-acknowledged", "revision": 0}
 
@@ -138,7 +144,7 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
     monkeypatch.setattr(
         extension_controls_commands,
         "prompt_for_approval_gate",
-        lambda *_args, **_kwargs: calls.append("prompt") or object(),
+        lambda *_args, **_kwargs: calls.append("prompt") or SimpleNamespace(password="password", totp_code="123456"),
     )
     monkeypatch.setattr(
         extension_controls_commands,
@@ -159,4 +165,4 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
     )
 
     assert exit_code == 0
-    assert calls == ["prompt", "require", "consume", *expected_calls]
+    assert calls == list(expected_calls)
