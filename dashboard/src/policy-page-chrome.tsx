@@ -35,7 +35,7 @@ export function PolicyUnderlineTabBar({ activeView, onViewChange }: PolicyUnderl
 
   return (
     <div
-      className="flex flex-wrap gap-6 border-b border-slate-200"
+      className="flex flex-nowrap gap-5 overflow-x-auto border-b border-slate-200 sm:gap-6"
       role="tablist"
       aria-label="Policy sections"
     >
@@ -52,7 +52,7 @@ export function PolicyUnderlineTabBar({ activeView, onViewChange }: PolicyUnderl
             tabIndex={selected ? 0 : -1}
             onClick={() => onViewChange(view)}
             onKeyDown={(event) => handleKeyDown(event, view)}
-            className={`-mb-px border-b-2 px-1 pb-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
+            className={`-mb-px min-h-11 shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
               selected
                 ? "border-brand-blue text-brand-blue"
                 : "border-transparent text-slate-500 hover:border-slate-300 hover:text-brand-dark"

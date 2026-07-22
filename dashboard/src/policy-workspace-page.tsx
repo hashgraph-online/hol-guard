@@ -13,11 +13,19 @@ function PolicyFallback() {
   return <div className="guard-skeleton h-40 w-full rounded-2xl" aria-busy="true" aria-live="polite" />;
 }
 
+export function resolveProtectionRulesPath(search: string): string {
+  const params = new URLSearchParams({ section: "rules" });
+  if (new URLSearchParams(search).get("demo") === "1") {
+    params.set("demo", "1");
+  }
+  return `/settings?${params.toString()}`;
+}
+
 export function PolicyWorkspacePage(props: {
   snapshot: GuardRuntimeSnapshot;
   policies: GuardPolicyDecision[];
   onClearPolicy: (policy: GuardPolicyDecision) => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (pathname?: string) => void;
   onOpenInbox: () => void;
   onRefreshPolicies: () => void;
   onNavigate?: (pathname: string) => void;
@@ -28,7 +36,14 @@ export function PolicyWorkspacePage(props: {
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(props.snapshot);
   const cloudConnected = resolveCloudExceptionsConnected(props.snapshot);
 
-  const handleOpenSettings = useCallback(() => props.onOpenSettings(), [props]);
+  const handleOpenSettings = useCallback(() => {
+    const settingsPath = resolveProtectionRulesPath(window.location.search);
+    if (props.onNavigate) {
+      props.onNavigate(settingsPath);
+      return;
+    }
+    props.onOpenSettings(settingsPath);
+  }, [props]);
   const handleOpenInbox = useCallback(() => props.onOpenInbox(), [props]);
   const handleViewChange = useCallback((view: PolicyPageView) => setActiveView(view), []);
 
@@ -46,7 +61,7 @@ export function PolicyWorkspacePage(props: {
       <WorkspacePageHeader
         eyebrow="Policy"
         title="Remembered rules and exceptions"
-        description="See what Guard will do next time, in plain language. Remove local rules or add custom exceptions here."
+        description="Inspect remembered outcomes, cloud exceptions, and the order Guard uses to decide. Configure protection behavior in Settings."
         actions={
           activeView === "exceptions" ? (
             <PolicyExceptionsToolbar
