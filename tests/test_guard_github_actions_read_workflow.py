@@ -84,6 +84,7 @@ def test_typed_github_actions_read_workflow_is_explicitly_benign(tmp_path: Path)
         "gh api repos/example/project/actions/jobs/$jid/logs > output.zip",
         "gh api repos/example/project/actions/jobs/$jid/logs | xargs sh",
         "gh api repos/example/project/actions/jobs/$jid/logs | rg --pre ./payload pattern",
+        "gh api repos/example/project/actions/jobs/$jid/logs | rg -o 'package==[0-9.a-z]+'",
         "gh api repos/example/project/actions/jobs/$jid/logs --hostname attacker.invalid",
         "gh api repos/../project/actions/jobs/$jid/logs",
         "$(gh api repos/example/project/actions/jobs/$jid --jq .name)",

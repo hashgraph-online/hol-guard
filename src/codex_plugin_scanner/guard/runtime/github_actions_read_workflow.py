@@ -103,6 +103,8 @@ def _safe_github_read_pipeline(command_text: str, values: dict[str, _ValueKind])
     for segment in segments[1:]:
         if not _safe_emitted_output_filter(segment):
             return None
+    if segments[1:] and not _filters_bound_emitted_matches(segments[1:]):
+        return None
     return _github_output_kind(github_tokens)
 
 
@@ -233,6 +235,13 @@ def _safe_emitted_output_filter(tokens: list[str]) -> bool:
             continue
         positional.append(token)
     return len(positional) == 1 and not any(marker in positional[0] for marker in ("$(", "`", "<(", ">("))
+
+
+def _filters_bound_emitted_matches(segments: list[list[str]]) -> bool:
+    final = segments[-1]
+    if final[0] == "head":
+        return True
+    return final[0] in {"grep", "rg"} and any("q" in token.lstrip("-") for token in final[1:] if token.startswith("-"))
 
 
 def _bounded_count(value: str) -> bool:
