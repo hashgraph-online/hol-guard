@@ -26,6 +26,9 @@ class CommandActivityHealth(Protocol):
     @property
     def persistence_error_count(self) -> int: ...
 
+    @property
+    def active_error_count(self) -> int: ...
+
 
 class ProtectionHealthStore(Protocol):
     def count_command_activities(self) -> int: ...
@@ -109,17 +112,15 @@ def _daemon_signal(runtime_state: Mapping[str, object] | None, *, now: datetime)
 def _decision_stream_signal(store: ProtectionHealthStore) -> ProtectionSignal:
     try:
         health = store.get_command_activity_persistence_health()
-        dropped = health.dropped_event_count
-        errors = health.persistence_error_count
+        active_errors = health.active_error_count
         activity_count = store.count_command_activities()
     except (AttributeError, RuntimeError, TypeError, ValueError):
         return _signal(ProtectionCheckStatus.FAIL, "decision_stream_health_unavailable")
-    if dropped > 0 or errors > 0:
+    if active_errors > 0:
         return _signal(ProtectionCheckStatus.FAIL, "decision_stream_degraded")
     if activity_count == 0:
         return _signal(ProtectionCheckStatus.UNKNOWN, "decision_stream_not_observed")
-    # Historical rows do not prove the producer is still healthy.
-    return _signal(ProtectionCheckStatus.UNKNOWN, "decision_stream_completeness_unavailable")
+    return _signal(ProtectionCheckStatus.PASS, "decision_stream_healthy")
 
 
 def _tamper_signal(trust_status: Mapping[str, object]) -> ProtectionSignal:

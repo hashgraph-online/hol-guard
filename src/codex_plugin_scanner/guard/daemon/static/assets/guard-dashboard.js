@@ -17863,6 +17863,29 @@ async function repairApprovalCenter() {
   }
   return response.json();
 }
+async function repairProtectionCheck(checkId) {
+  if (isGuardDemoMode()) {
+    return { repaired: true, check_ids: [checkId], message: "Protection restored." };
+  }
+  const response = await fetchWithGuardAuth("/v1/protection/repair", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ check_id: checkId })
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = isRecord$1(payload) ? stringValue$1(payload.message) : null;
+    throw new Error(message ?? `Protection repair failed with ${response.status}`);
+  }
+  if (!isRecord$1(payload) || payload.repaired !== true || !Array.isArray(payload.check_ids)) {
+    throw new Error("Guard returned an invalid protection repair result.");
+  }
+  return {
+    repaired: true,
+    check_ids: payload.check_ids.filter((value) => typeof value === "string"),
+    message: stringValue$1(payload.message) ?? "Protection restored."
+  };
+}
 function normalizeGuardUpdateVersionCheck(raw) {
   const value = isRecord$1(raw) ? raw : {};
   return {
@@ -29831,6 +29854,26 @@ function App() {
       navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
     }
   }, []);
+  const handleRepairProtectionCheck = reactExports.useCallback(async (checkId, harnesses) => {
+    let message;
+    if (checkId === "harness_hooks") {
+      if (harnesses.length === 0) {
+        throw new Error("Guard could not find an installed app hook to repair.");
+      }
+      for (const harness of harnesses) {
+        await runHarnessAction({ harness, action: "repair", dryRun: false });
+      }
+      message = `Repaired ${harnesses.length} app hook${harnesses.length === 1 ? "" : "s"}. Run a protected action to confirm interception.`;
+    } else if (checkId === "daemon") {
+      await repairApprovalCenter();
+      message = "Local runtime connection repaired.";
+    } else {
+      const result = await repairProtectionCheck(checkId);
+      message = result.message;
+    }
+    await refreshStateAfterAction();
+    return message;
+  }, [refreshStateAfterAction]);
   const appDetailContent = reactExports.useMemo(() => {
     if (view !== "app-detail" || !appDetailHarness || runtime.kind !== "ready") {
       return null;
@@ -29948,6 +29991,7 @@ function App() {
             onConnectHarness: handleConnectHarness,
             onTestHarness: handleTestHarness,
             onRepairHarness: handleRepairHarness,
+            onRepairProtectionCheck: handleRepairProtectionCheck,
             onOpenAppDetail: handleOpenAppDetail
           }
         ) }) : null,

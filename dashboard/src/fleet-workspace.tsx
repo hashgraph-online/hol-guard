@@ -49,6 +49,7 @@ type FleetWorkspaceProps = {
   onConnectHarness?: (harness: string) => void;
   onTestHarness?: (harness: string) => void;
   onRepairHarness?: (harness: string) => void;
+  onRepairProtectionCheck: (checkId: string, harnesses: string[]) => Promise<string>;
   onOpenAppDetail?: (harness: string) => void;
 };
 
@@ -270,6 +271,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
     ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some(
       (check) => check.check_id === "harness_hooks" && check.status === "fail"
     ));
+  const repairHarnesses = Array.from(new Set(managedInstalls.map((install) => install.harness)));
   const recoveryPrimary = primaryProtectionRecoveryAction(protectionHealth, repairHarness);
 
   const heroCopy = resolveFleetHeroCopy(
@@ -291,7 +293,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
         subheadline={heroCopy.subheadline}
         cta={
           protectionHealth.state !== "protected" && recoveryPrimary ? (
-            <ActionButton href={recoveryPrimary.href}>{recoveryPrimary.cta}</ActionButton>
+            <ActionButton href="#protection-recovery">Repair protection</ActionButton>
           ) : (
             <ActionButton href={heroCopy.primaryCtaHref}>{heroCopy.primaryCtaLabel}</ActionButton>
           )
@@ -319,7 +321,12 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
       />
 
       {protectionHealth.state !== "protected" ? (
-        <FleetProtectionRecovery health={protectionHealth} repairHarness={repairHarness} />
+        <FleetProtectionRecovery
+          health={protectionHealth}
+          repairHarness={repairHarness}
+          repairHarnesses={repairHarnesses}
+          onRepairProtectionCheck={props.onRepairProtectionCheck}
+        />
       ) : null}
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">

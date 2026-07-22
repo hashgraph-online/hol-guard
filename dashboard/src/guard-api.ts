@@ -3009,6 +3009,36 @@ export async function repairApprovalCenter(): Promise<{ repaired: boolean; clear
   return response.json() as Promise<{ repaired: boolean; cleared: string[] }>;
 }
 
+export type GuardProtectionRepairResult = {
+  repaired: boolean;
+  check_ids: string[];
+  message: string;
+};
+
+export async function repairProtectionCheck(checkId: string): Promise<GuardProtectionRepairResult> {
+  if (isGuardDemoMode()) {
+    return { repaired: true, check_ids: [checkId], message: "Protection restored." };
+  }
+  const response = await fetchWithGuardAuth("/v1/protection/repair", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ check_id: checkId }),
+  });
+  const payload = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    const message = isRecord(payload) ? stringValue(payload.message) : null;
+    throw new Error(message ?? `Protection repair failed with ${response.status}`);
+  }
+  if (!isRecord(payload) || payload.repaired !== true || !Array.isArray(payload.check_ids)) {
+    throw new Error("Guard returned an invalid protection repair result.");
+  }
+  return {
+    repaired: true,
+    check_ids: payload.check_ids.filter((value): value is string => typeof value === "string"),
+    message: stringValue(payload.message) ?? "Protection restored.",
+  };
+}
+
 function normalizeGuardUpdateVersionCheck(raw: unknown): GuardUpdateVersionCheck {
   const value = isRecord(raw) ? raw : {};
   return {
