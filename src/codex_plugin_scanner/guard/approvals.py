@@ -67,6 +67,7 @@ from .store import (
     _runtime_scoped_exact_match_key,
     browser_mcp_exact_match_context,
     runtime_tool_action_exact_match_context,
+    runtime_tool_action_portable_match_context,
 )
 from .synced_policy import synced_policy_bundle_validation
 from .temporary_mcp_approvals import (
@@ -761,6 +762,7 @@ def apply_approval_resolution(
         )
 
     resolution_harness = None if scope == "global" else str(request["harness"])
+    resolve_matching_scope_requests = resolve_scope_matches and not (action == "allow" and scope != "artifact")
     if return_queue_result:
         result = store.resolve_request_with_queue_result(
             request_id,
@@ -778,7 +780,7 @@ def apply_approval_resolution(
                 raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
             if isinstance(error, str) and error:
                 raise ValueError(error)
-        if resolve_scope_matches and not exact_context_allow:
+        if resolve_matching_scope_requests and not exact_context_allow:
             resolved_scope_ids = store.resolve_matching_approval_requests(
                 harness=resolution_harness,
                 scope=scope,
@@ -816,7 +818,7 @@ def apply_approval_resolution(
             result["temporary_mcp_grant"] = _temporary_mcp_grant_result(temporary_mcp_selection)
         return result
     resolved_ids: list[str] = []
-    if resolve_scope_matches and not exact_context_allow:
+    if resolve_matching_scope_requests and not exact_context_allow:
         resolved_ids = store.resolve_matching_approval_requests(
             harness=resolution_harness,
             scope=scope,
@@ -918,6 +920,26 @@ def _broad_runtime_exact_match_key(request: Mapping[str, object], scope: str) ->
     artifact_id = request.get("artifact_id")
     if not isinstance(artifact_id, str) or not artifact_id:
         return None
+    if request.get("artifact_type") == "tool_action_request":
+        raw_command_text = _string_or_none(request.get("raw_command_text"))
+        wrapper_chain = request.get("wrapper_chain")
+        envelope = request.get("action_envelope_json")
+        if isinstance(envelope, Mapping):
+            raw_command_text = raw_command_text or _string_or_none(envelope.get("raw_command_text"))
+            raw_command_text = raw_command_text or _string_or_none(envelope.get("command"))
+            if not isinstance(wrapper_chain, Sequence) or isinstance(wrapper_chain, str):
+                wrapper_chain = envelope.get("wrapper_chain")
+        if raw_command_text is None:
+            return None
+        context = runtime_tool_action_exact_match_context(
+            config_path=_string_or_none(request.get("config_path")),
+            source_scope=_string_or_none(request.get("source_scope")),
+            raw_command_text=raw_command_text,
+            wrapper_chain=(
+                wrapper_chain if isinstance(wrapper_chain, Sequence) and not isinstance(wrapper_chain, str) else None
+            ),
+        )
+        return _runtime_scoped_exact_match_key(artifact_id, runtime_tool_action_portable_match_context(context))
     return _runtime_scoped_exact_match_key(artifact_id)
 
 

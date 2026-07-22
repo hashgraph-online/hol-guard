@@ -13,6 +13,7 @@ from .models import DECISION_SCOPE_VALUES, DecisionScope
 from .package_execution_context import (
     PACKAGE_EXECUTION_CONTEXT_VERSION,
     PackageExecutionContext,
+    package_execution_context_from_scanner_evidence,
 )
 from .runtime.github_workflow_runtime import approval_record_from_approval_request
 from .temporary_mcp_approvals import temporary_mcp_approval_payload
@@ -31,7 +32,7 @@ _SCOPED_APPROVAL_FAMILIES = frozenset(
 )
 
 APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX: Final = "guard.approval-scopes.v"
-APPROVAL_SCOPE_CONTRACT_VERSION: Final = f"{APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX}3"
+APPROVAL_SCOPE_CONTRACT_VERSION: Final = f"{APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX}4"
 ResolutionAction = Literal["allow", "block"]
 
 
@@ -108,15 +109,14 @@ class ApprovalScopeContract:
 def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContract:
     """Derive the current action-aware scope contract from trusted request fields.
 
-    A validated workflow descriptor marks a request as a task-capability
-    candidate, but it is not positive proof. Broad allow scopes stay unavailable;
-    issuance and atomic claim bind complete proof later. Deny breadth remains
-    limited to selectors Guard can derive canonically.
+    Reusable allow scopes are exposed only when Guard can persist an action-bound
+    selector. The wider scope changes where that same action may be reused; it
+    never turns into blanket permission for unrelated actions.
     """
 
     artifact_available = _string_or_none(request.get("artifact_id")) is not None
     artifact_scopes: tuple[DecisionScope, ...] = ("artifact",) if artifact_available else ()
-    allow_scopes = () if _allow_is_non_overridable(request) else artifact_scopes
+    allow_scopes = () if _allow_is_non_overridable(request) else _reusable_allow_scopes(request, artifact_scopes)
     block_scopes: list[DecisionScope] = list(artifact_scopes)
     trusted_family = _request_scoped_family_key(request)
     task_capability_eligible = _github_workflow_task_capability_eligible(request)
@@ -129,17 +129,17 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
         if _string_or_none(request.get("publisher")) is not None:
             block_scopes.append("publisher")
         block_scopes.extend(("harness", "global"))
-    restrictions = ["broad_allow_requires_positive_proof"]
+    restrictions = ["reusable_allow_is_action_bound"]
     restrictions.append(
         "task_capability_exact_operation_only" if task_capability_eligible else "task_capability_not_enabled"
     )
     if _allow_is_non_overridable(request):
         restrictions.append("current_action_not_overridable")
-    if _derived_workspace_scope_target(request) is not None:
-        restrictions.append("workspace_allow_requires_complete_proof")
-    if trusted_family is not None:
-        restrictions.append("harness_and_global_allow_unavailable")
-    else:
+    if "workspace" in allow_scopes:
+        restrictions.append("workspace_allow_bound_to_project_and_action")
+    if "harness" in allow_scopes or "global" in allow_scopes:
+        restrictions.append("broad_allow_bound_to_exact_action")
+    if trusted_family is None:
         restrictions.append("broad_deny_requires_trusted_selector")
     block_scope_tuple = tuple(block_scopes)
     restrictions_tuple = tuple(restrictions)
@@ -161,6 +161,44 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
         task_capability_eligible=task_capability_eligible,
         task_capability_reason_codes=task_capability_reason_codes,
     )
+
+
+def _reusable_allow_scopes(
+    request: Mapping[str, object],
+    artifact_scopes: tuple[DecisionScope, ...],
+) -> tuple[DecisionScope, ...]:
+    if not artifact_scopes or _request_scoped_family_key(request) is None:
+        return artifact_scopes
+    artifact_hash = _string_or_none(request.get("artifact_hash"))
+    if artifact_hash is None or artifact_hash == "unknown":
+        return artifact_scopes
+
+    scopes: list[DecisionScope] = list(artifact_scopes)
+    artifact_type = _string_or_none(request.get("artifact_type"))
+    workspace = _derived_workspace_scope_target(request)
+    if workspace is not None and artifact_type in {
+        "file_read_request",
+        "prompt_request",
+        "tool_action_request",
+    }:
+        scopes.append("workspace")
+    elif workspace is not None and artifact_type == "package_request":
+        execution_context = package_execution_context_from_scanner_evidence(request.get("scanner_evidence"))
+        if execution_context is not None and execution_context.portable:
+            scopes.append("workspace")
+
+    if artifact_type == "tool_action_request" and _tool_action_has_exact_context(request):
+        scopes.extend(("harness", "global"))
+    return tuple(scopes)
+
+
+def _tool_action_has_exact_context(request: Mapping[str, object]) -> bool:
+    raw_command_text = _string_or_none(request.get("raw_command_text"))
+    envelope = request.get("action_envelope_json")
+    if isinstance(envelope, Mapping):
+        raw_command_text = raw_command_text or _string_or_none(envelope.get("raw_command_text"))
+        raw_command_text = raw_command_text or _string_or_none(envelope.get("command"))
+    return raw_command_text is not None
 
 
 def request_scope_contract_payload(request: Mapping[str, object]) -> dict[str, object]:
