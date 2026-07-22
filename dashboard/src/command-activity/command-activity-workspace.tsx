@@ -47,6 +47,7 @@ export function CommandActivityWorkspace(props: { harness?: string | null }) {
       <CommandActivitySummary
         state={activity.analytics}
         outsideTableFilters={commandSummaryIsOutsideTableFilters(activity.filters)}
+        onRetry={activity.retry}
       />
       <p className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
         {commandExecutionEvidenceCopy(props.harness ?? null, hasPostProof)}

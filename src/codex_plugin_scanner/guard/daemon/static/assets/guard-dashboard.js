@@ -14468,6 +14468,11 @@ function infinitiveVerb(type) {
       return "run";
   }
 }
+function isShellCommandRequest(request) {
+  const artifactType = (request.artifact_type ?? "").toLowerCase();
+  const actionType = (request.action_envelope_json?.action_type ?? "").toLowerCase();
+  return actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command");
+}
 function plainEnglishRequestTitle(request) {
   const category = detectCategory({
     ...request,
@@ -14491,6 +14496,9 @@ function plainEnglishRequestTitle(request) {
     case "tool-call":
       return `${app} wants to use a tool`;
     default:
+      if (isShellCommandRequest(request)) {
+        return `${app} wants to run a shell command`;
+      }
       return `${app} wants to do something with ${name}`;
   }
 }
@@ -14515,6 +14523,9 @@ function whyPaused(request) {
     case "tool-call":
       return "This uses an outside tool. Guard stops new tools by default.";
     default:
+      if (isShellCommandRequest(request)) {
+        return "This shell command has parts Guard could not fully inspect. Guard pauses these so you can review before running.";
+      }
       return "Guard paused this so you can review it first.";
   }
 }
@@ -14765,6 +14776,10 @@ function resolveSecondaryRiskSummary(item) {
     return null;
   }
   if (duplicatesStoppedActionText(item, summary)) {
+    return null;
+  }
+  const dashboardDetail = resolveDecisionV2Detail(item);
+  if (dashboardDetail && normalizeDuplicateReviewText(summary) === normalizeDuplicateReviewText(dashboardDetail)) {
     return null;
   }
   return summary;
@@ -22195,6 +22210,9 @@ function openPackageFirewallAuthorizeFallback(authorizeUrl, browserOpened) {
 function FiShare2(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2", "strokeLinecap": "round", "strokeLinejoin": "round" }, "child": [{ "tag": "circle", "attr": { "cx": "18", "cy": "5", "r": "3" }, "child": [] }, { "tag": "circle", "attr": { "cx": "6", "cy": "12", "r": "3" }, "child": [] }, { "tag": "circle", "attr": { "cx": "18", "cy": "19", "r": "3" }, "child": [] }, { "tag": "line", "attr": { "x1": "8.59", "y1": "13.51", "x2": "15.42", "y2": "17.49" }, "child": [] }, { "tag": "line", "attr": { "x1": "15.41", "y1": "6.51", "x2": "8.59", "y2": "10.49" }, "child": [] }] })(props);
 }
+function FiRefreshCw(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2", "strokeLinecap": "round", "strokeLinejoin": "round" }, "child": [{ "tag": "polyline", "attr": { "points": "23 4 23 10 17 10" }, "child": [] }, { "tag": "polyline", "attr": { "points": "1 20 1 14 7 14" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" }, "child": [] }] })(props);
+}
 function FiCopy(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2", "strokeLinecap": "round", "strokeLinejoin": "round" }, "child": [{ "tag": "rect", "attr": { "x": "9", "y": "9", "width": "13", "height": "13", "rx": "2", "ry": "2" }, "child": [] }, { "tag": "path", "attr": { "d": "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" }, "child": [] }] })(props);
 }
@@ -24075,7 +24093,7 @@ function homeCommandActivityModel(analytics) {
 }
 function commandHealthCopy(analytics) {
   if (analytics.health.status === "healthy") return null;
-  return "Command activity evidence is degraded. Counts may be incomplete.";
+  return "Guard could not record some recent command activity. Counts may be incomplete. Guard retries automatically; check again after the next command.";
 }
 function commandWindowLabel(analytics) {
   return `${analytics.window.days}-day window ending ${analytics.window.through}`;
@@ -24584,7 +24602,13 @@ function CommandActivitySummary(props) {
   const healthCopy = commandHealthCopy(analytics);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "min-w-0 max-w-full space-y-5", "aria-label": "Command activity summary", children: [
     props.outsideTableFilters ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700", role: "status", children: "Summary and trend totals do not include every active filter below." }) : null,
-    healthCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status", children: healthCopy }) : null,
+    healthCopy ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: healthCopy }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: props.onRetry, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(FiRefreshCw, { "aria-hidden": "true" }),
+        "Check again"
+      ] })
+    ] }) : null,
     props.state.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status", children: "Refresh failed. Showing the last loaded command activity summary." }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 xl:grid-cols-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(Metric, { label: "Commands checked", value: metrics.commandsChecked, detail: "One per recorded activity" }),
@@ -25493,7 +25517,8 @@ function CommandActivityWorkspace(props) {
       CommandActivitySummary,
       {
         state: activity.analytics,
-        outsideTableFilters: commandSummaryIsOutsideTableFilters(activity.filters)
+        outsideTableFilters: commandSummaryIsOutsideTableFilters(activity.filters),
+        onRetry: activity.retry
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600", children: commandExecutionEvidenceCopy(props.harness ?? null, hasPostProof) }),

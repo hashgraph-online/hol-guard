@@ -161,7 +161,7 @@ def record_post_hook_command_activity_best_effort(
                 if previous.execution_status is expected_status:
                     return False
                 if previous.execution_status is not CommandExecutionStatus.ALLOWED_UNCONFIRMED:
-                    raise ValueError("post-hook proof conflicts with persisted command lifecycle")
+                    return False
                 current = build_correlated_post_activity(
                     previous,
                     request_correlation=correlation,
