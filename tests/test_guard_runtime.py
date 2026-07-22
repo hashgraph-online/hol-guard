@@ -23718,6 +23718,74 @@ def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_pat
     assert artifact is None
 
 
+def test_codex_read_only_source_inspection_allows_literal_cd_to_sibling_workspace(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    current = home_dir / "current"
+    sibling = home_dir / "sibling"
+    current.mkdir(parents=True)
+    _write_text(sibling / "package.json", "{}\n")
+    _write_text(sibling / "app" / "route.ts", "export const tokenLabel = 'field name only';\n")
+    command = "cd ~/sibling && sed -n '1,20p' app/route.ts"
+
+    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+        command,
+        cwd=current,
+        home_dir=home_dir,
+    )
+    artifact = guard_commands_module._codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": "export const tokenLabel = 'field name only';\n"},
+        },
+        config_path=str(current / ".codex" / "config.toml"),
+        source_scope="workspace",
+        cwd=current,
+        home_dir=home_dir,
+    )
+    assert artifact is None
+
+
+def test_codex_literal_cd_source_inspection_keeps_sensitive_sibling_output_guarded(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    current = home_dir / "current"
+    sibling = home_dir / "sibling"
+    current.mkdir(parents=True)
+    _write_text(sibling / "package.json", "{}\n")
+    credential = "ghp_" + "123456789012345678901234567890123456"
+    _write_text(sibling / ".env", f"TOKEN={credential}\n")
+    command = "cd ~/sibling && sed -n '1,20p' .env"
+
+    artifact = guard_commands_module._codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": f"TOKEN={credential}\n"},
+        },
+        config_path=str(current / ".codex" / "config.toml"),
+        source_scope="workspace",
+        cwd=current,
+        home_dir=home_dir,
+    )
+    assert artifact is not None
+    assert "credential-looking output" in artifact.name
+
+
+def test_codex_literal_cd_source_inspection_rejects_hidden_home_directory(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    current = home_dir / "current"
+    hidden = home_dir / ".ssh"
+    current.mkdir(parents=True)
+    _write_text(hidden / "config", "Host example\n")
+    _write_text(hidden / "pyproject.toml", "[project]\nname = 'not-a-workspace'\n")
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "cd ~/.ssh && sed -n '1,20p' config",
+        cwd=current,
+        home_dir=home_dir,
+    )
+
+
 @pytest.mark.parametrize(
     "command",
     (

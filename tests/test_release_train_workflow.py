@@ -16,8 +16,8 @@ PUBLISH_WORKFLOW = ROOT / ".github" / "workflows" / "publish.yml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
 CI_PUSH_BRANCHES = ["main"]
-PUBLISH_PUSH_BRANCHES = ["main", "release/2.1"]
-PR_BRANCHES = ["main", "release/2.1"]
+PUBLISH_PUSH_BRANCHES = ["main", "release/2.2"]
+PR_BRANCHES = ["main", "release/2.2"]
 RELEASE_MAINTAINERS = {"@kantorcodes", "@deep-purple-boots"}
 
 
@@ -62,7 +62,7 @@ def test_branch_pushes_publish_their_channel_while_tag_pushes_cannot_publish() -
         condition = jobs[job_name]["if"]
         assert "github.event_name == 'workflow_dispatch'" in condition
         assert "github.event_name == 'push'" in condition
-        assert "github.ref == 'refs/heads/release/2.1'" in condition
+        assert "github.ref == 'refs/heads/release/2.2'" in condition
         assert "needs.build.outputs.channel == 'alpha'" in condition
     for job_name in ("publish-main-testpypi", "publish-main-pypi", "release-main"):
         condition = jobs[job_name]["if"]
@@ -110,7 +110,7 @@ def test_release_21_main_merge_publishes_exact_stable_version_and_tag() -> None:
     release_job = workflow["jobs"]["release-main"]
     release_step = next(step for step in release_job["steps"] if step.get("name") == "Create discoverable main release")
 
-    assert project["project"]["version"] == "2.1.0"
+    assert project["project"]["version"] == "2.2.0"
     assert release_job["needs"] == ["build", "publish-main-pypi"]
     assert "github.ref == 'refs/heads/main'" in release_job["if"]
     assert "needs.build.outputs.channel == 'stable'" in release_job["if"]
@@ -127,9 +127,9 @@ def test_release_21_push_computes_a_deterministic_source_bound_alpha() -> None:
     assert _mapping(checkout["with"])["ref"] == (
         "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
     )
-    assert 'elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/2.1" ]]' in compute_run
+    assert 'elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/2.2" ]]' in compute_run
     assert 'CHANNEL="alpha"' in compute_run
-    assert 'TRAIN="2.1"' in compute_run
+    assert 'TRAIN="2.2"' in compute_run
     assert "compute_alpha_release_version.py" in compute_run
     assert '--release-train "$TRAIN"' in compute_run
     assert "SOURCE_SHA=$(git rev-parse 'HEAD^{commit}')" in compute_run
@@ -137,7 +137,7 @@ def test_release_21_push_computes_a_deterministic_source_bound_alpha() -> None:
 
     auto_alpha_block = compute_run[
         compute_run.index(
-            'elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/2.1" ]]'
+            'elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/2.2" ]]'
         ) : compute_run.index('elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]')
     ]
     assert "list-versions --registry pypi" in auto_alpha_block
@@ -171,7 +171,7 @@ def test_alpha_only_dispatch_and_pr_version_stamping_contracts() -> None:
     stamp_run = next(step["run"] for step in build_steps if step.get("name") == "Stamp package version when needed")
 
     assert 'if [[ "$CHANNEL" != "alpha" ]]' in compute_run
-    assert "The release/2.1 train is alpha-only" in compute_run
+    assert "The release/2.2 train is alpha-only" in compute_run
     assert 'elif [[ "$CHANNEL" == "stable" ]]' not in compute_run
     assert "VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py" in compute_run
     assert 'VERSION=$(BASE_VERSION="$BASE_VERSION" PR_NUMBER="$PR_NUMBER"' in compute_run
@@ -185,7 +185,7 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     build_steps = workflow["jobs"]["build"]["steps"]
 
     assert inputs["release_channel"]["options"] == ["alpha"]
-    assert inputs["release_train"]["options"] == ["2.1"]
+    assert inputs["release_train"]["options"] == ["2.2"]
     assert inputs["release_version"]["required"] is True
     assert inputs["expected_sha"]["required"] is True
     assert "promotion_pr" not in inputs
@@ -205,14 +205,14 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     assert '"$GITHUB_ACTOR_ID" != "6068672"' in dispatch_gate["run"]
     assert '"$GITHUB_ACTOR_ID" != "301892678"' in dispatch_gate["run"]
     assert '"$RELEASE_CHANNEL" != "alpha"' in dispatch_gate["run"]
-    assert '"$RELEASE_TRAIN" != "2.1"' in dispatch_gate["run"]
-    assert '"$GITHUB_REF" != "refs/heads/release/2.1"' in dispatch_gate["run"]
+    assert '"$RELEASE_TRAIN" != "2.2"' in dispatch_gate["run"]
+    assert '"$GITHUB_REF" != "refs/heads/release/2.2"' in dispatch_gate["run"]
     assert '"$EXPECTED_SHA" != "$GITHUB_SHA"' in dispatch_gate["run"]
     assert jobs["build"]["needs"] == "authorize-release"
     build_condition = jobs["build"]["if"]
     assert "github.event_name != 'workflow_dispatch' || github.run_attempt == 1" in build_condition
     assert (
-        "github.event_name != 'push' || github.run_attempt == 1 || github.ref == 'refs/heads/release/2.1'"
+        "github.event_name != 'push' || github.run_attempt == 1 || github.ref == 'refs/heads/release/2.2'"
         in build_condition
     )
     assert jobs["alpha-cross-platform"]["needs"] == "build"
@@ -226,10 +226,10 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     ):
         assert "github.run_attempt == 1" in jobs[job_name]["if"]
         if job_name != "alpha-cross-platform":
-            assert "(github.event_name == 'push' && github.ref == 'refs/heads/release/2.1')" in jobs[job_name]["if"]
+            assert "(github.event_name == 'push' && github.ref == 'refs/heads/release/2.2')" in jobs[job_name]["if"]
     compute_run = next(step["run"] for step in build_steps if step.get("name") == "Compute publish version")
     assert 'if [[ "$CHANNEL" != "alpha" ]]' in compute_run
-    assert 'if [[ "$TRAIN" != "2.1" ]]' in compute_run
+    assert 'if [[ "$TRAIN" != "2.2" ]]' in compute_run
     assert 'if [[ "$GITHUB_REF" != "$TRAIN_REF" ]]' in compute_run
     assert '"$GITHUB_RUN_ATTEMPT" != "1"' in compute_run
     assert '"$GITHUB_ACTOR_ID" != "6068672"' in compute_run

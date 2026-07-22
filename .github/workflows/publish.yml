@@ -15,7 +15,7 @@ on:
         required: true
         type: choice
         options:
-          - "2.1"
+          - "2.2"
       release_version:
         description: "Exact canonical release version"
         required: true
@@ -25,9 +25,9 @@ on:
         required: true
         type: string
   push:
-    branches: [main, release/2.1]
+    branches: [main, release/2.2]
   pull_request:
-    branches: [main, release/2.1]
+    branches: [main, release/2.2]
     types: [opened, synchronize, reopened, labeled]
 
 permissions:
@@ -63,12 +63,12 @@ jobs:
             echo "Release dispatch actor is not an authorized maintainer" >&2
             exit 1
           fi
-          if [[ "$RELEASE_CHANNEL" != "alpha" || "$RELEASE_TRAIN" != "2.1" ]]; then
-            echo "Only the release/2.1 alpha train is authorized" >&2
+          if [[ "$RELEASE_CHANNEL" != "alpha" || "$RELEASE_TRAIN" != "2.2" ]]; then
+            echo "Only the release/2.2 alpha train is authorized" >&2
             exit 1
           fi
-          if [[ "$GITHUB_REF" != "refs/heads/release/2.1" ]]; then
-            echo "Alpha releases must run from refs/heads/release/2.1" >&2
+          if [[ "$GITHUB_REF" != "refs/heads/release/2.2" ]]; then
+            echo "Alpha releases must run from refs/heads/release/2.2" >&2
             exit 1
           fi
           if [[ "$EXPECTED_SHA" != "$GITHUB_SHA" ]]; then
@@ -80,7 +80,7 @@ jobs:
     name: Build + Verify
     if: >-
       (github.event_name != 'workflow_dispatch' || github.run_attempt == 1) &&
-      (github.event_name != 'push' || github.run_attempt == 1 || github.ref == 'refs/heads/release/2.1') &&
+      (github.event_name != 'push' || github.run_attempt == 1 || github.ref == 'refs/heads/release/2.2') &&
       (github.event.action != 'labeled' || github.event.label.name == 'run-testpypi-canary')
     needs: authorize-release
     runs-on: ubuntu-latest
@@ -151,14 +151,14 @@ jobs:
             fi
             CHANNEL="$RELEASE_CHANNEL"
             TRAIN="$RELEASE_TRAIN"
-            if [[ "$TRAIN" != "2.1" ]]; then
+            if [[ "$TRAIN" != "2.2" ]]; then
               echo "Unsupported release train: ${TRAIN}" >&2
               exit 1
             fi
             TRAIN_REF="refs/heads/release/${TRAIN}"
 
             if [[ "$CHANNEL" != "alpha" ]]; then
-              echo "The release/2.1 train is alpha-only" >&2
+              echo "The release/2.2 train is alpha-only" >&2
               exit 1
             fi
             if [[ "$GITHUB_REF" != "$TRAIN_REF" ]]; then
@@ -199,7 +199,7 @@ jobs:
           print(f"{os.environ['BASE_VERSION']}.dev{pair(pair(int(os.environ['PR_NUMBER']), int(os.environ['GITHUB_RUN_NUMBER'])), int(os.environ['GITHUB_RUN_ATTEMPT']))}")
           PY
             )
-          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/2.1" ]]; then
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/2.2" ]]; then
             if [[ "$RELEASE_PUBLISHING_ENABLED" != "true" ]]; then
               echo "Release publishing is disabled until protected environments are verified" >&2
               exit 1
@@ -209,7 +209,7 @@ jobs:
               exit 1
             fi
             CHANNEL="alpha"
-            TRAIN="2.1"
+            TRAIN="2.2"
             TRAIN_REF="refs/heads/release/${TRAIN}"
             PYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
               list-versions --registry pypi)
@@ -609,7 +609,7 @@ jobs:
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/2.1')
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/2.2')
       )
     needs: [build]
     runs-on: ubuntu-latest
@@ -664,7 +664,7 @@ jobs:
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/2.1')
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/2.2')
       )
     needs: [build, reserve-alpha-tag]
     runs-on: ubuntu-latest
@@ -757,7 +757,7 @@ jobs:
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/2.1')
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/2.2')
       )
     needs: [build, publish-alpha-testpypi]
     runs-on: ubuntu-latest
@@ -1172,7 +1172,7 @@ jobs:
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/2.1')
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/2.2')
       )
     needs: [build, publish-alpha-pypi]
     runs-on: ubuntu-latest
@@ -1274,7 +1274,7 @@ jobs:
       (
         (
           ((github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-           (github.event_name == 'push' && github.ref == 'refs/heads/release/2.1')) &&
+           (github.event_name == 'push' && github.ref == 'refs/heads/release/2.2')) &&
           needs.build.outputs.channel == 'alpha' &&
           needs.publish-alpha-pypi.result == 'success' &&
           needs.release-alpha.result == 'success'

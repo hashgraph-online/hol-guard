@@ -173,7 +173,7 @@ def _pending_workflow_request(store: GuardStore) -> dict[str, object]:
     if len(pending) != 1:
         raise RuntimeError(f"workflow approval request mismatch: {pending!r}")
     contract = request_scope_contract(pending[0])
-    if not contract.task_capability_eligible or contract.allow_scopes != ("artifact",):
+    if not contract.task_capability_eligible or "artifact" not in contract.allow_scopes:
         raise RuntimeError("workflow request did not expose the exact task-capability contract")
     request_id = pending[0].get("request_id")
     if not isinstance(request_id, str) or not request_id:

@@ -43,6 +43,26 @@ from ._commands_shared import *
 from .commands_parser_helpers import *
 
 
+def _codex_literal_home_workspace_target(tokens: tuple[str, ...], *, home_dir: Path) -> Path | None:
+    if len(tokens) != 2 or tokens[0].strip("\"'").casefold() != "cd":
+        return None
+    operand = tokens[1].strip("\"'")
+    if not operand or ".." in Path(operand).parts or any(marker in operand for marker in ("$", "`", "\x00")):
+        return None
+    candidate = home_dir / operand[2:] if operand.startswith("~/") else Path(operand)
+    if not candidate.is_absolute():
+        candidate = home_dir / candidate
+    try:
+        target = candidate.resolve(strict=True)
+        relative = target.relative_to(home_dir.resolve(strict=True))
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if not relative.parts or relative.parts[0].startswith("."):
+        return None
+    markers = (".git", "package.json", "pyproject.toml", "Cargo.toml", "go.mod")
+    return target if any((target / marker).exists() for marker in markers) else None
+
+
 def _codex_source_inspection_target_tokens(parts: list[str]) -> tuple[str, ...]:
     command_parts = _codex_unwrapped_command_parts(parts)
     if not command_parts:
@@ -152,8 +172,30 @@ def _codex_command_is_read_only_source_inspection(
         return _codex_command_is_read_only_source_search(command, cwd=cwd, home_dir=home_dir)
     execution_context = model_shell_execution_context(command, cwd=cwd, workspace_root=cwd)
     if execution_context.directory_change_present:
-        return _codex_contextual_source_inspection_is_read_only(
+        if _codex_contextual_source_inspection_is_read_only(
             execution_context,
+            home_dir=home_dir,
+        ):
+            return True
+        if home_dir is None:
+            return False
+        home_context = model_shell_execution_context(
+            command,
+            cwd=home_dir,
+            workspace_root=home_dir,
+            home_dir=home_dir,
+        )
+        if not home_context.segments:
+            return False
+        first = home_context.segments[0]
+        if (
+            first.control_before
+            or first.directory_operation != "cd"
+            or _codex_literal_home_workspace_target(first.tokens, home_dir=home_dir) is None
+        ):
+            return False
+        return _codex_contextual_source_inspection_is_read_only(
+            home_context,
             home_dir=home_dir,
         )
     chained_segments = _split_codex_safe_read_only_chain(command)
