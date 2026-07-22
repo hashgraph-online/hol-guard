@@ -1367,6 +1367,15 @@ def _hol_guard_package_spec(target_version: str | None = None) -> str:
     return "hol-guard"
 
 
+def _target_version_is_prerelease(target_version: str | None) -> bool:
+    if not isinstance(target_version, str) or not target_version.strip():
+        return False
+    try:
+        return Version(target_version.strip()).is_prerelease
+    except InvalidVersion:
+        return False
+
+
 def _installer_output_text(stdout: object, stderr: object) -> str:
     return "\n".join(part.strip() for part in (str(stdout or "").strip(), str(stderr or "").strip()) if part.strip())
 
@@ -1402,12 +1411,24 @@ def _update_command(
             return ["pipx", "install", "--force", wheel]
         return [sys.executable, "-m", "pip", "install", "--force-reinstall", wheel]
     package = _hol_guard_package_spec(target_version)
+    allow_prerelease = _target_version_is_prerelease(target_version)
     if use_pypi:
         if installer == "uv":
-            return ["uv", "tool", "install", "--force", package]
+            command = ["uv", "tool", "install", "--force"]
+            if allow_prerelease:
+                command.append("--prerelease=allow")
+            command.append(package)
+            return command
         if installer == "pipx":
-            return ["pipx", "install", "--force", package]
-        return [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", package]
+            command = ["pipx", "install", "--force", package]
+            if allow_prerelease:
+                command.extend(["--pip-args", "--pre"])
+            return command
+        command = [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall"]
+        if allow_prerelease:
+            command.append("--pre")
+        command.append(package)
+        return command
     if installer == "uv":
         return ["uv", "tool", "upgrade", "hol-guard"]
     if installer == "pipx":
