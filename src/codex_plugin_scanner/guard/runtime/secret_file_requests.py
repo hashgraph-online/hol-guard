@@ -2013,11 +2013,14 @@ def _low_risk_compound_developer_execution_context(
             and segment.control_before == ("|",)
             and _read_only_lookup_filter_segment_is_safe(command_name, args, home_dir=segment_root)
         )
+        root_checked_args = (
+            list(_search_file_operand_tokens(command_name, args))
+            if safe_pipe_filter and command_name in {"grep", "egrep", "fgrep"}
+            else args
+        )
         if not _path_text_is_within_root(os.fspath(segment_root), inspection_root):
             return None
-        if not safe_pipe_filter and any(
-            _shell_token_escapes_root(arg, cwd=segment_root, root=inspection_root) for arg in args
-        ):
+        if any(_shell_token_escapes_root(arg, cwd=segment_root, root=inspection_root) for arg in root_checked_args):
             return None
         if segment.directory_operation is not None:
             continue

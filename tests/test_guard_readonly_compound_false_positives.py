@@ -24,7 +24,6 @@ def _source_file(repo: Path, relative_path: str) -> None:
             "git diff HEAD -- app/guard/_components/controls/guard-controls-policy-studio.tsx "
             "| grep -A5 -B5 'handleUndo|handleRedo|undoAndGet|redoAndGet'"
         ),
-        "git diff --stat && echo '---' && git diff",
         "cat .git 2>/dev/null; echo '---'; git status --short 2>/dev/null | head -50",
     ),
 )
@@ -73,8 +72,11 @@ def test_read_only_source_pipeline_allows_identifier_like_output(tmp_path: Path)
     "suffix",
     (
         "git diff HEAD -- .env | cat",
+        "git diff HEAD -- .aws/credentials | cat",
+        "git diff --stat && echo '---' && git diff",
         "git diff HEAD -- src/safe.ts | cat /etc/passwd",
         "git diff HEAD -- src/safe.ts | grep pattern ../../outside.txt",
+        "git diff HEAD -- src/safe.ts | grep -f /outside/patterns",
         "git diff HEAD -- src/safe.ts | cat $(printf payload)",
         "sed -i '' 's/old/new/' src/safe.ts",
         "git add -A && git commit -m change",
