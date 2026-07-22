@@ -28201,8 +28201,6 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
                   harnessDisplayName(item.harness),
                   " · ",
-                  category.shortLabel,
-                  " · ",
                   formatQueueRequestDate(item)
                 ] })
               ] }),
@@ -28297,7 +28295,7 @@ function iconForQueueCategory(categoryId) {
 }
 function queueItemPreview(item) {
   const envelope = item.action_envelope_json;
-  return envelope?.command ?? item.raw_command_text ?? envelope?.mcp_tool ?? (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? envelope?.package_name ?? displayArtifactName(item);
+  return envelope?.command ?? item.raw_command_text ?? envelope?.mcp_tool ?? (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? envelope?.package_name ?? resolveStoppedCommandText(item);
 }
 const QUEUE_PAGE_SIZE$1 = 10;
 function ReviewHeader({
