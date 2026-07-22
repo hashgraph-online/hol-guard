@@ -110,6 +110,11 @@ def _configure_guard_local_parsers(
     _add_guard_common_args(update_parser)
     update_parser.add_argument("--dry-run", action="store_true")
     update_parser.add_argument(
+        "--alpha",
+        action="store_true",
+        help="Update to the newest alpha release in the installed major version",
+    )
+    update_parser.add_argument(
         "--wheel",
         help="Install a local HOL Guard wheel file, or the newest matching hol_guard-*.whl from a directory",
     )

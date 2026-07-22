@@ -251,6 +251,7 @@ def run_guard_update(
     force_pypi_reinstall: bool = False,
     wheel: str | None = None,
     guard_home: Path | None = None,
+    include_alpha: bool = False,
 ) -> tuple[dict[str, object], int]:
     installer = _installer_kind()
     payload: dict[str, object] = {
@@ -392,6 +393,7 @@ def run_guard_update(
         current_version,
         source_kind=update_context.source.public_name,
         network_policy=network_policy,
+        include_alpha=include_alpha,
     )
     if requested_wheel_path is None and _python_runtime_blocks_update(version_check):
         payload.update(
@@ -446,7 +448,7 @@ def run_guard_update(
     payload.update(
         {
             "command": command,
-            "retry_command": _safe_update_retry_command(requested_wheel_path),
+            "retry_command": _safe_update_retry_command(requested_wheel_path, include_alpha=include_alpha),
             "binary_diagnostics": _binary_diagnostics(command, installer),
             "version_check": version_check,
         }
@@ -458,6 +460,8 @@ def run_guard_update(
             payload["wheel_version"] = trusted_wheel.version
     else:
         payload["upgrade_source"] = update_context.source.public_name
+        if include_alpha:
+            payload["release_channel"] = "alpha"
     if dry_run:
         payload["status"] = "planned"
         payload["changed"] = False
@@ -564,6 +568,7 @@ def run_guard_update(
             resulting_version,
             source_kind=update_context.source.public_name,
             network_policy=network_policy,
+            include_alpha=include_alpha,
         )
         payload["post_version_check"] = post_version_check
         payload["version_check"] = _merge_version_checks(
@@ -947,7 +952,10 @@ def _stale_retry_command(payload: dict[str, object]) -> str:
         return ""
     version_check = payload.get("version_check")
     if isinstance(version_check, dict) and version_check.get("update_available") is True:
-        return _shell_command(["hol-guard", "update"])
+        command = ["hol-guard", "update"]
+        if payload.get("release_channel") == "alpha":
+            command.append("--alpha")
+        return _shell_command(command)
     retry_command = payload.get("retry_command")
     if isinstance(retry_command, str) and retry_command.strip():
         return retry_command.strip()
@@ -957,8 +965,10 @@ def _stale_retry_command(payload: dict[str, object]) -> str:
     return ""
 
 
-def _safe_update_retry_command(wheel_path: Path | None) -> str:
+def _safe_update_retry_command(wheel_path: Path | None, *, include_alpha: bool = False) -> str:
     command = ["hol-guard", "update"]
+    if include_alpha:
+        command.append("--alpha")
     if wheel_path is not None:
         command.extend(["--wheel", str(wheel_path)])
     return _shell_command(command)
@@ -1031,6 +1041,7 @@ def _version_check_payload(
     *,
     source_kind: str = "pypi",
     network_policy: ManagedNetworkPolicy | None = None,
+    include_alpha: bool = False,
 ) -> dict[str, object]:
     if source_kind != "pypi":
         return {
@@ -1042,7 +1053,9 @@ def _version_check_payload(
         }
     policy_token = _version_network_policy.set(network_policy)
     try:
-        latest_version = _latest_version_from_pypi()
+        latest_version = (
+            _latest_alpha_version_from_pypi(current_version) if include_alpha else _latest_version_from_pypi()
+        )
     finally:
         _version_network_policy.reset(policy_token)
     if latest_version is None:
@@ -1089,6 +1102,7 @@ def _version_check_payload(
         }
     return {
         "source": "pypi",
+        **({"release_channel": "alpha"} if include_alpha else {}),
         "status": "stale" if update_available else "current",
         "current_version": current_version,
         "latest_version": latest_version,
@@ -1128,6 +1142,35 @@ def _latest_version_from_pypi() -> str | None:
         return None
     version = info.get("version")
     return version if isinstance(version, str) and version.strip() else None
+
+
+def _latest_alpha_version_from_pypi(current_version: str) -> str | None:
+    _ = _latest_version_from_pypi()
+    payload = _last_pypi_payload
+    if not isinstance(payload, dict):
+        return None
+    releases = payload.get("releases")
+    if not isinstance(releases, dict):
+        return None
+    try:
+        current_major = Version(current_version).major
+    except InvalidVersion:
+        return None
+    candidates: list[tuple[Version, str]] = []
+    for version_text, files in releases.items():
+        if not isinstance(version_text, str) or not version_text.strip():
+            continue
+        try:
+            parsed_version = Version(version_text)
+        except InvalidVersion:
+            continue
+        if parsed_version.major != current_major or parsed_version.pre is None or parsed_version.pre[0] != "a":
+            continue
+        if _release_has_non_yanked_file(files):
+            candidates.append((parsed_version, version_text.strip()))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda candidate: candidate[0])[1]
 
 
 def _read_bounded_pypi_response(response: object, *, deadline: float) -> bytes:

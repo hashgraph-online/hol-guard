@@ -81,6 +81,43 @@ def test_update_detects_uv_tool_install_and_pins_latest_version(monkeypatch: pyt
     assert payload["binary_diagnostics"]["path_status"] == "uv_tool_shim_detected"
 
 
+def test_update_alpha_pins_latest_alpha_in_installed_major(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands.sys, "prefix", "/opt/pipx/venvs/hol-guard")
+    monkeypatch.setattr(update_commands.shutil, "which", lambda name: f"/opt/bin/{name}")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.1127")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_latest_alpha_version_from_pypi", lambda _current: "2.1.0a35")
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True, include_alpha=True)
+
+    assert exit_code == 0
+    assert payload["command"] == ["pipx", "install", "--force", "hol-guard==2.1.0a35"]
+    assert payload["retry_command"] == "hol-guard update --alpha"
+    assert payload["release_channel"] == "alpha"
+    assert payload["version_check"]["release_channel"] == "alpha"
+
+
+def test_latest_alpha_version_stays_in_current_major_and_skips_yanked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.1127")
+    monkeypatch.setattr(
+        update_commands,
+        "_last_pypi_payload",
+        {
+            "releases": {
+                "2.1.0a34": [{"yanked": False}],
+                "2.1.0a35": [{"yanked": False}],
+                "2.2.0a1": [{"yanked": True}],
+                "2.2.0b1": [{"yanked": False}],
+                "3.1.0a9": [{"yanked": False}],
+            }
+        },
+    )
+
+    assert update_commands._latest_alpha_version_from_pypi("2.0.1127") == "2.1.0a35"
+
+
 def test_update_version_check_marks_stale_local_install(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_commands.sys, "prefix", "/opt/guard-venv")
     monkeypatch.setattr(update_commands.sys, "executable", "/opt/guard-venv/bin/python")
