@@ -29,6 +29,7 @@ _API_OPTIONS_WITH_VALUES = frozenset(
     }
 )
 _API_BOOLEAN_OPTIONS = frozenset({"--include", "--paginate", "--silent", "--slurp", "--verbose", "-i"})
+_API_OUTPUT_FORMAT_OPTIONS = frozenset({"--jq", "--template"})
 _METHOD_OVERRIDE_HEADER = re.compile(r"\Ax-http-method-override\s*:", re.IGNORECASE)
 _STATIC_ENDPOINT = re.compile(r"\A[A-Za-z0-9_./{}:+,@=-]+\Z")
 
@@ -237,7 +238,7 @@ def _parse_api_arguments(args: Sequence[str]) -> GitHubApiArguments | GitHubComm
                 has_dynamic_option_value = has_dynamic_option_value or _value_is_dynamic(value)
             elif option_name == "--input":
                 has_input = True
-            elif _value_is_dynamic(value):
+            elif option_name not in _API_OUTPUT_FORMAT_OPTIONS and _value_is_dynamic(value):
                 has_dynamic_option_value = True
             index += consumed
             continue
