@@ -1,6 +1,6 @@
-import { describe, it, expect } from "bun:test";
 import { plainEnglishRequestTitle, whyPaused, humanFileName } from "./plain-english";
 import type { GuardApprovalRequest, GuardActionEnvelope } from "../guard-types";
+import { assert } from "node:console";
 
 function buildShellRequest(overrides: Partial<GuardApprovalRequest> = {}): GuardApprovalRequest {
   return {
@@ -28,76 +28,80 @@ function buildShellRequest(overrides: Partial<GuardApprovalRequest> = {}): Guard
   } as unknown as GuardApprovalRequest;
 }
 
-describe("plainEnglishRequestTitle", () => {
-  it("uses clear title for shell commands instead of raw artifact name", () => {
-    const request = buildShellRequest({
-      artifact_name: "compound unmodeled compound shell command",
-      artifact_type: "shell_command",
-    });
-    const title = plainEnglishRequestTitle(request);
-    expect(title).toBe("Codex wants to run a shell command");
-    expect(title).not.toContain("compound unmodeled");
+// T1: shell command title should not include raw artifact name
+{
+  const request = buildShellRequest({
+    artifact_name: "compound unmodeled compound shell command",
+    artifact_type: "shell_command",
   });
+  const title = plainEnglishRequestTitle(request);
+  assert(title === "Codex wants to run a shell command", `T1: expected shell command title, got "${title}"`);
+  assert(!title.includes("compound unmodeled"), "T1: title must not include raw artifact name");
+}
 
-  it("uses clear title when action envelope indicates shell command", () => {
-    const request = buildShellRequest({
-      artifact_name: "some weird artifact name",
-      artifact_type: "other_type",
-      action_envelope_json: { action_type: "shell_command" } as unknown as GuardActionEnvelope | null,
-    });
-    const title = plainEnglishRequestTitle(request);
-    expect(title).toBe("Codex wants to run a shell command");
+// T2: action_envelope action_type shell_command should also trigger clear title
+{
+  const request = buildShellRequest({
+    artifact_name: "some weird artifact name",
+    artifact_type: "other_type",
+    action_envelope_json: { action_type: "shell_command" } as unknown as GuardActionEnvelope | null,
   });
+  const title = plainEnglishRequestTitle(request);
+  assert(title === "Codex wants to run a shell command", `T2: expected shell command title, got "${title}"`);
+}
 
-  it("falls back to generic title for non-shell unknown artifacts", () => {
-    const request = buildShellRequest({
-      artifact_name: "mystery-artifact",
-      artifact_type: "unknown_type",
-    });
-    const title = plainEnglishRequestTitle(request);
-    expect(title).toBe("Codex wants to do something with mystery-artifact");
+// T3: non-shell unknown artifacts should fall back to generic title
+{
+  const request = buildShellRequest({
+    artifact_name: "mystery-artifact",
+    artifact_type: "unknown_type",
   });
+  const title = plainEnglishRequestTitle(request);
+  assert(title === "Codex wants to do something with mystery-artifact", `T3: expected generic title, got "${title}"`);
+}
 
-  it("preserves secret category title", () => {
-    const request = buildShellRequest({
-      artifact_name: ".env",
-      artifact_type: "file_read",
-    });
-    const title = plainEnglishRequestTitle(request);
-    expect(title).toBe("Codex wants to read your secrets file");
+// T4: secret category title is preserved
+{
+  const request = buildShellRequest({
+    artifact_name: ".env",
+    artifact_type: "file_read",
   });
-});
+  const title = plainEnglishRequestTitle(request);
+  assert(title === "Codex wants to read your secrets file", `T4: expected secret title, got "${title}"`);
+}
 
-describe("whyPaused", () => {
-  it("explains shell command pause reason clearly", () => {
-    const request = buildShellRequest({
-      artifact_type: "shell_command",
-    });
-    const reason = whyPaused(request);
-    expect(reason).toContain("shell command");
-    expect(reason).toContain("could not fully inspect");
-    expect(reason).not.toContain("compound");
+// T5: whyPaused for shell commands should be clear and not contain jargon
+{
+  const request = buildShellRequest({
+    artifact_type: "shell_command",
   });
+  const reason = whyPaused(request);
+  assert(reason.includes("shell command"), `T5: pause reason should mention shell command, got "${reason}"`);
+  assert(reason.includes("could not fully inspect"), `T5: pause reason should explain inspection, got "${reason}"`);
+  assert(!reason.includes("compound"), `T5: pause reason must not contain 'compound', got "${reason}"`);
+}
 
-  it("uses generic pause reason for non-shell unknowns", () => {
-    const request = buildShellRequest({
-      artifact_type: "unknown_type",
-    });
-    const reason = whyPaused(request);
-    expect(reason).toBe("Guard paused this so you can review it first.");
+// T6: whyPaused for non-shell unknowns should use generic reason
+{
+  const request = buildShellRequest({
+    artifact_type: "unknown_type",
   });
-});
+  const reason = whyPaused(request);
+  assert(reason === "Guard paused this so you can review it first.", `T6: expected generic pause reason, got "${reason}"`);
+}
 
-describe("humanFileName", () => {
-  it("returns human-friendly names for known file types", () => {
-    expect(humanFileName(".env")).toBe("your secrets file");
-    expect(humanFileName("config.json")).toBe("a settings file");
-    expect(humanFileName("script.sh")).toBe("a shell script");
-  });
+// T7: humanFileName returns human-friendly names for known file types
+{
+  assert(humanFileName(".env") === "your secrets file", "T7: .env should be 'your secrets file'");
+  assert(humanFileName("config.json") === "a settings file", "T7: config.json should be 'a settings file'");
+  assert(humanFileName("script.sh") === "a shell script", "T7: script.sh should be 'a shell script'");
+}
 
-  it("returns a file for empty input", () => {
-    expect(humanFileName(null)).toBe("a file");
-    expect(humanFileName(undefined)).toBe("a file");
-    expect(humanFileName("")).toBe("a file");
-  });
-});
+// T8: humanFileName returns a file for empty input
+{
+  assert(humanFileName(null) === "a file", "T8: null should be 'a file'");
+  assert(humanFileName(undefined) === "a file", "T8: undefined should be 'a file'");
+  assert(humanFileName("") === "a file", "T8: empty string should be 'a file'");
+}
+
+console.log("plain-english.test.ts: all tests passed");
