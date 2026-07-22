@@ -172,9 +172,6 @@ _READ_ONLY_GET_BOOLEAN_OPTIONS = frozenset(
         "--show-kind",
         "--show-labels",
         "--use-openapi-print-columns",
-        "--watch",
-        "--watch-only",
-        "-w",
     }
 )
 _SAFE_INVENTORY_OUTPUTS = frozenset({"name", "wide"})
@@ -255,11 +252,23 @@ def _read_only_get_resource_and_output(args: tuple[str, ...]) -> tuple[str | Non
         if token.startswith("-"):
             return None, None
         if resource is None:
-            resource = token.lower().split("/", 1)[0].split(".", 1)[0]
+            resource = _inventory_resource_name(token)
             if "," in resource or resource_token_includes_secret(resource):
+                return None, None
+        elif "/" in token:
+            additional_resource = _inventory_resource_name(token)
+            if (
+                "," in additional_resource
+                or resource_token_includes_secret(additional_resource)
+                or additional_resource not in _READ_ONLY_INVENTORY_RESOURCES
+            ):
                 return None, None
         index += 1
     return resource, output
+
+
+def _inventory_resource_name(token: str) -> str:
+    return token.lower().split("/", 1)[0].split(".", 1)[0]
 
 
 def _command_candidates(command: str, *, depth: int = 0) -> tuple[str, ...]:
