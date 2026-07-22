@@ -66,7 +66,22 @@ const pairedActiveNoApps = resolveFleetHeroCopy("paired_active", 0, "degraded", 
 const degradedWithApps = resolveFleetHeroCopy("paired_active", 2, "degraded", urls);
 assert(degradedWithApps.status === "degraded", "active installs cannot imply protected fleet health");
 assert(degradedWithApps.headline === "App protection is degraded", "degraded fleet copy is explicit");
+assert(
+  degradedWithApps.primaryCtaLabel === "Restore full protection",
+  `degraded fleet CTA must be actionable — got "${degradedWithApps.primaryCtaLabel}"`
+);
+assert(
+  degradedWithApps.primaryCtaHref === "#protection-recovery",
+  `degraded fleet CTA must target local recovery — got "${degradedWithApps.primaryCtaHref}"`
+);
 assert(pairedActiveNoApps.status === "setup_gap", "F5: paired_active no apps status should be setup_gap");
+
+const partialWithApps = resolveFleetHeroCopy("paired_active", 2, "partial", urls);
+assert(partialWithApps.status === "partial", "partial fleet status is explicit");
+assert(
+  partialWithApps.primaryCtaHref === "#protection-recovery",
+  `partial fleet CTA must target local recovery — got "${partialWithApps.primaryCtaHref}"`
+);
 
 const allStates: FleetHeroCopy[] = [localOnlyWithApps, pairedWaitingWithApps, pairedActiveWithApps];
 for (const state of allStates) {
