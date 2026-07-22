@@ -20,7 +20,7 @@ import {
   HiMiniServerStack,
   HiMiniShieldCheck,
 } from "react-icons/hi2";
-import { displayArtifactName, harnessDisplayName } from "./approval-center-utils";
+import { harnessDisplayName, resolveStoppedCommandText } from "./approval-center-utils";
 import type { GuardApprovalRequest } from "./guard-types";
 import {
   formatQueueRequestDate,
@@ -144,7 +144,7 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
               {preview}
             </p>
             <p className="truncate text-[11px] text-muted-foreground">
-              {harnessDisplayName(item.harness)} · {category.shortLabel} · {formatQueueRequestDate(item)}
+              {harnessDisplayName(item.harness)} · {formatQueueRequestDate(item)}
             </p>
           </div>
           <span
@@ -234,7 +234,7 @@ function iconForQueueCategory(categoryId: QueueCategoryId) {
   }
 }
 
-function queueItemPreview(item: GuardApprovalRequest): string {
+export function queueItemPreview(item: GuardApprovalRequest): string {
   const envelope = item.action_envelope_json;
   return (
     envelope?.command ??
@@ -242,6 +242,6 @@ function queueItemPreview(item: GuardApprovalRequest): string {
     envelope?.mcp_tool ??
     (envelope?.prompt_text ?? envelope?.prompt_excerpt) ??
     envelope?.package_name ??
-    displayArtifactName(item)
+    resolveStoppedCommandText(item)
   );
 }
