@@ -2060,10 +2060,58 @@ def _repair_supported_harnesses_in_process(
         repaired_installs.append(repaired_cursor)
     if cursor_warning is not None:
         repair_notes.append(cursor_warning)
+    repaired_pi, pi_warning = _repair_pi_install(
+        context=context,
+        store=store,
+        workspace=workspace,
+        now=now,
+    )
+    if repaired_pi is not None:
+        repaired_installs.append(repaired_pi)
+    if pi_warning is not None:
+        repair_notes.append(pi_warning)
     opencode_note = _refresh_opencode_pretool_plugin(context=context, store=store)
     if opencode_note is not None:
         repair_notes.append(opencode_note)
     return repaired_installs, repair_notes
+
+
+def _repair_pi_install(
+    *,
+    context: HarnessContext,
+    store: GuardStore,
+    workspace: str | None,
+    now: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Rewrite the managed Pi extension after package updates.
+
+    The extension embeds timeout and daemon-compat constants. Refreshing it after
+    update keeps the fast daemon path available and avoids cold CLI timeouts.
+    """
+
+    try:
+        managed_install = store.get_managed_install("pi")
+    except (json.JSONDecodeError, sqlite3.Error):
+        return None, None
+    if managed_install is None or not bool(managed_install.get("active")):
+        return None, None
+    try:
+        repair_context, repair_workspace = _repair_context_from_managed_install(context, managed_install)
+        payload = apply_managed_install(
+            "install",
+            "pi",
+            False,
+            repair_context,
+            store,
+            repair_workspace or workspace,
+            now,
+        )
+    except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
+        return None, f"Could not refresh Pi protection during update: {error}"
+    repaired = payload.get("managed_install")
+    if not isinstance(repaired, dict):
+        return None, "Could not refresh Pi protection during update: managed install was not recorded"
+    return repaired, None
 
 
 def _repair_cursor_install(
