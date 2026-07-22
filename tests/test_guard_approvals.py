@@ -1424,9 +1424,9 @@ class TestGuardApprovals:
         request = store.get_approval_request("req-supported-scopes")
 
         assert request is not None
-        assert request["allowed_scopes"] == ["artifact"]
+        assert request["allowed_scopes"] == ["artifact", "workspace"]
         assert request["allowed_scopes_by_action"] == {
-            "allow": ["artifact"],
+            "allow": ["artifact", "workspace"],
             "block": ["artifact", "workspace", "publisher", "harness", "global"],
         }
 
@@ -2439,7 +2439,7 @@ class TestGuardApprovals:
         assert payload["resolved"] is True
         assert payload["resolved_request"]["request_id"] == request_id
         assert payload["resolved_request"]["resolution_action"] == ("allow" if action == "approve" else "block")
-        expected_scope = scope if action == "block" or scope == "artifact" else "artifact"
+        expected_scope = scope if action == "block" or scope in {"artifact", "workspace"} else "artifact"
         assert payload["resolved_request"]["resolution_scope"] == expected_scope
         assert payload["applied_scope"] == expected_scope
         assert payload["resolved_request"]["approval_url"] == "http://127.0.0.1/pending"

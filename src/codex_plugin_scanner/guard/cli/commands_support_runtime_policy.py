@@ -26,7 +26,11 @@ from ..runtime.approval_context import (
 )
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
-from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
+from ..store import (
+    _runtime_scoped_exact_match_key,
+    runtime_tool_action_exact_match_context,
+    runtime_tool_action_portable_match_context,
+)
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -367,6 +371,10 @@ def _runtime_stored_policy_decision(
                 for key in (
                     _runtime_scoped_exact_match_key(artifact_id),
                     _runtime_scoped_exact_match_key(artifact_id, runtime_exact_match_context),
+                    _runtime_scoped_exact_match_key(
+                        artifact_id,
+                        runtime_tool_action_portable_match_context(runtime_exact_match_context),
+                    ),
                 )
                 if key is not None
             }
