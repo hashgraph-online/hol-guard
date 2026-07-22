@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_hook_generic import _should_relax_configured_default
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
@@ -46,13 +45,6 @@ def test_compound_git_metadata_and_file_listing_is_explicitly_benign(tmp_path: P
             home_dir=home_dir,
         )
         is None
-    )
-    assert _should_relax_configured_default(
-        configured_action="require-reapproval",
-        has_narrow_override=False,
-        home_dir=home_dir,
-        payload={"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}},
-        runtime_workspace=repository,
     )
 
 

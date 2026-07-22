@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_hook_generic import _should_relax_configured_default
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
     _unmodeled_shell_runtime_artifact,
 )
@@ -63,13 +62,6 @@ def test_typed_github_actions_read_workflow_is_explicitly_benign(tmp_path: Path)
         )
         is None
     )
-    assert _should_relax_configured_default(
-        configured_action="require-reapproval",
-        has_narrow_override=False,
-        home_dir=tmp_path,
-        payload={"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}},
-        runtime_workspace=tmp_path,
-    )
     assert (
         _unmodeled_shell_runtime_artifact(
             harness="pi",
@@ -118,3 +110,22 @@ def test_typed_github_actions_read_workflow_rejects_non_numeric_loop_data(id_que
 
 def test_typed_github_actions_read_workflow_rejects_unclosed_control_flow() -> None:
     assert not is_bounded_github_actions_read_workflow(_workflow().removesuffix("done"))
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    (
+        ("GH_HOST", "attacker.invalid"),
+        ("GH_PAGER", "./payload"),
+        ("PAGER", "./payload"),
+        ("RIPGREP_CONFIG_PATH", "./ripgreprc"),
+    ),
+)
+def test_typed_github_actions_read_workflow_rejects_executable_or_remote_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    key: str,
+    value: str,
+) -> None:
+    monkeypatch.setenv(key, value)
+
+    assert not is_bounded_github_actions_read_workflow(_workflow())

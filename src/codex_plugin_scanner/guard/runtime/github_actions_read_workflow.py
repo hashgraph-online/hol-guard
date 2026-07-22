@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 from typing import Final, Literal
@@ -26,6 +27,12 @@ def is_bounded_github_actions_read_workflow(command_text: str) -> bool:
     """Prove a small shell workflow reads Actions metadata without executable data flow."""
 
     if not command_text.strip() or "`" in command_text or "\\\n" in command_text:
+        return False
+    if os.environ.get("GH_HOST", "").strip().casefold() not in {"", "github.com"}:
+        return False
+    if any(os.environ.get(key, "").strip() not in {"", "cat"} for key in ("GH_PAGER", "PAGER")):
+        return False
+    if os.environ.get("RIPGREP_CONFIG_PATH", "").strip():
         return False
     values: dict[str, _ValueKind] = {}
     control_stack: list[str] = []
