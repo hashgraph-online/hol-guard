@@ -1,4 +1,5 @@
-import { shouldShowFirstRunGuide } from "./apps/app-detail-workspace";
+import { renderToStaticMarkup } from "react-dom/server";
+import { OperationalSourceSetupPanel, shouldShowFirstRunGuide } from "./apps/app-detail-workspace";
 import { buildClearPayload, clearLabelForScope } from "./clear-policy-payload";
 import type { GuardPolicyDecision } from "./guard-types";
 
@@ -7,6 +8,13 @@ function assert(condition: boolean, message: string): void {
     throw new Error(message);
   }
 }
+
+const emptyStorage = { getItem: () => null, setItem: () => undefined };
+(globalThis as unknown as { window: object }).window = {
+  location: { origin: "http://127.0.0.1:4781", pathname: "/", search: "", hash: "" },
+  localStorage: emptyStorage,
+  sessionStorage: emptyStorage,
+};
 
 assert(
   shouldShowFirstRunGuide({ status: "unknown", totalActions: 0, inventoryCount: 0, pendingCount: 0 }),
@@ -32,6 +40,17 @@ assert(
   !shouldShowFirstRunGuide({ status: "unknown", totalActions: 0, inventoryCount: 0, pendingCount: 1 }),
   "app with pending review should prioritize review queue"
 );
+
+const bunxSetupMarkup = renderToStaticMarkup(OperationalSourceSetupPanel({ harness: "bunx" }));
+const guardCliSetupMarkup = renderToStaticMarkup(OperationalSourceSetupPanel({ harness: "guard-cli" }));
+const packageFirewallSetupMarkup = renderToStaticMarkup(OperationalSourceSetupPanel({ harness: "package-firewall" }));
+
+assert(bunxSetupMarkup.includes("Open package firewall"), "bunx settings link to package firewall controls");
+assert(guardCliSetupMarkup.includes("Open Guard settings"), "Guard CLI settings link to Guard's own settings");
+assert(packageFirewallSetupMarkup.includes("Open package firewall"), "package-firewall settings link to its controls");
+for (const markup of [bunxSetupMarkup, guardCliSetupMarkup, packageFirewallSetupMarkup]) {
+  assert(!markup.includes("Connect app"), "operational source settings never render the AI-app connector");
+}
 
 const grArtifactPolicy: GuardPolicyDecision = {
   harness: "codex",

@@ -15,6 +15,7 @@ import {
   parseActionEnvelope,
   parseDecisionV2,
   readGuardToken,
+  runHarnessAction,
   runPackageFirewallAction,
   runPackageSync,
   startPackageFirewallConnect,
@@ -254,6 +255,14 @@ assert(
   formatHarnessCommand(["hol-guard", "apps", "connect", "claude code"]) === 'hol-guard apps connect "claude code"',
   "T760: harness setup fallback command should quote spaced args"
 );
+
+for (const source of ["bunx", "guard-cli", "package-firewall"]) {
+  const rejected = await runHarnessAction({ harness: source, action: "install", dryRun: false }).then(
+    () => false,
+    (error: unknown) => error instanceof Error && error.message.includes("not a connectable AI app"),
+  );
+  assert(rejected, `${source} must be rejected before the AI-app harness mutation request`);
+}
 
 assert(snapshot.cloud_pairing_state.state === "paired_waiting", "demo snapshot exposes paired waiting state");
 assert(snapshot.cloud_pairing_state.label === snapshot.cloud_state_label, "demo pairing label matches legacy label");

@@ -17,8 +17,13 @@ import {
   GuardHero,
   ProofStrip,
 } from "./approval-center-primitives";
-import { harnessDisplayName, isDisplayableHarness } from "./approval-center-utils";
-import { SUPPORTED_APPS_BRIEF, resolveAppInstallStatus, APP_STATUS_LABELS } from "./apps/app-catalog";
+import { harnessDisplayName } from "./approval-center-utils";
+import {
+  SUPPORTED_APPS_BRIEF,
+  resolveAppInstallStatus,
+  APP_STATUS_LABELS,
+} from "./apps/app-catalog";
+import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import { protectionHealthFor } from "./protection-health";
 import type { GuardInventoryItem, GuardPolicyDecision, GuardProtectionState, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
@@ -117,10 +122,10 @@ export function resolveFleetHeroCopy(
 function collectHarnesses(snapshot: GuardRuntimeSnapshot): string[] {
   const harnesses = new Set<string>();
   for (const item of snapshot.items) {
-    if (isDisplayableHarness(item.harness)) harnesses.add(item.harness);
+    if (isConnectableAppHarness(item.harness)) harnesses.add(item.harness);
   }
   for (const receipt of snapshot.latest_receipts) {
-    if (isDisplayableHarness(receipt.harness)) harnesses.add(receipt.harness);
+    if (isConnectableAppHarness(receipt.harness)) harnesses.add(receipt.harness);
   }
   return Array.from(harnesses).sort((a, b) => a.localeCompare(b));
 }
@@ -227,20 +232,20 @@ function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail 
 
 export function FleetWorkspace(props: FleetWorkspaceProps) {
   const harnesses = collectHarnesses(props.runtime);
-  const managedInstalls = (props.runtime.managed_installs ?? []).filter((i) => isDisplayableHarness(i.harness));
+  const managedInstalls = (props.runtime.managed_installs ?? []).filter((i) => isConnectableAppHarness(i.harness));
   const activeInstalls = managedInstalls.filter((i) => i.active);
-  const inventory = props.inventory.kind === "ready" ? props.inventory.items.filter((i) => isDisplayableHarness(i.harness)) : [];
+  const inventory = props.inventory.kind === "ready" ? props.inventory.items.filter((i) => isConnectableAppHarness(i.harness)) : [];
   const visibleHarnesses = Array.from(
     new Set([
       ...managedInstalls.map((i) => i.harness),
       ...harnesses,
       ...inventory.map((i) => i.harness),
       ...props.policies.map((p) => p.harness),
-    ].filter(isDisplayableHarness))
+    ].filter(isConnectableAppHarness))
   ).sort((a, b) => a.localeCompare(b));
   const runtimeState = props.runtime.runtime_state;
   const protectionHealth = protectionHealthFor(props.runtime);
-  const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isDisplayableHarness));
+  const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isConnectableAppHarness));
 
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,

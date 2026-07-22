@@ -1,5 +1,6 @@
 import { parseAppDetail, PROTECT_ROUTE, resolveView, viewTitle } from "./app";
 import { harnessDisplayName, isDisplayableHarness, normalizeHarnessFilter, normalizeHarnessSlug } from "./approval-center-utils";
+import { appSetupTarget, isConnectableAppHarness } from "./apps/harness-setup-target";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -40,6 +41,14 @@ assert(normalizeHarnessFilter("cursor") === "cursor", "filter normalizer keeps v
 assert(normalizeHarnessFilter("*") === "all", "filter normalizer maps wildcard pseudo-harness to all apps");
 assert(normalizeHarnessFilter("Ce2b7ac2ccab4fab9902347b033bf25e") === "all", "filter normalizer maps token-like pseudo-harness to all apps");
 assert(isDisplayableHarness("codex"), "real app harness is displayable");
+assert(isConnectableAppHarness("codex"), "registered AI app is connectable");
+assert(isConnectableAppHarness("pi-agent"), "registered AI app alias is connectable");
+assert(!isConnectableAppHarness("bunx"), "package runner is not sent to AI app setup");
+assert(!isConnectableAppHarness("guard-cli"), "Guard's internal source is not sent to AI app setup");
+assert(!isConnectableAppHarness("package-firewall"), "package firewall source is not sent to AI app setup");
+assert(appSetupTarget("bunx") === "package-firewall", "bunx settings route to package firewall controls");
+assert(appSetupTarget("package-firewall") === "package-firewall", "package firewall evidence routes to its controls");
+assert(appSetupTarget("guard-cli") === "guard-settings", "Guard CLI evidence routes to Guard settings");
 assert(!isDisplayableHarness("*"), "wildcard pseudo-harness is not displayable");
 assert(!isDisplayableHarness("Ce2b7ac2ccab4fab9902347b033bf25e"), "token-like pseudo-harness is not displayable");
 assert(harnessDisplayName("*") === "All apps", "wildcard pseudo-harness never renders as raw star");
