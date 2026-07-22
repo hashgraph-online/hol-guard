@@ -1,6 +1,7 @@
 import { useMemo } from "react";
+import { FiRefreshCw } from "react-icons/fi";
 
-import { SectionLabel } from "../approval-center-primitives";
+import { ActionButton, SectionLabel } from "../approval-center-primitives";
 import type { CommandActivityLoadState } from "./command-activity-state";
 import {
   commandBreakdownsAreGlobalOnly,
@@ -81,6 +82,7 @@ function FrequencyList(props: { title: string; buckets: CommandCountBucket[] }) 
 export function CommandActivitySummary(props: {
   state: CommandActivityLoadState<CommandActivityAnalytics>;
   outsideTableFilters: boolean;
+  onRetry: () => void;
 }) {
   if (props.state.kind === "idle" || (props.state.kind === "loading" && props.state.previous === null)) {
     return <div className="guard-skeleton h-52 w-full" aria-label="Loading command activity summary" />;
@@ -109,8 +111,12 @@ export function CommandActivitySummary(props: {
         </div>
       ) : null}
       {healthCopy ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
-          {healthCopy}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
+          <p>{healthCopy}</p>
+          <ActionButton variant="outline" onClick={props.onRetry}>
+            <FiRefreshCw aria-hidden="true" />
+            Check again
+          </ActionButton>
         </div>
       ) : null}
       {props.state.kind === "error" ? (

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import date
 from pathlib import Path
 from typing import cast
 
@@ -15,6 +16,7 @@ from codex_plugin_scanner.guard.cli.commands_support_command_activity import (
     record_post_hook_command_activity_best_effort,
     record_pre_hook_command_activity_best_effort,
 )
+from codex_plugin_scanner.guard.runtime.command_activity_api_contract import CommandActivityAnalyticsQuery
 from codex_plugin_scanner.guard.runtime.command_activity_contract import (
     COMMAND_ACTIVITY_HARNESSES,
     ActivityDecisionReason,
@@ -281,7 +283,7 @@ def test_strong_post_pairs_without_repeated_command_content(tmp_path: Path) -> N
     assert store.count_command_activities() == 1
 
 
-def test_conflicting_terminal_post_is_counted_without_creating_unpaired_evidence(tmp_path: Path) -> None:
+def test_conflicting_terminal_post_is_diagnosed_without_degrading_persistence_health(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     store = _store(guard_home)
     payload = _command_payload()
@@ -314,7 +316,10 @@ def test_conflicting_terminal_post_is_counted_without_creating_unpaired_evidence
     assert store.count_command_activities() == 1
     health = store.get_command_activity_persistence_health()
     assert health.dropped_event_count == 1
-    assert health.last_error_code == "post_record_failed"
+    assert health.persistence_error_count == 0
+    assert health.last_error_code == "post_result_conflict"
+    analytics = store.command_activity_analytics(CommandActivityAnalyticsQuery(days=7), as_of=date.today())
+    assert cast(dict[str, object], analytics["health"])["status"] == "healthy"
 
 
 def test_prevented_command_post_result_does_not_degrade_evidence_health(tmp_path: Path) -> None:
