@@ -19,7 +19,7 @@ jobs:
         python: ['3.12']
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen --extra dev --python ${{ matrix.python }}
       - run: uv run --no-sync pytest tests/test_guard_mdm_*.py --tb=short
@@ -39,7 +39,7 @@ jobs:
     env:
       HOL_GUARD_BUILD_ID: ${{ inputs.build_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen --extra mdm-build --python 3.12
       - shell: bash
