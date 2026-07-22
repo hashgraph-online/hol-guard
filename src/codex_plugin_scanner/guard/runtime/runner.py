@@ -120,12 +120,15 @@ def _hol_guard_runtime_source_sha256(package_root: Path | None = None) -> str:
     return digest.hexdigest()
 
 
-def _hol_guard_runtime_package_identity() -> tuple[str, str] | None:
+def _hol_guard_runtime_package_identity() -> tuple[str | None, str] | None:
+    try:
+        source_sha256 = _hol_guard_runtime_source_sha256()
+    except OSError:
+        return None
     try:
         distribution_version = importlib.metadata.version("hol-guard")
-        source_sha256 = _hol_guard_runtime_source_sha256()
-    except (importlib.metadata.PackageNotFoundError, OSError):
-        return None
+    except importlib.metadata.PackageNotFoundError:
+        distribution_version = None
     return distribution_version, source_sha256
 
 
@@ -3924,7 +3927,7 @@ def _guard_oauth_reconnect_after_revoked_message() -> str:
 def _guard_runtime_was_upgraded() -> bool:
     loaded_identity = _LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY
     if loaded_identity is None:
-        return False
+        return True
     return _hol_guard_runtime_package_identity() != loaded_identity
 
 

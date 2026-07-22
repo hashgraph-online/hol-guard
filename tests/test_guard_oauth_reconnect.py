@@ -151,6 +151,12 @@ def test_missing_package_metadata_after_load_blocks_oauth_refresh(monkeypatch) -
     assert guard_runner_module._guard_runtime_was_upgraded() is True
 
 
+def test_missing_package_identity_at_startup_blocks_oauth_refresh(monkeypatch) -> None:
+    monkeypatch.setattr(guard_runner_module, "_LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY", None)
+
+    assert guard_runner_module._guard_runtime_was_upgraded() is True
+
+
 def test_runtime_source_identity_covers_non_runner_modules(tmp_path) -> None:
     package_root = tmp_path / "codex_plugin_scanner"
     runtime_root = package_root / "guard" / "runtime"
