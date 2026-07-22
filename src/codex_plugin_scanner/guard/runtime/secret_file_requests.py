@@ -1566,15 +1566,13 @@ def _destructive_shell_tool_action_request(
             interpreter_executable_identities=interpreter_executable_identities,
         )
     if not execution_context.complete and home_dir is not None:
-        developer_execution_context = low_risk_compound_developer_execution_context(
+        developer_execution_context = literal_cd_execution_context(
             detection_command_text,
             home_dir=home_dir,
-        )
+        ) or low_risk_compound_developer_execution_context(detection_command_text, home_dir=home_dir)
         raw_developer_execution_context = (
-            low_risk_compound_developer_execution_context(
-                raw_command_text,
-                home_dir=home_dir,
-            )
+            literal_cd_execution_context(raw_command_text, home_dir=home_dir)
+            or low_risk_compound_developer_execution_context(raw_command_text, home_dir=home_dir)
             if raw_command_text is not None and raw_command_text != detection_command_text
             else developer_execution_context
         )
@@ -1886,6 +1884,85 @@ def low_risk_compound_developer_execution_context(
         return replace(recovered, command_text=command_text) if recovered is not None else None
 
     return _low_risk_compound_developer_execution_context(command_text, home_dir=home_dir)
+
+
+def literal_cd_execution_context(
+    command_text: str,
+    *,
+    home_dir: Path,
+) -> ShellExecutionContext | None:
+    """Recover a deterministic execution root from one leading literal ``cd``."""
+
+    context = model_shell_execution_context(
+        command_text,
+        cwd=home_dir,
+        workspace_root=home_dir,
+        home_dir=home_dir,
+    )
+    workspace_root = _leading_literal_cd_workspace_root(context, home_dir=home_dir)
+    if workspace_root is not None and workspace_root != home_dir.resolve():
+        context = model_shell_execution_context(
+            command_text,
+            cwd=workspace_root,
+            workspace_root=workspace_root,
+            home_dir=home_dir,
+        )
+    if not shell_execution_context_starts_with_literal_cd(context):
+        return None
+    if _shell_execution_context_validation_reason(context) is not None:
+        return None
+    if len(context.segments) not in {2, 3}:
+        return None
+    runner = context.segments[1]
+    command_name, command_index = _shell_segment_primary_command(list(runner.tokens))
+    if command_name not in {"bunx", "npx"} or command_index is None:
+        return None
+    args = _without_safe_inspection_redirections(list(runner.tokens[command_index + 1 :]))
+    if args is None:
+        return None
+    while args and args[0] in {"--bun", "--no", "--no-install"}:
+        args.pop(0)
+    if not args or args[0] not in {"eslint", "jest", "tsc", "vitest"}:
+        return None
+    runner_name = args[0]
+    if any(
+        _runner_argument_escapes_root(
+            arg,
+            cwd=runner.effective_cwd or home_dir,
+            root=context.workspace_root or home_dir,
+        )
+        for arg in args[1:]
+    ):
+        return None
+    runner_cwd = runner.effective_cwd
+    if runner_cwd is None:
+        return None
+    try:
+        executable = (runner_cwd / "node_modules" / ".bin" / runner_name).resolve(strict=True)
+        executable.relative_to((runner_cwd / "node_modules").resolve(strict=True))
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if len(context.segments) == 3:
+        output_filter = context.segments[2]
+        filter_name, filter_index = _shell_segment_primary_command(list(output_filter.tokens))
+        if filter_name not in {"head", "tail"} or filter_index is None:
+            return None
+        filter_args = list(output_filter.tokens[filter_index + 1 :])
+        if output_filter.control_before != ("|",) or len(filter_args) != 1:
+            return None
+        count = filter_args[0]
+        if not count.startswith("-") or not count[1:].isdigit() or not 1 <= int(count[1:]) <= 1000:
+            return None
+    return context
+
+
+def _runner_argument_escapes_root(arg: str, *, cwd: Path, root: Path) -> bool:
+    if _shell_token_has_command_substitution(arg) or "$" in arg or arg.startswith("~"):
+        return True
+    candidate = arg.partition("=")[2] if arg.startswith("-") and "=" in arg else arg
+    if candidate.startswith("~") or "$" in candidate:
+        return True
+    return bool(candidate) and _shell_token_escapes_root(candidate, cwd=cwd, root=root)
 
 
 def _low_risk_compound_developer_execution_context(

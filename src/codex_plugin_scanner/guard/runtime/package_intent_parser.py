@@ -101,6 +101,7 @@ def parse_package_intent(
     command_text: str,
     *,
     workspace: Path | None = None,
+    home_dir: Path | None = None,
     canonical_command: CanonicalCommand | None = None,
 ) -> PackageIntent | None:
     handlers = {
@@ -138,7 +139,7 @@ def parse_package_intent(
         "helm": _parse_helm_intent,
     }
     intents: list[PackageIntent] = []
-    for segment in _normalized_command_segments(command_text, workspace=workspace):
+    for segment in _normalized_command_segments(command_text, workspace=workspace, home_dir=home_dir):
         if not segment.tokens:
             continue
         command_name = _command_name(segment.tokens[0])
@@ -183,15 +184,16 @@ def extract_package_intent_request(
     *,
     action_envelope_command: str | None,
     workspace: Path | None = None,
+    home_dir: Path | None = None,
 ) -> PackageIntent | None:
     normalized_tool_name = _normalize_tool_name(tool_name)
     if normalized_tool_name in _SHELL_TOOL_NAMES:
         for command_text in _candidate_command_texts(arguments):
-            intent = parse_package_intent(command_text, workspace=workspace)
+            intent = parse_package_intent(command_text, workspace=workspace, home_dir=home_dir)
             if intent is not None:
                 return intent
     if action_envelope_command:
-        return parse_package_intent(action_envelope_command, workspace=workspace)
+        return parse_package_intent(action_envelope_command, workspace=workspace, home_dir=home_dir)
     return None
 
 
@@ -1152,12 +1154,35 @@ def _normalized_command_segments(
     command_text: str,
     *,
     workspace: Path | None = None,
+    home_dir: Path | None = None,
 ) -> tuple[_CommandSegment, ...]:
     execution_context = model_shell_execution_context(
         command_text,
         cwd=workspace,
         workspace_root=workspace,
+        home_dir=home_dir,
     )
+    if not execution_context.complete and home_dir is not None:
+        home_context = model_shell_execution_context(
+            command_text,
+            cwd=home_dir,
+            workspace_root=home_dir,
+            home_dir=home_dir,
+        )
+        if home_context.complete and home_context.segments and home_context.segments[0].directory_operation == "cd":
+            target = next(
+                (segment.effective_cwd for segment in home_context.segments[1:] if segment.effective_cwd is not None),
+                None,
+            )
+            if target is not None:
+                recovered = model_shell_execution_context(
+                    command_text,
+                    cwd=target,
+                    workspace_root=target,
+                    home_dir=home_dir,
+                )
+                if recovered.complete:
+                    execution_context = recovered
     control_shape = tuple(
         _CONTROL_CONTEXT_LABELS[context_segment.control_operator] for context_segment in execution_context.segments
     )

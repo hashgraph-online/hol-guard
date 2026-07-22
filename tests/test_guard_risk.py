@@ -180,7 +180,7 @@ def test_artifact_risk_signals_ignore_common_file_extensions_as_network_hosts():
         source_scope="project",
         config_path="/workspace/.codex/config.toml",
         command="python",
-        args=("-c", "cat backup.log cache.tmp payload.bin old.bak"),
+        args=("-c", "cat backup.log cache.tmp payload.bin old.bak component.jsx regression.test.tsx"),
         transport="stdio",
     )
 
