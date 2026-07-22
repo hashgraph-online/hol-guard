@@ -663,7 +663,7 @@ def _coerce_loaded_bounded_positive_int(value: object, *, default: int, maximum:
 
 
 def _coerce_loaded_approval_surface_policy(value: object) -> str:
-    if value == "auto-open-once":
+    if value in {"auto-open-once", "approval-center"}:
         return "attention-aware"
     if isinstance(value, str) and value in VALID_APPROVAL_SURFACE_POLICIES:
         return value

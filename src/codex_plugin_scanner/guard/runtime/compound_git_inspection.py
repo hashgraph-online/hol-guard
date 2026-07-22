@@ -75,6 +75,8 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
         return args in {("--show-toplevel",), ("--show-prefix",), ("--is-inside-work-tree",), ("HEAD",)}
     if operation == "diff":
         return _safe_diff_args(args)
+    if operation == "ls-files":
+        return _safe_ls_files_args(args)
     if operation == "show":
         return bool(args) and all(
             arg in {"--stat", "--oneline", "--name-only", "--name-status", "HEAD"}
@@ -128,6 +130,11 @@ def _safe_diff_args(args: tuple[str, ...]) -> bool:
         )
         and all(_safe_repository_path(path) for path in paths)
     )
+
+
+def _safe_ls_files_args(args: tuple[str, ...]) -> bool:
+    allowed = {"--exclude-standard", "--others"}
+    return bool(args) and len(args) == len(set(args)) and set(args) <= allowed and "--others" in args
 
 
 def _safe_object_path(value: str) -> bool:

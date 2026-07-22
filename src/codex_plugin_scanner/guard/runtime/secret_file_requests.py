@@ -345,7 +345,7 @@ _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
     }
 )
 _READ_ONLY_LOOKUP_COMMANDS = frozenset(
-    {"cat", "fd", "find", "grep", "egrep", "fgrep", "head", "ls", "rg", "sed", "tail"}
+    {"cat", "fd", "find", "grep", "egrep", "fgrep", "head", "ls", "pwd", "rg", "sed", "tail"}
 )
 _READ_ONLY_LOOKUP_FILTERS = frozenset({"grep", "egrep", "fgrep", "head", "sed", "tail"})
 _READ_ONLY_SEARCH_EXECUTION_FLAGS = {
@@ -1901,6 +1901,14 @@ def _low_risk_compound_developer_execution_context(
         workspace_root=home_dir,
         home_dir=home_dir,
     )
+    workspace_root = _leading_literal_cd_workspace_root(context, home_dir=home_dir)
+    if workspace_root is not None and workspace_root != home_dir.resolve():
+        context = model_shell_execution_context(
+            command_text,
+            cwd=workspace_root,
+            workspace_root=workspace_root,
+            home_dir=home_dir,
+        )
     if not shell_execution_context_starts_with_literal_cd(context):
         return None
     if is_low_risk_compound_git_inspection(context):
@@ -1909,9 +1917,12 @@ def _low_risk_compound_developer_execution_context(
     github_is_low_risk = github_assessment is not None and not github_capability_requires_confirmation(
         github_assessment
     )
+    inspection_root = context.workspace_root or home_dir
     saw_inspection = False
     for segment in context.segments[1:]:
-        if any(control not in {"&&", "|"} for control in (*segment.control_before, *segment.control_after)):
+        if any(
+            control not in {"&&", "||", "|", ";", "\n"} for control in (*segment.control_before, *segment.control_after)
+        ):
             return None
         command_name, command_index = _shell_segment_primary_command(list(segment.tokens))
         if command_name is None or command_index is None:
@@ -1920,8 +1931,8 @@ def _low_risk_compound_developer_execution_context(
         if args is None:
             return None
         segment_root = segment.effective_cwd or home_dir
-        if not _path_text_is_within_root(os.fspath(segment_root), home_dir) or any(
-            _shell_token_escapes_root(arg, cwd=segment_root, root=home_dir) for arg in args
+        if not _path_text_is_within_root(os.fspath(segment_root), inspection_root) or any(
+            _shell_token_escapes_root(arg, cwd=segment_root, root=inspection_root) for arg in args
         ):
             return None
         if segment.directory_operation is not None:
@@ -1976,6 +1987,44 @@ def _low_risk_compound_developer_execution_context(
     return context if saw_inspection else None
 
 
+def _leading_literal_cd_workspace_root(
+    context: ShellExecutionContext,
+    *,
+    home_dir: Path,
+) -> Path | None:
+    """Resolve a literal leading cd as the bounded root for an inspection chain."""
+
+    if not context.segments:
+        return None
+    first = context.segments[0]
+    if first.control_before or first.directory_operation != "cd" or len(first.tokens) != 2:
+        return None
+    if first.tokens[0].strip("\"'").casefold() != "cd":
+        return None
+    operand = first.tokens[1].strip()
+    if (
+        not operand
+        or _shell_token_has_command_substitution(operand)
+        or any(marker in operand for marker in ("$", "`", "\x00"))
+    ):
+        return None
+    if operand == "~":
+        candidate = home_dir
+    elif operand.startswith("~/"):
+        candidate = home_dir / operand[2:]
+    elif operand.startswith("~"):
+        return None
+    else:
+        candidate = Path(operand)
+        if not candidate.is_absolute():
+            candidate = home_dir / candidate
+    try:
+        resolved = candidate.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+    return resolved if resolved.is_dir() else None
+
+
 def _without_safe_inspection_redirections(args: list[str]) -> list[str] | None:
     filtered: list[str] = []
     index = 0
@@ -1987,7 +2036,7 @@ def _without_safe_inspection_redirections(args: list[str]) -> list[str] | None:
         if token == "2>" and index + 1 < len(args) and args[index + 1] == "/dev/null":
             index += 2
             continue
-        if any(marker in token for marker in (">", "<")):
+        if any(marker in token for marker in (">", "<")) and not any(character.isspace() for character in token):
             return None
         filtered.append(token)
         index += 1
@@ -5524,7 +5573,8 @@ def _looks_destructive_shell_command(
         return False
     lowered = normalized.lower()
     redacted_command_text = _redacted_shell_text_for_command_names(lowered)
-    if _contains_mutating_shell_redirection(parts):
+    redirection_parts = _split_shell_parts(redacted_command_text)
+    if _contains_mutating_shell_redirection(redirection_parts):
         return True
     if _contains_prior_pytest_state_mutation(parts):
         return True
@@ -5661,6 +5711,8 @@ def _read_only_lookup_primary_segment_is_safe(command: str, args: list[str], *, 
         return _read_only_lookup_plain_targets_are_safe(args, allow_dirs=False, home_dir=home_dir)
     if command == "ls":
         return _read_only_lookup_ls_args_are_safe(args, home_dir=home_dir)
+    if command == "pwd":
+        return all(arg in {"-L", "-P"} for arg in args)
     if command in {"grep", "egrep", "fgrep", "rg"}:
         return _read_only_lookup_search_args_are_safe(command, args, home_dir=home_dir)
     if command == "fd":

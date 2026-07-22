@@ -140,6 +140,79 @@ def test_literal_home_relative_cd_resolves_within_explicit_home_boundary(tmp_pat
     assert context.segments[1].effective_cwd == destination.resolve()
 
 
+@pytest.mark.parametrize(
+    "suffix",
+    (
+        "grep -n TODO src | head -20",
+        "grep -rn 'callback => result' src; echo complete",
+        "pwd && ls src && head -8 src/example.py && echo done && grep -n TODO src/example.py",
+        "git status --short | head -20",
+        "git diff --name-only && echo untracked && git ls-files --others --exclude-standard | grep -E '.py$'",
+        (
+            'gh api repos/example/project 2>&1 | python3 -c "import json,sys; '
+            "data=json.load(sys.stdin); print(data.get('name'))\""
+        ),
+    ),
+)
+def test_literal_cd_read_only_inspection_outside_home_uses_that_workspace_root(
+    tmp_path: Path,
+    suffix: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace = tmp_path / "workspaces" / "demo"
+    home_dir.mkdir()
+    workspace.mkdir(parents=True)
+    (workspace / "src").mkdir()
+    (workspace / "src" / "example.py").write_text("# TODO\n", encoding="utf-8")
+    command = f"cd {workspace} && {suffix}"
+    recovered = secret_file_requests_module.low_risk_compound_developer_execution_context(
+        command,
+        home_dir=home_dir,
+    )
+
+    request = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=None,
+        home_dir=home_dir,
+    )
+
+    assert recovered is not None
+    assert request is None, request.action_class
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    (
+        "rm -rf build",
+        "grep -rn TODO src; rm -rf build",
+        "grep -rn TODO src > report.txt",
+        "pwd & rm -rf build",
+        "git push origin main",
+        "gh pr merge 42 --admin",
+        "grep -n $(cat secret.txt) src",
+        "npx --package tsc@file:./package tsc --noEmit",
+    ),
+)
+def test_literal_cd_outside_home_does_not_exempt_risky_or_dynamic_commands(
+    tmp_path: Path,
+    suffix: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace = tmp_path / "workspaces" / "demo"
+    home_dir.mkdir()
+    workspace.mkdir(parents=True)
+
+    request = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": f"cd {workspace} && {suffix}"},
+        cwd=None,
+        home_dir=home_dir,
+    )
+
+    assert request is not None
+
+
 def test_home_relative_cd_without_explicit_home_stays_unresolved(tmp_path: Path) -> None:
     context = model_shell_execution_context("cd ~/sibling-worktree && gh api repos/example/project", cwd=tmp_path)
 
