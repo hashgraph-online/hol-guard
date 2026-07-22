@@ -117,5 +117,8 @@ const fleetSource = readFileSync(new URL("./fleet-workspace.tsx", import.meta.ur
 const reviewStatesSource = readFileSync(new URL("./review-states.tsx", import.meta.url), "utf8");
 assert.match(appDetailSource, /Install state" value=\{active \? "Installed"/);
 assert.match(appDetailSource, /protectionHealthFor\(runtime, harness\)/);
-assert.match(fleetSource, /resolveAppStatus\(install, appProtection\.state/);
+assert.match(fleetSource, /resolveAppStatus\(install, appProtection,/);
+assert.match(fleetSource, /check\.check_id === "harness_hooks"/);
+assert.match(fleetSource, /hookCheck\?\.status === "fail"/);
+assert.match(fleetSource, /hookCheck\?\.status === "unknown"/);
 assert.match(reviewStatesSource, /protectedAppsCount = protectionHealth\.apps\.filter/);
