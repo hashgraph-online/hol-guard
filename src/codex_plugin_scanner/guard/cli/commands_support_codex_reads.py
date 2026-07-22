@@ -152,8 +152,31 @@ def _codex_command_is_read_only_source_inspection(
         return _codex_command_is_read_only_source_search(command, cwd=cwd, home_dir=home_dir)
     execution_context = model_shell_execution_context(command, cwd=cwd, workspace_root=cwd)
     if execution_context.directory_change_present:
-        return _codex_contextual_source_inspection_is_read_only(
+        if _codex_contextual_source_inspection_is_read_only(
             execution_context,
+            home_dir=home_dir,
+        ):
+            return True
+        if home_dir is None:
+            return False
+        home_context = model_shell_execution_context(
+            command,
+            cwd=home_dir,
+            workspace_root=home_dir,
+            home_dir=home_dir,
+        )
+        if not home_context.segments:
+            return False
+        first = home_context.segments[0]
+        if (
+            first.control_before
+            or first.directory_operation != "cd"
+            or len(first.tokens) != 2
+            or ".." in Path(first.tokens[1].strip("\"'")).parts
+        ):
+            return False
+        return _codex_contextual_source_inspection_is_read_only(
+            home_context,
             home_dir=home_dir,
         )
     chained_segments = _split_codex_safe_read_only_chain(command)

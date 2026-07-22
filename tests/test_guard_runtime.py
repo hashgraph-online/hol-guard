@@ -16489,6 +16489,60 @@ def test_guard_runtime_keeps_mutating_github_graphql_after_literal_home_cd_revie
     assert match.shell_execution_context_reason_code == "shell_cwd_workspace_escape"
 
 
+@pytest.mark.parametrize(
+    ("runner_path", "command"),
+    [
+        (
+            "node_modules/.bin/vitest",
+            "timeout 60 bun x vitest run tests/unit.test.ts 2>&1 | tail -10",
+        ),
+        (
+            "node_modules/typescript/bin/tsc",
+            "NODE_OPTIONS=--max-old-space-size=4096 bun --smol "
+            "./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep 'error TS' | head -20",
+        ),
+    ],
+)
+def test_guard_runtime_allows_installed_read_only_runner_after_literal_home_cd(
+    tmp_path: Path,
+    runner_path: str,
+    command: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    sibling = home_dir / "sibling"
+    workspace.mkdir(parents=True)
+    _write_text(sibling / runner_path, "#!/bin/sh\n")
+    _write_text(sibling / "tests" / "unit.test.ts", "export const safe = true;\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": f"cd ~/sibling && {command}"},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert match is None
+
+
+def test_guard_runtime_keeps_uninstalled_runner_after_literal_home_cd_reviewable(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    sibling = home_dir / "sibling"
+    workspace.mkdir(parents=True)
+    sibling.mkdir()
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "cd ~/sibling && bun x vitest run tests/unit.test.ts"},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert match is not None
+    assert match.shell_execution_context_reason_code == "shell_cwd_workspace_escape"
+
+
 def test_guard_runtime_allows_lean_ctx_wrapped_gh_graphql_pipeline(tmp_path):
     command = (
         "/path/to/lean-ctx -c 'gh api graphql -f query='\\''query { viewer { login } }'\\''' 2>&1 | "
@@ -23716,6 +23770,57 @@ def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_pat
         home_dir=tmp_path,
     )
     assert artifact is None
+
+
+def test_codex_read_only_source_inspection_allows_literal_cd_to_sibling_workspace(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    current = home_dir / "current"
+    sibling = home_dir / "sibling"
+    current.mkdir(parents=True)
+    _write_text(sibling / "app" / "route.ts", "export const tokenLabel = 'field name only';\n")
+    command = "cd ~/sibling && sed -n '1,20p' app/route.ts"
+
+    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+        command,
+        cwd=current,
+        home_dir=home_dir,
+    )
+    artifact = guard_commands_module._codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": "export const tokenLabel = 'field name only';\n"},
+        },
+        config_path=str(current / ".codex" / "config.toml"),
+        source_scope="workspace",
+        cwd=current,
+        home_dir=home_dir,
+    )
+    assert artifact is None
+
+
+def test_codex_literal_cd_source_inspection_keeps_sensitive_sibling_output_guarded(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    current = home_dir / "current"
+    sibling = home_dir / "sibling"
+    current.mkdir(parents=True)
+    credential = "ghp_" + "123456789012345678901234567890123456"
+    _write_text(sibling / ".env", f"TOKEN={credential}\n")
+    command = "cd ~/sibling && sed -n '1,20p' .env"
+
+    artifact = guard_commands_module._codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": f"TOKEN={credential}\n"},
+        },
+        config_path=str(current / ".codex" / "config.toml"),
+        source_scope="workspace",
+        cwd=current,
+        home_dir=home_dir,
+    )
+    assert artifact is not None
+    assert "credential-looking output" in artifact.name
 
 
 @pytest.mark.parametrize(

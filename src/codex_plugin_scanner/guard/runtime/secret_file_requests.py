@@ -2067,20 +2067,35 @@ def literal_cd_execution_context(
         return None
     if _shell_execution_context_validation_reason(context) is not None:
         return None
-    if len(context.segments) not in {2, 3}:
+    if not 2 <= len(context.segments) <= 4:
         return None
     runner = context.segments[1]
-    command_name, command_index = _shell_segment_primary_command(list(runner.tokens))
-    if command_name not in {"bunx", "npx"} or command_index is None:
+    runner_tokens = list(runner.tokens)
+    command_name, command_index = _shell_segment_primary_command(runner_tokens)
+    if command_name == "timeout" and command_index is not None:
+        timeout_args = runner_tokens[command_index + 1 :]
+        if not timeout_args or not timeout_args[0].isdigit() or not 1 <= int(timeout_args[0]) <= 3600:
+            return None
+        runner_tokens = timeout_args[1:]
+        command_name, command_index = _shell_segment_primary_command(runner_tokens)
+    if command_name not in {"bun", "bunx", "npx"} or command_index is None:
         return None
-    args = _without_safe_inspection_redirections(list(runner.tokens[command_index + 1 :]))
+    args = _without_safe_inspection_redirections(list(runner_tokens[command_index + 1 :]))
     if args is None:
         return None
     while args and args[0] in {"--bun", "--no", "--no-install"}:
-        args.pop(0)
-    if not args or args[0] not in {"eslint", "jest", "tsc", "vitest"}:
+        _ = args.pop(0)
+    if command_name == "bun":
+        while args and args[0] in {"--smol"}:
+            _ = args.pop(0)
+        if args and args[0] == "x":
+            _ = args.pop(0)
+    if not args:
         return None
-    runner_name = args[0]
+    runner_token = args[0]
+    runner_name = Path(runner_token).name
+    if runner_name not in {"eslint", "jest", "tsc", "vitest"}:
+        return None
     if any(
         _runner_argument_escapes_root(
             arg,
@@ -2094,20 +2109,32 @@ def literal_cd_execution_context(
     if runner_cwd is None:
         return None
     try:
-        executable = (runner_cwd / "node_modules" / ".bin" / runner_name).resolve(strict=True)
-        executable.relative_to((runner_cwd / "node_modules").resolve(strict=True))
+        executable = (
+            (runner_cwd / runner_token).resolve(strict=True)
+            if "/" in runner_token
+            else (runner_cwd / "node_modules" / ".bin" / runner_name).resolve(strict=True)
+        )
+        _ = executable.relative_to((runner_cwd / "node_modules").resolve(strict=True))
     except (OSError, RuntimeError, ValueError):
         return None
-    if len(context.segments) == 3:
-        output_filter = context.segments[2]
+    for output_filter in context.segments[2:]:
         filter_name, filter_index = _shell_segment_primary_command(list(output_filter.tokens))
-        if filter_name not in {"head", "tail"} or filter_index is None:
+        if filter_name not in {"grep", "head", "tail"} or filter_index is None:
             return None
         filter_args = list(output_filter.tokens[filter_index + 1 :])
-        if output_filter.control_before != ("|",) or len(filter_args) != 1:
+        if output_filter.control_before != ("|",):
             return None
-        count = filter_args[0]
-        if not count.startswith("-") or not count[1:].isdigit() or not 1 <= int(count[1:]) <= 1000:
+        if filter_name in {"head", "tail"}:
+            if len(filter_args) != 1:
+                return None
+            count = filter_args[0]
+            if not count.startswith("-") or not count[1:].isdigit() or not 1 <= int(count[1:]) <= 1000:
+                return None
+        elif not _read_only_lookup_filter_segment_is_safe(
+            filter_name,
+            filter_args,
+            home_dir=output_filter.effective_cwd or home_dir,
+        ):
             return None
     return context
 

@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, release/2.1]
+    branches: [main, release/2.2]
   schedule:
     - cron: "0 5 * * 1"
   workflow_dispatch:
