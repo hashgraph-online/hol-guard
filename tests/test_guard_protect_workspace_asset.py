@@ -23,19 +23,15 @@ def test_degraded_protection_exposes_recovery_actions() -> None:
 
     assert "Restore full protection" in source
     assert "protection-recovery" in source
-    assert "primaryProtectionRecoveryAction" in source
-    assert "View all steps" in source
+    assert "View repair details" in source
     assert "Needs repair" in source
-    assert 'fallbackHref: "/evidence?view=commands"' in authoritative_source
-    assert "Check command evidence" in source
-    assert "Repair failed checks" in source
-    assert "Guard rechecks protection after each step" in source
-    assert "Open diagnostics" in source
+    assert "Repair protection" in source
+    assert "Repair failed checks" not in source
+    assert "Open diagnostics" not in source
+    assert "Guard could not confirm integrity protection yet." not in source
     assert 'hookCheck?.status === "fail"' in source
     assert 'check.check_id === "harness_hooks" && check.status === "fail"' in source
     assert "Restore full protection" in authoritative_source
-    assert "primaryProtectionRecoveryAction" in authoritative_source
-    assert 'href="#protection-recovery"' in authoritative_source
 
 
 def test_protection_repair_requires_local_auth_token() -> None:

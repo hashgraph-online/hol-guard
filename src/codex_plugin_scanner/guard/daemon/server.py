@@ -4078,7 +4078,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_protection_repair(self, payload: dict[str, object]) -> None:
         check_id = self._optional_string(payload.get("check_id"))
         store = self.server.store  # type: ignore[attr-defined]
-        if check_id in {"policy_engine", "rule_packs", "tamper_checks"}:
+        if check_id in {"all", "policy_engine", "rule_packs", "tamper_checks"}:
             try:
                 status = store.setup_policy_integrity(now=_now(), include_items=False)
             except (OSError, RuntimeError, ValueError):
@@ -4091,6 +4091,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 return
             repaired = status.get("mode") == "protected"
+            degraded_reasons = status.get("degraded_reasons")
+            reason_count = len(degraded_reasons) if isinstance(degraded_reasons, list) else 0
             self._write_json(
                 {
                     "repaired": repaired,
@@ -4098,7 +4100,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "message": (
                         "Integrity protection restored."
                         if repaired
-                        else "Guard could not confirm integrity protection yet."
+                        else (
+                            "Integrity repair preserved unauthenticated policy data instead of trusting it. "
+                            "Retry repair from Protect; Guard will keep the remaining "
+                            f"{reason_count or 1} issue isolated."
+                        )
                     ),
                 },
                 status=200 if repaired else 409,

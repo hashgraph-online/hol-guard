@@ -134,7 +134,8 @@ test("unproven checks clamp server and install claims across protection views", 
   await expect(page.getByLabel("Protection status").getByText("Degraded", { exact: true })).toBeVisible();
   await expect(page.getByText("Your apps are covered")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Repair sandbox" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Open diagnostics" }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open diagnostics" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Repair protection" })).toHaveCount(1);
 
   await page.goto(`/apps/codex?tab=settings&${DAEMON}`);
   await expect(page.getByRole("heading", { name: "Codex protection is degraded" })).toBeVisible();
@@ -152,7 +153,7 @@ test("degraded protection copy remains visible on mobile", async ({ page }, test
   await page.screenshot({ path: testInfo.outputPath("protection-health-mobile.png"), fullPage: true });
 });
 
-test("failed protection checks repair in place before offering diagnostics", async ({ page }) => {
+test("one inline action repairs failed protection checks without leaving Protect", async ({ page }) => {
   const snapshot = snapshotForState("partial");
   snapshot.protection_health.checks = snapshot.protection_health.checks.map((check) =>
     check.check_id === "rule_packs" ? { ...check, status: "fail" as const } : check
@@ -160,11 +161,12 @@ test("failed protection checks repair in place before offering diagnostics", asy
   await mountProtectionFixture(page, snapshot);
   await page.goto(`/protect?${DAEMON}`);
 
-  await page.getByRole("button", { name: "Repair rule packs" }).click();
+  await page.getByRole("button", { name: "Repair protection" }).click();
 
   await expect(page).toHaveURL(/\/protect/);
   await expect(page.getByText("Integrity protection restored.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Open diagnostics" })).toHaveCount(0);
+  await expect(page.locator("#protection-recovery").getByRole("link", { name: /settings/i })).toHaveCount(0);
 });
 
 for (const expected of [

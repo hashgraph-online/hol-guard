@@ -26,7 +26,7 @@ import {
 import { ApprovalCenterLayout, type BulkGateCredentials } from "./approval-center-layout";
 import type { AppView } from "./approval-center-primitives";
 import { buildClearPayload } from "./clear-policy-payload";
-import { normalizeHarnessSlug } from "./approval-center-utils";
+import { harnessDisplayName, normalizeHarnessSlug } from "./approval-center-utils";
 import { ErrorBoundary } from "./error-boundary";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
@@ -753,24 +753,31 @@ export function App() {
     }
   }, []);
 
-  const handleRepairProtectionCheck = useCallback(async (checkId: string, harnesses: string[]) => {
-    let message: string;
-    if (checkId === "harness_hooks") {
-      if (harnesses.length === 0) {
-        throw new Error("Guard could not find an installed app hook to repair.");
-      }
-      for (const harness of harnesses) {
-        await runHarnessAction({ harness, action: "repair", dryRun: false });
-      }
-      message = `Repaired ${harnesses.length} app hook${harnesses.length === 1 ? "" : "s"}. Run a protected action to confirm interception.`;
-    } else if (checkId === "daemon") {
+  const handleRepairProtection = useCallback(async (harnesses: string[]) => {
+    const failures: string[] = [];
+    try {
       await repairApprovalCenter();
-      message = "Local runtime connection repaired.";
-    } else {
-      const result = await repairProtectionCheck(checkId);
+    } catch {
+      failures.push("local runtime");
+    }
+    for (const harness of harnesses) {
+      try {
+        await runHarnessAction({ harness, action: "repair", dryRun: false });
+      } catch {
+        failures.push(`${harnessDisplayName(harness)} hooks`);
+      }
+    }
+    let message = "Protection repair completed.";
+    try {
+      const result = await repairProtectionCheck("all");
       message = result.message;
+    } catch (error: unknown) {
+      failures.push(error instanceof Error ? error.message : "integrity protection");
     }
     await refreshStateAfterAction();
+    if (failures.length > 0) {
+      throw new Error(`Repair paused at ${failures.join(", ")}. Retry repair to continue from this page.`);
+    }
     return message;
   }, [refreshStateAfterAction]);
 
@@ -898,7 +905,7 @@ export function App() {
               onConnectHarness={handleConnectHarness}
               onTestHarness={handleTestHarness}
               onRepairHarness={handleRepairHarness}
-              onRepairProtectionCheck={handleRepairProtectionCheck}
+              onRepairProtection={handleRepairProtection}
               onOpenAppDetail={handleOpenAppDetail}
             />
           </Suspense>

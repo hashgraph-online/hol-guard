@@ -4795,6 +4795,11 @@
     color: var(--color-slate-400);
   }
 
+  .first\:border-t-0:first-child {
+    border-top-style: var(--tw-border-style);
+    border-top-width: 0;
+  }
+
   .first\:pt-0:first-child {
     padding-top: 0;
   }
