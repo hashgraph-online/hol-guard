@@ -265,7 +265,10 @@ class TestPiInstall:
         assert "approvalBlockedReason" in text
         assert "Do not call ask for this HOL Guard approval" in text
         assert 'option labeled "I\'ve approved this request in HOL Guard"' in text
-        assert "void openApprovalUrl(response, openedApprovalUrls)" in text
+        assert "const openedApprovalCenters = new Set<string>()" in text
+        assert "return new URL(approvalUrl).origin" in text
+        assert "openedApprovalCenters.has(approvalCenter)" in text
+        assert "if (details.kind === 'input') void openApprovalUrl(response, openedApprovalCenters)" in text
         assert "trySpawnOpen(command, args)" in text
         assert "child.once('error', () => settle(false))" in text
         assert "pollApprovalResolution" in text
@@ -277,12 +280,13 @@ class TestPiInstall:
         assert "guardPayload.tool_response = event.content" in text
         assert "const GUARD_CONFIG_PATH =" in text
         assert "config_path: GUARD_CONFIG_PATH" in text
-        assert '"hook", "--guard-home"' in text
+        assert '"hook", "--json", "--guard-home"' in text
         assert '"guard", "hook"' not in text
         assert '"--harness", "pi"' in text
+        assert '"hook", "--json"' in text
         assert '"--home"' in text
         assert "ctx.cwd" in text
-        assert "timeout: GUARD_TIMEOUT_MS" in text
+        assert "timeout: cliTimeoutMs" in text
         assert str(extension_path) in json.loads(settings_path.read_text(encoding="utf-8"))["extensions"]
         assert omp_extension_path.is_file()
         assert str(omp_extension_path) in json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"]
@@ -308,10 +312,14 @@ class TestPiInstall:
         assert "if (result.error) {" in text
         assert "const resultError =" in text
         assert "const errorCode =" in text
-        assert 'decision: "deny"' in text
+        assert 'decision: "allow"' in text
+        assert 'notice: "warning"' in text
         assert "errorCode === 'ETIMEDOUT'" in text
-        assert "HOL Guard Pi hook timed out after" in text
+        assert "HOL Guard Pi hook timed out" in text
+        assert "continuing without a completed review" in text
         assert "HOL Guard Pi hook failed before completing review" in text
+        assert "GUARD_COMPATIBILITY_VERSION" in text
+        assert "compatibility_version !== GUARD_COMPATIBILITY_VERSION" in text
 
     def test_install_writes_managed_extension_that_truncates_post_tool_payloads(
         self,

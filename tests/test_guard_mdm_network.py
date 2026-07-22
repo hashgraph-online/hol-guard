@@ -23,6 +23,7 @@ def test_tls_verification_cannot_be_disabled() -> None:
     context = managed_ssl_context(ManagedNetworkPolicy(proxy_mode="none"))
     assert context.verify_mode == ssl.CERT_REQUIRED
     assert context.check_hostname is True
+    assert context.minimum_version == ssl.TLSVersion.TLSv1_2
     session = managed_requests_session(ManagedNetworkPolicy(proxy_mode="none"))
     assert session.verify is True
     assert session.trust_env is False

@@ -121,6 +121,7 @@ def managed_ssl_context(policy: ManagedNetworkPolicy | None = None) -> ssl.SSLCo
 
     resolved = policy or active_network_policy()
     context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     if resolved.ca_bundle_path is not None:
         bundle = Path(resolved.ca_bundle_path)
         if not bundle.is_absolute() or not bundle.is_file():

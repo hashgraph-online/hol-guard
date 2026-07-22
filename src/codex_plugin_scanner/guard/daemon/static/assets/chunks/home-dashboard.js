@@ -1,4 +1,4 @@
-import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, u as useReceiptAnalytics, h as harnessDisplayName, i as isDisplayableHarness, b as EmptyState, A as ActionButton, c as EvidenceInsightsShareModal, d as HiMiniCheckCircle, e as GuardHero, f as formatNumber, k as HiMiniShieldCheck, D as DeviceProofCard, l as guardActionDisposition, m as formatRelativeTime, n as guardActionActivityCopy, o as HiMiniSparkles, p as HiMiniXMark, q as HiMiniChevronUp, s as HiMiniChevronDown, t as resolveCloudIntelCopy, v as HiMiniCloud, w as HiMiniQuestionMarkCircle, x as useFocusTrap, y as approvalProofRequiresPassword, z as HiMiniExclamationTriangle, B as HiMiniBolt, C as Badge, F as HiMiniChevronRight, I as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, u as useReceiptAnalytics, e as harnessDisplayName, i as isConnectableAppHarness, p as protectionHealthFor, k as EmptyState, A as ActionButton, l as EvidenceInsightsShareModal, m as HiMiniCheckCircle, n as GuardHero, o as formatNumber, q as HiMiniShieldCheck, D as DeviceProofCard, s as guardActionDisposition, t as formatRelativeTime, v as guardActionActivityCopy, w as HiMiniSparkles, x as HiMiniXMark, y as HiMiniChevronUp, z as HiMiniChevronDown, B as resolveCloudIntelCopy, C as HiMiniCloud, F as HiMiniQuestionMarkCircle, I as useFocusTrap, J as approvalProofRequiresPassword, K as HiMiniExclamationTriangle, L as HiMiniBolt, M as Badge, N as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { H as HomeProtectionModule } from "./home-protection-module.js";
 function HomeInsightsSkeleton() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -64,6 +64,48 @@ function EvidenceInsightsHomePreview({
         children: "See all insights →"
       }
     ) : analyticsLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-4 w-36 rounded" }) : null }) : null
+  ] });
+}
+const client = createCommandActivityClient(fetchCommandActivityApi);
+function HomeCommandActivityCard(props) {
+  const [analytics, setAnalytics] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    const controller = new AbortController();
+    client.fetchAnalytics({ days: 90, top_limit: 10, dimension: null, dimension_value: null }, controller.signal).then(
+      (data) => setAnalytics(data),
+      () => void 0
+    );
+    return () => controller.abort();
+  }, []);
+  const handleOpen = reactExports.useCallback(() => props.onOpen(), [props.onOpen]);
+  const model = analytics === null ? null : homeCommandActivityModel(analytics);
+  if (model === null) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rounded-lg border border-slate-200 bg-white p-4 shadow-sm", "aria-labelledby": "home-command-activity-title", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-blue/[0.08] text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCommandLine, { className: "h-5 w-5", "aria-hidden": "true" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "home-command-activity-title", className: "text-sm font-semibold text-brand-dark", children: "Commands checked" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-500", children: model.window })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleOpen, "aria-label": "Open command activity", className: "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand-dark", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-5 w-5", "aria-hidden": "true" }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 grid grid-cols-3 gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xl font-semibold text-brand-dark", children: model.metrics.commandsChecked.toLocaleString() }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Checked" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xl font-semibold text-brand-dark", children: model.metrics.prompted.toLocaleString() }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Review prompts" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xl font-semibold text-brand-dark", children: model.metrics.postProof.toLocaleString() }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Post proof" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-3 text-xs ${model.health ? "text-amber-700" : "text-slate-500"}`, children: model.health ?? "Evidence store reporting normally." })
   ] });
 }
 const safeLocalStorage = {
@@ -187,25 +229,27 @@ function HomeWorkspace(props) {
   const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
   const queuedCount = props.requests.kind === "ready" ? props.requests.items.length : 0;
   const policyItems = props.policies.kind === "ready" ? props.policies.items : [];
-  const managedInstalls = (snapshot?.managed_installs ?? []).filter((item) => isDisplayableHarness(item.harness));
+  const managedInstalls = (snapshot?.managed_installs ?? []).filter((item) => isConnectableAppHarness(item.harness));
   const activeInstalls = managedInstalls.filter((item) => item.active);
   const observedHarnesses = snapshot ? Array.from(
     new Set([
       ...snapshot.items.map((item) => item.harness),
       ...snapshot.latest_receipts.map((receipt) => receipt.harness),
       ...policyItems.map((policy) => policy.harness)
-    ].filter(isDisplayableHarness))
+    ].filter(isConnectableAppHarness))
   ).sort() : [];
   const clearHarnesses = activeInstalls.length > 0 ? activeInstalls.map((i) => i.harness) : observedHarnesses;
   const watchedAppsCount = activeInstalls.length > 0 ? activeInstalls.length : observedHarnesses.length;
+  const protectionState = snapshot ? protectionHealthFor(snapshot).state : "degraded";
   const state = reactExports.useMemo(
     () => deriveHomeState({
       hasActiveInstalls: activeInstalls.length > 0,
       hasObservedHarnesses: observedHarnesses.length > 0,
       queuedCount,
-      watchedAppsCount
+      watchedAppsCount,
+      protectionState
     }),
-    [activeInstalls.length, observedHarnesses.length, queuedCount, watchedAppsCount]
+    [activeInstalls.length, observedHarnesses.length, protectionState, queuedCount, watchedAppsCount]
   );
   const dailyStory = reactExports.useMemo(
     () => snapshot ? buildDailyStory(snapshot.latest_receipts, queuedCount) : null,
@@ -281,6 +325,7 @@ function HomeWorkspace(props) {
         onShare: handleShareOpen
       }
     ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HomeCommandActivityCard, { onOpen: props.onOpenCommands }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(StreakMilestoneBanner, { streak }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       NewAppDiscoveryBanner,
@@ -454,7 +499,7 @@ function ClearConfirmDialog(props) {
   ] }) });
 }
 function deriveHomeState(input) {
-  const { hasActiveInstalls, hasObservedHarnesses, queuedCount, watchedAppsCount } = input;
+  const { hasActiveInstalls, hasObservedHarnesses, protectionState, queuedCount, watchedAppsCount } = input;
   if (queuedCount > 0) {
     return {
       heroStatus: "needs_review",
@@ -479,6 +524,24 @@ function deriveHomeState(input) {
       headline: "Finish setup",
       subheadline: "Guard detected apps but they need setup to be fully protected.",
       ctaLabel: "Open Protect",
+      ctaTarget: "protect"
+    };
+  }
+  if (protectionState === "degraded") {
+    return {
+      heroStatus: "degraded",
+      headline: "Protection is degraded",
+      subheadline: "Guard is running, but one or more required protection checks failed or remain unproven.",
+      ctaLabel: "Review protection",
+      ctaTarget: "protect"
+    };
+  }
+  if (protectionState === "partial") {
+    return {
+      heroStatus: "partial",
+      headline: "Protection is partial",
+      subheadline: "Core protection passes, but complete decision-stream evidence is not available.",
+      ctaLabel: "Review protection",
       ctaTarget: "protect"
     };
   }
@@ -531,6 +594,18 @@ function buildDailyStory(receipts, queuedCount) {
   }
   return null;
 }
+function harnessPriorityScore(install, observed, pendingCount) {
+  let score = 0;
+  if (install?.active) {
+    score = 3;
+  } else if (install !== void 0) {
+    score = 2;
+  } else if (observed) {
+    score = 1;
+  }
+  if (pendingCount > 0) score += 4;
+  return score;
+}
 function computeStreak(receipts) {
   if (receipts.length === 0) return 0;
   const sortedByTime = [...receipts].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
@@ -576,8 +651,8 @@ function AppsAtAGlance(props) {
       const bInstall = props.managedInstalls.find((i) => i.harness === b);
       const aPending = pendingByHarness.get(a) ?? 0;
       const bPending = pendingByHarness.get(b) ?? 0;
-      const aScore = (aInstall?.active ? 3 : aInstall !== void 0 ? 2 : props.observedHarnesses.includes(a) ? 1 : 0) + (aPending > 0 ? 4 : 0);
-      const bScore = (bInstall?.active ? 3 : bInstall !== void 0 ? 2 : props.observedHarnesses.includes(b) ? 1 : 0) + (bPending > 0 ? 4 : 0);
+      const aScore = harnessPriorityScore(aInstall, props.observedHarnesses.includes(a), aPending);
+      const bScore = harnessPriorityScore(bInstall, props.observedHarnesses.includes(b), bPending);
       return bScore - aScore;
     });
   }, [props.managedInstalls, props.observedHarnesses, pendingByHarness]);
@@ -766,8 +841,8 @@ function NewAppDiscoveryBanner(props) {
   )) });
 }
 function resolveNewAppDiscoveries(managedInstalls, observedHarnesses) {
-  const activeHarnesses = new Set(managedInstalls.filter((i) => isDisplayableHarness(i.harness)).map((i) => i.harness));
-  return observedHarnesses.filter((h) => isDisplayableHarness(h) && !activeHarnesses.has(h));
+  const activeHarnesses = new Set(managedInstalls.filter((i) => isConnectableAppHarness(i.harness)).map((i) => i.harness));
+  return observedHarnesses.filter((h) => isConnectableAppHarness(h) && !activeHarnesses.has(h));
 }
 function NewAppBanner(props) {
   const storageKey = `guard-new-app-dismissed-${props.harness}`;

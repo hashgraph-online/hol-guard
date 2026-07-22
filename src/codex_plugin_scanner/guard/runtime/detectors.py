@@ -72,6 +72,7 @@ class DetectorContext:
     prior_decisions: Mapping[str, object]
     threat_intel: Mapping[str, object]
     redaction_settings: Mapping[str, object]
+    approved_scan_roots: tuple[Path, ...] = ()
 
 
 class GuardDetector(Protocol):

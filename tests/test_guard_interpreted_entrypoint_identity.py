@@ -279,6 +279,39 @@ def test_structured_executable_path_with_spaces_and_unicode_is_stable_and_conten
     assert changed != first
 
 
+def test_inline_launch_identity_is_opaque_stable_and_secret_change_bound(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    launcher = _fake_launcher(workspace, "bash")
+    first_secret = "password=approval-context-one"
+    second_secret = "password=approval-context-two"
+
+    first = build_runtime_launch_identity(
+        str(launcher),
+        args=("-c", f"printf %s {first_secret}"),
+        structured_command=True,
+        cwd=workspace,
+    )
+    unchanged = build_runtime_launch_identity(
+        str(launcher),
+        args=("-c", f"printf %s {first_secret}"),
+        structured_command=True,
+        cwd=workspace,
+    )
+    changed = build_runtime_launch_identity(
+        str(launcher),
+        args=("-c", f"printf %s {second_secret}"),
+        structured_command=True,
+        cwd=workspace,
+    )
+
+    serialized = json.dumps(first, sort_keys=True)
+    assert first == unchanged
+    assert first != changed
+    assert first_secret not in serialized
+    assert second_secret not in serialized
+
+
 def test_main_runtime_context_handles_structured_mcp_executable_path_with_spaces(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

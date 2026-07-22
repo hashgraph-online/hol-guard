@@ -642,6 +642,13 @@ def _daemon_healthz_details_match_guard_home(url: str, guard_home: Path, *, auth
     return _healthz_payload_matches_guard_home(json.dumps(payload), guard_home)
 
 
+def _daemon_healthz_details_match_current_runtime(payload: dict[str, object]) -> bool:
+    return (
+        payload.get("package_version") == __version__
+        and payload.get("runtime_fingerprint") == _current_guard_daemon_runtime_fingerprint()
+    )
+
+
 def _guard_daemon_url_port(url: str) -> int | None:
     try:
         parsed = urllib.parse.urlparse(url)
@@ -708,7 +715,11 @@ def _initialize_existing_guard_daemon(guard_home: Path, port: int) -> _ExistingG
     if not isinstance(auth_token, str) or not auth_token.strip():
         return None
     details_payload = _daemon_healthz_details_payload(url, auth_token)
-    if details_payload is None or not _healthz_payload_matches_guard_home(json.dumps(details_payload), guard_home):
+    if (
+        details_payload is None
+        or not _healthz_payload_matches_guard_home(json.dumps(details_payload), guard_home)
+        or not _daemon_healthz_details_match_current_runtime(details_payload)
+    ):
         return None
     pid = details_payload.get("pid")
     if not isinstance(pid, int) or pid <= 0:
@@ -1973,6 +1984,12 @@ def _current_guard_daemon_runtime_fingerprint() -> str:
         digest.update(str(stat_result.st_size).encode("utf-8"))
     _runtime_fingerprint_cache = digest.hexdigest()
     return _runtime_fingerprint_cache
+
+
+def current_guard_daemon_runtime_fingerprint() -> str:
+    """Return the installed runtime identity used for daemon compatibility."""
+
+    return _current_guard_daemon_runtime_fingerprint()
 
 
 def _guard_daemon_start_in_progress(guard_home: Path) -> bool:

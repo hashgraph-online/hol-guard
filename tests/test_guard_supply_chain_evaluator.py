@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.runtime.package_intent_common import (
     python_target,
 )
 from codex_plugin_scanner.guard.runtime.package_manifest_diff import _DeadlineExceededError
+from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
     PackageRequestEvaluation,
@@ -245,6 +246,19 @@ def _tarball_bytes(entries: list[tuple[str, bytes]]) -> bytes:
             info.size = len(content)
             archive.addfile(info, io.BytesIO(content))
     return buffer.getvalue()
+
+
+def _downloaded_archive(tmp_path: Path, payload: bytes) -> RestrictedArchiveDownload:
+    archive_path = tmp_path / "downloaded-archive.blob"
+    archive_path.write_bytes(payload)
+    archive_path.chmod(0o400)
+    return RestrictedArchiveDownload(
+        path=archive_path,
+        sha256=hashlib.sha256(payload).hexdigest(),
+        size=len(payload),
+        source_url="https://packages.example.com/archive.tgz",
+        final_url="https://packages.example.com/archive.tgz",
+    )
 
 
 class _EvaluateHandler(BaseHTTPRequestHandler):
@@ -554,7 +568,7 @@ def test_merged_all_global_installs_omit_workspace_context() -> None:
     assert artifact.metadata["lockfile_paths"] == []
 
 
-def test_evaluate_package_request_artifact_does_not_convert_npm_source_specs_to_latest(
+def test_evaluate_package_request_artifact_reviews_npm_git_sources_before_cloud(
     tmp_path: Path,
 ) -> None:
     _EvaluateHandler.captured_headers = {}
@@ -580,7 +594,7 @@ def test_evaluate_package_request_artifact_does_not_convert_npm_source_specs_to_
         workspace_dir.mkdir()
         artifact = _artifact_for_targets("git+https://github.com/org/pkg.git")
 
-        evaluate_package_request_artifact(
+        result = evaluate_package_request_artifact(
             artifact=artifact,
             store=store,
             workspace_dir=workspace_dir,
@@ -590,11 +604,10 @@ def test_evaluate_package_request_artifact_does_not_convert_npm_source_specs_to_
         server.shutdown()
         thread.join(timeout=5)
 
-    package_payload = _EvaluateHandler.captured_requests[0]["packages"][0]
-    assert package_payload["name"] == "pkg"
-    assert package_payload["sourceUrl"] == "git+https://github.com/org/pkg.git"
-    assert "range" not in package_payload
-    assert "version" not in package_payload
+    assert _EvaluateHandler.captured_requests == []
+    assert result.decision == "ask"
+    assert result.packages[0]["reasons"][0]["code"] == "git_dependency_source"
+    assert result.packages[0]["sourceIdentity"] == "git:github.com/org/pkg#missing"
 
 
 def test_evaluate_package_request_artifact_posts_open_range_for_unversioned_pypi_request(
@@ -974,7 +987,7 @@ def test_evaluate_package_request_artifact_handles_upgrade_required_with_premium
 
 
 @pytest.mark.parametrize("status_code", [400, 401, 403, 404])
-def test_evaluate_package_request_artifact_fails_closed_on_untrusted_cloud_http_error(
+def test_evaluate_package_request_artifact_distinguishes_auth_from_validation_http_errors(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     status_code: int,
@@ -1017,11 +1030,16 @@ def test_evaluate_package_request_artifact_fails_closed_on_untrusted_cloud_http_
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
-    assert result.enforcement == "premium_cloud"
     expected_code = "cloud_auth_error" if status_code in {401, 403} else "cloud_validation_error"
     assert any(reason["code"] == expected_code for reason in result.reasons)
+    if status_code == 401:
+        assert result.decision == "monitor"
+        assert result.policy_action == "allow"
+        assert result.enforcement == "offline_cached"
+    else:
+        assert result.decision == "ask"
+        assert result.policy_action == "require-reapproval"
+        assert result.enforcement == "premium_cloud"
 
 
 def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachable(
@@ -1141,16 +1159,42 @@ def test_evaluate_package_request_artifact_rejects_untrusted_cloud_endpoint_befo
     assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
 
 
+def test_evaluate_external_tarball_requires_approval_without_network(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail_scan(_source_url: str) -> object:
+        raise AssertionError("external archive inspection ran before approval")
+
+    def fail_cloud(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("external archive evaluation reached cloud network before approval")
+
+    monkeypatch.setattr(evaluator_module, "_scan_external_tarball", fail_scan)
+    monkeypatch.setattr(evaluator_module, "_evaluate_with_cloud", fail_cloud)
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("https://packages.example.com/review-first.tgz"),
+        store=GuardStore(tmp_path / "guard-home"),
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "review"
+    assert any(reason["code"] == "external_tarball_source" for reason in result.reasons)
+
+
 def test_evaluate_package_request_artifact_blocks_external_tarball_zip_slip(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     archive = _tarball_bytes([("../escape.sh", b"#!/bin/sh\necho pwned\n")])
-    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: archive)
+    downloaded = _downloaded_archive(tmp_path, archive)
+    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("https://packages.example.com/unsafe.tgz"),
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=tmp_path / "workspace",
         now="2026-05-19T00:00:00Z",
+        external_archive_network_authorized=True,
     )
 
     assert result.decision == "block"
@@ -1175,12 +1219,14 @@ def test_evaluate_package_request_artifact_blocks_external_tarball_install_scrip
         }
     ).encode("utf-8")
     archive = _tarball_bytes([("package/package.json", package_json)])
-    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: archive)
+    downloaded = _downloaded_archive(tmp_path, archive)
+    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("https://packages.example.com/scripted.tgz"),
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=tmp_path / "workspace",
         now="2026-05-19T00:00:00Z",
+        external_archive_network_authorized=True,
     )
 
     assert result.decision == "block"
@@ -1207,12 +1253,14 @@ def test_evaluate_package_request_artifact_blocks_shai_hulud_style_credential_th
         }
     ).encode("utf-8")
     archive = _tarball_bytes([("package/package.json", package_json)])
-    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: archive)
+    downloaded = _downloaded_archive(tmp_path, archive)
+    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("https://packages.example.com/shai-hulud-fixture.tgz"),
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=tmp_path / "workspace",
         now="2026-05-19T00:00:00Z",
+        external_archive_network_authorized=True,
     )
 
     assert result.decision == "block"
@@ -1225,16 +1273,18 @@ def test_evaluate_package_request_artifact_reviews_clean_external_tarball(
 ) -> None:
     package_json = json.dumps({"name": "safe-package", "version": "1.0.0"}).encode("utf-8")
     archive = _tarball_bytes([("package/package.json", package_json)])
-    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: archive)
+    downloaded = _downloaded_archive(tmp_path, archive)
+    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("https://packages.example.com/safe.tgz"),
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=tmp_path / "workspace",
         now="2026-05-19T00:00:00Z",
+        external_archive_network_authorized=True,
     )
 
     assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
+    assert result.policy_action == "review"
     assert any(reason["code"] == "external_tarball_source" for reason in result.reasons)
 
 
@@ -1894,7 +1944,10 @@ def test_transitive_lockfile_resolution_uses_bounded_deadline(tmp_path: Path, mo
     assert captured["deadline"] == pytest.approx(100.2)
 
 
-def test_transitive_lockfile_timeout_surfaces_warn_result(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_transitive_lockfile_timeout_pauses_without_using_partial_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
     response = _bundle_response(
@@ -1935,9 +1988,13 @@ def test_transitive_lockfile_timeout_surfaces_warn_result(tmp_path: Path, monkey
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "warn"
-    assert any(reason["code"] == "transitive_lockfile_timeout" for reason in result.reasons)
-    assert "package-lock.json" in result.user_copy.harness_message
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert any(reason["code"] == "lockfile_parse_incomplete" for reason in result.reasons)
+    assert result.packages[0]["lockfileParseError"] == "deadline_exceeded"
+    assert result.packages[0]["lockfileParseComplete"] is False
+    assert result.packages[0]["lockfileParserVersion"] == "complete-v1"
+    assert "npm-package-lock" in result.user_copy.harness_message
 
 
 def test_package_from_cloud_result_preserves_direct_and_dependency_path_schema() -> None:
@@ -2111,7 +2168,7 @@ def test_evaluate_package_request_artifact_handles_invalid_lockfile_bytes_withou
     assert result.policy_action == "require-reapproval"
 
 
-def test_evaluate_package_request_artifact_handles_unreadable_workspace_paths_without_crashing(
+def test_evaluate_package_request_artifact_pauses_for_unreadable_lockfile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
@@ -2155,8 +2212,10 @@ def test_evaluate_package_request_artifact_handles_unreadable_workspace_paths_wi
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "monitor"
-    assert result.policy_action == "allow"
+    assert result.decision == "ask"
+    assert any(reason["code"] == "lockfile_parse_incomplete" for reason in result.reasons)
+    assert result.packages[0]["lockfileParseError"] == "read_error"
+    assert result.policy_action == "require-reapproval"
 
 
 def test_evaluate_package_request_artifact_handles_unreadable_transitive_lockfile_without_crashing(
@@ -2365,7 +2424,7 @@ def test_evaluate_package_request_artifact_stale_bundle_requests_refresh_and_rec
     assert evidence[0]["category"] == "supply-chain"
 
 
-def test_evaluate_package_request_artifact_fails_closed_when_stale_bundle_needs_cloud_refresh_but_auth_expired(
+def test_evaluate_package_request_artifact_uses_stale_bundle_when_cloud_auth_expired(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2415,13 +2474,132 @@ def test_evaluate_package_request_artifact_fails_closed_when_stale_bundle_needs_
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
-    assert result.enforcement == "premium_cloud"
+    assert result.decision == "monitor"
+    assert result.policy_action == "allow"
+    assert result.enforcement == "offline_cached"
     assert any(reason["code"] == "cloud_auth_error" for reason in result.reasons)
     assert result.user_copy.next_step == "hol-guard connect"
     assert "local-only" in result.user_copy.harness_message
     assert "hol-guard connect" in result.user_copy.harness_message
+
+
+def test_evaluate_unlisted_registry_package_uses_local_intelligence_when_cloud_auth_expired(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=WORKSPACE_ID,
+        now="2026-05-19T00:00:00Z",
+    )
+    stale_response = _bundle_response(
+        packages=[],
+        generated_at=datetime(2026, 5, 18, tzinfo=timezone.utc),
+        expires_at=datetime(2026, 5, 18, 1, tzinfo=timezone.utc),
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, stale_response, "2026-05-18T01:00:00Z")
+
+    def raise_auth_expired(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+        raise GuardSyncAuthorizationExpiredError(
+            "Guard authorization expired. Run `hol-guard connect` to sign in again."
+        )
+
+    monkeypatch.setattr(evaluator_module, "_resolve_guard_sync_auth_context", raise_auth_expired)
+    monkeypatch.setattr(evaluator_module, "_registry_resolved_target_version", lambda **_kwargs: "1.2.3")
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("@openai/codex@latest"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "monitor"
+    assert result.policy_action == "allow"
+    assert result.enforcement == "local_fallback"
+    assert any(reason["code"] == "cloud_auth_error" for reason in result.reasons)
+    assert result.user_copy.next_step == "hol-guard connect"
+
+
+def test_evaluate_unlisted_package_still_requires_review_when_registry_identity_is_unresolved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=WORKSPACE_ID,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    def raise_auth_expired(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+        raise GuardSyncAuthorizationExpiredError(
+            "Guard authorization expired. Run `hol-guard connect` to sign in again."
+        )
+
+    monkeypatch.setattr(evaluator_module, "_resolve_guard_sync_auth_context", raise_auth_expired)
+    monkeypatch.setattr(evaluator_module, "_registry_resolved_target_version", lambda **_kwargs: None)
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("@openai/cdoex@latest"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert any(reason["code"] == "unidentified_package" for reason in result.reasons)
+
+
+def test_evaluate_unlisted_package_fails_closed_on_unexpected_auth_context_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=WORKSPACE_ID,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    def raise_unexpected_error(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+        raise RuntimeError("unexpected auth context failure")
+
+    monkeypatch.setattr(evaluator_module, "_resolve_guard_sync_auth_context", raise_unexpected_error)
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("@openai/codex@latest"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
 
 
 def test_evaluate_package_request_artifact_honors_cloud_advisory_block_when_auth_expired(

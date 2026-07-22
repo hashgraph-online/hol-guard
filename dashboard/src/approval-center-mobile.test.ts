@@ -3,6 +3,7 @@ import {
   sortQueue,
   buildProgressCopy,
 } from "./queue-state";
+import { queueItemPreview } from "./review-queue-item";
 import type { GuardApprovalRequest } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
@@ -60,6 +61,32 @@ const THIRD_REQUEST: GuardApprovalRequest = {
 };
 
 const multipleRequests = [BASE_REQUEST, SECOND_REQUEST, THIRD_REQUEST];
+
+assert(
+  queueItemPreview(BASE_REQUEST) === "git status",
+  "Queue rows prefer the command launch target over the artifact category",
+);
+
+assert(
+  queueItemPreview({
+    ...BASE_REQUEST,
+    launch_target: null,
+    launch_summary: "Pi wants to run `scp report.txt host:/srv/report.txt`",
+    artifact_name: "compound bash SCP overwrite command",
+  }) === "scp report.txt host:/srv/report.txt",
+  "Queue rows recover a command prefix from the launch summary before the artifact category",
+);
+
+assert(
+  queueItemPreview({
+    ...BASE_REQUEST,
+    launch_target: "Compound command findings: review required",
+    queue_preview: "git status && bun test",
+    raw_command_text: "opaque-wrapper action",
+    queue_command_category: "command.git",
+  }) === "git status && bun test",
+  "Paginated queue rows prefer the lightweight command preview over the compound category summary",
+);
 
 assert(
   multipleRequests.length >= 2,

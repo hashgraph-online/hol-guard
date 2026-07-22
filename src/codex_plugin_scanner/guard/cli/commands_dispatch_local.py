@@ -21,6 +21,29 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
+def _run_guard_pytest_contained_command(
+    args: argparse.Namespace,
+    *,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    """Run pytest only after the versioned OS containment profile is active."""
+
+    del input_text, output_stream
+    from ..runtime.restricted_pytest import RestrictedPytestError, run_restricted_pytest
+
+    command = list(getattr(args, "pytest_command", []) or [])
+    try:
+        return run_restricted_pytest(
+            command,
+            workspace=Path(str(args.workspace)),
+            cwd=Path(str(args.cwd)) if getattr(args, "cwd", None) else Path.cwd(),
+            timeout_seconds=int(args.timeout_seconds),
+        )
+    except RestrictedPytestError as error:
+        print(f"{error.reason_code}: {error}", file=sys.stderr)
+        return error.exit_code
+
 def _run_guard_command_inspection_command(
     args: argparse.Namespace,
     *,
@@ -162,6 +185,7 @@ def _run_guard_update_command(
         now=_now(),
         wheel=getattr(args, "wheel", None),
         guard_home=guard_home,
+        include_alpha=bool(getattr(args, "alpha", False)),
         force_pypi_reinstall=bool(getattr(args, "force_pypi_reinstall", False)),
     )
     if update_store_error is not None:
@@ -462,6 +486,7 @@ __all__ = [
     "_run_guard_mcp_command",
     "_run_guard_preflight_command",
     "_run_guard_protect_command",
+    "_run_guard_pytest_contained_command",
     "_run_guard_scan_command",
     "_run_guard_start_command",
     "_run_guard_status_command",

@@ -3,12 +3,17 @@ import { HiMiniArrowPath } from "react-icons/hi2";
 
 import {
   fetchGuardUpdateStatus,
+  prepareGuardDaemonReconnect,
   reconnectGuardDaemonAfterUpdate,
   readGuardToken,
   redirectToGuardDaemonOrigin,
   scheduleGuardUpdate,
 } from "./guard-api";
-import type { GuardUpdatePhase, GuardUpdateStatus } from "./guard-types";
+import type {
+  GuardDaemonReconnectAuthorization,
+  GuardUpdatePhase,
+  GuardUpdateStatus,
+} from "./guard-types";
 
 const UPDATE_STATUS_POLL_MS = 60_000;
 const RECONNECT_POLL_MS = 1_500;
@@ -201,7 +206,11 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
   }, [enabled, refreshUpdateStatus]);
 
   const waitForReconnect = useCallback(
-    async (expectedPreviousVersion: string, expectedLatestVersion: string | null): Promise<boolean> => {
+    async (
+      expectedPreviousVersion: string,
+      expectedLatestVersion: string | null,
+      authorization: GuardDaemonReconnectAuthorization,
+    ): Promise<boolean> => {
       reconnectStartedAt.current = Date.now();
       let sawUpdateInProgress = false;
       while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
@@ -210,6 +219,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
             expectedPreviousVersion,
             expectedLatestVersion,
             sawUpdateInProgress,
+            authorization,
           });
           if (!reconnectResult) {
             throw new Error("Guard daemon not found");
@@ -223,8 +233,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
             redirectToGuardDaemonOrigin(origin, readGuardToken());
             return true;
           }
-          const status = await fetchGuardUpdateStatus();
-          setUpdateStatus(status);
+          setUpdateStatus(reconnectResult.status);
           setUpdatePhase("idle");
           options?.onReconnected?.();
           return false;
@@ -246,6 +255,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
     }): Promise<void> => {
       setUpdatePhase("updating");
       try {
+        const reconnectAuthorization = await prepareGuardDaemonReconnect();
         const scheduleResult = await scheduleGuardUpdate(
           params.forcePypiReinstall === true ? { forcePypiReinstall: true } : undefined,
         );
@@ -254,6 +264,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
           const redirected = await waitForReconnect(
             params.expectedPreviousVersion,
             params.expectedLatestVersion,
+            reconnectAuthorization,
           );
           if (!redirected) {
             window.location.reload();
@@ -267,6 +278,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
         const redirected = await waitForReconnect(
           params.expectedPreviousVersion,
           params.expectedLatestVersion,
+          reconnectAuthorization,
         );
         if (!redirected) {
           window.location.reload();

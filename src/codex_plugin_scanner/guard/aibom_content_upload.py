@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from ..path_support import resolves_within_root
-from .inventory_contract import GuardAgentInventorySnapshot
+from .inventory_contract import GuardAgentInventoryItem, GuardAgentInventorySnapshot
 
 _CONTENT_HASH_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 _MAX_CONTENT_ITEMS_PER_BATCH = 100
@@ -95,7 +95,10 @@ def primary_content_sources_from_artifacts(
             continue
         item_id = str(getattr(artifact, "artifact_id", ""))
         item = items_by_id.get(item_id)
-        if item is None or not _CONTENT_HASH_PATTERN.fullmatch(item.content_hash):
+        if item is None:
+            continue
+        primary_content_hash = _primary_content_hash(item, artifact_type=artifact_type)
+        if primary_content_hash is None:
             continue
         path_value = getattr(artifact, "config_path", None)
         if not isinstance(path_value, str) or not path_value.strip():
@@ -112,7 +115,7 @@ def primary_content_sources_from_artifacts(
             GuardAibomPrimaryContentSource(
                 agent_id=snapshot.agent_id,
                 allowed_root=allowed_root,
-                content_hash=item.content_hash,
+                content_hash=primary_content_hash,
                 harness_id=snapshot.agent_type,
                 item_id=item.item_id,
                 item_kind=item.item_kind,
@@ -123,6 +126,18 @@ def primary_content_sources_from_artifacts(
             )
         )
     return tuple(sources)
+
+
+def _primary_content_hash(item: GuardAgentInventoryItem, *, artifact_type: str) -> str | None:
+    """Resolve the exact primary-body digest independently of bundle identity."""
+
+    if artifact_type == "instruction":
+        candidate: object = item.content_hash
+    else:
+        candidate = item.metadata.get("primaryContentHash")
+    if not isinstance(candidate, str) or _CONTENT_HASH_PATTERN.fullmatch(candidate) is None:
+        return None
+    return candidate
 
 
 def _primary_allowed_root(

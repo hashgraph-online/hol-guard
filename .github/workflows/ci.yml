@@ -1,9 +1,12 @@
 name: CI
 on:
   push:
-    branches: [main, release/2.2]
+    branches: [main]
   pull_request:
-    branches: [main, release/2.2]
+    branches: [main, release/2.1]
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -21,8 +24,18 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - name: Set up uv
+        id: setup-uv-primary
+        continue-on-error: true
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Retry uv setup after transient download failure
+        if: steps.setup-uv-primary.outcome == 'failure'
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
       - run: uv run --no-sync python -m ruff check src/
@@ -41,11 +54,90 @@ jobs:
 
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.12"]
+        shard-index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Set up uv
+        id: setup-uv-primary
+        continue-on-error: true
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Retry uv setup after transient download failure
+        if: steps.setup-uv-primary.outcome == 'failure'
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
+      - name: Secure the CI virtualenv interpreter
+        shell: bash
+        run: |
+          interpreter="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
+          target="$(realpath "$interpreter")"
+          mode="$(stat -c '%a' "$target")"
+          if (( (8#$mode & 2) != 0 )); then
+            replacement="${interpreter}.guard-ci"
+            cp --dereference "$target" "$replacement"
+            chmod 0755 "$replacement"
+            mv "$replacement" "$target"
+          fi
+          secured_mode="$(stat -c '%a' "$(realpath "$interpreter")")"
+          (( (8#$secured_mode & 2) == 0 ))
+      - name: Run pytest shard ${{ matrix.shard-index }}
+        shell: bash
+        run: |
+          uv run --no-sync python scripts/ci/pytest_shard.py \
+            --shard-index "${{ matrix.shard-index }}" \
+            --shard-count 16 \
+            --granularity node > pytest-nodes.txt
+          test -s pytest-nodes.txt
+          uv run --no-sync pytest @pytest-nodes.txt --tb=short
+
+  compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
+      - name: Run cross-version compatibility contracts
+        run: >-
+          uv run --no-sync pytest
+          tests/test_cli.py
+          tests/test_verification.py
+          tests/test_action_runner.py
+          tests/test_policy.py
+          tests/test_policy_bundle_parser.py
+          --tb=short
+
+  deep-compatibility:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.13"]
         shard-index: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -54,25 +146,23 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
+          version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
-      - name: Run pytest shard ${{ matrix.shard-index }}
+      - name: Run deep compatibility shard ${{ matrix.shard-index }}
         shell: bash
         run: |
-          files_output="$(python scripts/ci/pytest_shard.py \
+          uv run --no-sync python scripts/ci/pytest_shard.py \
             --shard-index "${{ matrix.shard-index }}" \
-            --shard-count 4)"
-          if [[ -z "$files_output" ]]; then
-            echo "pytest shard produced no test files" >&2
-            exit 1
-          fi
-          mapfile -t files <<< "$files_output"
-          uv run --no-sync pytest "${files[@]}" --tb=short
+            --shard-count 4 \
+            --granularity file > pytest-files.txt
+          test -s pytest-files.txt
+          uv run --no-sync pytest @pytest-files.txt --tb=short
 
   ci-python-312:
     name: ci (3.12)
     if: always()
-    needs: [quality, tests, windows-updater]
+    needs: [quality, tests, compatibility]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -80,27 +170,24 @@ jobs:
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
           TESTS_RESULT: ${{ needs.tests.result }}
-          WINDOWS_UPDATER_RESULT: ${{ needs['windows-updater'].result }}
+          COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
         run: |
           test "$QUALITY_RESULT" = "success"
           test "$TESTS_RESULT" = "success"
-          test "$WINDOWS_UPDATER_RESULT" = "success"
+          test "$COMPATIBILITY_RESULT" = "success"
 
   dashboard:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          node-version: "20"
-      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
-        with:
-          version: "10"
-      - run: cd dashboard && pnpm install --frozen-lockfile
-      - run: cd dashboard && pnpm test
+          bun-version: "1.3.14"
+      - run: cd dashboard && bun install --frozen-lockfile
+      - run: cd dashboard && bun run test
       - name: Dashboard build and bundle-size report (L331)
         run: |
-          cd dashboard && pnpm build
+          cd dashboard && bun run build
           js_size=$(du -sh dist/assets/*.js 2>/dev/null | awk '{print $1}' | head -1)
           css_size=$(du -sh dist/assets/*.css 2>/dev/null | awk '{print $1}' | head -1)
           echo "Bundle JS: ${js_size:-unknown}, CSS: ${css_size:-unknown}"
@@ -112,8 +199,18 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.13"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - name: Set up uv
+        id: setup-uv-primary
+        continue-on-error: true
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Retry uv setup after transient download failure
+        if: steps.setup-uv-primary.outcome == 'failure'
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
           enable-cache: true
       - run: python3.13 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt
       - run: uv sync --frozen --extra dev --extra cisco --group cisco-mcp --python 3.13
@@ -130,13 +227,49 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - name: Set up uv
+        id: setup-uv-primary
+        continue-on-error: true
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Retry uv setup after transient download failure
+        if: steps.setup-uv-primary.outcome == 'failure'
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
-      - run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py --tb=short
+      - name: Run cross-platform Guard regressions
+        run: >-
+          uv run --no-sync pytest
+          tests/test_cli.py
+          tests/test_verification.py
+          tests/test_action_runner.py
+          tests/test_guard_skill_directory_identity.py
+          tests/test_guard_skill_directory_identity_discovery.py
+          tests/test_guard_skill_directory_identity_downstream.py
+          tests/test_guard_skill_directory_identity_links.py
+          tests/test_guard_consumer_skill_directory_identity.py
+          tests/test_guard_runner_skill_directory_identity.py
+          tests/test_gemini_adapter.py
+          tests/test_gemini_skill_directory_identity.py
+          tests/test_antigravity_adapter.py
+          tests/test_guard_aibom_detection.py
+          tests/test_guard_aibom_content_upload_batches.py
+          tests/test_guard_aibom_skill_directory_identity.py
+          --tb=short
+      - name: Run Windows Codex hook process-tree regressions
+        if: runner.os == 'Windows'
+        run: >-
+          uv run --no-sync pytest
+          tests/test_codex_hook_fallback_isolation.py
+          -k "isolated_process_timeout_kills_descendants or isolated_process_closes_descendant_held_pipes_after_parent_exit"
+          --tb=short
 
   windows-updater:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 15
     strategy:
@@ -148,8 +281,18 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - name: Set up uv
+        id: setup-uv-primary
+        continue-on-error: true
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Retry uv setup after transient download failure
+        if: steps.setup-uv-primary.outcome == 'failure'
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
       - name: Run trusted updater and daemon regressions

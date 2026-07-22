@@ -18,8 +18,8 @@ import threading
 import time
 import uuid
 import webbrowser
-from collections.abc import Mapping
-from contextlib import suppress
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -54,6 +54,15 @@ from ..approval_gate import (
     validate_settings_update as validate_approval_gate_settings,
 )
 from ..approval_resolution import approval_resolution_block_reason
+from ..approval_scope_support import (
+    APPROVAL_SCOPE_CONTRACT_VERSION,
+    APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX,
+    IneligibleApprovalScopeError,
+    StaleApprovalScopeContractError,
+    request_scope_contract,
+    request_scope_contract_payload,
+    resolve_request_scope_selection,
+)
 from ..approvals import (
     ApprovalRequestAlreadyResolvedError,
     ApprovalRequestNotFoundError,
@@ -113,13 +122,14 @@ from ..local_supply_chain import (
     resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
-from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision
+from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision, format_local_http_origin
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
     package_firewall_available_actions,
     package_firewall_block_details,
     package_firewall_operation_allowed,
+    reconcile_connect_state_with_oauth_entitlement,
     resolve_package_firewall_entitlement,
 )
 from ..package_firewall_receipts import package_firewall_receipt_metadata
@@ -180,7 +190,23 @@ from ..store_evidence import (
     export_evidence_json,
     list_evidence,
 )
+from .command_activity_api import (
+    handle_command_activity_analytics,
+    handle_command_activity_diagnostics,
+    handle_command_activity_feedback,
+    handle_command_activity_list,
+    handle_command_extensions,
+    parse_command_activity_event_cursor,
+    stream_command_activity_events,
+)
 from .command_queue_worker import CommandQueueWorker, start_command_queue_worker, stop_command_queue_worker
+from .dashboard_reconnect import (
+    DASHBOARD_RECONNECT_PROTOCOL_VERSION,
+    consume_dashboard_reconnect_challenge,
+    dashboard_reconnect_challenge_identity,
+    issue_dashboard_reconnect_challenge,
+    prepare_dashboard_reconnect_authorization,
+)
 from .dashboard_update import merge_dashboard_update_progress, schedule_guard_dashboard_update
 from .discovery import (
     DAEMON_DISCOVERY_CHALLENGE_TTL_SECONDS,
@@ -192,6 +218,7 @@ from .discovery import (
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     clear_guard_daemon_state_if_current,
+    current_guard_daemon_runtime_fingerprint,
     load_guard_daemon_auth_token,
     repair_approval_center_locator,
     write_guard_daemon_state,
@@ -277,6 +304,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     start_monotonic: float
     active_stream_clients: int
     active_stream_clients_lock: threading.Lock
+    shutdown_started: threading.Event
     package_firewall_connect_state: dict[str, object] | None
     package_firewall_connect_state_lock: threading.Lock
     guard_cloud_connect_state: dict[str, object] | None
@@ -288,6 +316,11 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     approval_attention: ApprovalAttentionCoordinator
     daemon_discovery_challenges: dict[str, dict[str, object]]
     daemon_discovery_challenges_lock: threading.Lock
+    dashboard_reconnect_lock: threading.Lock
+    dashboard_reconnect_consumed_challenges: dict[str, int]
+    containment_health_cache: dict[str, object] | None
+    containment_health_cache_monotonic: float
+    containment_health_cache_lock: threading.Lock
 
     def __init__(
         self,
@@ -300,6 +333,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         runtime_session_id: str,
         runtime_started_at: str,
         idle_timeout_seconds: float | None,
+        shutdown_started: threading.Event,
     ) -> None:
         super().__init__(server_address, handler_class)
         self.store = store
@@ -313,6 +347,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.start_monotonic = time.monotonic()
         self.active_stream_clients = 0
         self.active_stream_clients_lock = threading.Lock()
+        self.shutdown_started = shutdown_started
         self.package_firewall_connect_state = None
         self.package_firewall_connect_state_lock = threading.Lock()
         self.guard_cloud_connect_state = None
@@ -323,6 +358,11 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.package_firewall_session_nonces_lock = threading.Lock()
         self.daemon_discovery_challenges = {}
         self.daemon_discovery_challenges_lock = threading.Lock()
+        self.dashboard_reconnect_lock = threading.Lock()
+        self.dashboard_reconnect_consumed_challenges = {}
+        self.containment_health_cache = None
+        self.containment_health_cache_monotonic = 0.0
+        self.containment_health_cache_lock = threading.Lock()
         from .hook_worker import HookWorker
 
         self.hook_worker = HookWorker(store=store)
@@ -362,7 +402,50 @@ _ROOT_STATIC_FILES = {
     "/favicon-16x16.png",
     "/favicon-32x32.png",
 }
-_CLAUDE_HOOK_EXECUTION_LOCK = threading.Lock()
+
+
+class _RuntimeHookExecutionGate:
+    """Allow concurrent hooks unless one temporarily mutates process environment."""
+
+    def __init__(self) -> None:
+        self._condition = threading.Condition()
+        self._readers = 0
+        self._writer = False
+        self._waiting_writers = 0
+
+    @contextmanager
+    def shared(self) -> Iterator[None]:
+        with self._condition:
+            while self._writer or self._waiting_writers > 0:
+                self._condition.wait()
+            self._readers += 1
+        try:
+            yield
+        finally:
+            with self._condition:
+                self._readers -= 1
+                if self._readers == 0:
+                    self._condition.notify_all()
+
+    @contextmanager
+    def exclusive(self) -> Iterator[None]:
+        with self._condition:
+            self._waiting_writers += 1
+            try:
+                while self._writer or self._readers > 0:
+                    self._condition.wait()
+            finally:
+                self._waiting_writers -= 1
+            self._writer = True
+        try:
+            yield
+        finally:
+            with self._condition:
+                self._writer = False
+                self._condition.notify_all()
+
+
+_RUNTIME_HOOK_EXECUTION_GATE = _RuntimeHookExecutionGate()
 _RUNTIME_HOOK_ENV_ALLOWLIST = frozenset(
     {
         "HOL_GUARD_MANAGED_CURSOR_HOOK",
@@ -921,7 +1004,7 @@ def _default_package_firewall_connect_flow(
     else:
         title = "Connect HOL Guard Cloud to enable package firewall"
         detail = (
-            "Guard keeps this machine protected locally. Connect HOL Guard Cloud here so the daemon can verify "
+            "Guard continues running locally. Connect HOL Guard Cloud here so the daemon can verify "
             "package-firewall access before it changes package-manager routing."
         )
     return {
@@ -1077,7 +1160,7 @@ def _default_guard_cloud_connect_flow(*, store: GuardStore, repair_mode: bool) -
     else:
         title = "Connect Guard Cloud to publish insights"
         detail = (
-            "Guard keeps protecting this machine locally. Connect Guard Cloud here so the daemon can publish "
+            "Local Guard remains available. Connect Guard Cloud here so the daemon can publish "
             "a public share link with preview image support."
         )
     return {
@@ -1251,6 +1334,10 @@ def _finalize_daemon_guard_connect_payload(
                 "latest_connect_state": store.get_latest_guard_connect_state(now=now),
             }
         )
+        reconciled_state = reconcile_connect_state_with_oauth_entitlement(store, now=now)
+        if reconciled_state is not None:
+            payload["milestone"] = str(reconciled_state.get("milestone") or "first_sync_pending")
+            payload["latest_connect_state"] = reconciled_state
         return payload
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
         store.record_latest_guard_connect_sync_result(
@@ -1328,7 +1415,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         headers = self._cors_headers_for_request(
             allow_methods="GET, POST, DELETE, OPTIONS",
-            allow_headers="Authorization, Content-Type, X-Guard-Dashboard-Session, X-Guard-Token",
+            allow_headers=("Authorization, Content-Type, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token"),
         )
         if headers is None:
             self._write_empty(status=403)
@@ -1362,11 +1449,35 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return
             self._stream_events(_int_query_value(parsed.query, "cursor"))
             return
+        if parsed.path == "/v1/command-activity/events":
+            if self._query_has_guard_token(parsed.query):
+                self._record_query_token_rejection()
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            if not self._header_token_is_valid():
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            try:
+                cursor = parse_command_activity_event_cursor(
+                    parsed.query,
+                    last_event_id=self.headers.get("Last-Event-ID"),
+                )
+            except ValueError as error:
+                self._write_json({"error": str(error)}, status=400)
+                return
+            stream_command_activity_events(self, cursor)
+            return
         if parsed.path.startswith("/v1/") and not self._header_token_is_valid():
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
         if parsed.path == "/v1/capabilities":
             self._handle_capabilities()
+            return
+        if parsed.path == "/v1/runtime/containment-health":
+            self._write_json(
+                {"containment_health": self._containment_health_payload(force_refresh=True)},
+                extra_headers={"Cache-Control": "no-store"},
+            )
             return
         if parsed.path == "/v1/sessions":
             self._write_json({"items": store.list_guard_sessions(limit=200)})
@@ -1377,12 +1488,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             include_receipts = self._query_bool(parsed.query, "include_receipts", default=True)
             snapshot = build_runtime_snapshot(
                 store=store,
-                approval_center_url=(
-                    f"http://{self._daemon_server().daemon_host()}:{self._daemon_server().daemon_port()}"
+                approval_center_url=format_local_http_origin(
+                    self._daemon_server().daemon_host(),
+                    self._daemon_server().daemon_port(),
                 ),
                 active_request_id=self._query_string(parsed.query, "active_request_id"),
                 include_items=self._query_bool(parsed.query, "include_items", default=True),
                 receipt_limit=25 if include_receipts else 0,
+                containment_health=self._containment_health_payload(),
             )
             self._write_json({**snapshot, "security_level": config.security_level})
             return
@@ -1478,6 +1591,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/requests":
             self._handle_requests_list(parsed.query)
+            return
+        if parsed.path == "/v1/command-activity":
+            handle_command_activity_list(self, parsed.query)
+            return
+        if parsed.path == "/v1/command-activity/analytics":
+            handle_command_activity_analytics(self, parsed.query)
+            return
+        if parsed.path == "/v1/command-activity/diagnostics":
+            handle_command_activity_diagnostics(self)
+            return
+        if parsed.path == "/v1/command-extensions":
+            handle_command_extensions(self, parsed.query)
             return
         if parsed.path == "/v1/connect/state":
             self._write_legacy_pairing_disabled()
@@ -1675,7 +1800,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 extra_headers=self._cors_headers_for_request(),
             )
             return
+        body = self._read_delete_body() if parsed.path == "/v1/command-activity" else None
         store = self.server.store  # type: ignore[attr-defined]
+        if parsed.path == "/v1/command-activity":
+            if body is None:
+                self._write_json({"error": "invalid_request"}, status=400)
+                return
+            if body.get("confirm") != "clear-command-activity":
+                self._write_json(
+                    {"error": "confirmation_required", "confirm": "clear-command-activity"},
+                    status=400,
+                )
+                return
+            try:
+                require_high_risk(
+                    store.guard_home,
+                    purpose="evidence_clear",
+                    approval_gate_input=approval_gate_input_from_mapping(body),
+                )
+            except ApprovalGateError as error:
+                self._write_approval_gate_error(error)
+                return
+            self._write_json(store.clear_command_activity_evidence())
+            return
         if parsed.path == "/v1/evidence":
             with store._connect() as conn:
                 deleted = clear_evidence(conn)
@@ -1727,6 +1874,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/daemon/identity-challenge":
             self._handle_daemon_identity_challenge(payload)
             return
+        if parsed.path == "/v1/update/reconnect/challenge":
+            self._handle_dashboard_reconnect_challenge(payload)
+            return
+        if parsed.path == "/v1/update/reconnect/verify":
+            self._handle_dashboard_reconnect_verify(payload)
+            return
         if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid(payload=payload):
             if (
                 len(path_parts) == 4
@@ -1760,6 +1913,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
+            return
+        if parsed.path == "/v1/command-activity/feedback":
+            handle_command_activity_feedback(self, payload)
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]:
             self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
@@ -1834,11 +1990,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             result = repair_approval_center_locator(self.server.store.guard_home)  # type: ignore[attr-defined]
             self._write_json(result)
             return
+        if parsed.path == "/v1/protection/repair":
+            self._handle_protection_repair(payload)
+            return
         if parsed.path == "/v1/insights/share":
             self._handle_insights_share_publish(payload)
             return
         if parsed.path == "/v1/cloud/connect":
             self._handle_guard_cloud_connect_start()
+            return
+        if parsed.path == "/v1/update/reconnect/prepare":
+            self._handle_dashboard_reconnect_prepare()
             return
         if parsed.path == "/v1/update":
             force_pypi_reinstall = bool(payload.get("force_pypi_reinstall"))
@@ -1942,7 +2104,63 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not isinstance(scope, str) or not scope.strip():
             self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
             return
+        scope_contract_version_value = payload.get("scope_contract_version")
+        if scope_contract_version_value is not None and (
+            not isinstance(scope_contract_version_value, str) or not scope_contract_version_value.strip()
+        ):
+            self._write_json({"resolved": False, "error": "invalid_scope_contract_version"}, status=400)
+            return
+        scope_contract_version = (
+            scope_contract_version_value.strip() if isinstance(scope_contract_version_value, str) else None
+        )
+        if scope_contract_version is not None and (
+            not scope_contract_version.startswith(APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX)
+            or not scope_contract_version.removeprefix(APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX).isdigit()
+        ):
+            self._write_json({"resolved": False, "error": "invalid_scope_contract_version"}, status=400)
+            return
+        scope_contract_digest_value = payload.get("scope_contract_digest")
+        if scope_contract_digest_value is not None and (
+            not isinstance(scope_contract_digest_value, str) or not scope_contract_digest_value.strip()
+        ):
+            self._write_json({"resolved": False, "error": "invalid_scope_contract_digest"}, status=400)
+            return
+        scope_contract_digest = (
+            scope_contract_digest_value.strip() if isinstance(scope_contract_digest_value, str) else None
+        )
+        if scope_contract_digest is not None and (
+            len(scope_contract_digest) != 64
+            or any(character not in "0123456789abcdef" for character in scope_contract_digest)
+        ):
+            self._write_json({"resolved": False, "error": "invalid_scope_contract_digest"}, status=400)
+            return
         try:
+            existing_request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
+            if isinstance(existing_request, dict):
+                scope_selection = resolve_request_scope_selection(
+                    existing_request,
+                    action=action,
+                    requested_scope=scope.strip(),
+                    contract_version=scope_contract_version,
+                    contract_digest=scope_contract_digest,
+                )
+                if existing_request.get("status") != "pending":
+                    if (
+                        existing_request.get("resolution_action") == action
+                        and existing_request.get("resolution_scope") == scope_selection.applied_scope
+                    ):
+                        self._write_json(
+                            {
+                                "resolved": True,
+                                "idempotent": True,
+                                "resolved_request": existing_request,
+                                "requested_scope": scope_selection.requested_scope,
+                                "applied_scope": scope_selection.applied_scope,
+                                **request_scope_contract_payload(existing_request),
+                            }
+                        )
+                        return
+                    raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
             persist_policy = self._approval_persist_policy(payload)
             updated = apply_approval_resolution(
                 store=self.server.store,  # type: ignore[attr-defined]
@@ -1955,6 +2173,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 resolve_scope_matches=False,
                 approval_gate_input=approval_gate_input_from_mapping(payload),
                 persist_policy=persist_policy,
+                scope_contract_version=scope_contract_version,
+                scope_contract_digest=scope_contract_digest,
+                mcp_grant_target=payload.get("mcp_grant_target"),
+                mcp_grant_duration=payload.get("mcp_grant_duration"),
             )
         except ApprovalRequestNotFoundError:
             self._write_json(
@@ -1972,6 +2194,52 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             return
         except ApprovalRequestAlreadyResolvedError:
+            resolved_request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
+            if isinstance(resolved_request, dict):
+                try:
+                    replay_selection = resolve_request_scope_selection(
+                        resolved_request,
+                        action=action,
+                        requested_scope=scope.strip(),
+                        contract_version=scope_contract_version,
+                        contract_digest=scope_contract_digest,
+                    )
+                except StaleApprovalScopeContractError as error:
+                    self._write_json(
+                        {"resolved": False, "error": str(error), **error.contract.to_dict()},
+                        status=409,
+                    )
+                    return
+                except IneligibleApprovalScopeError as error:
+                    self._write_json(
+                        {
+                            "resolved": False,
+                            "error": str(error),
+                            "action": error.action,
+                            "requested_scope": error.requested_scope,
+                            **error.contract.to_dict(),
+                        },
+                        status=422,
+                    )
+                    return
+                except ValueError as error:
+                    self._write_json({"resolved": False, "error": str(error)}, status=400)
+                    return
+                if (
+                    resolved_request.get("resolution_action") == action
+                    and resolved_request.get("resolution_scope") == replay_selection.applied_scope
+                ):
+                    self._write_json(
+                        {
+                            "resolved": True,
+                            "idempotent": True,
+                            "resolved_request": resolved_request,
+                            "requested_scope": replay_selection.requested_scope,
+                            "applied_scope": replay_selection.applied_scope,
+                            **request_scope_contract_payload(resolved_request),
+                        }
+                    )
+                    return
             self._write_json(
                 {
                     "resolved": False,
@@ -1991,6 +2259,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         except ApprovalGateError as error:
             self._write_approval_gate_error(error, resolved=False)
+            return
+        except StaleApprovalScopeContractError as error:
+            self._write_json(
+                {"resolved": False, "error": str(error), **error.contract.to_dict()},
+                status=409,
+            )
+            return
+        except IneligibleApprovalScopeError as error:
+            self._write_json(
+                {
+                    "resolved": False,
+                    "error": str(error),
+                    "action": error.action,
+                    "requested_scope": error.requested_scope,
+                    **error.contract.to_dict(),
+                },
+                status=422,
+            )
             return
         except ValueError as error:
             self._write_json({"resolved": False, "error": str(error)}, status=400)
@@ -2468,13 +2754,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "remote_once_request_not_pending"}, status=409)
             return
         request_policy_action = self._optional_string(request_row.get("policy_action"))
-        request_recommended_scope = self._optional_string(request_row.get("recommended_scope"))
+        resolution_action = normalize_remote_approval_decision(envelope.get("decision"))
+        if resolution_action is None:
+            self._write_json({"error": "invalid_remote_approval_decision"}, status=400)
+            return
+        contract = request_scope_contract(request_row)
+        request_recommended_scope = self._optional_string(envelope.get("scope"))
         resolution_block_reason = approval_resolution_block_reason(request_row)
         if (
             resolution_block_reason is not None
             or request_policy_action not in {"review", "require-reapproval"}
             or request_recommended_scope not in DECISION_SCOPE_VALUES
         ):
+            self._write_json({"error": "remote_once_not_permitted"}, status=409)
+            return
+        try:
+            scope_selection = resolve_request_scope_selection(
+                request_row,
+                action=resolution_action,
+                requested_scope=request_recommended_scope,
+                contract_version=APPROVAL_SCOPE_CONTRACT_VERSION,
+                contract_digest=contract.digest,
+            )
+        except IneligibleApprovalScopeError:
             self._write_json({"error": "remote_once_not_permitted"}, status=409)
             return
         try:
@@ -2513,16 +2815,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         ):
             self._write_json({"error": "remote_once_replayed"}, status=409)
             return
-        resolution_action = normalize_remote_approval_decision(envelope.get("decision"))
-        if resolution_action is None:  # Validated before binding and receipt claim; defensive for typed narrowing.
-            self.server.store.release_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
-            self._write_json({"error": "invalid_remote_approval_decision"}, status=400)
-            return
         try:
             result = self.server.store.resolve_request_with_signed_remote_result(  # type: ignore[attr-defined]
                 request_id,
                 resolution_action=resolution_action,
-                resolution_scope=request_recommended_scope or "artifact",
+                resolution_scope=scope_selection.applied_scope,
                 reason="Guard Cloud signed remote approval",
                 resolved_at=_now(),
             )
@@ -2545,7 +2842,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "receipt_id": receipt_id,
                 "request_id": request_id,
                 "review_command": self._optional_string(resolved_request.get("review_command")),
-                "scope": request_recommended_scope or "artifact",
+                "scope": scope_selection.applied_scope,
             },
             resolved_at,
         )
@@ -3778,6 +4075,64 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return None
         return parsed if isinstance(parsed, dict) else None
 
+    def _handle_protection_repair(self, payload: dict[str, object]) -> None:
+        check_id = self._optional_string(payload.get("check_id"))
+        store = self.server.store  # type: ignore[attr-defined]
+        if check_id in {"policy_engine", "rule_packs", "tamper_checks"}:
+            try:
+                status = store.setup_policy_integrity(now=_now(), include_items=False)
+            except (OSError, RuntimeError, ValueError):
+                self._write_json(
+                    {
+                        "error": "protection_repair_failed",
+                        "message": "Guard could not restore integrity protection automatically.",
+                    },
+                    status=409,
+                )
+                return
+            repaired = status.get("mode") == "protected"
+            self._write_json(
+                {
+                    "repaired": repaired,
+                    "check_ids": ["policy_engine", "rule_packs", "tamper_checks"],
+                    "message": (
+                        "Integrity protection restored."
+                        if repaired
+                        else "Guard could not confirm integrity protection yet."
+                    ),
+                },
+                status=200 if repaired else 409,
+            )
+            return
+        if check_id == "decision_stream":
+            try:
+                health = store.get_command_activity_persistence_health()
+                observed = store.count_command_activities() > 0
+            except (OSError, RuntimeError, TypeError, ValueError):
+                self._write_json(
+                    {
+                        "error": "protection_repair_failed",
+                        "message": "Guard could not verify the command evidence store.",
+                    },
+                    status=409,
+                )
+                return
+            repaired = health.active_error_count == 0 and observed
+            self._write_json(
+                {
+                    "repaired": repaired,
+                    "check_ids": ["decision_stream"],
+                    "message": (
+                        "Command evidence is healthy."
+                        if repaired
+                        else "Guard still needs a successful protected command to confirm evidence health."
+                    ),
+                },
+                status=200 if repaired else 409,
+            )
+            return
+        self._write_json({"error": "unsupported_protection_check"}, status=400)
+
     def _handle_settings_update(self, payload: dict[str, object]) -> None:
         settings = payload.get("settings")
         if not isinstance(settings, dict):
@@ -3807,7 +4162,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     approval_gate_grant=approval_gate_grant,
                 )
             config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
-            config = update_guard_settings(guard_home, config_settings, approval_gate_grant=approval_gate_grant)
+            entitlement = resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
+            config = update_guard_settings(
+                guard_home,
+                config_settings,
+                approval_gate_grant=approval_gate_grant,
+                cloud_sync_entitled=bool(entitlement.get("allowed")),
+            )
             if isinstance(gate_payload, dict):
                 update_approval_gate_settings(
                     guard_home,
@@ -3852,7 +4213,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     approval_gate_grant=approval_gate_grant,
                 )
             config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
-            config = update_guard_settings(guard_home, config_settings, approval_gate_grant=approval_gate_grant)
+            entitlement = resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
+            config = update_guard_settings(
+                guard_home,
+                config_settings,
+                approval_gate_grant=approval_gate_grant,
+                cloud_sync_entitled=bool(entitlement.get("allowed")),
+            )
             if isinstance(gate_payload, dict):
                 update_approval_gate_settings(
                     guard_home,
@@ -4441,7 +4808,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             json=True,
         )
         buffer = io.StringIO()
-        with _CLAUDE_HOOK_EXECUTION_LOCK:
+        execution_guard = (
+            _RUNTIME_HOOK_EXECUTION_GATE.exclusive() if hook_env else _RUNTIME_HOOK_EXECUTION_GATE.shared()
+        )
+        with execution_guard:
             from ..cli.commands import run_guard_command
 
             original_env: dict[str, str | None] = {key: os.environ.get(key) for key in hook_env}
@@ -4473,6 +4843,159 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _query_has_guard_token(self, query: str) -> bool:
         return any(key == "token" for key, _value in parse_qsl(query, keep_blank_values=True))
+
+    def _handle_dashboard_reconnect_prepare(self) -> None:
+        daemon_server = self._daemon_server()
+        try:
+            with daemon_server.dashboard_reconnect_lock:
+                authorization = prepare_dashboard_reconnect_authorization(daemon_server.store.guard_home)
+        except (OSError, RuntimeError):
+            self._write_json(
+                {
+                    "error": "dashboard_reconnect_unavailable",
+                    "reason_code": "dashboard_reconnect_identity_unavailable",
+                },
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+        self._write_json(authorization, extra_headers={"Cache-Control": "no-store"})
+
+    def _handle_dashboard_reconnect_challenge(self, payload: dict[str, object]) -> None:
+        if payload.get("protocol_version") != DASHBOARD_RECONNECT_PROTOCOL_VERSION:
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_protocol_mismatch")
+            return
+        candidate_origin = self._strict_loopback_origin(payload.get("candidate_origin"))
+        daemon_origin = self._dashboard_reconnect_daemon_origin()
+        if candidate_origin is None or daemon_origin is None or candidate_origin != daemon_origin:
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_origin_mismatch")
+            return
+        state = self._current_authenticated_daemon_state()
+        state_id = self._optional_string(state.get("state_id")) if state is not None else None
+        if state_id is None:
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_state_unavailable")
+            return
+        daemon_server = self._daemon_server()
+        with daemon_server.dashboard_reconnect_lock:
+            challenge, reason_code = issue_dashboard_reconnect_challenge(
+                daemon_server.store.guard_home,
+                reconnect_id=payload.get("reconnect_id"),
+                client_nonce=payload.get("client_nonce"),
+                candidate_origin=candidate_origin,
+                state_id=state_id,
+            )
+        if challenge is None:
+            self._write_dashboard_reconnect_candidate_failure(reason_code)
+            return
+        self._write_json(challenge, extra_headers={"Cache-Control": "no-store"})
+
+    def _handle_dashboard_reconnect_verify(self, payload: dict[str, object]) -> None:
+        if payload.get("protocol_version") != DASHBOARD_RECONNECT_PROTOCOL_VERSION:
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_protocol_mismatch")
+            return
+        raw_challenge = payload.get("challenge")
+        if not isinstance(raw_challenge, dict) or not _is_string_object_dict(raw_challenge):
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_malformed_proof")
+            return
+        candidate_origin = self._strict_loopback_origin(raw_challenge.get("candidate_origin"))
+        daemon_origin = self._dashboard_reconnect_daemon_origin()
+        state = self._current_authenticated_daemon_state()
+        state_id = self._optional_string(state.get("state_id")) if state is not None else None
+        if candidate_origin is None or daemon_origin is None or candidate_origin != daemon_origin or state_id is None:
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_proof_context_mismatch")
+            return
+        daemon_server = self._daemon_server()
+        challenge_identity = dashboard_reconnect_challenge_identity(raw_challenge)
+        if challenge_identity is None:
+            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_malformed_proof")
+            return
+        now_ms = int(time.time() * 1000)
+        with daemon_server.dashboard_reconnect_lock:
+            expired_challenges = [
+                identity
+                for identity, expires_at_ms in daemon_server.dashboard_reconnect_consumed_challenges.items()
+                if expires_at_ms < now_ms
+            ]
+            for identity in expired_challenges:
+                daemon_server.dashboard_reconnect_consumed_challenges.pop(identity, None)
+            if challenge_identity in daemon_server.dashboard_reconnect_consumed_challenges:
+                self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_proof_replayed")
+                return
+            verified, reason_code = consume_dashboard_reconnect_challenge(
+                daemon_server.store.guard_home,
+                challenge=raw_challenge,
+                proof=payload.get("proof"),
+                expected_candidate_origin=daemon_origin,
+                expected_state_id=state_id,
+            )
+            if verified:
+                expires_at_ms = raw_challenge.get("expires_at_ms")
+                daemon_server.dashboard_reconnect_consumed_challenges[challenge_identity] = (
+                    expires_at_ms if isinstance(expires_at_ms, int) else now_ms
+                )
+                while len(daemon_server.dashboard_reconnect_consumed_challenges) > 256:
+                    oldest = next(iter(daemon_server.dashboard_reconnect_consumed_challenges))
+                    daemon_server.dashboard_reconnect_consumed_challenges.pop(oldest, None)
+        if not verified:
+            self._write_dashboard_reconnect_candidate_failure(reason_code)
+            return
+        self._write_json(
+            {"verified": True, "reason_code": reason_code},
+            extra_headers={"Cache-Control": "no-store"},
+        )
+
+    def _write_dashboard_reconnect_candidate_failure(self, reason_code: str) -> None:
+        self._write_json(
+            {"error": "daemon_candidate_unavailable", "reason_code": reason_code},
+            status=404,
+            extra_headers={"Cache-Control": "no-store"},
+        )
+
+    def _current_authenticated_daemon_state(self) -> dict[str, object] | None:
+        daemon_server = self._daemon_server()
+        state = load_authenticated_daemon_state(daemon_server.store.guard_home)
+        if state is None:
+            return None
+        expected_guard_home = str(daemon_server.store.guard_home.resolve())
+        if (
+            state.get("guard_home") != expected_guard_home
+            or state.get("host") != daemon_server.daemon_host()
+            or state.get("port") != daemon_server.daemon_port()
+            or state.get("pid") != os.getpid()
+            or state.get("state_id") != daemon_server.runtime_session_id
+        ):
+            return None
+        return state
+
+    def _dashboard_reconnect_daemon_origin(self) -> str | None:
+        daemon_server = self._daemon_server()
+        host = daemon_server.daemon_host()
+        if host == "127.0.0.1":
+            return f"http://127.0.0.1:{daemon_server.daemon_port()}"
+        if host == "::1":
+            return f"http://[::1]:{daemon_server.daemon_port()}"
+        return None
+
+    @classmethod
+    def _strict_loopback_origin(cls, value: object) -> str | None:
+        if not isinstance(value, str):
+            return None
+        normalized = cls._normalize_origin(value)
+        if normalized is None:
+            return None
+        parsed = urlparse(normalized)
+        if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "::1"}:
+            return None
+        try:
+            port = parsed.port
+        except ValueError:
+            return None
+        if port is None or not 1 <= port <= 65535:
+            return None
+        canonical_host = "[::1]" if parsed.hostname == "::1" else "127.0.0.1"
+        canonical = f"http://{canonical_host}:{port}"
+        raw_origin = value.strip()
+        return canonical if normalized == canonical and raw_origin in {canonical, f"{canonical}/"} else None
 
     def _handle_daemon_identity_challenge(self, payload: dict[str, object]) -> None:
         nonce = self._optional_string(payload.get("nonce"))
@@ -4783,6 +5306,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/settings/export",
             "/v1/events",
             "/v1/events/stream",
+            "/v1/command-activity",
+            "/v1/command-activity/analytics",
+            "/v1/command-activity/diagnostics",
+            "/v1/command-activity/events",
+            "/v1/command-activity/feedback",
+            "/v1/command-extensions",
             "/v1/requests",
             "/v1/receipts",
             "/v1/receipts/analytics",
@@ -4811,8 +5340,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/approval-gate/totp/verify",
             "/v1/approval-gate/totp/disable",
             "/v1/daemon/repair",
+            "/v1/protection/repair",
             "/v1/notifications/setup",
             "/v1/update/status",
+            "/v1/update/reconnect/prepare",
         }:
             return True
         # Hosted dashboard access is blocked for these routes, but local
@@ -4832,7 +5363,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
                 return True
         if self.command == "POST":
-            if path == "/v1/update":
+            if path in {"/v1/update", "/v1/update/reconnect/prepare"}:
                 return True
             if (
                 len(path_parts) == 4
@@ -5004,6 +5535,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         with self.server.active_stream_clients_lock:  # type: ignore[attr-defined]
             self.server.active_stream_clients += 1  # type: ignore[attr-defined]
 
+    def _try_increment_active_stream_clients(self, maximum: int) -> bool:
+        with self.server.active_stream_clients_lock:  # type: ignore[attr-defined]
+            if self.server.active_stream_clients >= maximum:  # type: ignore[attr-defined]
+                return False
+            self.server.active_stream_clients += 1  # type: ignore[attr-defined]
+            return True
+
     def _decrement_active_stream_clients(self) -> None:
         with self.server.active_stream_clients_lock:  # type: ignore[attr-defined]
             self.server.active_stream_clients = max(0, self.server.active_stream_clients - 1)  # type: ignore[attr-defined]
@@ -5071,6 +5609,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/daemon/repair",
             "/v1/evidence",
             "/v1/evidence/export",
+            "/v1/command-activity",
+            "/v1/command-activity/analytics",
+            "/v1/command-activity/diagnostics",
+            "/v1/command-activity/events",
+            "/v1/command-activity/feedback",
+            "/v1/command-extensions",
             "/v1/harnesses",
             "/v1/notifications/setup",
             "/v1/policy",
@@ -5091,6 +5635,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/settings/reset",
             "/v1/read-state",
             "/v1/update",
+            "/v1/update/reconnect/challenge",
+            "/v1/update/reconnect/prepare",
+            "/v1/update/reconnect/verify",
             "/v1/update/status",
         }:
             return True
@@ -5131,10 +5678,31 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
         }
 
+    def _containment_health_payload(self, *, force_refresh: bool = False) -> dict[str, object] | None:
+        from ..runtime.containment_health import probe_containment_health
+
+        server = self._daemon_server()
+        with server.containment_health_cache_lock:
+            age = time.monotonic() - server.containment_health_cache_monotonic
+            if not force_refresh and server.containment_health_cache is not None and age <= 10.0:
+                return dict(server.containment_health_cache)
+            try:
+                payload = probe_containment_health(
+                    daemon_fingerprint=current_guard_daemon_runtime_fingerprint(),
+                ).to_dict()
+            except (OSError, RuntimeError, TypeError, ValueError):
+                server.containment_health_cache = None
+                server.containment_health_cache_monotonic = time.monotonic()
+                return None
+            server.containment_health_cache = payload
+            server.containment_health_cache_monotonic = time.monotonic()
+            return dict(payload)
+
     def _detailed_healthz_payload(self) -> dict[str, object]:
         uptime = round(time.monotonic() - self.server.start_monotonic, 1)  # type: ignore[attr-defined]
         store = self.server.store  # type: ignore[attr-defined]
         pending_approvals = store.count_approval_requests()
+        activity_health = store.get_command_activity_persistence_health()
         return {
             "ok": True,
             "receipts": len(store.list_receipts(limit=500)),
@@ -5145,7 +5713,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "tables": store.list_table_names(),
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
             "package_version": __version__,
+            "runtime_fingerprint": current_guard_daemon_runtime_fingerprint(),
             "guard_home": str(store.guard_home.resolve()),
+            "command_activity_evidence": {
+                "state": "degraded" if activity_health.persistence_error_count else "healthy",
+                "dropped_event_count": activity_health.dropped_event_count,
+                "persistence_error_count": activity_health.persistence_error_count,
+                "last_error_code": activity_health.last_error_code,
+                "last_error_at": (
+                    activity_health.last_error_at.isoformat() if activity_health.last_error_at is not None else None
+                ),
+                "schema_version": activity_health.schema_version,
+            },
         }
 
     @staticmethod
@@ -5471,10 +6050,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/approval-gate/totp/verify",
             "/v1/approval-gate/totp/disable",
             "/v1/daemon/repair",
+            "/v1/protection/repair",
             "/v1/insights/share",
             "/v1/cloud/connect",
             "/v1/notifications/setup",
             "/v1/update",
+            "/v1/update/reconnect/prepare",
+            "/v1/command-activity/feedback",
         }:
             return True
         if len(path_parts) >= 3 and path_parts[:2] == ["v1", "hooks"]:
@@ -5644,6 +6226,7 @@ class GuardDaemonServer:
         workspace_dir: Path | None = None,
     ) -> None:
         _validate_dashboard_bundle()
+        self._shutdown_started = threading.Event()
         self._server = _GuardDaemonHttpServer(
             (host, port),
             _GuardDaemonHandler,
@@ -5656,6 +6239,7 @@ class GuardDaemonServer:
                 store.guard_home,
                 idle_timeout_seconds=idle_timeout_seconds,
             ),
+            shutdown_started=self._shutdown_started,
         )
         self.port = self._server.daemon_port()
         self._bundle_refresh_backoff_seconds = bundle_refresh_backoff_seconds
@@ -5673,10 +6257,10 @@ class GuardDaemonServer:
         self._bundle_refresh_thread: threading.Thread | None = None
         self._command_queue_worker: CommandQueueWorker | None = None
         self._headless_cloud_sync_thread: threading.Thread | None = None
+        self._command_activity_maintenance_thread: threading.Thread | None = None
         self._live_request_sync_worker: LiveRequestSyncWorker | None = None
         self._thread: threading.Thread | None = None
         self._watchdog_thread: threading.Thread | None = None
-        self._shutdown_started = threading.Event()
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -5711,6 +6295,7 @@ class GuardDaemonServer:
         if self._headless_cloud_sync_thread is not None:
             self._headless_cloud_sync_thread.join(timeout=5)
             self._headless_cloud_sync_thread = None
+        self._join_command_activity_maintenance()
         self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
         self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
 
@@ -5719,7 +6304,9 @@ class GuardDaemonServer:
             if self._aibom_refresh_thread.is_alive():
                 raise RuntimeError("AIBOM inventory refresh is still stopping")
             self._aibom_refresh_thread = None
+        self._require_command_activity_maintenance_stopped()
         self._shutdown_started.clear()
+        self._maintain_command_activity_best_effort()
         self._persist_aibom_inventory_context()
         self._server.last_activity_monotonic = time.monotonic()
         write_guard_daemon_state(
@@ -5749,6 +6336,57 @@ class GuardDaemonServer:
             self._server.store,
             self._live_request_sync_worker,
         )
+        self._start_command_activity_maintenance()
+
+    def _maintain_command_activity_best_effort(self) -> None:
+        now = datetime.now(timezone.utc)
+        try:
+            config = load_guard_config(
+                self._server.store.guard_home,
+            )
+            self._server.store.maintain_command_activity(
+                now=now,
+                detail_retain_days=config.evidence_retain_days,
+            )
+        except Exception:
+            with suppress(Exception):
+                self._server.store.record_command_activity_persistence_failure(
+                    error_code="maintenance_failed",
+                    occurred_at=now,
+                )
+
+    def _start_command_activity_maintenance(self) -> None:
+        if (
+            self._command_activity_maintenance_thread is not None
+            and self._command_activity_maintenance_thread.is_alive()
+        ):
+            return
+        self._command_activity_maintenance_thread = threading.Thread(
+            target=self._command_activity_maintenance_loop,
+            daemon=True,
+        )
+        self._command_activity_maintenance_thread.start()
+
+    def _require_command_activity_maintenance_stopped(self) -> None:
+        if self._command_activity_maintenance_thread is None:
+            return
+        if self._command_activity_maintenance_thread.is_alive():
+            raise RuntimeError("command activity maintenance is still stopping")
+        self._command_activity_maintenance_thread = None
+
+    def _join_command_activity_maintenance(self) -> None:
+        if self._command_activity_maintenance_thread is None:
+            return
+        self._command_activity_maintenance_thread.join(timeout=5)
+        if not self._command_activity_maintenance_thread.is_alive():
+            self._command_activity_maintenance_thread = None
+
+    def _command_activity_maintenance_loop(self) -> None:
+        if self._shutdown_started.is_set():
+            return
+        self._maintain_command_activity_best_effort()
+        while not self._shutdown_started.wait(3_600):
+            self._maintain_command_activity_best_effort()
 
     def _persist_aibom_inventory_context(self) -> None:
         workspace_id = self._server.store.get_cloud_workspace_id()

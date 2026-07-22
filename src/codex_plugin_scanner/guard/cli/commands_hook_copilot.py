@@ -29,8 +29,46 @@ if TYPE_CHECKING:
 
 
 from ..mcp_tool_calls import resolve_tool_call_policy_action
+from ..models import GuardAction
+from ..runtime.command_activity_contract import ActivityApprovalReuseStatus
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from .commands_support_command_activity import (
+    command_activity_was_prompted,
+    record_pre_hook_command_activity_best_effort,
+)
+
+
+def _record_copilot_pre_activity(
+    *,
+    store: GuardStore,
+    context: HarnessContext,
+    event: str,
+    payload: Mapping[str, object],
+    policy_action: GuardAction,
+    receipt_id: str,
+    decision: ToolCallDecision,
+    runtime_workspace: Path | None,
+) -> None:
+    raw_reuse_status = decision.approval_reuse_status
+    reuse_status = (
+        ActivityApprovalReuseStatus(raw_reuse_status)
+        if raw_reuse_status in {item.value for item in ActivityApprovalReuseStatus}
+        else ActivityApprovalReuseStatus.NOT_APPLICABLE
+    )
+    _ = record_pre_hook_command_activity_best_effort(
+        store=store,
+        guard_home=context.guard_home,
+        harness="copilot",
+        event=event,
+        payload=payload,
+        policy_action=policy_action,
+        receipt_id=receipt_id,
+        prompted=command_activity_was_prompted(decision.current_action or policy_action, reuse_status),
+        approval_reuse_status=reuse_status,
+        cwd=runtime_workspace,
+        home_dir=context.home_dir,
+    )
 
 
 def _copilot_tool_decision_scanner_evidence(
@@ -241,8 +279,10 @@ def _run_hook_copilot_pretool(
         }
         decision_scanner_evidence = (*decision_scanner_evidence, observe_mode_evidence)
         policy_action = "allow"
+    # Copilot review/reapproval continues to PermissionRequest, which owns that
+    # activity. PreToolUse records only decisions that terminate at this stage.
     if policy_action in {"allow", "warn"}:
-        allow_tool_call(
+        receipt = allow_tool_call(
             store=store,
             artifact=runtime_artifact,
             artifact_hash=runtime_artifact_hash,
@@ -256,6 +296,16 @@ def _run_hook_copilot_pretool(
             policy_action=policy_action,
         )
         if _should_emit_copilot_hook_response(args):
+            _record_copilot_pre_activity(
+                store=store,
+                context=context,
+                event="preToolUse",
+                payload=payload,
+                policy_action=policy_action,
+                receipt_id=receipt.receipt_id,
+                decision=decision,
+                runtime_workspace=runtime_workspace,
+            )
             _record_harness_usage_for_hook(
                 store=store,
                 action_envelope=action_envelope,
@@ -272,7 +322,7 @@ def _run_hook_copilot_pretool(
             return 0
     else:
         if policy_action in {"block", "sandbox-required"}:
-            block_tool_call(
+            receipt = block_tool_call(
                 store=store,
                 artifact=runtime_artifact,
                 artifact_hash=runtime_artifact_hash,
@@ -284,6 +334,17 @@ def _run_hook_copilot_pretool(
                 additional_scanner_evidence=decision_scanner_evidence,
                 policy_action=policy_action,
             )
+            if _should_emit_copilot_hook_response(args):
+                _record_copilot_pre_activity(
+                    store=store,
+                    context=context,
+                    event="preToolUse",
+                    payload=payload,
+                    policy_action=policy_action,
+                    receipt_id=receipt.receipt_id,
+                    decision=decision,
+                    runtime_workspace=runtime_workspace,
+                )
         if _should_emit_copilot_hook_response(args):
             _record_harness_usage_for_hook(
                 store=store,
@@ -425,7 +486,7 @@ def _run_hook_copilot_permission_request(
         policy_action = "allow"
         response_payload["policy_action"] = "allow"
     if policy_action in {"allow", "warn"}:
-        allow_tool_call(
+        receipt = allow_tool_call(
             store=store,
             artifact=runtime_artifact,
             artifact_hash=runtime_artifact_hash,
@@ -437,6 +498,16 @@ def _run_hook_copilot_permission_request(
             arguments=runtime_arguments,
             additional_scanner_evidence=decision_scanner_evidence,
             policy_action=policy_action,
+        )
+        _record_copilot_pre_activity(
+            store=store,
+            context=context,
+            event="copilotPermissionRequest",
+            payload=payload,
+            policy_action=policy_action,
+            receipt_id=receipt.receipt_id,
+            decision=decision,
+            runtime_workspace=runtime_workspace,
         )
         if _should_emit_copilot_hook_response(args):
             _record_harness_usage_for_hook(
@@ -460,7 +531,7 @@ def _run_hook_copilot_permission_request(
         )
         _emit("hook", response_payload, getattr(args, "json", False))
         return 0
-    block_tool_call(
+    receipt = block_tool_call(
         store=store,
         artifact=runtime_artifact,
         artifact_hash=runtime_artifact_hash,
@@ -471,6 +542,16 @@ def _run_hook_copilot_permission_request(
         arguments=runtime_arguments,
         additional_scanner_evidence=decision_scanner_evidence,
         policy_action=policy_action,
+    )
+    _record_copilot_pre_activity(
+        store=store,
+        context=context,
+        event="copilotPermissionRequest",
+        payload=payload,
+        policy_action=policy_action,
+        receipt_id=receipt.receipt_id,
+        decision=decision,
+        runtime_workspace=runtime_workspace,
     )
     if terminal_action:
         response_payload["approval_requests"] = []

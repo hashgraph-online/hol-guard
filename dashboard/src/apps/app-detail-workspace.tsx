@@ -46,12 +46,20 @@ import { filterEvidence } from "../evidence/evidence-filters";
 import { sortEvidence } from "../evidence/evidence-sort";
 import { computeMetrics } from "../evidence/evidence-metrics";
 import { guardActionDisposition, guardActionPresentation } from "../guard-action";
+import { appSetupTarget } from "./harness-setup-target";
 import { DEFAULT_FILTER_STATE } from "../evidence/evidence-url-state";
 import type { EvidenceFilterState, EvidenceSortKey } from "../evidence/evidence-types";
+import { CommandActivityWorkspace } from "../command-activity/command-activity-workspace";
+import { protectionHealthFor } from "../protection-health";
+import {
+  AppCommandActivityModeTabs,
+  type AppActivityMode,
+} from "../command-activity/app-command-activity-mode-tabs";
 import type {
   GuardApprovalRequest,
   GuardInventoryItem,
   GuardPolicyDecision,
+  GuardProtectionState,
   GuardReceipt,
   GuardRuntimeSnapshot,
   GuardManagedInstall,
@@ -106,21 +114,37 @@ function writeTabToUrl(tab: TabKey) {
   window.history.replaceState({}, "", url.toString());
 }
 
-function resolveHeroStatus(status: "active" | "needs_setup" | "observed" | "unknown"): "clear" | "setup_gap" | "needs_review" {
-  if (status === "active") return "clear";
+function resolveHeroStatus(
+  status: "active" | "needs_setup" | "observed" | "unknown",
+  protectionState: GuardProtectionState,
+): "clear" | "setup_gap" | "needs_review" | "partial" | "degraded" {
+  if (status === "active") return protectionState === "protected" ? "clear" : protectionState;
   if (status === "needs_setup") return "setup_gap";
   return "needs_review";
 }
 
-function resolveHeroHeadline(status: "active" | "needs_setup" | "observed" | "unknown", harness: string, isObserved: boolean): string {
-  if (status === "active") return `${harnessDisplayName(harness)} is protected`;
+function resolveHeroHeadline(
+  status: "active" | "needs_setup" | "observed" | "unknown",
+  harness: string,
+  isObserved: boolean,
+  protectionState: GuardProtectionState,
+): string {
+  if (status === "active" && protectionState === "protected") return `${harnessDisplayName(harness)} is protected`;
+  if (status === "active" && protectionState === "partial") return `${harnessDisplayName(harness)} is partially protected`;
+  if (status === "active") return `${harnessDisplayName(harness)} protection is degraded`;
   if (status === "needs_setup") return `${harnessDisplayName(harness)} needs setup`;
   if (isObserved) return `${harnessDisplayName(harness)} is observed`;
   return harnessDisplayName(harness);
 }
 
-function resolveHeroSubheadline(status: "active" | "needs_setup" | "observed" | "unknown", isObserved: boolean): string {
-  if (status === "active") return "Guard is watching this app. Review its activity and settings below.";
+function resolveHeroSubheadline(
+  status: "active" | "needs_setup" | "observed" | "unknown",
+  isObserved: boolean,
+  protectionState: GuardProtectionState,
+): string {
+  if (status === "active" && protectionState === "protected") return "All required protection checks have current proof.";
+  if (status === "active" && protectionState === "partial") return "Core protection passes, but decision-stream evidence is incomplete.";
+  if (status === "active") return "One or more required protection checks failed or remain unproven.";
   if (status === "needs_setup") return "Finish setup so Guard can protect this app.";
   if (isObserved) return "Guard has seen activity but install is not active.";
   return "This app has not been seen yet.";
@@ -129,6 +153,7 @@ function resolveHeroSubheadline(status: "active" | "needs_setup" | "observed" | 
 function resolveHeroCta(opts: {
   pendingCount: number;
   status: "active" | "needs_setup" | "observed" | "unknown";
+  protectionState: GuardProtectionState;
   onGoActivity: () => void;
   onGoSettings: () => void;
 }): React.ReactNode {
@@ -139,7 +164,7 @@ function resolveHeroCta(opts: {
       </ActionButton>
     );
   }
-  if (opts.status === "needs_setup") {
+  if (opts.status === "needs_setup" || (opts.status === "active" && opts.protectionState !== "protected")) {
     return (
       <ActionButton onClick={opts.onGoSettings} data-primary="true">
         Open Settings
@@ -293,9 +318,11 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
     ? "observed"
     : "unknown";
 
-  const heroStatus = resolveHeroStatus(status);
-  const heroHeadline = resolveHeroHeadline(status, harness, isObserved);
-  const heroSub = resolveHeroSubheadline(status, isObserved);
+  const appProtection = protectionHealthFor(runtime, harness);
+  const protectionState = appProtection.state;
+  const heroStatus = resolveHeroStatus(status, protectionState);
+  const heroHeadline = resolveHeroHeadline(status, harness, isObserved, protectionState);
+  const heroSub = resolveHeroSubheadline(status, isObserved, protectionState);
 
   const handleTabChange = useCallback((next: TabKey) => {
     const currentIndex = tabOrder.indexOf(activeTab);
@@ -328,7 +355,13 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
   const handleGoActivity = useCallback(() => handleTabChange("activity"), [handleTabChange]);
   const handleGoSettings = useCallback(() => handleTabChange("settings"), [handleTabChange]);
 
-  const heroCta = resolveHeroCta({ pendingCount: pendingItems.length, status, onGoActivity: handleGoActivity, onGoSettings: handleGoSettings });
+  const heroCta = resolveHeroCta({
+    pendingCount: pendingItems.length,
+    status,
+    protectionState,
+    onGoActivity: handleGoActivity,
+    onGoSettings: handleGoSettings,
+  });
 
   return (
     <div className="space-y-6">
@@ -358,7 +391,11 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
           { label: "Pending", value: pendingItems.length, tone: pendingItems.length > 0 ? "blue" : "slate" },
           { label: "Total actions", value: totalActions, tone: totalActions > 0 ? "purple" : "slate" },
           { label: "Blocked", value: `${blockRate}%`, tone: blockRate > 0 ? "blue" : "slate" },
-          { label: "Status", value: isActive ? "active" : "inactive", tone: isActive ? "green" : "slate" },
+          {
+            label: "Protection",
+            value: isActive ? appProtection.label : "Not active",
+            tone: isActive && protectionState === "protected" ? "green" : "slate",
+          },
         ]}
       />
 
@@ -492,12 +529,14 @@ function AppOverviewTab(props: {
   onOpenRequest: (requestId: string) => void;
   onManagedInstallChanged?: () => Promise<void>;
 }) {
-  const showFirstRunGuide = shouldShowFirstRunGuide({
-    status: props.status,
-    totalActions: props.totalActions,
-    inventoryCount: props.harnessInventory.length,
-    pendingCount: props.pendingItems.length,
-  });
+  const showFirstRunGuide =
+    appSetupTarget(props.harness) === "harness" &&
+    shouldShowFirstRunGuide({
+      status: props.status,
+      totalActions: props.totalActions,
+      inventoryCount: props.harnessInventory.length,
+      pendingCount: props.pendingItems.length,
+    });
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
@@ -779,6 +818,19 @@ function firstRunIntro(harness: string): string {
 
 const ACTIVITY_PAGE_SIZE = 50;
 
+function readActivityMode(): AppActivityMode {
+  const value = new URLSearchParams(window.location.search).get("activity");
+  if (value === "commands" || value === "pending") return value;
+  return "recorded";
+}
+
+function writeActivityMode(mode: AppActivityMode): void {
+  const url = new URL(window.location.href);
+  if (mode === "recorded") url.searchParams.delete("activity");
+  else url.searchParams.set("activity", mode);
+  window.history.replaceState({}, "", url.toString());
+}
+
 function AppActivityTab(props: {
   harness: string;
   pendingItems: GuardApprovalRequest[];
@@ -787,7 +839,7 @@ function AppActivityTab(props: {
   queueError: string | null;
   onRetry: () => void;
 }) {
-  const [showPending, setShowPending] = useState(false);
+  const [activityMode, setActivityMode] = useState<AppActivityMode>(readActivityMode);
   const [filters, setFilters] = useState<EvidenceFilterState>(() => ({
     ...DEFAULT_FILTER_STATE,
     view: "actions",
@@ -865,13 +917,10 @@ function AppActivityTab(props: {
     setPage((prev) => prev + 1);
   }, []);
 
-  const handleShowActions = useCallback(() => {
-    setShowPending(false);
-  }, []);
-
-  const handleShowPending = useCallback(() => {
-    setShowPending(true);
-    setFilters((prev) => ({ ...prev, selectedId: "" }));
+  const handleActivityModeChange = useCallback((mode: AppActivityMode) => {
+    setActivityMode(mode);
+    writeActivityMode(mode);
+    if (mode !== "recorded") setFilters((prev) => ({ ...prev, selectedId: "" }));
   }, []);
 
   const noopHarnessFilter = useCallback((_harness: string) => {}, []);
@@ -898,95 +947,88 @@ function AppActivityTab(props: {
         </div>
       )}
 
-      {hasPending && (
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleShowActions}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-              !showPending
-                ? "bg-brand-blue text-white shadow-sm"
-                : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
-            }`}
-          >
-            Actions
-          </button>
-          <button
-            type="button"
-            onClick={handleShowPending}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-              showPending
-                ? "bg-brand-blue text-white shadow-sm"
-                : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
-            }`}
-          >
-            Pending ({props.pendingItems.length})
-          </button>
+      <AppCommandActivityModeTabs
+        mode={activityMode}
+        pendingCount={props.pendingItems.length}
+        onChange={handleActivityModeChange}
+      />
+
+      {activityMode === "commands" && (
+        <div id="app-activity-panel-commands" role="tabpanel" aria-labelledby="app-activity-tab-commands">
+          <CommandActivityWorkspace harness={props.harness} />
         </div>
       )}
 
-      {showPending ? (
-        hasPending ? (
-          <div className="space-y-3">
-            {props.pendingItems.map((item) => (
-              <button
-                key={item.request_id}
-                onClick={() => props.onOpenRequest(item.request_id)}
-                className="flex w-full items-center justify-between rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-left transition-shadow hover:shadow-sm"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-brand-dark">{item.artifact_name ?? item.artifact_id}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {item.artifact_type} · {formatRelativeTime(item.created_at)}
-                  </p>
+      {activityMode === "pending" && (
+        <div id="app-activity-panel-pending" role="tabpanel" aria-labelledby="app-activity-tab-pending">
+          {hasPending ? (
+            <div className="space-y-3">
+              {props.pendingItems.map((item) => (
+                <button
+                  key={item.request_id}
+                  onClick={() => props.onOpenRequest(item.request_id)}
+                  className="flex w-full items-center justify-between rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-left transition-shadow hover:shadow-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-brand-dark">{item.artifact_name ?? item.artifact_id}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {item.artifact_type} · {formatRelativeTime(item.created_at)}
+                    </p>
+                  </div>
+                  <Badge tone="info">Pending</Badge>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No pending reviews"
+              body="Guard will surface blocked actions here when this app needs a decision."
+              tone="teach"
+            />
+          )}
+        </div>
+      )}
+
+      {activityMode === "recorded" && (
+        <div id="app-activity-panel-recorded" role="tabpanel" aria-labelledby="app-activity-tab-recorded">
+          {props.harnessReceipts.length === 0 ? (
+            <EmptyState
+              title="No activity yet"
+              body="Guard has not recorded any decisions for this app yet. Allow or block an action and it will appear here."
+              tone="teach"
+            />
+          ) : (
+            <div className={selectedReceipt ? "grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]" : ""}>
+              <div className="space-y-3">
+                <EvidenceFilterBar
+                  filters={filters}
+                  onChange={handleFilterChange}
+                  totalCount={props.harnessReceipts.length}
+                  filteredCount={filtered.length}
+                  harnesses={[]}
+                  hideHarnessFilter={true}
+                />
+                <EvidenceInsightStrip metrics={metrics} />
+                <EvidenceActionList
+                  receipts={sorted}
+                  selectedId={filters.selectedId}
+                  onSelectId={handleSelectId}
+                  onFilterHarness={noopHarnessFilter}
+                  onFilterCategory={handleFilterCategory}
+                  sort={filters.sort}
+                  onSortChange={handleSortChange}
+                  page={page}
+                  pageSize={ACTIVITY_PAGE_SIZE}
+                  onLoadMore={handleLoadMore}
+                  hideHarnessColumn={true}
+                  tableLabel={`${harnessDisplayName(props.harness)} actions`}
+                />
+              </div>
+              {selectedReceipt && (
+                <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+                  <EvidenceActionDetail receipt={selectedReceipt} onClose={handleCloseDetail} />
                 </div>
-                <Badge tone="info">Pending</Badge>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="No pending reviews"
-            body="Guard will surface actions here when this app needs a decision."
-            tone="teach"
-          />
-        )
-      ) : props.harnessReceipts.length === 0 ? (
-        <EmptyState
-          title="No activity yet"
-          body="Guard has not recorded any decisions for this app yet. Allow or block an action and it will appear here."
-          tone="teach"
-        />
-      ) : (
-        <div className={selectedReceipt ? "grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]" : ""}>
-          <div className="space-y-3">
-            <EvidenceFilterBar
-              filters={filters}
-              onChange={handleFilterChange}
-              totalCount={props.harnessReceipts.length}
-              filteredCount={filtered.length}
-              harnesses={[]}
-              hideHarnessFilter={true}
-            />
-            <EvidenceInsightStrip metrics={metrics} />
-            <EvidenceActionList
-              receipts={sorted}
-              selectedId={filters.selectedId}
-              onSelectId={handleSelectId}
-              onFilterHarness={noopHarnessFilter}
-              onFilterCategory={handleFilterCategory}
-              sort={filters.sort}
-              onSortChange={handleSortChange}
-              page={page}
-              pageSize={ACTIVITY_PAGE_SIZE}
-              onLoadMore={handleLoadMore}
-              hideHarnessColumn={true}
-              tableLabel={`${harnessDisplayName(props.harness)} actions`}
-            />
-          </div>
-          {selectedReceipt && (
-            <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-              <EvidenceActionDetail receipt={selectedReceipt} onClose={handleCloseDetail} />
+              )}
             </div>
           )}
         </div>
@@ -1085,6 +1127,56 @@ function PolicyDecisionRow(props: {
   );
 }
 
+export function OperationalSourceSetupPanel({ harness }: { harness: string }) {
+  const target = appSetupTarget(harness);
+  const displayName = harnessDisplayName(harness);
+
+  if (target === "package-firewall") {
+    return (
+      <div className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5">
+        <SectionLabel>Package manager protection</SectionLabel>
+        <h3 className="mt-2 text-lg font-semibold text-brand-dark">
+          {harness === "bunx" ? "Protect bunx through the package firewall" : "Manage the package firewall in Supply Chain"}
+        </h3>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+          {displayName} is a package-security activity source, not an AI app harness. Use the package firewall controls to detect, install, test, or repair its managed shim.
+        </p>
+        <div className="mt-4">
+          <ActionButton href="/supply-chain">
+            <HiMiniShieldCheck className="h-4 w-4" aria-hidden="true" />
+            Open package firewall
+          </ActionButton>
+        </div>
+      </div>
+    );
+  }
+
+  if (target === "guard-settings") {
+    return (
+      <div className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5">
+        <SectionLabel>Local Guard source</SectionLabel>
+        <h3 className="mt-2 text-lg font-semibold text-brand-dark">Guard CLI is already part of this local installation</h3>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+          This page groups decisions emitted by Guard's own command-line protection. It does not need a separate app connector or harness configuration.
+        </p>
+        <div className="mt-4">
+          <ActionButton href="/settings" variant="outline">Open Guard settings</ActionButton>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm sm:p-5">
+      <SectionLabel>Recorded activity source</SectionLabel>
+      <h3 className="mt-2 text-lg font-semibold text-brand-dark">No app connector is required for {displayName}</h3>
+      <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+        Guard recorded activity under this source identifier, but it is not a locally installable AI app. Activity and remembered decisions remain available on this page.
+      </p>
+    </div>
+  );
+}
+
 function AppSettingsTab(props: {
   harness: string;
   status: "active" | "needs_setup" | "observed" | "unknown";
@@ -1142,12 +1234,16 @@ function AppSettingsTab(props: {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
       <div className="space-y-6">
-        <HarnessSetupPanel
-          harness={props.harness}
-          install={props.install}
-          status={props.status}
-          onManagedInstallChanged={props.onManagedInstallChanged}
-        />
+        {appSetupTarget(props.harness) === "harness" ? (
+          <HarnessSetupPanel
+            harness={props.harness}
+            install={props.install}
+            status={props.status}
+            onManagedInstallChanged={props.onManagedInstallChanged}
+          />
+        ) : (
+          <OperationalSourceSetupPanel harness={props.harness} />
+        )}
 
         {props.policyError && (
           <div className="guard-fade-in rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5">
@@ -1417,7 +1513,7 @@ function HarnessSetupPanel(props: {
       </div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <SetupMetric label="Install state" value={active ? "Protected" : props.status === "observed" ? "Observed" : "Not connected"} active={active} />
+        <SetupMetric label="Install state" value={active ? "Installed" : props.status === "observed" ? "Observed" : "Not connected"} active={active} />
         <SetupMetric label="Config source" value={props.install?.workspace ?? "Local machine"} />
         <SetupMetric label="Last changed" value={props.install ? formatRelativeTime(props.install.updated_at) : "Not yet"} />
       </div>

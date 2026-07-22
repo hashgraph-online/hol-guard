@@ -21,8 +21,8 @@ GITHUB_SHA = "0123456789abcdef0123456789abcdef01234567"
 @pytest.mark.parametrize(
     ("git_ref", "version"),
     [
-        ("refs/heads/release/2.2", "2.2.0a1"),
-        ("refs/heads/release/2.2", "2.2.0a37"),
+        ("refs/heads/release/2.1", "2.1.0a1"),
+        ("refs/heads/release/2.1", "2.1.0a37"),
         ("refs/heads/release/3.1", "3.1.0a5"),
     ],
 )
@@ -35,36 +35,37 @@ def test_accepts_exact_canonical_release_train_alphas(git_ref: str, version: str
 
 def test_generic_alpha_validator_returns_typed_sha_bound_release() -> None:
     release = validate_release_train(
-        "2.2.0a2",
-        "refs/heads/release/2.2",
+        "2.1.0a2",
+        "refs/heads/release/2.1",
         "alpha",
-        existing_versions=["2.2.0a1"],
+        existing_versions=["2.1.0a1"],
         github_sha=GITHUB_SHA,
         expected_sha=GITHUB_SHA,
     )
 
     assert release == ValidatedRelease(
-        version="2.2.0a2",
-        git_ref="refs/heads/release/2.2",
-        source_ref="refs/heads/release/2.2",
+        version="2.1.0a2",
+        git_ref="refs/heads/release/2.1",
+        source_ref="refs/heads/release/2.1",
         channel=ReleaseChannel.ALPHA,
         source_sha=GITHUB_SHA,
     )
 
 
-def test_registry_preserves_release_31_and_adds_release_22() -> None:
+def test_registry_preserves_release_31_and_adds_release_21() -> None:
     assert ALPHA_BRANCHES == (
-        "refs/heads/release/2.2",
+        "refs/heads/release/2.1",
         "refs/heads/release/3.1",
     )
-    assert RELEASE_TRAINS["refs/heads/release/2.2"].version_prefix == "2.2.0"
-    assert RELEASE_TRAINS["refs/heads/release/2.2"].stable_enabled is False
+    assert RELEASE_TRAINS["refs/heads/release/2.1"].version_prefix == "2.1.0"
+    assert RELEASE_TRAINS["refs/heads/release/2.1"].stable_enabled is True
     assert RELEASE_TRAINS["refs/heads/release/3.1"].version_prefix == "3.1.0"
 
 
 @pytest.mark.parametrize(
     ("git_ref", "version"),
     [
+        ("refs/heads/release/2.1", "2.1.0"),
         ("refs/heads/release/3.1", "3.1.0"),
     ],
 )
@@ -87,18 +88,6 @@ def test_accepts_exact_stable_candidates_with_bound_source_sha(git_ref: str, ver
     )
 
 
-def test_release_22_rejects_stable_channel_even_with_exact_tag_and_sha() -> None:
-    with pytest.raises(ValueError, match=r"release/2\.2 is alpha-only"):
-        validate_release_train(
-            "2.2.0",
-            "refs/heads/release/2.2",
-            ReleaseChannel.STABLE,
-            actual_ref="refs/tags/v2.2.0",
-            github_sha=GITHUB_SHA,
-            expected_sha=GITHUB_SHA,
-        )
-
-
 @pytest.mark.parametrize(
     ("git_ref", "version"),
     [
@@ -106,7 +95,7 @@ def test_release_22_rejects_stable_channel_even_with_exact_tag_and_sha() -> None
         ("refs/heads/release/3.1", "3.1.0b1"),
         ("refs/heads/release/3.1", "3.1.0rc1"),
         ("refs/heads/release/3.1", "3.1.1"),
-        ("refs/heads/release/3.1", "2.2.0"),
+        ("refs/heads/release/3.1", "2.1.0"),
         ("refs/heads/release/3.1", "3.0.0"),
         ("refs/heads/release/3.1", "3.2.0"),
         ("refs/heads/release/3.1", "3.1.0.dev1"),
@@ -125,13 +114,13 @@ def test_rejects_noncanonical_or_wrong_train_stable_candidates(git_ref: str, ver
 @pytest.mark.parametrize(
     ("git_ref", "version"),
     [
-        ("refs/heads/release/2.2", "2.1.0a1"),
-        ("refs/heads/release/2.2", "2.3.0a1"),
-        ("refs/heads/release/2.2", "3.1.0a1"),
-        ("refs/heads/release/2.2", "2.2.1a1"),
+        ("refs/heads/release/2.1", "2.0.0a1"),
+        ("refs/heads/release/2.1", "2.3.0a1"),
+        ("refs/heads/release/2.1", "3.1.0a1"),
+        ("refs/heads/release/2.1", "2.1.1a1"),
         ("refs/heads/release/3.1", "3.0.0a9"),
         ("refs/heads/release/3.1", "3.2.0a1"),
-        ("refs/heads/release/3.1", "2.2.0a1"),
+        ("refs/heads/release/3.1", "2.1.0a1"),
         ("refs/heads/release/3.1", "3.1.1a1"),
     ],
 )
@@ -143,29 +132,29 @@ def test_rejects_wrong_train_major_minor_or_patch(git_ref: str, version: str) ->
 @pytest.mark.parametrize(
     "version",
     [
-        "1!2.2.0a1",
-        "2.2.0a0",
-        "2.2.0b1",
-        "2.2.0rc1",
-        "2.2.0",
-        "2.2.0a1.dev1",
-        "2.2.0a1.post1",
-        "2.2.0a1+local",
-        "v2.2.0a1",
-        " 2.2.0a1 ",
-        "2.2a1",
-        "2.2.0a01",
-        "2.2.0-alpha1",
+        "1!2.1.0a1",
+        "2.1.0a0",
+        "2.1.0b1",
+        "2.1.0rc1",
+        "2.1.0",
+        "2.1.0a1.dev1",
+        "2.1.0a1.post1",
+        "2.1.0a1+local",
+        "v2.1.0a1",
+        " 2.1.0a1 ",
+        "2.1a1",
+        "2.1.0a01",
+        "2.1.0-alpha1",
     ],
 )
 def test_rejects_non_public_or_noncanonical_alpha_versions(version: str) -> None:
     with pytest.raises(ValueError, match="canonical public PEP 440"):
-        validate_release_train_alpha(version, "refs/heads/release/2.2")
+        validate_release_train_alpha(version, "refs/heads/release/2.1")
 
 
 def test_rejects_malformed_requested_version() -> None:
     with pytest.raises(ValueError, match="Requested version is not a valid PEP 440 version"):
-        validate_release_train_alpha("not-a-version", "refs/heads/release/2.2")
+        validate_release_train_alpha("not-a-version", "refs/heads/release/2.1")
 
 
 @pytest.mark.parametrize(
@@ -173,18 +162,18 @@ def test_rejects_malformed_requested_version() -> None:
     [
         "refs/heads/main",
         "refs/heads/release/2.3",
-        "refs/tags/alpha/v2.2.0a1",
+        "refs/tags/alpha/v2.1.0a1",
         "refs/pull/123/merge",
     ],
 )
 def test_rejects_unregistered_source_refs(git_ref: str) -> None:
-    with pytest.raises(ValueError, match=r"release/2\.2.*release/3\.1"):
-        validate_release_train_alpha("2.2.0a1", git_ref)
+    with pytest.raises(ValueError, match=r"release/2\.1.*release/3\.1"):
+        validate_release_train_alpha("2.1.0a1", git_ref)
 
 
 def test_rejects_unknown_release_channel() -> None:
     with pytest.raises(ValueError, match="alpha, stable"):
-        validate_release_train("2.2.0a1", "refs/heads/release/2.2", "preview")
+        validate_release_train("2.1.0a1", "refs/heads/release/2.1", "preview")
 
 
 @pytest.mark.parametrize(
@@ -192,10 +181,10 @@ def test_rejects_unknown_release_channel() -> None:
     [
         (
             ReleaseChannel.ALPHA,
-            "2.2.0a1",
-            "refs/heads/release/2.2",
+            "2.1.0a1",
+            "refs/heads/release/2.1",
             "refs/heads/main",
-            "refs/heads/release/2.2",
+            "refs/heads/release/2.1",
         ),
         (ReleaseChannel.STABLE, "3.1.0", "refs/heads/release/3.1", None, "exact protected version tag"),
         (
@@ -246,8 +235,8 @@ def test_rejects_missing_noncanonical_or_mismatched_source_sha(
 ) -> None:
     with pytest.raises(ValueError, match=error):
         validate_release_train(
-            "2.2.0a1",
-            "refs/heads/release/2.2",
+            "2.1.0a1",
+            "refs/heads/release/2.1",
             ReleaseChannel.ALPHA,
             github_sha=github_sha,
             expected_sha=expected_sha,
@@ -257,9 +246,9 @@ def test_rejects_missing_noncanonical_or_mismatched_source_sha(
 def test_rejects_duplicate_alpha_across_normalized_existing_versions() -> None:
     with pytest.raises(ValueError, match="already exists"):
         validate_release_train_alpha(
-            "2.2.0a2",
-            "refs/heads/release/2.2",
-            existing_versions=["2.2.0-alpha2"],
+            "2.1.0a2",
+            "refs/heads/release/2.1",
+            existing_versions=["2.1.0-alpha2"],
         )
 
 
@@ -275,29 +264,29 @@ def test_rejects_duplicate_stable_candidate() -> None:
 
 
 def test_rejects_non_monotonic_alpha() -> None:
-    with pytest.raises(ValueError, match=r"must be newer than.*2\.2\.0a3"):
+    with pytest.raises(ValueError, match=r"must be newer than.*2\.1\.0a3"):
         validate_release_train_alpha(
-            "2.2.0a2",
-            "refs/heads/release/2.2",
-            existing_versions=["2.2.0a1", "2.2.0a3"],
+            "2.1.0a2",
+            "refs/heads/release/2.1",
+            existing_versions=["2.1.0a1", "2.1.0a3"],
         )
 
 
 def test_accepts_next_alpha_and_ignores_other_trains() -> None:
     release = validate_release_train_alpha(
-        "2.2.0a4",
-        "refs/heads/release/2.2",
-        existing_versions=["2.2.0a3", "3.1.0a99", "2.1.0a200"],
+        "2.1.0a4",
+        "refs/heads/release/2.1",
+        existing_versions=["2.1.0a3", "3.1.0a99", "2.2.0a200"],
     )
 
-    assert release.version == "2.2.0a4"
+    assert release.version == "2.1.0a4"
 
 
 def test_rejects_malformed_existing_version() -> None:
     with pytest.raises(ValueError, match="Existing version is not a valid PEP 440 version"):
         validate_release_train_alpha(
-            "2.2.0a2",
-            "refs/heads/release/2.2",
+            "2.1.0a2",
+            "refs/heads/release/2.1",
             existing_versions=["not-a-version"],
         )
 
@@ -321,19 +310,19 @@ def test_cli_accepts_repeated_existing_versions(
         [
             "validate_alpha_release.py",
             "--version",
-            "2.2.0a3",
+            "2.1.0a3",
             "--git-ref",
-            "refs/heads/release/2.2",
+            "refs/heads/release/2.1",
             "--existing-version",
-            "2.2.0a1",
+            "2.1.0a1",
             "--existing-version",
-            "2.2.0a2",
+            "2.1.0a2",
         ],
     )
 
     assert main() == 0
     captured = capsys.readouterr()
-    assert captured.out == "2.2.0a3\n"
+    assert captured.out == "2.1.0a3\n"
     assert captured.err == ""
 
 
@@ -346,17 +335,17 @@ def test_cli_reports_duplicate_without_traceback(
         [
             "validate_alpha_release.py",
             "--version",
-            "2.2.0a2",
+            "2.1.0a2",
             "--git-ref",
-            "refs/heads/release/2.2",
+            "refs/heads/release/2.1",
             "--existing-version",
-            "2.2.0a2",
+            "2.1.0a2",
         ],
     )
 
     assert main() == 1
     captured = capsys.readouterr()
-    assert "Error: Alpha version 2.2.0a2 already exists" in captured.err
+    assert "Error: Alpha version 2.1.0a2 already exists" in captured.err
     assert "Traceback" not in captured.err
 
 

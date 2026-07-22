@@ -31,6 +31,7 @@ import { EvidenceClearModal } from "./evidence/evidence-clear-modal";
 import { AppTab } from "./evidence/app-tab";
 import { CategoryTab } from "./evidence/category-tab";
 import { WorkspacePageHeader } from "./workspace-page-header";
+import { CommandActivityWorkspace } from "./command-activity/command-activity-workspace";
 import { guardActionDisposition } from "./guard-action";
 
 export type ReceiptsState =
@@ -232,7 +233,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  if (receiptItems.length === 0) {
+  if (receiptItems.length === 0 && filters.view !== "commands") {
     return (
       <EmptyState
         title="No evidence yet"
@@ -278,7 +279,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
   );
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 max-w-full space-y-6">
       <WorkspacePageHeader
         eyebrow="Evidence"
         title={evidenceTitleForView(filters.view)}
@@ -286,14 +287,13 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
         tabs={tabOptions}
         activeTab={filters.view}
         onTabChange={handleViewChange}
-        actions={headerActions}
+        actions={filters.view === "commands" ? undefined : headerActions}
       />
 
-      {filters.view !== "insights" && (
-        <EvidenceHero totalCount={totalReceiptCount} lastActivityAt={metrics.lastActivityAt} />
-      )}
+      {filters.view !== "insights" && filters.view !== "commands" && <EvidenceHero totalCount={totalReceiptCount} lastActivityAt={metrics.lastActivityAt} />}
 
       <div className="pt-1">
+        {filters.view === "commands" && <div id="tabpanel-commands" role="tabpanel" aria-labelledby="tab-commands" className="guard-fade-in"><CommandActivityWorkspace /></div>}
         {filters.view === "actions" && (
           <div
             id="tabpanel-actions"
@@ -434,6 +434,16 @@ export function ReceiptsWorkspace(props: {
   onClearEvidence?: () => void;
   onNavigate?: (pathname: string) => void;
 }) {
+  if (readEvidenceUrlState().view === "commands") {
+    return (
+      <EvidenceWorkbench
+        receiptItems={props.receipts.kind === "ready" ? props.receipts.items : []}
+        runtime={props.runtime?.kind === "ready" ? props.runtime.snapshot : null}
+        onClearEvidence={props.onClearEvidence}
+        onNavigate={props.onNavigate}
+      />
+    );
+  }
   if (props.receipts.kind === "loading") {
     return <EvidenceLoadingState />;
   }

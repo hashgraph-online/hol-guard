@@ -1,7 +1,9 @@
 import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag, ProofStrip } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
-import type { GuardCloudCommandCapability, GuardCloudSyncHealth, GuardInventoryItem, GuardProofStatus, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
+import type { GuardCloudCommandCapability, GuardCloudSyncHealth, GuardInventoryItem, GuardProofStatus, GuardProtectionState, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
+import { protectionHealthFor } from "./protection-health";
 import { guardActionPresentation } from "./guard-action";
+import type { GuardActionPresentation } from "./guard-action";
 
 const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw", "kimi", "grok"] as const;
 
@@ -12,8 +14,29 @@ type RuntimeOverviewProps = {
   inventory?: GuardInventoryItem[];
 };
 
+type RuntimeProofTone = "blue" | "green" | "purple" | "slate" | "attention";
+
+function protectionProofTone(state: GuardProtectionState): RuntimeProofTone {
+  if (state === "protected") return "green";
+  if (state === "partial") return "blue";
+  return "slate";
+}
+
+function protectionTagTone(state: GuardProtectionState): RuntimeProofTone {
+  if (state === "protected") return "green";
+  if (state === "partial") return "blue";
+  return "attention";
+}
+
+function recentDecisionTone(action: GuardActionPresentation | null): RuntimeProofTone {
+  if (action === null) return "slate";
+  if (action.disposition === "allowed") return "green";
+  if (action.disposition === "blocked") return "attention";
+  return "blue";
+}
+
 function headlineTone(state: GuardRuntimeSnapshot["headline_state"]): "info" | "success" | "attention" {
-  if (state === "blocked") {
+  if (state === "blocked" || state === "degraded") {
     return "attention";
   }
   if (state === "connected" || state === "local_only") {
@@ -137,7 +160,7 @@ export function resolveProofStatusCopy(proofStatus: GuardProofStatus): ProofStat
   }
   return {
     label: "Local only",
-    detail: "Local protection is active. Cloud proof is optional.",
+    detail: "Local Guard is available. Protection health is reported separately; cloud proof is optional.",
     tone: "slate",
   };
 }
@@ -441,6 +464,7 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
   const latestAction = latestReceipt ? guardActionPresentation(latestReceipt.policy_decision) : null;
   const daemonHealthLabel = snapshot.runtime_state !== null ? "running" : "offline";
   const resolvedInventory = inventory ?? snapshot.inventory ?? [];
+  const protectionHealth = protectionHealthFor(snapshot);
 
   return (
     <Surface className="mb-6" tone="accent">
@@ -482,22 +506,26 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
 
         <ProofStrip
           items={[
+            { label: "Protection health", value: protectionHealth.label, tone: protectionProofTone(protectionHealth.state) },
             { label: "Protection level", value: securityLevel ?? "balanced", tone: securityLevel === "strict" ? "purple" : "blue" },
             {
               label: "Recent decision",
               value: latestAction?.label ?? "None",
-              tone: latestAction?.disposition === "allowed"
-                ? "green"
-                : latestAction?.disposition === "blocked"
-                ? "attention"
-                : latestAction
-                ? "blue"
-                : "slate",
+              tone: recentDecisionTone(latestAction),
             },
             { label: "Cloud state", value: snapshot.cloud_state === "local_only" ? "Local only" : "Syncing", tone: snapshot.cloud_state === "local_only" ? "slate" : "green" },
-            { label: "Apps seen", value: resolvedInventory.length, tone: resolvedInventory.length > 0 ? "green" : "slate" },
           ]}
         />
+
+        <div className="rounded-xl border border-border bg-white px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Protection health</p>
+            <Tag tone={protectionTagTone(protectionHealth.state)}>
+              {protectionHealth.label}
+            </Tag>
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{protectionHealth.detail}</p>
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
           <CloudSyncHealthCard health={snapshot.cloud_sync_health} />

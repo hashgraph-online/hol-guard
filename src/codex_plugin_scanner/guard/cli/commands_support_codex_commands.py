@@ -211,7 +211,7 @@ _CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"fd", "rg", "grep", "egrep", "fgre
 
 _CODEX_READ_ONLY_VIEW_COMMANDS = frozenset({"cat", "head", "nl", "tail", "sed", "wc", "yq"})
 
-_CODEX_READ_ONLY_PIPE_FILTERS = frozenset({"head", "nl", "tail", "sed", "wc"})
+_CODEX_READ_ONLY_PIPE_FILTERS = frozenset({"cat", "head", "nl", "tail", "sed", "wc"})
 
 _CODEX_READ_ONLY_SEARCH_WRAPPERS = frozenset({"bash", "sh", "zsh"})
 
@@ -340,6 +340,7 @@ _CODEX_GIT_DIFF_BOOLEAN_OPTIONS = frozenset(
         "--shortstat",
         "--stat",
         "--summary",
+        "--staged",
     }
 )
 

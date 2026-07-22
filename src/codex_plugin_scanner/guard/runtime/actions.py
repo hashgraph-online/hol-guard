@@ -162,6 +162,7 @@ class GuardActionEnvelope:
     mcp_tool: str | None
     package_manager: str | None
     package_name: str | None
+    command_category: str | None = None
     package_intent_kind: str | None = None
     package_targets: tuple[str, ...] = ()
     pre_execution_result: str | None = None
@@ -193,6 +194,7 @@ class GuardActionEnvelope:
             "mcp_tool": self.mcp_tool,
             "package_manager": self.package_manager,
             "package_name": self.package_name,
+            "command_category": self.command_category,
             "package_intent_kind": self.package_intent_kind,
             "package_targets": list(self.package_targets),
             "pre_execution_result": self.pre_execution_result,
@@ -219,6 +221,7 @@ class GuardActionEnvelope:
                 "actionId",
                 "actionType",
                 "preExecutionResult",
+                "command_category",
             }:
                 raise ValueError(f"Guard action envelope contains unknown action-bearing field: {key}")
         action_id = _matching_aliased_value(payload, "action_id", "actionId")
@@ -250,6 +253,7 @@ class GuardActionEnvelope:
             mcp_tool=_string_value(payload.get("mcp_tool")),
             package_manager=_string_value(payload.get("package_manager")),
             package_name=_string_value(payload.get("package_name")),
+            command_category=_string_value(payload.get("command_category")),
             package_intent_kind=_string_value(payload.get("package_intent_kind")),
             package_targets=_string_tuple(payload.get("package_targets")),
             pre_execution_result=_string_value(pre_execution_result),

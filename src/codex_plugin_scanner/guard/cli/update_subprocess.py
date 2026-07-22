@@ -1494,10 +1494,6 @@ def _pipx_execution_command(executable: str, args: list[str], *, python: str, in
         return [
             executable,
             args[0],
-            "--backend",
-            "pip",
-            "--fetch-python",
-            "never",
             "--index-url",
             index_url,
             "--python",

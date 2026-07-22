@@ -6,6 +6,7 @@ import {
   HiMiniCheckCircle,
   HiMiniExclamationTriangle,
   HiMiniBellAlert,
+  HiMiniChevronDown,
   HiMiniMagnifyingGlass,
   HiMiniXMark,
 } from "react-icons/hi2";
@@ -67,9 +68,14 @@ import type {
 } from "./guard-types";
 import { SettingsSectionShell } from "./settings/settings-section-shell";
 import { SettingsFormSection, SettingsToggleRow } from "./settings/settings-row-primitives";
-import type { LocalSettingsTabKey } from "./settings/settings-ia";
+import { isLocalSettingsTabKey, type LocalSettingsTabKey } from "./settings/settings-ia";
 
 export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
+
+export function resolveInitialSettingsTab(search: string): LocalSettingsTabKey {
+  const section = new URLSearchParams(search).get("section");
+  return section !== null && isLocalSettingsTabKey(section) ? section : "protection";
+}
 
 export function resolveSecurityLevelCardDescription(level: "relaxed" | "balanced" | "strict" | "custom"): string {
   if (level === "relaxed") return "Warn on dangerous actions. Most safe actions run without a prompt.";
@@ -455,7 +461,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [actionMessageKind, setActionMessageKind] = useState<"success" | "error">("success");
   const [perfSnapshot, setPerfSnapshot] = useState<GuardRuntimeSnapshot | null>(null);
   const [pendingMode, setPendingMode] = useState<GuardSettings["mode"] | null>(null);
-  const [activeTab, setActiveTab] = useState<LocalSettingsTabKey>("protection");
+  const [activeTab, setActiveTab] = useState<LocalSettingsTabKey>(() => resolveInitialSettingsTab(window.location.search));
   const [searchQuery, setSearchQuery] = useState("");
   const [importingSettings, setImportingSettings] = useState(false);
   const [resettingSettings, setResettingSettings] = useState(false);
@@ -533,6 +539,15 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   }, []);
 
   useEffect(() => {
+    const handlePopState = () => {
+      setActiveTab(resolveInitialSettingsTab(window.location.search));
+      setActionMessage(null);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
     function handleBeforeUnload(event: BeforeUnloadEvent) {
       if (hasUnsavedChanges(savedSettingsRef.current, draft)) {
         event.preventDefault();
@@ -546,6 +561,9 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const handleTabChange = useCallback((tab: LocalSettingsTabKey) => {
     setActiveTab(tab);
     setActionMessage(null);
+    const url = new URL(window.location.href);
+    url.searchParams.set("section", tab);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
 
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -1317,7 +1335,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   return (
     <div className="flex min-h-[calc(100dvh-11rem)] flex-col gap-6">
       <GuardHero
-        status="clear"
+        status="neutral"
         headline="Set how hard Guard should push back"
         subheadline="Pick a security level, then fine-tune individual rules whenever you need more control."
         cta={<Tag tone="blue">{protectionModeLabel(draft.mode)}</Tag>}
@@ -1532,7 +1550,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
           </div>
         )}
 
-        {activeTab === "risk" && (
+        {activeTab === "rules" && (
           <div className="flex min-h-0 flex-1 flex-col space-y-6">
             {!isFineTuningEditable(draft.security_level) ? (
               <FineTuningPresetBanner
@@ -1576,45 +1594,49 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 </div>
               </div>
             </SettingsFormSection>
-          </div>
-        )}
 
-        {activeTab === "defaults" && (
-          <div className="flex min-h-0 flex-1 flex-col space-y-6">
-            <SettingsFormSection
-              title="When Guard is unsure"
-              description="These rules apply before Guard has enough history to decide on its own."
-            >
-              <div className="grid gap-3 py-3 sm:grid-cols-2">
-                <SettingSelect label="First-time action" value={draft.default_action} options={actionOptions} onChange={handleStringChange("default_action")} />
-                <SettingSelect label="Unknown source" value={draft.unknown_publisher_action} options={actionOptions} onChange={handleStringChange("unknown_publisher_action")} />
-                <SettingSelect label="Changed command" value={draft.changed_hash_action} options={actionOptions} onChange={handleStringChange("changed_hash_action")} />
-                <SettingSelect label="New website or host" value={draft.new_network_domain_action} options={actionOptions} onChange={handleStringChange("new_network_domain_action")} />
-                <SettingSelect label="Nested commands" value={draft.subprocess_action} options={actionOptions} onChange={handleStringChange("subprocess_action")} />
-                <SettingSelect label="Where to ask" value={draft.approval_surface_policy} options={surfacePolicyOptions} onChange={handleStringChange("approval_surface_policy")} />
-              </div>
-              {draft.approval_surface_policy === "attention-aware" ? (
-                <div className="grid gap-3 border-t border-slate-100 py-3 sm:grid-cols-2">
-                  <SettingNumber
-                    label="Browser delay"
-                    value={draft.approval_browser_delay_seconds}
-                    min={0}
-                    max={300}
-                    suffix="seconds"
-                    onChange={handleNumberChange("approval_browser_delay_seconds")}
-                  />
-                  <SettingSelect
-                    label="Open immediately for"
-                    value={draft.approval_browser_immediate_severity}
-                    options={attentionSeverityOptions}
-                    onChange={handleStringChange("approval_browser_immediate_severity")}
-                  />
-                  <p className="text-xs leading-5 text-slate-500 sm:col-span-2">
-                    Guard cancels the browser prompt when your AI app continues with a different action. Desktop and in-app notices still appear immediately.
-                  </p>
+            <details className="group rounded-xl border border-slate-200 bg-slate-50/40 open:bg-white">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-xl px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/50 [&::-webkit-details-marker]:hidden">
+                <span>
+                  <span className="block text-sm font-semibold text-brand-dark">Advanced fallback behavior</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-500">
+                    Decide what happens when Guard has no remembered rule or specific risk match.
+                  </span>
+                </span>
+                <HiMiniChevronDown className="h-5 w-5 shrink-0 text-slate-400 transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+              <div className="border-t border-slate-100 px-4 pb-4">
+                <div className="grid gap-3 py-4 sm:grid-cols-2">
+                  <SettingSelect label="First-time action" value={draft.default_action} options={actionOptions} onChange={handleStringChange("default_action")} />
+                  <SettingSelect label="Unknown source" value={draft.unknown_publisher_action} options={actionOptions} onChange={handleStringChange("unknown_publisher_action")} />
+                  <SettingSelect label="Changed command" value={draft.changed_hash_action} options={actionOptions} onChange={handleStringChange("changed_hash_action")} />
+                  <SettingSelect label="New website or host" value={draft.new_network_domain_action} options={actionOptions} onChange={handleStringChange("new_network_domain_action")} />
+                  <SettingSelect label="Nested commands" value={draft.subprocess_action} options={actionOptions} onChange={handleStringChange("subprocess_action")} />
+                  <SettingSelect label="Where to ask" value={draft.approval_surface_policy} options={surfacePolicyOptions} onChange={handleStringChange("approval_surface_policy")} />
                 </div>
-              ) : null}
-            </SettingsFormSection>
+                {draft.approval_surface_policy === "attention-aware" ? (
+                  <div className="grid gap-3 border-t border-slate-100 py-4 sm:grid-cols-2">
+                    <SettingNumber
+                      label="Browser delay"
+                      value={draft.approval_browser_delay_seconds}
+                      min={0}
+                      max={300}
+                      suffix="seconds"
+                      onChange={handleNumberChange("approval_browser_delay_seconds")}
+                    />
+                    <SettingSelect
+                      label="Open immediately for"
+                      value={draft.approval_browser_immediate_severity}
+                      options={attentionSeverityOptions}
+                      onChange={handleStringChange("approval_browser_immediate_severity")}
+                    />
+                    <p className="text-xs leading-5 text-slate-500 sm:col-span-2">
+                      Guard cancels the browser prompt when your AI app continues with a different action. Desktop and in-app notices still appear immediately.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </details>
           </div>
         )}
 
@@ -1719,7 +1741,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       </div>
 
       <div
-        className="sticky bottom-4 mt-auto rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur"
+        className="sticky bottom-2 mt-auto rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:bottom-4 sm:p-4"
         role="region"
         aria-label="Save settings"
       >
@@ -1745,7 +1767,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
           ) : saveError ? (
             <p className="text-sm text-brand-purple">{saveError}</p>
           ) : (
-            <p className="text-xs text-slate-500">Use this for local tuning. Team policy from Guard Cloud may still override some decisions.</p>
+            <p className="hidden text-xs text-slate-500 sm:block">Use this for local tuning. Team policy from Guard Cloud may still override some decisions.</p>
           )}
           <div aria-live="polite" aria-atomic="true" className="sr-only">
             {saveStatusText(saveSuccess, saveError)}
@@ -1907,7 +1929,7 @@ function SettingSelect(props: {
         value={props.value}
         onChange={props.onChange}
         disabled={props.disabled}
-        className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {props.options.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>

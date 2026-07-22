@@ -671,7 +671,7 @@ class TestMigrationFromOldSchema:
 
 
 class TestCorruptionRecovery:
-    def test_malformed_risk_signals_json_falls_back_gracefully(self) -> None:
+    def test_risk_signal_payloads_are_safe_and_legacy_browser_labels_are_repaired(self) -> None:
         conn = _make_conn()
         req = _make_request()
         _insert(conn, req)
@@ -682,6 +682,47 @@ class TestCorruptionRecovery:
         row = get_approval_request(conn, req.request_id)
         assert row is not None
         assert isinstance(row["risk_signals"], list)
+
+        cases = (
+            ("click", "page element", "browser interaction on"),
+            ("fill_form", "page elements", "browser interaction on"),
+            ("new_page", "current page", "browser navigation to"),
+            ("take_snapshot", "current page", "browser inspection of"),
+            ("get_network_request", "network request", "browser inspection of"),
+            ("list_console_messages", "console messages", "browser inspection of"),
+        )
+        request_ids: set[str] = set()
+        for index, (operation, target, risk_prefix) in enumerate(cases, start=1):
+            legacy = dataclasses.replace(
+                _make_request(artifact_id=f"codex:project:chrome-devtools:{operation}"),
+                artifact_name=operation,
+                artifact_type="tool_call",
+                launch_target=f"chrome-devtools {operation} unknown",
+                risk_signals=[f"{risk_prefix} unknown target"],
+            )
+            _insert(conn, legacy, now=f"2026-01-02T00:00:0{index}Z")
+            request_ids.add(legacy.request_id)
+            detail = get_approval_request(conn, legacy.request_id)
+            assert detail is not None
+            assert detail["launch_target"] == f"chrome-devtools {operation} {target}"
+            assert detail["risk_signals"] == [f"{risk_prefix} {target}"]
+            stored = conn.execute(
+                "select launch_target, risk_signals_json from approval_requests where request_id = ?",
+                (legacy.request_id,),
+            ).fetchone()
+            assert stored is not None
+            assert stored["launch_target"] == f"chrome-devtools {operation} unknown"
+            assert stored["risk_signals_json"] == f'["{risk_prefix} unknown target"]'
+
+        page = list_pending_approval_summaries(conn, limit=10)
+        summaries = page["items"]
+        assert isinstance(summaries, list)
+        repaired: set[object] = set()
+        for item in summaries:
+            assert isinstance(item, dict)
+            if item.get("request_id") in request_ids:
+                repaired.add(item.get("launch_target"))
+        assert repaired == {f"chrome-devtools {operation} {target}" for operation, target, _prefix in cases}
 
     def test_malformed_changed_fields_json_falls_back_gracefully(self) -> None:
         conn = _make_conn()

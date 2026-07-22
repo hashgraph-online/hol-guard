@@ -8,6 +8,7 @@ import {
   CODEX_RESUME_STATUSES
 } from "./guard-types";
 import { computeTrendBuckets } from "./evidence/evidence-metrics";
+import { normalizeProtectionHealth, protectionHeadlineFor } from "./protection-health";
 import {
   AUTHORITATIVE_DECISION_INCONSISTENT,
   guardActionDisposition,
@@ -18,6 +19,8 @@ import {
   mostRestrictiveGuardAction,
   normalizeGuardAction,
 } from "./guard-action";
+import { parseTemporaryMcpApproval } from "./temporary-mcp-approval";
+import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import type {
   GuardActionEnvelope,
   GuardAction,
@@ -58,6 +61,7 @@ import type {
   GuardReceiptArtifactStat,
   GuardReceiptDailyActivity,
   GuardReceiptHarnessStat,
+  GuardRuntimeState,
   GuardRuntimeSnapshot,
   GuardCloudConnectStatusResponse,
   SupplyChainBundle,
@@ -66,10 +70,12 @@ import type {
   GuardSettingsExport,
   GuardSettings,
   GuardUpdateScheduleResult,
+  GuardDaemonReconnectAuthorization,
   GuardUpdateReconnectOptions,
   GuardUpdateStatus,
   GuardUpdateVersionCheck,
   DecisionScope,
+  GuardApprovalResolutionInput,
   RiskSignalV2,
   RiskSignalV2Category,
   RiskSignalV2RedactionLevel,
@@ -92,17 +98,43 @@ const GUARD_DAEMON_PORT_RANGE = 1000;
 const GUARD_DAEMON_DISCOVERY_PROBE_COUNT = 25;
 const GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE = 5;
 const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
+const GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION = 1;
+const GUARD_DAEMON_RECONNECT_NONCE_BYTES = 32;
+const RUNTIME_HEARTBEAT_MAX_AGE_MS = 30_000;
+const RUNTIME_HEARTBEAT_FUTURE_TOLERANCE_MS = 5_000;
 let guardTokenOverride: string | null = null;
 let guardTokenLocationKey: string | null = null;
+let guardDaemonReconnectDiagnostic = "dashboard_reconnect_not_started";
 
 type RawGuardApprovalRequest = Omit<
   GuardApprovalRequest,
-  "action_envelope_json" | "decision_v2_json" | "policy_action" | "decision_contract_error"
+  | "action_envelope_json"
+  | "decision_v2_json"
+  | "policy_action"
+  | "decision_contract_error"
+  | "recommended_scope"
+  | "allowed_scopes"
+  | "scope_contract_version"
+  | "scope_contract_digest"
+  | "allowed_scopes_by_action"
+  | "recommended_scope_by_action"
+  | "scope_restrictions"
+  | "task_capability_eligibility"
+  | "temporary_mcp_approval"
 > & {
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
   policy_action?: unknown;
   decision_contract_error?: unknown;
+  recommended_scope?: unknown;
+  allowed_scopes?: unknown;
+  scope_contract_version?: unknown;
+  scope_contract_digest?: unknown;
+  allowed_scopes_by_action?: unknown;
+  recommended_scope_by_action?: unknown;
+  scope_restrictions?: unknown;
+  task_capability_eligibility?: unknown;
+  temporary_mcp_approval?: unknown;
 };
 
 type RawGuardReceipt = Omit<GuardReceipt, "action_envelope_json" | "policy_decision"> & {
@@ -129,6 +161,8 @@ type RuntimeSnapshotPayload = Omit<
   | "supply_chain"
   | "managed_installs"
   | "cloud_command_capability"
+  | "protection_health"
+  | "runtime_state"
   | "latest_receipts"
   | "inventory"
 > & {
@@ -139,6 +173,8 @@ type RuntimeSnapshotPayload = Omit<
   supply_chain?: unknown;
   managed_installs?: unknown;
   cloud_command_capability?: unknown;
+  protection_health?: unknown;
+  runtime_state?: unknown;
 };
 
 type QueueResolutionPayload = Omit<
@@ -265,7 +301,17 @@ function saveGuardDaemonOrigin(daemonOrigin: string): void {
 }
 
 function preferredGuardDaemonPort(): number {
-  const fromOrigin = readGuardDaemonOrigin();
+  const establishedOrigin = establishedGuardDaemonOriginForReconnect();
+  const rawDaemonUrl = guardParam(GUARD_DAEMON_PARAM);
+  const suppliedToken = guardParam(GUARD_TOKEN_PARAM);
+  const mayUseUnboundHint = Boolean(suppliedToken?.trim()) || !readGuardStorage(GUARD_TOKEN_PARAM);
+  const fromOrigin =
+    establishedOrigin ??
+    (rawDaemonUrl && mayUseUnboundHint ? localGuardDaemonOrigin(rawDaemonUrl) : null) ??
+    (() => {
+      const storedDaemonUrl = readGuardStorage(GUARD_DAEMON_PARAM);
+      return storedDaemonUrl ? localGuardDaemonOrigin(storedDaemonUrl) : null;
+    })();
   if (fromOrigin) {
     try {
       const port = Number(new URL(fromOrigin).port);
@@ -302,20 +348,36 @@ export function buildGuardDaemonCandidatePorts(preferredPort: number): number[] 
 }
 
 async function probeGuardDaemonHealth(origin: string): Promise<boolean> {
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
+  const candidateOrigin = localGuardDaemonOrigin(origin);
+  if (!candidateOrigin) {
+    return false;
+  }
   try {
-    const response = await fetch(`${origin}/healthz`, { signal: controller.signal });
+    const { response, payload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/healthz`, {
+      redirect: "error",
+    });
     if (!response.ok) {
       return false;
     }
-    const payload: unknown = await response.json();
     if (!isRecord(payload)) {
       return false;
     }
     return payload.ok === true && payload.compatibility_version === 2;
   } catch {
     return false;
+  }
+}
+
+async function fetchGuardDaemonCandidateJson(
+  input: RequestInfo,
+  init: RequestInit,
+): Promise<{ response: Response; payload: unknown }> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetch(input, { ...init, signal: controller.signal });
+    const payload: unknown = await response.json();
+    return { response, payload };
   } finally {
     window.clearTimeout(timeoutId);
   }
@@ -372,12 +434,301 @@ export function updateReconnectSucceeded(
   return options.sawUpdateInProgress === true;
 }
 
+type GuardDaemonReconnectChallenge = {
+  protocol_version: 1;
+  reconnect_id: string;
+  client_nonce: string;
+  server_nonce: string;
+  state_id: string;
+  candidate_origin: string;
+  installation_id: string;
+  guard_home_id: string;
+  surface: "dashboard";
+  issued_at_ms: number;
+  expires_at_ms: number;
+};
+
+function isHexDigest(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+function randomHex(bytes: number): string {
+  const value = new Uint8Array(bytes);
+  globalThis.crypto.getRandomValues(value);
+  return [...value].map((item) => item.toString(16).padStart(2, "0")).join("");
+}
+
+function hexBytes(value: string): Uint8Array {
+  const bytes = new Uint8Array(value.length / 2);
+  for (let index = 0; index < value.length; index += 2) {
+    bytes[index / 2] = Number.parseInt(value.slice(index, index + 2), 16);
+  }
+  return bytes;
+}
+
+function canonicalReconnectPayload(value: Record<string, string | number>): string {
+  const entries = Object.entries(value).sort(([left], [right]) => {
+    if (left < right) return -1;
+    if (left > right) return 1;
+    return 0;
+  });
+  return JSON.stringify(Object.fromEntries(entries));
+}
+
+async function dashboardReconnectProof(
+  verifier: string,
+  proofContext: "server" | "client",
+  challenge: GuardDaemonReconnectChallenge,
+): Promise<string> {
+  const key = await globalThis.crypto.subtle.importKey(
+    "raw",
+    hexBytes(verifier).buffer as ArrayBuffer,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const message = new TextEncoder().encode(
+    canonicalReconnectPayload({ proof_context: proofContext, ...challenge }),
+  ).buffer as ArrayBuffer;
+  const signature = await globalThis.crypto.subtle.sign("HMAC", key, message);
+  return [...new Uint8Array(signature)].map((item) => item.toString(16).padStart(2, "0")).join("");
+}
+
+function constantTimeHexEqual(left: string, right: string): boolean {
+  if (!isHexDigest(left) || !isHexDigest(right)) {
+    return false;
+  }
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return difference === 0;
+}
+
+function parseReconnectAuthorization(payload: unknown): GuardDaemonReconnectAuthorization | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  if (
+    payload["protocol_version"] !== GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION ||
+    payload["surface"] !== "dashboard" ||
+    !isHexDigest(payload["reconnect_id"]) ||
+    !isHexDigest(payload["verifier"]) ||
+    !isHexDigest(payload["installation_id"]) ||
+    !isHexDigest(payload["guard_home_id"]) ||
+    typeof payload["issued_at_ms"] !== "number" ||
+    typeof payload["expires_at_ms"] !== "number" ||
+    payload["expires_at_ms"] <= payload["issued_at_ms"]
+  ) {
+    return null;
+  }
+  const now = Date.now();
+  if (payload["issued_at_ms"] > now + 5_000 || payload["expires_at_ms"] > now + 305_000) {
+    return null;
+  }
+  return {
+    protocolVersion: 1,
+    reconnectId: payload["reconnect_id"],
+    verifier: payload["verifier"],
+    surface: "dashboard",
+    issuedAtMs: payload["issued_at_ms"],
+    expiresAtMs: payload["expires_at_ms"],
+    installationId: payload["installation_id"],
+    guardHomeId: payload["guard_home_id"],
+  };
+}
+
+function parseReconnectChallenge(
+  payload: unknown,
+  authorization: GuardDaemonReconnectAuthorization,
+  candidateOrigin: string,
+  clientNonce: string,
+): { challenge: GuardDaemonReconnectChallenge; proof: string } | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  const stringFields = ["state_id"] as const;
+  if (
+    payload["protocol_version"] !== GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION ||
+    payload["reconnect_id"] !== authorization.reconnectId ||
+    payload["client_nonce"] !== clientNonce ||
+    payload["candidate_origin"] !== candidateOrigin ||
+    payload["installation_id"] !== authorization.installationId ||
+    payload["guard_home_id"] !== authorization.guardHomeId ||
+    payload["surface"] !== authorization.surface ||
+    !isHexDigest(payload["server_nonce"]) ||
+    !isHexDigest(payload["proof"]) ||
+    !stringFields.every((field) => typeof payload[field] === "string" && payload[field].length > 0) ||
+    typeof payload["issued_at_ms"] !== "number" ||
+    typeof payload["expires_at_ms"] !== "number"
+  ) {
+    return null;
+  }
+  const challenge: GuardDaemonReconnectChallenge = {
+    protocol_version: 1,
+    reconnect_id: authorization.reconnectId,
+    client_nonce: clientNonce,
+    server_nonce: payload["server_nonce"],
+    state_id: payload["state_id"] as string,
+    candidate_origin: candidateOrigin,
+    installation_id: authorization.installationId,
+    guard_home_id: authorization.guardHomeId,
+    surface: "dashboard",
+    issued_at_ms: payload["issued_at_ms"],
+    expires_at_ms: payload["expires_at_ms"],
+  };
+  const now = Date.now();
+  if (
+    challenge.issued_at_ms > now + 5_000 ||
+    challenge.expires_at_ms < now ||
+    challenge.expires_at_ms > authorization.expiresAtMs
+  ) {
+    return null;
+  }
+  return { challenge, proof: payload["proof"] };
+}
+
+export async function prepareGuardDaemonReconnect(): Promise<GuardDaemonReconnectAuthorization> {
+  const daemonOrigin = establishedGuardDaemonOriginForReconnect();
+  const guardToken = readGuardToken();
+  if (!daemonOrigin || !guardToken) {
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_prepare_origin_unavailable";
+    throw new Error("Guard could not identify the authenticated daemon for a secure reconnect.");
+  }
+  let response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+    redirect: "error",
+  }, guardToken));
+  if (response.status === 401) {
+    const refreshedToken = await initializeGuardDashboardSessionAtOrigin(daemonOrigin, guardToken);
+    if (refreshedToken && refreshedToken !== guardToken) {
+      saveGuardToken(refreshedToken);
+      response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        redirect: "error",
+      }, refreshedToken));
+    }
+  }
+  const authorization = response.ok ? parseReconnectAuthorization(await response.json()) : null;
+  if (!authorization || authorization.expiresAtMs <= Date.now()) {
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_prepare_failed";
+    throw new Error("Guard could not prepare a secure dashboard reconnect.");
+  }
+  guardDaemonReconnectDiagnostic = "dashboard_reconnect_prepared";
+  return authorization;
+}
+
+function establishedGuardDaemonOriginForReconnect(): string | null {
+  const pageOrigin = localGuardDaemonOrigin(window.location.origin);
+  if (pageOrigin) {
+    return pageOrigin;
+  }
+  const suppliedToken = guardParam(GUARD_TOKEN_PARAM);
+  if (suppliedToken?.trim()) {
+    const suppliedDaemon = guardParam(GUARD_DAEMON_PARAM);
+    const suppliedOrigin = suppliedDaemon ? localGuardDaemonOrigin(suppliedDaemon) : null;
+    if (suppliedOrigin) {
+      return suppliedOrigin;
+    }
+  }
+  const storedDaemon = readGuardStorage(GUARD_DAEMON_PARAM);
+  return storedDaemon ? localGuardDaemonOrigin(storedDaemon) : null;
+}
+
+export function readGuardDaemonReconnectDiagnostic(): string {
+  return guardDaemonReconnectDiagnostic;
+}
+
+async function authenticateGuardDaemonCandidate(
+  origin: string,
+  authorization: GuardDaemonReconnectAuthorization,
+): Promise<boolean> {
+  const candidateOrigin = localGuardDaemonOrigin(origin);
+  if (!candidateOrigin || authorization.expiresAtMs <= Date.now()) {
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_authorization_expired";
+    return false;
+  }
+  const clientNonce = randomHex(GUARD_DAEMON_RECONNECT_NONCE_BYTES);
+  try {
+    const { response: challengeResponse, payload: challengePayload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/v1/update/reconnect/challenge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        protocol_version: GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION,
+        reconnect_id: authorization.reconnectId,
+        client_nonce: clientNonce,
+        candidate_origin: candidateOrigin,
+      }),
+      redirect: "error",
+    });
+    if (!challengeResponse.ok) {
+      guardDaemonReconnectDiagnostic = "dashboard_reconnect_candidate_unavailable";
+      return false;
+    }
+    const parsed = parseReconnectChallenge(
+      challengePayload,
+      authorization,
+      candidateOrigin,
+      clientNonce,
+    );
+    if (!parsed) {
+      guardDaemonReconnectDiagnostic = "dashboard_reconnect_challenge_invalid";
+      return false;
+    }
+    const expectedServerProof = await dashboardReconnectProof(
+      authorization.verifier,
+      "server",
+      parsed.challenge,
+    );
+    if (!constantTimeHexEqual(parsed.proof, expectedServerProof)) {
+      guardDaemonReconnectDiagnostic = "dashboard_reconnect_server_proof_invalid";
+      return false;
+    }
+    const clientProof = await dashboardReconnectProof(
+      authorization.verifier,
+      "client",
+      parsed.challenge,
+    );
+    const { response: verificationResponse, payload: verificationPayload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/v1/update/reconnect/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        protocol_version: GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION,
+        challenge: parsed.challenge,
+        proof: clientProof,
+      }),
+      redirect: "error",
+    });
+    if (!verificationResponse.ok) {
+      guardDaemonReconnectDiagnostic = "dashboard_reconnect_client_proof_rejected";
+      return false;
+    }
+    if (!isRecord(verificationPayload) || verificationPayload["verified"] !== true) {
+      guardDaemonReconnectDiagnostic = "dashboard_reconnect_client_proof_rejected";
+      return false;
+    }
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_proof_accepted";
+    return true;
+  } catch {
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_candidate_unavailable";
+    return false;
+  }
+}
+
 async function initializeGuardDashboardSessionAtOrigin(
   origin: string,
   guardToken: string | null,
 ): Promise<string | null> {
+  const candidateOrigin = localGuardDaemonOrigin(origin);
+  if (!candidateOrigin) {
+    return null;
+  }
   try {
-    const response = await fetch(`${origin}/v1/initialize`, {
+    const { response, payload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/v1/initialize`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -388,11 +739,12 @@ async function initializeGuardDashboardSessionAtOrigin(
         surface: "dashboard",
         supported_protocol_versions: [...GUARD_SURFACE_PROTOCOL_VERSIONS],
       }),
+      redirect: "error",
     });
     if (!response.ok) {
       return null;
     }
-    return parseDashboardSessionToken(await response.json());
+    return parseDashboardSessionToken(payload);
   } catch {
     return null;
   }
@@ -402,27 +754,37 @@ export async function fetchGuardUpdateStatusAtOrigin(
   origin: string,
   guardToken: string | null,
 ): Promise<GuardUpdateStatus> {
-  const response = await fetch(`${origin}/v1/update/status`, {
+  const candidateOrigin = localGuardDaemonOrigin(origin);
+  if (!candidateOrigin) {
+    throw new Error("Invalid Guard daemon origin");
+  }
+  const { response, payload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/v1/update/status`, {
     headers: guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {},
+    redirect: "error",
   });
   if (!response.ok) {
     throw new Error(`Update status failed with ${response.status}`);
   }
-  return normalizeGuardUpdateStatus(await response.json());
+  return normalizeGuardUpdateStatus(payload);
 }
 
 export function redirectToGuardDaemonOrigin(
   origin: string,
   guardToken: string | null,
 ): void {
-  const url = new URL(origin);
+  const candidateOrigin = localGuardDaemonOrigin(origin);
+  if (!candidateOrigin) {
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_origin_invalid";
+    return;
+  }
+  const url = new URL(candidateOrigin);
   url.pathname = window.location.pathname;
   url.search = window.location.search;
   const fragmentPairs: string[] = [];
   if (guardToken) {
     fragmentPairs.push(`${GUARD_TOKEN_PARAM}=${encodeURIComponent(guardToken)}`);
   }
-  fragmentPairs.push(`${GUARD_DAEMON_PARAM}=${encodeURIComponent(origin)}`);
+  fragmentPairs.push(`${GUARD_DAEMON_PARAM}=${encodeURIComponent(candidateOrigin)}`);
   url.hash = fragmentPairs.join("&");
   window.location.replace(url.toString());
 }
@@ -430,8 +792,13 @@ export function redirectToGuardDaemonOrigin(
 export async function reconnectGuardDaemonAfterUpdate(
   options?: GuardUpdateReconnectOptions,
 ): Promise<{ origin: string | null; status: GuardUpdateStatus | null; sawUpdateInProgress: boolean } | null> {
-  const guardToken = readGuardToken();
   const reconnectOptions = options ?? {};
+  const authorization = reconnectOptions.authorization;
+  if (!authorization) {
+    guardDaemonReconnectDiagnostic = "dashboard_reconnect_authorization_missing";
+    return null;
+  }
+  const guardToken = readGuardToken();
   const awaitingVersionChange = Boolean(reconnectOptions.expectedPreviousVersion);
   const ports = buildGuardDaemonCandidatePorts(preferredGuardDaemonPort());
   let sawUpdateInProgress = reconnectOptions.sawUpdateInProgress === true;
@@ -442,6 +809,9 @@ export async function reconnectGuardDaemonAfterUpdate(
       batch.map(async (port) => {
         const origin = `http://127.0.0.1:${port}`;
         if (!(await probeGuardDaemonHealth(origin))) {
+          return null;
+        }
+        if (!(await authenticateGuardDaemonCandidate(origin, authorization))) {
           return null;
         }
         try {
@@ -461,11 +831,11 @@ export async function reconnectGuardDaemonAfterUpdate(
 
     const active = results.find((result) => result !== null && result.origin !== null && result.status !== null);
     if (active?.origin && active.status) {
-      saveGuardDaemonOrigin(active.origin);
       const refreshedToken = await initializeGuardDashboardSessionAtOrigin(active.origin, guardToken);
       if (refreshedToken) {
         saveGuardToken(refreshedToken);
       }
+      saveGuardDaemonOrigin(active.origin);
       return {
         origin: active.origin,
         status: active.status,
@@ -484,31 +854,52 @@ export async function reconnectGuardDaemonAfterUpdate(
 }
 
 function readGuardDaemonOrigin(): string | null {
+  const storedDaemonUrl = readGuardStorage(GUARD_DAEMON_PARAM);
+  const storedDaemonOrigin = storedDaemonUrl ? localGuardDaemonOrigin(storedDaemonUrl) : null;
   const rawDaemonUrl = guardParam(GUARD_DAEMON_PARAM);
   if (rawDaemonUrl) {
     const daemonOrigin = localGuardDaemonOrigin(rawDaemonUrl);
-    if (daemonOrigin) {
+    const suppliedToken = guardParam(GUARD_TOKEN_PARAM);
+    const hasStoredToken = Boolean(readGuardStorage(GUARD_TOKEN_PARAM));
+    if (daemonOrigin && (Boolean(suppliedToken?.trim()) || !hasStoredToken)) {
       saveGuardStorage(GUARD_DAEMON_PARAM, daemonOrigin);
       return daemonOrigin;
     }
   }
-  const storedDaemonUrl = readGuardStorage(GUARD_DAEMON_PARAM);
-  return storedDaemonUrl ? localGuardDaemonOrigin(storedDaemonUrl) : null;
+  return storedDaemonOrigin;
 }
 
-function localGuardDaemonOrigin(rawUrl: string): string | null {
+export function canonicalizeGuardDaemonOrigin(rawUrl: string): string | null {
   try {
-    const url = new URL(rawUrl);
-    if (url.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]", "::1"].includes(url.hostname)) {
+    const rawOrigin = rawUrl.trim();
+    const url = new URL(rawOrigin);
+    if (url.protocol !== "http:" || !["127.0.0.1", "[::1]"].includes(url.hostname)) {
       return null;
     }
-    if (url.username || url.password || (url.pathname && url.pathname !== "/") || url.search || url.hash) {
+    if (
+      url.username ||
+      url.password ||
+      (url.pathname && url.pathname !== "/") ||
+      url.search ||
+      url.hash ||
+      !url.port
+    ) {
       return null;
     }
-    return url.origin;
+    const port = Number(url.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+      return null;
+    }
+    const canonicalHost = url.hostname === "[::1]" ? "[::1]" : "127.0.0.1";
+    const canonical = `http://${canonicalHost}:${port}`;
+    return url.origin === canonical && (rawOrigin === canonical || rawOrigin === `${canonical}/`) ? canonical : null;
   } catch {
     return null;
   }
+}
+
+function localGuardDaemonOrigin(rawUrl: string): string | null {
+  return canonicalizeGuardDaemonOrigin(rawUrl);
 }
 
 function guardApiInput(input: RequestInfo): RequestInfo {
@@ -553,6 +944,18 @@ async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promi
   return fetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
 }
 
+export async function fetchCommandActivityApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    typeof input === "string" &&
+    /^\/v1\/(?:command-activity(?:\/(?:analytics|diagnostics|events|feedback))?|command-extensions)(?:\?[^#]*)?$/.test(
+      input,
+    );
+  if (!approvedPath) {
+    throw new Error("Invalid command activity API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
 function guardAuthHeaders(): HeadersInit {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
@@ -582,7 +985,8 @@ async function refreshGuardDashboardSession(guardToken: string): Promise<string 
         client_name: "guard-dashboard-web",
         surface: "dashboard",
         supported_protocol_versions: [...GUARD_SURFACE_PROTOCOL_VERSIONS]
-      })
+      }),
+      redirect: "error",
     });
     if (!response.ok) {
       return null;
@@ -715,6 +1119,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   const mcpTool = raw["mcp_tool"];
   const packageManager = raw["package_manager"];
   const packageName = raw["package_name"];
+  const commandCategory = raw["command_category"];
   const packageIntentKind = raw["package_intent_kind"];
   const packageTargets = raw["package_targets"];
   const preExecutionResult = aliasedPreExecutionResult.value;
@@ -741,6 +1146,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
     !isStringOrNull(mcpTool) ||
     !isStringOrNull(packageManager) ||
     !isStringOrNull(packageName) ||
+    (commandCategory !== undefined && !isStringOrNull(commandCategory)) ||
     (packageIntentKind !== undefined && !isStringOrNull(packageIntentKind)) ||
     (preExecutionResult !== undefined && preExecutionResult !== null && !isGuardAction(preExecutionResult)) ||
     (policyAction !== undefined && policyAction !== null && !isGuardAction(policyAction)) ||
@@ -776,6 +1182,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
     mcp_tool: mcpTool,
     package_manager: packageManager,
     package_name: packageName,
+    command_category: isStringOrNull(commandCategory) ? commandCategory : null,
     package_intent_kind: isStringOrNull(packageIntentKind) ? packageIntentKind : null,
     package_targets: isStringArray(packageTargets) ? packageTargets : [],
     pre_execution_result: isGuardAction(preExecutionResult) ? preExecutionResult : null,
@@ -906,6 +1313,36 @@ function parseLegacyPackageActionMetadata(raw: unknown): LegacyPackageActionMeta
   return { recognized: true, action: isRecognizedGuardActionInput(action) ? normalizeGuardAction(action) : null };
 }
 
+const DECISION_SCOPE_VALUES: ReadonlySet<string> = new Set([
+  "artifact",
+  "workspace",
+  "publisher",
+  "harness",
+  "global",
+]);
+
+function isDecisionScope(value: unknown): value is DecisionScope {
+  return typeof value === "string" && DECISION_SCOPE_VALUES.has(value);
+}
+
+function parseDecisionScopeList(value: unknown): DecisionScope[] | null {
+  if (!Array.isArray(value) || !value.every(isDecisionScope)) {
+    return null;
+  }
+  return [...new Set(value)];
+}
+
+function parseStringList(value: unknown): string[] | null {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+    return null;
+  }
+  return [...new Set(value)];
+}
+
+function parseOptionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
 export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardApprovalRequest {
   const { decision_contract_error: rawContractError, ...baseItem } = item;
   const policyAction = normalizeGuardAction(item.policy_action);
@@ -942,9 +1379,64 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
         legacyActionMetadata.action,
       )
     : policyAction;
+  const hasScopeContract = [
+    item.scope_contract_version,
+    item.scope_contract_digest,
+    item.allowed_scopes_by_action,
+    item.recommended_scope_by_action,
+    item.scope_restrictions,
+    item.task_capability_eligibility,
+  ].some((value) => value !== undefined && value !== null);
+  const scopeContractVersion = parseOptionalString(item.scope_contract_version);
+  const scopeContractDigest = parseOptionalString(item.scope_contract_digest);
+  const hasCompleteScopeContract = scopeContractVersion !== null && scopeContractDigest !== null;
+  const rawAllowedByAction = isRecord(item.allowed_scopes_by_action)
+    ? item.allowed_scopes_by_action
+    : {};
+  const rawRecommendedByAction = isRecord(item.recommended_scope_by_action)
+    ? item.recommended_scope_by_action
+    : {};
+  const rawTaskEligibility = isRecord(item.task_capability_eligibility)
+    ? item.task_capability_eligibility
+    : null;
+  const taskReasonCodes = parseStringList(rawTaskEligibility?.reason_codes);
+  const taskCapabilityEligibility =
+    typeof rawTaskEligibility?.eligible === "boolean" && taskReasonCodes !== null
+      ? {
+          eligible: rawTaskEligibility.eligible,
+          reason_codes: taskReasonCodes,
+        }
+      : undefined;
+  const allowedScopes = parseDecisionScopeList(item.allowed_scopes);
+  const scopeRestrictions = parseStringList(item.scope_restrictions);
   return {
     ...baseItem,
     policy_action: failClosedPolicyAction,
+    recommended_scope: isDecisionScope(item.recommended_scope) ? item.recommended_scope : null,
+    allowed_scopes: allowedScopes ?? undefined,
+    scope_contract_version: hasScopeContract ? scopeContractVersion : undefined,
+    scope_contract_digest: hasScopeContract ? scopeContractDigest : undefined,
+    allowed_scopes_by_action: hasScopeContract
+      ? {
+          allow: hasCompleteScopeContract ? parseDecisionScopeList(rawAllowedByAction.allow) ?? [] : [],
+          block: hasCompleteScopeContract ? parseDecisionScopeList(rawAllowedByAction.block) ?? [] : [],
+        }
+      : undefined,
+    recommended_scope_by_action: hasScopeContract
+      ? {
+          allow:
+            hasCompleteScopeContract && isDecisionScope(rawRecommendedByAction.allow)
+              ? rawRecommendedByAction.allow
+              : null,
+          block:
+            hasCompleteScopeContract && isDecisionScope(rawRecommendedByAction.block)
+              ? rawRecommendedByAction.block
+              : null,
+        }
+      : undefined,
+    scope_restrictions: hasScopeContract ? scopeRestrictions ?? [] : undefined,
+    task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : undefined,
+    temporary_mcp_approval: parseTemporaryMcpApproval(item.temporary_mcp_approval),
     action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
     ...(hasDecisionContractError
@@ -1120,8 +1612,17 @@ function normalizeCloudCommandCapability(raw: unknown): GuardRuntimeSnapshot["cl
 }
 
 export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): GuardRuntimeSnapshot {
+  const protectionHealth = normalizeProtectionHealth(snapshot.protection_health);
+  const runtimeState = normalizeRuntimeState(snapshot.runtime_state);
+  const headline = protectionHeadlineFor({
+    health: protectionHealth,
+    runtimeActive: runtimeState !== null,
+    pendingCount: snapshot.pending_count,
+  });
   return {
     ...snapshot,
+    ...headline,
+    runtime_state: runtimeState,
     items: normalizeApprovalRequests(snapshot.items),
     latest_receipts: normalizeReceipts(snapshot.latest_receipts),
     inventory: normalizeInventory(snapshot.inventory),
@@ -1129,7 +1630,89 @@ export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): Guar
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
     managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
     cloud_command_capability: normalizeCloudCommandCapability(snapshot.cloud_command_capability),
+    protection_health: protectionHealth,
   };
+}
+
+function normalizeRuntimeState(raw: unknown): GuardRuntimeState | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const sessionId = raw["session_id"];
+  const daemonHost = raw["daemon_host"];
+  const daemonPort = raw["daemon_port"];
+  const startedAt = raw["started_at"];
+  const lastHeartbeatAt = raw["last_heartbeat_at"];
+  const approvalCenterUrl = raw["approval_center_url"];
+  if (
+    typeof sessionId !== "string" ||
+    sessionId.length === 0 ||
+    typeof daemonHost !== "string" ||
+    !isLoopbackRuntimeHost(daemonHost) ||
+    typeof daemonPort !== "number" ||
+    !Number.isInteger(daemonPort) ||
+    daemonPort <= 0 ||
+    daemonPort > 65_535 ||
+    typeof startedAt !== "string" ||
+    parseAwareTimestamp(startedAt) === null ||
+    typeof lastHeartbeatAt !== "string" ||
+    !isFreshAwareTimestamp(lastHeartbeatAt) ||
+    typeof approvalCenterUrl !== "string" ||
+    !isMatchingRuntimeUrl(approvalCenterUrl, daemonHost, daemonPort)
+  ) {
+    return null;
+  }
+  return {
+    session_id: sessionId,
+    daemon_host: daemonHost,
+    daemon_port: daemonPort,
+    started_at: startedAt,
+    last_heartbeat_at: lastHeartbeatAt,
+    approval_center_url: approvalCenterUrl,
+  };
+}
+
+function parseAwareTimestamp(value: string): number | null {
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/u.test(value)) {
+    return null;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function isFreshAwareTimestamp(value: string): boolean {
+  const timestamp = parseAwareTimestamp(value);
+  if (timestamp === null) {
+    return false;
+  }
+  const now = Date.now();
+  return (
+    timestamp >= now - RUNTIME_HEARTBEAT_MAX_AGE_MS &&
+    timestamp <= now + RUNTIME_HEARTBEAT_FUTURE_TOLERANCE_MS
+  );
+}
+
+function isLoopbackRuntimeHost(value: string): boolean {
+  return value === "127.0.0.1" || value === "localhost" || value === "::1";
+}
+
+function isMatchingRuntimeUrl(value: string, daemonHost: string, daemonPort: number): boolean {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.startsWith("[") ? url.hostname.slice(1, -1) : url.hostname;
+    return (
+      url.protocol === "http:" &&
+      hostname === daemonHost &&
+      Number(url.port) === daemonPort &&
+      url.username.length === 0 &&
+      url.password.length === 0 &&
+      url.pathname === "/" &&
+      url.search.length === 0 &&
+      url.hash.length === 0
+    );
+  } catch {
+    return false;
+  }
 }
 
 function normalizeQueueCopy(raw: unknown): GuardQueueResolutionCopy | null {
@@ -1226,9 +1809,13 @@ function queuePath(basePath: string, params: URLSearchParams): string {
 const PENDING_QUEUE_PAGE_LIMIT = 200;
 const MAX_PENDING_QUEUE_PAGES = 50;
 
-export async function fetchAllPendingRequests(): Promise<GuardApprovalRequest[]> {
+type PendingRequestPageCallback = (items: GuardApprovalRequest[]) => void;
+
+export async function fetchAllPendingRequests(onPage?: PendingRequestPageCallback): Promise<GuardApprovalRequest[]> {
   if (isGuardDemoMode()) {
-    return getDemoRequests();
+    const demoRequests = getDemoRequests();
+    onPage?.(demoRequests);
+    return demoRequests;
   }
   const items: GuardApprovalRequest[] = [];
   let cursor: string | undefined;
@@ -1240,6 +1827,7 @@ export async function fetchAllPendingRequests(): Promise<GuardApprovalRequest[]>
       includeTotals: pageIndex === 0,
     });
     items.push(...page.items);
+    onPage?.([...items]);
     if (!page.next_cursor || page.next_cursor === cursor) {
       return items;
     }
@@ -2120,6 +2708,9 @@ export async function runHarnessAction(input: {
   dryRun?: boolean;
   confirmationPhrase?: string;
 }): Promise<GuardHarnessActionResult> {
+  if (!isConnectableAppHarness(input.harness)) {
+    throw new Error(`${input.harness} is not a connectable AI app.`);
+  }
   if (isGuardDemoMode()) {
     return {
       harness: input.harness,
@@ -2186,13 +2777,7 @@ function fetchGuardApi(input: RequestInfo, init?: RequestInit): Promise<Response
   return fetchWithGuardAuth(input, init);
 }
 
-export async function resolveRequest(input: {
-  requestId: string;
-  action: "allow" | "block";
-  scope: DecisionScope;
-  workspace?: string;
-  reason: string;
-}): Promise<void> {
+export async function resolveRequest(input: GuardApprovalResolutionInput): Promise<void> {
   await resolveRequestWithQueueResult(input);
 }
 
@@ -2303,16 +2888,7 @@ export async function disableApprovalGateTotp(
   });
 }
 
-export async function resolveRequestWithQueueResult(input: {
-  requestId: string;
-  action: "allow" | "block";
-  scope: DecisionScope;
-  workspace?: string;
-  reason: string;
-  approval_password?: string;
-  approval_totp_code?: string;
-  approval_gate_use_cooldown?: boolean;
-}): Promise<GuardQueueResolutionResult> {
+export async function resolveRequestWithQueueResult(input: GuardApprovalResolutionInput): Promise<GuardQueueResolutionResult> {
   if (isGuardDemoMode()) {
     return {
       resolved: true,
@@ -2341,6 +2917,14 @@ export async function resolveRequestWithQueueResult(input: {
       scope: input.scope,
       workspace: input.workspace || undefined,
       reason: input.reason || undefined,
+      ...(input.scope_contract_version !== undefined
+        ? { scope_contract_version: input.scope_contract_version }
+        : {}),
+      ...(input.scope_contract_digest !== undefined
+        ? { scope_contract_digest: input.scope_contract_digest }
+        : {}),
+      ...(input.mcp_grant_target !== undefined ? { mcp_grant_target: input.mcp_grant_target } : {}),
+      ...(input.mcp_grant_duration !== undefined ? { mcp_grant_duration: input.mcp_grant_duration } : {}),
       ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
       ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
       ...(input.approval_gate_use_cooldown !== undefined ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {})
@@ -2425,6 +3009,36 @@ export async function repairApprovalCenter(): Promise<{ repaired: boolean; clear
   return response.json() as Promise<{ repaired: boolean; cleared: string[] }>;
 }
 
+export type GuardProtectionRepairResult = {
+  repaired: boolean;
+  check_ids: string[];
+  message: string;
+};
+
+export async function repairProtectionCheck(checkId: string): Promise<GuardProtectionRepairResult> {
+  if (isGuardDemoMode()) {
+    return { repaired: true, check_ids: [checkId], message: "Protection restored." };
+  }
+  const response = await fetchWithGuardAuth("/v1/protection/repair", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ check_id: checkId }),
+  });
+  const payload = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    const message = isRecord(payload) ? stringValue(payload.message) : null;
+    throw new Error(message ?? `Protection repair failed with ${response.status}`);
+  }
+  if (!isRecord(payload) || payload.repaired !== true || !Array.isArray(payload.check_ids)) {
+    throw new Error("Guard returned an invalid protection repair result.");
+  }
+  return {
+    repaired: true,
+    check_ids: payload.check_ids.filter((value): value is string => typeof value === "string"),
+    message: stringValue(payload.message) ?? "Protection restored.",
+  };
+}
+
 function normalizeGuardUpdateVersionCheck(raw: unknown): GuardUpdateVersionCheck {
   const value = isRecord(raw) ? raw : {};
   return {
@@ -2502,6 +3116,7 @@ export async function scheduleGuardUpdate(
       : undefined;
   const response = await fetchWithGuardAuth("/v1/update", {
     method: "POST",
+    redirect: "error",
     ...(body
       ? { headers: { "Content-Type": "application/json" }, body }
       : {}),

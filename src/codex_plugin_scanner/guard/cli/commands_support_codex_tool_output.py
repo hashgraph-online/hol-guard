@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from ..runtime.env_wrapper import parse_env_wrapper
+from ..runtime.shell_execution_context import model_shell_execution_context, validate_shell_execution_segment
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .commands_support_codex_paths import _PROMPT_PATH_TOKEN_PATTERN, _codex_search_target_is_source_like
@@ -96,46 +98,21 @@ def _codex_strip_command_wrapper(parts: list[str]) -> list[str]:
 
 
 def _codex_strip_env_wrapper(parts: list[str]) -> list[str]:
-    index = 0
-    while index < len(parts):
-        part = parts[index]
-        if part == "--":
-            return parts[index + 1 :]
-        if part in {"-i", "-0", "--ignore-environment", "--null"}:
-            index += 1
-            continue
-        if part in {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}:
-            index += 2
-            continue
-        if part.startswith(("--unset=", "--chdir=", "--split-string=")):
-            index += 1
-            continue
-        if part.startswith("-"):
-            index += 1
-            continue
-        if "=" in part and not part.startswith("="):
-            index += 1
-            continue
-        return parts[index:]
-    return []
+    parsed = parse_env_wrapper(parts)
+    return list(parsed.executable_argv) if parsed.complete else []
 
 
 def _codex_env_args_clear_environment(parts: list[str]) -> bool:
-    saw_clear_environment = False
-    for part in parts:
-        if part == "--":
-            return False
-        if part in {"-i", "--ignore-environment"}:
-            saw_clear_environment = True
-            continue
-        if part.startswith("-"):
-            continue
-        if "=" in part and not part.startswith("="):
-            if _codex_env_assignment_uses_shell_expansion(part):
-                return False
-            continue
-        return False
-    return saw_clear_environment
+    parsed = parse_env_wrapper(parts)
+    return (
+        parsed.complete
+        and parsed.option_effects.ignore_environment
+        and not parsed.executable_argv
+        and not any(
+            _codex_env_assignment_uses_shell_expansion(f"{name}={value}")
+            for name, value in parsed.environment_delta.assignments
+        )
+    )
 
 
 def _codex_env_assignment_uses_shell_expansion(part: str) -> bool:
@@ -181,7 +158,27 @@ def _codex_command_targets_secret_like_source_name(
     *,
     cwd: Path | None = None,
     home_dir: Path | None = None,
+    _execution_context_applied: bool = False,
 ) -> bool:
+    if not _execution_context_applied:
+        execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
+        if execution_context.directory_change_present:
+            if not execution_context.complete:
+                return True
+            for segment in execution_context.segments:
+                if segment.directory_operation is not None:
+                    continue
+                segment_cwd, reason = validate_shell_execution_segment(execution_context, segment)
+                if segment_cwd is None or reason is not None:
+                    return True
+                if _codex_command_targets_secret_like_source_name(
+                    segment.command_text,
+                    cwd=segment_cwd,
+                    home_dir=home_dir,
+                    _execution_context_applied=True,
+                ):
+                    return True
+            return False
     chained_segments = _split_codex_safe_read_only_chain(command_text)
     if chained_segments is not None:
         return any(
@@ -226,7 +223,32 @@ def _codex_command_references_sensitive_local_source(command_text: str, *, cwd: 
     return bool(_codex_sensitive_local_source_matches(command_text, cwd=cwd))
 
 
-def _codex_sensitive_local_source_matches(command_text: str, *, cwd: Path | None) -> list[SecretPathMatch]:
+def _codex_sensitive_local_source_matches(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    _execution_context_applied: bool = False,
+) -> list[SecretPathMatch]:
+    if not _execution_context_applied:
+        execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
+        if execution_context.directory_change_present:
+            if not execution_context.complete:
+                return []
+            contextual_matches: list[SecretPathMatch] = []
+            for segment in execution_context.segments:
+                if segment.directory_operation is not None:
+                    continue
+                segment_cwd, reason = validate_shell_execution_segment(execution_context, segment)
+                if segment_cwd is None or reason is not None:
+                    return []
+                contextual_matches.extend(
+                    _codex_sensitive_local_source_matches(
+                        segment.command_text,
+                        cwd=segment_cwd,
+                        _execution_context_applied=True,
+                    )
+                )
+            return _dedupe_codex_secret_path_matches(contextual_matches)
     matches = _codex_sensitive_path_matches_in_text(command_text, cwd=cwd)
     try:
         parts = shlex.split(command_text)

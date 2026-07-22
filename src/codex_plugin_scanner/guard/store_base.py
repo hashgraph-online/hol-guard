@@ -1312,6 +1312,32 @@ def runtime_tool_action_exact_match_context(
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
+def runtime_tool_action_portable_match_context(runtime_exact_match_context: str | None) -> str | None:
+    """Remove project location while retaining the exact executable action."""
+
+    if runtime_exact_match_context is None:
+        return None
+    try:
+        payload = json.loads(runtime_exact_match_context)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, Mapping):
+        return None
+    raw_command_text = payload.get("raw_command_text")
+    if not isinstance(raw_command_text, str) or not raw_command_text:
+        return None
+    wrapper_chain = payload.get("wrapper_chain")
+    normalized_wrapper_chain = (
+        wrapper_chain if isinstance(wrapper_chain, Sequence) and not isinstance(wrapper_chain, str) else None
+    )
+    return runtime_tool_action_exact_match_context(
+        config_path=None,
+        source_scope=None,
+        raw_command_text=raw_command_text,
+        wrapper_chain=normalized_wrapper_chain,
+    )
+
+
 def browser_mcp_exact_match_context(
     *,
     intent: str | None,
@@ -1366,6 +1392,7 @@ def _scoped_runtime_row_requires_exact_match(
     requested_artifact_id: str | None,
     requested_artifact_hash: str | None = None,
     requested_runtime_exact_match_key: str | None = None,
+    requested_portable_exact_match_key: str | None = None,
 ) -> bool:
     if scope not in {"harness", "global"}:
         return False
@@ -1380,6 +1407,7 @@ def _scoped_runtime_row_requires_exact_match(
             requested_artifact_hash if _is_approval_context_token(requested_artifact_hash) else None,
             _runtime_scoped_exact_match_key(requested_artifact_id),
             requested_runtime_exact_match_key,
+            requested_portable_exact_match_key,
         )
         if key is not None
     }

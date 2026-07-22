@@ -35,6 +35,11 @@ from .opencode_artifacts import (
     runtime_config_path,
     runtime_overlay,
 )
+from .opencode_install_snapshot import (
+    OpenCodeInstallSnapshotError,
+    load_opencode_install_snapshot,
+    write_json_transaction,
+)
 from .opencode_pretool import install_pretool_plugin, remove_pretool_plugin
 
 _OPENCODE_SCHEMA = "https://opencode.ai/config.json"
@@ -172,44 +177,42 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         )
 
     def install(self, context: HarnessContext) -> dict[str, object]:
-        detection = self.detect(context)
-        managed_servers = managed_stdio_servers(detection)
-        skipped_servers = skipped_stdio_server_names(detection)
-        target_config_path = self._managed_install_config_path(context)
-        target_payload, parse_error, _parse_reason = _load_json_or_jsonc(target_config_path)
-        if target_config_path.is_file() and (parse_error or not isinstance(target_payload, dict)):
-            raise OpenCodeInstallConfigError(
-                "Refusing to modify an invalid OpenCode root config. "
-                "Fix opencode.json (or opencode.jsonc) syntax and retry install."
+        try:
+            snapshot = load_opencode_install_snapshot(
+                context,
+                command_available=_command_available(self.executable),
             )
-        if not isinstance(target_payload, dict):
-            target_payload = {}
+        except OpenCodeInstallSnapshotError as error:
+            raise OpenCodeInstallConfigError(str(error)) from error
+        detection = extend_detection_with_workspace_aibom(
+            snapshot.detection,
+            home_dir=context.home_dir,
+            workspace_dir=context.workspace_dir,
+        )
+        detected_managed_servers = managed_stdio_servers(detection)
+        managed_servers = tuple(
+            server for server in detected_managed_servers if not server.name.startswith(_GUARD_MCP_COMPANION_PREFIX)
+        )
+        prefix_artifacts = {
+            artifact.name
+            for artifact in detection.artifacts
+            if artifact.artifact_type == "mcp_server" and artifact.name.startswith(_GUARD_MCP_COMPANION_PREFIX)
+        }
+        skipped_servers = tuple(dict.fromkeys((*skipped_stdio_server_names(detection), *sorted(prefix_artifacts))))
+        target_config_path = self._managed_install_config_path(context)
+        target_payload = snapshot.payload_for(target_config_path)
         original_text = None
         if target_config_path.is_file():
             original_text = target_config_path.read_text(encoding="utf-8")
         backup_path = self._backup_path(context)
-        if not backup_path.exists():
-            backup_path.parent.mkdir(parents=True, exist_ok=True)
-            backup_payload = {"existed": original_text is not None, "content": original_text}
-            backup_path.write_text(json.dumps(backup_payload, indent=2) + "\n", encoding="utf-8")
         state_path = self._state_path(context, target_config_path)
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(
-            json.dumps(
-                {
-                    "managed_config_path": str(target_config_path),
-                    "backup_path": str(backup_path),
-                    "scope": "workspace" if context.workspace_dir is not None else "global",
-                    "workspace_dir": (
-                        str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None
-                    ),
-                },
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        existing_workspace_server_names = self._workspace_server_names(context)
+        state_payload: dict[str, object] = {
+            "managed_config_path": str(target_config_path),
+            "backup_path": str(backup_path),
+            "scope": "workspace" if context.workspace_dir is not None else "global",
+            "workspace_dir": str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None,
+        }
+        existing_workspace_server_names = snapshot.workspace_server_names()
         _apply_install_baseline(target_payload)
         target_payload["permission"] = self._managed_permission_payload(
             target_payload.get("permission"),
@@ -223,31 +226,35 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             servers=managed_servers,
             existing_workspace_server_names=existing_workspace_server_names,
         )
-        target_config_path.parent.mkdir(parents=True, exist_ok=True)
-        target_config_path.write_text(json.dumps(target_payload, indent=2) + "\n", encoding="utf-8")
+        overlay_path = runtime_config_path(context)
+        overlay_payload = runtime_overlay(
+            permission_rules=self._proxy_permission_rules(
+                context,
+                managed_servers,
+                existing_workspace_server_names,
+            ),
+            mcp_servers=self._proxy_mcp_overrides(
+                context,
+                managed_servers,
+                existing_workspace_server_names,
+            ),
+        )
+        writes: list[tuple[Path, dict[str, object]]] = []
+        if not backup_path.exists():
+            writes.append((backup_path, {"existed": original_text is not None, "content": original_text}))
+        writes.extend(
+            (
+                (state_path, state_payload),
+                (target_config_path, target_payload),
+                (overlay_path, overlay_payload),
+            )
+        )
+        try:
+            write_json_transaction(tuple(writes))
+        except OpenCodeInstallSnapshotError as error:
+            raise OpenCodeInstallConfigError(str(error)) from error
         shim_manifest = install_guard_shim(self.harness, context)
         plugin_manifest = install_pretool_plugin(context)
-        overlay_path = runtime_config_path(context)
-        overlay_path.parent.mkdir(parents=True, exist_ok=True)
-        overlay_path.write_text(
-            json.dumps(
-                runtime_overlay(
-                    permission_rules=self._proxy_permission_rules(
-                        context,
-                        managed_servers,
-                        existing_workspace_server_names,
-                    ),
-                    mcp_servers=self._proxy_mcp_overrides(
-                        context,
-                        managed_servers,
-                        existing_workspace_server_names,
-                    ),
-                ),
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
             [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
@@ -741,21 +748,6 @@ def _persisted_mcp_with_guard_companions(
         existing_workspace_server_names=existing_workspace_server_names,
         context=context,
     )
-    managed_names = {
-        server.name for server in servers if not OpenCodeHarnessAdapter._skip_global_managed_server(server)
-    }
-    stale_companions: list[str] = []
-    for name, server_config in persisted.items():
-        if not isinstance(name, str) or not isinstance(server_config, dict):
-            continue
-        command, args = _command_parts(server_config)
-        if not is_verified_guard_mcp_companion(name, command, args):
-            continue
-        if name.removeprefix(_GUARD_MCP_COMPANION_PREFIX) in managed_names:
-            continue
-        stale_companions.append(name)
-    for name in stale_companions:
-        persisted.pop(name, None)
     for server in servers:
         if OpenCodeHarnessAdapter._skip_global_managed_server(server):
             continue
@@ -836,6 +828,7 @@ def _persisted_mcp_payload(current_mcp: object) -> dict[str, object]:
         if not isinstance(name, str) or not isinstance(entry, dict):
             continue
         if name.startswith(_GUARD_MCP_COMPANION_PREFIX):
+            persisted[name] = dict(entry)
             continue
         restored = _restore_local_server_from_guard_proxy(entry)
         if restored is not None:

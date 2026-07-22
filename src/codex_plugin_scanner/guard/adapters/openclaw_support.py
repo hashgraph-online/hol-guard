@@ -9,6 +9,12 @@ from pathlib import Path
 
 from ..models import GuardArtifact, HarnessDetection
 from .base import HarnessContext
+from .openclaw_mcp_inventory import (
+    OpenClawMcpInventory,
+    OpenClawMcpServer,
+    effective_mcp_inventory,
+    effective_mcp_transport,
+)
 
 _MAX_FILE_READ = 64 * 1024
 _SKILL_SUBDIRS = ("references", "templates", "scripts", "assets")
@@ -25,9 +31,10 @@ def managed_root(context: HarnessContext) -> Path:
 
 
 def config_artifacts(context: HarnessContext, path: Path, payload: dict[str, object]) -> list[GuardArtifact]:
-    artifacts = [_gateway_artifact(context, path, payload)]
+    mcp_inventory = effective_mcp_inventory(payload)
+    artifacts = [_gateway_artifact(context, path, payload, mcp_inventory=mcp_inventory)]
     artifacts.extend(_channel_artifacts(path, payload))
-    artifacts.extend(_mcp_artifacts(path, payload))
+    artifacts.extend(_mcp_artifacts(path, mcp_inventory))
     return artifacts
 
 
@@ -91,7 +98,13 @@ def install_state(
     return "repaired_managed_install"
 
 
-def _gateway_artifact(context: HarnessContext, path: Path, payload: dict[str, object]) -> GuardArtifact:
+def _gateway_artifact(
+    context: HarnessContext,
+    path: Path,
+    payload: dict[str, object],
+    *,
+    mcp_inventory: OpenClawMcpInventory,
+) -> GuardArtifact:
     gateway = _dict_value(payload.get("gateway"))
     agents = _dict_value(payload.get("agents"))
     defaults = _dict_value(agents.get("defaults"))
@@ -106,7 +119,11 @@ def _gateway_artifact(context: HarnessContext, path: Path, payload: dict[str, ob
         "sandbox_mode": _string_value(sandbox.get("mode")),
         "hooks_enabled": bool(hooks),
         "channel_names": sorted(_channels(payload)),
-        "mcp_server_names": sorted(_mcp_servers(payload)),
+        "mcp_server_names": [server.effective.name for server in mcp_inventory.servers],
+        "mcp_server_sources": {
+            server.effective.name: server.effective.source_scope for server in mcp_inventory.servers
+        },
+        "mcp_inventory_warnings": list(mcp_inventory.warnings),
     }
     args = (
         f"gateway bind {metadata['gateway_bind'] or 'loopback'}",
@@ -156,17 +173,21 @@ def _channel_artifacts(path: Path, payload: dict[str, object]) -> list[GuardArti
     return artifacts
 
 
-def _mcp_artifacts(path: Path, payload: dict[str, object]) -> list[GuardArtifact]:
+def _mcp_artifacts(path: Path, inventory: OpenClawMcpInventory) -> list[GuardArtifact]:
     artifacts: list[GuardArtifact] = []
-    for name, config in _mcp_servers(payload).items():
+    for server in inventory.servers:
+        definition = server.effective
+        name = definition.name
+        config = definition.config
         command = config.get("command")
         url = config.get("url")
+        transport = effective_mcp_transport(config)
         env = _dict_value(config.get("env"))
         headers = _dict_value(config.get("headers"))
         args = _string_list(config.get("args"))
         artifacts.append(
             GuardArtifact(
-                artifact_id=f"openclaw:mcp:{name}",
+                artifact_id=f"openclaw:mcp:{name}:{definition.identity_sha256[:16]}",
                 name=name,
                 harness="openclaw",
                 artifact_type="mcp_server",
@@ -175,8 +196,16 @@ def _mcp_artifacts(path: Path, payload: dict[str, object]) -> list[GuardArtifact
                 command=command if isinstance(command, str) else None,
                 args=tuple(args),
                 url=url if isinstance(url, str) else None,
-                transport="http" if isinstance(url, str) else "stdio",
+                transport=transport,
                 metadata={
+                    "source_key": definition.source_key,
+                    "source_scope": definition.source_scope,
+                    "server_identity_sha256": definition.identity_sha256,
+                    "config_identity_sha256": definition.config_identity_sha256,
+                    "definition_count": len(server.definitions),
+                    "active_definition_count": sum(item.enabled for item in server.definitions),
+                    "conflicting_active_definitions": server.conflicting_active_definitions,
+                    "shadowed_definitions": _shadowed_mcp_definitions(server),
                     "env_keys": sorted(str(key) for key in env if isinstance(key, str)),
                     "header_keys": sorted(str(key) for key in headers if isinstance(key, str)),
                     "env": env,
@@ -185,6 +214,22 @@ def _mcp_artifacts(path: Path, payload: dict[str, object]) -> list[GuardArtifact
             )
         )
     return artifacts
+
+
+def _shadowed_mcp_definitions(server: OpenClawMcpServer) -> list[dict[str, object]]:
+    effective = server.effective
+    return [
+        {
+            "source_key": definition.source_key,
+            "source_scope": definition.source_scope,
+            "enabled": definition.enabled,
+            "identity_sha256": definition.identity_sha256,
+            "config_identity_sha256": definition.config_identity_sha256,
+            "same_config_as_effective": definition.config_identity_sha256 == effective.config_identity_sha256,
+        }
+        for definition in server.definitions
+        if definition is not effective
+    ]
 
 
 def _artifacts_for_skill(root: Path, skill_md: Path) -> list[GuardArtifact]:
@@ -292,23 +337,6 @@ def _channels(payload: dict[str, object]) -> dict[str, dict[str, object]]:
     return {
         str(name): config for name, config in channels.items() if isinstance(name, str) and isinstance(config, dict)
     }
-
-
-def _mcp_servers(payload: dict[str, object]) -> dict[str, dict[str, object]]:
-    mcp = _dict_value(payload.get("mcp"))
-    candidates = (mcp.get("servers"), mcp.get("mcpServers"), payload.get("mcpServers"))
-    for candidate in candidates:
-        server_map = _dict_value(candidate)
-        if not server_map:
-            continue
-        enabled_servers = {
-            str(name): config
-            for name, config in server_map.items()
-            if isinstance(name, str) and isinstance(config, dict) and config.get("enabled", True) is not False
-        }
-        if enabled_servers:
-            return enabled_servers
-    return {}
 
 
 def _dict_value(value: object) -> dict[str, object]:

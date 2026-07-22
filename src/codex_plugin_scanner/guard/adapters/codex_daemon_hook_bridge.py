@@ -15,8 +15,33 @@ import time
 import urllib.error
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TypedDict
 from urllib.parse import urlparse
+
+if __package__:
+    from ..codex_hook_bridge_runtime import BridgeConfig
+    from ..codex_hook_bridge_runtime import TrustedHookLaunch as _TrustedHookLaunch
+    from ..codex_hook_bridge_runtime import bounded_hook_input as _hook_input
+    from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
+    from ..codex_hook_bridge_runtime import trusted_hook_launch as _trusted_hook_launch
+else:  # pragma: no cover - exercised by subprocess integration tests
+    _package_root = str(Path(__file__).resolve().parents[3])
+    if _package_root not in sys.path:
+        sys.path.insert(0, _package_root)
+    from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
+        BridgeConfig,
+    )
+    from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
+        TrustedHookLaunch as _TrustedHookLaunch,
+    )
+    from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
+        bounded_hook_input as _hook_input,
+    )
+    from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
+        bridge_config_from_argv as _parse_bridge_config,
+    )
+    from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
+        trusted_hook_launch as _trusted_hook_launch,
+    )
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _HOOK_TIMEOUT_GRACE_SECONDS = 2
@@ -24,15 +49,11 @@ _DAEMON_START_TIMEOUT_SECONDS = 8
 _DISCOVERY_PROTOCOL_VERSION = 1
 _DISCOVERY_CHALLENGE_TTL_SECONDS = 5
 _MAX_DAEMON_RESPONSE_BYTES = 1_000_000
+_MAX_HOOK_INPUT_BYTES = 1_000_000
 _FAIL_CLOSED_REASON = "HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair`, then retry."
-
-
-class BridgeConfig(TypedDict):
-    state_path: str
-    fallback_command: tuple[str, ...]
-    start_command: tuple[str, ...]
-    query: str
-    hook_timeouts: dict[str, int]
+_LAUNCH_INTEGRITY_REASON = (
+    "HOL Guard could not authenticate its managed Codex hook launcher. Run `hol-guard install codex`, then retry."
+)
 
 
 def _assert_loopback_http_url(url: str) -> None:
@@ -376,13 +397,20 @@ def main(
     start_command: Sequence[str],
     query: str,
     hook_timeouts: Mapping[str, int],
+    manifest_path: str | Path | None = None,
+    config_json: str | None = None,
 ) -> int:
     """Review one Codex hook through the resident daemon or a fail-safe fallback."""
 
-    data = sys.stdin.read().strip() or "{}"
+    data = _hook_input(_MAX_HOOK_INPUT_BYTES)
+    if data is None:
+        sys.stdout.write(json.dumps(_fail_closed("PreToolUse"), separators=(",", ":")))
+        return 0
     event_name = _event_name(data)
     timeout_seconds = _request_timeout(event_name, hook_timeouts)
     response: dict[str, object] | None = None
+    trusted_launch: _TrustedHookLaunch | None = None
+    launch_integrity_failed = False
     try:
         response = _daemon_response(
             state_path=state_path,
@@ -391,7 +419,28 @@ def main(
             timeout_seconds=timeout_seconds,
         )
     except (OSError, ValueError, http.client.HTTPException, urllib.error.URLError):
-        if _run_daemon_start(start_command, timeout_seconds=timeout_seconds):
+        if manifest_path is not None or config_json is not None:
+            try:
+                if manifest_path is None or config_json is None:
+                    raise ValueError("managed Codex hook launch identity is incomplete")
+                trusted_launch = _trusted_hook_launch(
+                    manifest_path=manifest_path,
+                    state_path=state_path,
+                    fallback_command=fallback_command,
+                    start_command=start_command,
+                    config_json=config_json,
+                )
+            except (ImportError, OSError, RuntimeError, ValueError):
+                launch_integrity_failed = True
+        start_succeeded = (
+            trusted_launch.run_start(
+                start_command,
+                timeout_seconds=min(timeout_seconds, _DAEMON_START_TIMEOUT_SECONDS),
+            )
+            if trusted_launch is not None
+            else not launch_integrity_failed and _run_daemon_start(start_command, timeout_seconds=timeout_seconds)
+        )
+        if start_succeeded:
             try:
                 response = _daemon_response(
                     state_path=state_path,
@@ -402,55 +451,29 @@ def main(
             except (OSError, ValueError, http.client.HTTPException, urllib.error.URLError):
                 response = None
     if response is None:
-        response = _run_local_fallback(
-            fallback_command,
-            data=data,
-            timeout_seconds=timeout_seconds,
-        )
+        if trusted_launch is not None:
+            fallback_stdout = trusted_launch.run_fallback(
+                fallback_command,
+                data=data,
+                timeout_seconds=timeout_seconds,
+            )
+            if fallback_stdout is not None:
+                response = _json_object(fallback_stdout.strip()) if fallback_stdout.strip() else {}
+        elif not launch_integrity_failed:
+            response = _run_local_fallback(
+                fallback_command,
+                data=data,
+                timeout_seconds=timeout_seconds,
+            )
     if response is None:
-        response = _fail_closed(event_name)
+        failure_reason = _LAUNCH_INTEGRITY_REASON if launch_integrity_failed else _FAIL_CLOSED_REASON
+        response = _fail_closed(event_name, failure_reason)
     sys.stdout.write(json.dumps(response, separators=(",", ":")))
     return 0
 
 
-def _string_sequence(value: object, *, label: str) -> tuple[str, ...]:
-    if not isinstance(value, list) or not value or not all(isinstance(item, str) for item in value):
-        raise SystemExit(f"codex_daemon_hook_bridge config missing {label}")
-    return tuple(value)
-
-
-def _hook_timeout_mapping(value: object) -> dict[str, int]:
-    if not isinstance(value, dict):
-        raise SystemExit("codex_daemon_hook_bridge config missing hook_timeouts")
-    timeouts = {
-        str(key): timeout
-        for key, timeout in value.items()
-        if isinstance(key, str) and isinstance(timeout, int) and timeout > _HOOK_TIMEOUT_GRACE_SECONDS
-    }
-    if not timeouts:
-        raise SystemExit("codex_daemon_hook_bridge config has no valid hook_timeouts")
-    return timeouts
-
-
 def _bridge_config_from_argv(argv: Sequence[str]) -> BridgeConfig:
-    if len(argv) != 2:
-        raise SystemExit("codex_daemon_hook_bridge expects one JSON config argument")
-    payload = _json_object(argv[1])
-    if payload is None:
-        raise SystemExit("codex_daemon_hook_bridge config must be a JSON object")
-    state_path = payload.get("state_path")
-    query = payload.get("query")
-    if not isinstance(state_path, str):
-        raise SystemExit("codex_daemon_hook_bridge config missing state_path")
-    if not isinstance(query, str):
-        raise SystemExit("codex_daemon_hook_bridge config missing query")
-    return BridgeConfig(
-        state_path=state_path,
-        fallback_command=_string_sequence(payload.get("fallback_command"), label="fallback_command"),
-        start_command=_string_sequence(payload.get("start_command"), label="start_command"),
-        query=query,
-        hook_timeouts=_hook_timeout_mapping(payload.get("hook_timeouts")),
-    )
+    return _parse_bridge_config(argv, timeout_grace_seconds=_HOOK_TIMEOUT_GRACE_SECONDS)
 
 
 if __name__ == "__main__":
@@ -458,9 +481,11 @@ if __name__ == "__main__":
     raise SystemExit(
         main(
             state_path=_config["state_path"],
+            manifest_path=_config["manifest_path"],
             fallback_command=_config["fallback_command"],
             start_command=_config["start_command"],
             query=_config["query"],
             hook_timeouts=_config["hook_timeouts"],
+            config_json=_config["config_json"],
         )
     )

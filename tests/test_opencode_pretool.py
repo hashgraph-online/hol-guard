@@ -161,7 +161,7 @@ def test_pretool_hook_launcher_ignores_workspace_package_hijack(
     guard_home.mkdir()
     ctx = HarnessContext(home_dir=tmp_path / "home", workspace_dir=workspace, guard_home=guard_home)
     guard_python = resolve_guard_hook_python(ctx)
-    package_root = package_root_from_python(guard_python)
+    package_root = package_root_from_python(guard_python, ctx)
     launcher = _pretool_hook_launcher_code(package_root=package_root)
     inherit_env = {key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ}
     env = {**inherit_env, **_pretool_hook_env(package_root=package_root), _HOOK_ARGV_ENV: '["guard","hook","--json"]'}
@@ -181,11 +181,15 @@ def test_pretool_hook_launcher_ignores_workspace_package_hijack(
 def test_pretool_hook_env_blocks_workspace_import_shadowing(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     guard_python = resolve_guard_hook_python(ctx)
-    package_root = package_root_from_python(guard_python)
+    package_root = package_root_from_python(guard_python, ctx)
     env = _pretool_hook_env(package_root=package_root)
     assert env["PYTHONSAFEPATH"] == "1"
     assert env["PYTHONNOUSERSITE"] == "1"
-    assert package_root in env["PYTHONPATH"]
+    assert "PYTHONPATH" not in env
+    source = pretool_plugin_source(ctx)
+    assert 'args: ["-I", "-S", "-s", "-c", GUARD_HOOK_LAUNCHER]' in source
+    assert "verifyGuardPythonIdentity();" in source
+    assert "nodeSpawn(GUARD_PYTHON.targetPath, options.args" in source
 
 
 def test_pretool_plugin_source_does_not_spawn_python_m_module(tmp_path: Path) -> None:

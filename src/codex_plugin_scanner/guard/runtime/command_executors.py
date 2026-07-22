@@ -12,6 +12,12 @@ from ..action_lattice import is_guard_action as _is_guard_action
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approval_resolution import require_resolvable_approval_request
+from ..approval_scope_support import (
+    APPROVAL_SCOPE_CONTRACT_VERSION,
+    IneligibleApprovalScopeError,
+    request_scope_contract,
+    resolve_request_scope_selection,
+)
 from ..cli.install_commands import (
     apply_managed_install,
     build_harness_verification,
@@ -337,6 +343,7 @@ def _execute_approval_operation(
         store=store,
         admitted_at=job.get("createdAt"),
     )
+    require_resolvable_approval_request(request_row)
     validate_remote_approval_request_binding(
         envelope=envelope,
         request_row=request_row,
@@ -345,9 +352,26 @@ def _execute_approval_operation(
     )
     require_resolvable_approval_request(request_row)
     request_policy_action = _optional_string(request_row.get("policy_action"))
-    resolution_scope = _optional_string(request_row.get("recommended_scope"))
+    envelope_decision = _optional_string(envelope.get("decision"))
+    resolution_action = normalize_remote_approval_decision(envelope_decision)
+    if resolution_action is None:
+        raise ValueError("invalid_remote_approval_decision")
+    if normalized_outer_action != resolution_action:
+        raise ValueError("remote_approval_decision_mismatch")
+    contract = request_scope_contract(request_row)
+    resolution_scope = _optional_string(envelope.get("scope"))
     if request_policy_action not in {"review", "require-reapproval"} or resolution_scope not in DECISION_SCOPE_VALUES:
         raise ValueError("remote_approval_not_permitted")
+    try:
+        scope_selection = resolve_request_scope_selection(
+            request_row,
+            action=resolution_action,
+            requested_scope=resolution_scope,
+            contract_version=APPROVAL_SCOPE_CONTRACT_VERSION,
+            contract_digest=contract.digest,
+        )
+    except IneligibleApprovalScopeError as error:
+        raise ValueError("remote_approval_not_permitted") from error
     receipt_id = _optional_string(envelope.get("receiptId"))
     if receipt_id is None:
         raise ValueError("invalid_remote_approval_receipt")
@@ -363,7 +387,7 @@ def _execute_approval_operation(
         claimed_at=generated_at,
     ):
         raise ValueError("remote_approval_replayed")
-    resolution_scope = resolution_scope or "artifact"
+    resolution_scope = scope_selection.applied_scope
     try:
         result = store.resolve_request_with_signed_remote_result(
             local_request_id,

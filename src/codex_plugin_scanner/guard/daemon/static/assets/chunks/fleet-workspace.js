@@ -1,8 +1,263 @@
-import { i as isDisplayableHarness, j as jsxRuntimeExports, e as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, b as EmptyState, r as reactExports, h as harnessDisplayName, F as HiMiniChevronRight, d as HiMiniCheckCircle, J as HiMiniEye, K as HiMiniWrenchScrewdriver, L as HiMiniXCircle, M as HiMiniExclamationCircle, N as HiMiniClipboardDocumentCheck, O as HiMiniClipboard } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, O as HiMiniWrenchScrewdriver, A as ActionButton, e as harnessDisplayName, m as HiMiniCheckCircle, P as HiMiniExclamationCircle, i as isConnectableAppHarness, p as protectionHealthFor, n as GuardHero, Q as ProofStrip, S as SectionLabel, k as EmptyState, c as HiMiniChevronRight, R as HiMiniEye, T as HiMiniXCircle, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard } from "../guard-dashboard.js";
 import { S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
+const PROTECTION_CHECK_ACTIONS = {
+  harness_hooks: {
+    label: "App hooks",
+    detail: "One or more app hooks need setup or repair.",
+    fallbackHref: "/settings?section=apps",
+    cta: "Repair app hooks",
+    repairable: true
+  },
+  daemon: {
+    label: "Local runtime",
+    detail: "The local Guard runtime needs attention before protection can finish.",
+    fallbackHref: "/settings",
+    cta: "Repair local runtime",
+    repairable: true
+  },
+  policy_engine: {
+    label: "Policy engine",
+    detail: "Guard could not confirm the local policy engine is ready.",
+    fallbackHref: "/policy",
+    cta: "Repair policy engine",
+    repairable: true
+  },
+  rule_packs: {
+    label: "Rule packs",
+    detail: "Guard cannot confirm the active rule-pack proof yet.",
+    fallbackHref: "/policy",
+    cta: "Repair rule packs",
+    repairable: true
+  },
+  decision_plane_compatibility: {
+    label: "Decision plane",
+    detail: "Local decision-plane compatibility is unproven or failed.",
+    fallbackHref: "/settings",
+    cta: "Open diagnostics",
+    repairable: false
+  },
+  containment_compatibility: {
+    label: "Containment",
+    detail: "Containment compatibility is unproven or failed.",
+    fallbackHref: "/settings",
+    cta: "Open diagnostics",
+    repairable: false
+  },
+  sandbox: {
+    label: "Sandbox",
+    detail: "Sandbox enforcement could not be confirmed.",
+    fallbackHref: "/settings",
+    cta: "Open diagnostics",
+    repairable: false
+  },
+  decision_stream: {
+    label: "Command evidence",
+    detail: "Command activity evidence is incomplete or unavailable.",
+    fallbackHref: "/evidence?view=commands",
+    cta: "Check command evidence",
+    repairable: true
+  },
+  tamper_checks: {
+    label: "Integrity checks",
+    detail: "Managed Guard files or hooks did not pass integrity checks.",
+    fallbackHref: "/settings?section=security",
+    cta: "Repair integrity",
+    repairable: true
+  }
+};
+function actionForCheck(check, repairHarness) {
+  if (check.check_id === "harness_hooks" && repairHarness) {
+    return {
+      checkId: check.check_id,
+      label: "App hooks",
+      detail: `${harnessDisplayName(repairHarness)} hooks need setup or repair.`,
+      fallbackHref: `/apps/${repairHarness}?tab=settings`,
+      cta: `Repair ${harnessDisplayName(repairHarness)}`,
+      repairable: true
+    };
+  }
+  const action = PROTECTION_CHECK_ACTIONS[check.check_id];
+  return action ? { checkId: check.check_id, ...action } : {
+    checkId: check.check_id,
+    label: check.check_id.replace(/_/g, " "),
+    detail: "Guard could not confirm this protection proof.",
+    fallbackHref: "/settings",
+    cta: "Open diagnostics",
+    repairable: false
+  };
+}
+function primaryProtectionRecoveryAction(health, repairHarness) {
+  const gaps = health.checks.filter((check) => check.status !== "pass");
+  const ordered = [
+    ...gaps.filter((check) => check.status === "fail"),
+    ...gaps.filter((check) => check.status !== "fail")
+  ];
+  const first = ordered[0];
+  return first ? actionForCheck(first, repairHarness) : null;
+}
+function ProtectionGapItem({
+  action,
+  check,
+  repairState,
+  onRepair
+}) {
+  const handleRepair = reactExports.useCallback(() => {
+    void onRepair(check.check_id);
+  }, [check.check_id, onRepair]);
+  const working = repairState?.status === "working";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-col gap-2 rounded-xl border border-brand-attention/10 bg-white/70 px-3 py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 text-xs text-slate-600", children: [
+      repairState?.status === "success" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HiMiniCheckCircle,
+        {
+          className: "mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500",
+          "aria-hidden": "true"
+        }
+      ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HiMiniExclamationCircle,
+        {
+          className: `mt-0.5 h-3.5 w-3.5 shrink-0 ${check.status === "fail" ? "text-brand-attention" : "text-slate-400"}`,
+          "aria-hidden": "true"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "font-semibold text-brand-dark", children: action.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 text-[10px] font-medium uppercase tracking-wide text-slate-400", children: check.status === "fail" ? "Failed" : "Unproven" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block", children: action.detail })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      action.repairable ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActionButton,
+        {
+          onClick: handleRepair,
+          disabled: working,
+          variant: "outline",
+          children: working ? "Repairing…" : action.cta
+        }
+      ) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: action.fallbackHref, variant: "outline", children: action.cta }),
+      repairState?.status === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: action.fallbackHref, variant: "ghost", children: "Open diagnostics" }) : null
+    ] }),
+    repairState ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "p",
+      {
+        className: `text-xs ${repairState.status === "error" ? "text-red-600" : "text-slate-500"}`,
+        "aria-live": "polite",
+        children: repairState.message
+      }
+    ) : null
+  ] });
+}
+function recoverySummary(failCount, unknownCount) {
+  if (failCount === 0) {
+    return "Complete the remaining proof here. Guard rechecks protection after each step.";
+  }
+  const failedChecks = `${failCount} failed check${failCount === 1 ? "" : "s"}`;
+  let remainingProofs = "";
+  if (unknownCount > 0) {
+    remainingProofs = `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}`;
+  }
+  return `Repair the ${failedChecks} here${remainingProofs}. Guard rechecks protection after each step.`;
+}
+function FleetProtectionRecovery(props) {
+  const [repairStates, setRepairStates] = reactExports.useState(
+    {}
+  );
+  const gaps = props.health.checks.filter((check) => check.status !== "pass");
+  const failCount = gaps.filter((check) => check.status === "fail").length;
+  const unknownCount = gaps.length - failCount;
+  const handleRepair = reactExports.useCallback(
+    async (checkId) => {
+      setRepairStates((current) => ({
+        ...current,
+        [checkId]: { status: "working", message: "Repairing now…" }
+      }));
+      try {
+        const message = await props.onRepairProtectionCheck(
+          checkId,
+          props.repairHarnesses
+        );
+        setRepairStates((current) => ({
+          ...current,
+          [checkId]: { status: "success", message }
+        }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Guard could not complete this repair.";
+        setRepairStates((current) => ({
+          ...current,
+          [checkId]: { status: "error", message }
+        }));
+      }
+    },
+    [props.onRepairProtectionCheck, props.repairHarnesses]
+  );
+  const handleRepairAll = reactExports.useCallback(async () => {
+    const repairedGroups = /* @__PURE__ */ new Set();
+    for (const check of gaps) {
+      if (!actionForCheck(check, props.repairHarness).repairable) continue;
+      const group = check.check_id === "rule_packs" || check.check_id === "tamper_checks" || check.check_id === "policy_engine" ? "integrity" : check.check_id;
+      if (repairedGroups.has(group)) continue;
+      repairedGroups.add(group);
+      await handleRepair(check.check_id);
+    }
+  }, [gaps, handleRepair]);
+  const handleRepairAllClick = reactExports.useCallback(() => {
+    void handleRepairAll();
+  }, [handleRepairAll]);
+  if (gaps.length === 0) return null;
+  const anyWorking = Object.values(repairStates).some(
+    (state) => state.status === "working"
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      id: "protection-recovery",
+      className: "border-y border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-4 sm:px-5",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                HiMiniWrenchScrewdriver,
+                {
+                  className: "h-4 w-4 shrink-0 text-brand-attention",
+                  "aria-hidden": "true"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-brand-dark", children: "Restore full protection" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: recoverySummary(failCount, unknownCount) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairAllClick, disabled: anyWorking, children: anyWorking ? "Repairing…" : "Repair failed checks" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 grid gap-3 sm:grid-cols-2", children: gaps.map((check) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ProtectionGapItem,
+          {
+            action: actionForCheck(check, props.repairHarness),
+            check,
+            repairState: repairStates[check.check_id],
+            onRepair: handleRepair
+          },
+          check.check_id
+        )) })
+      ]
+    }
+  );
+}
 const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
-function resolveFleetHeroCopy(cloudState, activeInstallCount, urls) {
+function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, urls) {
   const hasApps = activeInstallCount > 0;
+  if (hasApps && protectionState !== "protected") {
+    return {
+      status: protectionState,
+      headline: protectionState === "partial" ? "Apps are partially protected" : "App protection is degraded",
+      subheadline: protectionState === "partial" ? "Core protection passes. Finish the remaining proofs below to reach full protection." : "Some protection checks failed or remain unproven. Use the steps below to restore full protection.",
+      primaryCtaLabel: "Restore full protection",
+      primaryCtaHref: "#protection-recovery",
+      secondaryCtaLabel: cloudState === "local_only" ? "Connect this machine" : "Open Cloud Devices",
+      secondaryCtaHref: cloudState === "local_only" ? urls.connect_url : urls.fleet_url
+    };
+  }
   if (cloudState === "local_only") {
     return {
       status: hasApps ? "clear" : "setup_gap",
@@ -38,19 +293,25 @@ function resolveFleetHeroCopy(cloudState, activeInstallCount, urls) {
 function collectHarnesses(snapshot) {
   const harnesses = /* @__PURE__ */ new Set();
   for (const item of snapshot.items) {
-    if (isDisplayableHarness(item.harness)) harnesses.add(item.harness);
+    if (isConnectableAppHarness(item.harness)) harnesses.add(item.harness);
   }
   for (const receipt of snapshot.latest_receipts) {
-    if (isDisplayableHarness(receipt.harness)) harnesses.add(receipt.harness);
+    if (isConnectableAppHarness(receipt.harness)) harnesses.add(receipt.harness);
   }
   return Array.from(harnesses).sort((a, b) => a.localeCompare(b));
 }
 function renderReceiptContext(receipt) {
   return `${harnessDisplayName(receipt.harness)} · ${receipt.policy_decision.replace(/-/g, " ")}`;
 }
-function resolveAppStatus(install, hasInventory, hasReceipts) {
+function formatCount(value) {
+  return value.toLocaleString();
+}
+function resolveAppStatus(install, protectionHealth, hasInventory, hasReceipts) {
   if (install !== void 0) {
-    if (install.active) return "protected";
+    const hookCheck = protectionHealth.checks.find((check) => check.check_id === "harness_hooks");
+    if (!install.active || hookCheck?.status === "fail") return "needs_repair";
+    if (protectionHealth.state === "protected") return "protected";
+    if (protectionHealth.state === "partial") return "partial";
     return "needs_repair";
   }
   if (!hasInventory && !hasReceipts) return "not_found";
@@ -58,6 +319,7 @@ function resolveAppStatus(install, hasInventory, hasReceipts) {
 }
 function toInstallStatus(status) {
   if (status === "protected") return "active";
+  if (status === "partial") return "partial";
   if (status === "needs_repair") return "partial";
   if (status === "found_unprotected") return "observed";
   return "not_installed";
@@ -70,6 +332,10 @@ function StatusIcon({ status }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationCircle, { className: "h-4 w-4 text-brand-attention", "aria-hidden": "true" });
 }
 function StatusBadge({ status }) {
+  if (status === "partial") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-blue", children: "Partially protected" });
+  if (status === "needs_repair") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-attention", children: "Needs repair" });
+  }
   const installStatus = toInstallStatus(status);
   const label = APP_STATUS_LABELS[installStatus];
   if (installStatus === "active") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-emerald-600", children: label });
@@ -105,9 +371,9 @@ function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail 
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: harnessDisplayName(harness) }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-400", children: [
-              inventoryCount,
+              formatCount(inventoryCount),
               " actions · ",
-              policyCount,
+              formatCount(policyCount),
               " decisions"
             ] })
           ] })
@@ -122,22 +388,29 @@ function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail 
 }
 function FleetWorkspace(props) {
   const harnesses = collectHarnesses(props.runtime);
-  const managedInstalls = (props.runtime.managed_installs ?? []).filter((i) => isDisplayableHarness(i.harness));
+  const managedInstalls = (props.runtime.managed_installs ?? []).filter((i) => isConnectableAppHarness(i.harness));
   const activeInstalls = managedInstalls.filter((i) => i.active);
-  const inventory = props.inventory.kind === "ready" ? props.inventory.items.filter((i) => isDisplayableHarness(i.harness)) : [];
+  const inventory = props.inventory.kind === "ready" ? props.inventory.items.filter((i) => isConnectableAppHarness(i.harness)) : [];
   const visibleHarnesses = Array.from(
     new Set([
       ...managedInstalls.map((i) => i.harness),
       ...harnesses,
       ...inventory.map((i) => i.harness),
       ...props.policies.map((p) => p.harness)
-    ].filter(isDisplayableHarness))
+    ].filter(isConnectableAppHarness))
   ).sort((a, b) => a.localeCompare(b));
   const runtimeState = props.runtime.runtime_state;
-  const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isDisplayableHarness));
+  const protectionHealth = protectionHealthFor(props.runtime);
+  const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isConnectableAppHarness));
+  const repairHarness = managedInstalls.find((install) => !install.active)?.harness ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some(
+    (check) => check.check_id === "harness_hooks" && check.status === "fail"
+  ));
+  const repairHarnesses = Array.from(new Set(managedInstalls.map((install) => install.harness)));
+  const recoveryPrimary = primaryProtectionRecoveryAction(protectionHealth, repairHarness);
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
     activeInstalls.length,
+    protectionHealth.state,
     {
       fleet_url: props.runtime.fleet_url,
       dashboard_url: props.runtime.dashboard_url,
@@ -151,21 +424,30 @@ function FleetWorkspace(props) {
         status: heroCopy.status,
         headline: heroCopy.headline,
         subheadline: heroCopy.subheadline,
-        cta: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.primaryCtaHref, children: heroCopy.primaryCtaLabel }),
-        secondaryCta: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.secondaryCtaHref, variant: "outline", children: heroCopy.secondaryCtaLabel })
+        cta: protectionHealth.state !== "protected" && recoveryPrimary ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "#protection-recovery", children: "Repair protection" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.primaryCtaHref, children: heroCopy.primaryCtaLabel }),
+        secondaryCta: protectionHealth.state !== "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "#protection-recovery", variant: "outline", children: "View all steps" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.secondaryCtaHref, variant: "outline", children: heroCopy.secondaryCtaLabel })
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ProofStrip,
       {
         items: [
-          { label: "Needs review", value: `${props.runtime.pending_count}`, tone: props.runtime.pending_count > 0 ? "blue" : "slate" },
-          { label: "History", value: `${props.runtime.receipt_count}`, tone: "purple" },
-          { label: "Watched apps", value: `${activeInstalls.length > 0 ? activeInstalls.length : visibleHarnesses.length}`, tone: activeInstalls.length > 0 ? "green" : "slate" },
+          { label: "Needs review", value: formatCount(props.runtime.pending_count), tone: props.runtime.pending_count > 0 ? "blue" : "slate" },
+          { label: "History", value: formatCount(props.runtime.receipt_count), tone: "purple" },
+          { label: "Watched apps", value: formatCount(activeInstalls.length > 0 ? activeInstalls.length : visibleHarnesses.length), tone: protectionHealth.state === "protected" ? "green" : "slate" },
           { label: "Runtime", value: runtimeState ? "active" : "offline", tone: runtimeState ? "green" : "slate" }
         ]
       }
     ),
+    protectionHealth.state !== "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      FleetProtectionRecovery,
+      {
+        health: protectionHealth,
+        repairHarness,
+        repairHarnesses,
+        onRepairProtectionCheck: props.onRepairProtectionCheck
+      }
+    ) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [
@@ -177,7 +459,8 @@ function FleetWorkspace(props) {
           const harnessInventory = inventory.filter((i) => i.harness === harness && i.present);
           const harnessPolicies = props.policies.filter((p) => p.harness === harness);
           const hasReceipts = receiptHarnesses.has(harness);
-          const status = resolveAppStatus(install, harnessInventory.length > 0, hasReceipts);
+          const appProtection = protectionHealthFor(props.runtime, harness);
+          const status = resolveAppStatus(install, appProtection, harnessInventory.length > 0, hasReceipts);
           return /* @__PURE__ */ jsxRuntimeExports.jsx(
             AppRow,
             {
@@ -243,7 +526,7 @@ function SetupGuide(props) {
     {
       id: "verify",
       label: "Verify in dashboard",
-      description: "Check this dashboard to see Guard protecting your app. You will see receipts appear in History.",
+      description: "Check this dashboard to review app health and see receipts appear in History.",
       done: props.hasReceipts && props.hasInventory
     }
   ];

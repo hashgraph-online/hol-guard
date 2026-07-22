@@ -9,7 +9,7 @@ export function insightsSharePublishErrorMessage(raw: string): string {
     return "Guard insights sharing is not live on Guard Cloud yet. If you just updated, wait a few minutes and try again.";
   }
   if (lower.includes("guard cloud is unavailable")) {
-    return "Guard Cloud could not publish this share link right now. Local Guard keeps protecting this machine. Try again in a few minutes or reconnect with hol-guard connect.";
+    return "Guard Cloud could not publish this share link right now. Local Guard remains available. Try again in a few minutes or reconnect with hol-guard connect.";
   }
 
   if (
@@ -25,7 +25,7 @@ export function insightsSharePublishErrorMessage(raw: string): string {
     lower.includes("already consumed") ||
     lower.includes("no longer valid")
   ) {
-    return "Guard Cloud sign-in on this device expired. Run hol-guard disconnect, then hol-guard connect, and try again.";
+    return "Guard Cloud sign-in on this device expired. Run hol-guard connect to repair it, then try again.";
   }
 
   if (lower.includes("unauthorized") || lower.includes("401")) {

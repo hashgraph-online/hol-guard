@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import re
 import time
 from dataclasses import dataclass
 
@@ -32,6 +31,12 @@ from .supply_chain_bundle_models import (
     SupplyChainBundlePackage,
     SupplyChainBundleResponse,
     SupplyChainVerificationKey,
+)
+from .supply_chain_package_identity import (
+    PackageIdentityError,
+    canonical_package_identity,
+    normalize_ecosystem,
+    parse_package_identity,
 )
 
 
@@ -211,25 +216,23 @@ def _package_identity_matches(
     name: str,
     package_name: str,
 ) -> bool:
-    normalized_name = _normalize_package_name(ecosystem, package_name)
-    namespace_name = _normalize_package_name(ecosystem, f"{namespace}/{name}") if namespace is not None else None
-    leaf_name = _normalize_package_name(ecosystem, name)
-    if normalized_name.startswith("@"):
-        return namespace_name == normalized_name
-    return namespace is None and leaf_name == normalized_name
+    try:
+        package_identity = canonical_package_identity(
+            ecosystem=ecosystem,
+            namespace=namespace,
+            name=name,
+            version="*",
+        )
+        target_identity = parse_package_identity(ecosystem=ecosystem, package_name=package_name, version="*")
+    except PackageIdentityError:
+        return False
+    return package_identity == target_identity
 
 
 def _package_matches(package: SupplyChainBundlePackage, package_name: str, package_version: str | None) -> bool:
     if not _package_identity_matches(package.ecosystem, package.namespace, package.name, package_name):
         return False
     return package_version is None or package.version == package_version
-
-
-def _normalize_package_name(ecosystem: str, package_name: str) -> str:
-    normalized = package_name.strip().lower()
-    if ecosystem == "pypi":
-        return re.sub(r"[-_.]+", "-", normalized)
-    return normalized
 
 
 def _emergency_deny_identity_matches(entry: SupplyChainBundleEmergencyDeny, package_name: str) -> bool:
@@ -285,10 +288,14 @@ def evaluate_cached_supply_chain_bundle(
         check_supply_chain_bundle_freshness(response.bundle, now=now)
     except SupplyChainBundleExpiredError:
         stale = True
+    try:
+        normalized_ecosystem = normalize_ecosystem(ecosystem) if ecosystem is not None else None
+    except PackageIdentityError:
+        normalized_ecosystem = ""
     deny_entries = _matching_emergency_deny_entries(
         response.bundle,
         package_name=package_name,
-        ecosystem=ecosystem,
+        ecosystem=normalized_ecosystem,
     )
     if deny_entries:
         deny_entry = deny_entries[0]
@@ -304,7 +311,8 @@ def evaluate_cached_supply_chain_bundle(
     matches = [
         item
         for item in response.bundle.packages
-        if (ecosystem is None or item.ecosystem == ecosystem) and _package_matches(item, package_name, package_version)
+        if (normalized_ecosystem is None or item.ecosystem == normalized_ecosystem)
+        and _package_matches(item, package_name, package_version)
     ]
     if not matches:
         return OfflineSupplyChainDecision(

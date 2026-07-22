@@ -2,7 +2,7 @@ export type EvidenceDecision = "allow" | "block" | "ask" | "all";
 export type EvidenceTimeFilter = "all" | "today" | "yesterday" | "week" | "last7d" | "last30d";
 export type EvidenceSortKey = "newest" | "oldest" | "app" | "decision" | "category" | "artifact";
 export type EvidenceExportFormat = "csv" | "json";
-export type EvidenceView = "actions" | "insights" | "apps" | "export" | "story" | "categories";
+export type EvidenceView = "actions" | "commands" | "insights" | "apps" | "export" | "story" | "categories";
 
 export interface EvidenceFilterState {
   search: string;

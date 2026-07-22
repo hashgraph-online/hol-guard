@@ -18,6 +18,8 @@ import {
   guardAwareHref,
   bulkAllowReadOnce,
   repairApprovalCenter,
+  repairProtectionCheck,
+  runHarnessAction,
   resolveRequestWithQueueResult,
   retryResume,
 } from "./guard-api";
@@ -60,7 +62,7 @@ import type {
   GuardReceipt,
   GuardRuntimeSnapshot,
   GuardInventoryItem,
-  DecisionScope,
+  GuardApprovalResolutionInput,
 } from "./guard-types";
 
 type RequestState =
@@ -310,7 +312,11 @@ export function App() {
       const runtimeErrorMessage = "Unable to load the local runtime snapshot.";
       let pendingRequests: Promise<void>;
       if (needsFullQueue) {
-        pendingRequests = fetchAllPendingRequests()
+        pendingRequests = fetchAllPendingRequests((items) => {
+          if (!cancelled && !resolutionInFlight.current) {
+            setRequests({ kind: "ready", items });
+          }
+        })
           .then((items) => {
             if (!cancelled && !resolutionInFlight.current) {
               setRequests({ kind: "ready", items });
@@ -496,7 +502,8 @@ export function App() {
   const handleOpenFleet = useCallback(() => navigate(PROTECT_ROUTE), []);
   const handleOpenEvidence = useCallback(() => navigate("/evidence"), []);
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
-  const handleOpenSettings = useCallback(() => navigate("/settings"), []);
+  const handleOpenCommands = useCallback(() => navigate("/evidence?view=commands"), [navigate]);
+  const handleOpenSettings = useCallback((pathname = "/settings") => navigate(pathname), []);
   const handleOpenSupplyChain = useCallback(() => navigate("/supply-chain"), []);
   const handleOpenPolicy = useCallback(() => navigate("/policy"), []);
   const handleOpenHelp = useCallback(() => setHelpOpen(true), []);
@@ -633,16 +640,7 @@ export function App() {
     setReceipts({ kind: "ready", items: [] });
   }, [setReceipts]);
 
-  const handleResolve = useCallback(async (payload: {
-    requestId: string;
-    action: "allow" | "block";
-    scope: DecisionScope;
-    workspace?: string;
-    reason: string;
-    approval_password?: string;
-    approval_totp_code?: string;
-    approval_gate_use_cooldown?: boolean;
-  }) => {
+  const handleResolve = useCallback(async (payload: GuardApprovalResolutionInput) => {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
     try {
@@ -755,6 +753,27 @@ export function App() {
     }
   }, []);
 
+  const handleRepairProtectionCheck = useCallback(async (checkId: string, harnesses: string[]) => {
+    let message: string;
+    if (checkId === "harness_hooks") {
+      if (harnesses.length === 0) {
+        throw new Error("Guard could not find an installed app hook to repair.");
+      }
+      for (const harness of harnesses) {
+        await runHarnessAction({ harness, action: "repair", dryRun: false });
+      }
+      message = `Repaired ${harnesses.length} app hook${harnesses.length === 1 ? "" : "s"}. Run a protected action to confirm interception.`;
+    } else if (checkId === "daemon") {
+      await repairApprovalCenter();
+      message = "Local runtime connection repaired.";
+    } else {
+      const result = await repairProtectionCheck(checkId);
+      message = result.message;
+    }
+    await refreshStateAfterAction();
+    return message;
+  }, [refreshStateAfterAction]);
+
   const appDetailContent = useMemo(() => {
     if (view !== "app-detail" || !appDetailHarness || runtime.kind !== "ready") {
       return null;
@@ -846,6 +865,7 @@ export function App() {
             onOpenFleet={handleOpenFleet}
             onOpenEvidence={handleOpenEvidence}
             onOpenInsights={handleOpenInsights}
+            onOpenCommands={handleOpenCommands}
             onOpenSettings={handleOpenSettings}
             onOpenSupplyChain={handleOpenSupplyChain}
             onClearPolicies={handleClearPolicies}
@@ -878,6 +898,7 @@ export function App() {
               onConnectHarness={handleConnectHarness}
               onTestHarness={handleTestHarness}
               onRepairHarness={handleRepairHarness}
+              onRepairProtectionCheck={handleRepairProtectionCheck}
               onOpenAppDetail={handleOpenAppDetail}
             />
           </Suspense>

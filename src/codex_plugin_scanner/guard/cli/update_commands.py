@@ -26,12 +26,14 @@ from packaging.version import InvalidVersion, Version
 
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
+from ..adapters.cursor_hooks import cursor_native_hook_state
 from ..adapters.opencode_pretool import (
     global_plugin_path,
     install_pretool_plugin,
     managed_plugin_path,
     pretool_plugin_source,
 )
+from ..codex_hook_integrity import CodexHookIntegrityError, load_authenticated_hook_manifest
 from ..config import resolve_guard_home
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
@@ -107,6 +109,7 @@ _DAEMON_REFRESH_CLEANUP_TIMEOUT_SECONDS = 15.0
 _DAEMON_REFRESH_SCRIPT = """
 from __future__ import annotations
 
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -121,7 +124,12 @@ from codex_plugin_scanner.guard.daemon.manager import (
 
 payload = json.loads(sys.stdin.read())
 guard_home = Path(payload["guard_home"]).expanduser().resolve()
-home_dir = Path(payload["home_dir"]).expanduser().resolve()
+home_dir_value = payload.get("home_dir")
+home_dir = (
+    Path(home_dir_value).expanduser().resolve()
+    if isinstance(home_dir_value, str) and home_dir_value.strip()
+    else Path.home().resolve()
+)
 state_path = guard_home / "daemon-state.json"
 if not state_path.is_file():
     print(json.dumps({"status": "not_running"}))
@@ -137,12 +145,13 @@ if not guard_daemon_retirement_is_complete(guard_home):
     raise SystemExit(1)
 clear_guard_daemon_state(guard_home)
 repair_approval_center_locator(guard_home)
-daemon_url = ensure_guard_daemon_after_update(
-    guard_home,
-    home_dir=home_dir,
-    preferred_port=preferred_port,
-    allow_windows_job_breakaway=True,
-)
+refresh_parameters = inspect.signature(ensure_guard_daemon_after_update).parameters
+refresh_kwargs = {"preferred_port": preferred_port}
+if "home_dir" in refresh_parameters:
+    refresh_kwargs["home_dir"] = home_dir
+if "allow_windows_job_breakaway" in refresh_parameters:
+    refresh_kwargs["allow_windows_job_breakaway"] = True
+daemon_url = ensure_guard_daemon_after_update(guard_home, **refresh_kwargs)
 print(json.dumps({"status": "restarted", "retired": retired, "daemon_url": daemon_url}))
 """.strip()
 _DAEMON_REFRESH_CLEANUP_SCRIPT = """
@@ -208,7 +217,12 @@ home_dir = Path(payload["home_dir"]).resolve()
 guard_home = Path(payload["guard_home"]).resolve()
 workspace_value = payload.get("workspace_dir")
 workspace_dir = Path(workspace_value).resolve() if isinstance(workspace_value, str) else None
-context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
+context = HarnessContext(
+    home_dir=home_dir,
+    workspace_dir=workspace_dir,
+    guard_home=guard_home,
+    home_override_explicit=bool(payload.get("home_override_explicit")),
+)
 store = GuardStore(guard_home)
 managed_installs, notes = _repair_supported_harnesses_in_process(
     context=context,
@@ -238,6 +252,7 @@ def run_guard_update(
     force_pypi_reinstall: bool = False,
     wheel: str | None = None,
     guard_home: Path | None = None,
+    include_alpha: bool = False,
 ) -> tuple[dict[str, object], int]:
     installer = _installer_kind()
     payload: dict[str, object] = {
@@ -379,6 +394,7 @@ def run_guard_update(
         current_version,
         source_kind=update_context.source.public_name,
         network_policy=network_policy,
+        include_alpha=include_alpha,
     )
     if requested_wheel_path is None and _python_runtime_blocks_update(version_check):
         payload.update(
@@ -433,7 +449,7 @@ def run_guard_update(
     payload.update(
         {
             "command": command,
-            "retry_command": _safe_update_retry_command(requested_wheel_path),
+            "retry_command": _safe_update_retry_command(requested_wheel_path, include_alpha=include_alpha),
             "binary_diagnostics": _binary_diagnostics(command, installer),
             "version_check": version_check,
         }
@@ -445,6 +461,8 @@ def run_guard_update(
             payload["wheel_version"] = trusted_wheel.version
     else:
         payload["upgrade_source"] = update_context.source.public_name
+        if include_alpha:
+            payload["release_channel"] = "alpha"
     if dry_run:
         payload["status"] = "planned"
         payload["changed"] = False
@@ -551,6 +569,7 @@ def run_guard_update(
             resulting_version,
             source_kind=update_context.source.public_name,
             network_policy=network_policy,
+            include_alpha=include_alpha,
         )
         payload["post_version_check"] = post_version_check
         payload["version_check"] = _merge_version_checks(
@@ -934,7 +953,10 @@ def _stale_retry_command(payload: dict[str, object]) -> str:
         return ""
     version_check = payload.get("version_check")
     if isinstance(version_check, dict) and version_check.get("update_available") is True:
-        return _shell_command(["hol-guard", "update"])
+        command = ["hol-guard", "update"]
+        if payload.get("release_channel") == "alpha":
+            command.append("--alpha")
+        return _shell_command(command)
     retry_command = payload.get("retry_command")
     if isinstance(retry_command, str) and retry_command.strip():
         return retry_command.strip()
@@ -944,8 +966,10 @@ def _stale_retry_command(payload: dict[str, object]) -> str:
     return ""
 
 
-def _safe_update_retry_command(wheel_path: Path | None) -> str:
+def _safe_update_retry_command(wheel_path: Path | None, *, include_alpha: bool = False) -> str:
     command = ["hol-guard", "update"]
+    if include_alpha:
+        command.append("--alpha")
     if wheel_path is not None:
         command.extend(["--wheel", str(wheel_path)])
     return _shell_command(command)
@@ -1018,6 +1042,7 @@ def _version_check_payload(
     *,
     source_kind: str = "pypi",
     network_policy: ManagedNetworkPolicy | None = None,
+    include_alpha: bool = False,
 ) -> dict[str, object]:
     if source_kind != "pypi":
         return {
@@ -1029,7 +1054,9 @@ def _version_check_payload(
         }
     policy_token = _version_network_policy.set(network_policy)
     try:
-        latest_version = _latest_version_from_pypi()
+        latest_version = (
+            _latest_alpha_version_from_pypi(current_version) if include_alpha else _latest_version_from_pypi()
+        )
     finally:
         _version_network_policy.reset(policy_token)
     if latest_version is None:
@@ -1076,6 +1103,7 @@ def _version_check_payload(
         }
     return {
         "source": "pypi",
+        **({"release_channel": "alpha"} if include_alpha else {}),
         "status": "stale" if update_available else "current",
         "current_version": current_version,
         "latest_version": latest_version,
@@ -1115,6 +1143,35 @@ def _latest_version_from_pypi() -> str | None:
         return None
     version = info.get("version")
     return version if isinstance(version, str) and version.strip() else None
+
+
+def _latest_alpha_version_from_pypi(current_version: str) -> str | None:
+    _ = _latest_version_from_pypi()
+    payload = _last_pypi_payload
+    if not isinstance(payload, dict):
+        return None
+    releases = payload.get("releases")
+    if not isinstance(releases, dict):
+        return None
+    try:
+        current_major = Version(current_version).major
+    except InvalidVersion:
+        return None
+    candidates: list[tuple[Version, str]] = []
+    for version_text, files in releases.items():
+        if not isinstance(version_text, str) or not version_text.strip():
+            continue
+        try:
+            parsed_version = Version(version_text)
+        except InvalidVersion:
+            continue
+        if parsed_version.major != current_major or parsed_version.pre is None or parsed_version.pre[0] != "a":
+            continue
+        if _release_has_non_yanked_file(files):
+            candidates.append((parsed_version, version_text.strip()))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda candidate: candidate[0])[1]
 
 
 def _read_bounded_pypi_response(response: object, *, deadline: float) -> bytes:
@@ -1311,6 +1368,15 @@ def _hol_guard_package_spec(target_version: str | None = None) -> str:
     return "hol-guard"
 
 
+def _target_version_is_prerelease(target_version: str | None) -> bool:
+    if not isinstance(target_version, str) or not target_version.strip():
+        return False
+    try:
+        return Version(target_version.strip()).is_prerelease
+    except InvalidVersion:
+        return False
+
+
 def _installer_output_text(stdout: object, stderr: object) -> str:
     return "\n".join(part.strip() for part in (str(stdout or "").strip(), str(stderr or "").strip()) if part.strip())
 
@@ -1346,12 +1412,24 @@ def _update_command(
             return ["pipx", "install", "--force", wheel]
         return [sys.executable, "-m", "pip", "install", "--force-reinstall", wheel]
     package = _hol_guard_package_spec(target_version)
+    allow_prerelease = _target_version_is_prerelease(target_version)
     if use_pypi:
         if installer == "uv":
-            return ["uv", "tool", "install", "--force", package]
+            command = ["uv", "tool", "install", "--force"]
+            if allow_prerelease:
+                command.append("--prerelease=allow")
+            command.append(package)
+            return command
         if installer == "pipx":
-            return ["pipx", "install", "--force", package]
-        return [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", package]
+            command = ["pipx", "install", "--force", package]
+            if allow_prerelease:
+                command.extend(["--pip-args", "--pre"])
+            return command
+        command = [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall"]
+        if allow_prerelease:
+            command.append("--pre")
+        command.append(package)
+        return command
     if installer == "uv":
         return ["uv", "tool", "upgrade", "hol-guard"]
     if installer == "pipx":
@@ -1922,6 +2000,7 @@ def _repair_supported_harnesses(
         "home_dir": str(context.home_dir),
         "workspace_dir": str(context.workspace_dir) if context.workspace_dir is not None else workspace,
         "guard_home": str(context.guard_home),
+        "home_override_explicit": context.home_override_explicit,
         "now": now,
     }
     try:
@@ -1971,10 +2050,114 @@ def _repair_supported_harnesses_in_process(
     )
     repaired_installs = [repaired_codex] if repaired_codex is not None else []
     repair_notes = [codex_warning] if codex_warning is not None else []
+    repaired_cursor, cursor_warning = _repair_cursor_install(
+        context=context,
+        store=store,
+        workspace=workspace,
+        now=now,
+    )
+    if repaired_cursor is not None:
+        repaired_installs.append(repaired_cursor)
+    if cursor_warning is not None:
+        repair_notes.append(cursor_warning)
+    repaired_pi, pi_warning = _repair_pi_install(
+        context=context,
+        store=store,
+        workspace=workspace,
+        now=now,
+    )
+    if repaired_pi is not None:
+        repaired_installs.append(repaired_pi)
+    if pi_warning is not None:
+        repair_notes.append(pi_warning)
     opencode_note = _refresh_opencode_pretool_plugin(context=context, store=store)
     if opencode_note is not None:
         repair_notes.append(opencode_note)
     return repaired_installs, repair_notes
+
+
+def _repair_pi_install(
+    *,
+    context: HarnessContext,
+    store: GuardStore,
+    workspace: str | None,
+    now: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Rewrite the managed Pi extension after package updates.
+
+    The extension embeds timeout and daemon-compat constants. Refreshing it after
+    update keeps the fast daemon path available and avoids cold CLI timeouts.
+    """
+
+    try:
+        managed_install = store.get_managed_install("pi")
+    except (json.JSONDecodeError, sqlite3.Error):
+        return None, None
+    if managed_install is None or not bool(managed_install.get("active")):
+        return None, None
+    try:
+        repair_context, repair_workspace = _repair_context_from_managed_install(context, managed_install)
+        payload = apply_managed_install(
+            "install",
+            "pi",
+            False,
+            repair_context,
+            store,
+            repair_workspace or workspace,
+            now,
+        )
+    except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
+        return None, f"Could not refresh Pi protection during update: {error}"
+    repaired = payload.get("managed_install")
+    if not isinstance(repaired, dict):
+        return None, "Could not refresh Pi protection during update: managed install was not recorded"
+    return repaired, None
+
+
+def _repair_cursor_install(
+    *,
+    context: HarnessContext,
+    store: GuardStore,
+    workspace: str | None,
+    now: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    try:
+        managed_install = store.get_managed_install("cursor")
+    except (json.JSONDecodeError, sqlite3.Error):
+        return None, None
+    if managed_install is None or not bool(managed_install.get("active")):
+        return None, None
+    manifest = managed_install.get("manifest")
+    if not isinstance(manifest, dict):
+        return None, "Could not inspect Cursor protection during update: managed manifest is invalid"
+    surface_value = manifest.get("surface")
+    surface = surface_value if surface_value in {"editor", "all"} else None
+    if surface is None:
+        return None, None
+    try:
+        repair_context, repair_workspace = _repair_context_from_managed_install(context, managed_install)
+        hook_state = cursor_native_hook_state(repair_context)
+    except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
+        return None, f"Could not inspect Cursor protection during update: {error}"
+    if hook_state["protection_active"] is True:
+        return None, None
+    try:
+        payload = apply_managed_install(
+            "install",
+            "cursor",
+            False,
+            repair_context,
+            store,
+            repair_workspace or workspace,
+            now,
+            surface=surface,
+        )
+    except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
+        return None, f"Could not repair Cursor protection during update: {error}"
+    repaired = payload.get("managed_install")
+    if not isinstance(repaired, dict):
+        return None, "Could not repair Cursor protection during update: managed install was not recorded"
+    return repaired, None
 
 
 def _refresh_opencode_pretool_plugin(
@@ -2016,15 +2199,51 @@ def _repair_context_from_managed_install(
     managed_workspace = managed_install.get("workspace")
     if isinstance(managed_workspace, str) and managed_workspace.strip():
         workspace_path = Path(managed_workspace).expanduser().resolve()
+        manifest = managed_install.get("manifest")
+        explicit_value = manifest.get("hook_workspace_explicit") if isinstance(manifest, dict) else None
+        workspace_override_explicit = (
+            explicit_value
+            if isinstance(explicit_value, bool)
+            else _legacy_codex_workspace_was_explicit(context, managed_install, workspace_path)
+        )
         return (
             HarnessContext(
                 home_dir=context.home_dir,
                 workspace_dir=workspace_path,
                 guard_home=context.guard_home,
+                home_override_explicit=context.home_override_explicit,
+                workspace_override_explicit=workspace_override_explicit,
             ),
             str(workspace_path),
         )
-    return HarnessContext(context.home_dir, None, context.guard_home), None
+    return (
+        HarnessContext(
+            home_dir=context.home_dir,
+            workspace_dir=None,
+            guard_home=context.guard_home,
+            home_override_explicit=context.home_override_explicit,
+        ),
+        None,
+    )
+
+
+def _legacy_codex_workspace_was_explicit(
+    context: HarnessContext,
+    managed_install: dict[str, object],
+    workspace_path: Path,
+) -> bool:
+    if managed_install.get("harness") != "codex":
+        return True
+    try:
+        authenticated = load_authenticated_hook_manifest(
+            context.guard_home,
+            CodexHarnessAdapter._hook_config_path(context),
+        )
+    except (CodexHookIntegrityError, OSError):
+        return False
+    manifest_context = authenticated.get("context")
+    bound_workspace = manifest_context.get("workspace_dir") if isinstance(manifest_context, dict) else None
+    return isinstance(bound_workspace, str) and Path(bound_workspace).resolve() == workspace_path
 
 
 def _repair_codex_install(
@@ -2042,7 +2261,11 @@ def _repair_codex_install(
         hook_state = codex_native_hook_state(repair_context)
     except (OSError, RuntimeError) as error:
         return None, f"Could not inspect Codex protection during update: {error}"
-    if bool(hook_state["protection_active"]):
+    if (
+        bool(hook_state["protection_active"])
+        and hook_state.get("integrity_status") == "valid"
+        and bool(hook_state["shell_protection_active"])
+    ):
         return None, None
     try:
         payload = apply_managed_install(
@@ -2056,6 +2279,13 @@ def _repair_codex_install(
         )
     except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
         return None, f"Could not repair Codex protection during update: {error}"
+    try:
+        repaired_state = codex_native_hook_state(repair_context)
+    except (OSError, RuntimeError) as error:
+        return None, f"Could not verify repaired Codex protection during update: {error}"
+    if not bool(repaired_state.get("protection_active")) or repaired_state.get("integrity_status") != "valid":
+        reason = str(repaired_state.get("integrity_reason") or "codex_hook_integrity_readback_failed")
+        return None, f"Could not verify repaired Codex protection during update: {reason}"
     managed_install = payload.get("managed_install")
     return (managed_install if isinstance(managed_install, dict) else None), None
 

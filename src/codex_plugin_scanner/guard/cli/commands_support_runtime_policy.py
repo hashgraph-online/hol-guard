@@ -25,7 +25,12 @@ from ..runtime.approval_context import (
     build_runtime_launch_identity,
 )
 from ..runtime.command_extensions import risk_classes_for_command_action
-from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
+from ..runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
+from ..store import (
+    _runtime_scoped_exact_match_key,
+    runtime_tool_action_exact_match_context,
+    runtime_tool_action_portable_match_context,
+)
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -366,6 +371,10 @@ def _runtime_stored_policy_decision(
                 for key in (
                     _runtime_scoped_exact_match_key(artifact_id),
                     _runtime_scoped_exact_match_key(artifact_id, runtime_exact_match_context),
+                    _runtime_scoped_exact_match_key(
+                        artifact_id,
+                        runtime_tool_action_portable_match_context(runtime_exact_match_context),
+                    ),
                 )
                 if key is not None
             }
@@ -432,6 +441,7 @@ def _runtime_hook_approval_context_token(
     current_action: GuardAction,
     data_flow_signals: Sequence[object],
     scanner_evidence: Sequence[object],
+    workflow_approval_record: GitHubWorkflowApprovalRecord | None = None,
 ) -> str:
     """Bind a saved hook approval to the exact reviewed runtime context.
 
@@ -440,7 +450,28 @@ def _runtime_hook_approval_context_token(
     never serialized into the stored token itself.
     """
 
-    effective_cwd = _normalized_runtime_context_path(runtime_workspace or Path.cwd())
+    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
+    shell_context_present = bool(
+        metadata.get("shell_execution_context_hash") or metadata.get("shell_execution_context_hashes")
+    )
+    # Reuse requires the producer's explicit completeness proof.  Missing or
+    # malformed legacy metadata fails closed instead of being inferred from a
+    # separate reason-code field.
+    shell_context_complete = metadata.get("shell_execution_context_complete") is True
+    raw_effective_cwds = metadata.get("shell_execution_effective_cwds")
+    effective_cwd_values = raw_effective_cwds if isinstance(raw_effective_cwds, list) else []
+    shell_effective_cwds = tuple(
+        _normalized_runtime_context_path(Path(value))
+        for value in effective_cwd_values
+        if isinstance(value, str) and value.strip()
+    )
+    launch_cwd = Path(shell_effective_cwds[-1]) if shell_effective_cwds else runtime_workspace or Path.cwd()
+    if shell_effective_cwds:
+        effective_cwd = shell_effective_cwds[-1]
+    elif shell_context_present:
+        effective_cwd = None
+    else:
+        effective_cwd = _normalized_runtime_context_path(runtime_workspace or Path.cwd())
     configured_workspace = (
         _normalized_runtime_context_path(config.workspace) if config.workspace is not None else None
     )
@@ -449,7 +480,62 @@ def _runtime_hook_approval_context_token(
         if action_envelope is not None and action_envelope.workspace is not None
         else None
     )
-    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
+    executable_identity: object
+    shell_executable_identities: tuple[dict[str, object], ...] | None = None
+    if shell_context_present and not shell_context_complete:
+        executable_identity = {
+            "status": "unresolved_shell_execution_context",
+            "reason_code": metadata.get("shell_execution_context_reason_code")
+            or metadata.get("shell_execution_context_reason_codes"),
+            "reuse_nonce": secrets.token_hex(16),
+        }
+        shell_executable_identities = (
+            {
+                "cwd": None,
+                "identity": executable_identity,
+            },
+        )
+    elif workflow_approval_record is not None:
+        # GitHub workflow capabilities intentionally permit a retry after an
+        # executable's original bytes are restored. Their signed binding
+        # already covers the canonical executable content, command, workspace,
+        # environment, configuration, manifests, lockfiles, and sandbox. Do
+        # not add mutable inode timestamps to that independently verified
+        # identity or an exact restored retry can never reach the capability
+        # claim that revalidates it.
+        executable_identity = {
+            "launch_cwd": _normalized_runtime_context_path(launch_cwd),
+            "record": workflow_approval_record.to_dict(),
+            "status": "github_workflow_capability_bound",
+        }
+        if shell_context_present:
+            shell_executable_identities = tuple(
+                {
+                    "cwd": cwd,
+                    "identity": {
+                        "launch_cwd": cwd,
+                        "record": workflow_approval_record.to_dict(),
+                        "status": "github_workflow_capability_bound",
+                    },
+                }
+                for cwd in shell_effective_cwds
+            )
+    else:
+        executable_identity = _runtime_hook_executable_identity(
+            artifact,
+            launch_cwd=launch_cwd,
+        )
+        if shell_context_present:
+            shell_executable_identities = tuple(
+                {
+                    "cwd": cwd,
+                    "identity": _runtime_hook_executable_identity(
+                        artifact,
+                        launch_cwd=Path(cwd),
+                    ),
+                }
+                for cwd in shell_effective_cwds
+            )
     return build_approval_context_token(
         identity={
             "artifact_id": artifact.artifact_id,
@@ -458,12 +544,11 @@ def _runtime_hook_approval_context_token(
             "config_path": artifact.config_path,
             "configured_workspace": configured_workspace,
             "cwd": effective_cwd,
+            "shell_effective_cwds": shell_effective_cwds,
+            "shell_executables": shell_executable_identities,
             "envelope_workspace": envelope_workspace,
             "envelope_workspace_hash": action_envelope.workspace_hash if action_envelope is not None else None,
-            "executable": _runtime_hook_executable_identity(
-                artifact,
-                launch_cwd=runtime_workspace or Path.cwd(),
-            ),
+            "executable": executable_identity,
             "guard_home": _normalized_runtime_context_path(config.guard_home),
             "harness": artifact.harness,
             "publisher": artifact.publisher,
@@ -472,6 +557,11 @@ def _runtime_hook_approval_context_token(
         content={
             "artifact_content_hash": content_hash,
             "command_security_identity": metadata.get("command_security_identity"),
+            "interpreter_executable_identities": metadata.get("interpreter_executable_identities"),
+            "shell_execution_context_hash": metadata.get("shell_execution_context_hash"),
+            "shell_execution_context_hashes": metadata.get("shell_execution_context_hashes"),
+            "shell_execution_context_reason_code": metadata.get("shell_execution_context_reason_code"),
+            "shell_execution_context_reason_codes": metadata.get("shell_execution_context_reason_codes"),
         },
         capabilities={
             "action_envelope": _runtime_hook_action_capabilities(action_envelope),
@@ -676,6 +766,8 @@ def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None
     if artifact.artifact_type != "tool_action_request":
         return None
     raw_command_text = artifact.metadata.get("raw_command_text")
+    if not isinstance(raw_command_text, str) or not raw_command_text:
+        raw_command_text = artifact.command
     wrapper_chain = artifact.metadata.get("wrapper_chain")
     normalized_wrapper_chain = (
         wrapper_chain if isinstance(wrapper_chain, Sequence) and not isinstance(wrapper_chain, str) else None
@@ -695,13 +787,15 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         artifact.artifact_id,
         artifact.publisher,
     )
+    command_action_floor = _runtime_artifact_command_action_floor(artifact)
 
     def with_config_policy(action: GuardAction) -> GuardAction:
         # Artifact/publisher/harness settings are more-specific resolutions of
         # the global default, not additional inputs.  Scanner/risk results are
         # independent and therefore remain a floor even for an exact allow.
         current_config_action = configured_override if configured_override is not None else config.default_action
-        return most_restrictive_guard_action(action, current_config_action)
+        actions = (action, current_config_action, command_action_floor)
+        return most_restrictive_guard_action(*(item for item in actions if item is not None))
 
     risk_classes = _runtime_artifact_risk_classes(artifact)
     has_configured_risk_action = any(
@@ -744,6 +838,13 @@ def _runtime_artifact_guard_default_action(artifact: GuardArtifact) -> GuardActi
     value = artifact.metadata.get("guard_default_action")
     return normalize_guard_action(value, unknown_action="require-reapproval") if value is not None else None
 
+def _runtime_artifact_command_action_floor(artifact: GuardArtifact) -> GuardAction | None:
+    if artifact.artifact_type != "tool_action_request":
+        return None
+    if "command_action_floor" not in artifact.metadata:
+        return None
+    return normalize_guard_action(artifact.metadata.get("command_action_floor"), unknown_action="block")
+
 def _runtime_action_data_flow_signals(
     action_envelope: GuardActionEnvelope | None,
     *,
@@ -772,13 +873,20 @@ def _runtime_data_flow_sink_type(signals: tuple[RiskSignalV2, ...]) -> str:
     return "external sink"
 
 def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
+    risk_classes: list[str] = []
+    composite_risk_classes = artifact.metadata.get("risk_classes")
+    if isinstance(composite_risk_classes, list):
+        risk_classes.extend(
+            value.strip() for value in composite_risk_classes if isinstance(value, str) and value.strip()
+        )
     if artifact.artifact_type == "file_read_request":
-        return ["local_secret_read"]
+        risk_classes.append("local_secret_read")
+        return list(dict.fromkeys(risk_classes))
     if artifact.artifact_type == "package_request":
-        return ["package_script"]
+        risk_classes.append("package_script")
+        return list(dict.fromkeys(risk_classes))
     if artifact.artifact_type == "prompt_request":
         prompt_classes = _prompt_request_classes(artifact)
-        risk_classes: list[str] = []
         if "secret_read" in prompt_classes:
             risk_classes.append("local_secret_read")
         if "exfil_intent" in prompt_classes:
@@ -789,18 +897,13 @@ def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
             risk_classes.append("destructive_shell")
         if "prompt_injection_intent" in prompt_classes:
             risk_classes.append("destructive_shell")
-        return risk_classes
+        return list(dict.fromkeys(risk_classes))
     if artifact.artifact_type != "tool_action_request":
-        return []
-    composite_risk_classes = artifact.metadata.get("risk_classes")
-    if isinstance(composite_risk_classes, list):
-        normalized = [value for value in composite_risk_classes if isinstance(value, str) and value.strip()]
-        if normalized:
-            return list(dict.fromkeys(normalized))
+        return list(dict.fromkeys(risk_classes))
     action_class = artifact.metadata.get("action_class")
-    if not isinstance(action_class, str):
-        return []
-    return list(risk_classes_for_command_action(action_class))
+    if isinstance(action_class, str):
+        risk_classes.extend(risk_classes_for_command_action(action_class))
+    return list(dict.fromkeys(risk_classes))
 
 def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
     return {

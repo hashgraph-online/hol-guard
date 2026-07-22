@@ -33,7 +33,7 @@ function containsJargon(text: string): boolean {
 }
 
 const zeroPendingZeroInstalls = buildHomePrimaryState(0, 0);
-const zeroPendingWithInstalls = buildHomePrimaryState(0, 3);
+const zeroPendingWithInstalls = buildHomePrimaryState(0, 3, "protected");
 const pendingRequests = buildHomePrimaryState(5, 3);
 
 assert(
@@ -100,7 +100,7 @@ assert(
 
 const setupState: HomePrimaryState = buildHomePrimaryState(0, 0);
 const pendingState: HomePrimaryState = buildHomePrimaryState(2, 2);
-const protectedState: HomePrimaryState = buildHomePrimaryState(0, 1);
+const protectedState: HomePrimaryState = buildHomePrimaryState(0, 1, "protected");
 
 assert(
   [setupState.status, pendingState.status, protectedState.status].every(
@@ -169,9 +169,8 @@ assert(
 );
 
 assert(
-  queuedCountForInbox(0).toLowerCase().includes("queue") ||
-    queuedCountForInbox(0).toLowerCase().includes("open"),
-  "L141: Zero-pending CTA label still references the queue — label contains 'queue' or 'open'"
+  queuedCountForInbox(0) === "Review protection",
+  "L141: zero-pending unproven state links to protection health"
 );
 
 const appsProtectedCopy = "Apps protected";
@@ -201,6 +200,9 @@ const managedDiscoveryInstalls: GuardManagedInstall[] = [
 const newAppDiscoveries = resolveNewAppDiscoveries(managedDiscoveryInstalls, [
   "cursor",
   "opencode",
+  "bunx",
+  "guard-cli",
+  "package-firewall",
   "Ce2b7ac2ccab4fab9902347b033bf25e",
   "d75ba142-bf53-4f27-aebc-4884278c421a",
 ]);
@@ -252,7 +254,7 @@ assert(
 const allStates = [
   buildHomePrimaryState(0, 0),
   buildHomePrimaryState(2, 2),
-  buildHomePrimaryState(0, 1),
+  buildHomePrimaryState(0, 1, "protected"),
 ];
 const allCopies = allStates.map((s) => s.copy);
 const allCtaLabels = allStates.map((s) => s.ctaLabel);
@@ -373,6 +375,7 @@ const setupHomeState = deriveHomeState({
   hasObservedHarnesses: false,
   queuedCount: 0,
   watchedAppsCount: 0,
+  protectionState: "degraded",
 });
 assert(
   setupHomeState.heroStatus === "setup_gap" && setupHomeState.ctaTarget === "protect",
@@ -388,10 +391,39 @@ const clearHomeState = deriveHomeState({
   hasObservedHarnesses: true,
   queuedCount: 0,
   watchedAppsCount: 2,
+  protectionState: "protected",
 });
 assert(
   clearHomeState.heroStatus === "clear" && clearHomeState.ctaTarget === "evidence",
   "GR178: calm protected Home view avoids duplicate setup content"
+);
+
+const degradedHomeState = deriveHomeState({
+  hasActiveInstalls: true,
+  hasObservedHarnesses: true,
+  queuedCount: 0,
+  watchedAppsCount: 2,
+  protectionState: "degraded",
+});
+assert(
+  degradedHomeState.heroStatus === "degraded" &&
+    degradedHomeState.headline === "Protection is degraded" &&
+    degradedHomeState.ctaTarget === "protect",
+  "active installs cannot claim protection when required checks are degraded"
+);
+
+const partialHomeState = deriveHomeState({
+  hasActiveInstalls: true,
+  hasObservedHarnesses: true,
+  queuedCount: 0,
+  watchedAppsCount: 2,
+  protectionState: "partial",
+});
+assert(
+  partialHomeState.heroStatus === "partial" &&
+    partialHomeState.headline === "Protection is partial" &&
+    partialHomeState.ctaTarget === "protect",
+  "incomplete decision-stream proof produces a precise partial state"
 );
 
 assert(

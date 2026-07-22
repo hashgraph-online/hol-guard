@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
-import io
 import json
-import posixpath
 import re
 import sys
-import tarfile
 import time
 import urllib.error
 import urllib.parse
@@ -17,7 +15,6 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
-from xml.etree import ElementTree as ET
 
 if TYPE_CHECKING:
     import tomllib
@@ -29,19 +26,41 @@ from packaging.version import InvalidVersion, Version
 
 from ..action_lattice import normalize_guard_action_result
 from ..config import load_guard_config, resolve_risk_action
-from ..mdm.network import managed_urlopen
 from ..models import GuardAction, GuardArtifact
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from .js_semver import highest_js_version_for_selector, version_matches_js_selector
+from .lockfile_evaluation_support import (
+    collect_lockfile_parse_results,
+    incomplete_lockfile_fallback_target,
+    incomplete_lockfile_metadata,
+    package_has_incomplete_lockfile,
+    parse_lockfile_with_budget,
+)
+from .lockfile_parse_result import LOCKFILE_PARSER_VERSION, LockfileParseResult, parse_lockfile_text
 from .manifest_dependency_targets import evaluation_targets as _manifest_evaluation_targets
+from .npm_policy_range import (
+    bind_resolved_npm_policy_result,
+    policy_selector_matches_target,
+    target_for_resolved_npm_policy_match,
+)
+from .npm_source_spec import NpmSourceSpec, parse_npm_source_spec
+from .offline_archive_inspection import inspect_archive_offline
 from .package_intent_common import split_python_extras
 from .package_manifest_diff import (
     _DeadlineExceededError,
     _dependency_map_for_path,
     parse_manifest_dependencies,
+)
+from .restricted_archive_download import (
+    RestrictedArchiveDownload,
+    RestrictedArchiveDownloadResult,
+    RestrictedArchiveFailure,
+    canonical_external_https_archive_source,
+    download_restricted_archive,
+    is_external_https_archive_source,
 )
 from .runner import (
     GuardSyncAuthorizationExpiredError,
@@ -66,6 +85,14 @@ from .supply_chain_bundle_models import (
     SupplyChainBundleResponse,
 )
 from .supply_chain_bundle_runtime import _is_high_confidence_block
+from .supply_chain_package_identity import (
+    CanonicalPackageIdentity,
+    PackageIdentityError,
+    canonical_package_identity,
+    normalize_ecosystem,
+    normalize_qualified_package_name,
+    parse_package_identity,
+)
 from .supply_chain_support import ecosystem_support_metadata
 from .workspace_path_guard import (
     read_bytes_within_workspace,
@@ -86,6 +113,10 @@ _LOCAL_APPROVAL_INSTRUCTION_RE = re.compile(
     re.IGNORECASE,
 )
 _LOCAL_APPROVAL_REQUEST_URL_RE = re.compile(r"https?://[^\s]+/requests(?:/[^\s]*)?", re.IGNORECASE)
+_NAMED_SOURCE_SEPARATOR_RE = re.compile(
+    r"@(?=(?:https?|git\+|github|gitlab|bitbucket|file):)",
+    re.IGNORECASE,
+)
 _LOCKFILE_PARSE_BUDGET_SECONDS = 0.2
 _TRANSITIVE_BLOCK_CONFIDENCE_THRESHOLD = 900
 _NPM_REGISTRY_METADATA_BASE_URL = "https://registry.npmjs.org"
@@ -94,6 +125,9 @@ _TARBALL_SCAN_TIMEOUT_SECONDS = 2
 _TARBALL_SCAN_MAX_BYTES = 6 * 1024 * 1024
 _TARBALL_SCAN_MAX_FILES = 500
 _TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES = 256 * 1024
+_EXTERNAL_ARCHIVE_MAX_TARGETS = 4
+_EXTERNAL_ARCHIVE_MAX_AGGREGATE_BYTES = 12 * 1024 * 1024
+_EXTERNAL_ARCHIVE_REQUEST_TIMEOUT_SECONDS = 8.0
 _CLOUD_VALIDATION_ERROR_CACHE_TTL_SECONDS = 15 * 60
 _REGISTRY_DEFAULT_RANGES = {
     "npm": "latest",
@@ -147,6 +181,8 @@ class PackageRequestEvaluation:
     refresh_required: bool = False
     record_monitor_evidence: bool = False
     evidence_ids: tuple[str, ...] = ()
+    external_archive_downloads: tuple[RestrictedArchiveDownload, ...] = ()
+    external_archive_source_hashes: tuple[str, ...] = ()
 
     def to_cache_dict(self) -> dict[str, object]:
         return {
@@ -162,6 +198,7 @@ class PackageRequestEvaluation:
             "exception_id": self.exception_id,
             "risk_summary": self.risk_summary,
             "record_monitor_evidence": self.record_monitor_evidence,
+            "external_archive_source_hashes": list(self.external_archive_source_hashes),
             "user_copy": self.user_copy.to_dict(),
         }
 
@@ -173,6 +210,16 @@ class PackageRequestEvaluation:
         payload["workspace_fingerprint"] = self.workspace_fingerprint
         payload["refresh_required"] = self.refresh_required
         payload["evidence_ids"] = list(self.evidence_ids)
+        if self.external_archive_downloads:
+            payload["external_archive_inspection"] = [
+                {
+                    "sha256": download.sha256,
+                    "size": download.size,
+                    "source_url_hash": stable_digest_hex(download.source_url.encode("utf-8")),
+                    "final_url_hash": stable_digest_hex(download.final_url.encode("utf-8")),
+                }
+                for download in self.external_archive_downloads
+            ]
         return payload
 
     @classmethod
@@ -215,6 +262,16 @@ class PackageRequestEvaluation:
             ),
             policy_action=policy_action,
         )
+        raw_external_archive_source_hashes = payload.get("external_archive_source_hashes")
+        external_archive_source_hashes = (
+            tuple(
+                item
+                for item in raw_external_archive_source_hashes
+                if isinstance(item, str) and re.fullmatch(r"[0-9a-f]{64}", item)
+            )
+            if isinstance(raw_external_archive_source_hashes, (list, tuple))
+            else ()
+        )
         return cls(
             decision=str(payload.get("decision") or "monitor"),
             policy_action=policy_action,
@@ -233,6 +290,7 @@ class PackageRequestEvaluation:
             exception_id=_optional_string(payload.get("exception_id")),
             refresh_required=bool(payload.get("refresh_required")),
             record_monitor_evidence=bool(payload.get("record_monitor_evidence")),
+            external_archive_source_hashes=external_archive_source_hashes,
         )
 
 
@@ -242,11 +300,192 @@ def evaluate_package_request_artifact(
     store: GuardStore,
     workspace_dir: Path | None,
     now: str | None = None,
+    external_archive_network_authorized: bool = False,
+    retain_external_archive_blob: bool = False,
 ) -> PackageRequestEvaluation:
     now_value = now or datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     now_timestamp = _parse_evaluation_timestamp(now_value)
     targets = _evaluation_targets(artifact, workspace_dir)
     package_intent_hash = artifact.artifact_id.rsplit(":", 1)[-1]
+    external_archive_targets = tuple(target for target in targets if _target_is_external_https_archive(target))
+    external_archive_source_hashes = tuple(
+        stable_digest_hex(source_url.encode("utf-8"))
+        for target in external_archive_targets
+        if (source_url := _optional_string(target.get("source_url"))) is not None
+    )
+    incomplete_lockfile = _first_incomplete_lockfile_result(workspace_dir, artifact)
+    if incomplete_lockfile is not None:
+        return _finalize_incomplete_lockfile_evaluation(
+            artifact=artifact,
+            store=store,
+            target=targets[0] if targets else incomplete_lockfile_fallback_target(incomplete_lockfile),
+            workspace_dir=workspace_dir,
+            parse_result=incomplete_lockfile,
+            package_intent_hash=package_intent_hash,
+            now=now_value,
+        )
+    if external_archive_targets:
+        # External archives use a deliberately local two-phase evaluation.  In
+        # particular, neither cloud evaluation nor archive DNS may run before
+        # the exact request has crossed the approval boundary.
+        if len(external_archive_targets) > _EXTERNAL_ARCHIVE_MAX_TARGETS:
+            limit_package = _heuristic_package_result(
+                target=external_archive_targets[0],
+                decision="block",
+                code="external_archive_target_limit",
+                message="External archive request exceeded Guard's per-command target limit.",
+                severity="high",
+            )
+            external_archive_draft = _EvaluationDraft(
+                decision="block",
+                enforcement="free_local",
+                entitlement_state="free",
+                cache_status="miss",
+                packages=(limit_package,),
+                reasons=tuple(_dict_items(limit_package.get("reasons"))),
+                matched_rule_id=None,
+                exception_id=None,
+                refresh_required=False,
+                record_monitor_evidence=False,
+                bundle_version=None,
+                policy_version="local:none",
+                external_archive_source_hashes=external_archive_source_hashes,
+            )
+        elif len(external_archive_targets) != len(targets):
+            mixed_package = _heuristic_package_result(
+                target=external_archive_targets[0],
+                decision="block",
+                code="external_archive_mixed_request_unsupported",
+                message=(
+                    "External archives must be installed in a separate command so Guard can preserve "
+                    "registry advisory evaluation and bind the inspected blob to execution."
+                ),
+                severity="high",
+            )
+            external_archive_draft = _EvaluationDraft(
+                decision="block",
+                enforcement="free_local",
+                entitlement_state="free",
+                cache_status="miss",
+                packages=(mixed_package,),
+                reasons=tuple(_dict_items(mixed_package.get("reasons"))),
+                matched_rule_id=None,
+                exception_id=None,
+                refresh_required=False,
+                record_monitor_evidence=False,
+                bundle_version=None,
+                policy_version="local:none",
+                external_archive_source_hashes=external_archive_source_hashes,
+            )
+        else:
+            external_archive_draft = _heuristic_result(
+                artifact=artifact,
+                store=store,
+                targets=targets,
+                workspace_dir=workspace_dir,
+                external_archive_network_authorized=external_archive_network_authorized,
+                retain_external_archive_blob=retain_external_archive_blob,
+                external_archive_request_deadline=(
+                    time.monotonic() + _EXTERNAL_ARCHIVE_REQUEST_TIMEOUT_SECONDS
+                    if external_archive_network_authorized
+                    else None
+                ),
+            )
+        if external_archive_draft is None:
+            external_archive_draft = _EvaluationDraft(
+                decision="block",
+                enforcement="free_local",
+                entitlement_state="free",
+                cache_status="miss",
+                packages=(),
+                reasons=(
+                    {
+                        "code": "external_archive_inspection_incomplete",
+                        "message": "Guard could not establish an external archive evaluation.",
+                        "severity": "high",
+                        "source": "guard-local",
+                    },
+                ),
+                matched_rule_id=None,
+                exception_id=None,
+                refresh_required=False,
+                record_monitor_evidence=False,
+                bundle_version=None,
+                policy_version="local:none",
+                external_archive_source_hashes=external_archive_source_hashes,
+            )
+        if not external_archive_draft.external_archive_source_hashes:
+            external_archive_draft = replace(
+                external_archive_draft,
+                external_archive_source_hashes=external_archive_source_hashes,
+            )
+        try:
+            external_archive_result = _finalize_evaluation(
+                external_archive_draft,
+                package_intent_hash=package_intent_hash,
+                workspace_fingerprint=None,
+            )
+            _persist_evidence(
+                store=store,
+                artifact=artifact,
+                evaluation=external_archive_result,
+                now=now_value,
+            )
+            return external_archive_result
+        except BaseException:
+            for download in external_archive_draft.external_archive_downloads:
+                download.cleanup()
+            raise
+    source_review_targets = tuple(target for target in targets if _target_requires_npm_source_review(target))
+    if source_review_targets:
+        if len(source_review_targets) != len(targets):
+            mixed_source_package = _heuristic_package_result(
+                target=source_review_targets[0],
+                decision="block",
+                code="npm_source_mixed_request_unsupported",
+                message=(
+                    "npm source dependencies must be installed separately so Guard can preserve registry "
+                    "advisory evaluation and source approval identity."
+                ),
+                severity="high",
+            )
+            source_review_draft = _EvaluationDraft(
+                decision="block",
+                enforcement="free_local",
+                entitlement_state="free",
+                cache_status="miss",
+                packages=(mixed_source_package,),
+                reasons=tuple(_dict_items(mixed_source_package.get("reasons"))),
+                matched_rule_id=None,
+                exception_id=None,
+                refresh_required=False,
+                record_monitor_evidence=False,
+                bundle_version=None,
+                policy_version="local:none",
+            )
+        else:
+            source_review_draft = _heuristic_result(
+                artifact=artifact,
+                store=store,
+                targets=targets,
+                workspace_dir=workspace_dir,
+                external_archive_network_authorized=False,
+                retain_external_archive_blob=False,
+            )
+        if source_review_draft is None:
+            raise AssertionError("npm source review target did not produce a local decision")
+        source_review_result = _finalize_evaluation(
+            source_review_draft,
+            package_intent_hash=package_intent_hash,
+            workspace_fingerprint=None,
+        )
+        _persist_evidence(
+            store=store,
+            artifact=artifact,
+            evaluation=source_review_result,
+            now=now_value,
+        )
+        return source_review_result
     workspace_id = store.get_cloud_workspace_id()
     bundle_payload = store.get_cached_supply_chain_bundle(workspace_id) if workspace_id is not None else None
     bundle_response: SupplyChainBundleResponse | None = None
@@ -347,6 +586,8 @@ def evaluate_package_request_artifact(
                 store=store,
                 targets=targets,
                 workspace_dir=workspace_dir,
+                external_archive_network_authorized=external_archive_network_authorized,
+                retain_external_archive_blob=retain_external_archive_blob,
             )
             if heuristic is not None and _decision_rank(heuristic.decision) > _decision_rank(cloud_result.decision):
                 upgraded = _finalize_evaluation(
@@ -447,6 +688,8 @@ def evaluate_package_request_artifact(
         store=store,
         targets=targets,
         workspace_dir=workspace_dir,
+        external_archive_network_authorized=external_archive_network_authorized,
+        retain_external_archive_blob=retain_external_archive_blob,
     )
     if heuristic is None:
         fail_closed_unidentified = _unidentified_packages_fail_closed(store=store, workspace_dir=workspace_dir)
@@ -455,6 +698,10 @@ def evaluate_package_request_artifact(
             artifact=artifact,
             workspace_dir=workspace_dir,
             fail_closed_unidentified=fail_closed_unidentified,
+            verify_registry_identity=(
+                cloud_fallback_reason is not None
+                and _optional_string(cloud_fallback_reason.get("code")) == "cloud_auth_error"
+            ),
         )
         fallback_decision = max(
             (str(package.get("decision") or "monitor") for package in fallback_packages),
@@ -677,6 +924,8 @@ class _EvaluationDraft:
     record_monitor_evidence: bool
     bundle_version: str | None
     policy_version: str
+    external_archive_downloads: tuple[RestrictedArchiveDownload, ...] = ()
+    external_archive_source_hashes: tuple[str, ...] = ()
 
 
 def _finalize_evaluation(
@@ -706,6 +955,11 @@ def _finalize_evaluation(
     }[draft.decision]
     reason_message = _optional_string(draft.reasons[0].get("message")) if draft.reasons else None
     reason_code = _optional_string(draft.reasons[0].get("code")) if draft.reasons else None
+    policy_action: GuardAction = (
+        "review"
+        if draft.decision == "ask" and reason_code == "external_tarball_source"
+        else _DECISION_TO_GUARD_ACTION[draft.decision]
+    )
     source_risk_summaries = {
         "insecure_source_url": "from insecure HTTP source before install.",
         "external_tarball_source": "from external tarball source before install.",
@@ -748,11 +1002,11 @@ def _finalize_evaluation(
             dashboard_url=None,
             harness_message=" ".join(part.strip() for part in harness_parts if part.strip()),
         ),
-        policy_action=_DECISION_TO_GUARD_ACTION[draft.decision],
+        policy_action=policy_action,
     )
     return PackageRequestEvaluation(
         decision=draft.decision,
-        policy_action=_DECISION_TO_GUARD_ACTION[draft.decision],
+        policy_action=policy_action,
         enforcement=draft.enforcement,
         entitlement_state=draft.entitlement_state,
         cache_status=draft.cache_status,
@@ -773,6 +1027,8 @@ def _finalize_evaluation(
             for item in draft.packages
             if _should_record_package(item, draft.decision)
         ),
+        external_archive_downloads=draft.external_archive_downloads,
+        external_archive_source_hashes=draft.external_archive_source_hashes,
     )
 
 
@@ -799,20 +1055,18 @@ def _evaluate_with_cloud(
         result: str = fail_closed_decision
         return result
 
-    def can_defer_auth_failure_to_bundle() -> bool:
-        if bundle_meta is None or not bundle_defer_eligible:
-            return False
-        return bundle_decision == "block" or resolve_fail_closed_decision() != "block"
+    def can_fallback_from_auth_failure() -> bool:
+        if resolve_fail_closed_decision() != "block":
+            return True
+        return bundle_meta is not None and bundle_defer_eligible and bundle_decision == "block"
 
     try:
         auth_context = _resolve_guard_sync_auth_context(store, allow_primary_repair=False)
     except GuardSyncAuthorizationExpiredError:
-        if can_defer_auth_failure_to_bundle():
+        if can_fallback_from_auth_failure():
             return None, _cloud_fallback_reason(
                 code="cloud_auth_error",
-                message=(
-                    "Guard cloud evaluation was not authorized, so Guard fell back to signed bundle intelligence."
-                ),
+                message="Guard cloud evaluation was not authorized, so Guard used local package intelligence.",
             )
         return (
             _cloud_fail_closed_evaluation(
@@ -844,17 +1098,13 @@ def _evaluate_with_cloud(
             )
         return None, None
     except RuntimeError:
-        if can_defer_auth_failure_to_bundle():
-            return None, _cloud_fallback_reason(
-                code="cloud_auth_error",
-                message=(
-                    "Guard cloud evaluation was not authorized, so Guard fell back to signed bundle intelligence."
-                ),
-            )
         return (
             _cloud_fail_closed_evaluation(
-                code="cloud_auth_error",
-                message="Guard cloud evaluation was not authorized, so this package request needs review.",
+                code="cloud_validation_error",
+                message=(
+                    "Guard cloud evaluation could not establish a trusted session, "
+                    "so this package request needs review."
+                ),
                 artifact=artifact,
                 targets=targets,
                 workspace_dir=workspace_dir,
@@ -915,6 +1165,11 @@ def _evaluate_with_cloud(
         )
         if fail_closed is not None:
             return fail_closed, None
+        if error.code == 401:
+            return None, _cloud_fallback_reason(
+                code="cloud_auth_error",
+                message="Guard cloud evaluation was not authorized, so Guard used local package intelligence.",
+            )
         return None, _cloud_fallback_reason(
             code="cloud_http_error",
             message=(f"Guard cloud evaluation returned HTTP {error.code}, so Guard fell back to local intelligence."),
@@ -1079,6 +1334,8 @@ def _cloud_http_fail_closed_evaluation(
     fail_closed_decision: str,
 ) -> PackageRequestEvaluation | None:
     if status_code in {401, 403}:
+        if status_code == 401 and fail_closed_decision != "block":
+            return None
         return _cloud_fail_closed_evaluation(
             code="cloud_auth_error",
             message="Guard cloud evaluation was not authorized, so this package request needs review.",
@@ -1197,13 +1454,6 @@ def _cloud_fallback_requires_reconnect_copy(reason: dict[str, object]) -> bool:
     return _optional_string(reason.get("code")) == "cloud_auth_error"
 
 
-def _external_tarball_scan_failure_decision(*, store: GuardStore, workspace_dir: Path | None) -> str:
-    config = load_guard_config(store.guard_home, workspace=workspace_dir)
-    if config.security_level in {"strict", "paranoid"}:
-        return "block"
-    return "ask"
-
-
 def _cloud_fail_closed_decision(*, store: GuardStore, workspace_dir: Path | None) -> str:
     config = load_guard_config(store.guard_home, workspace=workspace_dir)
     cloud_action = resolve_risk_action(config, "cloud_advisory", harness=None)
@@ -1274,15 +1524,22 @@ def _evaluate_with_bundle(
             if resolved_version is not None
             else None
         )
+        resolved_npm_version = (
+            resolved_version if (_optional_string(target.get("ecosystem")) or "npm") == "npm" else None
+        )
+        policy_target = target_for_resolved_npm_policy_match(target, resolved_version=resolved_npm_version)
         matched_rule = _matching_policy_rule(
             bundle_response.bundle.policy_rules,
-            target=target,
+            target=policy_target,
             harness=artifact.harness,
             package_severity=package_match.normalized_severity if package_match is not None else None,
         )
         if matched_rule is not None:
             decision = _normalize_bundle_action(matched_rule.action)
-            package = _policy_package_result(target, decision=decision, rule_id=matched_rule.rule_id)
+            package = bind_resolved_npm_policy_result(
+                _policy_package_result(target, decision=decision, rule_id=matched_rule.rule_id),
+                resolved_version=resolved_npm_version,
+            )
             packages.append(package)
             continue
         confusion_result = _dependency_confusion_policy_package_result(
@@ -1355,14 +1612,7 @@ def _evaluate_with_bundle(
             resolved_version=resolved_version,
         )
         packages.append(package)
-    direct_identities = {
-        (
-            _optional_string(package.get("namespace")),
-            str(package.get("name") or ""),
-            _optional_string(package.get("resolvedVersion")),
-        )
-        for package in packages
-    }
+    direct_identities = {_result_package_identity(package) for package in packages}
     packages.extend(
         package
         for package in _transitive_lockfile_results(
@@ -1371,12 +1621,7 @@ def _evaluate_with_bundle(
             workspace_dir=workspace_dir,
             now_timestamp=now_timestamp,
         )
-        if (
-            _optional_string(package.get("namespace")),
-            str(package.get("name") or ""),
-            _optional_string(package.get("resolvedVersion")),
-        )
-        not in direct_identities
+        if package_has_incomplete_lockfile(package) or _result_package_identity(package) not in direct_identities
     )
     if not packages:
         return None
@@ -1451,9 +1696,98 @@ def _heuristic_result(
     store: GuardStore,
     targets: tuple[dict[str, object], ...],
     workspace_dir: Path | None,
+    external_archive_network_authorized: bool,
+    retain_external_archive_blob: bool,
+    external_archive_request_deadline: float | None = None,
 ) -> _EvaluationDraft | None:
     packages: list[dict[str, object]] = []
+    external_archive_downloads: list[RestrictedArchiveDownload] = []
+    external_archive_source_hashes = [
+        stable_digest_hex(source_url.encode("utf-8"))
+        for target in targets
+        if (source_url := _optional_string(target.get("source_url"))) is not None
+        and _target_is_external_https_archive(target)
+    ]
+    retained_archive_bytes = 0
     for target in targets:
+        source_url = _optional_string(target.get("source_url"))
+        if target.get("external_archive_source_integrity_invalid") is True:
+            packages.append(
+                _heuristic_package_result(
+                    target=target,
+                    decision="block",
+                    code="external_archive_source_integrity_invalid",
+                    message="Package source private data no longer matches its approved public identity.",
+                    severity="high",
+                )
+            )
+            continue
+        source_invalid_reason = _optional_string(target.get("source_invalid_reason"))
+        if source_invalid_reason is not None:
+            packages.append(
+                _heuristic_package_result(
+                    target=target,
+                    decision="block",
+                    code=source_invalid_reason,
+                    message="Package source syntax is ambiguous or invalid and cannot be authenticated.",
+                    severity="high",
+                )
+            )
+            continue
+        if source_url is not None and _target_is_external_https_archive(target):
+            try:
+                package_result, external_archive_download = _external_tarball_dependency_result(
+                    target,
+                    network_authorized=external_archive_network_authorized,
+                    retain_download=retain_external_archive_blob,
+                    request_deadline=external_archive_request_deadline,
+                )
+            except BaseException:
+                for retained_archive in external_archive_downloads:
+                    retained_archive.cleanup()
+                raise
+            if external_archive_download is not None:
+                retained_archive_bytes += external_archive_download.size
+                if retained_archive_bytes > _EXTERNAL_ARCHIVE_MAX_AGGREGATE_BYTES:
+                    external_archive_download.cleanup()
+                    for retained_archive in external_archive_downloads:
+                        retained_archive.cleanup()
+                    external_archive_downloads.clear()
+                    packages.append(
+                        _heuristic_package_result(
+                            target=target,
+                            decision="block",
+                            code="external_archive_aggregate_size_limit",
+                            message="External archives exceeded Guard's aggregate retained-byte limit.",
+                            severity="high",
+                        )
+                    )
+                    break
+                external_archive_downloads.append(external_archive_download)
+            if target.get("manifest_unsynced") is True:
+                package_result = _with_package_reason(
+                    package_result,
+                    {
+                        "code": "manifest_lockfile_unsynced",
+                        "message": (
+                            f"{target['package_name']} is declared in the project manifest but is not pinned "
+                            "in the existing lockfile yet, so Guard requires review before install."
+                        ),
+                        "severity": "high",
+                        "source": "guard-local",
+                    },
+                )
+            lockfile_parse_warning = _lockfile_parse_warning_result(
+                target=target,
+                artifact=artifact,
+                workspace_dir=workspace_dir,
+            )
+            if lockfile_parse_warning is not None:
+                first_reason = _first_dict_item(lockfile_parse_warning.get("reasons"))
+                if first_reason is not None:
+                    package_result = _with_package_reason(package_result, first_reason)
+            packages.append(package_result)
+            continue
         if target.get("manifest_unsynced") is True:
             packages.append(
                 _heuristic_package_result(
@@ -1500,8 +1834,7 @@ def _heuristic_result(
             local_source_result = _local_source_dependency_result(target)
             if local_source_result is not None:
                 package_result = local_source_result
-        source_url = _optional_string(target.get("source_url"))
-        if package_result is None and source_url is not None and source_url.lower().startswith("http://"):
+        if package_result is None and source_url is not None and source_url.lower().startswith("http:"):
             package_result = _heuristic_package_result(
                 target=target,
                 decision="block",
@@ -1510,18 +1843,14 @@ def _heuristic_result(
                 severity="high",
             )
         if package_result is None and source_url is not None and _is_git_source_url(source_url):
+            repository = _optional_string(target.get("source_repository")) or "Git repository"
+            revision_kind = _optional_string(target.get("source_revision_kind")) or "missing"
             package_result = _heuristic_package_result(
                 target=target,
                 decision="ask",
                 code="git_dependency_source",
-                message="Git package source requires review before install.",
+                message=f"Git package source {repository} ({revision_kind}) requires review before install.",
                 severity="high",
-            )
-        if package_result is None and source_url is not None and _is_external_https_tarball_source(source_url):
-            package_result = _external_tarball_dependency_result(
-                target,
-                store=store,
-                workspace_dir=workspace_dir,
             )
         if package_result is None:
             if lockfile_parse_warning is not None:
@@ -1536,6 +1865,10 @@ def _heuristic_result(
         return None
     packages.sort(key=lambda item: _decision_rank(str(item.get("decision") or "monitor")), reverse=True)
     decision = str(packages[0].get("decision") or "monitor")
+    if decision == "block":
+        for retained_archive in external_archive_downloads:
+            retained_archive.cleanup()
+        external_archive_downloads.clear()
     return _EvaluationDraft(
         decision=decision,
         enforcement="free_local",
@@ -1549,6 +1882,8 @@ def _heuristic_result(
         record_monitor_evidence=decision == "monitor",
         bundle_version=None,
         policy_version="local:none",
+        external_archive_downloads=tuple(external_archive_downloads),
+        external_archive_source_hashes=tuple(external_archive_source_hashes),
     )
 
 
@@ -1607,9 +1942,17 @@ def _evaluation_targets(
 
 
 def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], ...]:
-    raw_targets = artifact.metadata.get("targets")
-    if not isinstance(raw_targets, list):
+    public_targets = artifact.metadata.get("targets")
+    if not isinstance(public_targets, list):
         return ()
+    private_targets = artifact.runtime_private_metadata.get("package_targets")
+    private_integrity_invalid = False
+    if isinstance(private_targets, list):
+        private_integrity_invalid = not _private_package_targets_match_public(private_targets, public_targets)
+        raw_targets = public_targets if private_integrity_invalid else private_targets
+    else:
+        raw_targets = public_targets
+        private_integrity_invalid = not _public_package_targets_are_self_consistent(public_targets)
     parsed: list[dict[str, object]] = []
     package_manager = str(artifact.metadata.get("package_manager") or "npm")
     redacted_command = _optional_string(artifact.metadata.get("redacted_command"))
@@ -1620,16 +1963,17 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
         package_name = _optional_string(item.get("package_name"))
         if package_name is None:
             continue
-        namespace, name = _split_namespace_name(package_name)
+        namespace, name = _split_namespace_name(package_name, ecosystem=ecosystem)
         requested = _optional_string(item.get("requested_specifier"))
         raw_spec = _optional_string(item.get("raw_spec")) or package_name
         source_url = _optional_string(item.get("source_url"))
         if source_url is None:
             source_url = _source_url_from_specifier(requested)
-        if source_url is None:
+        if source_url is None and "source_kind" not in item:
             source_url = _source_url_from_raw_spec(raw_spec)
         if source_url is not None:
             requested = None
+        source_spec = _npm_source_spec(source_url, ecosystem=ecosystem)
         if requested is None and source_url is None:
             requested = _default_registry_range(ecosystem)
         exact_version = (
@@ -1646,15 +1990,89 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
                 "version": exact_version,
                 "range": requested if exact_version is None else None,
                 "source_url": source_url,
+                "source_kind": source_spec.source_kind if source_spec is not None else None,
+                "source_repository": source_spec.canonical_repository if source_spec is not None else None,
+                "source_revision_kind": source_spec.revision_kind if source_spec is not None else None,
+                "source_identity": source_spec.identity if source_spec is not None else None,
+                "source_redacted": source_spec.redacted if source_spec is not None else None,
+                "source_invalid_reason": source_spec.reason if source_spec is not None else None,
                 "alias": _optional_string(item.get("alias")),
                 "dependency_group": _optional_string(item.get("dependency_group")),
                 "extras": _string_tuple(item.get("extras")),
                 "editable": bool(item.get("editable")),
                 "package_manager": package_manager,
                 "redacted_command": redacted_command,
+                "external_archive_source_integrity_invalid": private_integrity_invalid,
             }
         )
     return tuple(parsed)
+
+
+def _private_package_targets_match_public(
+    private_targets: list[object],
+    public_targets: list[object],
+) -> bool:
+    if len(private_targets) != len(public_targets):
+        return False
+    structural_fields = (
+        "ecosystem",
+        "package_name",
+        "requested_specifier",
+        "alias",
+        "dependency_group",
+        "extras",
+        "editable",
+        "source_kind",
+        "source_repository",
+        "source_revision_kind",
+        "source_identity",
+        "source_invalid_reason",
+    )
+    for private_target, public_target in zip(private_targets, public_targets, strict=True):
+        if not isinstance(private_target, dict) or not isinstance(public_target, dict):
+            return False
+        if any(private_target.get(field) != public_target.get(field) for field in structural_fields):
+            return False
+        private_raw_spec = _optional_string(private_target.get("raw_spec"))
+        expected_raw_spec_hash = _optional_string(public_target.get("raw_spec_hash"))
+        if (
+            private_raw_spec is None
+            or expected_raw_spec_hash is None
+            or hashlib.sha256(private_raw_spec.encode("utf-8")).hexdigest() != expected_raw_spec_hash
+        ):
+            return False
+        private_source_url = _optional_string(private_target.get("source_url"))
+        expected_source_hash = _optional_string(public_target.get("source_url_hash"))
+        if private_source_url is None:
+            if expected_source_hash is not None:
+                return False
+        elif (
+            expected_source_hash is None
+            or hashlib.sha256(private_source_url.encode("utf-8")).hexdigest() != expected_source_hash
+        ):
+            return False
+    return True
+
+
+def _public_package_targets_are_self_consistent(public_targets: list[object]) -> bool:
+    """Permit serialized targets only when no exact value was redacted away."""
+
+    for target in public_targets:
+        if not isinstance(target, dict):
+            return False
+        raw_spec = _optional_string(target.get("raw_spec"))
+        raw_spec_hash = _optional_string(target.get("raw_spec_hash"))
+        if raw_spec_hash is not None and (
+            raw_spec is None or hashlib.sha256(raw_spec.encode("utf-8")).hexdigest() != raw_spec_hash
+        ):
+            return False
+        source_url = _optional_string(target.get("source_url"))
+        source_url_hash = _optional_string(target.get("source_url_hash"))
+        if source_url_hash is not None and (
+            source_url is None or hashlib.sha256(source_url.encode("utf-8")).hexdigest() != source_url_hash
+        ):
+            return False
+    return True
 
 
 def _bundle_meta(bundle_payload: dict[str, object]) -> dict[str, str]:
@@ -1666,6 +2084,106 @@ def _bundle_meta(bundle_payload: dict[str, object]) -> dict[str, str]:
         "policy_hash": str(bundle["policyHash"]),
         "scoring_version": str(bundle["scoringVersion"]),
     }
+
+
+def _lockfile_parse_results(
+    workspace_dir: Path | None,
+    artifact: GuardArtifact,
+) -> tuple[LockfileParseResult, ...]:
+    return collect_lockfile_parse_results(
+        workspace_dir,
+        artifact.metadata.get("lockfile_paths"),
+        budget_ms=_LOCKFILE_PARSE_BUDGET_SECONDS * 1000,
+        parse_text_result=_parse_lockfile_text_result,
+    )
+
+
+def _parse_lockfile_text_result(path: str, text: str) -> LockfileParseResult:
+    return parse_lockfile_with_budget(
+        path,
+        text,
+        budget_seconds=_LOCKFILE_PARSE_BUDGET_SECONDS,
+        dependency_parser=_dependency_map_for_path,
+        package_lock_parser=_package_lock_entries,
+    )
+
+
+def _first_incomplete_lockfile_result(
+    workspace_dir: Path | None,
+    artifact: GuardArtifact,
+) -> LockfileParseResult | None:
+    return next((result for result in _lockfile_parse_results(workspace_dir, artifact) if not result.complete), None)
+
+
+def _finalize_incomplete_lockfile_evaluation(
+    *,
+    artifact: GuardArtifact,
+    store: GuardStore,
+    target: dict[str, object],
+    workspace_dir: Path | None,
+    parse_result: LockfileParseResult,
+    package_intent_hash: str,
+    now: str,
+) -> PackageRequestEvaluation:
+    config = load_guard_config(store.guard_home, workspace=workspace_dir)
+    decision = "block" if config.security_level in {"strict", "paranoid"} else "ask"
+    package = _incomplete_lockfile_package_result(
+        target=target,
+        parse_result=parse_result,
+        decision=decision,
+    )
+    draft = _EvaluationDraft(
+        decision=decision,
+        enforcement="free_local",
+        entitlement_state="free",
+        cache_status="miss",
+        packages=(package,),
+        reasons=tuple(_dict_items(package.get("reasons"))),
+        matched_rule_id=None,
+        exception_id=None,
+        refresh_required=False,
+        record_monitor_evidence=False,
+        bundle_version=None,
+        policy_version="local:none",
+    )
+    fingerprint = _stable_hash(
+        {
+            "lockfile_hash": parse_result.source_hash,
+            "lockfile_parser_version": parse_result.parser_version,
+        }
+    )
+    evaluation = _finalize_evaluation(
+        draft,
+        package_intent_hash=package_intent_hash,
+        workspace_fingerprint=fingerprint,
+    )
+    _persist_evidence(store=store, artifact=artifact, evaluation=evaluation, now=now)
+    return evaluation
+
+
+def _incomplete_lockfile_package_result(
+    *,
+    target: dict[str, object],
+    parse_result: LockfileParseResult,
+    decision: str = "ask",
+) -> dict[str, object]:
+    error_reason = parse_result.error_reason or "parse_error"
+    package = _heuristic_package_result(
+        target=target,
+        decision=decision,
+        code="lockfile_parse_incomplete",
+        message=(
+            f"Guard could not completely parse the existing {parse_result.format} lockfile "
+            f"({error_reason}), so this package request is paused. Repair the lockfile, then retry."
+        ),
+        severity="high",
+    )
+    metadata = incomplete_lockfile_metadata(parse_result)
+    package.update(metadata)
+    first_reason = _first_dict_item(package.get("reasons"))
+    if first_reason is not None:
+        package["reasons"] = ({**first_reason, **metadata},)
+    return package
 
 
 def _workspace_fingerprint(
@@ -1683,6 +2201,7 @@ def _workspace_fingerprint(
             "workspace_name": workspace_dir.name if workspace_dir is not None else None,
             "manifest_hashes": manifest_hashes,
             "lockfile_hashes": lockfile_hashes,
+            "lockfile_parser_version": LOCKFILE_PARSER_VERSION,
             "bundle_policy_hash": bundle_meta["policy_hash"] if bundle_meta is not None else None,
         }
     )
@@ -1712,7 +2231,12 @@ def _build_request_payload(
                 "ecosystem": str(target["ecosystem"]),
                 "name": str(target["name"]),
                 "namespace": target["namespace"],
-                **({"sourceUrl": str(target["source_url"])} if target.get("source_url") else {}),
+                **(
+                    {"sourceUrl": str(target.get("source_redacted") or target["source_url"])}
+                    if target.get("source_url")
+                    else {}
+                ),
+                **({"sourceIdentity": str(target["source_identity"])} if target.get("source_identity") else {}),
                 **({"version": str(target["version"])} if target.get("version") else {}),
                 **({"range": str(target["range"])} if target.get("range") else {}),
             }
@@ -1735,18 +2259,29 @@ def _lockfile_context(workspace_dir: Path | None, artifact: GuardArtifact) -> di
     lockfile_path = resolve_path_within_workspace(workspace_dir, str(lockfile_paths[0]))
     if lockfile_path is None or not lockfile_path.exists():
         return None
+    if lockfile_path.name.lower() == "bun.lockb":
+        return None
     lockfile_text = read_text_within_workspace(workspace_dir, str(lockfile_paths[0]))
     if lockfile_text is None:
         return None
-    dependencies = _safe_dependency_map_for_path(
-        str(lockfile_path.name), lockfile_text, deadline=time.monotonic() + _LOCKFILE_PARSE_BUDGET_SECONDS
-    )
+    parse_result = _parse_lockfile_text_result(lockfile_path.name, lockfile_text)
+    if not parse_result.complete:
+        return {
+            "dependencyCount": 0,
+            "fileName": lockfile_path.name,
+            "lockfileHash": parse_result.source_hash,
+            "lockfileParserVersion": parse_result.parser_version,
+            "parseComplete": False,
+            "parseError": parse_result.error_reason,
+        }
     manifest_hashes = _hash_paths(workspace_dir, artifact.metadata.get("manifest_paths"))
     return {
-        "dependencyCount": len(dependencies),
+        "dependencyCount": len(parse_result.entries),
         "fileName": lockfile_path.name,
-        "lockfileHash": stable_digest_hex(lockfile_text.encode("utf-8")),
+        "lockfileHash": parse_result.source_hash,
+        "lockfileParserVersion": parse_result.parser_version,
         "manifestHash": manifest_hashes[0] if manifest_hashes else None,
+        "parseComplete": True,
         "repository": workspace_dir.name,
     }
 
@@ -1778,6 +2313,8 @@ def _transitive_lockfile_results(
         lockfile_path = resolve_path_within_workspace(workspace_dir, str(relative_path))
         if lockfile_path is None or not lockfile_path.exists():
             continue
+        if lockfile_path.name.lower() == "bun.lockb":
+            continue
         lockfile_ecosystem = _lockfile_ecosystem(lockfile_path.name)
         direct_target_names = (
             direct_target_names_by_ecosystem.get(lockfile_ecosystem, all_direct_target_names)
@@ -1788,49 +2325,34 @@ def _transitive_lockfile_results(
         if lockfile_text is None:
             continue
         dependency_entries: list[tuple[str, str, str, bool]] = []
-        parse_deadline = time.monotonic() + _LOCKFILE_PARSE_BUDGET_SECONDS
-        try:
-            if lockfile_path.name == "package-lock.json":
-                dependency_entries = [
-                    (
-                        dependency_path,
-                        package_name,
-                        version,
-                        dependency_path in direct_target_names,
-                    )
-                    for dependency_path, package_name, version, _direct in _package_lock_entries(
-                        lockfile_text, deadline=parse_deadline
-                    )
-                ]
-            else:
-                dependency_map = _safe_dependency_map_for_path(
-                    str(lockfile_path.name),
-                    lockfile_text,
-                    deadline=parse_deadline,
+        parse_result = _parse_lockfile_text_result(lockfile_path.name, lockfile_text)
+        if not parse_result.complete:
+            results.append(
+                _incomplete_lockfile_package_result(
+                    target=(direct_targets[0] if direct_targets else incomplete_lockfile_fallback_target(parse_result)),
+                    parse_result=parse_result,
                 )
-                for dependency_path, version in dependency_map.items():
-                    normalized_dependency_path = dependency_path.strip("/")
-                    if not normalized_dependency_path:
-                        continue
-                    package_name = _dependency_package_name(normalized_dependency_path)
-                    if package_name is None:
-                        continue
-                    dependency_entries.append(
-                        (
-                            dependency_path,
-                            package_name,
-                            version,
-                            normalized_dependency_path in direct_target_names,
-                        )
-                    )
-        except _DeadlineExceededError:
-            timeout_warning = _transitive_lockfile_timeout_warning(
-                targets=direct_targets,
-                lockfile_name=lockfile_path.name,
             )
-            if timeout_warning is not None:
-                results.append(timeout_warning)
             continue
+        for entry in parse_result.entries:
+            normalized_dependency_path = entry.dependency_path.strip("/")
+            if not normalized_dependency_path:
+                continue
+            package_name = (
+                entry.package_name
+                if lockfile_path.name == "package-lock.json"
+                else _dependency_package_name(normalized_dependency_path)
+            )
+            if package_name is None:
+                continue
+            dependency_entries.append(
+                (
+                    entry.dependency_path,
+                    package_name,
+                    entry.version,
+                    normalized_dependency_path in direct_target_names,
+                )
+            )
         for dependency_path, package_name, version, direct in dependency_entries:
             if direct:
                 continue
@@ -1897,6 +2419,7 @@ def _transitive_lockfile_results(
             downgraded_low_confidence = (
                 decision == "warn" and _normalize_bundle_action(package_match.default_action) == "block"
             )
+            package_label = _bundle_package_label(package_match, version=version)
             results.append(
                 {
                     "decision": decision,
@@ -1918,11 +2441,14 @@ def _transitive_lockfile_results(
                             else "transitive_lockfile_match",
                             "message": (
                                 (
-                                    "Existing lockfile includes transitive dependency path "
+                                    f"Existing lockfile includes {package_label} at transitive dependency path "
                                     f"{dependency_path} with lower-confidence risk signals."
                                 )
                                 if downgraded_low_confidence
-                                else f"Existing lockfile already includes vulnerable dependency path {dependency_path}."
+                                else (
+                                    f"Existing lockfile already includes vulnerable {package_label} "
+                                    f"at dependency path {dependency_path}."
+                                )
                             ),
                             "severity": package_match.normalized_severity,
                             "source": "lockfile",
@@ -1956,19 +2482,29 @@ def _is_bundle_stale(bundle_response: SupplyChainBundleResponse, *, now_timestam
 
 def _bundle_package_index(
     bundle_response: SupplyChainBundleResponse,
-) -> dict[tuple[str, str, str], SupplyChainBundlePackage]:
-    index: dict[tuple[str, str, str], SupplyChainBundlePackage] = {}
+) -> dict[CanonicalPackageIdentity, SupplyChainBundlePackage]:
+    index: dict[CanonicalPackageIdentity, SupplyChainBundlePackage] = {}
     for package in bundle_response.bundle.packages:
-        normalized_name = _normalize_package_name(package.ecosystem, package.name)
-        index[(package.ecosystem, normalized_name, package.version)] = package
-        if package.namespace is not None:
-            qualified_name = _normalize_package_name(package.ecosystem, f"{package.namespace}/{package.name}")
-            index[(package.ecosystem, qualified_name, package.version)] = package
+        try:
+            identity = canonical_package_identity(
+                ecosystem=package.ecosystem,
+                namespace=package.namespace,
+                name=package.name,
+                version=package.version,
+            )
+        except PackageIdentityError as error:
+            raise SupplyChainBundleMalformedError(f"Invalid package identity: {error}") from error
+        existing = index.get(identity)
+        if existing is not None and existing != package:
+            raise SupplyChainBundleMalformedError(
+                f"Conflicting package records for canonical identity {identity.display}"
+            )
+        index.setdefault(identity, package)
     return index
 
 
 def _bundle_package_from_index(
-    index: dict[tuple[str, str, str], SupplyChainBundlePackage],
+    index: dict[CanonicalPackageIdentity, SupplyChainBundlePackage],
     *,
     package_name: str,
     package_version: str,
@@ -1976,27 +2512,15 @@ def _bundle_package_from_index(
 ) -> SupplyChainBundlePackage | None:
     if ecosystem is None:
         return None
-    normalized_name = _normalize_package_name(ecosystem, package_name)
-    return index.get((ecosystem, normalized_name, package_version))
-
-
-def _transitive_lockfile_timeout_warning(
-    *,
-    targets: tuple[dict[str, object], ...],
-    lockfile_name: str,
-) -> dict[str, object] | None:
-    if not targets:
+    try:
+        identity = parse_package_identity(
+            ecosystem=ecosystem,
+            package_name=package_name,
+            version=package_version,
+        )
+    except PackageIdentityError:
         return None
-    return _heuristic_package_result(
-        target=targets[0],
-        decision="warn",
-        code="transitive_lockfile_timeout",
-        message=(
-            f"Guard only partially scanned {lockfile_name} before the resolver deadline; "
-            "transitive dependency results may be incomplete."
-        ),
-        severity="unknown",
-    )
+    return index.get(identity)
 
 
 def _parse_evaluation_timestamp(now_value: str) -> float | None:
@@ -2051,6 +2575,9 @@ def _bundle_package_result(
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
         "redactedCommand": _optional_string(target.get("redacted_command")),
         "alias": _optional_string(target.get("alias")),
+        "sourceIdentity": _optional_string(target.get("source_identity")),
+        "sourceRepository": _optional_string(target.get("source_repository")),
+        "sourceRevisionKind": _optional_string(target.get("source_revision_kind")),
         "relatedAdvisoryIds": list(package.related_advisory_ids),
         "reasons": (
             {
@@ -2262,6 +2789,7 @@ def _fallback_package_results(
     artifact: GuardArtifact,
     workspace_dir: Path | None,
     fail_closed_unidentified: bool = False,
+    verify_registry_identity: bool = False,
 ) -> tuple[dict[str, object], ...]:
     bun_fallback_packages = _bun_lockfile_binary_fallback_packages(
         targets=targets,
@@ -2278,9 +2806,16 @@ def _fallback_package_results(
             target,
             fail_closed_unidentified=fail_closed_unidentified,
             identity_resolved=(
-                _optional_string(target.get("ecosystem")) == "npm"
-                and "--ignore-scripts" in flags
-                and _lockfile_target_key(target) in lockfile_versions
+                (
+                    _optional_string(target.get("ecosystem")) == "npm"
+                    and "--ignore-scripts" in flags
+                    and _lockfile_target_key(target) in lockfile_versions
+                )
+                or (
+                    verify_registry_identity
+                    and (requested_range := _optional_string(target.get("range"))) is not None
+                    and _registry_resolved_target_version(target=target, requested_range=requested_range) is not None
+                )
             ),
         )
         for target in targets
@@ -2362,7 +2897,10 @@ def _local_package_manifest_result(
     manifest_target = dict(target)
     manifest_package_name = _manifest_package_name(manifest_text)
     if manifest_package_name is not None:
-        namespace, name = _split_namespace_name(manifest_package_name)
+        namespace, name = _split_namespace_name(
+            manifest_package_name,
+            ecosystem=_optional_string(target.get("ecosystem")) or "npm",
+        )
         manifest_target["namespace"] = namespace
         manifest_target["name"] = name
     if _artifact_has_flag(artifact, "--ignore-scripts"):
@@ -2390,7 +2928,8 @@ def _local_package_manifest_path(target: dict[str, object], workspace_dir: Path 
     source_url = _optional_string(target.get("source_url"))
     if source_url is not None and source_url.startswith("file:"):
         raw_spec = source_url.partition("file:")[2]
-    if raw_spec is None or raw_spec.startswith(("http://", "https://", "git+", "github:", "gitlab:", "bitbucket:")):
+    source_spec = _npm_source_spec(raw_spec, ecosystem="npm")
+    if raw_spec is None or (source_spec is not None and source_spec.source_kind != "local"):
         return None
     if raw_spec.startswith("file:"):
         raw_spec = raw_spec.partition("file:")[2]
@@ -2621,6 +3160,9 @@ def _heuristic_package_result(
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
         "redactedCommand": _optional_string(target.get("redacted_command")),
         "alias": _optional_string(target.get("alias")),
+        "sourceIdentity": _optional_string(target.get("source_identity")),
+        "sourceRepository": _optional_string(target.get("source_repository")),
+        "sourceRevisionKind": _optional_string(target.get("source_revision_kind")),
         "reasons": (
             {
                 "code": code,
@@ -2708,202 +3250,199 @@ def _go_mod_replace_map(text: str) -> dict[str, str]:
 
 
 def _is_git_source_url(source_url: str) -> bool:
-    normalized = source_url.lower()
-    if normalized.startswith(("git+", "github:", "gitlab:", "bitbucket:")):
-        return True
-    parsed = urllib.parse.urlsplit(source_url)
-    if (
-        parsed.scheme.lower() in {"http", "https"}
-        and parsed.hostname is not None
-        and parsed.hostname.lower() in {"github.com", "gitlab.com", "bitbucket.org"}
-    ):
-        path_parts = [part for part in parsed.path.split("/") if part]
-        return len(path_parts) >= 2
-    return (
-        "/" in source_url
-        and not normalized.startswith(("http://", "https://"))
-        and ":" not in source_url
-        and not source_url.startswith(("@", "./", "../", "/"))
-    )
+    source = parse_npm_source_spec(source_url)
+    return source is not None and source.is_git
 
 
 def _is_external_https_tarball_source(source_url: str) -> bool:
-    parsed = urllib.parse.urlsplit(source_url)
-    normalized_path = parsed.path.lower()
-    hostname = parsed.hostname.lower() if parsed.hostname is not None else ""
-    return (
-        parsed.scheme.lower() == "https"
-        and normalized_path.endswith((".tgz", ".tar.gz", ".tar"))
-        and hostname != "registry.npmjs.org"
+    return is_external_https_archive_source(source_url)
+
+
+def _target_is_external_https_archive(target: dict[str, object]) -> bool:
+    ecosystem = (_optional_string(target.get("ecosystem")) or "").lower()
+    source_url = _optional_string(target.get("source_url"))
+    source_spec = _npm_source_spec(source_url, ecosystem=ecosystem)
+    return bool(
+        ecosystem in {"npm", "pypi"}
+        and source_url is not None
+        and (source_spec is None or not source_spec.is_git)
+        and _is_external_https_tarball_source(source_url)
     )
+
+
+def _target_requires_npm_source_review(target: dict[str, object]) -> bool:
+    return (_optional_string(target.get("ecosystem")) or "").lower() == "npm" and _optional_string(
+        target.get("source_kind")
+    ) in {"git", "invalid", "local", "url"}
 
 
 def _external_tarball_dependency_result(
     target: dict[str, object],
     *,
-    store: GuardStore,
-    workspace_dir: Path | None,
-) -> dict[str, object]:
+    network_authorized: bool,
+    retain_download: bool,
+    request_deadline: float | None = None,
+) -> tuple[dict[str, object], RestrictedArchiveDownload | None]:
     source_url = _optional_string(target.get("source_url"))
     if source_url is None:
-        return _heuristic_package_result(
-            target=target,
-            decision="ask",
-            code="external_tarball_source",
-            message="External tarball source requires review before install.",
-            severity="medium",
-        )
-    scan = _scan_external_tarball(source_url)
-    if scan is None:
-        fail_closed_decision = _external_tarball_scan_failure_decision(store=store, workspace_dir=workspace_dir)
-        if fail_closed_decision != "block":
-            return _heuristic_package_result(
+        return (
+            _heuristic_package_result(
                 target=target,
                 decision="ask",
                 code="external_tarball_source",
                 message="External tarball source requires review before install.",
                 severity="medium",
-            )
-        return _heuristic_package_result(
-            target=target,
-            decision="block",
-            code="external_tarball_scan_unavailable",
-            message="Guard could not scan the external tarball source, so strict mode blocked the install.",
-            severity="high",
+            ),
+            None,
         )
-    return _heuristic_package_result(
-        target=target,
-        decision=scan["decision"],
-        code=scan["code"],
-        message=scan["message"],
-        severity=scan["severity"],
+    if target.get("external_archive_source_integrity_invalid") is True:
+        return (
+            _heuristic_package_result(
+                target=target,
+                decision="block",
+                code="external_archive_source_integrity_invalid",
+                message="External archive private source no longer matches its approved public identity.",
+                severity="high",
+            ),
+            None,
+        )
+    if canonical_external_https_archive_source(source_url) is None:
+        return (
+            _heuristic_package_result(
+                target=target,
+                decision="block",
+                code="external_archive_destination_rejected",
+                message="External archive source is not a canonical public HTTPS URL.",
+                severity="high",
+            ),
+            None,
+        )
+    if not network_authorized:
+        return (
+            _heuristic_package_result(
+                target=target,
+                decision="ask",
+                code="external_tarball_source",
+                message="External tarball source requires review before any archive download.",
+                severity="medium",
+            ),
+            None,
+        )
+    scan, retained_download = _scan_external_tarball(
+        source_url,
+        retain_download=retain_download,
+        request_deadline=request_deadline,
+    )
+    if scan is None:
+        return (
+            _heuristic_package_result(
+                target=target,
+                decision="block",
+                code="external_archive_inspection_incomplete",
+                message="Guard could not complete restricted download and offline archive inspection.",
+                severity="high",
+            ),
+            None,
+        )
+    return (
+        _heuristic_package_result(
+            target=target,
+            decision=scan["decision"],
+            code=scan["code"],
+            message=scan["message"],
+            severity=scan["severity"],
+        ),
+        retained_download,
     )
 
 
-def _scan_external_tarball(source_url: str) -> dict[str, str] | None:
-    archive_bytes = _download_external_tarball(source_url)
-    if archive_bytes is None:
-        return None
-    if len(archive_bytes) > _TARBALL_SCAN_MAX_BYTES:
-        return {
-            "decision": "block",
-            "code": "tarball_size_limit",
-            "message": "External tarball exceeded Guard scan size limits.",
-            "severity": "high",
-        }
-    return _scan_tarball_archive_bytes(archive_bytes)
-
-
-def _download_external_tarball(source_url: str) -> bytes | None:
-    request = urllib.request.Request(source_url, method="GET")
+def _scan_external_tarball(
+    source_url: str,
+    *,
+    retain_download: bool = False,
+    request_deadline: float | None = None,
+) -> tuple[dict[str, str] | None, RestrictedArchiveDownload | None]:
+    download_timeout = _TARBALL_SCAN_TIMEOUT_SECONDS
+    if request_deadline is not None:
+        remaining = request_deadline - time.monotonic()
+        if remaining <= 0:
+            return _external_archive_request_timeout_result(), None
+        download_timeout = min(download_timeout, remaining)
+    downloaded = _download_external_tarball(source_url, timeout_seconds=download_timeout)
+    if isinstance(downloaded, RestrictedArchiveFailure):
+        return (
+            {
+                "decision": "block",
+                "code": downloaded.code,
+                "message": downloaded.message,
+                "severity": "high",
+            },
+            None,
+        )
+    if not isinstance(downloaded, RestrictedArchiveDownload):
+        return None, None
+    retain_blob = False
     try:
-        with managed_urlopen(request, timeout=_TARBALL_SCAN_TIMEOUT_SECONDS) as response:
-            payload = response.read(_TARBALL_SCAN_MAX_BYTES + 1)
-    except OSError:
-        return None
-    return payload
-
-
-def _scan_tarball_archive_bytes(archive_bytes: bytes) -> dict[str, str] | None:
-    try:
-        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:*") as archive:
-            member_count = 0
-            for member in archive:
-                if member_count >= _TARBALL_SCAN_MAX_FILES:
-                    return {
-                        "decision": "block",
-                        "code": "tarball_file_count_limit",
-                        "message": "External tarball exceeded Guard file-count limits.",
-                        "severity": "high",
-                    }
-                member_count += 1
-                if _tarball_member_is_unsafe(member):
-                    return {
-                        "decision": "block",
-                        "code": "tarball_zip_slip",
-                        "message": "External tarball contains unsafe archive paths.",
-                        "severity": "high",
-                    }
-                if not member.isfile():
-                    continue
-                if not member.name.endswith("package.json"):
-                    continue
-                extracted = archive.extractfile(member)
-                if extracted is None:
-                    continue
-                package_json = extracted.read(_TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES + 1)
-                if len(package_json) > _TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES:
-                    return {
-                        "decision": "block",
-                        "code": "tarball_package_json_limit",
-                        "message": "External tarball package manifest exceeded Guard scan limits.",
-                        "severity": "high",
-                    }
-                install_script_risk = _package_json_install_script_risk(package_json)
-                if install_script_risk is not None:
-                    return {
-                        "decision": "block",
-                        "code": install_script_risk["code"],
-                        "message": install_script_risk["message"],
-                        "severity": "high",
-                    }
-    except (tarfile.TarError, OSError, UnicodeDecodeError, ValueError):
-        return None
-    return None
-
-
-def _tarball_member_is_unsafe(member: tarfile.TarInfo) -> bool:
-    normalized_name = posixpath.normpath(member.name)
-    if member.name.startswith(("/", "\\")):
-        return True
-    if normalized_name in {"..", "."} or normalized_name.startswith("../"):
-        return True
-    if ":" in normalized_name.split("/", 1)[0]:
-        return True
-    if member.issym() or member.islnk():
-        link_target = posixpath.normpath(member.linkname or "")
-        if link_target.startswith("/") or link_target.startswith("../") or link_target == "..":
-            return True
-    return False
-
-
-def _package_json_install_script_risk(payload: bytes) -> dict[str, str] | None:
-    try:
-        parsed = json.loads(payload.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    scripts = parsed.get("scripts")
-    if not isinstance(scripts, dict):
-        return None
-    for key in ("preinstall", "install", "postinstall", "prepare"):
-        value = scripts.get(key)
-        if isinstance(value, str) and value.strip():
-            normalized = value.lower()
-            touches_credentials = bool(
-                re.search(
-                    r"\b(?:npm_token|node_auth_token|_authtoken|pypi_token)\b|\.npmrc|\.pypirc",
-                    normalized,
-                )
+        inspection_timeout = _TARBALL_SCAN_TIMEOUT_SECONDS
+        if request_deadline is not None:
+            # The inspector parent reserves a 0.5s termination grace after its
+            # child's own deadline; include that grace in the request budget.
+            remaining = request_deadline - time.monotonic() - 0.5
+            if remaining <= 0:
+                return _external_archive_request_timeout_result(), None
+            inspection_timeout = min(inspection_timeout, remaining)
+        inspection = inspect_archive_offline(
+            downloaded.path,
+            expected_sha256=downloaded.sha256,
+            timeout_seconds=inspection_timeout,
+            max_archive_bytes=_TARBALL_SCAN_MAX_BYTES,
+            max_files=_TARBALL_SCAN_MAX_FILES,
+            max_package_json_bytes=_TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES,
+        )
+        if inspection.status != "clean":
+            return (
+                {
+                    "decision": "block",
+                    "code": inspection.code,
+                    "message": inspection.message,
+                    "severity": inspection.severity,
+                },
+                None,
             )
-            exfiltrates = bool(
-                re.search(
-                    r"\b(?:curl|wget|axios|urllib)\b|\bhttps?\.request\b|\bfetch\s*\(|\brequests\.",
-                    normalized,
-                )
-            )
-            if touches_credentials and exfiltrates:
-                return {
-                    "code": "credential_theft_install_script",
-                    "message": (
-                        "External tarball install script attempts to read local package-manager credentials "
-                        "and exfiltrate them."
-                    ),
-                }
-            return {
-                "code": "tarball_install_script",
-                "message": "External tarball declares install-time scripts and was blocked.",
-            }
-    return None
+        retain_blob = retain_download
+        return (
+            {
+                "decision": "ask",
+                "code": "external_tarball_source",
+                "message": "External tarball source requires review before any archive download.",
+                "severity": "medium",
+            },
+            downloaded if retain_blob else None,
+        )
+    finally:
+        if not retain_blob:
+            downloaded.cleanup()
+
+
+def _external_archive_request_timeout_result() -> dict[str, str]:
+    return {
+        "decision": "block",
+        "code": "external_archive_request_timeout",
+        "message": "External archive request exceeded Guard's aggregate time limit.",
+        "severity": "high",
+    }
+
+
+def _download_external_tarball(
+    source_url: str,
+    *,
+    timeout_seconds: float = _TARBALL_SCAN_TIMEOUT_SECONDS,
+) -> RestrictedArchiveDownloadResult:
+    return download_restricted_archive(
+        source_url,
+        max_bytes=_TARBALL_SCAN_MAX_BYTES,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def _lockfile_dependency_versions(
@@ -2926,11 +3465,16 @@ def _lockfile_dependency_versions(
         lockfile_path = resolve_path_within_workspace(workspace_dir, str(relative_path))
         if lockfile_path is None or not lockfile_path.exists():
             continue
+        if lockfile_path.name.lower() == "bun.lockb":
+            continue
         lockfile_text = read_text_within_workspace(workspace_dir, str(relative_path))
         if lockfile_text is None:
             continue
+        parse_result = _parse_lockfile_text_result(lockfile_path.name, lockfile_text)
+        if not parse_result.complete:
+            continue
         if lockfile_path.name == "package-lock.json":
-            versions.update(_package_lock_target_versions(lockfile_text, targets))
+            versions.update(_package_lock_target_versions_from_entries(parse_result, targets))
             continue
         if lockfile_path.name == "pnpm-lock.yaml":
             versions.update(_pnpm_lock_target_versions(lockfile_text, targets))
@@ -2939,7 +3483,7 @@ def _lockfile_dependency_versions(
             versions.update(_yarn_lock_target_versions(lockfile_text, targets))
             continue
         if lockfile_path.name == "bun.lock":
-            versions.update(_bun_lock_target_versions(lockfile_text, targets))
+            versions.update(_bun_lock_target_versions(parse_result, targets))
             continue
         if lockfile_path.name == "Cargo.lock":
             versions.update(_cargo_lock_target_versions(lockfile_text, targets))
@@ -3054,20 +3598,26 @@ def _package_lock_target_versions(
     text: str,
     targets: tuple[dict[str, object], ...],
 ) -> dict[tuple[str, str | None], str]:
-    try:
-        entries = _package_lock_entries(text, deadline=time.monotonic() + _LOCKFILE_PARSE_BUDGET_SECONDS)
-    except _DeadlineExceededError:
+    parse_result = _parse_lockfile_text_result("package-lock.json", text)
+    if not parse_result.complete:
         return {}
+    return _package_lock_target_versions_from_entries(parse_result, targets)
+
+
+def _package_lock_target_versions_from_entries(
+    parse_result: LockfileParseResult,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
     versions: dict[tuple[str, str | None], str] = {}
     for target in targets:
         target_key = _lockfile_target_key(target)
         candidate_paths = set(_package_lock_candidate_names(target))
         normalized_name = str(target["normalized_name"])
-        for dependency_path, package_name, version, direct in entries:
-            if not direct:
+        for entry in parse_result.entries:
+            if not entry.direct:
                 continue
-            if dependency_path in candidate_paths or package_name == normalized_name:
-                versions[target_key] = version
+            if entry.dependency_path in candidate_paths or entry.package_name == normalized_name:
+                versions[target_key] = entry.version
                 break
     return versions
 
@@ -3079,7 +3629,7 @@ def _package_lock_entries(text: str, *, deadline: float | None = None) -> list[t
     if isinstance(packages, dict):
         for package_path, value in packages.items():
             if deadline is not None and time.monotonic() > deadline:
-                break
+                raise _DeadlineExceededError("deadline_exceeded")
             if not isinstance(package_path, str) or not package_path.startswith("node_modules/"):
                 continue
             version = value.get("version") if isinstance(value, dict) else None
@@ -3111,7 +3661,7 @@ def _walk_package_lock_entries(
 ) -> None:
     for package_name, value in payload.items():
         if deadline is not None and time.monotonic() > deadline:
-            return
+            raise _DeadlineExceededError("deadline_exceeded")
         if not isinstance(package_name, str) or not isinstance(value, dict):
             continue
         version = value.get("version")
@@ -3147,32 +3697,32 @@ def _cargo_lock_target_versions(
     text: str,
     targets: tuple[dict[str, object], ...],
 ) -> dict[tuple[str, str | None], str]:
-    direct_versions, _error = _safe_dependency_map_result_for_path("Cargo.lock", text, deadline=time.monotonic() + 0.2)
-    return _target_versions_from_direct_map(targets, direct_versions)
+    parse_result = _safe_dependency_map_result_for_path("Cargo.lock", text, deadline=time.monotonic() + 0.2)
+    return _target_versions_from_direct_map(targets, parse_result.dependency_map())
 
 
 def _composer_lock_target_versions(
     text: str,
     targets: tuple[dict[str, object], ...],
 ) -> dict[tuple[str, str | None], str]:
-    direct_versions, _error = _safe_dependency_map_result_for_path(
+    parse_result = _safe_dependency_map_result_for_path(
         "composer.lock",
         text,
         deadline=time.monotonic() + 0.2,
     )
-    return _target_versions_from_direct_map(targets, direct_versions)
+    return _target_versions_from_direct_map(targets, parse_result.dependency_map())
 
 
 def _gemfile_lock_target_versions(
     text: str,
     targets: tuple[dict[str, object], ...],
 ) -> dict[tuple[str, str | None], str]:
-    direct_versions, _error = _safe_dependency_map_result_for_path(
+    parse_result = _safe_dependency_map_result_for_path(
         "Gemfile.lock",
         text,
         deadline=time.monotonic() + 0.2,
     )
-    return _target_versions_from_direct_map(targets, direct_versions)
+    return _target_versions_from_direct_map(targets, parse_result.dependency_map())
 
 
 def _pnpm_lock_target_versions(
@@ -3294,25 +3844,14 @@ def _expected_yarn_selectors(target: dict[str, object]) -> tuple[str, ...]:
 
 
 def _bun_lock_target_versions(
-    text: str,
+    parse_result: LockfileParseResult,
     targets: tuple[dict[str, object], ...],
 ) -> dict[tuple[str, str | None], str]:
-    try:
-        payload = tomllib.loads(text or "")
-    except tomllib.TOMLDecodeError:
-        return {}
-    packages = payload.get("package")
-    if not isinstance(packages, list):
-        return {}
     versions_by_name: dict[str, list[str]] = {}
-    for entry in packages:
-        if not isinstance(entry, dict):
-            continue
-        name = _optional_string(entry.get("name"))
-        version = _optional_string(entry.get("version"))
-        if name is None or version is None:
-            continue
-        versions_by_name.setdefault(name, []).append(version)
+    for entry in parse_result.entries:
+        candidate_versions = versions_by_name.setdefault(entry.package_name, [])
+        if entry.version not in candidate_versions:
+            candidate_versions.append(entry.version)
     versions: dict[tuple[str, str | None], str] = {}
     for target in targets:
         target_key = _lockfile_target_key(target)
@@ -3636,20 +4175,26 @@ def _bundle_package_versions(bundle_response: SupplyChainBundleResponse, target:
 
 def _bundle_package_name_matches(package: SupplyChainBundlePackage, target: dict[str, object]) -> bool:
     target_ecosystem = _optional_string(target.get("ecosystem"))
-    if target_ecosystem is not None and package.ecosystem != target_ecosystem:
+    if target_ecosystem is not None and package.ecosystem != normalize_ecosystem(target_ecosystem):
         return False
-    full_name = (
-        _normalize_package_name(package.ecosystem, f"{package.namespace}/{package.name}")
-        if package.namespace is not None
-        else _normalize_package_name(package.ecosystem, package.name)
-    )
-    target_name = str(target["normalized_name"])
-    target_namespace = _optional_string(target.get("namespace"))
-    if target_namespace is not None:
-        return target_name == full_name
-    if package.namespace is not None:
+    try:
+        # Bundle ingestion has already canonicalized package fields; the target
+        # remains case-sensitive for ecosystems such as Go.
+        package_identity = canonical_package_identity(
+            ecosystem=package.ecosystem,
+            namespace=package.namespace,
+            name=package.name,
+            version="*",
+        )
+        target_identity = canonical_package_identity(
+            ecosystem=target_ecosystem or package.ecosystem,
+            namespace=_optional_string(target.get("namespace")),
+            name=str(target["name"]),
+            version="*",
+        )
+    except PackageIdentityError:
         return False
-    return target_name == _normalize_package_name(package.ecosystem, package.name)
+    return package_identity == target_identity
 
 
 def _recommended_fix_allow_package_result(
@@ -3697,31 +4242,32 @@ def _recommended_fix_allow_package_result(
 def _source_url_from_specifier(specifier: str | None) -> str | None:
     if specifier is None:
         return None
-    if "://" in specifier or specifier.startswith(("git+", "github:", "gitlab:", "bitbucket:", "file:")):
+    if parse_npm_source_spec(specifier) is not None:
+        return specifier
+    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", specifier) is not None or specifier.lower().startswith(
+        ("http:", "https:", "git+", "github:", "gitlab:", "bitbucket:", "file:")
+    ):
         return specifier
     return None
 
 
 def _source_url_from_raw_spec(raw_spec: str) -> str | None:
-    if raw_spec.startswith("@") and "@" in raw_spec[1:]:
-        candidate = raw_spec.rsplit("@", 1)[-1]
-    elif (
-        "@" in raw_spec
-        and not raw_spec.startswith("http://")
-        and not raw_spec.startswith("https://")
-        and not raw_spec.startswith("git+")
+    separator = _NAMED_SOURCE_SEPARATOR_RE.search(raw_spec)
+    candidate = raw_spec[separator.end() :] if separator is not None else raw_spec
+    if "://" in candidate or candidate.lower().startswith(
+        ("http:", "https:", "git+", "github:", "gitlab:", "bitbucket:", "file:")
     ):
-        candidate = raw_spec.split("@", 1)[1]
-    else:
-        candidate = raw_spec
-    if "://" in candidate or candidate.startswith(("git+", "github:", "gitlab:", "bitbucket:", "file:")):
         return candidate
+    if _source_url_from_specifier(raw_spec) is not None:
+        return raw_spec
+    for index, character in enumerate(raw_spec):
+        if character == "@" and index > 0 and parse_npm_source_spec(raw_spec[index + 1 :]) is not None:
+            return raw_spec[index + 1 :]
     return None
 
 
 def _safe_dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[str, str]:
-    dependency_map, _error = _safe_dependency_map_result_for_path(path, text, deadline=deadline)
-    return dependency_map
+    return _safe_dependency_map_result_for_path(path, text, deadline=deadline).dependency_map()
 
 
 def _safe_dependency_map_result_for_path(
@@ -3729,17 +4275,16 @@ def _safe_dependency_map_result_for_path(
     text: str,
     *,
     deadline: float,
-) -> tuple[dict[str, str], str | None]:
-    try:
-        return _dependency_map_for_path(path, text, deadline=deadline), None
-    except (
-        _DeadlineExceededError,
-        ET.ParseError,
-        UnicodeDecodeError,
-        ValueError,
-        json.JSONDecodeError,
-    ):
-        return {}, "parse_error"
+) -> LockfileParseResult:
+    budget_ms = max(0.0, (deadline - time.monotonic()) * 1000)
+    return parse_lockfile_text(
+        path,
+        text,
+        deadline=deadline,
+        budget_ms=budget_ms,
+        dependency_parser=_dependency_map_for_path,
+        package_lock_parser=_package_lock_entries,
+    )
 
 
 def _lockfile_parse_warning_result(
@@ -3758,28 +4303,24 @@ def _lockfile_parse_warning_result(
         lockfile_path = resolve_path_within_workspace(workspace_dir, str(relative_path))
         if lockfile_path is None or not lockfile_path.exists():
             continue
+        if lockfile_path.name.lower() == "bun.lockb":
+            continue
         lockfile_ecosystem = _lockfile_ecosystem(lockfile_path.name)
         if lockfile_ecosystem is not None and lockfile_ecosystem != target_ecosystem:
             continue
         lockfile_text = read_text_within_workspace(workspace_dir, str(relative_path))
         if lockfile_text is None:
             continue
-        _dependency_map, error = _safe_dependency_map_result_for_path(
+        parse_result = _safe_dependency_map_result_for_path(
             lockfile_path.name,
             lockfile_text,
             deadline=time.monotonic() + 0.2,
         )
-        if error is None:
+        if parse_result.complete:
             continue
-        return _heuristic_package_result(
+        return _incomplete_lockfile_package_result(
             target=target,
-            decision="ask",
-            code="lockfile_parse_error",
-            message=(
-                "Guard could not parse the existing lockfile, so this range-based package request needs review. "
-                "Repair the lockfile, then retry."
-            ),
-            severity="high",
+            parse_result=parse_result,
         )
     return None
 
@@ -3851,8 +4392,9 @@ def _matching_policy_rule(
             }
             if selector not in candidates:
                 continue
-        if rule.version_range_selector is not None and not _selector_matches_version(
-            rule.version_range_selector, target
+        if rule.version_range_selector is not None and not policy_selector_matches_target(
+            rule.version_range_selector,
+            target,
         ):
             continue
         if rule.severity_threshold is not None:
@@ -3862,24 +4404,6 @@ def _matching_policy_rule(
                 continue
         return rule
     return None
-
-
-def _selector_matches_version(selector: str, target: dict[str, object]) -> bool:
-    version = _optional_string(target.get("version"))
-    requested_range = _optional_string(target.get("range"))
-    if requested_range is not None and requested_range == selector:
-        return True
-    ecosystem = _optional_string(target.get("ecosystem")) or "npm"
-    if version is None:
-        return False
-    if selector in {version, f"={version}", f"=={version}"}:
-        return True
-    if ecosystem == "npm" and version_matches_js_selector(version, selector):
-        return True
-    try:
-        return Version(version) in SpecifierSet(selector)
-    except (InvalidSpecifier, InvalidVersion):
-        return False
 
 
 def _bundle_package(
@@ -3967,24 +4491,29 @@ def _string_tuple(value: object) -> tuple[str, ...]:
     return tuple(item for item in value if isinstance(item, str))
 
 
-def _split_namespace_name(value: str) -> tuple[str | None, str]:
-    if value.startswith("@") and "/" in value:
-        namespace, name = value.split("/", 1)
-        return namespace, name
-    return None, value
+def _split_namespace_name(value: str, *, ecosystem: str) -> tuple[str | None, str]:
+    try:
+        identity = parse_package_identity(ecosystem=ecosystem, package_name=value, version="*")
+    except PackageIdentityError:
+        return None, value
+    return identity.namespace, identity.name
 
 
 def _exact_version(value: str | None) -> str | None:
     normalized = _optional_string(value)
     if normalized is None:
         return None
-    if "://" in normalized or normalized.startswith(("git+", "github:", "gitlab:", "bitbucket:", "file:")):
+    if parse_npm_source_spec(normalized) is not None:
         return None
     if normalized.startswith(("^", "~", "<", ">", "!", "*")):
         return None
     if any(token in normalized for token in ("||", " - ", ",")):
         return None
     return normalized
+
+
+def _npm_source_spec(value: str | None, *, ecosystem: str) -> NpmSourceSpec | None:
+    return parse_npm_source_spec(value) if ecosystem.lower() == "npm" else None
 
 
 def _default_registry_range(ecosystem: str) -> str | None:
@@ -4062,10 +4591,10 @@ def _package_display_name(package: dict[str, object]) -> str:
 
 
 def _normalize_package_name(ecosystem: str, package_name: str) -> str:
-    normalized = package_name.strip().lower()
-    if ecosystem == "pypi":
-        return re.sub(r"[-_.]+", "-", normalized)
-    return normalized
+    try:
+        return normalize_qualified_package_name(ecosystem, package_name)
+    except PackageIdentityError:
+        return package_name.strip()
 
 
 def _target_candidate_names(target: dict[str, object]) -> tuple[str, ...]:
@@ -4124,14 +4653,45 @@ def _should_record_package(package: dict[str, object], decision: str) -> bool:
 
 
 def _evidence_id(package_intent_hash: str, package: dict[str, object]) -> str:
-    package_name = _package_display_name(package)
     decision = str(package.get("decision") or "monitor")
-    resolved_version = _optional_string(package.get("resolvedVersion")) or _optional_string(
-        package.get("requestedVersion")
-    )
     dependency_path = _optional_string(package.get("dependencyPath")) or "direct"
-    identity = f"{package_intent_hash}:{package_name}:{resolved_version}:{dependency_path}:{decision}"
-    return f"evidence-{stable_digest_hex(identity.encode(), length=16)}"
+    identity_payload = {
+        "decision": decision,
+        "dependency_path": dependency_path,
+        "package_identity": _result_package_identity(package),
+        "package_intent_hash": package_intent_hash,
+    }
+    encoded = json.dumps(identity_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return f"evidence-{stable_digest_hex(encoded, length=16)}"
+
+
+def _result_package_identity(package: dict[str, object]) -> tuple[str, str, str, str, str, str]:
+    ecosystem = _optional_string(package.get("ecosystem"))
+    name = _optional_string(package.get("name")) or "package"
+    namespace = _optional_string(package.get("namespace"))
+    version = _optional_string(package.get("resolvedVersion")) or _optional_string(package.get("requestedVersion"))
+    if ecosystem is not None:
+        try:
+            identity = canonical_package_identity(
+                ecosystem=ecosystem,
+                namespace=namespace,
+                name=name,
+                version=version or "*",
+            )
+            return (
+                "canonical",
+                identity.ecosystem,
+                identity.namespace or "",
+                identity.name,
+                identity.version,
+                "",
+            )
+        except PackageIdentityError:
+            pass
+    opaque_sha256 = stable_digest_hex(
+        json.dumps(package, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    )
+    return ("opaque", ecosystem or "", namespace or "", name, version or "", opaque_sha256)
 
 
 def _with_additional_reason(
@@ -4207,7 +4767,7 @@ def _bundle_reason_message(
     reason: str,
     stale: bool,
 ) -> str:
-    package_label = f"{package.name}@{package.version}"
+    package_label = _bundle_package_label(package)
     if stale:
         if decision == "block":
             return f"Cached bundle is stale, but Guard still blocked {package_label} from advisory intelligence."
@@ -4221,3 +4781,8 @@ def _bundle_reason_message(
     if reason == "maintainer_compromise":
         return f"Cached bundle flagged {package_label} for probable maintainer compromise."
     return f"Cached bundle matched {package_label}."
+
+
+def _bundle_package_label(package: SupplyChainBundlePackage, *, version: str | None = None) -> str:
+    package_name = f"{package.namespace}/{package.name}" if package.namespace is not None else package.name
+    return f"{package_name}@{version or package.version}"

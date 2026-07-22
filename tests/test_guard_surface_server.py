@@ -92,6 +92,50 @@ def _decode_dashboard_session_claims(token: str) -> dict[str, object]:
 
 
 class TestGuardSurfaceServer:
+    def test_protection_repair_requires_auth_and_repairs_integrity(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+        monkeypatch.setattr(
+            GuardStore,
+            "setup_policy_integrity",
+            lambda self, **_kwargs: {"mode": "protected"},
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        unauthenticated = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/protection/repair",
+            data=json.dumps({"check_id": "rule_packs"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        authenticated = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/protection/repair",
+            data=json.dumps({"check_id": "rule_packs"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "X-Guard-Token": daemon._server.auth_token,
+            },
+            method="POST",
+        )
+        try:
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(unauthenticated, timeout=5)
+            with urllib.request.urlopen(authenticated, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert error.value.code == 401
+        assert payload == {
+            "repaired": True,
+            "check_ids": ["policy_engine", "rule_packs", "tamper_checks"],
+            "message": "Integrity protection restored.",
+        }
+
     def test_local_dashboard_session_preserves_reserved_claims(self) -> None:
         token = build_local_dashboard_session_token(
             auth_token="daemon-auth-token",
@@ -1060,8 +1104,10 @@ class TestGuardSurfaceServer:
         finally:
             daemon.stop()
 
-        assert payload["headline_state"] == "protected"
-        assert payload["headline_label"] == "Protected"
+        assert payload["headline_state"] == "degraded"
+        assert payload["headline_label"] == "Degraded"
+        assert payload["protection_health"]["state"] == "degraded"
+        assert "no_managed_harness" in payload["protection_health"]["reason_codes"]
         assert payload["cloud_state"] == "paired_active"
         assert payload["cloud_state_label"] == "Connected"
         assert payload["cloud_pairing_state"] == {
@@ -1361,12 +1407,13 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         assert payload["cloud_state"] == "paired_waiting"
-        assert "stays locally protected" in payload["cloud_state_detail"]
+        assert "Local Guard remains available" in payload["cloud_state_detail"]
+        assert "protected" not in payload["cloud_state_detail"].lower()
         assert payload["cloud_pairing_state"]["detail"] == payload["cloud_state_detail"]
         assert payload["proof_status"]["state"] == "stalled"
-        assert payload["proof_status"]["detail"].startswith("Local protection stays active.")
+        assert payload["proof_status"]["detail"].startswith("Local Guard remains available.")
         assert payload["cloud_sync_health"]["state"] == "failed"
-        assert payload["cloud_sync_health"]["detail"].startswith("Local protection is active.")
+        assert payload["cloud_sync_health"]["detail"].startswith("Local Guard remains available.")
 
     def test_guard_daemon_runtime_snapshot_reports_post_sync_reauth_as_local_only(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")

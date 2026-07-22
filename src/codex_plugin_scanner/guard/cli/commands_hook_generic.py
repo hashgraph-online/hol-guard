@@ -69,8 +69,18 @@ from ..runtime.approval_reuse import (
     ApprovalReuseValidationFailure,
     evaluate_approval_reuse,
 )
+from ..runtime.command_activity_contract import ActivityApprovalReuseStatus
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from .commands_support_codex_paths import _codex_prompt_credential_file_artifact
+from .commands_support_command_activity import (
+    command_activity_was_prompted,
+    hook_is_post_event,
+    hook_is_pre_event,
+    hook_post_succeeded,
+    record_post_hook_command_activity_best_effort,
+    record_pre_hook_command_activity_best_effort,
+)
 from .commands_support_runtime_policy import _runtime_hook_effective_policy_config
 
 # Bump when generic-hook classification or action-composition semantics change.
@@ -449,6 +459,39 @@ def _generic_hook_approval_reuse(
     return reuse, saved_present
 
 
+def _should_relax_configured_default(
+    *,
+    configured_action: GuardAction,
+    has_narrow_override: bool,
+    home_dir: Path | None,
+    payload: Mapping[str, object],
+    runtime_workspace: Path | None,
+) -> bool:
+    if has_narrow_override or configured_action not in {"review", "require-reapproval"}:
+        return False
+    event_name = _hook_event_name(dict(payload))
+    if event_name == "UserPromptSubmit":
+        prompt_text = payload.get("prompt")
+        if not isinstance(prompt_text, str) or not prompt_text.strip():
+            return False
+        if extract_prompt_requests(prompt_text):
+            return False
+        return (
+            _codex_prompt_credential_file_artifact(
+                prompt_text=prompt_text,
+                cwd=runtime_workspace,
+                config_path="<runtime>",
+            )
+            is None
+        )
+    return event_name == "PreToolUse" and is_explicitly_benign_tool_action_request(
+        payload.get("tool_name"),
+        payload.get("tool_input", payload.get("arguments")),
+        cwd=runtime_workspace,
+        home_dir=home_dir,
+    )
+
+
 def _run_hook_generic_payload(
     args: argparse.Namespace,
     *,
@@ -490,16 +533,13 @@ def _run_hook_generic_payload(
         configured_override if configured_override is not None else config.default_action,
         unknown_action="require-reapproval",
     )
-    verified_benign_default = (
-        configured_narrow_override is None
-        and configured_policy_normalization.action in {"review", "require-reapproval"}
-        and _hook_event_name(payload_map) == "PreToolUse"
-        and is_explicitly_benign_tool_action_request(
-            payload_map.get("tool_name"),
-            payload_map.get("tool_input", payload_map.get("arguments")),
-            cwd=runtime_workspace,
-            home_dir=home_dir,
-        )
+    hook_event_name = _hook_event_name(payload_map)
+    verified_benign_default = _should_relax_configured_default(
+        configured_action=configured_policy_normalization.action,
+        has_narrow_override=configured_narrow_override is not None,
+        home_dir=home_dir,
+        payload=payload_map,
+        runtime_workspace=runtime_workspace,
     )
     current_config_normalization = (
         normalize_guard_action_result("warn", unknown_action="require-reapproval")
@@ -772,7 +812,7 @@ def _run_hook_generic_payload(
                     "normalized_action": normalization.action,
                 }
             )
-    hook_event_name = _hook_event_name(payload_map) or "PreToolUse"
+    hook_event_name = hook_event_name or "PreToolUse"
     changed_capabilities = _string_list(payload_map.get("changed_capabilities"))
     if not changed_capabilities and isinstance(payload_map.get("event"), str):
         changed_capabilities = [str(payload_map["event"])]
@@ -784,6 +824,7 @@ def _run_hook_generic_payload(
     effective_action_envelope = (
         action_envelope.with_pre_execution_result(policy_action) if action_envelope is not None else None
     )
+    command_activity_receipt_id: str | None = None
     if should_record_generic_hook_receipt:
         receipt = build_receipt(
             harness=args.harness,
@@ -806,12 +847,44 @@ def _run_hook_generic_payload(
             approval_source=("inline" if _optional_string(payload_map.get("user_override")) is not None else "policy"),
         )
         store.add_receipt(receipt, action_envelope=effective_action_envelope)
+        command_activity_receipt_id = receipt.receipt_id
     _record_harness_usage_for_hook(
         store=store,
         action_envelope=effective_action_envelope,
         payload=payload_map,
         policy_action=policy_action,
     )
+    if hook_is_post_event(hook_event_name):
+        record_post_hook_command_activity_best_effort(
+            store=store,
+            guard_home=store.guard_home,
+            harness=_canonical_harness_name(args.harness),
+            event=hook_event_name,
+            payload=payload_map,
+            succeeded=hook_post_succeeded(hook_event_name, payload_map),
+        )
+    elif hook_is_pre_event(hook_event_name):
+        command_activity_reuse_status = (
+            ActivityApprovalReuseStatus(approval_reuse.status)
+            if approval_reuse.status in {item.value for item in ActivityApprovalReuseStatus}
+            else ActivityApprovalReuseStatus.NOT_APPLICABLE
+        )
+        record_pre_hook_command_activity_best_effort(
+            store=store,
+            guard_home=store.guard_home,
+            harness=_canonical_harness_name(args.harness),
+            event=hook_event_name,
+            payload=payload_map,
+            policy_action=cast(GuardAction, policy_action),
+            receipt_id=command_activity_receipt_id,
+            prompted=command_activity_was_prompted(
+                cast(GuardAction, current_policy_action),
+                command_activity_reuse_status,
+            ),
+            approval_reuse_status=command_activity_reuse_status,
+            cwd=runtime_workspace,
+            home_dir=home_dir,
+        )
     if _should_emit_copilot_hook_response(args):
         _emit_copilot_hook_response(
             policy_action=policy_action,

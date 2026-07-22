@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from functools import wraps
 from pathlib import Path
-from typing import TypeGuard
+from typing import ParamSpec, TypeGuard, TypeVar
 from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
 from .action_lattice import normalize_guard_action_result
@@ -18,9 +20,12 @@ from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
 from .approval_resolution import require_resolvable_approval_request
 from .approval_scope_support import (
+    IneligibleApprovalScopeError,
     package_request_portable_workspace_scope,
+    request_scope_contract,
+    request_scope_contract_payload,
+    resolve_request_scope_selection,
     resolve_request_workspace_scope,
-    supported_request_scopes,
 )
 from .cli.connect_flow import (
     connect_retry_refresh_race_from_reason,
@@ -52,13 +57,24 @@ from .risk import artifact_risk_signals, artifact_risk_summary
 from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
 from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT, authoritative_decision_from_artifact
+from .runtime.github_workflow_runtime import (
+    github_workflow_requires_local_once,
+    issue_github_workflow_capability_for_resolution,
+)
+from .runtime.protection_health_runtime import build_runtime_protection_health
 from .store import (
     GuardStore,
     _runtime_scoped_exact_match_key,
     browser_mcp_exact_match_context,
     runtime_tool_action_exact_match_context,
+    runtime_tool_action_portable_match_context,
 )
 from .synced_policy import synced_policy_bundle_validation
+from .temporary_mcp_approvals import (
+    TemporaryMcpGrantSelection,
+    parse_temporary_mcp_grant_selection,
+    temporary_mcp_grant_decision,
+)
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
@@ -66,6 +82,9 @@ GUARD_INBOX_URL = f"{GUARD_DASHBOARD_URL}/inbox"
 GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/protect"
 GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
 _APPROVAL_ONCE_POLICY_TTL = timedelta(minutes=15)
+_APPROVAL_RESOLUTION_LOCKS = tuple(threading.RLock() for _ in range(64))
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES = frozenset(
     {
         "file_read_request",
@@ -78,6 +97,20 @@ _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES = frozenset(
 
 class ApprovalRequestNotFoundError(ValueError):
     """Raised when an approval request ID does not exist."""
+
+
+def _serialize_approval_resolution(function: Callable[_P, _R]) -> Callable[_P, _R]:
+    @wraps(function)
+    def serialized(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+        request_id = kwargs.get("request_id")
+        if not isinstance(request_id, str):
+            raise TypeError("request_id must be provided as a string keyword argument")
+        digest = hashlib.sha256(request_id.encode("utf-8")).digest()
+        lock = _APPROVAL_RESOLUTION_LOCKS[int.from_bytes(digest[:2], "big") % len(_APPROVAL_RESOLUTION_LOCKS)]
+        with lock:
+            return function(*args, **kwargs)
+
+    return serialized
 
 
 class ApprovalRequestAlreadyResolvedError(ValueError):
@@ -415,6 +448,11 @@ def queue_blocked_approvals(
         policy_action = normalization.action
         if policy_action not in {"require-reapproval", "review"}:
             continue
+        artifact_id = str(item.get("artifact_id") or "")
+        if not artifact_id:
+            continue
+        artifact = artifacts_by_id.get(artifact_id)
+        item = _item_with_command_category(item, artifact)
         raw_action_envelope_json = item.get("action_envelope_json")
         action_envelope_json = _item_action_envelope_json(item)
         if raw_action_envelope_json is not None and action_envelope_json is None:
@@ -447,9 +485,6 @@ def queue_blocked_approvals(
                 *scanner_evidence,
                 normalization_evidence,
             )
-        artifact_id = str(item.get("artifact_id") or "")
-        if not artifact_id:
-            continue
         approval_context_hash = item.get("approval_context_hash")
         request_artifact_hash = (
             approval_context_hash
@@ -457,7 +492,6 @@ def queue_blocked_approvals(
             and parse_approval_context_token(approval_context_hash) is not None
             else str(item.get("artifact_hash") or "unknown")
         )
-        artifact = artifacts_by_id.get(artifact_id)
         request_id = uuid.uuid4().hex
         risk_summary = _item_risk_summary(item, artifact)
         launch_target = _launch_target(artifact, item)
@@ -523,8 +557,9 @@ def queue_blocked_approvals(
         if created_new_request:
             _record_created_event(store, request, timestamp)
         _notify_pending_approval(store=store, request=request)
-        request_payload = request.to_dict()
-        request_payload["allowed_scopes"] = list(supported_request_scopes(request_payload))
+        request_payload = store.get_approval_request(persisted_request_id)
+        if request_payload is None:
+            raise RuntimeError(f"Persisted approval request not found: {persisted_request_id}")
         queued.append(request_payload)
     return queued
 
@@ -547,6 +582,7 @@ def evaluation_has_terminal_policy_action(evaluation: Mapping[str, object]) -> b
     return False
 
 
+@_serialize_approval_resolution
 def apply_approval_resolution(
     *,
     store: GuardStore,
@@ -562,6 +598,10 @@ def apply_approval_resolution(
     approval_gate_grant: ApprovalGateGrant | None = None,
     approval_gate_subject: str | None = None,
     persist_policy: bool | None = None,
+    scope_contract_version: str | None = None,
+    scope_contract_digest: str | None = None,
+    mcp_grant_target: object | None = None,
+    mcp_grant_duration: object | None = None,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
     if request is None:
@@ -569,10 +609,39 @@ def apply_approval_resolution(
     if request["status"] != "pending":
         raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
     require_resolvable_approval_request(request)
-    if not _is_decision_scope(scope):
-        raise ValueError(f"Unsupported approval scope: {scope}")
-    if scope not in supported_request_scopes(request):
-        raise ValueError("unsupported_request_scope")
+    resolved_at = now or _now()
+    temporary_mcp_selection: TemporaryMcpGrantSelection | None = None
+    if (mcp_grant_target is None) != (mcp_grant_duration is None):
+        raise ValueError("incomplete_temporary_mcp_approval")
+    if mcp_grant_target is not None:
+        if action != "allow" or scope != "artifact":
+            raise ValueError("temporary_mcp_approval_requires_artifact_allow")
+        temporary_mcp_selection = parse_temporary_mcp_grant_selection(
+            request,
+            target=mcp_grant_target,
+            duration=mcp_grant_duration,
+            now=resolved_at,
+        )
+    selection = resolve_request_scope_selection(
+        request,
+        action=action,
+        requested_scope=scope,
+        contract_version=scope_contract_version,
+        contract_digest=scope_contract_digest,
+    )
+    requested_scope = selection.requested_scope
+    scope = selection.applied_scope
+    if selection.warning is not None:
+        persist_policy = None
+    elif action == "allow" and scope == "artifact" and persist_policy is True:
+        if scope_contract_version is not None:
+            raise IneligibleApprovalScopeError(
+                "saved_allow_scope_ineligible",
+                request_scope_contract(request),
+                action=action,
+                requested_scope=scope,
+            )
+        persist_policy = None
     workspace_artifact_id, workspace_artifact_hash = _workspace_policy_artifact_keys(request, scope)
     request_artifact_id = _string_or_none(request.get("artifact_id"))
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
@@ -620,7 +689,6 @@ def apply_approval_resolution(
         reason=reason,
         source="approval-gate",
     )
-    resolved_at = now or _now()
     resolved_gate_grant = require_approval_decision(
         store.guard_home,
         action=decision.action,
@@ -650,7 +718,11 @@ def apply_approval_resolution(
     elif persist_policy is None and scope == "artifact":
         once_decision = replace(
             decision,
-            expires_at=_approval_once_policy_expires_at(resolved_at),
+            expires_at=(
+                temporary_mcp_selection.expires_at
+                if temporary_mcp_selection is not None and temporary_mcp_selection.target == "exact"
+                else _approval_once_policy_expires_at(resolved_at)
+            ),
         )
         store.ensure_policy_integrity_ready_for_write(
             harness=once_decision.harness if once_decision.harness != "*" else None,
@@ -671,7 +743,27 @@ def apply_approval_resolution(
                 created_at=resolved_at,
             )
 
+    if temporary_mcp_selection is not None:
+        temporary_decision = temporary_mcp_grant_decision(
+            harness=str(request["harness"]),
+            selection=temporary_mcp_selection,
+            reason=reason,
+            artifact_id=request_artifact_id or "",
+            artifact_hash=request_artifact_hash or "",
+        )
+        store.ensure_policy_integrity_ready_for_write(
+            harness=temporary_decision.harness,
+            approval_gate_grant=resolved_gate_grant,
+            now=resolved_at,
+        )
+        store.upsert_policy(
+            temporary_decision,
+            resolved_at,
+            approval_gate_grant=resolved_gate_grant,
+        )
+
     resolution_harness = None if scope == "global" else str(request["harness"])
+    resolve_matching_scope_requests = resolve_scope_matches and not (action == "allow" and scope != "artifact")
     if return_queue_result:
         result = store.resolve_request_with_queue_result(
             request_id,
@@ -689,7 +781,7 @@ def apply_approval_resolution(
                 raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
             if isinstance(error, str) and error:
                 raise ValueError(error)
-        if resolve_scope_matches and not exact_context_allow:
+        if resolve_matching_scope_requests and not exact_context_allow:
             resolved_scope_ids = store.resolve_matching_approval_requests(
                 harness=resolution_harness,
                 scope=scope,
@@ -717,9 +809,17 @@ def apply_approval_resolution(
             persisted_rule=persisted_rule,
             local_once_fallback=local_once_fallback,
         )
+        issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
+        result.update(request_scope_contract_payload(request))
+        result["requested_scope"] = requested_scope
+        result["applied_scope"] = scope
+        if selection.warning is not None:
+            result["scope_warning"] = selection.warning
+        if temporary_mcp_selection is not None:
+            result["temporary_mcp_grant"] = _temporary_mcp_grant_result(temporary_mcp_selection)
         return result
     resolved_ids: list[str] = []
-    if resolve_scope_matches and not exact_context_allow:
+    if resolve_matching_scope_requests and not exact_context_allow:
         resolved_ids = store.resolve_matching_approval_requests(
             harness=resolution_harness,
             scope=scope,
@@ -757,7 +857,25 @@ def apply_approval_resolution(
         persisted_rule=persisted_rule,
         local_once_fallback=local_once_fallback,
     )
+    issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
+    updated.update(request_scope_contract_payload(request))
+    updated["requested_scope"] = requested_scope
+    updated["applied_scope"] = scope
+    if selection.warning is not None:
+        updated["scope_warning"] = selection.warning
+    if temporary_mcp_selection is not None:
+        updated["temporary_mcp_grant"] = _temporary_mcp_grant_result(temporary_mcp_selection)
     return updated
+
+
+def _temporary_mcp_grant_result(selection: TemporaryMcpGrantSelection) -> dict[str, object]:
+    return {
+        "target": selection.target,
+        "duration": selection.duration,
+        "expires_at": selection.expires_at,
+        "server_name": selection.eligibility.server_name,
+        "category": selection.eligibility.category,
+    }
 
 
 def _workspace_policy_artifact_keys(request: Mapping[str, object], scope: str) -> tuple[str | None, str | None]:
@@ -803,6 +921,26 @@ def _broad_runtime_exact_match_key(request: Mapping[str, object], scope: str) ->
     artifact_id = request.get("artifact_id")
     if not isinstance(artifact_id, str) or not artifact_id:
         return None
+    if request.get("artifact_type") == "tool_action_request":
+        raw_command_text = _string_or_none(request.get("raw_command_text"))
+        wrapper_chain = request.get("wrapper_chain")
+        envelope = request.get("action_envelope_json")
+        if isinstance(envelope, Mapping):
+            raw_command_text = raw_command_text or _string_or_none(envelope.get("raw_command_text"))
+            raw_command_text = raw_command_text or _string_or_none(envelope.get("command"))
+            if not isinstance(wrapper_chain, Sequence) or isinstance(wrapper_chain, str):
+                wrapper_chain = envelope.get("wrapper_chain")
+        if raw_command_text is None:
+            return None
+        context = runtime_tool_action_exact_match_context(
+            config_path=_string_or_none(request.get("config_path")),
+            source_scope=_string_or_none(request.get("source_scope")),
+            raw_command_text=raw_command_text,
+            wrapper_chain=(
+                wrapper_chain if isinstance(wrapper_chain, Sequence) and not isinstance(wrapper_chain, str) else None
+            ),
+        )
+        return _runtime_scoped_exact_match_key(artifact_id, runtime_tool_action_portable_match_context(context))
     return _runtime_scoped_exact_match_key(artifact_id)
 
 
@@ -1170,6 +1308,7 @@ def build_runtime_snapshot(
     receipt_limit: int = 25,
     active_request_id: str | None = None,
     include_items: bool = True,
+    containment_health: object = None,
 ) -> dict[str, object]:
     queue_page = store.list_pending_approval_summaries(limit=1)
     queue_items = queue_page["items"] if isinstance(queue_page["items"], list) else []
@@ -1190,15 +1329,27 @@ def build_runtime_snapshot(
         oauth_storage_health=oauth_storage_health,
     )
     trust_status = store.get_cached_policy_trust_status()
+    managed_installs = store.list_managed_installs()
+    runtime_state = store.get_runtime_state()
+    health_runtime_state = dict(runtime_state) if runtime_state is not None else None
+    if health_runtime_state is not None and containment_health is not None:
+        health_runtime_state["containment_health"] = containment_health
+    protection_health = build_runtime_protection_health(
+        store=store,
+        runtime_state=health_runtime_state,
+        managed_installs=managed_installs,
+        trust_status=trust_status,
+        now=datetime.fromisoformat(snapshot_now.replace("Z", "+00:00")),
+    )
     headline_state = _resolve_runtime_headline_state(
         pending_count=pending_count,
-        runtime_state=store.get_runtime_state(),
-        cloud_state=str(cloud_context["cloud_state"]),
+        runtime_state=runtime_state,
+        protection_state=str(protection_health["state"]),
     )
     return {
         "generated_at": snapshot_now,
         "approval_center_url": approval_center_url,
-        "runtime_state": store.get_runtime_state(),
+        "runtime_state": health_runtime_state,
         "oauth_storage_health": oauth_storage_health,
         "device": _build_runtime_device_context(store),
         "latest_connect_state": latest_connect_state,
@@ -1218,11 +1369,12 @@ def build_runtime_snapshot(
         "thread_count": threading.active_count(),
         "items": pending_requests,
         "latest_receipts": latest_receipts,
-        "managed_installs": store.list_managed_installs(),
+        "managed_installs": managed_installs,
         "cloud_command_capability": command_capability_status(store, now=snapshot_now),
         "supply_chain": build_local_supply_chain_posture(store, config, now=snapshot_now),
         **cloud_context,
         "trust_status": trust_status,
+        "protection_health": protection_health,
     }
 
 
@@ -1372,6 +1524,24 @@ def _item_action_envelope_json(item: Mapping[str, object]) -> dict[str, object] 
     return None
 
 
+def _item_with_command_category(item: dict[str, object], artifact) -> dict[str, object]:
+    envelope = _item_action_envelope_json(item)
+    if envelope is None or isinstance(envelope.get("command_category"), str):
+        return item
+    matches = artifact.metadata.get("command_rule_matches") if artifact is not None else None
+    if not isinstance(matches, list):
+        matches = item.get("command_rule_matches")
+    if not isinstance(matches, list):
+        return item
+    for match in matches:
+        if not isinstance(match, Mapping):
+            continue
+        extension_id = match.get("extension_id")
+        if isinstance(extension_id, str) and extension_id.startswith("command."):
+            return {**item, "action_envelope_json": {**envelope, "command_category": extension_id}}
+    return item
+
+
 def _item_scanner_evidence(item: dict[str, object]) -> tuple[dict[str, object], ...]:
     value = item.get("scanner_evidence")
     if not isinstance(value, list | tuple):
@@ -1395,6 +1565,8 @@ def _approval_once_policy_expires_at(resolved_at: str) -> str:
 
 
 def _should_record_local_once_replay(request: Mapping[str, object]) -> bool:
+    if github_workflow_requires_local_once(request):
+        return True
     artifact_type = request.get("artifact_type")
     if artifact_type == "package_request":
         return True
@@ -1680,7 +1852,7 @@ def _runtime_proof_status_detail(state: str) -> str:
         "sync_unavailable": "Local Guard is connected. Shared cloud sync needs a paid Guard plan.",
         "failed": "Guard Cloud sign-in on this machine needs repair. Run hol-guard connect again.",
         "stalled": (
-            "Local protection stays active. The first shared Guard Cloud proof stalled after a refresh-token race. "
+            "Local Guard remains available. The first shared Guard Cloud proof stalled after a refresh-token race. "
             "Run hol-guard connect once on this machine when you want shared proof restored."
         ),
         "pending": (
@@ -1815,7 +1987,7 @@ def _cloud_sync_health_detail(
     if state == "failed":
         if connect_retry_refresh_race:
             return (
-                "Local protection is active. The first shared Guard Cloud proof stalled after a refresh-token race. "
+                "Local Guard remains available. The first shared Guard Cloud proof stalled after a refresh-token race. "
                 "Run hol-guard connect once to mint a fresh Cloud refresh token."
             )
         if oauth_repair_required or connect_retry_required:
@@ -1827,9 +1999,12 @@ def _cloud_sync_health_detail(
             "or run hol-guard sync to try again now."
         )
     if state == "degraded":
-        return "Cloud accepted legacy sync, but v1 Guard event ingest is unavailable. Local protection stayed active."
+        return (
+            "Cloud accepted legacy sync, but v1 Guard event ingest is unavailable. "
+            "Review local protection health separately."
+        )
     if state == "disabled":
-        return "Local protection is active. Connect Cloud when you want shared team proof."
+        return "Cloud sync is disabled. Review local protection health separately or connect for shared team proof."
     if state == "stale":
         return "Cloud has not seen fresh local proof recently. Keep this runtime open or run sync again."
     if pending_events == 1:
@@ -1863,7 +2038,7 @@ def _runtime_cloud_state_detail(
         )
     if connect_retry_refresh_race:
         return (
-            "This machine stays locally protected. "
+            "Local Guard remains available. "
             "The first shared Guard Cloud proof stalled after a refresh-token race. "
             "Run hol-guard connect once when you want shared proof restored."
         )
@@ -1889,7 +2064,7 @@ def _runtime_cloud_state_detail(
             "This machine is connected to Guard Cloud. Open Home, Inbox, or Fleet in the portal "
             "to continue with shared review and proof."
         )
-    return "Guard is protecting this machine locally. Connect when you want Home, Inbox, Fleet, and shared team memory."
+    return "Guard is running on this machine. Review protection health locally or connect for shared team memory."
 
 
 def _resolve_guard_urls(sync_url: object) -> tuple[str, str, str, str]:
@@ -1912,23 +2087,23 @@ def _resolve_runtime_headline_state(
     *,
     pending_count: int,
     runtime_state: dict[str, object] | None,
-    cloud_state: str,
+    protection_state: str,
 ) -> str:
     if runtime_state is None:
         return "setup"
     if pending_count > 0:
         return "needs_decision"
-    if cloud_state == "local_only":
-        return "local_only"
-    if cloud_state == "paired_waiting":
-        return "connected"
-    return "protected"
+    if protection_state in {"protected", "partial"}:
+        return protection_state
+    return "degraded"
 
 
 def _runtime_headline_label(headline_state: str) -> str:
     labels = {
         "setup": "Setup required",
         "protected": "Protected",
+        "partial": "Partial",
+        "degraded": "Degraded",
         "needs_decision": "Decision needed",
         "local_only": "Local only",
         "connected": "Connected",
@@ -1940,11 +2115,13 @@ def _runtime_headline_detail(headline_state: str) -> str:
     details = {
         "setup": "The local Guard runtime is offline. Start the daemon or rerun hol-guard bootstrap.",
         "protected": "This machine is protected and the local queue is clear.",
+        "partial": "Core protection checks pass, but complete local evidence health cannot be proven.",
+        "degraded": "One or more required protection checks failed or remain unproven.",
         "needs_decision": "One or more actions are waiting for a decision in the current review queue.",
         "local_only": "This machine is protected locally and can connect later when shared memory matters.",
         "connected": "This machine is connected to Guard Cloud. Local Guard is sending the first shared proof now.",
     }
-    return details.get(headline_state, "This machine is protected locally.")
+    return details.get(headline_state, "Complete local protection cannot be proven.")
 
 
 _BULK_SECRET_TEXT_HINTS = (

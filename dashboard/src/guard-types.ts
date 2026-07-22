@@ -1,4 +1,14 @@
 export type DecisionScope = "artifact" | "workspace" | "publisher" | "harness" | "global";
+export type ApprovalResolutionAction = "allow" | "block";
+
+export type GuardApprovalScopesByAction = Record<ApprovalResolutionAction, DecisionScope[]>;
+
+export type GuardRecommendedScopesByAction = Record<ApprovalResolutionAction, DecisionScope | null>;
+
+export type GuardTaskCapabilityEligibility = {
+  eligible: boolean;
+  reason_codes: string[];
+};
 
 export const GUARD_ACTIONS = [
   "allow",
@@ -133,6 +143,7 @@ export type GuardActionEnvelope = {
   mcp_tool: string | null;
   package_manager: string | null;
   package_name: string | null;
+  command_category?: string | null;
   package_intent_kind?: string | null;
   package_targets?: string[];
   /** Exact Guard action projected immediately before execution. */
@@ -146,6 +157,8 @@ export type GuardActionEnvelope = {
 export type GuardHeadlineState =
   | "setup"
   | "protected"
+  | "partial"
+  | "degraded"
   | "blocked"
   | "needs_decision"
   | "local_only"
@@ -160,8 +173,14 @@ export type GuardApprovalRequest = {
   artifact_hash: string;
   publisher: string | null;
   policy_action: GuardAction;
-  recommended_scope: DecisionScope;
+  recommended_scope: DecisionScope | null;
   allowed_scopes?: DecisionScope[];
+  scope_contract_version?: string | null;
+  scope_contract_digest?: string | null;
+  allowed_scopes_by_action?: GuardApprovalScopesByAction;
+  recommended_scope_by_action?: GuardRecommendedScopesByAction;
+  scope_restrictions?: string[];
+  task_capability_eligibility?: GuardTaskCapabilityEligibility;
   risk_headline?: string;
   risk_summary?: string;
   risk_signals?: string[];
@@ -187,12 +206,44 @@ export type GuardApprovalRequest = {
   decision_contract_error?: string;
   fallback_cli_command?: string | null;
   raw_command_text?: string | null;
+  queue_preview?: string | null;
+  queue_command_category?: string | null;
   action_identity?: string | null;
   queue_group_id?: string | null;
   dedupe_count?: number;
   last_seen_at?: string | null;
   display_status?: string;
   scanner_evidence?: GuardScannerEvidence[];
+  temporary_mcp_approval?: GuardTemporaryMcpApproval | null;
+};
+
+export type GuardTemporaryMcpGrantTarget = "exact" | "category" | "server";
+export type GuardTemporaryMcpGrantDuration = "once" | "15m" | "1h" | "5h";
+
+export type GuardTemporaryMcpApproval = {
+  eligible: boolean;
+  server_name: string;
+  server_identity_hash: string;
+  category: string;
+  target_label: string | null;
+  allowed_targets: GuardTemporaryMcpGrantTarget[];
+  allowed_durations: GuardTemporaryMcpGrantDuration[];
+  hard_risk_exclusions: string[];
+};
+
+export type GuardApprovalResolutionInput = {
+  requestId: string;
+  action: "allow" | "block";
+  scope: DecisionScope;
+  workspace?: string;
+  reason: string;
+  approval_password?: string;
+  approval_totp_code?: string;
+  approval_gate_use_cooldown?: boolean;
+  scope_contract_version?: string;
+  scope_contract_digest?: string;
+  mcp_grant_target?: GuardTemporaryMcpGrantTarget;
+  mcp_grant_duration?: GuardTemporaryMcpGrantDuration;
 };
 
 export type GuardApprovalPageStatus = "pending" | "resolved" | "all";
@@ -270,6 +321,37 @@ export type GuardRuntimeState = {
   started_at: string;
   last_heartbeat_at: string;
   approval_center_url: string;
+};
+
+export type GuardProtectionState = "protected" | "partial" | "degraded";
+
+export type GuardProtectionCheckStatus = "pass" | "unknown" | "fail";
+
+export type GuardProtectionCheck = {
+  check_id: string;
+  status: GuardProtectionCheckStatus;
+  reason_code: string;
+};
+
+export type GuardProtectionAppHealth = {
+  harness: string;
+  state: GuardProtectionState;
+  label: string;
+  detail: string;
+  evidence_gap: boolean;
+  checks: GuardProtectionCheck[];
+  reason_codes: string[];
+};
+
+export type GuardProtectionHealth = {
+  schema_version: "guard.protection-health.v1";
+  state: GuardProtectionState;
+  label: string;
+  detail: string;
+  evidence_gap: boolean;
+  checks: GuardProtectionCheck[];
+  reason_codes: string[];
+  apps: GuardProtectionAppHealth[];
 };
 
 export type GuardCloudUserProfile = {
@@ -436,6 +518,7 @@ export type GuardRuntimeSnapshot = {
   generated_at: string;
   approval_center_url: string | null;
   runtime_state: GuardRuntimeState | null;
+  protection_health?: GuardProtectionHealth;
   device: GuardRuntimeDevice;
   latest_connect_state: GuardLatestConnectState | null;
   proof_status: GuardProofStatus;
@@ -977,6 +1060,18 @@ export type GuardUpdateReconnectOptions = {
   expectedPreviousVersion?: string | null;
   expectedLatestVersion?: string | null;
   sawUpdateInProgress?: boolean;
+  authorization?: GuardDaemonReconnectAuthorization | null;
+};
+
+export type GuardDaemonReconnectAuthorization = {
+  protocolVersion: 1;
+  reconnectId: string;
+  verifier: string;
+  surface: "dashboard";
+  issuedAtMs: number;
+  expiresAtMs: number;
+  installationId: string;
+  guardHomeId: string;
 };
 
 export type GuardUpdateScheduleResult = {

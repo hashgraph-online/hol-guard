@@ -13,6 +13,12 @@ from .commands_parser_helpers import *
 def _configure_guard_local_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    pytest_contained_parser = guard_subparsers.add_parser("pytest-contained", help=argparse.SUPPRESS)
+    pytest_contained_parser.add_argument("--workspace", required=True)
+    pytest_contained_parser.add_argument("--cwd")
+    pytest_contained_parser.add_argument("--timeout-seconds", type=int, default=30 * 60)
+    pytest_contained_parser.add_argument("pytest_command", nargs=argparse.REMAINDER)
+
     start_parser = guard_subparsers.add_parser("start", help="Show the first Guard steps for a local harness")
     _add_guard_common_args(start_parser)
     start_parser.add_argument("--json", action="store_true")
@@ -104,6 +110,11 @@ def _configure_guard_local_parsers(
     _add_guard_common_args(update_parser)
     update_parser.add_argument("--dry-run", action="store_true")
     update_parser.add_argument(
+        "--alpha",
+        action="store_true",
+        help="Update to the newest alpha release in the installed major version",
+    )
+    update_parser.add_argument(
         "--wheel",
         help="Install a local HOL Guard wheel file, or the newest matching hol_guard-*.whl from a directory",
     )
@@ -175,6 +186,56 @@ def _configure_guard_local_parsers(
     protect_parser.add_argument("--json", action="store_true")
     protect_parser.add_argument("--package-shim-ui", action="store_true", help=argparse.SUPPRESS)
     protect_parser.add_argument("protect_command", nargs=argparse.REMAINDER)
+
+    verified_read_parser = guard_subparsers.add_parser(
+        "verified-read",
+        help="Run a bounded workspace or public GitHub read entirely inside Guard",
+    )
+    verified_read_subparsers = verified_read_parser.add_subparsers(
+        dest="verified_read_command",
+        required=True,
+        metavar="{local,github-pr}",
+    )
+    local_read_parser = verified_read_subparsers.add_parser("local", help="Run a bounded local read")
+    local_read_parser.add_argument("--json", action="store_true")
+    local_read_parser.add_argument("read_argv", nargs=argparse.REMAINDER)
+    github_read_parser = verified_read_subparsers.add_parser("github-pr", help="Read one public pull request")
+    github_read_parser.add_argument("owner")
+    github_read_parser.add_argument("repository")
+    github_read_parser.add_argument("number", type=int)
+    github_read_parser.add_argument(
+        "--field",
+        action="append",
+        choices=("mergeable", "number", "state"),
+        default=None,
+    )
+    github_read_parser.add_argument("--json", action="store_true")
+
+    contained_write_parser = guard_subparsers.add_parser(
+        "contained-write",
+        help="Run one bounded workspace write through Guard-owned containment",
+    )
+    _add_guard_common_args(contained_write_parser)
+    contained_write_subparsers = contained_write_parser.add_subparsers(
+        dest="contained_write_command",
+        required=True,
+        metavar="{patch-check,patch-apply,format,copy}",
+    )
+    patch_check_parser = contained_write_subparsers.add_parser("patch-check")
+    patch_check_parser.add_argument("source")
+    patch_check_parser.add_argument("--json", action="store_true")
+    patch_apply_parser = contained_write_subparsers.add_parser("patch-apply")
+    patch_apply_parser.add_argument("source")
+    patch_apply_parser.add_argument("target")
+    patch_apply_parser.add_argument("--json", action="store_true")
+    format_parser = contained_write_subparsers.add_parser("format")
+    format_parser.add_argument("source")
+    format_parser.add_argument("target", nargs="?", default=None)
+    format_parser.add_argument("--json", action="store_true")
+    copy_parser = contained_write_subparsers.add_parser("copy")
+    copy_parser.add_argument("source")
+    copy_parser.add_argument("target")
+    copy_parser.add_argument("--json", action="store_true")
 
     command_parser = guard_subparsers.add_parser(
         "command",

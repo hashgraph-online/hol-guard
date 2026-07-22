@@ -165,16 +165,19 @@ class TestGuardApprovals:
         assert pending[0]["approval_url"] == "http://127.0.0.1:4455/approvals/req-123"
         assert pending[0]["workspace"] == str(workspace_dir)
         assert pending[0]["action_envelope_json"] == action_envelope_json
-        assert pending[0]["decision_v2_json"]["action"] == "ask"
-        assert pending[0]["decision_v2_json"]["reason"] == "require-reapproval"
-        assert pending[0]["decision_v2_json"]["user_title"] == "Fresh approval required"
-        assert pending[0]["decision_v2_json"]["signals"] == []
+        pending_decision = pending[0]["decision_v2_json"]
+        assert isinstance(pending_decision, dict)
+        assert pending_decision["action"] == "ask"
+        assert pending_decision["reason"] == "require-reapproval"
+        assert pending_decision["user_title"] == "Fresh approval required"
+        assert pending_decision["signals"] == []
+        assert pending_decision["approval_scopes"] == ["artifact"]
         assert resolved is not None
         assert resolved["status"] == "resolved"
         assert resolved["resolution_action"] == "allow"
         assert resolved["resolution_scope"] == "artifact"
         assert resolved["action_envelope_json"] == action_envelope_json
-        assert resolved["decision_v2_json"] == pending[0]["decision_v2_json"]
+        assert resolved["decision_v2_json"] == pending_decision
 
     def test_guard_store_runtime_snapshot_exposes_pending_request_payload_contract(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -219,7 +222,7 @@ class TestGuardApprovals:
         assert queue_summary["next_request_id"] == "req-snapshot-contract"
         assert isinstance(items, list)
         assert items[0]["request_id"] == "req-snapshot-contract"
-        assert items[0]["recommended_scope"] == "workspace"
+        assert items[0]["recommended_scope"] == "artifact"
         assert items[0]["review_command"] == "hol-guard approvals approve req-snapshot-contract"
         assert items[0]["approval_url"] == "http://127.0.0.1:4455/approvals/req-snapshot-contract"
 
@@ -504,6 +507,68 @@ class TestGuardApprovals:
         assert queued[0]["risk_summary"] == "Call arguments mention sensitive local files or secrets."
         assert queued[0]["risk_signals"] == ["call arguments mention sensitive local files or secrets"]
         assert queued[0]["launch_summary"] == "Launches with `dangerous_delete .env`."
+
+    def test_guard_queue_projects_command_category_from_artifact_metadata(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        envelope = {
+            "schema_version": 1,
+            "action_id": "action-docker",
+            "harness": "codex",
+            "event_name": "PreToolUse",
+            "action_type": "shell_command",
+            "workspace": "/workspace",
+            "workspace_hash": "workspace-hash",
+            "tool_name": "Bash",
+            "command": "docker ps",
+            "prompt_excerpt": None,
+            "prompt_text": None,
+            "target_paths": [],
+            "network_hosts": [],
+            "mcp_server": None,
+            "mcp_tool": None,
+            "package_manager": None,
+            "package_name": None,
+            "script_name": None,
+            "raw_payload_redacted": {},
+        }
+        artifact = GuardArtifact(
+            artifact_id="codex:runtime:docker",
+            name="docker ps",
+            harness="codex",
+            artifact_type="command",
+            source_scope="runtime",
+            config_path=str(tmp_path / "workspace" / "guard.toml"),
+            metadata={"command_rule_matches": [{"extension_id": "command.container-runtime"}]},
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation={
+                "artifacts": [
+                    {
+                        "artifact_id": artifact.artifact_id,
+                        "artifact_name": artifact.name,
+                        "artifact_hash": "hash-docker",
+                        "artifact_type": artifact.artifact_type,
+                        "source_scope": artifact.source_scope,
+                        "policy_action": "require-reapproval",
+                        "action_envelope_json": envelope,
+                    }
+                ]
+            },
+            store=store,
+            approval_center_url="http://127.0.0.1:4455",
+            now="2026-07-22T00:00:00+00:00",
+        )
+
+        assert queued[0]["action_envelope_json"]["command_category"] == "command.container-runtime"
 
     @pytest.mark.parametrize(
         ("artifact_name", "action_envelope_json", "expected"),
@@ -1057,6 +1122,7 @@ class TestGuardApprovals:
                     harness="codex",
                     artifact_id=artifact_id,
                     artifact_name=artifact_id.rsplit(":", maxsplit=1)[-1],
+                    artifact_type="mcp_server",
                     artifact_hash=f"hash-{request_id}",
                     policy_action="require-reapproval",
                     recommended_scope="harness",
@@ -1072,10 +1138,10 @@ class TestGuardApprovals:
         resolved = apply_approval_resolution(
             store=store,
             request_id="req-a",
-            action="allow",
+            action="block",
             scope="harness",
             workspace=None,
-            reason="trusted in harness",
+            reason="blocked in harness",
             now="2026-04-11T00:02:00+00:00",
         )
 
@@ -1091,6 +1157,7 @@ class TestGuardApprovals:
                     harness=harness,
                     artifact_id=f"{harness}:project:mcp:item",
                     artifact_name=f"{harness}-item",
+                    artifact_type="mcp_server",
                     artifact_hash=f"hash-{request_id}",
                     policy_action="require-reapproval",
                     recommended_scope="global",
@@ -1106,10 +1173,10 @@ class TestGuardApprovals:
         resolved = apply_approval_resolution(
             store=store,
             request_id="req-codex",
-            action="allow",
+            action="block",
             scope="global",
             workspace=None,
-            reason="trusted globally",
+            reason="blocked globally",
             now="2026-04-11T00:02:00+00:00",
         )
 
@@ -1204,7 +1271,7 @@ class TestGuardApprovals:
                 harness="guard-cli",
                 artifact_id="guard-cli:project:mcp:impeccable",
                 artifact_name="impeccable",
-                artifact_type="mcp",
+                artifact_type="mcp_server",
                 artifact_hash="hash-impeccable",
                 policy_action="require-reapproval",
                 recommended_scope="global",
@@ -1231,8 +1298,7 @@ class TestGuardApprovals:
 
         decisions = store.list_policy_decisions()
         assert calls
-        assert decisions[0]["harness"] == "*"
-        assert decisions[0]["scope"] == "global"
+        assert decisions == []
 
     def test_guard_saved_scope_falls_back_to_once_when_integrity_repair_fails(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
@@ -1244,7 +1310,7 @@ class TestGuardApprovals:
                 harness="guard-cli",
                 artifact_id=artifact_id,
                 artifact_name="impeccable",
-                artifact_type="mcp",
+                artifact_type="mcp_server",
                 artifact_hash="hash-impeccable",
                 policy_action="require-reapproval",
                 recommended_scope="global",
@@ -1283,7 +1349,7 @@ class TestGuardApprovals:
         )
 
         decisions = store.list_policy_decisions()
-        assert decisions[0]["scope"] == "global"
+        assert decisions == []
         assert first_retry is not None
         assert first_retry["action"] == "allow"
 
@@ -1332,6 +1398,7 @@ class TestGuardApprovals:
                     harness="codex",
                     artifact_id=f"codex:project:mcp:item-{index}",
                     artifact_name=f"item-{index}",
+                    artifact_type="mcp_server",
                     artifact_hash=f"hash-{index}",
                     policy_action="require-reapproval",
                     recommended_scope="harness",
@@ -1347,10 +1414,10 @@ class TestGuardApprovals:
         resolved = apply_approval_resolution(
             store=store,
             request_id="req-0",
-            action="allow",
+            action="block",
             scope="harness",
             workspace=None,
-            reason="trusted in harness",
+            reason="blocked in harness",
             now="2026-04-11T00:02:00+00:00",
         )
 
@@ -1419,7 +1486,11 @@ class TestGuardApprovals:
         request = store.get_approval_request("req-supported-scopes")
 
         assert request is not None
-        assert request["allowed_scopes"] == ["artifact", "publisher", "workspace", "harness", "global"]
+        assert request["allowed_scopes"] == ["artifact", "workspace"]
+        assert request["allowed_scopes_by_action"] == {
+            "allow": ["artifact", "workspace"],
+            "block": ["artifact", "workspace", "publisher", "harness", "global"],
+        }
 
     def test_guard_store_ignores_expired_policy_decisions_without_explicit_now(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -1747,6 +1818,37 @@ class TestGuardApprovals:
         assert snapshot_payload["runtime_state"]["daemon_port"] == daemon.port
         assert snapshot_payload["runtime_state"]["approval_center_url"] == f"http://127.0.0.1:{daemon.port}"
         assert snapshot_payload["runtime_state"]["session_id"]
+
+    def test_guard_daemon_runtime_snapshot_brackets_ipv6_urls(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        monkeypatch.setattr(daemon._server, "daemon_host", lambda: "::1")
+        daemon._server.runtime_host = "::1"
+        runtime_state = store.get_runtime_state()
+        assert runtime_state is not None
+        store.upsert_runtime_state(
+            session_id=str(runtime_state["session_id"]),
+            daemon_host="::1",
+            daemon_port=daemon.port,
+            started_at=str(runtime_state["started_at"]),
+            last_heartbeat_at=str(runtime_state["last_heartbeat_at"]),
+        )
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/runtime",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                snapshot_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        expected_url = f"http://[::1]:{daemon.port}"
+        assert snapshot_payload["approval_center_url"] == expected_url
+        assert snapshot_payload["runtime_state"]["approval_center_url"] == expected_url
 
     def test_guard_daemon_runtime_snapshot_counts_all_pending_requests_beyond_page_limit(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -2323,7 +2425,8 @@ class TestGuardApprovals:
 
         assert status == 200
         assert payload["resolved"] is True
-        assert payload["resolved_request"]["resolution_scope"] == "workspace"
+        assert payload["resolved_request"]["resolution_scope"] == "artifact"
+        assert payload["scope_warning"] == "legacy_scope_narrowed_to_artifact"
 
     @pytest.mark.parametrize("action", ["approve", "block"])
     @pytest.mark.parametrize("scope", ["artifact", "workspace", "publisher", "harness", "global"])
@@ -2333,21 +2436,15 @@ class TestGuardApprovals:
         store = GuardStore(tmp_path / "guard-home")
         workspace = tmp_path / "workspace"
         request_id = f"req-{action}-{scope}"
-        artifact_family = "tool-action" if scope in {"harness", "global"} else scope
-        artifact_id = (
-            f"codex:project:{artifact_family}:{scope}" if scope in {"harness", "global"} else f"codex:project:{scope}"
-        )
-        other_artifact_id = (
-            f"codex:project:{artifact_family}:{scope}-other"
-            if scope in {"harness", "global"}
-            else f"codex:project:{scope}-other"
-        )
+        artifact_id = f"codex:project:tool-action:{scope}"
+        other_artifact_id = f"codex:project:tool-action:{scope}-other"
         store.add_approval_request(
             GuardApprovalRequest(
                 request_id=request_id,
                 harness="codex",
                 artifact_id=artifact_id,
                 artifact_name=f"{scope} action",
+                artifact_type="tool_action_request",
                 artifact_hash=f"hash-{action}-{scope}",
                 publisher="codex-local",
                 policy_action="require-reapproval",
@@ -2367,6 +2464,7 @@ class TestGuardApprovals:
                 harness="codex",
                 artifact_id=other_artifact_id,
                 artifact_name=f"{scope} other action",
+                artifact_type="tool_action_request",
                 artifact_hash=f"hash-{action}-{scope}-other",
                 publisher="codex-local",
                 policy_action="require-reapproval",
@@ -2403,7 +2501,9 @@ class TestGuardApprovals:
         assert payload["resolved"] is True
         assert payload["resolved_request"]["request_id"] == request_id
         assert payload["resolved_request"]["resolution_action"] == ("allow" if action == "approve" else "block")
-        assert payload["resolved_request"]["resolution_scope"] == scope
+        expected_scope = scope if action == "block" or scope in {"artifact", "workspace"} else "artifact"
+        assert payload["resolved_request"]["resolution_scope"] == expected_scope
+        assert payload["applied_scope"] == expected_scope
         assert payload["resolved_request"]["approval_url"] == "http://127.0.0.1/pending"
         assert payload["resolved_request"]["review_command"] == f"hol-guard approvals {action} {request_id}"
         assert payload["remaining_pending_count"] == 1
@@ -2634,7 +2734,7 @@ class TestGuardApprovals:
             daemon.stop()
 
         assert status == 200
-        assert allow_headers == "Authorization, Content-Type, X-Guard-Dashboard-Session, X-Guard-Token"
+        assert allow_headers == ("Authorization, Content-Type, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token")
 
     def test_guard_daemon_limits_request_resolution_to_local_dashboard_origin(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -3047,9 +3147,8 @@ class TestGuardApprovals:
 
         assert remember_rc == 0
         assert remember_output["resolved"] is True
-        policy = store.list_policy_decisions("codex")[0]
-        assert policy["action"] == "allow"
-        assert policy["artifact_hash"] == "hash-remember"
+        assert remember_output["item"]["applied_scope"] == "artifact"
+        assert store.list_policy_decisions("codex") == []
 
     def test_guard_policies_cli_clears_local_decisions_for_harness(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -3439,7 +3538,8 @@ class TestGuardApprovals:
         assert rc == 0
         assert captured.err == ""
         assert payload["resolved"] is True
-        assert payload["item"]["resolution_scope"] == "workspace"
+        assert payload["item"]["resolution_scope"] == "artifact"
+        assert payload["item"]["scope_warning"] == "legacy_scope_narrowed_to_artifact"
         assert store.get_approval_request("req-workspace")["status"] == "resolved"
 
     def test_guard_workspace_resolution_does_not_match_sibling_workspace(self, tmp_path):

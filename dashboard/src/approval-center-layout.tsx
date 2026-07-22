@@ -16,7 +16,7 @@ import type {
   GuardPolicyDecision,
   GuardReceipt,
   GuardRuntimeSnapshot,
-  DecisionScope,
+  GuardApprovalResolutionInput,
 } from "./guard-types";
 import { useGuardUpdate } from "./guard-update-panel";
 
@@ -72,16 +72,7 @@ type LayoutProps = {
   onNavigate: (pathname: string) => void;
   onOpenRequest: (requestId: string) => void;
   onRetry?: () => void;
-  onResolve: (payload: {
-    requestId: string;
-    action: "allow" | "block";
-    scope: DecisionScope;
-    workspace?: string;
-    reason: string;
-    approval_password?: string;
-    approval_totp_code?: string;
-    approval_gate_use_cooldown?: boolean;
-  }) => void;
+  onResolve: (payload: GuardApprovalResolutionInput) => void;
   onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
   onRepair?: () => Promise<void>;
   onClearEvidence?: () => void;

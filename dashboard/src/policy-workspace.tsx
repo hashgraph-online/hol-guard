@@ -13,7 +13,7 @@ export function resolvePolicyViewLabel(view: PolicyPageView): string {
   if (view === "exceptions") {
     return "Cloud exceptions";
   }
-  return "Strict config";
+  return "How Guard decides";
 }
 
 export {
@@ -84,9 +84,6 @@ export function PolicyWorkspace({
         snapshot={snapshot}
         cloudControlsUrl={resolveCloudPolicyControlsUrl(snapshot)}
         onOpenSettings={onOpenSettings}
-        onOpenInbox={onOpenInbox}
-        onReloadPolicy={onReloadPolicy}
-        reloadingPolicy={reloadingPolicy}
       />
     </div>
   );
