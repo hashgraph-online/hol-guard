@@ -98,7 +98,7 @@ def test_dashboard_settings_update_persists_to_cli_config_loader(tmp_path):
     assert loaded.default_action == "review"
     assert loaded.changed_hash_action == "block"
     assert loaded.approval_wait_timeout_seconds == 45
-    assert loaded.approval_surface_policy == "approval-center"
+    assert loaded.approval_surface_policy == "attention-aware"
     assert loaded.telemetry is True
     assert loaded.harness_actions == {"codex": "review"}
     assert "ignored_key" not in config_text
