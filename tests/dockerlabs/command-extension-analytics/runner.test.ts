@@ -73,6 +73,7 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(guardBlock).not.toContain("ports:");
     expect(relayBlock).toContain('["python", "/opt/guard-lab/tcp_relay.py"]');
     expect(relayBlock).toContain('"127.0.0.1:${HOL_GUARD_LAB_PORT:?set by runner}:4781"');
+    expect(relayBlock).toContain("socket.create_connection(('127.0.0.1', 4781), timeout=2).close()");
     expect(relayBlock).toContain("- guard-analytics\n      - host-access");
     expect(relayBlock).toContain("condition: service_healthy");
     expect(compose).toContain("guard-analytics:\n    internal: true");

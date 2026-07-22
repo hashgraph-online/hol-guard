@@ -50,7 +50,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4781/healthz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 4781), timeout=2).close()"]
       interval: 1s
       timeout: 3s
       retries: 30
