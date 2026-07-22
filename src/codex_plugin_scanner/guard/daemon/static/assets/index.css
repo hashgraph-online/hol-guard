@@ -1713,6 +1713,10 @@
     column-gap: calc(var(--spacing) * 4);
   }
 
+  .gap-x-5 {
+    column-gap: calc(var(--spacing) * 5);
+  }
+
   .gap-x-8 {
     column-gap: calc(var(--spacing) * 8);
   }

@@ -1,5 +1,54 @@
-import { i as isConnectableAppHarness, p as protectionHealthFor, j as jsxRuntimeExports, n as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, k as EmptyState, r as reactExports, e as harnessDisplayName, c as HiMiniChevronRight, m as HiMiniCheckCircle, O as HiMiniEye, Q as HiMiniWrenchScrewdriver, R as HiMiniXCircle, T as HiMiniExclamationCircle, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, O as HiMiniWrenchScrewdriver, e as harnessDisplayName, A as ActionButton, P as HiMiniExclamationCircle, i as isConnectableAppHarness, p as protectionHealthFor, n as GuardHero, Q as ProofStrip, S as SectionLabel, k as EmptyState, r as reactExports, c as HiMiniChevronRight, m as HiMiniCheckCircle, R as HiMiniEye, T as HiMiniXCircle, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard } from "../guard-dashboard.js";
 import { S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
+const PROTECTION_CHECK_COPY = {
+  harness_hooks: { label: "App hooks", detail: "One or more app hooks need setup or repair." },
+  rule_packs: { label: "Rule packs", detail: "Guard cannot confirm the active rule-pack proof yet." },
+  decision_stream: { label: "Command evidence", detail: "Command activity evidence is incomplete or unavailable." },
+  tamper_checks: { label: "Integrity checks", detail: "Managed Guard files or hooks did not pass integrity checks." }
+};
+function FleetProtectionRecovery(props) {
+  const gaps = props.health.checks.filter((check) => check.status !== "pass");
+  const hasCommandEvidenceGap = gaps.some((check) => check.check_id === "decision_stream");
+  if (gaps.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "border-y border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-4 sm:px-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-brand-dark", children: "Protection needs attention" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: props.repairHarness ? `${harnessDisplayName(props.repairHarness)} needs repair. Complete that step, then return here to confirm the remaining proofs.` : "Review the incomplete proofs below, then return here to confirm protection." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap gap-2", children: [
+        props.repairHarness ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: `/apps/${props.repairHarness}?tab=settings`, children: [
+          "Repair ",
+          harnessDisplayName(props.repairHarness)
+        ] }) : null,
+        hasCommandEvidenceGap ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/evidence?view=commands", variant: "outline", children: "Open command diagnostics" }) : null
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 grid gap-x-5 gap-y-2 sm:grid-cols-2", children: gaps.map((check) => {
+      const copy = PROTECTION_CHECK_COPY[check.check_id] ?? {
+        label: check.check_id.replace(/_/g, " "),
+        detail: "Guard could not confirm this protection proof."
+      };
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-start gap-2 text-xs text-slate-600", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          HiMiniExclamationCircle,
+          {
+            className: `mt-0.5 h-3.5 w-3.5 shrink-0 ${check.status === "fail" ? "text-brand-attention" : "text-slate-400"}`,
+            "aria-hidden": "true"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "font-semibold text-brand-dark", children: copy.label }),
+          ": ",
+          copy.detail
+        ] })
+      ] }, check.check_id);
+    }) })
+  ] });
+}
 const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
 function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, urls) {
   const hasApps = activeInstallCount > 0;
@@ -62,24 +111,6 @@ function renderReceiptContext(receipt) {
 function formatCount(value) {
   return value.toLocaleString();
 }
-const PROTECTION_CHECK_COPY = {
-  harness_hooks: {
-    label: "App hooks",
-    detail: "One or more app hooks need setup or repair."
-  },
-  rule_packs: {
-    label: "Rule packs",
-    detail: "Guard cannot confirm the active rule-pack proof yet."
-  },
-  decision_stream: {
-    label: "Command evidence",
-    detail: "Command activity evidence is incomplete or unavailable."
-  },
-  tamper_checks: {
-    label: "Integrity checks",
-    detail: "Managed Guard files or hooks did not pass integrity checks."
-  }
-};
 function resolveAppStatus(install, protectionHealth, hasInventory, hasReceipts) {
   if (install !== void 0) {
     const hookCheck = protectionHealth.checks.find((check) => check.check_id === "harness_hooks");
@@ -157,40 +188,6 @@ function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail 
     }
   );
 }
-function ProtectionRecovery({ health, repairHarness }) {
-  const gaps = health.checks.filter((check) => check.status !== "pass");
-  const hasCommandEvidenceGap = gaps.some((check) => check.check_id === "decision_stream");
-  if (gaps.length === 0) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "border-y border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-4 sm:px-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-brand-dark", children: "Protection needs attention" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: repairHarness ? `${harnessDisplayName(repairHarness)} needs repair. Complete that step, then return here to confirm the remaining proofs.` : "Review the incomplete proofs below, then return here to confirm protection." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap gap-2", children: [
-        repairHarness ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: `/apps/${repairHarness}?tab=settings`, children: `Repair ${harnessDisplayName(repairHarness)}` }) : null,
-        hasCommandEvidenceGap ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/evidence?view=commands", variant: "outline", children: "Open command diagnostics" }) : null
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 grid gap-x-5 gap-y-2 sm:grid-cols-2", children: gaps.map((check) => {
-      const copy = PROTECTION_CHECK_COPY[check.check_id] ?? {
-        label: check.check_id.replace(/_/g, " "),
-        detail: "Guard could not confirm this protection proof."
-      };
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-start gap-2 text-xs text-slate-600", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationCircle, { className: `mt-0.5 h-3.5 w-3.5 shrink-0 ${check.status === "fail" ? "text-brand-attention" : "text-slate-400"}`, "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "font-semibold text-brand-dark", children: copy.label }),
-          ": ",
-          copy.detail
-        ] })
-      ] }, check.check_id);
-    }) })
-  ] });
-}
 function FleetWorkspace(props) {
   const harnesses = collectHarnesses(props.runtime);
   const managedInstalls = (props.runtime.managed_installs ?? []).filter((i) => isConnectableAppHarness(i.harness));
@@ -207,7 +204,9 @@ function FleetWorkspace(props) {
   const runtimeState = props.runtime.runtime_state;
   const protectionHealth = protectionHealthFor(props.runtime);
   const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isConnectableAppHarness));
-  const repairHarness = managedInstalls.find((install) => !install.active)?.harness ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail"));
+  const repairHarness = managedInstalls.find((install) => !install.active)?.harness ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some(
+    (check) => check.check_id === "harness_hooks" && check.status === "fail"
+  ));
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
     activeInstalls.length,
@@ -225,7 +224,10 @@ function FleetWorkspace(props) {
         status: heroCopy.status,
         headline: heroCopy.headline,
         subheadline: heroCopy.subheadline,
-        cta: protectionHealth.state === "degraded" && repairHarness ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: `/apps/${repairHarness}?tab=settings`, children: `Repair ${harnessDisplayName(repairHarness)}` }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.primaryCtaHref, children: heroCopy.primaryCtaLabel }),
+        cta: protectionHealth.state === "degraded" && repairHarness ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: `/apps/${repairHarness}?tab=settings`, children: [
+          "Repair ",
+          harnessDisplayName(repairHarness)
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.primaryCtaHref, children: heroCopy.primaryCtaLabel }),
         secondaryCta: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.secondaryCtaHref, variant: "outline", children: heroCopy.secondaryCtaLabel })
       }
     ),
@@ -240,7 +242,7 @@ function FleetWorkspace(props) {
         ]
       }
     ),
-    protectionHealth.state !== "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionRecovery, { health: protectionHealth, repairHarness }) : null,
+    protectionHealth.state !== "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsx(FleetProtectionRecovery, { health: protectionHealth, repairHarness }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [
