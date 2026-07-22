@@ -932,6 +932,7 @@ def test_guard_install_and_repair_codex_preserve_ambiguous_legacy_post_tool_hook
             workspace_dir=workspace_dir,
             guard_home=guard_home,
             home_override_explicit=True,
+            workspace_override_explicit=True,
         )
     )
 
@@ -1027,6 +1028,34 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert (home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh").exists() is False
     assert (home_dir / "managed" / "codex" / "codex-bashenv-guard.bash").exists() is False
     assert (home_dir / "managed" / "codex" / "codex-fish-guard.fish").exists() is False
+
+
+def test_guard_install_codex_does_not_bind_global_hooks_to_inferred_workspace(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(workspace_dir / "pyproject.toml", "[project]\nname = 'fixture'\nversion = '0'\n")
+    monkeypatch.chdir(workspace_dir)
+    monkeypatch.setattr(codex_adapter, "_command_available", lambda _command: True)
+
+    install_rc = main(["guard", "install", "codex", "--home", str(home_dir), "--json"])
+    install_payload = json.loads(capsys.readouterr().out)
+    doctor_rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--json"])
+    doctor_payload = json.loads(capsys.readouterr().out)
+    config_payload = tomllib.loads((home_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    hook_command = config_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+
+    assert install_rc == 0
+    assert install_payload["managed_install"]["workspace"] == str(workspace_dir)
+    assert "--workspace" not in shlex.split(hook_command)
+    assert doctor_rc == 0
+    assert doctor_payload["setup_status"] == "active"
+    assert doctor_payload["native_hook_state"]["protection_active"] is True
+    assert not any("managed Codex hooks are missing" in warning for warning in doctor_payload["warnings"])
 
 
 def test_guard_install_codex_detects_wrapped_servers_without_rewrapping(tmp_path, capsys):
@@ -1563,7 +1592,12 @@ def test_guard_install_codex_migrates_global_and_workspace_hooks_to_toml(tmp_pat
         'model = "gpt-5.3-codex"\n\n[features]\nhooks = true\n',
     )
     _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
-    context = HarnessContext(home_dir=home_dir, guard_home=home_dir, workspace_dir=workspace_dir)
+    context = HarnessContext(
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace_dir=workspace_dir,
+        workspace_override_explicit=True,
+    )
     legacy_group = codex_adapter._managed_hook_groups(context)["PreToolUse"]
     _write_text(
         home_dir / ".codex" / "hooks.json",
@@ -1616,7 +1650,12 @@ def test_guard_install_codex_migrates_legacy_bash_only_managed_hook(tmp_path, ca
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
-    context = HarnessContext(home_dir=home_dir, guard_home=home_dir, workspace_dir=workspace_dir)
+    context = HarnessContext(
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace_dir=workspace_dir,
+        workspace_override_explicit=True,
+    )
     legacy_group = codex_adapter._managed_hook_groups(context)["PreToolUse"]
     _write_text(
         workspace_dir / ".codex" / "hooks.json",
