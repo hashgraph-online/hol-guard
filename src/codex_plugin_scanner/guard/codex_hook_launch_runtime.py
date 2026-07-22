@@ -68,6 +68,7 @@ def isolated_daemon_start_command(
     python_executable: str,
     package_root: Path,
     guard_home: Path,
+    home_dir: Path,
 ) -> tuple[str, ...]:
     """Build the exact isolated daemon-start contract."""
 
@@ -76,7 +77,7 @@ def isolated_daemon_start_command(
         f"sys.path.insert(0, {str(package_root.resolve())!r});"
         "from pathlib import Path;"
         "from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure;"
-        f"recover_guard_daemon_after_hook_failure(Path({str(guard_home)!r}))"
+        f"recover_guard_daemon_after_hook_failure(Path({str(guard_home)!r}),home_dir=Path({str(home_dir)!r}))"
     )
     return (python_executable, "-I", "-c", bootstrap)
 

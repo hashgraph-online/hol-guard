@@ -182,6 +182,7 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
     ]
     assert bridge_config["fallback_command"][4:8] == ["guard", "hook", "--harness", "codex"]
     assert bridge_config["start_command"][:3] == [str(Path(sys.executable).absolute()), "-I", "-c"]
+    assert str(home_dir.resolve()) in bridge_config["start_command"][-1]
     assert bridge_config["hook_timeouts"]["PreToolUse"] > bridge_config["hook_timeouts"]["UserPromptSubmit"]
 
 
