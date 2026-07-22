@@ -333,6 +333,49 @@ def test_system_keyring_native_macos_read_uses_cfstr_decoder(
     assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) == "native-secret"
 
 
+def test_system_keyring_native_macos_read_does_not_disable_keychain_interaction_globally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    secret_store = SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: True),
+    )
+    interaction_enabled = True
+
+    def set_interaction_allowed(value: int) -> int:
+        nonlocal interaction_enabled
+        interaction_enabled = bool(value)
+        return 0
+
+    def copy_matching(query: dict[str, object], _data: object) -> int:
+        assert query["kSecUseAuthenticationUI"] == "kSecUseAuthenticationUIFail"
+        return 0 if interaction_enabled else -25293
+
+    fake_api = types.SimpleNamespace(
+        OS_status=guard_store_module.ctypes.c_int32,
+        _sec=types.SimpleNamespace(SecKeychainSetUserInteractionAllowed=set_interaction_allowed),
+        error=types.SimpleNamespace(
+            item_not_found=-25300,
+            keychain_denied=-128,
+            sec_auth_failed=-25293,
+            plist_missing=-67030,
+            sec_interaction_not_allowed=-25308,
+        ),
+        c_void_p=guard_store_module.ctypes.c_void_p,
+        k_=lambda name: name,
+        create_query=lambda **kwargs: kwargs,
+        SecItemCopyMatching=copy_matching,
+        cfstr_to_str=lambda _data: "native-secret",
+    )
+    monkeypatch.setattr(secret_store, "_load_macos_keyring_api_module", lambda: fake_api)
+
+    assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) == "native-secret"
+    assert interaction_enabled is True
+
+
 def test_system_keyring_supports_native_macos_reads_with_nonstandard_keyring_module(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

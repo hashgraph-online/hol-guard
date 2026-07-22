@@ -68,15 +68,22 @@ def isolated_daemon_start_command(
     python_executable: str,
     package_root: Path,
     guard_home: Path,
+    home_dir: Path | None = None,
 ) -> tuple[str, ...]:
-    """Build the exact isolated daemon-start contract."""
+    """Build the exact isolated daemon-start contract.
+
+    ``home_dir`` remains optional for callers using the pre-2.1 signature.
+    Managed manifests always bind the authenticated canonical home explicitly.
+    """
+
+    resolved_home_dir = Path.home() if home_dir is None else home_dir
 
     bootstrap = (
         "import sys;"
         f"sys.path.insert(0, {str(package_root.resolve())!r});"
         "from pathlib import Path;"
-        "from codex_plugin_scanner.guard.daemon import ensure_guard_daemon;"
-        f"ensure_guard_daemon(Path({str(guard_home)!r}))"
+        "from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure;"
+        f"recover_guard_daemon_after_hook_failure(Path({str(guard_home)!r}),home_dir=Path({str(resolved_home_dir)!r}))"
     )
     return (python_executable, "-I", "-c", bootstrap)
 

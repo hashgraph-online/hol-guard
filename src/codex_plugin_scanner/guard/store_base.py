@@ -703,40 +703,17 @@ class SystemKeyringSecretStore:
     def _get_secret_without_macos_ui(self, secret_id: str) -> str | None:
         if not self._supports_native_macos_security_reads():
             return None
-        set_interaction_allowed = None
-        interaction_state = None
         data = None
         try:
-            from ctypes import byref, c_ubyte
+            from ctypes import byref
 
             macos_keyring_api = self._load_macos_keyring_api_module()
             # The macOS keyring backend returns password bytes here but exposes
             # its decoder under the historical cfstr_to_str name.
             cfstr_to_str = getattr(macos_keyring_api, "cfstr_to_str", None)
             cf_release = getattr(macos_keyring_api, "CFRelease", None)
-            security_library = getattr(macos_keyring_api, "_sec", None)
-            get_interaction_allowed = (
-                getattr(security_library, "SecKeychainGetUserInteractionAllowed", None)
-                if security_library is not None
-                else None
-            )
-            set_interaction_allowed = (
-                getattr(security_library, "SecKeychainSetUserInteractionAllowed", None)
-                if security_library is not None
-                else None
-            )
-            interaction_state: c_ubyte | None = None
-            if get_interaction_allowed is not None:
-                get_interaction_allowed.restype = macos_keyring_api.OS_status
-                get_interaction_allowed.argtypes = [ctypes.POINTER(c_ubyte)]
-                interaction_state = c_ubyte(1)
-                status = get_interaction_allowed(byref(interaction_state))
-                if status != 0:
-                    interaction_state = None
-            if set_interaction_allowed is not None:
-                set_interaction_allowed.restype = macos_keyring_api.OS_status
-                set_interaction_allowed.argtypes = [c_ubyte]
-                set_interaction_allowed(0)
+            # Keep prompt suppression scoped to this query. Disabling keychain
+            # interaction process-wide makes otherwise readable items fail auth.
             query = macos_keyring_api.create_query(
                 kSecClass=macos_keyring_api.k_("kSecClassGenericPassword"),
                 kSecMatchLimit=macos_keyring_api.k_("kSecMatchLimitOne"),
@@ -749,11 +726,6 @@ class SystemKeyringSecretStore:
             status = macos_keyring_api.SecItemCopyMatching(query, byref(data))
         except Exception:
             return None
-        finally:
-            if set_interaction_allowed is not None:
-                restore_value = interaction_state.value if interaction_state is not None else 1
-                with suppress(Exception):
-                    set_interaction_allowed(restore_value)
         if status == 0:
             if not callable(cfstr_to_str):
                 return None
