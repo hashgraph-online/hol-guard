@@ -16,6 +16,7 @@ def test_degraded_protection_exposes_recovery_actions() -> None:
 
     assert "Protection needs attention" in source
     assert "Repair ${harnessDisplayName(repairHarness)}" in source
+    assert "href: `/apps/${repairHarness}?tab=settings`" in source
     assert 'href: "/evidence?view=commands"' in source
     assert "Open command diagnostics" in source
     assert 'hookCheck?.status === "fail"' in source

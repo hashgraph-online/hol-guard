@@ -157,12 +157,9 @@ function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail 
     }
   );
 }
-function ProtectionRecovery({ health, repairHarness, onOpenAppDetail }) {
+function ProtectionRecovery({ health, repairHarness }) {
   const gaps = health.checks.filter((check) => check.status !== "pass");
   const hasCommandEvidenceGap = gaps.some((check) => check.check_id === "decision_stream");
-  const handleRepair = reactExports.useCallback(() => {
-    if (repairHarness) onOpenAppDetail?.(repairHarness);
-  }, [onOpenAppDetail, repairHarness]);
   if (gaps.length === 0) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "border-y border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-4 sm:px-5", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", children: [
@@ -174,7 +171,7 @@ function ProtectionRecovery({ health, repairHarness, onOpenAppDetail }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: repairHarness ? `${harnessDisplayName(repairHarness)} needs repair. Complete that step, then return here to confirm the remaining proofs.` : "Review the incomplete proofs below, then return here to confirm protection." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap gap-2", children: [
-        repairHarness ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, children: `Repair ${harnessDisplayName(repairHarness)}` }) : null,
+        repairHarness ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: `/apps/${repairHarness}?tab=settings`, children: `Repair ${harnessDisplayName(repairHarness)}` }) : null,
         hasCommandEvidenceGap ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/evidence?view=commands", variant: "outline", children: "Open command diagnostics" }) : null
       ] })
     ] }),
@@ -211,9 +208,6 @@ function FleetWorkspace(props) {
   const protectionHealth = protectionHealthFor(props.runtime);
   const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isConnectableAppHarness));
   const repairHarness = managedInstalls.find((install) => !install.active)?.harness ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail"));
-  const handleRepairApp = reactExports.useCallback(() => {
-    if (repairHarness) props.onOpenAppDetail?.(repairHarness);
-  }, [props.onOpenAppDetail, repairHarness]);
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
     activeInstalls.length,
@@ -231,7 +225,7 @@ function FleetWorkspace(props) {
         status: heroCopy.status,
         headline: heroCopy.headline,
         subheadline: heroCopy.subheadline,
-        cta: protectionHealth.state === "degraded" && repairHarness ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairApp, children: `Repair ${harnessDisplayName(repairHarness)}` }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.primaryCtaHref, children: heroCopy.primaryCtaLabel }),
+        cta: protectionHealth.state === "degraded" && repairHarness ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: `/apps/${repairHarness}?tab=settings`, children: `Repair ${harnessDisplayName(repairHarness)}` }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.primaryCtaHref, children: heroCopy.primaryCtaLabel }),
         secondaryCta: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.secondaryCtaHref, variant: "outline", children: heroCopy.secondaryCtaLabel })
       }
     ),
@@ -246,7 +240,7 @@ function FleetWorkspace(props) {
         ]
       }
     ),
-    protectionHealth.state !== "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionRecovery, { health: protectionHealth, repairHarness, onOpenAppDetail: props.onOpenAppDetail }) : null,
+    protectionHealth.state !== "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionRecovery, { health: protectionHealth, repairHarness }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [
