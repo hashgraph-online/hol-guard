@@ -26,7 +26,11 @@ from ..runtime.approval_context import (
 )
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
-from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
+from ..store import (
+    _runtime_scoped_exact_match_key,
+    runtime_tool_action_exact_match_context,
+    runtime_tool_action_portable_match_context,
+)
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -367,6 +371,10 @@ def _runtime_stored_policy_decision(
                 for key in (
                     _runtime_scoped_exact_match_key(artifact_id),
                     _runtime_scoped_exact_match_key(artifact_id, runtime_exact_match_context),
+                    _runtime_scoped_exact_match_key(
+                        artifact_id,
+                        runtime_tool_action_portable_match_context(runtime_exact_match_context),
+                    ),
                 )
                 if key is not None
             }
@@ -758,6 +766,8 @@ def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None
     if artifact.artifact_type != "tool_action_request":
         return None
     raw_command_text = artifact.metadata.get("raw_command_text")
+    if not isinstance(raw_command_text, str) or not raw_command_text:
+        raw_command_text = artifact.command
     wrapper_chain = artifact.metadata.get("wrapper_chain")
     normalized_wrapper_chain = (
         wrapper_chain if isinstance(wrapper_chain, Sequence) and not isinstance(wrapper_chain, str) else None

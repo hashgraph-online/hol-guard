@@ -21,15 +21,15 @@ const request: GuardApprovalRequest = {
   publisher: "codex-local",
   policy_action: "require-reapproval",
   recommended_scope: "artifact",
-  allowed_scopes: ["artifact"],
-  scope_contract_version: "guard.approval-scopes.v2",
+  allowed_scopes: ["artifact", "workspace", "harness", "global"],
+  scope_contract_version: "guard.approval-scopes.v4",
   scope_contract_digest: "scope-contract-digest",
   allowed_scopes_by_action: {
-    allow: ["artifact"],
+    allow: ["artifact", "workspace", "harness", "global"],
     block: ["artifact", "workspace", "publisher", "harness", "global"],
   },
   recommended_scope_by_action: { allow: "artifact", block: "artifact" },
-  scope_restrictions: ["broad_allow_requires_positive_proof", "task_capability_not_enabled"],
+  scope_restrictions: ["reusable_allow_is_action_bound", "task_capability_not_enabled"],
   task_capability_eligibility: {
     eligible: false,
     reason_codes: ["task_capability_not_enabled"],
@@ -113,7 +113,11 @@ test("approval review renders action-eligible scopes and binds the selected cont
 
   await expect(page.getByRole("heading", { name: "Run workspace command" })).toBeVisible();
   await expect(page.getByRole("radio", { name: /Approve once/ })).toBeVisible();
-  await expect(page.getByText("Everywhere", { exact: true })).toHaveCount(0);
+  await page.getByText("Save for project or app", { exact: true }).click();
+  await expect(page.getByRole("radio", { name: /Remember for project/ })).toBeVisible();
+  await expect(page.getByRole("radio", { name: /This app/ })).toBeVisible();
+  await page.getByText("Advanced: save everywhere on this machine", { exact: true }).click();
+  await expect(page.getByRole("radio", { name: /Everywhere/ })).toBeVisible();
   await expect(page.getByText(/Task access is not available/)).toBeVisible();
 
   await page.getByText("Block matching actions", { exact: true }).first().click();
@@ -124,7 +128,7 @@ test("approval review renders action-eligible scopes and binds the selected cont
   expect(resolutionBodies[0]).toMatchObject({
     action: "block",
     scope: "global",
-    scope_contract_version: "guard.approval-scopes.v2",
+    scope_contract_version: "guard.approval-scopes.v4",
     scope_contract_digest: "scope-contract-digest",
   });
 });
@@ -145,11 +149,10 @@ test("non-overridable actions disable approval while preserving eligible block s
   await mountApprovalFixture(page, resolutionBodies, blockedRequest);
   await page.goto(`/requests/${blockedRequest.request_id}?${DAEMON}`);
 
-  await expect(page.getByText("This action cannot be approved under its current Guard policy.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Approve once" })).toBeDisabled();
-  await expect(page.getByText(/Task access cannot override/)).toBeVisible();
-  await page.getByText("Block matching actions", { exact: true }).first().click();
-  await expect(page.getByRole("radio", { name: /Block everywhere/ })).toBeVisible();
+  await expect(page.getByText("This decision cannot be overridden")).toBeVisible();
+  await expect(page.getByText(/Policy terminally blocked this action/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve once" })).toHaveCount(0);
+  await expect(page.getByText("Block matching actions", { exact: true })).toHaveCount(0);
   expect(resolutionBodies).toHaveLength(0);
 });
 

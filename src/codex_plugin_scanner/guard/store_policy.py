@@ -1128,6 +1128,14 @@ class StorePolicyMixin:
             if artifact_hash is not None
             else None
         )
+        portable_runtime_exact_match_key = (
+            _runtime_scoped_exact_match_key(
+                artifact_id,
+                runtime_tool_action_portable_match_context(runtime_exact_match_context),
+            )
+            if artifact_hash is not None and runtime_exact_match_context is not None
+            else None
+        )
         events: list[tuple[str, dict[str, object]]] = []
         selected_payload: dict[str, object] | None = None
         ignored_local_integrity: dict[str, object] | None = None
@@ -1429,6 +1437,7 @@ class StorePolicyMixin:
                         requested_artifact_id=artifact_id,
                         requested_artifact_hash=artifact_hash,
                         requested_runtime_exact_match_key=runtime_exact_match_key,
+                        requested_portable_exact_match_key=portable_runtime_exact_match_key,
                     ):
                         continue
                     integrity_result = self._policy_integrity_result_for_row(
@@ -1524,6 +1533,7 @@ class StorePolicyMixin:
                     requested_artifact_id=artifact_id,
                     requested_artifact_hash=artifact_hash,
                     requested_runtime_exact_match_key=runtime_exact_match_key,
+                    requested_portable_exact_match_key=portable_runtime_exact_match_key,
                 ):
                     continue
                 integrity_result = self._policy_integrity_result_for_row(

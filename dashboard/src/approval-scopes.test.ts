@@ -38,15 +38,15 @@ const BASE_REQUEST: GuardApprovalRequest = {
   publisher: "codex-local",
   policy_action: "require-reapproval",
   recommended_scope: "artifact",
-  allowed_scopes: ["artifact"],
-  scope_contract_version: "guard.approval-scopes.v2",
+  allowed_scopes: ["artifact", "workspace", "harness", "global"],
+  scope_contract_version: "guard.approval-scopes.v4",
   scope_contract_digest: "scope-digest",
   allowed_scopes_by_action: {
-    allow: ["artifact"],
+    allow: ["artifact", "workspace", "harness", "global"],
     block: ["artifact", "workspace", "publisher", "harness", "global"],
   },
   recommended_scope_by_action: { allow: "artifact", block: "artifact" },
-  scope_restrictions: ["broad_allow_requires_positive_proof", "task_capability_not_enabled"],
+  scope_restrictions: ["reusable_allow_is_action_bound", "task_capability_not_enabled"],
   task_capability_eligibility: {
     eligible: false,
     reason_codes: ["task_capability_not_enabled"],
@@ -76,10 +76,10 @@ const allowPayload = buildDecisionPayload({
   reason: "approved in review",
 });
 
-assert(allowPayload.scope === "artifact", "T-AS-01: stale broad allow selection narrows to eligible artifact scope");
+assert(allowPayload.scope === "global", "T-AS-01: eligible Everywhere selection is preserved");
 assert(allowPayload.workspace === undefined, "T-AS-02: artifact allow does not send a workspace");
 assert(
-  allowPayload.scope_contract_version === "guard.approval-scopes.v2" &&
+  allowPayload.scope_contract_version === "guard.approval-scopes.v4" &&
     allowPayload.scope_contract_digest === "scope-digest",
   "T-AS-03: resolution payload binds the displayed scope contract",
 );
@@ -94,12 +94,15 @@ assert(blockPayload.workspace === "/workspace/project", "T-AS-04: workspace bloc
 
 const allowScopes = scopeChoicesForRequest(BASE_REQUEST, "allow").map((choice) => choice.value);
 const blockScopes = scopeChoicesForRequest(BASE_REQUEST, "block").map((choice) => choice.value);
-assert(allowScopes.join(",") === "artifact", "T-AS-05: UI shows only the server-provided allow scope");
+assert(
+  allowScopes.join(",") === "artifact,workspace,harness,global",
+  "T-AS-05: UI shows every server-provided action-bound allow scope",
+);
 assert(
   blockScopes.join(",") === "artifact,workspace,publisher,harness,global",
   "T-AS-06: UI preserves every server-provided block scope",
 );
-assert(!requestSupportsScope(BASE_REQUEST, "allow", "global"), "T-AS-07: Everywhere is unavailable for allow");
+assert(requestSupportsScope(BASE_REQUEST, "allow", "global"), "T-AS-07: Everywhere is available when eligible");
 assert(requestSupportsScope(BASE_REQUEST, "block", "global"), "T-AS-08: Everywhere remains available for block");
 
 const legacyRequest: GuardApprovalRequest = {
@@ -179,8 +182,8 @@ assert(
 assert(ADVANCED_SCOPE_VALUES.has("global"), "T-AS-16: global remains the only advanced scope");
 assert(isAdvancedScope("global") && !isAdvancedScope("workspace"), "T-AS-17: advanced scope classification is stable");
 assert(
-  advancedScopeChoicesForRequest(BASE_REQUEST, "allow").length === 0,
-  "T-AS-18: advanced allow is absent when the contract excludes it",
+  advancedScopeChoicesForRequest(BASE_REQUEST, "allow").map((choice) => choice.value).join(",") === "global",
+  "T-AS-18: advanced allow includes eligible Everywhere",
 );
 assert(
   advancedScopeChoicesForRequest(BASE_REQUEST, "block").map((choice) => choice.value).join(",") === "global",
@@ -190,4 +193,9 @@ assert(
   standardScopeChoicesForRequest(BASE_REQUEST, "block").map((choice) => choice.value).join(",") ===
     "artifact,workspace,publisher,harness",
   "T-AS-20: standard block scopes exclude the advanced choice",
+);
+assert(
+  standardScopeChoicesForRequest(BASE_REQUEST, "allow").map((choice) => choice.value).join(",") ===
+    "artifact,workspace,harness",
+  "T-AS-21: standard allow scopes expose project and app when eligible",
 );
