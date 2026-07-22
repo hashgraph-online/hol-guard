@@ -16513,6 +16513,7 @@ def test_guard_runtime_allows_installed_read_only_runner_after_literal_home_cd(
     sibling = home_dir / "sibling"
     workspace.mkdir(parents=True)
     _write_text(sibling / runner_path, "#!/bin/sh\n")
+    _write_text(sibling / "package.json", "{}\n")
     _write_text(sibling / "tests" / "unit.test.ts", "export const safe = true;\n")
 
     match = extract_sensitive_tool_action_request(
@@ -16535,6 +16536,37 @@ def test_guard_runtime_keeps_uninstalled_runner_after_literal_home_cd_reviewable
     match = extract_sensitive_tool_action_request(
         "Bash",
         {"command": "cd ~/sibling && bun x vitest run tests/unit.test.ts"},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert match is not None
+    assert match.shell_execution_context_reason_code == "shell_cwd_workspace_escape"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "bun --smol ./node_modules/typescript/bin/tsc",
+        "bun x vitest run -u tests/unit.test.ts",
+        "bun x vitest run --coverage tests/unit.test.ts",
+    ],
+)
+def test_guard_runtime_keeps_mutating_runner_modes_after_literal_home_cd_reviewable(
+    tmp_path: Path,
+    command: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    sibling = home_dir / "sibling"
+    workspace.mkdir(parents=True)
+    _write_text(sibling / "package.json", "{}\n")
+    _write_text(sibling / "node_modules" / ".bin" / "vitest", "#!/bin/sh\n")
+    _write_text(sibling / "node_modules" / "typescript" / "bin" / "tsc", "#!/bin/sh\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": f"cd ~/sibling && {command}"},
         cwd=workspace,
         home_dir=home_dir,
     )
@@ -23777,6 +23809,7 @@ def test_codex_read_only_source_inspection_allows_literal_cd_to_sibling_workspac
     current = home_dir / "current"
     sibling = home_dir / "sibling"
     current.mkdir(parents=True)
+    _write_text(sibling / "package.json", "{}\n")
     _write_text(sibling / "app" / "route.ts", "export const tokenLabel = 'field name only';\n")
     command = "cd ~/sibling && sed -n '1,20p' app/route.ts"
 
@@ -23804,6 +23837,7 @@ def test_codex_literal_cd_source_inspection_keeps_sensitive_sibling_output_guard
     current = home_dir / "current"
     sibling = home_dir / "sibling"
     current.mkdir(parents=True)
+    _write_text(sibling / "package.json", "{}\n")
     credential = "ghp_" + "123456789012345678901234567890123456"
     _write_text(sibling / ".env", f"TOKEN={credential}\n")
     command = "cd ~/sibling && sed -n '1,20p' .env"
@@ -23821,6 +23855,21 @@ def test_codex_literal_cd_source_inspection_keeps_sensitive_sibling_output_guard
     )
     assert artifact is not None
     assert "credential-looking output" in artifact.name
+
+
+def test_codex_literal_cd_source_inspection_rejects_hidden_home_directory(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    current = home_dir / "current"
+    hidden = home_dir / ".ssh"
+    current.mkdir(parents=True)
+    _write_text(hidden / "config", "Host example\n")
+    _write_text(hidden / "pyproject.toml", "[project]\nname = 'not-a-workspace'\n")
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "cd ~/.ssh && sed -n '1,20p' config",
+        cwd=current,
+        home_dir=home_dir,
+    )
 
 
 @pytest.mark.parametrize(

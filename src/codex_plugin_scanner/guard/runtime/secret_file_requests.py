@@ -2094,7 +2094,7 @@ def literal_cd_execution_context(
         return None
     runner_token = args[0]
     runner_name = Path(runner_token).name
-    if runner_name not in {"eslint", "jest", "tsc", "vitest"}:
+    if runner_name not in {"tsc", "vitest"} or not _runner_invocation_is_read_only(runner_name, args[1:]):
         return None
     if any(
         _runner_argument_escapes_root(
@@ -2137,6 +2137,22 @@ def literal_cd_execution_context(
         ):
             return None
     return context
+
+
+def _runner_invocation_is_read_only(runner_name: str, args: list[str]) -> bool:
+    if runner_name == "tsc":
+        return "--noEmit" in args and "--emitDeclarationOnly" not in args and "--incremental" not in args
+    if not args or args[0] != "run":
+        return False
+    mutating_flags = {
+        "-u",
+        "--coverage",
+        "--merge-reports",
+        "--outputFile",
+        "--update",
+        "--updateSnapshot",
+    }
+    return not any(arg in mutating_flags or any(arg.startswith(f"{flag}=") for flag in mutating_flags) for arg in args)
 
 
 def _runner_argument_escapes_root(arg: str, *, cwd: Path, root: Path) -> bool:
