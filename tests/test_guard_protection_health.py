@@ -41,12 +41,13 @@ def test_runtime_state_brackets_ipv6_approval_center_origin() -> None:
 class _ActivityHealth:
     dropped_event_count: int
     persistence_error_count: int
+    active_error_count: int
 
 
 class _Store:
-    def __init__(self, *, count: int, dropped: int, errors: int) -> None:
+    def __init__(self, *, count: int, dropped: int, errors: int, active_errors: int) -> None:
         self._count: int = count
-        self._health: _ActivityHealth = _ActivityHealth(dropped, errors)
+        self._health: _ActivityHealth = _ActivityHealth(dropped, errors, active_errors)
 
     def count_command_activities(self) -> int:
         return self._count
@@ -75,6 +76,7 @@ def _payload(
     dropped: int = 0,
     errors: int = 0,
     activity_count: int = 1,
+    active_errors: int | None = None,
     runtime_state: dict[str, object] | None = None,
 ) -> dict[str, object]:
     if runtime_state is None:
@@ -83,7 +85,12 @@ def _payload(
             "containment_health": _containment_evidence(),
         }
     return build_runtime_protection_health(
-        store=_Store(count=activity_count, dropped=dropped, errors=errors),
+        store=_Store(
+            count=activity_count,
+            dropped=dropped,
+            errors=errors,
+            active_errors=(1 if dropped > 0 or errors > 0 else 0) if active_errors is None else active_errors,
+        ),
         runtime_state=runtime_state,
         managed_installs=installs or [],
         trust_status=trust or {},
@@ -107,8 +114,19 @@ def test_active_install_is_not_hook_interception_proof() -> None:
     }
     assert by_id["rule_packs"]["status"] == "pass"
     assert by_id["tamper_checks"]["status"] == "pass"
-    assert by_id["decision_stream"]["status"] == "unknown"
-    assert by_id["decision_stream"]["reason_code"] == "decision_stream_completeness_unavailable"
+    assert by_id["decision_stream"]["status"] == "pass"
+    assert by_id["decision_stream"]["reason_code"] == "decision_stream_healthy"
+
+
+def test_historical_persistence_errors_do_not_keep_current_health_degraded() -> None:
+    payload = _payload(dropped=4, errors=4, active_errors=0, activity_count=3)
+    checks = cast(list[dict[str, str]], payload["checks"])
+    decision_stream = next(check for check in checks if check["check_id"] == "decision_stream")
+    assert decision_stream == {
+        "check_id": "decision_stream",
+        "status": "pass",
+        "reason_code": "decision_stream_healthy",
+    }
 
 
 def test_trust_signals_fail_closed_when_degraded() -> None:

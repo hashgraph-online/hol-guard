@@ -92,6 +92,13 @@ async function mountProtectionFixture(
     else if (path.endsWith("/policy")) body = emptyPoliciesPayload;
     else if (path.endsWith("/settings")) body = defaultSettingsPayload;
     else if (path.endsWith("/inventory")) body = emptyInventoryPayload;
+    else if (path.endsWith("/protection/repair")) {
+      body = {
+        repaired: true,
+        check_ids: ["policy_engine", "rule_packs", "tamper_checks"],
+        message: "Integrity protection restored.",
+      };
+    }
     else if (path.endsWith("/command-activity/events")) {
       await route.fulfill({ status: 200, contentType: "text/event-stream", body: "" });
       return;
@@ -141,6 +148,21 @@ test("degraded protection copy remains visible on mobile", async ({ page }, test
   await expect(page.getByRole("heading", { name: "App protection is degraded" })).toBeVisible();
   await expect(page.getByLabel("Protection status").getByText("Degraded", { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("protection-health-mobile.png"), fullPage: true });
+});
+
+test("failed protection checks repair in place before offering diagnostics", async ({ page }) => {
+  const snapshot = snapshotForState("partial");
+  snapshot.protection_health.checks = snapshot.protection_health.checks.map((check) =>
+    check.check_id === "rule_packs" ? { ...check, status: "fail" as const } : check
+  );
+  await mountProtectionFixture(page, snapshot);
+  await page.goto(`/protect?${DAEMON}`);
+
+  await page.getByRole("button", { name: "Repair rule packs" }).click();
+
+  await expect(page).toHaveURL(/\/protect/);
+  await expect(page.getByText("Integrity protection restored.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open diagnostics" })).toHaveCount(0);
 });
 
 for (const expected of [

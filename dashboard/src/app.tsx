@@ -18,6 +18,8 @@ import {
   guardAwareHref,
   bulkAllowReadOnce,
   repairApprovalCenter,
+  repairProtectionCheck,
+  runHarnessAction,
   resolveRequestWithQueueResult,
   retryResume,
 } from "./guard-api";
@@ -751,6 +753,27 @@ export function App() {
     }
   }, []);
 
+  const handleRepairProtectionCheck = useCallback(async (checkId: string, harnesses: string[]) => {
+    let message: string;
+    if (checkId === "harness_hooks") {
+      if (harnesses.length === 0) {
+        throw new Error("Guard could not find an installed app hook to repair.");
+      }
+      for (const harness of harnesses) {
+        await runHarnessAction({ harness, action: "repair", dryRun: false });
+      }
+      message = `Repaired ${harnesses.length} app hook${harnesses.length === 1 ? "" : "s"}. Run a protected action to confirm interception.`;
+    } else if (checkId === "daemon") {
+      await repairApprovalCenter();
+      message = "Local runtime connection repaired.";
+    } else {
+      const result = await repairProtectionCheck(checkId);
+      message = result.message;
+    }
+    await refreshStateAfterAction();
+    return message;
+  }, [refreshStateAfterAction]);
+
   const appDetailContent = useMemo(() => {
     if (view !== "app-detail" || !appDetailHarness || runtime.kind !== "ready") {
       return null;
@@ -875,6 +898,7 @@ export function App() {
               onConnectHarness={handleConnectHarness}
               onTestHarness={handleTestHarness}
               onRepairHarness={handleRepairHarness}
+              onRepairProtectionCheck={handleRepairProtectionCheck}
               onOpenAppDetail={handleOpenAppDetail}
             />
           </Suspense>

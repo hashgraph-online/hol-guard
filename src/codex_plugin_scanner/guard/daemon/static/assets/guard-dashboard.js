@@ -14468,6 +14468,11 @@ function infinitiveVerb(type) {
       return "run";
   }
 }
+function isShellCommandRequest(request) {
+  const artifactType = (request.artifact_type ?? "").toLowerCase();
+  const actionType = (request.action_envelope_json?.action_type ?? "").toLowerCase();
+  return actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command");
+}
 function plainEnglishRequestTitle(request) {
   const category = detectCategory({
     ...request,
@@ -14491,6 +14496,9 @@ function plainEnglishRequestTitle(request) {
     case "tool-call":
       return `${app} wants to use a tool`;
     default:
+      if (isShellCommandRequest(request)) {
+        return `${app} wants to run a shell command`;
+      }
       return `${app} wants to do something with ${name}`;
   }
 }
@@ -14515,6 +14523,9 @@ function whyPaused(request) {
     case "tool-call":
       return "This uses an outside tool. Guard stops new tools by default.";
     default:
+      if (isShellCommandRequest(request)) {
+        return "This shell command has parts Guard could not fully inspect. Guard pauses these so you can review before running.";
+      }
       return "Guard paused this so you can review it first.";
   }
 }
@@ -14765,6 +14776,10 @@ function resolveSecondaryRiskSummary(item) {
     return null;
   }
   if (duplicatesStoppedActionText(item, summary)) {
+    return null;
+  }
+  const dashboardDetail = resolveDecisionV2Detail(item);
+  if (dashboardDetail && normalizeDuplicateReviewText(summary) === normalizeDuplicateReviewText(dashboardDetail)) {
     return null;
   }
   return summary;
@@ -17847,6 +17862,29 @@ async function repairApprovalCenter() {
     throw new Error(`Repair failed with ${response.status}`);
   }
   return response.json();
+}
+async function repairProtectionCheck(checkId) {
+  if (isGuardDemoMode()) {
+    return { repaired: true, check_ids: [checkId], message: "Protection restored." };
+  }
+  const response = await fetchWithGuardAuth("/v1/protection/repair", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ check_id: checkId })
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = isRecord$1(payload) ? stringValue$1(payload.message) : null;
+    throw new Error(message ?? `Protection repair failed with ${response.status}`);
+  }
+  if (!isRecord$1(payload) || payload.repaired !== true || !Array.isArray(payload.check_ids)) {
+    throw new Error("Guard returned an invalid protection repair result.");
+  }
+  return {
+    repaired: true,
+    check_ids: payload.check_ids.filter((value) => typeof value === "string"),
+    message: stringValue$1(payload.message) ?? "Protection restored."
+  };
 }
 function normalizeGuardUpdateVersionCheck(raw) {
   const value = isRecord$1(raw) ? raw : {};
@@ -29806,6 +29844,26 @@ function App() {
       navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
     }
   }, []);
+  const handleRepairProtectionCheck = reactExports.useCallback(async (checkId, harnesses) => {
+    let message;
+    if (checkId === "harness_hooks") {
+      if (harnesses.length === 0) {
+        throw new Error("Guard could not find an installed app hook to repair.");
+      }
+      for (const harness of harnesses) {
+        await runHarnessAction({ harness, action: "repair", dryRun: false });
+      }
+      message = `Repaired ${harnesses.length} app hook${harnesses.length === 1 ? "" : "s"}. Run a protected action to confirm interception.`;
+    } else if (checkId === "daemon") {
+      await repairApprovalCenter();
+      message = "Local runtime connection repaired.";
+    } else {
+      const result = await repairProtectionCheck(checkId);
+      message = result.message;
+    }
+    await refreshStateAfterAction();
+    return message;
+  }, [refreshStateAfterAction]);
   const appDetailContent = reactExports.useMemo(() => {
     if (view !== "app-detail" || !appDetailHarness || runtime.kind !== "ready") {
       return null;
@@ -29923,6 +29981,7 @@ function App() {
             onConnectHarness: handleConnectHarness,
             onTestHarness: handleTestHarness,
             onRepairHarness: handleRepairHarness,
+            onRepairProtectionCheck: handleRepairProtectionCheck,
             onOpenAppDetail: handleOpenAppDetail
           }
         ) }) : null,

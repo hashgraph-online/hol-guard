@@ -1,118 +1,259 @@
-import { HiMiniExclamationCircle, HiMiniWrenchScrewdriver } from "react-icons/hi2";
+import { useCallback, useState } from "react";
+import {
+  HiMiniCheckCircle,
+  HiMiniExclamationCircle,
+  HiMiniWrenchScrewdriver,
+} from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
 import { harnessDisplayName } from "./approval-center-utils";
-import type { GuardProtectionCheck, GuardProtectionHealth } from "./guard-types";
+import type {
+  GuardProtectionCheck,
+  GuardProtectionHealth,
+} from "./guard-types";
 
 type GapAction = {
+  checkId: string;
   label: string;
   detail: string;
-  href: string;
+  fallbackHref: string;
   cta: string;
 };
 
-const PROTECTION_CHECK_ACTIONS: Record<string, GapAction> = {
+type RepairState = { status: "working" | "success" | "error"; message: string };
+
+const PROTECTION_CHECK_ACTIONS: Record<string, Omit<GapAction, "checkId">> = {
   harness_hooks: {
     label: "App hooks",
     detail: "One or more app hooks need setup or repair.",
-    href: "/settings?section=apps",
+    fallbackHref: "/settings?section=apps",
     cta: "Repair app hooks",
   },
   daemon: {
     label: "Local runtime",
-    detail: "The local Guard runtime needs attention before protection can finish.",
-    href: "/settings",
-    cta: "Open settings",
+    detail:
+      "The local Guard runtime needs attention before protection can finish.",
+    fallbackHref: "/settings",
+    cta: "Repair local runtime",
   },
   policy_engine: {
     label: "Policy engine",
     detail: "Guard could not confirm the local policy engine is ready.",
-    href: "/policy",
-    cta: "Review policy",
+    fallbackHref: "/policy",
+    cta: "Repair policy engine",
   },
   rule_packs: {
     label: "Rule packs",
     detail: "Guard cannot confirm the active rule-pack proof yet.",
-    href: "/policy",
-    cta: "Open policy",
+    fallbackHref: "/policy",
+    cta: "Repair rule packs",
   },
   decision_plane_compatibility: {
     label: "Decision plane",
     detail: "Local decision-plane compatibility is unproven or failed.",
-    href: "/settings",
-    cta: "Open settings",
+    fallbackHref: "/settings",
+    cta: "Repair decision plane",
   },
   containment_compatibility: {
     label: "Containment",
     detail: "Containment compatibility is unproven or failed.",
-    href: "/settings",
-    cta: "Open settings",
+    fallbackHref: "/settings",
+    cta: "Repair containment",
   },
   sandbox: {
     label: "Sandbox",
     detail: "Sandbox enforcement could not be confirmed.",
-    href: "/settings",
-    cta: "Open settings",
+    fallbackHref: "/settings",
+    cta: "Repair sandbox",
   },
   decision_stream: {
     label: "Command evidence",
     detail: "Command activity evidence is incomplete or unavailable.",
-    href: "/evidence?view=commands",
-    cta: "Open command diagnostics",
+    fallbackHref: "/evidence?view=commands",
+    cta: "Check command evidence",
   },
   tamper_checks: {
     label: "Integrity checks",
     detail: "Managed Guard files or hooks did not pass integrity checks.",
-    href: "/settings?section=security",
+    fallbackHref: "/settings?section=security",
     cta: "Repair integrity",
   },
 };
 
-function actionForCheck(check: GuardProtectionCheck, repairHarness?: string): GapAction {
+function actionForCheck(
+  check: GuardProtectionCheck,
+  repairHarness?: string,
+): GapAction {
   if (check.check_id === "harness_hooks" && repairHarness) {
     return {
+      checkId: check.check_id,
       label: "App hooks",
       detail: `${harnessDisplayName(repairHarness)} hooks need setup or repair.`,
-      href: `/apps/${repairHarness}?tab=settings`,
+      fallbackHref: `/apps/${repairHarness}?tab=settings`,
       cta: `Repair ${harnessDisplayName(repairHarness)}`,
     };
   }
-  return (
-    PROTECTION_CHECK_ACTIONS[check.check_id] ?? {
-      label: check.check_id.replace(/_/g, " "),
-      detail: "Guard could not confirm this protection proof.",
-      href: "/settings",
-      cta: "Open settings",
-    }
-  );
+  const action = PROTECTION_CHECK_ACTIONS[check.check_id];
+  return action
+    ? { checkId: check.check_id, ...action }
+    : {
+        checkId: check.check_id,
+        label: check.check_id.replace(/_/g, " "),
+        detail: "Guard could not confirm this protection proof.",
+        fallbackHref: "/settings",
+        cta: "Try automatic repair",
+      };
 }
 
 export function primaryProtectionRecoveryAction(
   health: GuardProtectionHealth,
-  repairHarness?: string
+  repairHarness?: string,
 ): GapAction | null {
   const gaps = health.checks.filter((check) => check.status !== "pass");
-  if (gaps.length === 0) return null;
   const ordered = [
     ...gaps.filter((check) => check.status === "fail"),
     ...gaps.filter((check) => check.status !== "fail"),
   ];
   const first = ordered[0];
-  if (first === undefined) return null;
-  return actionForCheck(first, repairHarness);
+  return first ? actionForCheck(first, repairHarness) : null;
+}
+
+type ProtectionGapItemProps = {
+  action: GapAction;
+  check: GuardProtectionCheck;
+  repairState?: RepairState;
+  onRepair: (checkId: string) => Promise<void>;
+};
+
+function ProtectionGapItem({
+  action,
+  check,
+  repairState,
+  onRepair,
+}: ProtectionGapItemProps) {
+  const handleRepair = useCallback(() => {
+    void onRepair(check.check_id);
+  }, [check.check_id, onRepair]);
+  const working = repairState?.status === "working";
+
+  return (
+    <li className="flex flex-col gap-2 rounded-xl border border-brand-attention/10 bg-white/70 px-3 py-3">
+      <div className="flex items-start gap-2 text-xs text-slate-600">
+        {repairState?.status === "success" ? (
+          <HiMiniCheckCircle
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500"
+            aria-hidden="true"
+          />
+        ) : (
+          <HiMiniExclamationCircle
+            className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${check.status === "fail" ? "text-brand-attention" : "text-slate-400"}`}
+            aria-hidden="true"
+          />
+        )}
+        <span>
+          <strong className="font-semibold text-brand-dark">
+            {action.label}
+          </strong>
+          <span className="ml-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+            {check.status === "fail" ? "Failed" : "Unproven"}
+          </span>
+          <span className="mt-0.5 block">{action.detail}</span>
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <ActionButton
+          onClick={handleRepair}
+          disabled={working}
+          variant="outline"
+        >
+          {working ? "Repairing…" : action.cta}
+        </ActionButton>
+        {repairState?.status === "error" ? (
+          <ActionButton href={action.fallbackHref} variant="ghost">
+            Open diagnostics
+          </ActionButton>
+        ) : null}
+      </div>
+      {repairState ? (
+        <p
+          className={`text-xs ${repairState.status === "error" ? "text-red-600" : "text-slate-500"}`}
+          aria-live="polite"
+        >
+          {repairState.message}
+        </p>
+      ) : null}
+    </li>
+  );
 }
 
 type FleetProtectionRecoveryProps = {
   health: GuardProtectionHealth;
   repairHarness?: string;
+  repairHarnesses: string[];
+  onRepairProtectionCheck: (
+    checkId: string,
+    harnesses: string[],
+  ) => Promise<string>;
 };
 
 export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
+  const [repairStates, setRepairStates] = useState<Record<string, RepairState>>(
+    {},
+  );
   const gaps = props.health.checks.filter((check) => check.status !== "pass");
-  if (gaps.length === 0) return null;
-
-  const primary = primaryProtectionRecoveryAction(props.health, props.repairHarness);
   const failCount = gaps.filter((check) => check.status === "fail").length;
   const unknownCount = gaps.length - failCount;
+
+  const handleRepair = useCallback(
+    async (checkId: string) => {
+      setRepairStates((current) => ({
+        ...current,
+        [checkId]: { status: "working", message: "Repairing now…" },
+      }));
+      try {
+        const message = await props.onRepairProtectionCheck(
+          checkId,
+          props.repairHarnesses,
+        );
+        setRepairStates((current) => ({
+          ...current,
+          [checkId]: { status: "success", message },
+        }));
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Guard could not complete this repair.";
+        setRepairStates((current) => ({
+          ...current,
+          [checkId]: { status: "error", message },
+        }));
+      }
+    },
+    [props.onRepairProtectionCheck, props.repairHarnesses],
+  );
+
+  const handleRepairAll = useCallback(async () => {
+    const repairedGroups = new Set<string>();
+    for (const check of gaps) {
+      const group =
+        check.check_id === "rule_packs" ||
+        check.check_id === "tamper_checks" ||
+        check.check_id === "policy_engine"
+          ? "integrity"
+          : check.check_id;
+      if (repairedGroups.has(group)) continue;
+      repairedGroups.add(group);
+      await handleRepair(check.check_id);
+    }
+  }, [gaps, handleRepair]);
+  const handleRepairAllClick = useCallback(() => {
+    void handleRepairAll();
+  }, [handleRepairAll]);
+
+  if (gaps.length === 0) return null;
+  const anyWorking = Object.values(repairStates).some(
+    (state) => state.status === "working",
+  );
 
   return (
     <section
@@ -122,54 +263,34 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <HiMiniWrenchScrewdriver className="h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-brand-dark">Restore full protection</h2>
+            <HiMiniWrenchScrewdriver
+              className="h-4 w-4 shrink-0 text-brand-attention"
+              aria-hidden="true"
+            />
+            <h2 className="text-sm font-semibold text-brand-dark">
+              Restore full protection
+            </h2>
           </div>
           <p className="mt-1 text-sm text-slate-600">
             {failCount > 0
-              ? `Fix the ${failCount} failed check${failCount === 1 ? "" : "s"} below${
-                  unknownCount > 0 ? `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}` : ""
-                }. Each step opens the control that can clear it.`
-              : "Complete the proofs below to reach full protection. Each step opens the control that can clear it."}
+              ? `Repair the ${failCount} failed check${failCount === 1 ? "" : "s"} here${unknownCount > 0 ? `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}` : ""}. Guard rechecks protection after each step.`
+              : "Complete the remaining proof here. Guard rechecks protection after each step."}
           </p>
         </div>
-        {primary ? (
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <ActionButton href={primary.href}>{primary.cta}</ActionButton>
-          </div>
-        ) : null}
+        <ActionButton onClick={handleRepairAllClick} disabled={anyWorking}>
+          {anyWorking ? "Repairing…" : "Repair failed checks"}
+        </ActionButton>
       </div>
       <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-        {gaps.map((check) => {
-          const action = actionForCheck(check, props.repairHarness);
-          return (
-            <li
-              key={check.check_id}
-              className="flex flex-col gap-2 rounded-xl border border-brand-attention/10 bg-white/70 px-3 py-3"
-            >
-              <div className="flex items-start gap-2 text-xs text-slate-600">
-                <HiMiniExclamationCircle
-                  className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${
-                    check.status === "fail" ? "text-brand-attention" : "text-slate-400"
-                  }`}
-                  aria-hidden="true"
-                />
-                <span>
-                  <strong className="font-semibold text-brand-dark">{action.label}</strong>
-                  <span className="ml-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">
-                    {check.status === "fail" ? "Failed" : "Unproven"}
-                  </span>
-                  <span className="mt-0.5 block">{action.detail}</span>
-                </span>
-              </div>
-              <div>
-                <ActionButton href={action.href} variant="outline">
-                  {action.cta}
-                </ActionButton>
-              </div>
-            </li>
-          );
-        })}
+        {gaps.map((check) => (
+          <ProtectionGapItem
+            key={check.check_id}
+            action={actionForCheck(check, props.repairHarness)}
+            check={check}
+            repairState={repairStates[check.check_id]}
+            onRepair={handleRepair}
+          />
+        ))}
       </ul>
     </section>
   );

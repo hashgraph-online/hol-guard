@@ -92,6 +92,50 @@ def _decode_dashboard_session_claims(token: str) -> dict[str, object]:
 
 
 class TestGuardSurfaceServer:
+    def test_protection_repair_requires_auth_and_repairs_integrity(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+        monkeypatch.setattr(
+            GuardStore,
+            "setup_policy_integrity",
+            lambda self, **_kwargs: {"mode": "protected"},
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        unauthenticated = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/protection/repair",
+            data=json.dumps({"check_id": "rule_packs"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        authenticated = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/protection/repair",
+            data=json.dumps({"check_id": "rule_packs"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "X-Guard-Token": daemon._server.auth_token,
+            },
+            method="POST",
+        )
+        try:
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(unauthenticated, timeout=5)
+            with urllib.request.urlopen(authenticated, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert error.value.code == 401
+        assert payload == {
+            "repaired": True,
+            "check_ids": ["policy_engine", "rule_packs", "tamper_checks"],
+            "message": "Integrity protection restored.",
+        }
+
     def test_local_dashboard_session_preserves_reserved_claims(self) -> None:
         token = build_local_dashboard_session_token(
             auth_token="daemon-auth-token",

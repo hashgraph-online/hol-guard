@@ -1990,6 +1990,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             result = repair_approval_center_locator(self.server.store.guard_home)  # type: ignore[attr-defined]
             self._write_json(result)
             return
+        if parsed.path == "/v1/protection/repair":
+            self._handle_protection_repair(payload)
+            return
         if parsed.path == "/v1/insights/share":
             self._handle_insights_share_publish(payload)
             return
@@ -4072,6 +4075,64 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return None
         return parsed if isinstance(parsed, dict) else None
 
+    def _handle_protection_repair(self, payload: dict[str, object]) -> None:
+        check_id = self._optional_string(payload.get("check_id"))
+        store = self.server.store  # type: ignore[attr-defined]
+        if check_id in {"policy_engine", "rule_packs", "tamper_checks"}:
+            try:
+                status = store.setup_policy_integrity(now=_now(), include_items=False)
+            except (OSError, RuntimeError, ValueError):
+                self._write_json(
+                    {
+                        "error": "protection_repair_failed",
+                        "message": "Guard could not restore integrity protection automatically.",
+                    },
+                    status=409,
+                )
+                return
+            repaired = status.get("mode") == "protected"
+            self._write_json(
+                {
+                    "repaired": repaired,
+                    "check_ids": ["policy_engine", "rule_packs", "tamper_checks"],
+                    "message": (
+                        "Integrity protection restored."
+                        if repaired
+                        else "Guard could not confirm integrity protection yet."
+                    ),
+                },
+                status=200 if repaired else 409,
+            )
+            return
+        if check_id == "decision_stream":
+            try:
+                health = store.get_command_activity_persistence_health()
+                observed = store.count_command_activities() > 0
+            except (OSError, RuntimeError, TypeError, ValueError):
+                self._write_json(
+                    {
+                        "error": "protection_repair_failed",
+                        "message": "Guard could not verify the command evidence store.",
+                    },
+                    status=409,
+                )
+                return
+            repaired = health.active_error_count == 0 and observed
+            self._write_json(
+                {
+                    "repaired": repaired,
+                    "check_ids": ["decision_stream"],
+                    "message": (
+                        "Command evidence is healthy."
+                        if repaired
+                        else "Guard still needs a successful protected command to confirm evidence health."
+                    ),
+                },
+                status=200 if repaired else 409,
+            )
+            return
+        self._write_json({"error": "unsupported_protection_check"}, status=400)
+
     def _handle_settings_update(self, payload: dict[str, object]) -> None:
         settings = payload.get("settings")
         if not isinstance(settings, dict):
@@ -5279,6 +5340,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/approval-gate/totp/verify",
             "/v1/approval-gate/totp/disable",
             "/v1/daemon/repair",
+            "/v1/protection/repair",
             "/v1/notifications/setup",
             "/v1/update/status",
             "/v1/update/reconnect/prepare",
@@ -5988,6 +6050,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/approval-gate/totp/verify",
             "/v1/approval-gate/totp/disable",
             "/v1/daemon/repair",
+            "/v1/protection/repair",
             "/v1/insights/share",
             "/v1/cloud/connect",
             "/v1/notifications/setup",
