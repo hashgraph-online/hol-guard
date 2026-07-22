@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
+    import tomli as tomllib
+
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -97,6 +102,20 @@ def test_main_push_build_computes_a_registry_derived_stable_version() -> None:
     condition = '[[ "$CURRENT_VERSION" == "$VERSION" ]]'
     assert stamp_run.index("--check") < stamp_run.index(condition)
     assert stamp_run.index(condition) < stamp_run.index("--version")
+
+
+def test_release_21_main_merge_publishes_exact_stable_version_and_tag() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    workflow = _workflow(PUBLISH_WORKFLOW)
+    release_job = workflow["jobs"]["release-main"]
+    release_step = next(step for step in release_job["steps"] if step.get("name") == "Create discoverable main release")
+
+    assert project["project"]["version"] == "2.1.0"
+    assert release_job["needs"] == ["build", "publish-main-pypi"]
+    assert "github.ref == 'refs/heads/main'" in release_job["if"]
+    assert "needs.build.outputs.channel == 'stable'" in release_job["if"]
+    assert 'tag="v${VERSION}"' in release_step["run"]
+    assert 'gh release create "$tag"' in release_step["run"]
 
 
 def test_release_21_push_computes_a_deterministic_source_bound_alpha() -> None:

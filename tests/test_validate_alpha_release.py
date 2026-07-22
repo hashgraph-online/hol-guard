@@ -58,13 +58,14 @@ def test_registry_preserves_release_31_and_adds_release_21() -> None:
         "refs/heads/release/3.1",
     )
     assert RELEASE_TRAINS["refs/heads/release/2.1"].version_prefix == "2.1.0"
-    assert RELEASE_TRAINS["refs/heads/release/2.1"].stable_enabled is False
+    assert RELEASE_TRAINS["refs/heads/release/2.1"].stable_enabled is True
     assert RELEASE_TRAINS["refs/heads/release/3.1"].version_prefix == "3.1.0"
 
 
 @pytest.mark.parametrize(
     ("git_ref", "version"),
     [
+        ("refs/heads/release/2.1", "2.1.0"),
         ("refs/heads/release/3.1", "3.1.0"),
     ],
 )
@@ -85,18 +86,6 @@ def test_accepts_exact_stable_candidates_with_bound_source_sha(git_ref: str, ver
         channel=ReleaseChannel.STABLE,
         source_sha=GITHUB_SHA,
     )
-
-
-def test_release_21_rejects_stable_channel_even_with_exact_tag_and_sha() -> None:
-    with pytest.raises(ValueError, match=r"release/2\.1 is alpha-only"):
-        validate_release_train(
-            "2.1.0",
-            "refs/heads/release/2.1",
-            ReleaseChannel.STABLE,
-            actual_ref="refs/tags/v2.1.0",
-            github_sha=GITHUB_SHA,
-            expected_sha=GITHUB_SHA,
-        )
 
 
 @pytest.mark.parametrize(
