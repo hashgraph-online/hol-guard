@@ -68,7 +68,7 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
     if operation == "log":
         return _safe_bounded_log_args(args)
     if operation == "status":
-        return bool(args) and all(arg in {"--short", "--branch", "--porcelain", "--porcelain=v1"} for arg in args)
+        return bool(args) and all(_safe_status_arg(arg) for arg in args)
     if operation == "branch":
         return args in {("--show-current",), ("--list",)}
     if operation == "rev-parse":
@@ -85,6 +85,14 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
             for arg in args
         )
     return False
+
+
+def _safe_status_arg(value: str) -> bool:
+    if value in {"--short", "--branch", "--porcelain", "--porcelain=v1"}:
+        return True
+    return bool(
+        value.startswith("-") and not value.startswith("--") and len(value) > 1 and set(value[1:]) <= {"b", "s"}
+    )
 
 
 def _safe_bounded_log_args(args: tuple[str, ...]) -> bool:

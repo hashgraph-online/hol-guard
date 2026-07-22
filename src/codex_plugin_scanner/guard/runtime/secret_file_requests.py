@@ -47,6 +47,7 @@ from .false_positive_rules import (
     split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
+from .github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from .github_capability_contract import GitHubCommandAssessment
 from .github_capability_interaction import (
     github_capability_action_class,
@@ -1235,7 +1236,13 @@ def is_explicitly_benign_tool_action_request(
         if not parts:
             return False
         parsed_command_names = list(_shell_command_names_from_parts(parts))
+        if is_nonexecuting_github_actions_read_workflow(stripped_command):
+            found_benign_candidate = True
+            continue
         if _looks_like_benign_interpreter_wait(stripped_command, parts, parsed_command_names):
+            found_benign_candidate = True
+            continue
+        if _looks_like_benign_interpreter_wait_chain(stripped_command, parts):
             found_benign_candidate = True
             continue
         if _looks_like_read_only_interpreter_command(stripped_command, parts, parsed_command_names):
@@ -1249,6 +1256,12 @@ def is_explicitly_benign_tool_action_request(
             found_benign_candidate = True
             continue
         if _looks_like_safe_git_status_command(stripped_command, parts, cwd=cwd):
+            found_benign_candidate = True
+            continue
+        if home_dir is not None and _looks_like_safe_compound_developer_inspection(
+            stripped_command,
+            home_dir=home_dir,
+        ):
             found_benign_candidate = True
             continue
         if _looks_like_safe_kubernetes_inventory_command(stripped_command, parts, cwd=cwd):
@@ -1377,6 +1390,104 @@ def _git_status_has_execution_free_config(cwd: Path | None) -> bool:
         return False
     values = [value.strip().lower() for value in result.stdout.split("\0") if value.strip()]
     return bool(values) and all(value in {"0", "false", "no", "off"} for value in values)
+
+
+def _looks_like_safe_compound_developer_inspection(command_text: str, *, home_dir: Path) -> bool:
+    """Auto-relax only whole commands composed of bounded local observers."""
+
+    if any(marker in command_text for marker in ("$(", "`", "<(", ">(")):
+        return False
+    context = low_risk_compound_developer_execution_context(command_text, home_dir=home_dir)
+    if context is None or not context.complete:
+        return False
+    saw_inspection = False
+    for segment in context.segments[1:]:
+        if any(
+            control not in {"&&", "||", "|", ";", "\n"} for control in (*segment.control_before, *segment.control_after)
+        ):
+            return False
+        command_name, command_index = _shell_segment_primary_command(list(segment.tokens))
+        if command_name is None or command_index is None:
+            return False
+        args = _without_safe_inspection_redirections(list(segment.tokens[command_index + 1 :]))
+        if args is None:
+            return False
+        segment_root = segment.effective_cwd or home_dir
+        if command_name == "git":
+            operation = _read_only_git_operation(args)
+            if operation == "status":
+                if not _git_status_has_execution_free_config(segment_root):
+                    return False
+            elif operation == "log":
+                if not _git_log_has_execution_free_config(segment_root):
+                    return False
+            elif operation not in {"ls-files", "rev-parse"}:
+                return False
+            saw_inspection = True
+            continue
+        if (
+            command_name in _READ_ONLY_LOOKUP_FILTERS
+            and segment.control_before == ("|",)
+            and _read_only_lookup_filter_segment_is_safe(command_name, args, home_dir=segment_root)
+        ):
+            continue
+        if command_name in _READ_ONLY_LOOKUP_COMMANDS and _read_only_lookup_primary_segment_is_safe(
+            command_name,
+            args,
+            home_dir=segment_root,
+        ):
+            saw_inspection = True
+            continue
+        if command_name in _SAFE_STATIC_SHELL_COMMANDS and _static_shell_segment_is_safe(args):
+            continue
+        return False
+    return saw_inspection
+
+
+def _read_only_git_operation(args: list[str]) -> str | None:
+    if not args:
+        return None
+    operation_index = 0
+    if args[0] == "-C":
+        if len(args) < 3:
+            return None
+        operation_index = 2
+    return args[operation_index].casefold()
+
+
+def _git_log_has_execution_free_config(cwd: Path) -> bool:
+    if any(os.environ.get(key, "").strip() not in {"", "cat"} for key in ("GIT_PAGER", "PAGER")):
+        return False
+    git_path = shutil.which("git")
+    if git_path is None:
+        return False
+    try:
+        resolved_git = Path(git_path).resolve()
+        execution_cwd = cwd.resolve()
+    except OSError:
+        return False
+    if not _git_binary_path_is_trusted(resolved_git, cwd=execution_cwd):
+        return False
+    for key in ("core.pager", "pager.log"):
+        try:
+            result = subprocess.run(
+                [str(resolved_git), "config", "--null", "--get-all", key],
+                cwd=execution_cwd,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=1,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return False
+        if result.returncode == 1 and not result.stdout:
+            continue
+        if result.returncode != 0:
+            return False
+        values = [value.strip() for value in result.stdout.split("\0") if value.strip()]
+        if any(value != "cat" for value in values):
+            return False
+    return True
 
 
 def _git_binary_path_is_trusted(git_path: Path, *, cwd: Path) -> bool:
@@ -1604,6 +1715,12 @@ def _destructive_shell_tool_action_request(
             canonical_command=canonical_command,
             interpreter_executable_identities=interpreter_executable_identities,
         )
+    if is_nonexecuting_github_actions_read_workflow(detection_command_text) and (
+        raw_command_text is None
+        or raw_command_text == detection_command_text
+        or is_nonexecuting_github_actions_read_workflow(raw_command_text)
+    ):
+        return None
     if not execution_context.complete and home_dir is not None:
         developer_execution_context = literal_cd_execution_context(
             detection_command_text,
@@ -5714,6 +5831,8 @@ def _looks_destructive_shell_command(
     parsed_command_names = list(_shell_command_names_from_parts(parts))
     if _looks_like_benign_interpreter_wait(normalized, parts, parsed_command_names):
         return False
+    if _looks_like_benign_interpreter_wait_chain(normalized, parts):
+        return False
     if _looks_like_read_only_interpreter_command(normalized, parts, parsed_command_names):
         return False
     if _looks_like_safe_pytest_binary_invocation(parts, cwd=cwd):
@@ -7571,6 +7690,31 @@ def _looks_like_benign_interpreter_wait(command_text: str, parts: list[str], com
     if not scripts or len(scripts) != len(command_names):
         return False
     return all(_script_is_benign_wait(script_text) for script_text in scripts)
+
+
+def _looks_like_benign_interpreter_wait_chain(command_text: str, parts: list[str]) -> bool:
+    """Allow a bounded interpreter wait followed only by static completion markers."""
+
+    if any(marker in command_text for marker in ("$(", "`", "<(", ">(")):
+        return False
+    if any(token in parts for token in {";", "&", "||", "|", "|&"}):
+        return False
+    saw_wait = False
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            return False
+        args = segment[command_index + 1 :]
+        if _is_script_interpreter_command(command_name):
+            scripts = _script_interpreter_texts(segment)
+            if len(scripts) != 1 or not _script_is_benign_wait(scripts[0]):
+                return False
+            saw_wait = True
+            continue
+        if command_name in _SAFE_STATIC_SHELL_COMMANDS and _static_shell_segment_is_safe(args):
+            continue
+        return False
+    return saw_wait
 
 
 def _looks_like_read_only_shell_pipeline(

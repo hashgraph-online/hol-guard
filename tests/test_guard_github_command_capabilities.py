@@ -301,6 +301,22 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
     assert match is None
 
 
+def test_guard_keeps_github_read_with_stderr_discard_prompt_free(tmp_path: Path) -> None:
+    command = "gh api repos/example/project/actions/jobs/123/logs 2>/dev/null | head -20"
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+
+    assert match is None
+
+
+def test_guard_keeps_github_read_output_write_reviewable(tmp_path: Path) -> None:
+    command = "gh api repos/example/project/actions/jobs/123/logs > output.zip"
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+
+    assert match is not None
+
+
 def test_guard_keeps_static_graphql_query_with_jq_bindings_prompt_free(tmp_path: Path) -> None:
     command = _text(
         "gh api graphql -f query='query($owner:String!,$repo:String!){repository(owner:$owner,name:$repo)",

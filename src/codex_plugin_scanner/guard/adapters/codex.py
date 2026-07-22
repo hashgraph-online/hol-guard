@@ -216,6 +216,10 @@ _AUTHORITATIVE_ENFORCEMENT_BOUNDARY = "codex-native-hooks"
 _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON = "codex_authoritative_hook_unavailable"
 
 
+def _hook_workspace_dir(context: HarnessContext) -> Path | None:
+    return context.workspace_dir if context.workspace_override_explicit else None
+
+
 def _json_object(path: Path) -> dict[str, object]:
     if not path.is_file():
         return {}
@@ -243,8 +247,9 @@ def _local_hook_command_parts_for_home_mode(
         guard_args.extend(["--home", str(context.home_dir)])
         if runtime_guard_home != context.home_dir.resolve():
             guard_args.extend(["--guard-home", str(runtime_guard_home)])
-    if context.workspace_dir is not None:
-        guard_args.extend(["--workspace", str(context.workspace_dir)])
+    hook_workspace = _hook_workspace_dir(context)
+    if hook_workspace is not None:
+        guard_args.extend(["--workspace", str(hook_workspace)])
     package_root = Path(__file__).resolve().parents[3]
     return isolated_guard_cli_command(python_executable, package_root, guard_args)
 
@@ -287,8 +292,9 @@ def _hook_command_parts_for_home_mode(
     query = {"guard-home": str(guard_home)}
     if not home_is_current:
         query["home"] = str(context.home_dir)
-    if context.workspace_dir is not None:
-        query["workspace"] = str(context.workspace_dir)
+    hook_workspace = _hook_workspace_dir(context)
+    if hook_workspace is not None:
+        query["workspace"] = str(hook_workspace)
     long_timeout = _post_tool_hook_timeout_seconds(context)
     config = {
         "state_path": str(guard_home / "daemon-state.json"),
@@ -376,7 +382,7 @@ def _permission_request_hook_group(context: HarnessContext) -> dict[str, object]
 def _post_tool_hook_timeout_seconds(context: HarnessContext) -> int:
     configured_wait_timeout = load_guard_config(
         context.guard_home,
-        context.workspace_dir,
+        _hook_workspace_dir(context),
     ).approval_wait_timeout_seconds
     return (
         min(
@@ -451,7 +457,7 @@ def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
         guard_home=context.guard_home,
         home_dir=context.home_dir,
         runtime_guard_home=_runtime_guard_home(context),
-        workspace_dir=context.workspace_dir,
+        workspace_dir=_hook_workspace_dir(context),
         config_path=CodexHarnessAdapter._hook_config_path(context),
         interpreter_path=Path(_guard_python_executable()),
         package_version=__version__,
@@ -1291,6 +1297,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             "managed_hook_config_path": str(hook_config_path),
             "managed_hook_manifest_path": str(hook_state["manifest_path"]),
             "managed_hook_integrity": str(hook_state["integrity_status"]),
+            "hook_workspace_explicit": context.workspace_override_explicit,
             "managed_hooks_path": str(hooks_path),
             "enforcement_boundary": _AUTHORITATIVE_ENFORCEMENT_BOUNDARY,
             "legacy_shell_guard_cleanup": "complete",

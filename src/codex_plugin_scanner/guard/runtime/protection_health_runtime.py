@@ -43,6 +43,9 @@ def _hook_signals(managed_installs: Sequence[Mapping[str, object]]) -> dict[str,
         harness = install.get("harness")
         if not isinstance(harness, str) or len(harness) > 64 or _STABLE_HARNESS.fullmatch(harness) is None:
             continue
+        # Active install rows are not hook interception proof. Treat them as
+        # unproven until a dedicated attestation signal exists; only inactive
+        # managed installs are a confirmed failure.
         candidate = (
             _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
             if install.get("active") is True
@@ -66,7 +69,12 @@ def _global_hook_signal(harness_signals: Mapping[str, ProtectionSignal]) -> Prot
     return _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
 
 
-def _rule_pack_signal() -> ProtectionSignal:
+def _rule_pack_signal(trust_status: Mapping[str, object]) -> ProtectionSignal:
+    remembered = trust_status.get("remembered_rules")
+    if remembered == "enforced":
+        return _signal(ProtectionCheckStatus.PASS, "rule_packs_enforced")
+    if remembered == "disabled_degraded":
+        return _signal(ProtectionCheckStatus.FAIL, "rule_packs_disabled")
     return _signal(ProtectionCheckStatus.UNKNOWN, "rule_pack_runtime_proof_unavailable")
 
 
@@ -110,13 +118,14 @@ def _decision_stream_signal(store: ProtectionHealthStore) -> ProtectionSignal:
         return _signal(ProtectionCheckStatus.FAIL, "decision_stream_degraded")
     if activity_count == 0:
         return _signal(ProtectionCheckStatus.UNKNOWN, "decision_stream_not_observed")
+    # Historical rows do not prove the producer is still healthy.
     return _signal(ProtectionCheckStatus.UNKNOWN, "decision_stream_completeness_unavailable")
 
 
 def _tamper_signal(trust_status: Mapping[str, object]) -> ProtectionSignal:
     runtime_protection = trust_status.get("runtime_protection")
     if runtime_protection == "protected":
-        return _signal(ProtectionCheckStatus.UNKNOWN, "general_tamper_proof_unavailable")
+        return _signal(ProtectionCheckStatus.PASS, "runtime_protection_trusted")
     if runtime_protection == "degraded":
         return _signal(ProtectionCheckStatus.FAIL, "tamper_checks_failed")
     return _signal(ProtectionCheckStatus.UNKNOWN, "tamper_proof_unavailable")
@@ -130,7 +139,7 @@ def build_runtime_protection_health(
     trust_status: Mapping[str, object],
     now: datetime,
 ) -> dict[str, object]:
-    """Build current health without treating configuration as runtime proof."""
+    """Build current health using only operational runtime and trust proof."""
 
     harness_signals = _hook_signals(managed_installs)
     containment_signals = containment_health_signals(
@@ -141,7 +150,7 @@ def build_runtime_protection_health(
         "harness_hooks": _global_hook_signal(harness_signals),
         "daemon": _daemon_signal(runtime_state, now=now),
         "policy_engine": containment_signals["policy_engine"],
-        "rule_packs": _rule_pack_signal(),
+        "rule_packs": _rule_pack_signal(trust_status),
         "decision_plane_compatibility": containment_signals["decision_plane_compatibility"],
         "containment_compatibility": containment_signals["containment_compatibility"],
         "sandbox": containment_signals["sandbox"],

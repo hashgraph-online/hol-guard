@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.command_model import parse_shell_command
+from ..runtime.github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from ..runtime.jsonc import loads_jsonc
 from ..runtime.kubernetes_commands import kubernetes_secret_read_source
 from ..runtime.package_intent_common import PackageExecutionFileEvidence, PackageIntent
@@ -322,6 +323,8 @@ def _unmodeled_shell_runtime_artifact(
     workspace: Path | None,
     home_dir: Path,
 ) -> GuardArtifact | None:
+    if is_nonexecuting_github_actions_read_workflow(command_text):
+        return None
     canonical_command = parse_shell_command(command_text, cwd=workspace, home_dir=home_dir)
     execution_context = model_shell_execution_context(command_text, cwd=workspace, workspace_root=workspace)
     if canonical_command.confidence == "exact" and execution_context.complete:
