@@ -1098,15 +1098,13 @@ def _evaluate_with_cloud(
             )
         return None, None
     except RuntimeError:
-        if can_fallback_from_auth_failure():
-            return None, _cloud_fallback_reason(
-                code="cloud_auth_error",
-                message="Guard cloud evaluation was not authorized, so Guard used local package intelligence.",
-            )
         return (
             _cloud_fail_closed_evaluation(
-                code="cloud_auth_error",
-                message="Guard cloud evaluation was not authorized, so this package request needs review.",
+                code="cloud_validation_error",
+                message=(
+                    "Guard cloud evaluation could not establish a trusted session, "
+                    "so this package request needs review."
+                ),
                 artifact=artifact,
                 targets=targets,
                 workspace_dir=workspace_dir,

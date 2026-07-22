@@ -2567,6 +2567,41 @@ def test_evaluate_unlisted_package_still_requires_review_when_registry_identity_
     assert any(reason["code"] == "unidentified_package" for reason in result.reasons)
 
 
+def test_evaluate_unlisted_package_fails_closed_on_unexpected_auth_context_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=WORKSPACE_ID,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    def raise_unexpected_error(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+        raise RuntimeError("unexpected auth context failure")
+
+    monkeypatch.setattr(evaluator_module, "_resolve_guard_sync_auth_context", raise_unexpected_error)
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("@openai/codex@latest"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
+
+
 def test_evaluate_package_request_artifact_honors_cloud_advisory_block_when_auth_expired(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
