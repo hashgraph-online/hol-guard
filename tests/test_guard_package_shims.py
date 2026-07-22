@@ -1564,6 +1564,7 @@ def test_guard_protect_json_terminal_block_on_cloud_auth_error_does_not_queue_lo
 
 def test_guard_protect_allows_codex_install_with_local_intelligence_when_cloud_auth_expired(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
@@ -1574,6 +1575,11 @@ def test_guard_protect_allows_codex_install_with_local_intelligence_when_cloud_a
         evaluate_status=401,
     )
     try:
+        monkeypatch.setattr(
+            supply_chain_package_eval_module,
+            "_registry_resolved_target_version",
+            lambda **_kwargs: "1.2.3",
+        )
         _seed_bundle_cache_only(
             home_dir=home_dir,
             ecosystem="npm",

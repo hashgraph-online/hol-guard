@@ -698,7 +698,7 @@ def evaluate_package_request_artifact(
             artifact=artifact,
             workspace_dir=workspace_dir,
             fail_closed_unidentified=fail_closed_unidentified,
-            monitor_resolved_registry_identity=(
+            verify_registry_identity=(
                 cloud_fallback_reason is not None
                 and _optional_string(cloud_fallback_reason.get("code")) == "cloud_auth_error"
             ),
@@ -1167,7 +1167,7 @@ def _evaluate_with_cloud(
         )
         if fail_closed is not None:
             return fail_closed, None
-        if error.code in {401, 403}:
+        if error.code == 401:
             return None, _cloud_fallback_reason(
                 code="cloud_auth_error",
                 message="Guard cloud evaluation was not authorized, so Guard used local package intelligence.",
@@ -1336,7 +1336,7 @@ def _cloud_http_fail_closed_evaluation(
     fail_closed_decision: str,
 ) -> PackageRequestEvaluation | None:
     if status_code in {401, 403}:
-        if fail_closed_decision != "block":
+        if status_code == 401 and fail_closed_decision != "block":
             return None
         return _cloud_fail_closed_evaluation(
             code="cloud_auth_error",
@@ -2791,7 +2791,7 @@ def _fallback_package_results(
     artifact: GuardArtifact,
     workspace_dir: Path | None,
     fail_closed_unidentified: bool = False,
-    monitor_resolved_registry_identity: bool = False,
+    verify_registry_identity: bool = False,
 ) -> tuple[dict[str, object], ...]:
     bun_fallback_packages = _bun_lockfile_binary_fallback_packages(
         targets=targets,
@@ -2814,8 +2814,9 @@ def _fallback_package_results(
                     and _lockfile_target_key(target) in lockfile_versions
                 )
                 or (
-                    monitor_resolved_registry_identity
-                    and _optional_string(target.get("ecosystem")) in _REGISTRY_DEFAULT_RANGES
+                    verify_registry_identity
+                    and (requested_range := _optional_string(target.get("range"))) is not None
+                    and _registry_resolved_target_version(target=target, requested_range=requested_range) is not None
                 )
             ),
         )
