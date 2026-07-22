@@ -428,6 +428,10 @@ export function resolveSecondaryRiskSummary(item: GuardApprovalRequest): string 
   if (duplicatesStoppedActionText(item, summary)) {
     return null;
   }
+  const dashboardDetail = resolveDecisionV2Detail(item);
+  if (dashboardDetail && normalizeDuplicateReviewText(summary) === normalizeDuplicateReviewText(dashboardDetail)) {
+    return null;
+  }
   return summary;
 }
 
