@@ -51,13 +51,13 @@ dependencies = [
     "pyyaml>=6.0.3",
     "requests>=2.32,<3",
     "tomli>=2.0; python_version < '3.11'",
-    "cisco-ai-skill-scanner~=2.0.11; python_version < '3.14'",
+    "cisco-ai-skill-scanner~=2.0.12",
     "mcp>=1.28.1,<2; python_version >= '3.10'",
 ]
 
 [project.optional-dependencies]
 cisco = [
-    "litellm==1.91.3; python_version >= '3.11' and python_version < '3.14'",
+    "litellm==1.93.0; python_version >= '3.11' and python_version < '3.15'",
 ]
 dev = [
     "basedpyright>=1.39.8",
@@ -76,18 +76,19 @@ publish = [
 
 [dependency-groups]
 cisco-mcp = [
-    "cisco-ai-mcp-scanner==4.7.3; python_version >= '3.11' and python_version < '3.14'",
+    "cisco-ai-mcp-scanner==4.8.1; python_version >= '3.11.4'",
 ]
 
 [tool.uv]
 override-dependencies = [
     "aiohttp==3.14.1",
     "click==8.4.1",
-    "cisco-ai-skill-scanner==2.0.11",
+    "cisco-ai-skill-scanner==2.0.12",
     "fastapi==0.137.1",
-    "importlib-metadata==9.0.0",
+    "importlib-metadata==8.9.0",
     "jsonschema==4.26.0",
-    "litellm==1.91.3",
+    "litellm==1.93.0",
+    "magika==1.0.3",
     "openai==2.41.1",
     "pyjwt==2.13.0",
     "python-dotenv==1.2.2",

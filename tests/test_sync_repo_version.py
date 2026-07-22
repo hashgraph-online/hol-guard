@@ -37,14 +37,14 @@ def _write_repo_files(tmp_path: Path, *, pyproject_version: str, module_version:
                 f'version = "{pyproject_version}"',
                 'source = { editable = "." }',
                 "dependencies = [",
-                '    { name = "cisco-ai-skill-scanner", marker = "python_full_version < \'3.14\'" },',
+                '    { name = "cisco-ai-skill-scanner" },',
                 "]",
                 "",
                 "[package.optional-dependencies]",
                 "cisco = [",
                 (
                     '    { name = "litellm", marker = '
-                    '"python_full_version >= \'3.11\' and python_full_version < \'3.14\'" },'
+                    '"python_full_version >= \'3.11\' and python_full_version < \'3.15\'" },'
                 ),
                 "]",
                 "",
@@ -167,8 +167,7 @@ def test_sync_repo_version_preserves_lockfile_markers(tmp_path: Path) -> None:
     SYNC_REPO_VERSION.sync_repo_version(tmp_path, "2.0.845")
 
     lockfile_text = (tmp_path / "uv.lock").read_text(encoding="utf-8")
-    assert 'marker = "python_full_version < \'3.14\'"' in lockfile_text
-    assert 'marker = "python_full_version >= \'3.11\' and python_full_version < \'3.14\'"' in lockfile_text
+    assert 'marker = "python_full_version >= \'3.11\' and python_full_version < \'3.15\'"' in lockfile_text
 
 
 def test_sync_repo_version_preserves_inline_version_comments(tmp_path: Path) -> None:

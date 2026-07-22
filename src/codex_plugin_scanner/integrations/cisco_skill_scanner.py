@@ -44,13 +44,9 @@ def _empty_counts() -> dict[str, int]:
 
 
 def cisco_runtime_unavailable_message() -> str | None:
-    if sys.version_info < (3, 14):
-        return None
-    return (
-        "Cisco scanner evidence is unavailable on Python 3.14+ because the patched LiteLLM releases required "
-        "by Cisco scanning currently support Python <3.14. HOL Guard will continue without Cisco evidence; "
-        "use Python 3.10 through 3.13 for Cisco scanner evidence."
-    )
+    # LiteLLM 1.93+ and current Cisco skill-scanner dependencies support
+    # Python 3.14, so Guard no longer hard-blocks Cisco evidence on 3.14+.
+    return None
 
 
 def _normalize_string_items(value: object) -> tuple[str, ...]:
