@@ -28,7 +28,7 @@ from .runtime.approval_reuse import (
     ApprovalReuseValidationFailure,
     evaluate_approval_reuse,
 )
-from .runtime.browser_mcp_intent import normalize_browser_mcp_intent
+from .runtime.browser_mcp_intent import browser_intent_display_target, normalize_browser_mcp_intent
 from .runtime.mcp_protection import (
     McpServerIdentity,
     build_mcp_tool_identity,
@@ -892,7 +892,7 @@ def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[
         "tool_schema_mismatch": "tool name understates dangerous schema capabilities",
     }
     if browser_intent is not None:
-        target = browser_intent.target_domain or browser_intent.target_origin or "unknown target"
+        target = browser_intent_display_target(browser_intent, arguments)
         signals_by_category.update(
             {
                 "browser_navigation": f"browser navigation to {target}",

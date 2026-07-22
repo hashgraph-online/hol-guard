@@ -833,6 +833,10 @@ class TestBrowserRiskClassifierIntegration:
         )
         categories = tool_call_risk_categories(artifact, arguments)
         assert "browser_interaction" in categories
+        signals = tool_call_risk_signals(artifact, arguments)
+        assert "browser interaction on page element" in signals
+        assert all("unknown" not in signal for signal in signals)
+        assert all("#button" not in signal for signal in signals)
 
     def test_browser_transfer_category(self) -> None:
         """HGBM040: Upload/download has browser_transfer category."""
@@ -1062,3 +1066,27 @@ class TestProxyBrowserIntentMetadata:
         )
         assert "hol.org" in payload["launch_target"]
         assert "navigate_page" not in payload["launch_target"] or "chrome" in payload["launch_target"].lower()
+
+        cases: tuple[tuple[str, dict[str, object], str], ...] = (
+            ("click", {"uid": "12_3"}, "chrome-devtools click page element"),
+            (
+                "fill_form",
+                {"elements": [{"uid": "1", "value": "a"}, {"uid": "2", "value": "b"}]},
+                "chrome-devtools fill_form page elements",
+            ),
+            ("take_snapshot", {}, "chrome-devtools take_snapshot current page"),
+            ("get_network_request", {"reqid": 7}, "chrome-devtools get_network_request network request"),
+            ("get_console_message", {"msgid": 4}, "chrome-devtools get_console_message console message"),
+        )
+        for tool_name, arguments, expected_target in cases:
+            case_artifact, _ = _browser_artifact(tool_name=tool_name, arguments=arguments)
+            case_payload = RuntimeMcpGuardProxy._build_artifact_payload(
+                _FakeProxy(),
+                artifact=case_artifact,
+                artifact_hash="test-hash",
+                tool_name=tool_name,
+                params={"arguments": arguments},
+                signals=(),
+            )
+            assert case_payload["launch_target"] == expected_target
+            assert all(str(value) not in case_payload["launch_target"] for value in arguments.values())
