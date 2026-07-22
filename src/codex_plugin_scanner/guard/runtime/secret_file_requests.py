@@ -347,7 +347,7 @@ _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
 _READ_ONLY_LOOKUP_COMMANDS = frozenset(
     {"cat", "fd", "find", "grep", "egrep", "fgrep", "head", "ls", "pwd", "rg", "sed", "tail"}
 )
-_READ_ONLY_LOOKUP_FILTERS = frozenset({"grep", "egrep", "fgrep", "head", "sed", "tail"})
+_READ_ONLY_LOOKUP_FILTERS = frozenset({"cat", "grep", "egrep", "fgrep", "head", "sed", "tail"})
 _READ_ONLY_SEARCH_EXECUTION_FLAGS = {
     "rg": frozenset({"--config-path", "--hostname-bin", "--pre", "--pre-glob"}),
 }
@@ -2008,7 +2008,14 @@ def _low_risk_compound_developer_execution_context(
         if args is None:
             return None
         segment_root = segment.effective_cwd or home_dir
-        if not _path_text_is_within_root(os.fspath(segment_root), inspection_root) or any(
+        safe_pipe_filter = (
+            command_name in _READ_ONLY_LOOKUP_FILTERS
+            and segment.control_before == ("|",)
+            and _read_only_lookup_filter_segment_is_safe(command_name, args, home_dir=segment_root)
+        )
+        if not _path_text_is_within_root(os.fspath(segment_root), inspection_root):
+            return None
+        if not safe_pipe_filter and any(
             _shell_token_escapes_root(arg, cwd=segment_root, root=inspection_root) for arg in args
         ):
             return None
@@ -2027,11 +2034,7 @@ def _low_risk_compound_developer_execution_context(
         ):
             saw_inspection = True
             continue
-        if (
-            command_name in _READ_ONLY_LOOKUP_FILTERS
-            and segment.control_before == ("|",)
-            and (_read_only_lookup_filter_segment_is_safe(command_name, args, home_dir=segment_root))
-        ):
+        if safe_pipe_filter:
             continue
         if (
             command_name == "wc"
@@ -5785,6 +5788,8 @@ def _read_only_lookup_primary_segment_is_safe(command: str, args: list[str], *, 
     if command in {"head", "tail"}:
         return _read_only_lookup_head_tail_args_are_safe(args, require_target=True, home_dir=home_dir)
     if command == "cat":
+        if args == [".git"]:
+            return True
         return _read_only_lookup_plain_targets_are_safe(args, allow_dirs=False, home_dir=home_dir)
     if command == "ls":
         return _read_only_lookup_ls_args_are_safe(args, home_dir=home_dir)
@@ -5805,6 +5810,8 @@ def _read_only_lookup_filter_segment_is_safe(
     *,
     home_dir: Path | None = None,
 ) -> bool:
+    if command == "cat":
+        return not args or all(arg == "-" or (arg.startswith("-") and ">" not in arg) for arg in args)
     if command == "sed":
         return _read_only_lookup_sed_args_are_safe(args, require_target=False)
     if command in {"head", "tail"}:
