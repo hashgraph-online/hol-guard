@@ -20,6 +20,7 @@ def test_degraded_protection_exposes_recovery_actions() -> None:
     assert "Open command diagnostics" in source
     assert 'hookCheck?.status === "fail"' in source
     assert 'hookCheck?.status === "unknown"' in source
+    assert 'check.check_id === "harness_hooks" && check.status === "fail"' in source
 
 
 def test_protect_metrics_use_locale_grouping() -> None:

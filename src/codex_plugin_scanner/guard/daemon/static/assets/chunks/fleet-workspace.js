@@ -210,7 +210,7 @@ function FleetWorkspace(props) {
   const runtimeState = props.runtime.runtime_state;
   const protectionHealth = protectionHealthFor(props.runtime);
   const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isConnectableAppHarness));
-  const repairHarness = managedInstalls.find((install) => !install.active)?.harness ?? (protectionHealth.state === "degraded" ? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).state === "degraded") : void 0);
+  const repairHarness = managedInstalls.find((install) => !install.active)?.harness ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail"));
   const handleRepairApp = reactExports.useCallback(() => {
     if (repairHarness) props.onOpenAppDetail?.(repairHarness);
   }, [props.onOpenAppDetail, repairHarness]);
