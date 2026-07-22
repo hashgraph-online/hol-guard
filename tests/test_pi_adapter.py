@@ -312,10 +312,14 @@ class TestPiInstall:
         assert "if (result.error) {" in text
         assert "const resultError =" in text
         assert "const errorCode =" in text
-        assert 'decision: "deny"' in text
+        assert 'decision: "allow"' in text
+        assert 'notice: "warning"' in text
         assert "errorCode === 'ETIMEDOUT'" in text
-        assert "HOL Guard Pi hook timed out after" in text
+        assert "HOL Guard Pi hook timed out" in text
+        assert "continuing without a completed review" in text
         assert "HOL Guard Pi hook failed before completing review" in text
+        assert "GUARD_COMPATIBILITY_VERSION" in text
+        assert "compatibility_version !== GUARD_COMPATIBILITY_VERSION" in text
 
     def test_install_writes_managed_extension_that_truncates_post_tool_payloads(
         self,
