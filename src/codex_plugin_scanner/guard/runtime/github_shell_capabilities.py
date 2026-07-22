@@ -466,8 +466,11 @@ def _classify_github_shell_segment(segment: list[str], command_index: int) -> Gi
     index = command_index + 1
     while index < len(segment):
         token = segment[index]
-        if token in {"2>&1", "1>&2"}:
+        if token in {"2>&1", "1>&2", "2>/dev/null", "2>NUL", "2>nul"}:
             index += 1
+            continue
+        if token == "2>" and index + 1 < len(segment) and segment[index + 1].casefold() in {"/dev/null", "nul"}:
+            index += 2
             continue
         if token in {">", ">>", ">|", "<", "<<", "<<<"}:
             has_redirection = True
