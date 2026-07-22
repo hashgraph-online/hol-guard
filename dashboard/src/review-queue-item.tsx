@@ -243,8 +243,8 @@ export function queueItemPreview(item: GuardApprovalRequest): string {
   const envelope = item.action_envelope_json;
   return (
     envelope?.command ??
-    item.raw_command_text ??
     item.queue_preview ??
+    item.raw_command_text ??
     envelope?.mcp_tool ??
     (envelope?.prompt_text ?? envelope?.prompt_excerpt) ??
     envelope?.package_name ??

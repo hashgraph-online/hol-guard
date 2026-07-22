@@ -82,6 +82,7 @@ assert(
     ...BASE_REQUEST,
     launch_target: "Compound command findings: review required",
     queue_preview: "git status && bun test",
+    raw_command_text: "opaque-wrapper action",
     queue_command_category: "command.git",
   }) === "git status && bun test",
   "Paginated queue rows prefer the lightweight command preview over the compound category summary",
