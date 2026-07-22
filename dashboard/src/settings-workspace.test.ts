@@ -12,6 +12,7 @@ import {
   hasApprovalGateSettingsChanged,
   resolveApprovalPasswordSectionCopy,
   resolveTotpSetupModalTitle,
+  resolveInitialSettingsTab,
 } from "./settings-workspace";
 import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
 
@@ -97,6 +98,11 @@ assert(isFineTuningEditable("custom") === true, "fine-tuning: custom level is ed
 assert(isFineTuningEditable("strict") === false, "fine-tuning: strict level is locked until custom");
 assert(isFineTuningEditable("balanced") === false, "fine-tuning: balanced level is locked until custom");
 assert(isFineTuningEditable("relaxed") === false, "fine-tuning: relaxed level is locked until custom");
+
+assert(resolveInitialSettingsTab("?section=rules") === "rules", "settings routing: canonical rules deep link");
+assert(resolveInitialSettingsTab("?section=risk") === "rules", "settings routing: legacy fine-tuning deep link migrates");
+assert(resolveInitialSettingsTab("?section=defaults") === "rules", "settings routing: legacy fallback deep link migrates");
+assert(resolveInitialSettingsTab("?section=unknown") === "protection", "settings routing: unknown sections fall back safely");
 
 assert(resolveTotpSetupStep(null) === "confirm", "totp-setup: fresh setup starts at password confirmation");
 assert(

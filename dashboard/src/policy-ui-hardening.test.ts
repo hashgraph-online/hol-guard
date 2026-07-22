@@ -69,6 +69,8 @@ assert(chromeSource.includes('role="tab"'), "policy tabs expose tab role");
 assert(chromeSource.includes("tabIndex={selected ? 0 : -1}"), "policy tabs use roving tabindex");
 assert(chromeSource.includes(".focus()"), "policy tablist moves focus on arrow keys");
 assert(pageSource.includes("PolicyUnderlineTabBar"), "policy page mounts underline tab bar");
+assert(chromeSource.includes("overflow-x-auto"), "policy tabs remain usable without wrapping on narrow screens");
+assert(chromeSource.includes("min-h-11"), "policy tabs preserve mobile touch targets");
 
 const listSource = readSource("policy-cloud-exceptions-list.tsx");
 assert(listSource.includes('placeholder="Search exceptions…"'), "exception list exposes search");
@@ -107,6 +109,7 @@ const summarySource = readSource("policy-cloud-exceptions-summary.tsx");
 assert(summarySource.includes("SummarySkeleton"), "summary cards preserve skeleton layout while loading");
 
 const strictSource = readSource("policy-strict-config-tab.tsx");
-assert(strictSource.includes("aria-busy"), "strict config tab exposes loading busy state");
+assert(strictSource.includes("Policy explains. Settings configures."), "policy decision view explains configuration ownership");
+assert(!strictSource.includes("updateSettings"), "policy decision view cannot mutate local settings");
 
 console.log("policy-ui-hardening.test.ts: all assertions passed");

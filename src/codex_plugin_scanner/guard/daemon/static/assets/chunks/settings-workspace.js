@@ -1,4 +1,4 @@
-import { W as getDefaultExportFromCjs, r as reactExports, X as React, j as jsxRuntimeExports, I as useFocusTrap, Y as HiMiniKey, S as SectionLabel, A as ActionButton, q as HiMiniShieldCheck, Z as HiMiniLockClosed, _ as HiMiniBellAlert, $ as HiMiniAdjustmentsHorizontal, a0 as HiMiniCog6Tooth, a1 as HiMiniCircleStack, a2 as TabBar, c as HiMiniChevronRight, a3 as resolveProtectionLevelCopy, a4 as fetchSettings, a5 as fetchRuntimeSnapshot, a6 as updateSettings, a7 as clearPolicy, a8 as clearReviewQueue, a9 as revokeApprovalGateCooldown, aa as disableApprovalGateTotp, ab as importSettings, ac as resetSettings, ad as enrollApprovalGateTotp, ae as verifyApprovalGateTotp, af as clearEvidence, ag as exportDiagnostics, ah as repairApprovalCenter, ai as exportSettings, aj as setupDesktopNotifications, k as EmptyState, n as GuardHero, ak as Tag, al as HiMiniMagnifyingGlass, m as HiMiniCheckCircle, K as HiMiniExclamationTriangle, am as approvalGateCooldownLabel, x as HiMiniXMark } from "../guard-dashboard.js";
+import { W as getDefaultExportFromCjs, r as reactExports, X as React, j as jsxRuntimeExports, I as useFocusTrap, Y as HiMiniKey, S as SectionLabel, A as ActionButton, q as HiMiniShieldCheck, Z as HiMiniLockClosed, _ as HiMiniBellAlert, $ as HiMiniAdjustmentsHorizontal, a0 as HiMiniCircleStack, a1 as TabBar, c as HiMiniChevronRight, a2 as resolveProtectionLevelCopy, a3 as fetchSettings, a4 as fetchRuntimeSnapshot, a5 as updateSettings, a6 as clearPolicy, a7 as clearReviewQueue, a8 as revokeApprovalGateCooldown, a9 as disableApprovalGateTotp, aa as importSettings, ab as resetSettings, ac as enrollApprovalGateTotp, ad as verifyApprovalGateTotp, ae as clearEvidence, af as exportDiagnostics, ag as repairApprovalCenter, ah as exportSettings, ai as setupDesktopNotifications, k as EmptyState, n as GuardHero, aj as Tag, ak as HiMiniMagnifyingGlass, al as HiMiniCog6Tooth, z as HiMiniChevronDown, m as HiMiniCheckCircle, K as HiMiniExclamationTriangle, am as approvalGateCooldownLabel, x as HiMiniXMark } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
 var propTypes$2 = { exports: {} };
 var ReactPropTypesSecret_1;
@@ -2180,7 +2180,6 @@ const ICON_PROTECTION = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck,
 const ICON_APPROVAL = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "h-4 w-4", "aria-hidden": "true" });
 const ICON_NOTIFICATIONS = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBellAlert, { className: "h-4 w-4", "aria-hidden": "true" });
 const ICON_RISK = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "h-4 w-4", "aria-hidden": "true" });
-const ICON_DEFAULTS = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCog6Tooth, { className: "h-4 w-4", "aria-hidden": "true" });
 const ICON_MAINTENANCE = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { className: "h-4 w-4", "aria-hidden": "true" });
 const localSettingsNavItems = [
   {
@@ -2208,20 +2207,12 @@ const localSettingsNavItems = [
     icon: ICON_NOTIFICATIONS
   },
   {
-    key: "risk",
-    label: "Fine-tuning",
-    mobileLabel: "Tune",
-    summary: "Pick what Guard does for each risky action type.",
+    key: "rules",
+    label: "Protection rules",
+    mobileLabel: "Rules",
+    summary: "Tune risky actions and advanced fallback behavior.",
     group: "local",
     icon: ICON_RISK
-  },
-  {
-    key: "defaults",
-    label: "Fallback rules",
-    mobileLabel: "Fallback",
-    summary: "What Guard does when it has not seen something before.",
-    group: "local",
-    icon: ICON_DEFAULTS
   },
   {
     key: "maintenance",
@@ -2235,6 +2226,9 @@ const localSettingsNavItems = [
 const localSettingsMobileTabLabels = Object.fromEntries(
   localSettingsNavItems.map((item) => [item.key, item.mobileLabel ?? item.label])
 );
+function isLocalSettingsTabKey(value) {
+  return value === "protection" || value === "approval" || value === "notifications" || value === "rules" || value === "maintenance";
+}
 function SettingsSectionNavItem({ active, item, onSelect }) {
   const handleClick = reactExports.useCallback(() => {
     onSelect(item);
@@ -2377,6 +2371,13 @@ function SettingsToggleRow({
   ] });
 }
 const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
+function resolveInitialSettingsTab(search) {
+  const section = new URLSearchParams(search).get("section");
+  if (section === "risk" || section === "defaults") {
+    return "rules";
+  }
+  return section !== null && isLocalSettingsTabKey(section) ? section : "protection";
+}
 function resolveSecurityLevelCardDescription(level) {
   if (level === "relaxed") return "Warn on dangerous actions. Most safe actions run without a prompt.";
   if (level === "balanced") return "Ask before secret access, hidden execution, exfiltration, and destructive actions.";
@@ -2689,7 +2690,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   const [actionMessageKind, setActionMessageKind] = reactExports.useState("success");
   const [perfSnapshot, setPerfSnapshot] = reactExports.useState(null);
   const [pendingMode, setPendingMode] = reactExports.useState(null);
-  const [activeTab, setActiveTab] = reactExports.useState("protection");
+  const [activeTab, setActiveTab] = reactExports.useState(() => resolveInitialSettingsTab(window.location.search));
   const [searchQuery, setSearchQuery] = reactExports.useState("");
   const [importingSettings, setImportingSettings] = reactExports.useState(false);
   const [resettingSettings, setResettingSettings] = reactExports.useState(false);
@@ -2766,6 +2767,9 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   const handleTabChange = reactExports.useCallback((tab) => {
     setActiveTab(tab);
     setActionMessage(null);
+    const url = new URL(window.location.href);
+    url.searchParams.set("section", tab);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
   const handleSearchChange = reactExports.useCallback((event) => {
     setSearchQuery(event.target.value);
@@ -3658,7 +3662,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsActionMessage, { message: actionMessage, kind: actionMessageKind })
           ] }),
-          activeTab === "risk" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col space-y-6", children: [
+          activeTab === "rules" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col space-y-6", children: [
             !isFineTuningEditable(draft.security_level) ? /* @__PURE__ */ jsxRuntimeExports.jsx(
               FineTuningPresetBanner,
               {
@@ -3701,15 +3705,17 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                   ] })
                 ] })
               }
-            )
-          ] }),
-          activeTab === "defaults" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-0 flex-1 flex-col space-y-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            SettingsFormSection,
-            {
-              title: "When Guard is unsure",
-              description: "These rules apply before Guard has enough history to decide on its own.",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 py-3 sm:grid-cols-2", children: [
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group rounded-xl border border-slate-200 bg-slate-50/40 open:bg-white", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-xl px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/50 [&::-webkit-details-marker]:hidden", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: "Advanced fallback behavior" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs leading-relaxed text-slate-500", children: "Decide what happens when Guard has no remembered rule or specific risk match." })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-5 w-5 shrink-0 text-slate-400 transition-transform group-open:rotate-180", "aria-hidden": "true" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-4 pb-4", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 py-4 sm:grid-cols-2", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "First-time action", value: draft.default_action, options: actionOptions, onChange: handleStringChange("default_action") }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Unknown source", value: draft.unknown_publisher_action, options: actionOptions, onChange: handleStringChange("unknown_publisher_action") }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Changed command", value: draft.changed_hash_action, options: actionOptions, onChange: handleStringChange("changed_hash_action") }),
@@ -3717,7 +3723,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                   /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Nested commands", value: draft.subprocess_action, options: actionOptions, onChange: handleStringChange("subprocess_action") }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Where to ask", value: draft.approval_surface_policy, options: surfacePolicyOptions, onChange: handleStringChange("approval_surface_policy") })
                 ] }),
-                draft.approval_surface_policy === "attention-aware" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 border-t border-slate-100 py-3 sm:grid-cols-2", children: [
+                draft.approval_surface_policy === "attention-aware" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 border-t border-slate-100 py-4 sm:grid-cols-2", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
                     SettingNumber,
                     {
@@ -3740,9 +3746,9 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                   ),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-slate-500 sm:col-span-2", children: "Guard cancels the browser prompt when your AI app continues with a different action. Desktop and in-app notices still appear immediately." })
                 ] }) : null
-              ]
-            }
-          ) }),
+              ] })
+            ] })
+          ] }),
           activeTab === "maintenance" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-0 flex-1 flex-col space-y-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsFormSection, { title: "Keep this machine tidy", description: "Export, reset, clear history, or fix a broken approval link.", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 py-3", children: [
             perfSnapshot !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticsPerfCard, { snapshot: perfSnapshot }) : null,
             /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -3811,7 +3817,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
-        className: "sticky bottom-4 mt-auto rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur",
+        className: "sticky bottom-2 mt-auto rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:bottom-4 sm:p-4",
         role: "region",
         "aria-label": "Save settings",
         children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
@@ -3825,7 +3831,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
               "Unsaved changes"
             ] })
           ] }),
-          saveSuccess ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-emerald-600", children: "Settings saved" }) : saveError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-purple", children: saveError }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Use this for local tuning. Team policy from Guard Cloud may still override some decisions." }),
+          saveSuccess ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-emerald-600", children: "Settings saved" }) : saveError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-purple", children: saveError }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "hidden text-xs text-slate-500 sm:block", children: "Use this for local tuning. Team policy from Guard Cloud may still override some decisions." }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: saveStatusText(saveSuccess, saveError) })
         ] })
       }
@@ -3945,7 +3951,7 @@ function SettingSelect(props) {
         value: props.value,
         onChange: props.onChange,
         disabled: props.disabled,
-        className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60",
+        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60",
         children: props.options.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option.value, children: option.label }, option.value))
       }
     )
@@ -4358,6 +4364,7 @@ export {
   isFineTuningEditable,
   resolveApprovalPasswordSectionCopy,
   resolveFineTuningSectionDescription,
+  resolveInitialSettingsTab,
   resolveSecurityLevelCardDescription,
   resolveSecurityLevelDescription,
   resolveTotpSetupModalDescription,
