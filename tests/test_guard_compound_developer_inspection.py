@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shlex
+import sys
 from pathlib import Path
 
 import pytest
@@ -167,11 +169,31 @@ def test_compound_stdin_only_python_observer_is_one_unit(tmp_path: Path) -> None
     workspace.mkdir(parents=True)
 
     artifact = _artifact(
-        f'cd {workspace} && printf data | python3 -c "import sys; print(sys.stdin.read().strip())"',
+        f"cd {workspace} && printf data | {shlex.quote(sys.executable)} "
+        + '-c "import sys; print(sys.stdin.read().strip())"',
         home=home,
     )
 
     assert artifact is None
+
+
+@pytest.mark.parametrize("harness", ("pi", "codex", "claude-code", "gemini", "cursor"))
+def test_harnesses_keep_compound_destructive_commands_guarded(
+    tmp_path: Path,
+    harness: str,
+) -> None:
+    home = tmp_path / "home"
+    workspace = home / "projects" / "workspace"
+    workspace.mkdir(parents=True)
+
+    artifact = _artifact(
+        f"cd {workspace} && printf ready && rm -rf ./generated-output",
+        home=home,
+        harness=harness,
+    )
+
+    assert artifact is not None
+    assert artifact.metadata["action_class"] == "destructive shell command"
 
 
 def test_compound_shell_syntax_check_is_inspection_only(tmp_path: Path) -> None:

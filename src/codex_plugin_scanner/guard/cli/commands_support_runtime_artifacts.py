@@ -4,46 +4,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .commands_support_codex_commands import (
-        _codex_command_parts_may_read_local_content,
-        _codex_command_reads_environment_pipeline,
-        _codex_local_secret_source_label,
-        _codex_pipeline_segment_may_read_local_content,
-        _codex_post_tool_command_is_read_only_source_inspection,
-        _codex_post_tool_command_texts,
-        _codex_shell_split,
-        _codex_source_inspection_can_skip_secret_output,
-    )
-    from .commands_support_codex_paths import (
-        _codex_prompt_credential_file_artifact,
-        _collect_codex_tool_response_text,
-        _with_codex_prompt_display_metadata,
-    )
-    from .commands_support_codex_reads import _split_codex_safe_read_only_pipeline
-    from .commands_support_codex_tool_output_messages import (
-        _codex_tool_output_request_summary,
-        _codex_tool_output_runtime_summary,
-    )
-    from .commands_support_hook_payload import _coalesce_string
-    from .commands_support_runtime_policy import _runtime_data_flow_summary
-
-    # These helpers are injected by commands_support's shared registry at
-    # runtime. Local signatures retain type safety without introducing a
-    # type-only import cycle with commands_support_runtime_resolution.
-    def _canonical_harness_name(value: str) -> str: ...
-
-    def _runtime_policy_path(
-        harness: str,
-        home_dir: Path,
-        workspace: Path | None,
-        *,
-        payload: dict[str, object] | None = None,
-    ) -> Path: ...
-
-
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.command_model import parse_shell_command
 from ..runtime.kubernetes_commands import kubernetes_secret_read_source
@@ -66,6 +26,11 @@ from .commands_support_codex_commands import (
     _codex_source_inspection_can_skip_secret_output,
 )
 from .commands_support_codex_git import _codex_git_diff_selection_identity
+from .commands_support_codex_paths import (
+    _codex_prompt_credential_file_artifact,
+    _collect_codex_tool_response_text,
+    _with_codex_prompt_display_metadata,
+)
 from .commands_support_codex_reads import _split_codex_safe_read_only_pipeline
 from .commands_support_codex_tool_output import (
     _codex_command_captures_combined_shell_output,
@@ -86,6 +51,9 @@ from .commands_support_codex_tool_output_messages import (
     _codex_tool_output_runtime_reason,
     _codex_tool_output_runtime_summary,
 )
+from .commands_support_hook_payload import _coalesce_string
+from .commands_support_runtime_policy import _runtime_data_flow_summary
+from .commands_support_runtime_resolution import _canonical_harness_name, _runtime_policy_path
 
 
 def _optional_string(value: object | None) -> str | None:
