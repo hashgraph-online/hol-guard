@@ -46,6 +46,7 @@ import { filterEvidence } from "../evidence/evidence-filters";
 import { sortEvidence } from "../evidence/evidence-sort";
 import { computeMetrics } from "../evidence/evidence-metrics";
 import { guardActionDisposition, guardActionPresentation } from "../guard-action";
+import { appSetupTarget } from "./harness-setup-target";
 import { DEFAULT_FILTER_STATE } from "../evidence/evidence-url-state";
 import type { EvidenceFilterState, EvidenceSortKey } from "../evidence/evidence-types";
 import { CommandActivityWorkspace } from "../command-activity/command-activity-workspace";
@@ -528,12 +529,14 @@ function AppOverviewTab(props: {
   onOpenRequest: (requestId: string) => void;
   onManagedInstallChanged?: () => Promise<void>;
 }) {
-  const showFirstRunGuide = shouldShowFirstRunGuide({
-    status: props.status,
-    totalActions: props.totalActions,
-    inventoryCount: props.harnessInventory.length,
-    pendingCount: props.pendingItems.length,
-  });
+  const showFirstRunGuide =
+    appSetupTarget(props.harness) === "harness" &&
+    shouldShowFirstRunGuide({
+      status: props.status,
+      totalActions: props.totalActions,
+      inventoryCount: props.harnessInventory.length,
+      pendingCount: props.pendingItems.length,
+    });
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
@@ -1124,6 +1127,56 @@ function PolicyDecisionRow(props: {
   );
 }
 
+export function OperationalSourceSetupPanel({ harness }: { harness: string }) {
+  const target = appSetupTarget(harness);
+  const displayName = harnessDisplayName(harness);
+
+  if (target === "package-firewall") {
+    return (
+      <div className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5">
+        <SectionLabel>Package manager protection</SectionLabel>
+        <h3 className="mt-2 text-lg font-semibold text-brand-dark">
+          {harness === "bunx" ? "Protect bunx through the package firewall" : "Manage the package firewall in Supply Chain"}
+        </h3>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+          {displayName} is a package-security activity source, not an AI app harness. Use the package firewall controls to detect, install, test, or repair its managed shim.
+        </p>
+        <div className="mt-4">
+          <ActionButton href="/supply-chain">
+            <HiMiniShieldCheck className="h-4 w-4" aria-hidden="true" />
+            Open package firewall
+          </ActionButton>
+        </div>
+      </div>
+    );
+  }
+
+  if (target === "guard-settings") {
+    return (
+      <div className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5">
+        <SectionLabel>Local Guard source</SectionLabel>
+        <h3 className="mt-2 text-lg font-semibold text-brand-dark">Guard CLI is already part of this local installation</h3>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+          This page groups decisions emitted by Guard's own command-line protection. It does not need a separate app connector or harness configuration.
+        </p>
+        <div className="mt-4">
+          <ActionButton href="/settings" variant="outline">Open Guard settings</ActionButton>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm sm:p-5">
+      <SectionLabel>Recorded activity source</SectionLabel>
+      <h3 className="mt-2 text-lg font-semibold text-brand-dark">No app connector is required for {displayName}</h3>
+      <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+        Guard recorded activity under this source identifier, but it is not a locally installable AI app. Activity and remembered decisions remain available on this page.
+      </p>
+    </div>
+  );
+}
+
 function AppSettingsTab(props: {
   harness: string;
   status: "active" | "needs_setup" | "observed" | "unknown";
@@ -1181,12 +1234,16 @@ function AppSettingsTab(props: {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
       <div className="space-y-6">
-        <HarnessSetupPanel
-          harness={props.harness}
-          install={props.install}
-          status={props.status}
-          onManagedInstallChanged={props.onManagedInstallChanged}
-        />
+        {appSetupTarget(props.harness) === "harness" ? (
+          <HarnessSetupPanel
+            harness={props.harness}
+            install={props.install}
+            status={props.status}
+            onManagedInstallChanged={props.onManagedInstallChanged}
+          />
+        ) : (
+          <OperationalSourceSetupPanel harness={props.harness} />
+        )}
 
         {props.policyError && (
           <div className="guard-fade-in rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5">

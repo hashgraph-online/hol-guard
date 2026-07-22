@@ -20,7 +20,7 @@ import {
   SectionLabel,
   GuardHero,
 } from "./approval-center-primitives";
-import { harnessDisplayName, formatRelativeTime, formatNumber, isDisplayableHarness } from "./approval-center-utils";
+import { harnessDisplayName, formatRelativeTime, formatNumber } from "./approval-center-utils";
 import { useFocusTrap } from "./use-focus-trap";
 import { DeviceProofCard, resolveCloudIntelCopy } from "./runtime-overview";
 import { HomeProtectionModule } from "./home-protection-module";
@@ -31,6 +31,7 @@ import { useReceiptAnalytics } from "./evidence/use-receipt-analytics";
 import { HomeCommandActivityCard } from "./command-activity/command-activity-home-card";
 import { protectionHealthFor } from "./protection-health";
 import { guardActionActivityCopy, guardActionDisposition } from "./guard-action";
+import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import type {
   GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
@@ -218,7 +219,7 @@ export function HomeWorkspace(props: {
   const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
   const queuedCount = props.requests.kind === "ready" ? props.requests.items.length : 0;
   const policyItems = props.policies.kind === "ready" ? props.policies.items : [];
-  const managedInstalls = (snapshot?.managed_installs ?? []).filter((item: GuardManagedInstall) => isDisplayableHarness(item.harness));
+  const managedInstalls = (snapshot?.managed_installs ?? []).filter((item: GuardManagedInstall) => isConnectableAppHarness(item.harness));
   const activeInstalls = managedInstalls.filter((item: GuardManagedInstall) => item.active);
   const observedHarnesses = snapshot
     ? Array.from(
@@ -226,7 +227,7 @@ export function HomeWorkspace(props: {
           ...snapshot.items.map((item: GuardApprovalRequest) => item.harness),
           ...snapshot.latest_receipts.map((receipt: GuardReceipt) => receipt.harness),
           ...policyItems.map((policy: GuardPolicyDecision) => policy.harness),
-        ].filter(isDisplayableHarness))
+        ].filter(isConnectableAppHarness))
       ).sort()
     : [];
   const clearHarnesses = activeInstalls.length > 0 ? activeInstalls.map((i: GuardManagedInstall) => i.harness) : observedHarnesses;
@@ -1019,8 +1020,8 @@ export function resolveNewAppDiscoveries(
   managedInstalls: GuardManagedInstall[],
   observedHarnesses: string[]
 ): string[] {
-  const activeHarnesses = new Set(managedInstalls.filter((i) => isDisplayableHarness(i.harness)).map((i) => i.harness));
-  return observedHarnesses.filter((h) => isDisplayableHarness(h) && !activeHarnesses.has(h));
+  const activeHarnesses = new Set(managedInstalls.filter((i) => isConnectableAppHarness(i.harness)).map((i) => i.harness));
+  return observedHarnesses.filter((h) => isConnectableAppHarness(h) && !activeHarnesses.has(h));
 }
 
 function NewAppBanner(props: {

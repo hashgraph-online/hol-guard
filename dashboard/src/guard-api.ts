@@ -20,6 +20,7 @@ import {
   normalizeGuardAction,
 } from "./guard-action";
 import { parseTemporaryMcpApproval } from "./temporary-mcp-approval";
+import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import type {
   GuardActionEnvelope,
   GuardAction,
@@ -2704,6 +2705,9 @@ export async function runHarnessAction(input: {
   dryRun?: boolean;
   confirmationPhrase?: string;
 }): Promise<GuardHarnessActionResult> {
+  if (!isConnectableAppHarness(input.harness)) {
+    throw new Error(`${input.harness} is not a connectable AI app.`);
+  }
   if (isGuardDemoMode()) {
     return {
       harness: input.harness,
