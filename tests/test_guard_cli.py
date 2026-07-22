@@ -4555,7 +4555,9 @@ args = ["workspace-skill.js", "--changed"]
         assert "codex_hooks" not in config_text
         assert hooks_payload["PreToolUse"]
 
-    def test_guard_update_repairs_workspace_codex_install_in_recorded_workspace(self, tmp_path, monkeypatch, capsys):
+    def test_guard_update_keeps_unauthenticated_legacy_codex_workspace_record_global(
+        self, tmp_path, monkeypatch, capsys
+    ):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         GuardStore(home_dir).set_managed_install(
@@ -4596,10 +4598,31 @@ args = ["workspace-skill.js", "--changed"]
         assert hooks_payload["PreToolUse"]
         hook_command = hooks_payload["PreToolUse"][0]["hooks"][0]["command"]
         bridge_config = json.loads(shlex.split(hook_command)[3])
-        fallback_command = bridge_config["fallback_command"]
-        workspace_index = fallback_command.index("--workspace")
-        assert fallback_command[workspace_index + 1] == str(workspace_dir)
+        assert "--workspace" not in bridge_config["fallback_command"]
         assert (workspace_dir / ".codex" / "config.toml").exists() is False
+
+    def test_codex_repair_preserves_authenticated_legacy_workspace_binding(self, tmp_path, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = (tmp_path / "workspace").resolve()
+        context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir)
+        managed_install = {
+            "harness": "codex",
+            "workspace": str(workspace_dir),
+            "manifest": {},
+        }
+        monkeypatch.setattr(
+            guard_update_commands_module,
+            "load_authenticated_hook_manifest",
+            lambda *_args: {"context": {"workspace_dir": str(workspace_dir)}},
+        )
+
+        repair_context, repair_workspace = guard_update_commands_module._repair_context_from_managed_install(
+            context,
+            managed_install,
+        )
+
+        assert repair_context.workspace_override_explicit is True
+        assert repair_workspace == str(workspace_dir)
 
     def test_guard_update_fails_closed_on_malformed_codex_config(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
