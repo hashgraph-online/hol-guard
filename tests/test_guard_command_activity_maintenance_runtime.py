@@ -26,6 +26,9 @@ class _SequencedEvent:
         self.calls += 1
         return self.calls > 2
 
+    def is_set(self) -> bool:
+        return False
+
 
 @dataclass(frozen=True, slots=True)
 class _LoadedConfig:
@@ -77,6 +80,18 @@ def test_long_lived_daemon_rechecks_daily_and_uses_global_retention(monkeypatch:
     monkeypatch.setattr(daemon_server, "load_guard_config", load)
     daemon_server.GuardDaemonServer._maintain_command_activity_best_effort(service)
     assert loaded == [(Path("/global-home"), None)]
+
+
+def test_daemon_shutdown_skips_initial_command_activity_maintenance() -> None:
+    service = object.__new__(daemon_server.GuardDaemonServer)
+    service._shutdown_started = threading.Event()
+    service._shutdown_started.set()
+    maintenance_calls: list[int] = []
+    service._maintain_command_activity_best_effort = lambda: maintenance_calls.append(1)
+
+    service._command_activity_maintenance_loop()
+
+    assert maintenance_calls == []
 
 
 def test_daemon_restart_rejects_a_still_stopping_maintenance_worker() -> None:
