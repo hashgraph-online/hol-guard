@@ -289,9 +289,10 @@ def _hook_command_parts_for_home_mode(
     python_executable: str,
 ) -> tuple[str, ...]:
     guard_home = (resolve_guard_home() if home_is_current else context.guard_home).resolve(strict=False)
-    query = {"guard-home": str(guard_home)}
-    if not home_is_current:
-        query["home"] = str(context.home_dir)
+    # Bind the daemon fast path to the install context explicitly. Omitting
+    # ``home`` for the common current-user install silently forced every
+    # PostToolUse event through the legacy CLI path.
+    query = {"guard-home": str(guard_home), "home": str(context.home_dir.resolve(strict=False))}
     hook_workspace = _hook_workspace_dir(context)
     if hook_workspace is not None:
         query["workspace"] = str(hook_workspace)

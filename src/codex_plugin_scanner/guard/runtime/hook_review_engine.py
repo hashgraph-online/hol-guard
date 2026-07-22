@@ -184,7 +184,7 @@ class HookReviewEngine:
         config: GuardConfig,
         start: float,
     ) -> HookReviewResponse:
-        """Scan full tool output for PostToolUse file operations without guard_source_ref.
+        """Scan full inline tool output for PostToolUse without guard_source_ref.
 
         This is the server-side fast path for all harnesses that do not
         generate ``guard_source_ref`` client-side (claude-code, codex,
@@ -192,21 +192,28 @@ class HookReviewEngine:
         payload, scans it for secrets, and returns ``allow_original``
         if clean.
 
-        Only file read/write actions are eligible — shell commands, MCP
-        tools, and other action types still need the full CLI policy/
-        permission/approval engine and fall through to ``_review_standard``.
+        PostToolUse observes output from an action that already ran. Applying
+        the pre-execution permission engine again creates duplicate approvals
+        and can stop every benign shell or MCP result. Scan any extractable
+        inline output here; allow output-free completions and keep oversized
+        or risky output on conservative paths.
         """
         from .hook_output_text import extract_payload_output
-
-        action_type = getattr(envelope, "action_type", None)
-        if action_type not in {"file_read", "file_write"}:
-            return self._review_standard(request, envelope, config, start)
 
         extracted = extract_payload_output(request.payload)
 
         if not extracted.text:
-            # No output text found in payload — fall back to excerpt path.
-            return self._review_standard(request, envelope, config, start)
+            # The action already completed and produced nothing for the model.
+            # A second permission review cannot protect any output and only
+            # creates an unresolvable PostToolUse approval.
+            return HookReviewResponse(
+                decision="allow",
+                reason=None,
+                model_output_action="allow_original",
+                notice="none",
+                reason_code="output_empty_allow",
+                policy_action="allow",
+            )
 
         target_paths = _target_paths(envelope)
         scan_local_samples = should_unsuppress_local_sample_secrets_for_paths(target_paths, cwd=request.cwd)

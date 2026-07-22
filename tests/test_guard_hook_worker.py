@@ -6,9 +6,20 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.config import HOOK_FAST_PATH_ENV, hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker, HookWorkerUnsupported
 from codex_plugin_scanner.guard.runtime.hook_source_read import sha256_text
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+def test_resident_hook_worker_is_enabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(HOOK_FAST_PATH_ENV, raising=False)
+    assert hook_fast_path_enabled() is True
+
+
+def test_resident_hook_worker_supports_emergency_disable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(HOOK_FAST_PATH_ENV, "0")
+    assert hook_fast_path_enabled() is False
 
 
 @pytest.fixture()
@@ -223,7 +234,7 @@ class TestHookWorkerNonPostTool:
     ) -> None:
         """PreToolUse must fall back to legacy CLI for policy/permission checks.
 
-        The fast path only handles PostToolUse with guard_source_ref.
+        The fast path only handles PostToolUse events.
         PreToolUse must raise HookWorkerUnsupported so the server falls
         through to the legacy CLI path, which performs the full policy
         evaluation, permission checks, and approval-center queueing.
@@ -250,7 +261,7 @@ class TestHookWorkerAllHarnessFallback:
     use the server-side output scanning fast path.
 
     All harnesses (claude-code, codex, grok, zcode) now get the fast path
-    for PostToolUse file reads. The engine extracts the full tool output
+    for PostToolUse output. The engine extracts the full tool output
     from the payload, scans it for secrets, and returns allow_original
     if clean.
     """
@@ -596,10 +607,10 @@ class TestHookWorkerOutputScanning:
         assert result["model_output_action"] == "block"
         assert result["reason_code"] == "output_secret_match"
 
-    def test_non_file_read_falls_back(
+    def test_shell_output_uses_scan_fast_path(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
-        """Non-file-read PostToolUse (e.g. shell command) falls back to standard path."""
+        """Clean shell output is scanned once without a second approval."""
         payload = {
             "hook_event_name": "PostToolUse",
             "tool_name": "Bash",
@@ -616,14 +627,38 @@ class TestHookWorkerOutputScanning:
             workspace=workspace,
         )
 
+        assert result["policy_action"] == "allow"
+        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
+
+    def test_shell_secret_output_remains_blocked(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        """The shell fast path still blocks secret-bearing output."""
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "printenv SERVICE_CREDENTIAL"},
+            "stdout": "credential = 'prod-live-value'\n",
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="codex",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
         assert result["decision"] == "block"
         assert result["continue"] is False
         assert result["policy_action"] == "block"
+        assert result["reason_code"] == "output_secret_match"
 
-    def test_empty_output_falls_back(
+    def test_empty_output_allows_without_second_approval(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
-        """PostToolUse with no extractable output text falls back to standard path."""
+        """An empty completed action has no output to expose or reapprove."""
         payload = {
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
@@ -639,10 +674,8 @@ class TestHookWorkerOutputScanning:
             workspace=workspace,
         )
 
-        assert result["decision"] == "block"
-        assert result["continue"] is False
-        assert result["policy_action"] == "block"
-        assert result["model_output_action"] == "block"
+        assert result["policy_action"] == "allow"
+        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
 
     def test_codex_stdout_uses_fast_path(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
