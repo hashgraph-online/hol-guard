@@ -5,55 +5,64 @@ const PROTECTION_CHECK_ACTIONS = {
     label: "App hooks",
     detail: "One or more app hooks need setup or repair.",
     fallbackHref: "/settings?section=apps",
-    cta: "Repair app hooks"
+    cta: "Repair app hooks",
+    repairable: true
   },
   daemon: {
     label: "Local runtime",
     detail: "The local Guard runtime needs attention before protection can finish.",
     fallbackHref: "/settings",
-    cta: "Repair local runtime"
+    cta: "Repair local runtime",
+    repairable: true
   },
   policy_engine: {
     label: "Policy engine",
     detail: "Guard could not confirm the local policy engine is ready.",
     fallbackHref: "/policy",
-    cta: "Repair policy engine"
+    cta: "Repair policy engine",
+    repairable: true
   },
   rule_packs: {
     label: "Rule packs",
     detail: "Guard cannot confirm the active rule-pack proof yet.",
     fallbackHref: "/policy",
-    cta: "Repair rule packs"
+    cta: "Repair rule packs",
+    repairable: true
   },
   decision_plane_compatibility: {
     label: "Decision plane",
     detail: "Local decision-plane compatibility is unproven or failed.",
     fallbackHref: "/settings",
-    cta: "Repair decision plane"
+    cta: "Open diagnostics",
+    repairable: false
   },
   containment_compatibility: {
     label: "Containment",
     detail: "Containment compatibility is unproven or failed.",
     fallbackHref: "/settings",
-    cta: "Repair containment"
+    cta: "Open diagnostics",
+    repairable: false
   },
   sandbox: {
     label: "Sandbox",
     detail: "Sandbox enforcement could not be confirmed.",
     fallbackHref: "/settings",
-    cta: "Repair sandbox"
+    cta: "Open diagnostics",
+    repairable: false
   },
   decision_stream: {
     label: "Command evidence",
     detail: "Command activity evidence is incomplete or unavailable.",
     fallbackHref: "/evidence?view=commands",
-    cta: "Check command evidence"
+    cta: "Check command evidence",
+    repairable: true
   },
   tamper_checks: {
     label: "Integrity checks",
     detail: "Managed Guard files or hooks did not pass integrity checks.",
     fallbackHref: "/settings?section=security",
-    cta: "Repair integrity"
+    cta: "Repair integrity",
+    repairable: true
   }
 };
 function actionForCheck(check, repairHarness) {
@@ -63,7 +72,8 @@ function actionForCheck(check, repairHarness) {
       label: "App hooks",
       detail: `${harnessDisplayName(repairHarness)} hooks need setup or repair.`,
       fallbackHref: `/apps/${repairHarness}?tab=settings`,
-      cta: `Repair ${harnessDisplayName(repairHarness)}`
+      cta: `Repair ${harnessDisplayName(repairHarness)}`,
+      repairable: true
     };
   }
   const action = PROTECTION_CHECK_ACTIONS[check.check_id];
@@ -72,7 +82,8 @@ function actionForCheck(check, repairHarness) {
     label: check.check_id.replace(/_/g, " "),
     detail: "Guard could not confirm this protection proof.",
     fallbackHref: "/settings",
-    cta: "Try automatic repair"
+    cta: "Open diagnostics",
+    repairable: false
   };
 }
 function primaryProtectionRecoveryAction(health, repairHarness) {
@@ -116,7 +127,7 @@ function ProtectionGapItem({
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
+      action.repairable ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         ActionButton,
         {
           onClick: handleRepair,
@@ -124,7 +135,7 @@ function ProtectionGapItem({
           variant: "outline",
           children: working ? "Repairing…" : action.cta
         }
-      ),
+      ) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: action.fallbackHref, variant: "outline", children: action.cta }),
       repairState?.status === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: action.fallbackHref, variant: "ghost", children: "Open diagnostics" }) : null
     ] }),
     repairState ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -136,6 +147,17 @@ function ProtectionGapItem({
       }
     ) : null
   ] });
+}
+function recoverySummary(failCount, unknownCount) {
+  if (failCount === 0) {
+    return "Complete the remaining proof here. Guard rechecks protection after each step.";
+  }
+  const failedChecks = `${failCount} failed check${failCount === 1 ? "" : "s"}`;
+  let remainingProofs = "";
+  if (unknownCount > 0) {
+    remainingProofs = `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}`;
+  }
+  return `Repair the ${failedChecks} here${remainingProofs}. Guard rechecks protection after each step.`;
 }
 function FleetProtectionRecovery(props) {
   const [repairStates, setRepairStates] = reactExports.useState(
@@ -172,6 +194,7 @@ function FleetProtectionRecovery(props) {
   const handleRepairAll = reactExports.useCallback(async () => {
     const repairedGroups = /* @__PURE__ */ new Set();
     for (const check of gaps) {
+      if (!actionForCheck(check, props.repairHarness).repairable) continue;
       const group = check.check_id === "rule_packs" || check.check_id === "tamper_checks" || check.check_id === "policy_engine" ? "integrity" : check.check_id;
       if (repairedGroups.has(group)) continue;
       repairedGroups.add(group);
@@ -203,7 +226,7 @@ function FleetProtectionRecovery(props) {
               ),
               /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-brand-dark", children: "Restore full protection" })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: failCount > 0 ? `Repair the ${failCount} failed check${failCount === 1 ? "" : "s"} here${unknownCount > 0 ? `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}` : ""}. Guard rechecks protection after each step.` : "Complete the remaining proof here. Guard rechecks protection after each step." })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: recoverySummary(failCount, unknownCount) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairAllClick, disabled: anyWorking, children: anyWorking ? "Repairing…" : "Repair failed checks" })
         ] }),

@@ -17,6 +17,7 @@ type GapAction = {
   detail: string;
   fallbackHref: string;
   cta: string;
+  repairable: boolean;
 };
 
 type RepairState = { status: "working" | "success" | "error"; message: string };
@@ -27,6 +28,7 @@ const PROTECTION_CHECK_ACTIONS: Record<string, Omit<GapAction, "checkId">> = {
     detail: "One or more app hooks need setup or repair.",
     fallbackHref: "/settings?section=apps",
     cta: "Repair app hooks",
+    repairable: true,
   },
   daemon: {
     label: "Local runtime",
@@ -34,48 +36,56 @@ const PROTECTION_CHECK_ACTIONS: Record<string, Omit<GapAction, "checkId">> = {
       "The local Guard runtime needs attention before protection can finish.",
     fallbackHref: "/settings",
     cta: "Repair local runtime",
+    repairable: true,
   },
   policy_engine: {
     label: "Policy engine",
     detail: "Guard could not confirm the local policy engine is ready.",
     fallbackHref: "/policy",
     cta: "Repair policy engine",
+    repairable: true,
   },
   rule_packs: {
     label: "Rule packs",
     detail: "Guard cannot confirm the active rule-pack proof yet.",
     fallbackHref: "/policy",
     cta: "Repair rule packs",
+    repairable: true,
   },
   decision_plane_compatibility: {
     label: "Decision plane",
     detail: "Local decision-plane compatibility is unproven or failed.",
     fallbackHref: "/settings",
-    cta: "Repair decision plane",
+    cta: "Open diagnostics",
+    repairable: false,
   },
   containment_compatibility: {
     label: "Containment",
     detail: "Containment compatibility is unproven or failed.",
     fallbackHref: "/settings",
-    cta: "Repair containment",
+    cta: "Open diagnostics",
+    repairable: false,
   },
   sandbox: {
     label: "Sandbox",
     detail: "Sandbox enforcement could not be confirmed.",
     fallbackHref: "/settings",
-    cta: "Repair sandbox",
+    cta: "Open diagnostics",
+    repairable: false,
   },
   decision_stream: {
     label: "Command evidence",
     detail: "Command activity evidence is incomplete or unavailable.",
     fallbackHref: "/evidence?view=commands",
     cta: "Check command evidence",
+    repairable: true,
   },
   tamper_checks: {
     label: "Integrity checks",
     detail: "Managed Guard files or hooks did not pass integrity checks.",
     fallbackHref: "/settings?section=security",
     cta: "Repair integrity",
+    repairable: true,
   },
 };
 
@@ -90,6 +100,7 @@ function actionForCheck(
       detail: `${harnessDisplayName(repairHarness)} hooks need setup or repair.`,
       fallbackHref: `/apps/${repairHarness}?tab=settings`,
       cta: `Repair ${harnessDisplayName(repairHarness)}`,
+      repairable: true,
     };
   }
   const action = PROTECTION_CHECK_ACTIONS[check.check_id];
@@ -100,7 +111,8 @@ function actionForCheck(
         label: check.check_id.replace(/_/g, " "),
         detail: "Guard could not confirm this protection proof.",
         fallbackHref: "/settings",
-        cta: "Try automatic repair",
+        cta: "Open diagnostics",
+        repairable: false,
       };
 }
 
@@ -160,13 +172,19 @@ function ProtectionGapItem({
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <ActionButton
-          onClick={handleRepair}
-          disabled={working}
-          variant="outline"
-        >
-          {working ? "Repairing…" : action.cta}
-        </ActionButton>
+        {action.repairable ? (
+          <ActionButton
+            onClick={handleRepair}
+            disabled={working}
+            variant="outline"
+          >
+            {working ? "Repairing…" : action.cta}
+          </ActionButton>
+        ) : (
+          <ActionButton href={action.fallbackHref} variant="outline">
+            {action.cta}
+          </ActionButton>
+        )}
         {repairState?.status === "error" ? (
           <ActionButton href={action.fallbackHref} variant="ghost">
             Open diagnostics
@@ -194,6 +212,18 @@ type FleetProtectionRecoveryProps = {
     harnesses: string[],
   ) => Promise<string>;
 };
+
+function recoverySummary(failCount: number, unknownCount: number): string {
+  if (failCount === 0) {
+    return "Complete the remaining proof here. Guard rechecks protection after each step.";
+  }
+  const failedChecks = `${failCount} failed check${failCount === 1 ? "" : "s"}`;
+  let remainingProofs = "";
+  if (unknownCount > 0) {
+    remainingProofs = `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}`;
+  }
+  return `Repair the ${failedChecks} here${remainingProofs}. Guard rechecks protection after each step.`;
+}
 
 export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   const [repairStates, setRepairStates] = useState<Record<string, RepairState>>(
@@ -235,6 +265,7 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   const handleRepairAll = useCallback(async () => {
     const repairedGroups = new Set<string>();
     for (const check of gaps) {
+      if (!actionForCheck(check, props.repairHarness).repairable) continue;
       const group =
         check.check_id === "rule_packs" ||
         check.check_id === "tamper_checks" ||
@@ -272,9 +303,7 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
             </h2>
           </div>
           <p className="mt-1 text-sm text-slate-600">
-            {failCount > 0
-              ? `Repair the ${failCount} failed check${failCount === 1 ? "" : "s"} here${unknownCount > 0 ? `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}` : ""}. Guard rechecks protection after each step.`
-              : "Complete the remaining proof here. Guard rechecks protection after each step."}
+            {recoverySummary(failCount, unknownCount)}
           </p>
         </div>
         <ActionButton onClick={handleRepairAllClick} disabled={anyWorking}>

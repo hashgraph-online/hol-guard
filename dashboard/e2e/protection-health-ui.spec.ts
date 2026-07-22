@@ -133,6 +133,8 @@ test("unproven checks clamp server and install claims across protection views", 
   await expect(page.getByRole("heading", { name: "App protection is degraded" })).toBeVisible();
   await expect(page.getByLabel("Protection status").getByText("Degraded", { exact: true })).toBeVisible();
   await expect(page.getByText("Your apps are covered")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Repair sandbox" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Open diagnostics" }).first()).toBeVisible();
 
   await page.goto(`/apps/codex?tab=settings&${DAEMON}`);
   await expect(page.getByRole("heading", { name: "Codex protection is degraded" })).toBeVisible();
