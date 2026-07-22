@@ -215,9 +215,7 @@ class StoreCommandActivityLifecycleMixin:
             )
             active = cast(
                 sqlite3.Row | None,
-                connection.execute(
-                    "select * from command_activity_health_active where singleton = 1"
-                ).fetchone(),
+                connection.execute("select * from command_activity_health_active where singleton = 1").fetchone(),
             )
         if row is None or active is None:
             raise RuntimeError("command activity persistence health is unavailable")
