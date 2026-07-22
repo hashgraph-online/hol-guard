@@ -68,6 +68,43 @@ def test_harnesses_recover_safe_inspection_after_cross_workspace_cd(
     assert artifact is None
 
 
+@pytest.mark.parametrize("harness", ("pi", "codex", "claude-code", "gemini", "cursor"))
+def test_harnesses_accept_safe_leading_delay_before_cross_workspace_inspection(
+    tmp_path: Path,
+    harness: str,
+) -> None:
+    home = tmp_path / "home"
+    workspace = home / "projects" / "workspace"
+    (workspace / "src").mkdir(parents=True)
+
+    assert (
+        _artifact(
+            f"sleep 30 && cd {workspace} && grep -n TODO src/example.ts | head -20",
+            home=home,
+            harness=harness,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize("pattern", ("TODO", "component.property", "module-name.tsx"))
+def test_compound_inspection_accepts_safe_stderr_suppression(tmp_path: Path, pattern: str) -> None:
+    home = tmp_path / "home"
+    workspace = home / "projects" / "workspace"
+    (workspace / "src").mkdir(parents=True)
+
+    assert _artifact(f"cd {workspace} && grep -rn {pattern} src 2>/dev/null | head -20", home=home) is None
+
+
+@pytest.mark.parametrize("redirect", ("2>report.txt", "> report.txt", "< input.txt"))
+def test_compound_inspection_keeps_file_redirection_guarded(tmp_path: Path, redirect: str) -> None:
+    home = tmp_path / "home"
+    workspace = home / "projects" / "workspace"
+    (workspace / "src").mkdir(parents=True)
+
+    assert _artifact(f"cd {workspace} && grep -rn TODO src {redirect} | head -20", home=home) is not None
+
+
 def test_cross_workspace_recovery_preserves_mutating_command_review(tmp_path: Path) -> None:
     home = tmp_path / "home"
     active_workspace = home / "projects" / "active"

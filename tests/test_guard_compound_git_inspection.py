@@ -50,6 +50,38 @@ def test_compound_git_inspection_accepts_bounded_log_forms(tmp_path: Path, log_a
     assert _artifact(f"cd {workspace} && git log {log_args}", home=home) is None
 
 
+@pytest.mark.parametrize(
+    "inspection",
+    (
+        "git show origin/main:public/example.txt | head -20",
+        "git diff origin/main -- public/example.txt | head -20",
+    ),
+)
+def test_compound_git_inspection_accepts_safe_revision_paths(tmp_path: Path, inspection: str) -> None:
+    home = tmp_path / "home"
+    workspace = home / "workspace"
+    (workspace / "public").mkdir(parents=True)
+
+    assert _artifact(f"cd {workspace} && {inspection}", home=home) is None
+
+
+@pytest.mark.parametrize(
+    "inspection",
+    (
+        "git show origin/main:../settings.txt",
+        "git show origin/main:/settings.txt",
+        "git diff origin/main -- ../settings.txt",
+        "git diff origin/main -- /settings.txt",
+    ),
+)
+def test_compound_git_inspection_rejects_escaping_revision_paths(tmp_path: Path, inspection: str) -> None:
+    home = tmp_path / "home"
+    workspace = home / "workspace"
+    workspace.mkdir(parents=True)
+
+    assert _artifact(f"cd {workspace} && {inspection}", home=home) is not None
+
+
 @pytest.mark.parametrize("repository", ("projects/repository", "./projects/repository", "."))
 def test_compound_git_inspection_accepts_bounded_relative_repository_paths(
     tmp_path: Path,
