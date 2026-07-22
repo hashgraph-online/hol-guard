@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     tool_call_risk_categories,
@@ -834,6 +836,18 @@ class TestBrowserRiskClassifierIntegration:
         categories = tool_call_risk_categories(artifact, arguments)
         assert "browser_interaction" in categories
 
+    def test_browser_interaction_signal_describes_page_element(self) -> None:
+        artifact, arguments = _browser_artifact(
+            tool_name="click",
+            arguments={"uid": "12_3"},
+        )
+
+        signals = tool_call_risk_signals(artifact, arguments)
+
+        assert "browser interaction on page element" in signals
+        assert all("unknown" not in signal for signal in signals)
+        assert all("12_3" not in signal for signal in signals)
+
     def test_browser_transfer_category(self) -> None:
         """HGBM040: Upload/download has browser_transfer category."""
         artifact, arguments = _browser_artifact(
@@ -1062,3 +1076,42 @@ class TestProxyBrowserIntentMetadata:
         )
         assert "hol.org" in payload["launch_target"]
         assert "navigate_page" not in payload["launch_target"] or "chrome" in payload["launch_target"].lower()
+
+    @pytest.mark.parametrize(
+        ("tool_name", "arguments", "expected_target"),
+        [
+            ("click", {"uid": "12_3"}, "chrome-devtools click page element"),
+            (
+                "fill_form",
+                {"elements": [{"uid": "1", "value": "a"}, {"uid": "2", "value": "b"}]},
+                "chrome-devtools fill_form page elements",
+            ),
+            ("take_snapshot", {}, "chrome-devtools take_snapshot current page"),
+            ("get_network_request", {"reqid": 7}, "chrome-devtools get_network_request network request"),
+            ("get_console_message", {"msgid": 4}, "chrome-devtools get_console_message console message"),
+        ],
+    )
+    def test_launch_target_describes_non_url_browser_inputs(
+        self,
+        tool_name: str,
+        arguments: dict[str, object],
+        expected_target: str,
+    ) -> None:
+        from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
+
+        artifact, _ = _browser_artifact(tool_name=tool_name, arguments=arguments)
+
+        class _FakeProxy:
+            _launch_target = staticmethod(lambda tool, args: f"{tool} {args}")
+
+        payload = RuntimeMcpGuardProxy._build_artifact_payload(
+            _FakeProxy(),
+            artifact=artifact,
+            artifact_hash="test-hash",
+            tool_name=tool_name,
+            params={"arguments": arguments},
+            signals=(),
+        )
+
+        assert payload["launch_target"] == expected_target
+        assert all(str(value) not in payload["launch_target"] for value in arguments.values())

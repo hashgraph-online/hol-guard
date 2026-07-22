@@ -533,6 +533,53 @@ def normalize_browser_mcp_intent(
     )
 
 
+def browser_intent_display_target(
+    intent: GuardBrowserAutomationIntentV1,
+    arguments: object,
+) -> str:
+    """Return a bounded, privacy-safe target label for approval UX."""
+    if intent.target_domain:
+        return intent.target_domain
+    if intent.target_origin:
+        return intent.target_origin
+
+    mapping = _extract_mapping(arguments) or {}
+    operation = intent.operation.lower()
+    if "network" in operation:
+        return "network request" if operation.startswith(("get_", "read_")) else "network activity"
+    if "console" in operation:
+        return "console message" if operation.startswith(("get_", "read_")) else "console messages"
+    if intent.intent in {"browser.interact", "browser.transfer"} and _has_browser_element_target(mapping):
+        return "page elements" if _has_multiple_browser_element_targets(mapping) else "page element"
+    if operation in {"list_pages", "browser_list_pages"}:
+        return "open pages"
+    if operation in {"select_page", "close_page", "browser_select_page", "browser_close_page"}:
+        return "browser page"
+    return "current page"
+
+
+def _has_browser_element_target(mapping: Mapping[str, object]) -> bool:
+    element_keys = {
+        "uid",
+        "ref",
+        "selector",
+        "element",
+        "elementId",
+        "nodeId",
+        "backendNodeId",
+        "from_uid",
+        "to_uid",
+    }
+    return any(key in mapping for key in element_keys) or isinstance(mapping.get("elements"), list)
+
+
+def _has_multiple_browser_element_targets(mapping: Mapping[str, object]) -> bool:
+    elements = mapping.get("elements")
+    has_drag_pair = "from_uid" in mapping and "to_uid" in mapping
+    has_element_list = isinstance(elements, list) and len(elements) > 1
+    return has_drag_pair or has_element_list
+
+
 # ─── Internal helpers ──────────────────────────────────────────────────────────
 
 
@@ -885,6 +932,7 @@ __all__ = [
     "_normalize_target_domain",
     "_normalize_target_origin",
     "_redacted_target_url",
+    "browser_intent_display_target",
     "is_browser_mcp_server",
     "normalize_browser_mcp_intent",
 ]

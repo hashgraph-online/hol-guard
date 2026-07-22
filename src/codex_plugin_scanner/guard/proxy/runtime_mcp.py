@@ -63,7 +63,7 @@ from ..runtime.approval_context import (
     runtime_launch_identity_matches,
 )
 from ..runtime.approval_reuse import APPROVAL_REUSE_CLAIM_FAILED
-from ..runtime.browser_mcp_intent import normalize_browser_mcp_intent
+from ..runtime.browser_mcp_intent import browser_intent_display_target, normalize_browser_mcp_intent
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.package_execution_policy import is_execution_permitted
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
@@ -3388,7 +3388,7 @@ class RuntimeMcpGuardProxy:
             changed_fields.append("runtime_browser_tool_call")
             risk_categories = tool_call_risk_categories(artifact, arguments)
             # Build a safer browser-specific launch target label
-            target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
+            target = browser_intent_display_target(browser_intent, arguments)
             launch_target = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
             browser_intent_dict = cast(
                 dict[str, object],
@@ -3556,7 +3556,7 @@ class RuntimeMcpGuardProxy:
         browser_intent = normalize_browser_mcp_intent(artifact, params.get("arguments"))
         if browser_intent is not None:
             artifact_payload["changed_fields"].append("runtime_browser_tool_call")
-            target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
+            target = browser_intent_display_target(browser_intent, params.get("arguments"))
             artifact_payload["launch_target"] = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
             artifact_payload["browser_intent"] = _safe_mcp_arguments(
                 {
