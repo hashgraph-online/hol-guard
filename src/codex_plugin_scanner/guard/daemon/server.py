@@ -4095,8 +4095,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             reason_count = len(degraded_reasons) if isinstance(degraded_reasons, list) else 0
             repaired_check_ids = ["policy_engine", "rule_packs", "tamper_checks"]
             if check_id == "all" and repaired:
-                with suppress(OSError, RuntimeError, TypeError, ValueError):
-                    self._containment_health_payload(force_refresh=True)
+                failed_check_ids: list[str] = []
+                try:
+                    containment_health = self._containment_health_payload(force_refresh=True)
+                    if containment_health is None:
+                        failed_check_ids.extend(
+                            ["decision_plane_compatibility", "containment_compatibility", "sandbox"]
+                        )
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    failed_check_ids.extend(["decision_plane_compatibility", "containment_compatibility", "sandbox"])
                 try:
                     config = load_guard_config(store.guard_home)
                     store.maintain_command_activity(
@@ -4107,7 +4114,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     if evidence_health.active_error_count == 0 and store.count_command_activities() > 0:
                         repaired_check_ids.append("decision_stream")
                 except (OSError, RuntimeError, TypeError, ValueError):
-                    pass
+                    failed_check_ids.append("decision_stream")
+                if failed_check_ids:
+                    self._write_json(
+                        {
+                            "error": "protection_repair_incomplete",
+                            "repaired": False,
+                            "check_ids": repaired_check_ids,
+                            "failed_check_ids": failed_check_ids,
+                            "message": (
+                                "Repair paused before every protection layer could be rechecked. Retry repair here."
+                            ),
+                        },
+                        status=409,
+                    )
+                    return
             self._write_json(
                 {
                     "repaired": repaired,
