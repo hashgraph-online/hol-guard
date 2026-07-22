@@ -987,7 +987,7 @@ def test_evaluate_package_request_artifact_handles_upgrade_required_with_premium
 
 
 @pytest.mark.parametrize("status_code", [400, 401, 403, 404])
-def test_evaluate_package_request_artifact_fails_closed_on_untrusted_cloud_http_error(
+def test_evaluate_package_request_artifact_distinguishes_auth_from_validation_http_errors(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     status_code: int,
@@ -1030,11 +1030,16 @@ def test_evaluate_package_request_artifact_fails_closed_on_untrusted_cloud_http_
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
-    assert result.enforcement == "premium_cloud"
     expected_code = "cloud_auth_error" if status_code in {401, 403} else "cloud_validation_error"
     assert any(reason["code"] == expected_code for reason in result.reasons)
+    if status_code in {401, 403}:
+        assert result.decision == "monitor"
+        assert result.policy_action == "allow"
+        assert result.enforcement == "offline_cached"
+    else:
+        assert result.decision == "ask"
+        assert result.policy_action == "require-reapproval"
+        assert result.enforcement == "premium_cloud"
 
 
 def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachable(
@@ -2419,7 +2424,7 @@ def test_evaluate_package_request_artifact_stale_bundle_requests_refresh_and_rec
     assert evidence[0]["category"] == "supply-chain"
 
 
-def test_evaluate_package_request_artifact_fails_closed_when_stale_bundle_needs_cloud_refresh_but_auth_expired(
+def test_evaluate_package_request_artifact_uses_stale_bundle_when_cloud_auth_expired(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2469,13 +2474,58 @@ def test_evaluate_package_request_artifact_fails_closed_when_stale_bundle_needs_
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
-    assert result.enforcement == "premium_cloud"
+    assert result.decision == "monitor"
+    assert result.policy_action == "allow"
+    assert result.enforcement == "offline_cached"
     assert any(reason["code"] == "cloud_auth_error" for reason in result.reasons)
     assert result.user_copy.next_step == "hol-guard connect"
     assert "local-only" in result.user_copy.harness_message
     assert "hol-guard connect" in result.user_copy.harness_message
+
+
+def test_evaluate_unlisted_registry_package_uses_local_intelligence_when_cloud_auth_expired(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=WORKSPACE_ID,
+        now="2026-05-19T00:00:00Z",
+    )
+    stale_response = _bundle_response(
+        packages=[],
+        generated_at=datetime(2026, 5, 18, tzinfo=timezone.utc),
+        expires_at=datetime(2026, 5, 18, 1, tzinfo=timezone.utc),
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, stale_response, "2026-05-18T01:00:00Z")
+
+    def raise_auth_expired(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+        raise GuardSyncAuthorizationExpiredError(
+            "Guard authorization expired. Run `hol-guard connect` to sign in again."
+        )
+
+    monkeypatch.setattr(evaluator_module, "_resolve_guard_sync_auth_context", raise_auth_expired)
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("@openai/codex@latest"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "monitor"
+    assert result.policy_action == "allow"
+    assert result.enforcement == "local_fallback"
+    assert any(reason["code"] == "cloud_auth_error" for reason in result.reasons)
+    assert result.user_copy.next_step == "hol-guard connect"
 
 
 def test_evaluate_package_request_artifact_honors_cloud_advisory_block_when_auth_expired(

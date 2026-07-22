@@ -1562,6 +1562,45 @@ def test_guard_protect_json_terminal_block_on_cloud_auth_error_does_not_queue_lo
     assert store.list_approval_requests(limit=None) == []
 
 
+def test_guard_protect_allows_codex_install_with_local_intelligence_when_cloud_auth_expired(
+    tmp_path: Path,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="allow",
+        package_name="@openai/codex",
+        evaluate_status=401,
+    )
+    try:
+        _seed_bundle_cache_only(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="minimist",
+            package_version="1.2.8",
+            action="allow",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        store = GuardStore(home_dir)
+
+        payload, exit_code = build_protect_payload(
+            command=["bun", "install", "-g", "@openai/codex@latest"],
+            store=store,
+            workspace_dir=workspace_dir,
+            dry_run=True,
+            now="2026-05-19T00:00:00Z",
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    assert exit_code == 0
+    assert payload["verdict"]["action"] == "allow"
+    assert payload["supply_chain_evaluation"]["policy_action"] == "allow"
+    assert any(reason["code"] == "cloud_auth_error" for reason in payload["supply_chain_evaluation"]["reasons"])
+    assert store.list_approval_requests(limit=None) == []
+
+
 def test_guard_protect_probe_skips_local_approval_queue_on_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2518,8 +2557,8 @@ def test_guard_protect_saved_approval_does_not_bypass_new_bundle_block_for_unpin
             now="2026-05-19T00:00:00Z",
         )
 
-        assert first_exit_code == 2
-        assert first_payload["verdict"]["action"] in {"block", "require-reapproval"}
+        assert first_exit_code == 0
+        assert first_payload["verdict"]["action"] == "allow"
         receipt = first_payload["receipt"]
         assert isinstance(receipt, dict)
         store.upsert_policy(

@@ -698,6 +698,10 @@ def evaluate_package_request_artifact(
             artifact=artifact,
             workspace_dir=workspace_dir,
             fail_closed_unidentified=fail_closed_unidentified,
+            monitor_resolved_registry_identity=(
+                cloud_fallback_reason is not None
+                and _optional_string(cloud_fallback_reason.get("code")) == "cloud_auth_error"
+            ),
         )
         fallback_decision = max(
             (str(package.get("decision") or "monitor") for package in fallback_packages),
@@ -1051,20 +1055,18 @@ def _evaluate_with_cloud(
         result: str = fail_closed_decision
         return result
 
-    def can_defer_auth_failure_to_bundle() -> bool:
-        if bundle_meta is None or not bundle_defer_eligible:
-            return False
-        return bundle_decision == "block" or resolve_fail_closed_decision() != "block"
+    def can_fallback_from_auth_failure() -> bool:
+        if resolve_fail_closed_decision() != "block":
+            return True
+        return bundle_meta is not None and bundle_defer_eligible and bundle_decision == "block"
 
     try:
         auth_context = _resolve_guard_sync_auth_context(store, allow_primary_repair=False)
     except GuardSyncAuthorizationExpiredError:
-        if can_defer_auth_failure_to_bundle():
+        if can_fallback_from_auth_failure():
             return None, _cloud_fallback_reason(
                 code="cloud_auth_error",
-                message=(
-                    "Guard cloud evaluation was not authorized, so Guard fell back to signed bundle intelligence."
-                ),
+                message="Guard cloud evaluation was not authorized, so Guard used local package intelligence.",
             )
         return (
             _cloud_fail_closed_evaluation(
@@ -1096,12 +1098,10 @@ def _evaluate_with_cloud(
             )
         return None, None
     except RuntimeError:
-        if can_defer_auth_failure_to_bundle():
+        if can_fallback_from_auth_failure():
             return None, _cloud_fallback_reason(
                 code="cloud_auth_error",
-                message=(
-                    "Guard cloud evaluation was not authorized, so Guard fell back to signed bundle intelligence."
-                ),
+                message="Guard cloud evaluation was not authorized, so Guard used local package intelligence.",
             )
         return (
             _cloud_fail_closed_evaluation(
@@ -1167,6 +1167,11 @@ def _evaluate_with_cloud(
         )
         if fail_closed is not None:
             return fail_closed, None
+        if error.code in {401, 403}:
+            return None, _cloud_fallback_reason(
+                code="cloud_auth_error",
+                message="Guard cloud evaluation was not authorized, so Guard used local package intelligence.",
+            )
         return None, _cloud_fallback_reason(
             code="cloud_http_error",
             message=(f"Guard cloud evaluation returned HTTP {error.code}, so Guard fell back to local intelligence."),
@@ -1331,6 +1336,8 @@ def _cloud_http_fail_closed_evaluation(
     fail_closed_decision: str,
 ) -> PackageRequestEvaluation | None:
     if status_code in {401, 403}:
+        if fail_closed_decision != "block":
+            return None
         return _cloud_fail_closed_evaluation(
             code="cloud_auth_error",
             message="Guard cloud evaluation was not authorized, so this package request needs review.",
@@ -2784,6 +2791,7 @@ def _fallback_package_results(
     artifact: GuardArtifact,
     workspace_dir: Path | None,
     fail_closed_unidentified: bool = False,
+    monitor_resolved_registry_identity: bool = False,
 ) -> tuple[dict[str, object], ...]:
     bun_fallback_packages = _bun_lockfile_binary_fallback_packages(
         targets=targets,
@@ -2800,9 +2808,15 @@ def _fallback_package_results(
             target,
             fail_closed_unidentified=fail_closed_unidentified,
             identity_resolved=(
-                _optional_string(target.get("ecosystem")) == "npm"
-                and "--ignore-scripts" in flags
-                and _lockfile_target_key(target) in lockfile_versions
+                (
+                    _optional_string(target.get("ecosystem")) == "npm"
+                    and "--ignore-scripts" in flags
+                    and _lockfile_target_key(target) in lockfile_versions
+                )
+                or (
+                    monitor_resolved_registry_identity
+                    and _optional_string(target.get("ecosystem")) in _REGISTRY_DEFAULT_RANGES
+                )
             ),
         )
         for target in targets
