@@ -120,5 +120,7 @@ assert.match(appDetailSource, /protectionHealthFor\(runtime, harness\)/);
 assert.match(fleetSource, /resolveAppStatus\(install, appProtection,/);
 assert.match(fleetSource, /check\.check_id === "harness_hooks"/);
 assert.match(fleetSource, /hookCheck\?\.status === "fail"/);
-assert.match(fleetSource, /hookCheck\?\.status === "unknown"/);
+assert.match(fleetSource, /protectionHealth\.state === "protected"/);
+assert.match(fleetSource, /protectionHealth\.state === "partial"/);
+assert.match(fleetSource, /#protection-recovery/);
 assert.match(reviewStatesSource, /protectedAppsCount = protectionHealth\.apps\.filter/);

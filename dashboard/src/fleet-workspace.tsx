@@ -25,7 +25,10 @@ import {
 } from "./apps/app-catalog";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import { protectionHealthFor } from "./protection-health";
-import { FleetProtectionRecovery } from "./fleet-protection-recovery";
+import {
+  FleetProtectionRecovery,
+  primaryProtectionRecoveryAction,
+} from "./fleet-protection-recovery";
 import type {
   GuardInventoryItem,
   GuardPolicyDecision,
@@ -80,10 +83,10 @@ export function resolveFleetHeroCopy(
       headline: protectionState === "partial" ? "Apps are partially protected" : "App protection is degraded",
       subheadline:
         protectionState === "partial"
-          ? "Core protection passes, but complete decision-stream evidence is not available."
-          : "One or more required protection checks failed or remain unproven.",
-      primaryCtaLabel: "Review app health",
-      primaryCtaHref: urls.dashboard_url,
+          ? "Core protection passes. Finish the remaining proofs below to reach full protection."
+          : "Some protection checks failed or remain unproven. Use the steps below to restore full protection.",
+      primaryCtaLabel: "Restore full protection",
+      primaryCtaHref: "#protection-recovery",
       secondaryCtaLabel: cloudState === "local_only" ? "Connect this machine" : "Open Cloud Devices",
       secondaryCtaHref: cloudState === "local_only" ? urls.connect_url : urls.fleet_url,
     };
@@ -157,8 +160,10 @@ function resolveAppStatus(
   if (install !== undefined) {
     const hookCheck = protectionHealth.checks.find((check) => check.check_id === "harness_hooks");
     if (!install.active || hookCheck?.status === "fail") return "needs_repair";
-    if (hookCheck?.status === "unknown" || protectionHealth.state !== "protected") return "partial";
-    return "protected";
+    if (protectionHealth.state === "protected") return "protected";
+    if (protectionHealth.state === "partial") return "partial";
+    // Degraded with active hooks is not "partially protected" — treat as repair path.
+    return "needs_repair";
   }
   if (!hasInventory && !hasReceipts) return "not_found";
   return "found_unprotected";
@@ -182,7 +187,9 @@ function StatusIcon({ status }: { status: AppStatus }) {
 
 function StatusBadge({ status }: { status: AppStatus }) {
   if (status === "partial") return <span className="text-xs font-medium text-brand-blue">Partially protected</span>;
-  if (status === "needs_repair") return <span className="text-xs font-medium text-brand-attention">Degraded</span>;
+  if (status === "needs_repair") {
+    return <span className="text-xs font-medium text-brand-attention">Needs repair</span>;
+  }
   const installStatus = toInstallStatus(status);
   const label = APP_STATUS_LABELS[installStatus];
   if (installStatus === "active") return <span className="text-xs font-medium text-emerald-600">{label}</span>;
@@ -263,6 +270,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
     ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some(
       (check) => check.check_id === "harness_hooks" && check.status === "fail"
     ));
+  const recoveryPrimary = primaryProtectionRecoveryAction(protectionHealth, repairHarness);
 
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
@@ -281,17 +289,23 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
         status={heroCopy.status}
         headline={heroCopy.headline}
         subheadline={heroCopy.subheadline}
-        cta={protectionHealth.state === "degraded" && repairHarness ? (
-          <ActionButton href={`/apps/${repairHarness}?tab=settings`}>
-            Repair {harnessDisplayName(repairHarness)}
-          </ActionButton>
-        ) : (
-          <ActionButton href={heroCopy.primaryCtaHref}>{heroCopy.primaryCtaLabel}</ActionButton>
-        )}
+        cta={
+          protectionHealth.state !== "protected" && recoveryPrimary ? (
+            <ActionButton href={recoveryPrimary.href}>{recoveryPrimary.cta}</ActionButton>
+          ) : (
+            <ActionButton href={heroCopy.primaryCtaHref}>{heroCopy.primaryCtaLabel}</ActionButton>
+          )
+        }
         secondaryCta={
-          <ActionButton href={heroCopy.secondaryCtaHref} variant="outline">
-            {heroCopy.secondaryCtaLabel}
-          </ActionButton>
+          protectionHealth.state !== "protected" ? (
+            <ActionButton href="#protection-recovery" variant="outline">
+              View all steps
+            </ActionButton>
+          ) : (
+            <ActionButton href={heroCopy.secondaryCtaHref} variant="outline">
+              {heroCopy.secondaryCtaLabel}
+            </ActionButton>
+          )
         }
       />
 
