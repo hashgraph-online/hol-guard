@@ -91,48 +91,38 @@ def _payload(
     )
 
 
-def test_missing_positive_proofs_never_claim_protected() -> None:
-    # Without trust or managed activity, core proofs stay unproven or failed.
-    payload = _payload(
-        installs=[],
-        trust={},
-        activity_count=0,
-        runtime_state={"last_heartbeat_at": _NOW.isoformat()},
-    )
-    assert payload["state"] == "degraded"
-    assert payload["label"] == "Degraded"
-
-
-def test_operational_proofs_can_reach_protected() -> None:
+def test_active_install_is_not_hook_interception_proof() -> None:
     payload = _payload(
         installs=[{"harness": "codex", "active": True}],
         trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
-        dropped=0,
-        errors=0,
         activity_count=3,
     )
-    assert payload["state"] == "protected"
-    assert payload["label"] == "Protected"
+    assert payload["state"] == "degraded"
     checks = cast(list[dict[str, str]], payload["checks"])
     by_id = {check["check_id"]: check for check in checks}
     assert by_id["harness_hooks"] == {
         "check_id": "harness_hooks",
-        "status": "pass",
-        "reason_code": "hooks_managed_active",
+        "status": "unknown",
+        "reason_code": "hook_attestation_unavailable",
     }
     assert by_id["rule_packs"]["status"] == "pass"
-    assert by_id["decision_stream"]["status"] == "pass"
     assert by_id["tamper_checks"]["status"] == "pass"
+    assert by_id["decision_stream"]["status"] == "unknown"
+    assert by_id["decision_stream"]["reason_code"] == "decision_stream_completeness_unavailable"
 
 
-def test_evidence_gap_after_core_proof_is_partial() -> None:
+def test_trust_signals_fail_closed_when_degraded() -> None:
     payload = _payload(
-        installs=[{"harness": "codex", "active": True}],
-        trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
-        activity_count=0,
+        installs=[{"harness": "codex", "active": False}],
+        trust={"runtime_protection": "degraded", "remembered_rules": "disabled_degraded"},
+        dropped=1,
     )
-    assert payload["state"] == "partial"
-    assert payload["detail"] == "Core protection passes, but decision-stream evidence is incomplete."
+    checks = cast(list[dict[str, str]], payload["checks"])
+    by_id = {check["check_id"]: check for check in checks}
+    assert by_id["harness_hooks"]["status"] == "fail"
+    assert by_id["rule_packs"]["status"] == "fail"
+    assert by_id["tamper_checks"]["status"] == "fail"
+    assert by_id["decision_stream"]["status"] == "fail"
 
 
 def test_report_distinguishes_failed_and_unproven_facts() -> None:
@@ -145,8 +135,7 @@ def test_report_distinguishes_failed_and_unproven_facts() -> None:
     checks = cast(list[dict[str, str]], raw_checks)
     by_id = {check["check_id"]: check for check in checks}
     assert by_id["daemon"]["status"] == "pass"
-    assert by_id["harness_hooks"]["status"] == "pass"
-    assert by_id["harness_hooks"]["reason_code"] == "hooks_managed_active"
+    assert by_id["harness_hooks"]["status"] == "unknown"
     assert by_id["decision_plane_compatibility"]["status"] == "pass"
     assert by_id["sandbox"]["status"] == "pass"
 

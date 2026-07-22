@@ -43,8 +43,11 @@ def _hook_signals(managed_installs: Sequence[Mapping[str, object]]) -> dict[str,
         harness = install.get("harness")
         if not isinstance(harness, str) or len(harness) > 64 or _STABLE_HARNESS.fullmatch(harness) is None:
             continue
+        # Active install rows are not hook interception proof. Treat them as
+        # unproven until a dedicated attestation signal exists; only inactive
+        # managed installs are a confirmed failure.
         candidate = (
-            _signal(ProtectionCheckStatus.PASS, "hooks_managed_active")
+            _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
             if install.get("active") is True
             else _signal(ProtectionCheckStatus.FAIL, "hooks_inactive")
         )
@@ -63,8 +66,6 @@ def _global_hook_signal(harness_signals: Mapping[str, ProtectionSignal]) -> Prot
         return _signal(ProtectionCheckStatus.FAIL, "no_managed_harness")
     if any(signal.status is ProtectionCheckStatus.FAIL for signal in harness_signals.values()):
         return _signal(ProtectionCheckStatus.FAIL, "one_or_more_hooks_inactive")
-    if all(signal.status is ProtectionCheckStatus.PASS for signal in harness_signals.values()):
-        return _signal(ProtectionCheckStatus.PASS, "hooks_managed_active")
     return _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
 
 
@@ -117,7 +118,8 @@ def _decision_stream_signal(store: ProtectionHealthStore) -> ProtectionSignal:
         return _signal(ProtectionCheckStatus.FAIL, "decision_stream_degraded")
     if activity_count == 0:
         return _signal(ProtectionCheckStatus.UNKNOWN, "decision_stream_not_observed")
-    return _signal(ProtectionCheckStatus.PASS, "decision_stream_healthy")
+    # Historical rows do not prove the producer is still healthy.
+    return _signal(ProtectionCheckStatus.UNKNOWN, "decision_stream_completeness_unavailable")
 
 
 def _tamper_signal(trust_status: Mapping[str, object]) -> ProtectionSignal:
