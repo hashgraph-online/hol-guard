@@ -386,6 +386,17 @@ assert(
   "T-QS-31a: first-class Docker metadata drives the queue category"
 );
 
+const categorizedDestructiveDockerItem: GuardApprovalRequest = {
+  ...categorizedDockerItem,
+  request_id: "req-categorized-destructive-docker",
+  risk_summary: "Invokes a destructive shell command.",
+};
+
+assert(
+  resolveQueueCategory(categorizedDestructiveDockerItem).label === "Destructive shell command",
+  "T-QS-31b: destructive-shell risk takes precedence over command metadata"
+);
+
 const categorizedGitHubItem: GuardApprovalRequest = {
   ...BASE_REQUEST,
   request_id: "req-categorized-github",
@@ -394,7 +405,7 @@ const categorizedGitHubItem: GuardApprovalRequest = {
 
 assert(
   resolveQueueCategory(categorizedGitHubItem).label === "GitHub command",
-  "T-QS-31b: first-class GitHub metadata drives the queue category"
+  "T-QS-31c: first-class GitHub metadata drives the queue category"
 );
 
 const persistenceItem: GuardApprovalRequest = {

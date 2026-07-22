@@ -690,6 +690,10 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
     return "file_delete_cleanup";
   }
 
+  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete files", "wipe", "force-clean", "git clean -fd", "truncate"])) {
+    return "destructive_shell";
+  }
+
   const commandCategory = categoryFromCommandExtension(envelope?.command_category);
   if (commandCategory !== null) {
     return commandCategory;
@@ -749,10 +753,6 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
 
   if (sourceEditCommand(command, text) || envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command)) {
     return "source_edit";
-  }
-
-  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete files", "wipe", "force-clean", "git clean -fd", "truncate"])) {
-    return "destructive_shell";
   }
 
   if (networkCommand(command, text) || decisionCategories.includes("network")) {
