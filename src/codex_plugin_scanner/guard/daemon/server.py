@@ -6562,7 +6562,7 @@ class GuardDaemonServer:
             clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
             self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
         finally:
-            release_guard_daemon_owner_lock(self._owner_lock)
+            release_guard_daemon_owner_lock(getattr(self, "_owner_lock", None))
             self._owner_lock = None
 
     def _start_watchdog(self) -> None:
