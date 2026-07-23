@@ -50,8 +50,8 @@ def _hook_signals(
         if not isinstance(harness, str) or len(harness) > 64 or _STABLE_HARNESS.fullmatch(harness) is None:
             continue
         if install.get("active") is not True:
-            candidate = _signal(ProtectionCheckStatus.FAIL, "hooks_inactive")
-        elif hook_verification is None or harness not in hook_verification:
+            continue
+        if hook_verification is None or harness not in hook_verification:
             candidate = _signal(ProtectionCheckStatus.UNKNOWN, "hook_verification_unavailable")
         elif hook_verification[harness]:
             candidate = _signal(ProtectionCheckStatus.PASS, "hooks_verified")

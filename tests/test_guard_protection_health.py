@@ -225,14 +225,14 @@ def test_report_distinguishes_failed_and_unproven_facts() -> None:
     assert degraded_by_id["harness_hooks"] == {
         "check_id": "harness_hooks",
         "status": "fail",
-        "reason_code": "one_or_more_hooks_inactive",
+        "reason_code": "no_managed_harness",
     }
     assert degraded_by_id["tamper_checks"]["status"] == "fail"
     assert degraded_by_id["decision_stream"]["status"] == "fail"
     assert degraded_by_id["rule_packs"]["status"] == "fail"
 
 
-def test_duplicate_harness_rows_preserve_the_most_restrictive_signal() -> None:
+def test_inactive_duplicate_rows_do_not_override_an_active_install() -> None:
     for installs in (
         [{"harness": "codex", "active": False}, {"harness": "codex", "active": True}],
         [{"harness": "codex", "active": True}, {"harness": "codex", "active": False}],
@@ -244,9 +244,24 @@ def test_duplicate_harness_rows_preserve_the_most_restrictive_signal() -> None:
         checks = cast(list[dict[str, str]], apps[0]["checks"])
         assert checks[0] == {
             "check_id": "harness_hooks",
-            "status": "fail",
-            "reason_code": "hooks_inactive",
+            "status": "unknown",
+            "reason_code": "hook_verification_unavailable",
         }
+
+
+def test_inactive_historical_rows_do_not_degrade_verified_active_hooks() -> None:
+    payload = _payload(
+        installs=[
+            {"harness": "pi", "active": False},
+            {"harness": "cursor", "active": True},
+        ],
+        trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
+        hook_verification={"cursor": True},
+    )
+
+    assert payload["state"] == "protected"
+    apps = cast(list[dict[str, object]], payload["apps"])
+    assert [app["harness"] for app in apps] == ["cursor"]
 
 
 def test_stale_or_invalid_runtime_rows_never_prove_daemon_health() -> None:
