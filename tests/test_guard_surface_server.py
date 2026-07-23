@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import sqlite3
 import time
 import urllib.error
 import urllib.parse
@@ -231,6 +232,39 @@ class TestGuardSurfaceServer:
         request = urllib.request.Request(
             f"http://127.0.0.1:{daemon.port}/v1/protection/repair",
             data=json.dumps({"check_id": "all"}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+            method="POST",
+        )
+        try:
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request, timeout=5)
+            payload = json.loads(error.value.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert error.value.code == 409
+        assert payload["error"] == "protection_repair_failed"
+
+    def test_protection_repair_converts_command_store_errors_to_inline_failure(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+
+        def fail_probe(_store: GuardStore) -> None:
+            raise sqlite3.OperationalError("write failed")
+
+        monkeypatch.setattr(
+            daemon_server_module,
+            "_repair_command_activity_persistence_health",
+            fail_probe,
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/protection/repair",
+            data=json.dumps({"check_id": "decision_stream"}).encode("utf-8"),
             headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
             method="POST",
         )
