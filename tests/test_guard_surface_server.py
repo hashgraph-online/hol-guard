@@ -191,15 +191,12 @@ class TestGuardSurfaceServer:
             method="POST",
         )
         try:
-            with pytest.raises(urllib.error.HTTPError) as error:
-                urllib.request.urlopen(request, timeout=5)
-            payload = json.loads(error.value.read().decode("utf-8"))
+            with urllib.request.urlopen(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
 
-        assert error.value.code == 409
-        assert payload["error"] == "protection_repair_incomplete"
-        assert payload["repaired"] is False
+        assert payload["repaired"] is True
         assert payload["check_ids"] == [
             "policy_engine",
             "rule_packs",
@@ -207,25 +204,27 @@ class TestGuardSurfaceServer:
             "decision_plane_compatibility",
             "containment_compatibility",
             "sandbox",
+            "decision_stream",
         ]
-        assert payload["failed_check_ids"] == []
-        assert payload["pending_check_ids"] == ["decision_stream"]
-        assert payload["message"] == (
-            "Repair paused before every protection layer could be confirmed. Retry repair here."
-        )
+        assert payload["pending_check_ids"] == []
+        assert payload["message"] == "Integrity protection restored."
         assert maintained
         assert containment_probes == [True]
 
-    def test_protection_repair_failure_explains_safe_inline_retry(
+    def test_protection_repair_converts_recovery_type_errors_to_inline_failure(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+
+        def fail_setup(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+            raise TypeError("invalid recovery state")
+
         monkeypatch.setattr(
             GuardStore,
             "setup_policy_integrity",
-            lambda self, **_kwargs: {"mode": "degraded", "degraded_reasons": ["rollback_detected"]},
+            fail_setup,
         )
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -243,8 +242,44 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         assert error.value.code == 409
-        assert "Retry repair from Protect" in payload["message"]
-        assert "could not confirm" not in payload["message"].lower()
+        assert payload["error"] == "protection_repair_failed"
+
+    def test_protection_repair_recovers_degraded_integrity_without_trusting_invalid_rows(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+        monkeypatch.setattr(
+            GuardStore,
+            "setup_policy_integrity",
+            lambda self, **_kwargs: {"mode": "degraded", "degraded_reasons": ["rollback_detected"]},
+        )
+        repair_calls: list[bool] = []
+        monkeypatch.setattr(
+            GuardStore,
+            "repair_policy_integrity",
+            lambda self, *, clear_invalid, **_kwargs: (
+                repair_calls.append(clear_invalid) or {"mode": "protected", "counts": {"valid": 0}}
+            ),
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/protection/repair",
+            data=json.dumps({"check_id": "rule_packs"}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert payload["repaired"] is True
+        assert repair_calls == [False]
+        assert payload["message"] == "Integrity protection restored."
 
     def test_protection_repair_all_reports_containment_probe_failure_inline(
         self,
