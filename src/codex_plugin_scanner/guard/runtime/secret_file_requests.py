@@ -1860,6 +1860,23 @@ def _destructive_shell_tool_action_request(
                     else execution_context
                 ),
             )
+    bounded_source_edit_context = (
+        _bounded_verified_source_edit_execution_context(detection_command_text, home_dir=home_dir)
+        if home_dir is not None
+        else None
+    )
+    raw_bounded_source_edit_context = (
+        _bounded_verified_source_edit_execution_context(raw_command_text, home_dir=home_dir)
+        if home_dir is not None and raw_command_text is not None and raw_command_text != detection_command_text
+        else bounded_source_edit_context
+    )
+    if bounded_source_edit_context is not None and raw_bounded_source_edit_context is not None:
+        bounded_source_edit = True
+        execution_context = bounded_source_edit_context
+        raw_execution_context = raw_bounded_source_edit_context
+    else:
+        bounded_source_edit = False
+
     execution_context_reason = _shell_execution_context_validation_reason(execution_context)
     if execution_context.directory_change_present and execution_context_reason is not None:
         return ToolActionRequestMatch(
@@ -1901,7 +1918,7 @@ def _destructive_shell_tool_action_request(
             execution_context=raw_execution_context,
         )
     )
-    if detection_command_is_destructive or raw_command_is_destructive:
+    if (detection_command_is_destructive or raw_command_is_destructive) and not bounded_source_edit:
         matched_execution_context = raw_execution_context if raw_command_is_destructive else execution_context
         matched_execution_context = matched_execution_context or execution_context
         destructive_reason = (
@@ -2039,7 +2056,167 @@ def low_risk_compound_developer_execution_context(
         recovered = _low_risk_compound_developer_execution_context(delayed.group(2), home_dir=home_dir)
         return replace(recovered, command_text=command_text) if recovered is not None else None
 
-    return _low_risk_compound_developer_execution_context(command_text, home_dir=home_dir)
+    return _low_risk_compound_developer_execution_context(
+        command_text, home_dir=home_dir
+    ) or _bounded_verified_source_edit_execution_context(command_text, home_dir=home_dir)
+
+
+def _bounded_verified_source_edit_execution_context(
+    command_text: str,
+    *,
+    home_dir: Path,
+) -> ShellExecutionContext | None:
+    """Recognize one literal source substitution followed by same-file verification."""
+
+    if any(marker in command_text for marker in ("$(", "`", "<(", ">(")):
+        return None
+    modeled_command = command_text.replace("\\\r\n", " ").replace("\\\n", " ")
+    context = model_shell_execution_context(
+        modeled_command,
+        cwd=home_dir,
+        workspace_root=home_dir,
+        home_dir=home_dir,
+    )
+    workspace_root = _leading_literal_cd_workspace_root(context, home_dir=home_dir)
+    if workspace_root is None or workspace_root == home_dir.resolve():
+        return None
+    if not _bounded_edit_workspace_is_safe(workspace_root, home_dir=home_dir):
+        return None
+    context = model_shell_execution_context(
+        modeled_command,
+        cwd=workspace_root,
+        workspace_root=workspace_root,
+        home_dir=home_dir,
+    )
+    if not shell_execution_context_starts_with_literal_cd(context):
+        return None
+    if _shell_execution_context_validation_reason(context) is not None:
+        return None
+    if len(context.segments) not in {3, 4}:
+        return None
+
+    edit = context.segments[1]
+    edit_name, edit_index = _shell_segment_primary_command(list(edit.tokens))
+    if edit_name != "sed" or edit_index is None or edit.control_before != ("&&",):
+        return None
+    edit_args = _without_safe_inspection_redirections(list(edit.tokens[edit_index + 1 :]))
+    if edit_args is None:
+        return None
+    target = _bounded_in_place_sed_target(
+        edit_args,
+        cwd=edit.effective_cwd or workspace_root,
+        workspace_root=workspace_root,
+    )
+    if target is None:
+        return None
+
+    verification_segments = context.segments[2:]
+    if len(verification_segments) == 2:
+        label = verification_segments[0]
+        label_name, label_index = _shell_segment_primary_command(list(label.tokens))
+        if label_name != "echo" or label_index is None or label.control_before not in {("&&",), ("\n",)}:
+            return None
+        label_args = _without_safe_inspection_redirections(list(label.tokens[label_index + 1 :]))
+        if label_args is None or not _static_shell_segment_is_safe(label_args):
+            return None
+
+    verification = verification_segments[-1]
+    verification_name, verification_index = _shell_segment_primary_command(list(verification.tokens))
+    if verification_name not in {"grep", "egrep", "fgrep"} or verification_index is None:
+        return None
+    if verification.control_before not in {("&&",), ("\n",)}:
+        return None
+    verification_args = _without_safe_inspection_redirections(list(verification.tokens[verification_index + 1 :]))
+    if verification_args is None or not _read_only_lookup_primary_segment_is_safe(
+        verification_name,
+        verification_args,
+        home_dir=verification.effective_cwd or workspace_root,
+    ):
+        return None
+    verification_targets = _search_file_operand_tokens(verification_name, verification_args)
+    if len(verification_targets) != 1:
+        return None
+    if not _same_workspace_file(target, verification_targets[0], cwd=workspace_root):
+        return None
+    return replace(context, command_text=command_text)
+
+
+def _bounded_in_place_sed_target(
+    args: list[str],
+    *,
+    cwd: Path,
+    workspace_root: Path,
+) -> str | None:
+    if len(args) < 5 or args[:2] != ["-i", ""]:
+        return None
+    scripts: list[str] = []
+    index = 2
+    while index < len(args) and args[index] == "-e":
+        if index + 1 >= len(args):
+            return None
+        scripts.append(args[index + 1])
+        index += 2
+    targets = args[index:]
+    if not 1 <= len(scripts) <= 16 or len(targets) != 1:
+        return None
+    if any(not _literal_sed_substitution_is_safe(script) for script in scripts):
+        return None
+    target = targets[0]
+    if not _read_only_lookup_target_is_safe(target, allow_dirs=False, home_dir=cwd):
+        return None
+    try:
+        resolved = (cwd / target).resolve(strict=True)
+        _ = resolved.relative_to(workspace_root.resolve(strict=True))
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return target if resolved.is_file() else None
+
+
+def _bounded_edit_workspace_is_safe(workspace_root: Path, *, home_dir: Path) -> bool:
+    try:
+        relative = workspace_root.relative_to(home_dir.resolve(strict=True))
+    except (OSError, RuntimeError, ValueError):
+        return False
+    if not relative.parts or relative.parts[0].startswith("."):
+        return False
+    return any(
+        (workspace_root / marker).exists()
+        for marker in (".git", "package.json", "pyproject.toml", "Cargo.toml", "go.mod")
+    )
+
+
+def _literal_sed_substitution_is_safe(script: str) -> bool:
+    if len(script) > 4096 or len(script) < 5 or script[0] != "s" or "$" in script:
+        return False
+    delimiter = script[1]
+    if delimiter.isalnum() or delimiter.isspace() or delimiter == "\\":
+        return False
+    fields: list[str] = []
+    current: list[str] = []
+    escaped = False
+    for character in script[2:]:
+        if escaped:
+            current.extend(("\\", character))
+            escaped = False
+        elif character == "\\":
+            escaped = True
+        elif character == delimiter and len(fields) < 2:
+            fields.append("".join(current))
+            current = []
+        else:
+            current.append(character)
+    if escaped or len(fields) != 2:
+        return False
+    flags = "".join(current)
+    pattern, replacement = fields
+    return bool(pattern) and "\n" not in replacement and all(flag in {"g", "i", "I", "p"} for flag in flags)
+
+
+def _same_workspace_file(left: str, right: str, *, cwd: Path) -> bool:
+    try:
+        return (cwd / left).resolve(strict=True) == (cwd / right).resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
 
 
 def literal_cd_execution_context(
