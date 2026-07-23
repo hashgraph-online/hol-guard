@@ -297,7 +297,11 @@ def test_system_keyring_timeout_keeps_non_policy_integrity_macos_services(
         "_supports_native_macos_security_reads",
         classmethod(lambda cls: True),
     )
-    monkeypatch.setattr(secret_store, "_get_secret_without_macos_ui", lambda _secret_id: "oauth-secret")
+    monkeypatch.setattr(
+        secret_store,
+        "_get_macos_secret_in_isolated_process",
+        lambda _secret_id, *, timeout_seconds: "oauth-secret",
+    )
 
     assert secret_store.get_secret_with_timeout("oauth-token", timeout_seconds=1.0) == "oauth-secret"
 
@@ -330,7 +334,7 @@ def test_system_keyring_native_macos_read_uses_cfstr_decoder(
     )
     monkeypatch.setattr(secret_store, "_load_macos_keyring_api_module", lambda: fake_api)
 
-    assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) == "native-secret"
+    assert secret_store._get_secret_without_macos_ui("policy-key") == "native-secret"
 
 
 def test_system_keyring_native_macos_read_does_not_disable_keychain_interaction_globally(
@@ -372,8 +376,68 @@ def test_system_keyring_native_macos_read_does_not_disable_keychain_interaction_
     )
     monkeypatch.setattr(secret_store, "_load_macos_keyring_api_module", lambda: fake_api)
 
-    assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) == "native-secret"
+    assert secret_store._get_secret_without_macos_ui("policy-key") == "native-secret"
     assert interaction_enabled is True
+
+
+def test_system_keyring_macos_read_runs_behind_killable_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret_store = SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
+    captured: dict[str, object] = {}
+
+    def run_worker(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        captured["command"] = command
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(command, 0, b'{"value":"native-secret"}', b"")
+
+    monkeypatch.setattr(guard_store_module.subprocess, "run", run_worker)
+
+    assert secret_store._get_macos_secret_in_isolated_process("policy-key", timeout_seconds=0.75) == "native-secret"
+    command = captured["command"]
+    assert isinstance(command, list)
+    assert command[:3] == [sys.executable, "-I", "-c"]
+    assert command[-2:] == ["hol-guard.policy-integrity", "policy-key"]
+    assert captured["timeout"] == 0.75
+    assert captured["stdin"] is subprocess.DEVNULL
+
+
+def test_system_keyring_macos_read_fails_closed_on_native_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret_store = SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
+
+    def time_out(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        raise subprocess.TimeoutExpired(command, timeout=0.1)
+
+    monkeypatch.setattr(guard_store_module.subprocess, "run", time_out)
+
+    assert secret_store._get_macos_secret_in_isolated_process("policy-key", timeout_seconds=0.1) is None
+
+
+def test_system_keyring_timeout_routes_native_macos_reads_to_isolated_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    secret_store = SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: True),
+    )
+    monkeypatch.setattr(secret_store, "_test_keyring_module", lambda: None)
+    monkeypatch.setattr(
+        secret_store,
+        "_get_secret_without_macos_ui",
+        lambda _secret_id: (_ for _ in ()).throw(AssertionError("native read must be isolated")),
+    )
+    monkeypatch.setattr(
+        secret_store,
+        "_get_macos_secret_in_isolated_process",
+        lambda secret_id, *, timeout_seconds: f"{secret_id}:{timeout_seconds}",
+    )
+
+    assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=0.75) == "policy-key:0.75"
 
 
 def test_system_keyring_supports_native_macos_reads_with_nonstandard_keyring_module(
@@ -408,8 +472,8 @@ def test_policy_integrity_timeout_uses_native_no_ui_path_with_nonstandard_keyrin
     secret_store = SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
     monkeypatch.setattr(
         secret_store,
-        "_get_secret_without_macos_ui",
-        lambda _secret_id: module.get_password("hol-guard.policy-integrity", _secret_id),
+        "_get_macos_secret_in_isolated_process",
+        lambda _secret_id, *, timeout_seconds: module.get_password("hol-guard.policy-integrity", _secret_id),
     )
     monkeypatch.setattr(
         secret_store,
