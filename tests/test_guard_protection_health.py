@@ -95,6 +95,25 @@ def test_missing_positive_proofs_never_claim_protected_or_partial() -> None:
         assert payload["state"] not in {"protected", "partial"}
 
 
+def test_canonical_managed_install_supersedes_legacy_alias() -> None:
+    installs = [
+        {"harness": "claude", "active": True, "manifest": {}},
+        {"harness": "claude-code", "active": True, "manifest": {"canonical": True}},
+    ]
+
+    assert approvals_module._canonical_managed_installs_for_health(installs) == [
+        {"harness": "claude-code", "active": True, "manifest": {"canonical": True}}
+    ]
+
+    active_alias = [
+        {"harness": "claude", "active": True, "manifest": {"alias": True}},
+        {"harness": "claude-code", "active": False, "manifest": {"canonical": True}},
+    ]
+    assert approvals_module._canonical_managed_installs_for_health(active_alias) == [
+        {"harness": "claude-code", "active": True, "manifest": {"alias": True}}
+    ]
+
+
 def test_report_distinguishes_failed_and_unproven_facts() -> None:
     active = _payload(
         installs=[{"harness": "codex", "active": True}],
