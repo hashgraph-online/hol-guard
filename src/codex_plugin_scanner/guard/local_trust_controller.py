@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from .local_trust_contract import (
     POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
+    POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE,
+    POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
     LocalTrustMode,
     TrustBackend,
     TrustBackendUnavailableError,
@@ -15,6 +18,7 @@ from .local_trust_contract import (
     run_trust_backend_check,
     select_trust_backend,
 )
+from .runtime.protection_health_runtime import daemon_runtime_is_current
 from .store import GuardStore, SystemKeyringSecretStore
 
 PASSIVE_TRUST_TIMEOUT_SECONDS = 0.25
@@ -73,7 +77,23 @@ class _MacOSNativeTrustBackend:
         self.passive_no_ui_safe = macos_native_backend_supported(store)
 
     def status(self) -> TrustStatus:
-        return TrustStatus.from_policy_integrity_state(self._store.get_policy_integrity_status())
+        state = self._store.get_cached_policy_integrity_state()
+        if not state:
+            return _degraded_safe_status(
+                backend=self.name,
+                reason=POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
+                setup_available=True,
+            )
+        if not daemon_runtime_is_current(
+            self._store.get_runtime_state(),
+            now=datetime.now(timezone.utc),
+        ):
+            return _degraded_safe_status(
+                backend=self.name,
+                reason=POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE,
+                setup_available=True,
+            )
+        return TrustStatus.from_policy_integrity_state(state)
 
     def sign(self, payload: bytes) -> str:
         raise TrustBackendUnavailableError("macos_native_backend_signing_is_managed_by_guard_store")
