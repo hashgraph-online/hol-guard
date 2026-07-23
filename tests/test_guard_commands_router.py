@@ -31,7 +31,7 @@ def test_only_explicit_account_actions_allow_system_keyring() -> None:
         assert not commands_router._should_allow_system_keyring(Namespace(guard_command=command))
 
 
-def test_foreground_migration_stops_after_first_failed_keychain_recovery(
+def test_foreground_migration_prioritizes_authority_and_stops_after_failed_recovery(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -52,15 +52,15 @@ def test_foreground_migration_stops_after_first_failed_keychain_recovery(
         @staticmethod
         def migrate_legacy_macos_oauth_secret() -> bool:
             migration_calls.append("oauth")
-            return False
+            return True
 
         @staticmethod
         def migrate_legacy_extension_control_authority_secrets() -> bool:
             migration_calls.append("extension")
-            return True
+            return False
 
     monkeypatch.setattr(commands_dispatch_local, "GuardStore", lambda *_args, **_kwargs: ExplicitStore())
 
     commands_dispatch_local._migrate_legacy_macos_secrets(cast(GuardStore, PassiveStore()))
 
-    assert migration_calls == ["oauth"]
+    assert migration_calls == ["extension"]

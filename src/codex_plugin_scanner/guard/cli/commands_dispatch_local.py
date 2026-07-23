@@ -24,11 +24,11 @@ from .commands_parser_helpers import *
 
 def _migrate_legacy_macos_secrets(store: GuardStore) -> None:
     migration_pairs = (
-        ("legacy_macos_oauth_secret_migration_required", "migrate_legacy_macos_oauth_secret"),
         (
             "legacy_extension_control_authority_secret_migration_required",
             "migrate_legacy_extension_control_authority_secrets",
         ),
+        ("legacy_macos_oauth_secret_migration_required", "migrate_legacy_macos_oauth_secret"),
     )
     required_migrations: list[str] = []
     for required_method_name, migration_method_name in migration_pairs:
