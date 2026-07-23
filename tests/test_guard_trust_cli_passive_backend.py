@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import local_trust_controller as trust_controller_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.cli import commands_dispatch_trust as trust_dispatch_module
 from codex_plugin_scanner.guard.local_trust_contract import TrustStatus
@@ -155,6 +156,11 @@ def test_trust_cli_macos_native_status_uses_daemon_authored_cached_state_without
             "last_heartbeat_at": datetime.now(timezone.utc).isoformat(),
         },
     )
+    monkeypatch.setattr(
+        trust_controller_module,
+        "load_guard_daemon_url",
+        lambda guard_home: "http://127.0.0.1:5474",
+    )
 
     rc = main(
         [
@@ -233,6 +239,11 @@ def test_trust_cli_rejects_protected_cache_with_stale_daemon_heartbeat(
         "get_runtime_state",
         lambda self: {"last_heartbeat_at": stale_heartbeat},
     )
+    monkeypatch.setattr(
+        trust_controller_module,
+        "load_guard_daemon_url",
+        lambda guard_home: "http://127.0.0.1:5474",
+    )
 
     rc = main(
         [
@@ -250,6 +261,46 @@ def test_trust_cli_rejects_protected_cache_with_stale_daemon_heartbeat(
 
     assert rc == 0
     assert payload["runtime_protection"] == "degraded"
+    assert payload["degraded_reasons"] == ["trust_backend_unavailable"]
+
+
+def test_trust_cli_rejects_protected_cache_when_daemon_process_is_not_live(
+    tmp_path: Path,
+    capsys,
+    monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
+) -> None:
+    _enable_macos_native_policy_integrity(monkeypatch, install_fake_system_keyring)
+    home_dir = tmp_path / "home"
+    monkeypatch.setattr(
+        GuardStore,
+        "get_cached_policy_integrity_state",
+        lambda self: {"backend": "system-keyring", "degraded_reasons": [], "mode": "protected"},
+    )
+    monkeypatch.setattr(
+        GuardStore,
+        "get_runtime_state",
+        lambda self: {"last_heartbeat_at": datetime.now(timezone.utc).isoformat()},
+    )
+    monkeypatch.setattr(trust_controller_module, "load_guard_daemon_url", lambda guard_home: None)
+
+    rc = main(
+        [
+            "guard",
+            "trust",
+            "status",
+            "--backend",
+            "macos-native",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["runtime_protection"] == "degraded"
+    assert payload["remembered_rules"] == "disabled_degraded"
     assert payload["degraded_reasons"] == ["trust_backend_unavailable"]
 
 
