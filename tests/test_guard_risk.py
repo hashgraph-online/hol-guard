@@ -1188,6 +1188,20 @@ def test_tool_action_request_classifier_reviews_gh_pr_create_body_file():
     assert request.action_class == "GitHub content mutation command"
 
 
+@pytest.mark.parametrize(
+    "template_arg",
+    ("--template body.md", "--template=body.md", "-Tbody.md"),
+)
+def test_tool_action_request_classifier_reviews_gh_pr_create_template(template_arg):
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": f'gh pr create --title "focused fix" {template_arg}'},
+    )
+
+    assert request is not None
+    assert request.action_class == "GitHub content mutation command"
+
+
 def test_tool_action_request_classifier_allows_single_quoted_gh_pr_create_markdown_body():
     request = extract_sensitive_tool_action_request(
         "bash",
