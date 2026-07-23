@@ -920,7 +920,6 @@ class StoreOAuthConnectMixin:
                     select request_id
                     from guard_connect_states
                     where status in ('connected', 'retry_required')
-                      and milestone != 'first_sync_succeeded'
                     order by updated_at desc
                     limit 1
                     """

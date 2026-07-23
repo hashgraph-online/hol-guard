@@ -783,6 +783,37 @@ def test_partial_acknowledgement_retries_only_rejected_event(tmp_path, monkeypat
     assert rows[0]["attempt_count"] == 1
 
 
+def test_partial_acknowledgement_preserves_sanitized_cloud_retry_reason(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard")
+    store.add_approval_request(_request("request-rejected"), _NOW)
+    monkeypatch.setattr(
+        live_request_sync,
+        "_post_sync_events",
+        lambda *_args, **_kwargs: {
+            "accepted": 0,
+            "rejected": 1,
+            "perEventResults": [
+                {
+                    "index": 0,
+                    "accepted": False,
+                    "code": "oauth_subject_mismatch",
+                    "error": "binding rejected",
+                }
+            ],
+        },
+    )
+
+    result = live_request_sync.sync_live_requests_once(store, _sync_auth(store))
+
+    assert result["rejected"] == 1
+    assert result["errors"] == [
+        "1 live request events require retry. Cloud reported: oauth_subject_mismatch: binding rejected."
+    ]
+    state = store.get_sync_payload(live_request_sync.LIVE_REQUEST_SYNC_STATE_KEY)
+    assert isinstance(state, dict)
+    assert state["last_error"] == result["errors"][0]
+
+
 def test_terminal_rejections_are_acknowledged_while_transient_rejection_retries(
     tmp_path,
     monkeypatch,

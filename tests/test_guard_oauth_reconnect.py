@@ -10,7 +10,8 @@ from datetime import datetime, timezone
 import pytest
 
 from codex_plugin_scanner.guard.cli.connect_flow import run_guard_connect_repair_command
-from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+from codex_plugin_scanner.guard.cli.oauth_client import PRODUCTION_GUARD_ISSUER, generate_dpop_key_pair
+from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -110,6 +111,151 @@ def test_invalid_grant_refresh_preserves_sign_in_until_explicit_repair(tmp_path,
     assert "hol-guard disconnect" in str(error.value)
     assert store.get_oauth_local_credentials(allow_primary=True) is not None
 
+
+def test_storage_repair_recovers_missing_oauth_binding_and_claims_unowned_requests(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    access_token = ".".join(
+        (
+            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
+            guard_runner_module._encode_jwt_segment(
+                {
+                    "iss": PRODUCTION_GUARD_ISSUER,
+                    "grant": {"grantId": "grant-1"},
+                    "machine": {"machineId": "machine-1"},
+                    "workspace": {"workspaceId": "workspace-1"},
+                }
+            ),
+            "signature",
+        )
+    )
+    store.set_oauth_local_credentials(
+        issuer=PRODUCTION_GUARD_ISSUER,
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        access_token=access_token,
+        now="2026-06-01T00:00:00+00:00",
+    )
+    store.add_approval_request(
+        GuardApprovalRequest(
+            request_id="request-unowned",
+            harness="codex",
+            artifact_id="codex:project:request-unowned",
+            artifact_name="Test action",
+            artifact_hash="hash-abc",
+            policy_action="require-reapproval",
+            recommended_scope="artifact",
+            changed_fields=("tool_action_request",),
+            source_scope="project",
+            config_path="config.toml",
+            review_command="hol-guard approvals approve request-unowned",
+            approval_url="http://127.0.0.1:5474/requests/request-unowned",
+            action_identity="request-unowned",
+            queue_group_id="request-unowned",
+            trigger_summary="Review test action",
+            last_seen_at="2026-06-01T00:00:00+00:00",
+        ),
+        "2026-06-01T00:00:00+00:00",
+    )
+
+    result = guard_runner_module.repair_guard_cloud_connect_storage(store)
+
+    credentials = store.get_oauth_local_credentials(allow_primary=True)
+    assert credentials is not None
+    assert credentials["grant_id"] == "grant-1"
+    assert result["repaired_oauth_binding"] is True
+    assert result["claimed_live_requests"] == 1
+    binding = store.get_live_request_oauth_binding()
+    assert binding is not None
+    rows = store.list_ready_live_request_outbox(now="9999-12-31T23:59:59+00:00", limit=10)
+    assert rows[0]["oauth_subject_hash"] == binding["oauth_subject_hash"]
+
+
+def test_storage_repair_rejects_conflicting_cached_token_identity(tmp_path) -> None:
+    store = _store_with_oauth_credentials(tmp_path)
+    credentials = store.get_oauth_local_credentials(allow_primary=True)
+    assert credentials is not None
+    conflicting_token = ".".join(
+        (
+            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
+            guard_runner_module._encode_jwt_segment(
+                {
+                    "iss": PRODUCTION_GUARD_ISSUER,
+                    "grant": {"grantId": "grant-other"},
+                    "machine": {"machineId": "machine-1"},
+                    "workspace": {"workspaceId": "workspace-1"},
+                }
+            ),
+            "signature",
+        )
+    )
+    credentials["access_token"] = conflicting_token
+
+    assert guard_runner_module._oauth_binding_metadata_from_access_token(credentials) == {}
+
+
+def test_upgraded_running_process_does_not_refresh_shared_oauth_grant(monkeypatch) -> None:
+    refresh_attempted = False
+
+    def _unexpected_urlopen(request, timeout):
+        del request, timeout
+        nonlocal refresh_attempted
+        refresh_attempted = True
+        raise AssertionError("stale runtime must not exchange the shared refresh token")
+
+    loaded_identity = guard_runner_module._LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY
+    assert loaded_identity is not None
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_hol_guard_runtime_package_identity",
+        lambda: (loaded_identity[0], "0" * 64),
+    )
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _unexpected_urlopen)
+
+    with pytest.raises(guard_runner_module.GuardSyncNotAvailableError) as error:
+        guard_runner_module._refresh_guard_oauth_access_token(
+            token_endpoint="https://hol.org/api/guard/oauth/token",
+            client_id="guard-local-daemon",
+            refresh_token="refresh-token-1",
+            dpop_key_material=generate_dpop_key_pair(),
+        )
+
+    assert error.value.retryable is True
+    assert "Restart the agent application" in str(error.value)
+    assert refresh_attempted is False
+
+
+def test_missing_package_metadata_after_load_blocks_oauth_refresh(monkeypatch) -> None:
+    loaded_identity = guard_runner_module._LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY
+    assert loaded_identity is not None
+    monkeypatch.setattr(guard_runner_module, "_hol_guard_runtime_package_identity", lambda: None)
+
+    assert guard_runner_module._guard_runtime_was_upgraded() is True
+
+
+def test_missing_package_identity_at_startup_blocks_oauth_refresh(monkeypatch) -> None:
+    monkeypatch.setattr(guard_runner_module, "_LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY", None)
+
+    assert guard_runner_module._guard_runtime_was_upgraded() is True
+
+
+def test_runtime_source_identity_covers_non_runner_modules(tmp_path) -> None:
+    package_root = tmp_path / "codex_plugin_scanner"
+    runtime_root = package_root / "guard" / "runtime"
+    runtime_root.mkdir(parents=True)
+    (runtime_root / "runner.py").write_text("RUNNER = True\n", encoding="utf-8")
+    adjacent_module = runtime_root / "oauth_support.py"
+    adjacent_module.write_text("REVISION = 1\n", encoding="utf-8")
+
+    initial_digest = guard_runner_module._hol_guard_runtime_source_sha256(package_root)
+    adjacent_module.write_text("REVISION = 2\n", encoding="utf-8")
+
+    assert guard_runner_module._hol_guard_runtime_source_sha256(package_root) != initial_digest
 
 def test_prepare_guard_cloud_connect_authorization_tolerates_network_errors(tmp_path, monkeypatch) -> None:
     store = _store_with_oauth_credentials(tmp_path)

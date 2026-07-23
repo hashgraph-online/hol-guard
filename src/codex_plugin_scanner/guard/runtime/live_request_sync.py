@@ -280,6 +280,22 @@ def _is_terminally_superseded_result(item: dict[str, object]) -> bool:
     return isinstance(error, str) and error.startswith("stale event sequence ")
 
 
+def _retry_result_message(items: list[dict[str, object]]) -> str:
+    details: list[str] = []
+    for item in items:
+        code = item.get("code")
+        error = item.get("error")
+        detail = ": ".join(
+            _cloud_scrub_text(value) for value in (code, error) if isinstance(value, str) and value.strip()
+        )
+        if detail and detail not in details:
+            details.append(detail)
+    message = f"{len(items)} live request events require retry."
+    if details:
+        return f"{message} Cloud reported: {'; '.join(details[:3])}."
+    return message
+
+
 def sync_live_requests_once(
     store: GuardStore,
     auth_context: dict[str, object],
@@ -420,6 +436,7 @@ def sync_live_requests_once(
             if isinstance(per_event_results, list) and len(per_event_results) == len(events):
                 acknowledged_sequences: list[int] = []
                 retry_sequences: list[int] = []
+                retry_results: list[dict[str, object]] = []
                 valid_results = True
                 for index, item in enumerate(per_event_results):
                     if (
@@ -433,6 +450,7 @@ def sync_live_requests_once(
                         acknowledged_sequences.append(sequences[index])
                     else:
                         retry_sequences.append(sequences[index])
+                        retry_results.append(item)
                 if (
                     valid_results
                     and sum(bool(item["accepted"]) for item in per_event_results) == accepted
@@ -440,7 +458,7 @@ def sync_live_requests_once(
                 ):
                     store.acknowledge_live_request_outbox(acknowledged_sequences, **delivery_binding)
                     if retry_sequences:
-                        message = f"{len(retry_sequences)} live request events require retry."
+                        message = _retry_result_message(retry_results)
                         all_errors.append(message)
                         store.retry_live_request_outbox(
                             retry_sequences,
