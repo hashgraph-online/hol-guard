@@ -68,6 +68,100 @@ def test_read_only_source_pipeline_allows_identifier_like_output(tmp_path: Path)
     assert artifact is None
 
 
+def test_literal_sibling_repo_bounded_sed_edit_with_same_file_verification_does_not_require_review(
+    tmp_path: Path,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    repo = home_dir / "projects" / "email-workspace"
+    workspace.mkdir(parents=True)
+    _source_file(repo, "src/emails/notice.tsx")
+    (repo / ".git").mkdir()
+    command = """cd ~/projects/email-workspace && sed -i '' \\
+  -e 's/previewToken/previewLabel/g' \\
+  -e 's/Token/Value/g' \\
+  src/emails/notice.tsx
+echo "=== Verify ==="
+grep -n "previewLabel\\|Value" src/emails/notice.tsx"""
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert match is None
+
+
+@pytest.mark.parametrize(
+    "edit,verification",
+    (
+        ("sed -i '' -e 's/old/new/e' src/safe.ts", "grep -n new src/safe.ts"),
+        ("sed -i.bak -e 's/old/new/g' src/safe.ts", "grep -n new src/safe.ts"),
+        ("sed -i '' -e 's/old/new/g' .env", "grep -n new .env"),
+        ("sed -i '' -e 's/old/new/g' src/safe.ts", "grep -n new src/other.ts"),
+        ("sed -i '' -e 's/old/new/g' src/safe.ts", "grep -n new ../../outside.ts"),
+        ("sed -i '' -e 's/old/new/g' src/safe.ts", ""),
+        ("sed -i '' -e 's/old/$HOME/g' src/safe.ts", "grep -n HOME src/safe.ts"),
+        ("sed -i '' -e 's/.*/new/g' src/safe.ts", "grep -n new src/safe.ts"),
+        ("sed -i '' -e 's/old/prefix-&/g' src/safe.ts", "grep -n prefix src/safe.ts"),
+        (r"sed -i '' -e 's/(old)/\\1/g' src/safe.ts", "grep -n old src/safe.ts"),
+    ),
+)
+def test_bounded_sed_edit_rejects_unverified_or_sensitive_variants(
+    tmp_path: Path,
+    edit: str,
+    verification: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    repo = home_dir / "projects" / "project"
+    workspace.mkdir(parents=True)
+    _source_file(repo, "src/safe.ts")
+    _source_file(repo, "src/other.ts")
+    (repo / ".git").mkdir()
+    (repo / ".env").write_text("old=value\n", encoding="utf-8")
+    (home_dir / "outside.ts").write_text("old\n", encoding="utf-8")
+    suffix = f" && {verification}" if verification else ""
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": f"cd ~/projects/project && {edit}{suffix}"},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert match is not None
+
+
+@pytest.mark.parametrize(
+    ("repo_relative", "with_marker"),
+    (("projects/unmarked", False), (".config/project", True)),
+)
+def test_bounded_sed_edit_requires_visible_marked_workspace(
+    tmp_path: Path,
+    repo_relative: str,
+    with_marker: bool,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    repo = home_dir / repo_relative
+    workspace.mkdir(parents=True)
+    _source_file(repo, "src/safe.ts")
+    if with_marker:
+        (repo / ".git").mkdir()
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": (f"cd ~/{repo_relative} && sed -i '' -e 's/old/new/g' src/safe.ts && grep -n new src/safe.ts")},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert match is not None
+
+
 @pytest.mark.parametrize(
     "suffix",
     (
