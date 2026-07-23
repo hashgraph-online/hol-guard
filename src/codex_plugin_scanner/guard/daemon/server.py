@@ -4083,6 +4083,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if check_id in {"all", "policy_engine", "rule_packs", "tamper_checks"}:
             try:
                 status = store.setup_policy_integrity(now=_now(), include_items=False)
+                if status.get("mode") != "protected":
+                    status = store.repair_policy_integrity(
+                        clear_invalid=False,
+                        now=_now(),
+                        include_items=False,
+                    )
+                counts = status.get("counts")
+                valid_count = counts.get("valid", 0) if isinstance(counts, dict) else 0
+                if status.get("mode") != "protected" and valid_count == 0:
+                    store.reset_policy_integrity(now=_now())
+                    status = store.setup_policy_integrity(now=_now(), include_items=False)
             except (OSError, RuntimeError, ValueError):
                 self._write_json(
                     {
@@ -4125,10 +4136,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     evidence_health = store.get_command_activity_persistence_health()
                     if evidence_health.active_error_count > 0:
                         failed_check_ids.append("decision_stream")
-                    elif store.count_command_activities() > 0:
-                        repaired_check_ids.append("decision_stream")
                     else:
-                        pending_check_ids.append("decision_stream")
+                        repaired_check_ids.append("decision_stream")
                 except (OSError, RuntimeError, TypeError, ValueError):
                     failed_check_ids.append("decision_stream")
                 if failed_check_ids or pending_check_ids:
@@ -4172,7 +4181,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     detail_retain_days=config.evidence_retain_days,
                 )
                 health = store.get_command_activity_persistence_health()
-                observed = store.count_command_activities() > 0
             except (OSError, RuntimeError, TypeError, ValueError):
                 self._write_json(
                     {
@@ -4182,7 +4190,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     status=409,
                 )
                 return
-            repaired = health.active_error_count == 0 and observed
+            repaired = health.active_error_count == 0
             self._write_json(
                 {
                     "repaired": repaired,
@@ -4190,7 +4198,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "message": (
                         "Command evidence is healthy."
                         if repaired
-                        else "Guard still needs a successful protected command to confirm evidence health."
+                        else "Guard could not restore command evidence persistence."
                     ),
                 },
                 status=200 if repaired else 409,

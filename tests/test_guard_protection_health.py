@@ -4,8 +4,13 @@ import hashlib
 import itertools
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
+import pytest
+
+from codex_plugin_scanner.guard import approvals as approvals_module
 from codex_plugin_scanner.guard.models import GuardRuntimeState
 from codex_plugin_scanner.guard.runtime.containment_contract import ContainmentBackend
 from codex_plugin_scanner.guard.runtime.containment_health import (
@@ -22,6 +27,7 @@ from codex_plugin_scanner.guard.runtime.protection_health import (
 from codex_plugin_scanner.guard.runtime.protection_health_runtime import (
     build_runtime_protection_health,
 )
+from codex_plugin_scanner.guard.store import GuardStore
 
 _NOW = datetime(2026, 7, 19, 15, 0, tzinfo=timezone.utc)
 
@@ -78,6 +84,7 @@ def _payload(
     activity_count: int = 1,
     active_errors: int | None = None,
     runtime_state: dict[str, object] | None = None,
+    hook_verification: dict[str, bool] | None = None,
 ) -> dict[str, object]:
     if runtime_state is None:
         runtime_state = {
@@ -93,6 +100,7 @@ def _payload(
         ),
         runtime_state=runtime_state,
         managed_installs=installs or [],
+        hook_verification=hook_verification,
         trust_status=trust or {},
         now=_NOW,
     )
@@ -110,12 +118,47 @@ def test_active_install_is_not_hook_interception_proof() -> None:
     assert by_id["harness_hooks"] == {
         "check_id": "harness_hooks",
         "status": "unknown",
-        "reason_code": "hook_attestation_unavailable",
+        "reason_code": "hook_verification_unavailable",
     }
     assert by_id["rule_packs"]["status"] == "pass"
     assert by_id["tamper_checks"]["status"] == "pass"
     assert by_id["decision_stream"]["status"] == "pass"
     assert by_id["decision_stream"]["reason_code"] == "decision_stream_healthy"
+
+
+def test_live_hook_verification_and_empty_evidence_store_are_ready() -> None:
+    payload = _payload(
+        installs=[{"harness": "codex", "active": True}],
+        trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
+        activity_count=0,
+        hook_verification={"codex": True},
+    )
+
+    assert payload["state"] == "protected"
+    checks = cast(list[dict[str, str]], payload["checks"])
+    by_id = {check["check_id"]: check for check in checks}
+    assert by_id["harness_hooks"] == {
+        "check_id": "harness_hooks",
+        "status": "pass",
+        "reason_code": "hooks_verified",
+    }
+    assert by_id["decision_stream"] == {
+        "check_id": "decision_stream",
+        "status": "pass",
+        "reason_code": "decision_stream_ready",
+    }
+
+
+def test_runtime_snapshot_reads_live_hook_verification(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    installs = [{"harness": "pi", "active": True}]
+    adapter = SimpleNamespace(detect=lambda _context: SimpleNamespace(installed=True))
+    monkeypatch.setattr(approvals_module, "get_adapter", lambda _harness: adapter)
+
+    assert approvals_module._live_hook_verification(installs, store) == {"pi": True}
 
 
 def test_historical_persistence_errors_do_not_keep_current_health_degraded() -> None:
