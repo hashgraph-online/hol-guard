@@ -10,6 +10,8 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard import approvals as approvals_module
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.managed_install_proof import bind_managed_install_proof
 from codex_plugin_scanner.guard.models import GuardRuntimeState
 from codex_plugin_scanner.guard.runtime.containment_contract import ContainmentBackend
 from codex_plugin_scanner.guard.runtime.containment_health import (
@@ -59,17 +61,6 @@ class _Store:
 
     def get_command_activity_persistence_health(self) -> _ActivityHealth:
         return self._health
-
-
-@dataclass(frozen=True)
-class _Detection:
-    installed: bool
-
-
-class _Adapter:
-    @staticmethod
-    def detect(_context: object) -> _Detection:
-        return _Detection(installed=True)
 
 
 def _containment_evidence() -> dict[str, object]:
@@ -164,16 +155,22 @@ def test_runtime_snapshot_reads_live_hook_verification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    installs = [{"harness": "pi", "active": True}]
-    adapter = _Adapter()
-    monkeypatch.setattr(approvals_module, "get_adapter", lambda _harness: adapter)
+    hook_path = store.guard_home / "managed" / "pi" / "hook.ts"
+    hook_path.parent.mkdir(parents=True)
+    hook_path.write_text("export const guard = true;\n", encoding="utf-8")
+    context = HarnessContext(home_dir=Path.home(), workspace_dir=None, guard_home=store.guard_home)
+    manifest = bind_managed_install_proof({"config_path": str(hook_path)}, context)
+    installs = [{"harness": "pi", "active": True, "manifest": manifest}]
 
     assert approvals_module._live_hook_verification(installs, store) == {"pi": True}
 
-    def unavailable_adapter(_harness: str) -> object:
-        raise ImportError("adapter unavailable")
+    hook_path.write_text("export const guard = false;\n", encoding="utf-8")
+    assert approvals_module._live_hook_verification(installs, store) == {"pi": False}
 
-    monkeypatch.setattr(approvals_module, "get_adapter", unavailable_adapter)
+    def unavailable_proof(*_args: object) -> bool:
+        raise ImportError("proof verifier unavailable")
+
+    monkeypatch.setattr(approvals_module, "verify_managed_install_proof", unavailable_proof)
     assert approvals_module._live_hook_verification(installs, store) == {}
 
 

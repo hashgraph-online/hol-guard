@@ -42,6 +42,7 @@ from .desktop_notifications import (
 from .incident import build_incident_context
 from .local_dashboard_session import build_local_dashboard_session_token
 from .local_supply_chain import build_local_supply_chain_posture
+from .managed_install_proof import verify_managed_install_proof
 from .memory_decision_outbox import enqueue_memory_decision_event
 from .models import (
     DECISION_SCOPE_VALUES,
@@ -1324,10 +1325,9 @@ def _live_hook_verification(
 
                 verified[harness] = cursor_native_hook_state(context).get("protection_active") is True
                 continue
-            detection = get_adapter(harness).detect(context)
+            verified[harness] = verify_managed_install_proof(install.get("manifest"), context) is True
         except (ImportError, OSError, RuntimeError, TypeError, ValueError):
             continue
-        verified[harness] = detection.installed
     return verified
 
 
