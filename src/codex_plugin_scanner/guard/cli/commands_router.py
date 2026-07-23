@@ -97,9 +97,15 @@ def _normalize_guard_handler_result(result: object) -> int:
 
 
 def _should_prime_policy_integrity(args: argparse.Namespace) -> bool:
-    """Keep eager Keychain ownership in the long-lived daemon process."""
+    """Prime local integrity state in the long-lived daemon process."""
 
     return args.guard_command == "daemon" and bool(getattr(args, "serve", False))
+
+
+def _should_allow_system_keyring(args: argparse.Namespace) -> bool:
+    """Limit macOS Keychain access to explicit foreground account actions."""
+
+    return args.guard_command in {"connect", "disconnect", "login", "remote-pair"}
 
 
 def run_guard_command(
@@ -148,6 +154,7 @@ def run_guard_command(
             guard_home,
             source=source,
             prime_policy_integrity=_should_prime_policy_integrity(args),
+            allow_system_keyring=_should_allow_system_keyring(args),
         )
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)

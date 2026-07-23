@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.store import (
     EncryptedFileSecretStore,
     FallbackSecretStore,
     GuardStore,
+    MigratingFallbackSecretStore,
     SystemKeyringSecretStore,
     UnavailableSecretStore,
     _build_oauth_secret_store,
@@ -49,11 +50,14 @@ def test_guard_store_constructor_uses_facade_patched_helpers(
     def _fake_set_private_mode(path, mode: int) -> None:
         permission_calls.append((str(path), mode))
 
-    def _fake_oauth_secret_store(path):
+    def _fake_oauth_secret_store(path, *, allow_system_keyring: bool):
+        assert allow_system_keyring is False
         oauth_builder_calls.append(str(path))
         return EncryptedFileSecretStore(path)
 
-    def _fake_policy_integrity_secret_store():
+    def _fake_policy_integrity_secret_store(path, *, allow_system_keyring: bool):
+        assert path == guard_home
+        assert allow_system_keyring is False
         policy_builder_calls.append("policy")
         return None
 
@@ -91,11 +95,14 @@ def test_guard_store_constructor_can_skip_policy_integrity_priming(
     oauth_builder_calls: list[str] = []
     policy_builder_calls: list[str] = []
 
-    def _fake_oauth_secret_store(path):
+    def _fake_oauth_secret_store(path, *, allow_system_keyring: bool):
+        assert allow_system_keyring is False
         oauth_builder_calls.append(str(path))
         return EncryptedFileSecretStore(path)
 
-    def _fake_policy_integrity_secret_store():
+    def _fake_policy_integrity_secret_store(path, *, allow_system_keyring: bool):
+        assert path == guard_home
+        assert allow_system_keyring is False
         policy_builder_calls.append("policy")
         return None
 
@@ -192,6 +199,29 @@ def test_system_keyring_reads_return_none_when_keyring_missing(monkeypatch):
 
     assert store.get_secret("anything") is None
     assert store.get_secret_with_timeout("anything", timeout_seconds=1.0) is None
+
+
+def test_migrating_fallback_no_ui_uses_bounded_primary_read(tmp_path, monkeypatch):
+    primary = SystemKeyringSecretStore(service_name="hol-guard.test")
+    fallback = EncryptedFileSecretStore(tmp_path)
+    store = MigratingFallbackSecretStore(primary, fallback)
+    bounded_calls: list[tuple[str, float]] = []
+
+    monkeypatch.setattr(
+        primary,
+        "get_secret",
+        lambda _secret_id: (_ for _ in ()).throw(AssertionError("prompt-capable Keychain read")),
+    )
+
+    def bounded_read(secret_id: str, *, timeout_seconds: float = 0.0) -> str:
+        bounded_calls.append((secret_id, timeout_seconds))
+        return "legacy-secret"
+
+    monkeypatch.setattr(primary, "get_secret_with_timeout", bounded_read)
+
+    assert store.get_secret_no_ui("legacy-id") == "legacy-secret"
+    assert bounded_calls == [("legacy-id", 0.5)]
+    assert fallback.get_secret("legacy-id") == "legacy-secret"
 
 
 def test_system_keyring_set_secret_raises_clear_error_when_keyring_missing(monkeypatch):
@@ -503,7 +533,8 @@ def test_system_keyring_timeout_blocks_non_policy_macos_prompt_fallback(
     assert secret_store.get_secret_with_timeout("oauth-token", timeout_seconds=1.0) is None
 
 
-def test_policy_integrity_store_uses_native_backend_on_macos_without_health_probe(
+def test_policy_integrity_store_uses_encrypted_local_backend_on_macos_without_keychain_probe(
+    tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
@@ -511,20 +542,67 @@ def test_policy_integrity_store_uses_native_backend_on_macos_without_health_prob
     monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
     monkeypatch.setattr(
         SystemKeyringSecretStore,
-        "_supports_native_macos_security_reads",
-        classmethod(lambda cls: True),
-    )
-    monkeypatch.setattr(
-        SystemKeyringSecretStore,
-        "_macos_default_keychain_is_usable",
+        "_backend_is_available",
         classmethod(
-            lambda cls: (_ for _ in ()).throw(AssertionError("policy integrity builder should skip health probe"))
+            lambda cls: (_ for _ in ()).throw(AssertionError("policy integrity builder must not probe Keychain"))
         ),
     )
 
-    secret_store = guard_store_module._build_policy_integrity_secret_store()
+    secret_store = guard_store_module._build_policy_integrity_secret_store(
+        tmp_path / "guard-home",
+        allow_system_keyring=False,
+    )
 
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert isinstance(secret_store, EncryptedFileSecretStore)
+
+
+def test_explicit_macos_trust_mirrors_keychain_material_for_passive_reads(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    module = _install_fake_system_keyring(monkeypatch, usable_macos_keychain=True)
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: True),
+    )
+    explicit_store = GuardStore(
+        guard_home,
+        prime_policy_integrity=False,
+        allow_system_keyring=True,
+    )
+    explicit_backend = explicit_store._policy_integrity_secret_store
+    assert isinstance(explicit_backend, FallbackSecretStore)
+    encoded_key = "c" * 44
+    module.set_password(
+        "hol-guard.policy-integrity",
+        explicit_store._policy_integrity_key_ref,
+        encoded_key,
+    )
+    monkeypatch.setattr(
+        explicit_backend.primary,
+        "get_secret_with_timeout",
+        lambda secret_id, *, timeout_seconds: module.get_password(
+            "hol-guard.policy-integrity",
+            secret_id,
+        ),
+    )
+
+    assert (
+        explicit_store._get_policy_integrity_secret_from_store(explicit_store._policy_integrity_key_ref) == encoded_key
+    )
+
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "get_secret_with_timeout",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("passive reads must not touch Keychain")),
+    )
+    passive_store = GuardStore(guard_home, prime_policy_integrity=False)
+
+    assert isinstance(passive_store._policy_integrity_secret_store, EncryptedFileSecretStore)
+    assert passive_store._get_policy_integrity_secret_from_store(passive_store._policy_integrity_key_ref) == encoded_key
 
 
 @pytest.fixture(autouse=True)
@@ -837,66 +915,45 @@ def test_add_evidence_self_repairs_dropped_evidence_table(tmp_path):
     assert row is not None
 
 
-def test_oauth_secret_store_skips_system_keyring_when_macos_default_keychain_is_missing(tmp_path, monkeypatch):
+def test_explicit_macos_oauth_store_does_not_probe_default_keychain_availability(tmp_path, monkeypatch):
     _install_fake_system_keyring(monkeypatch, usable_macos_keychain=False)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     SystemKeyringSecretStore._clear_macos_keychain_health_cache()
     monkeypatch.setattr(
         SystemKeyringSecretStore,
-        "_macos_default_keychain_path",
-        staticmethod(lambda: None),
+        "_is_available",
+        classmethod(lambda cls: (_ for _ in ()).throw(AssertionError("builder probed Keychain availability"))),
     )
 
-    secret_store = _build_oauth_secret_store(tmp_path / "guard-home")
+    secret_store = _build_oauth_secret_store(
+        tmp_path / "guard-home",
+        allow_system_keyring=True,
+    )
 
-    assert SystemKeyringSecretStore._is_available() is False
-    assert isinstance(secret_store, UnavailableSecretStore)
+    assert isinstance(secret_store, FallbackSecretStore)
+    assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
 
 
-def test_oauth_secret_store_skips_system_keyring_when_macos_user_keychain_search_list_is_broken(
+def test_explicit_macos_oauth_store_does_not_run_security_keychain_discovery(
     tmp_path,
     monkeypatch,
 ):
     _install_fake_system_keyring(monkeypatch, usable_macos_keychain=False)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     SystemKeyringSecretStore._clear_macos_keychain_health_cache()
-    usable_keychain = tmp_path / "Library" / "Keychains" / "login.keychain-db"
-    usable_keychain.parent.mkdir(parents=True, exist_ok=True)
-    usable_keychain.write_text("", encoding="utf-8")
-    missing_keychain = tmp_path / "Library" / "Keychains" / "legacy.keychain-db"
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("builder invoked security")),
+    )
 
-    def fake_run(
-        command: list[str],
-        *,
-        check: bool,
-        capture_output: bool,
-        text: bool,
-        timeout: int,
-    ) -> subprocess.CompletedProcess[str]:
-        assert check is False
-        assert capture_output is True
-        assert text is True
-        assert timeout == 5
-        args = tuple(command[1:])
-        if args == ("default-keychain", "-d", "user"):
-            return subprocess.CompletedProcess(command, 0, stdout=f'"{usable_keychain}"\n', stderr="")
-        if args == ("list-keychains", "-d", "user"):
-            return subprocess.CompletedProcess(
-                command,
-                0,
-                stdout=f'    "{usable_keychain}"\n    "{missing_keychain}"\n',
-                stderr="",
-            )
-        if args == ("show-keychain-info", str(usable_keychain)):
-            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
-        raise AssertionError(f"Unexpected security command: {command!r}")
+    secret_store = _build_oauth_secret_store(
+        tmp_path / "guard-home",
+        allow_system_keyring=True,
+    )
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
-
-    secret_store = _build_oauth_secret_store(tmp_path / "guard-home")
-
-    assert SystemKeyringSecretStore._is_available() is False
-    assert isinstance(secret_store, UnavailableSecretStore)
+    assert isinstance(secret_store, FallbackSecretStore)
+    assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
 
 
 def test_oauth_secret_store_uses_system_keyring_with_encrypted_fallback_on_macos_when_available(
@@ -907,7 +964,10 @@ def test_oauth_secret_store_uses_system_keyring_with_encrypted_fallback_on_macos
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     SystemKeyringSecretStore._clear_macos_keychain_health_cache()
 
-    secret_store = _build_oauth_secret_store(tmp_path / "guard-home")
+    secret_store = _build_oauth_secret_store(
+        tmp_path / "guard-home",
+        allow_system_keyring=True,
+    )
 
     assert isinstance(secret_store, FallbackSecretStore)
     assert isinstance(secret_store.primary, SystemKeyringSecretStore)
@@ -925,45 +985,47 @@ def test_oauth_secret_store_uses_cached_macos_availability_when_healthy(tmp_path
         classmethod(lambda cls: (_ for _ in ()).throw(AssertionError("cache miss"))),
     )
 
-    secret_store = _build_oauth_secret_store(guard_home)
+    secret_store = _build_oauth_secret_store(
+        guard_home,
+        allow_system_keyring=True,
+    )
 
     assert isinstance(secret_store, FallbackSecretStore)
     assert isinstance(secret_store.primary, SystemKeyringSecretStore)
     assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
 
 
-def test_oauth_secret_store_unavailable_on_macos_does_not_create_local_secret_files(tmp_path, monkeypatch):
+def test_passive_macos_oauth_store_never_probes_keychain(tmp_path, monkeypatch):
     _install_fake_system_keyring(monkeypatch, usable_macos_keychain=False)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     SystemKeyringSecretStore._clear_macos_keychain_health_cache()
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_is_available",
+        classmethod(lambda cls: (_ for _ in ()).throw(AssertionError("passive store must not probe Keychain"))),
+    )
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
 
-    with pytest.raises(RuntimeError, match="OS credential store"):
-        store.set_oauth_local_credentials(
-            issuer="https://hol.org",
-            client_id="guard-local-daemon",
-            refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
-            dpop_public_jwk={
-                "kty": "EC",
-                "crv": "P-256",
-                "x": "x-value",
-                "y": "y-value",
-                "alg": "ES256",
-                "use": "sig",
-            },
-            dpop_public_jwk_thumbprint="thumbprint-123",
-            now="2026-06-01T00:00:00+00:00",
-        )
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "x-value",
+            "y": "y-value",
+            "alg": "ES256",
+            "use": "sig",
+        },
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
 
-    assert not (guard_home / "secrets").exists()
-    assert store.get_oauth_local_credential_health() == {
-        "configured": False,
-        "state": "not_configured",
-        "backend": "unavailable",
-        "fallback_backend": None,
-    }
+    assert isinstance(store._oauth_secret_store, EncryptedFileSecretStore)
+    assert store.get_oauth_local_credential_health()["state"] == "healthy"
 
 
 def test_oauth_secret_store_ignores_stale_macos_unavailable_cache_for_login(tmp_path, monkeypatch):
@@ -973,7 +1035,10 @@ def test_oauth_secret_store_ignores_stale_macos_unavailable_cache_for_login(tmp_
     guard_store_module._write_system_keyring_availability_cache(guard_home, available=False)
     monkeypatch.setattr(SystemKeyringSecretStore, "_is_available", classmethod(lambda cls: True))
 
-    secret_store = _build_oauth_secret_store(guard_home)
+    secret_store = _build_oauth_secret_store(
+        guard_home,
+        allow_system_keyring=True,
+    )
 
     assert isinstance(secret_store, FallbackSecretStore)
     assert isinstance(secret_store.primary, SystemKeyringSecretStore)
@@ -991,7 +1056,10 @@ def test_oauth_secret_store_rechecks_stale_macos_health_cache_for_login(tmp_path
         SystemKeyringSecretStore, "_macos_default_keychain_is_usable_uncached", classmethod(lambda cls: True)
     )
 
-    secret_store = _build_oauth_secret_store(guard_home)
+    secret_store = _build_oauth_secret_store(
+        guard_home,
+        allow_system_keyring=True,
+    )
 
     assert isinstance(secret_store, FallbackSecretStore)
     assert isinstance(secret_store.primary, SystemKeyringSecretStore)
@@ -1006,7 +1074,7 @@ def test_macos_oauth_write_accepts_encrypted_fallback_when_keychain_readback_fai
     _install_fake_system_keyring(monkeypatch, usable_macos_keychain=True)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     monkeypatch.setattr(SystemKeyringSecretStore, "get_secret_with_timeout", lambda *args, **kwargs: None)
-    store = GuardStore(guard_home)
+    store = GuardStore(guard_home, allow_system_keyring=True)
 
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
@@ -1056,7 +1124,7 @@ def test_oauth_health_uses_no_ui_primary_read_for_macos_keychain_only_store(tmp_
         now="2026-06-01T00:00:00+00:00",
     )
 
-    restarted_store = GuardStore(guard_home)
+    restarted_store = GuardStore(guard_home, allow_system_keyring=True)
 
     assert restarted_store.get_oauth_local_credential_health()["state"] == "healthy"
     credentials = restarted_store.get_oauth_local_credentials()
@@ -1114,7 +1182,7 @@ def test_macos_oauth_default_reads_backfill_encrypted_fallback_from_keychain_onl
         return fake_keyring._secrets.get((self.service_name, secret_id))
 
     monkeypatch.setattr(SystemKeyringSecretStore, "get_secret_with_timeout", fake_no_ui_read)
-    store = GuardStore(guard_home)
+    store = GuardStore(guard_home, allow_system_keyring=True)
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
         client_id="guard-local-daemon",
@@ -1131,7 +1199,7 @@ def test_macos_oauth_default_reads_backfill_encrypted_fallback_from_keychain_onl
     store._oauth_secret_store.fallback.delete_secret(store._oauth_local_credentials_ref)
     store._clear_oauth_secret_payload_cache()
 
-    restarted_store = GuardStore(guard_home)
+    restarted_store = GuardStore(guard_home, allow_system_keyring=True)
 
     credentials = restarted_store.get_oauth_local_credentials()
 
@@ -1139,6 +1207,81 @@ def test_macos_oauth_default_reads_backfill_encrypted_fallback_from_keychain_onl
     assert credentials["refresh_token"] == "refresh-secret-value"
     assert isinstance(restarted_store._oauth_secret_store, FallbackSecretStore)
     assert restarted_store._oauth_secret_store.fallback.get_secret(restarted_store._oauth_local_credentials_ref)
+
+
+def test_explicit_macos_oauth_migration_enables_passive_vault_reads(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    fake_keyring = _install_fake_system_keyring(monkeypatch, usable_macos_keychain=True)
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    explicit_store = GuardStore(guard_home, allow_system_keyring=True)
+    explicit_store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    secret_ref = explicit_store._oauth_local_credentials_ref
+    assert isinstance(explicit_store._oauth_secret_store, FallbackSecretStore)
+    explicit_store._oauth_secret_store.fallback.delete_secret(secret_ref)
+    explicit_store._clear_oauth_secret_payload_cache()
+
+    migrating_store = GuardStore(guard_home, allow_system_keyring=True)
+    assert migrating_store.migrate_legacy_macos_oauth_secret() is True
+
+    monkeypatch.setattr(
+        fake_keyring,
+        "get_password",
+        lambda _service, _secret_id: (_ for _ in ()).throw(AssertionError("passive read probed Keychain")),
+    )
+    passive_store = GuardStore(guard_home)
+
+    assert passive_store.get_oauth_local_credentials(allow_primary=False) is not None
+
+
+def test_explicit_macos_oauth_no_ui_migration_uses_bounded_read(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    fake_keyring = _install_fake_system_keyring(monkeypatch, usable_macos_keychain=True)
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    explicit_store = GuardStore(guard_home, allow_system_keyring=True)
+    explicit_store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    secret_ref = explicit_store._oauth_local_credentials_ref
+    assert isinstance(explicit_store._oauth_secret_store, MigratingFallbackSecretStore)
+    explicit_store._oauth_secret_store.fallback.delete_secret(secret_ref)
+    explicit_store._clear_oauth_secret_payload_cache()
+
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "get_secret",
+        lambda _self, _secret_id: (_ for _ in ()).throw(AssertionError("prompt-capable Keychain read")),
+    )
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "get_secret_with_timeout",
+        lambda self, requested_ref, *, timeout_seconds=0.0: fake_keyring._secrets.get(
+            (self.service_name, requested_ref)
+        ),
+    )
+
+    migrating_store = GuardStore(guard_home, allow_system_keyring=True)
+
+    assert migrating_store.migrate_legacy_macos_oauth_secret(allow_interactive=False) is True
 
 
 def test_clear_oauth_local_credentials_removes_legacy_macos_encrypted_secret(tmp_path, monkeypatch):
@@ -1179,7 +1322,7 @@ def test_unavailable_oauth_secret_store_deletes_legacy_encrypted_secret(tmp_path
     assert not legacy_path.exists()
 
 
-def test_guard_store_ignores_persisted_system_keyring_unavailable_result_for_macos_oauth(
+def test_passive_macos_store_ignores_system_keyring_availability(
     tmp_path,
     monkeypatch,
 ):
@@ -1197,16 +1340,16 @@ def test_guard_store_ignores_persisted_system_keyring_unavailable_result_for_mac
 
     first_store = GuardStore(guard_home)
 
-    assert isinstance(first_store._oauth_secret_store, UnavailableSecretStore)
-    assert first_store._policy_integrity_secret_store is None
+    assert isinstance(first_store._oauth_secret_store, EncryptedFileSecretStore)
+    assert isinstance(first_store._policy_integrity_secret_store, EncryptedFileSecretStore)
 
     SystemKeyringSecretStore._clear_macos_keychain_health_cache()
 
     second_store = GuardStore(guard_home)
 
-    assert isinstance(second_store._oauth_secret_store, UnavailableSecretStore)
-    assert second_store._policy_integrity_secret_store is None
-    assert availability_checks == 2
+    assert isinstance(second_store._oauth_secret_store, EncryptedFileSecretStore)
+    assert isinstance(second_store._policy_integrity_secret_store, EncryptedFileSecretStore)
+    assert availability_checks == 0
 
 
 def test_windows_oauth_refresh_lock_wraps_permission_error_as_blocking(monkeypatch):
@@ -1238,7 +1381,7 @@ def test_windows_oauth_refresh_lock_wraps_permission_error_as_blocking(monkeypat
 
 
 def test_set_oauth_local_credentials_rejects_unallowlisted_issuer(tmp_path):
-    store = GuardStore(tmp_path / "guard-home")
+    store = GuardStore(tmp_path / "guard-home", allow_system_keyring=True)
 
     with pytest.raises(ValueError, match="allowlisted HOL origin"):
         store.set_oauth_local_credentials(
@@ -1355,7 +1498,7 @@ def test_guard_store_secures_guard_home_and_database_permissions(tmp_path):
     if os.name == "nt":
         pytest.skip("POSIX-only permission assertions")
 
-    store = GuardStore(tmp_path / "guard-home")
+    store = GuardStore(tmp_path / "guard-home", allow_system_keyring=True)
 
     assert store.guard_home.stat().st_mode & 0o777 == 0o700
     assert store.path.stat().st_mode & 0o777 == 0o600
@@ -1376,7 +1519,7 @@ def test_guard_store_repairs_existing_guard_home_and_database_permissions(tmp_pa
         sidecar.write_text("", encoding="utf-8")
         os.chmod(sidecar, 0o666)
 
-    store = GuardStore(guard_home)
+    store = GuardStore(guard_home, allow_system_keyring=True)
 
     assert store.guard_home.stat().st_mode & 0o777 == 0o700
     assert store.path.stat().st_mode & 0o777 == 0o600
@@ -1891,7 +2034,7 @@ def test_get_oauth_local_credentials_uses_encrypted_fallback_on_macos_when_prima
     fake_keyring = _install_fake_system_keyring(monkeypatch)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     monkeypatch.setattr(SystemKeyringSecretStore, "_macos_default_keychain_is_usable", classmethod(lambda cls: True))
-    store = GuardStore(tmp_path / "guard-home")
+    store = GuardStore(tmp_path / "guard-home", allow_system_keyring=True)
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
         client_id="guard-local-daemon",
@@ -1923,7 +2066,7 @@ def test_get_oauth_local_credentials_prefers_valid_fallback_over_macos_keychain(
     _install_fake_system_keyring(monkeypatch)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     monkeypatch.setattr(SystemKeyringSecretStore, "_macos_default_keychain_is_usable", classmethod(lambda cls: True))
-    store = GuardStore(tmp_path / "guard-home")
+    store = GuardStore(tmp_path / "guard-home", allow_system_keyring=True)
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
         client_id="guard-local-daemon",
@@ -2175,7 +2318,7 @@ def test_oauth_health_does_not_repair_from_recoverable_fallback_when_macos_keych
     fake_keyring = _install_fake_system_keyring(monkeypatch)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     guard_home = tmp_path / "guard-home"
-    store = GuardStore(guard_home)
+    store = GuardStore(guard_home, allow_system_keyring=True)
     monkeypatch.setattr(
         store._oauth_secret_store.primary,
         "get_secret_with_timeout",

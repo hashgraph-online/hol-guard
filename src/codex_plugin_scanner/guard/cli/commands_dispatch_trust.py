@@ -475,7 +475,11 @@ def _run_guard_trust_command(
             payload = build_trust_doctor_payload_from_status(payload, guard_home=guard_home)
         _emit_trust_payload(f"trust.{trust_command}", payload, getattr(args, "json", False))
         return 0
-    store = store or GuardStore(guard_home, prime_policy_integrity=False)
+    store = store or GuardStore(
+        guard_home,
+        prime_policy_integrity=False,
+        allow_system_keyring=trust_command in {"setup", "reset"} and backend == "macos-native",
+    )
     payload = _trust_status_payload(store, guard_home=guard_home, command=trust_command, backend=backend)
     if trust_command == "test":
         if not bool(getattr(args, "no_ui", False)):

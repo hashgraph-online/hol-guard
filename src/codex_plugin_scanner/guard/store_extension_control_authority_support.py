@@ -8,6 +8,7 @@ import base64
 import hashlib
 import hmac
 import sqlite3
+import sys
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -24,7 +25,13 @@ from .runtime.extension_control_authority import (
 )
 from .runtime.extension_control_contract import ControlLayerKind, ExtensionControlLayer
 from .runtime.extension_control_resolver import compose_control_layers
-from .store_base import SecretStore, SystemKeyringSecretStore
+from .store_base import (
+    EncryptedFileSecretStore,
+    MigratingFallbackSecretStore,
+    SecretStore,
+    SystemKeyringSecretStore,
+)
+from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
 
 _KEY_REF_SUFFIX = ":authentication-key"
 _ANCHOR_REF_SUFFIX = ":anchor"
@@ -67,11 +74,59 @@ class _ExtensionControlAuthoritySupportMixin:
     def _secret_store(self) -> SecretStore:
         current = self._extension_control_authority_secret_store
         if current is None:
-            current = SystemKeyringSecretStore(service_name="hol-guard.extension-control-authority")
+            if sys.platform == "darwin":
+                fallback = EncryptedFileSecretStore(cast(Path, self.guard_home))
+                if bool(getattr(self, "_allow_system_keyring", False)):
+                    current = MigratingFallbackSecretStore(
+                        SystemKeyringSecretStore(service_name="hol-guard.extension-control-authority"),
+                        fallback,
+                    )
+                else:
+                    current = fallback
+            else:
+                current = SystemKeyringSecretStore(service_name="hol-guard.extension-control-authority")
             self._extension_control_authority_secret_store = current
         if isinstance(current, SystemKeyringSecretStore) and not current._is_available():
             raise RuntimeError("extension control credential store unavailable")
         return current
+
+    def legacy_extension_control_authority_secret_migration_required(self) -> bool:
+        """Return whether an authority row lacks its local vault material."""
+
+        if sys.platform != "darwin":
+            return False
+        with self._connect() as connection:
+            ensure_extension_control_authority_schema(connection)
+            snapshot_exists = (
+                connection.execute("select 1 from extension_control_authority_snapshot where singleton = 1").fetchone()
+                is not None
+            )
+        if not snapshot_exists:
+            return False
+        store = EncryptedFileSecretStore(cast(Path, self.guard_home))
+        return any(store.get_secret(secret_ref) is None for secret_ref in (self._key_ref(), self._anchor_ref()))
+
+    def migrate_legacy_extension_control_authority_secrets(self, *, allow_interactive: bool = True) -> bool:
+        """Mirror legacy Keychain authority material during an explicit action."""
+
+        if not bool(getattr(self, "_allow_system_keyring", False)):
+            return False
+        if not self.legacy_extension_control_authority_secret_migration_required():
+            return False
+        store = self._secret_store()
+        if not isinstance(store, MigratingFallbackSecretStore):
+            return False
+        migrated = False
+        allow_interactive_read = allow_interactive
+        for secret_ref in (self._key_ref(), self._anchor_ref()):
+            if store.fallback.get_secret(secret_ref) is not None:
+                continue
+            value = store.get_secret(secret_ref) if allow_interactive_read else store.get_secret_no_ui(secret_ref)
+            allow_interactive_read = False
+            if value is None:
+                return False
+            migrated = True
+        return migrated
 
     def _authority_ref_prefix(self) -> str:
         home = str(cast(Path, self.guard_home).resolve())
