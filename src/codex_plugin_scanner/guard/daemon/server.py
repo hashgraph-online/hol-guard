@@ -13,6 +13,7 @@ import mimetypes
 import os
 import platform
 import secrets
+import sqlite3
 import tempfile
 import threading
 import time
@@ -4171,7 +4172,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                             repaired_check_ids.append(containment_check_id)
                         else:
                             failed_check_ids.append(containment_check_id)
-                except (OSError, RuntimeError, TypeError, ValueError):
+                except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                     failed_check_ids.extend(["decision_plane_compatibility", "containment_compatibility", "sandbox"])
                 try:
                     config = load_guard_config(store.guard_home)
@@ -4229,7 +4230,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     detail_retain_days=config.evidence_retain_days,
                 )
                 health = store.get_command_activity_persistence_health()
-            except (OSError, RuntimeError, TypeError, ValueError):
+            except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                 self._write_json(
                     {
                         "error": "protection_repair_failed",
