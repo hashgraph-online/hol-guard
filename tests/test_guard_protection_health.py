@@ -5,7 +5,6 @@ import itertools
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -60,6 +59,17 @@ class _Store:
 
     def get_command_activity_persistence_health(self) -> _ActivityHealth:
         return self._health
+
+
+@dataclass(frozen=True)
+class _Detection:
+    installed: bool
+
+
+class _Adapter:
+    @staticmethod
+    def detect(_context: object) -> _Detection:
+        return _Detection(installed=True)
 
 
 def _containment_evidence() -> dict[str, object]:
@@ -155,7 +165,7 @@ def test_runtime_snapshot_reads_live_hook_verification(
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     installs = [{"harness": "pi", "active": True}]
-    adapter = SimpleNamespace(detect=lambda _context: SimpleNamespace(installed=True))
+    adapter = _Adapter()
     monkeypatch.setattr(approvals_module, "get_adapter", lambda _harness: adapter)
 
     assert approvals_module._live_hook_verification(installs, store) == {"pi": True}
