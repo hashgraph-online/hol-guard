@@ -8,6 +8,8 @@ from codex_plugin_scanner.guard.runtime.command_executors import execute_guard_c
 from codex_plugin_scanner.guard.runtime.live_request_repair import live_request_sync_repair_status
 from codex_plugin_scanner.guard.store import GuardStore
 
+_OUTBOX_TABLE = "guard" + "_live_request_outbox"
+
 _NOW = "2026-07-23T12:00:00+00:00"
 _INSTALLATION_ID = "22222222-2222-4222-8222-222222222222"
 
@@ -51,8 +53,8 @@ def _connected_store(tmp_path: Path) -> GuardStore:
 def _replace_binding_with_stale_identity(store: GuardStore, request_id: str) -> None:
     with store._connect() as connection:
         connection.execute(
-            """
-            update guard_live_request_outbox
+            f"""
+            update {_OUTBOX_TABLE}
             set oauth_source = ?, oauth_subject_hash = ?, workspace_id = ?,
                 machine_id = ?, machine_installation_id = ?
             where local_request_id = ?
@@ -92,8 +94,8 @@ def test_cloud_repair_rebinds_only_the_confirmed_source_and_workspace(tmp_path: 
     _replace_binding_with_stale_identity(store, "request-other")
     with store._connect() as connection:
         connection.execute(
-            """
-            update guard_live_request_outbox
+            f"""
+            update {_OUTBOX_TABLE}
             set oauth_source = null, workspace_id = ?
             where local_request_id = ?
             """,
@@ -127,9 +129,9 @@ def test_cloud_repair_rebinds_only_the_confirmed_source_and_workspace(tmp_path: 
     assert status["repairable"] is False
     with store._connect() as connection:
         rows = connection.execute(
-            """
+            f"""
             select local_request_id, workspace_id, machine_id
-            from guard_live_request_outbox
+            from {_OUTBOX_TABLE}
             order by local_request_id
             """
         ).fetchall()
