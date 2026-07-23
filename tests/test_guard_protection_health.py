@@ -170,6 +170,12 @@ def test_runtime_snapshot_reads_live_hook_verification(
 
     assert approvals_module._live_hook_verification(installs, store) == {"pi": True}
 
+    def unavailable_adapter(_harness: str) -> object:
+        raise ImportError("adapter unavailable")
+
+    monkeypatch.setattr(approvals_module, "get_adapter", unavailable_adapter)
+    assert approvals_module._live_hook_verification(installs, store) == {}
+
 
 def test_historical_persistence_errors_do_not_keep_current_health_degraded() -> None:
     payload = _payload(dropped=4, errors=4, active_errors=0, activity_count=3)

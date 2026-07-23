@@ -211,6 +211,39 @@ class TestGuardSurfaceServer:
         assert maintained
         assert containment_probes == [True]
 
+    def test_protection_repair_converts_recovery_type_errors_to_inline_failure(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+
+        def fail_setup(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+            raise TypeError("invalid recovery state")
+
+        monkeypatch.setattr(
+            GuardStore,
+            "setup_policy_integrity",
+            fail_setup,
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/protection/repair",
+            data=json.dumps({"check_id": "all"}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+            method="POST",
+        )
+        try:
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request, timeout=5)
+            payload = json.loads(error.value.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert error.value.code == 409
+        assert payload["error"] == "protection_repair_failed"
+
     def test_protection_repair_recovers_degraded_integrity_without_trusting_invalid_rows(
         self,
         tmp_path: Path,

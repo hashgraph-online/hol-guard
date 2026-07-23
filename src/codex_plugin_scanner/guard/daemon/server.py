@@ -4094,7 +4094,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 if status.get("mode") != "protected" and valid_count == 0:
                     store.reset_policy_integrity(now=_now())
                     status = store.setup_policy_integrity(now=_now(), include_items=False)
-            except (OSError, RuntimeError, ValueError):
+            except (OSError, RuntimeError, TypeError, ValueError):
                 self._write_json(
                     {
                         "error": "protection_repair_failed",

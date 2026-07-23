@@ -1325,7 +1325,7 @@ def _live_hook_verification(
                 verified[harness] = cursor_native_hook_state(context).get("protection_active") is True
                 continue
             detection = get_adapter(harness).detect(context)
-        except (OSError, RuntimeError, TypeError, ValueError):
+        except (ImportError, OSError, RuntimeError, TypeError, ValueError):
             continue
         verified[harness] = detection.installed
     return verified
