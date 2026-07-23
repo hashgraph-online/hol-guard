@@ -42,7 +42,7 @@ _MAX_DAEMON_RESPONSE_BYTES = 1_000_000
 
 
 class _ResponseReader(Protocol):
-    def read(self, amt: int = -1) -> bytes: ...
+    def read(self, size: int = -1, /) -> bytes: ...
 
 
 class _DaemonHTTPError(RuntimeError):
