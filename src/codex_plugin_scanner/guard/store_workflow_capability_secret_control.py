@@ -4,12 +4,12 @@
 
 from __future__ import annotations
 
-from .store_base import SecretStore, SystemKeyringSecretStore
+from .store_base import SecretStore
 
 
 class StoreWorkflowCapabilitySecretControlMixin:
     @property
-    def _policy_integrity_secret_store(self) -> SystemKeyringSecretStore | None:
+    def _policy_integrity_secret_store(self) -> SecretStore | None:
         raise NotImplementedError
 
     @staticmethod

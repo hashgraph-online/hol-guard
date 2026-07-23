@@ -245,6 +245,20 @@ stored outside the SQLite database. The approval password gate proves *who* is
 asking Guard to remember trust. The integrity envelope proves the saved row was
 written through Guard, not forged by editing `guard.db` directly.
 
+On macOS, unattended Guard processes use the owner-only encrypted local vault.
+Hooks, MCP proxies, daemon loops, status checks, and token refreshes never open
+Keychain UI. Explicit foreground account commands may use the login Keychain to
+enroll or recover credentials, then mirror validated material into the local vault
+for background use.
+
+After upgrading a Keychain-only installation, rerun the foreground harness install
+command once. Guard checks authenticated legacy rows, imports only missing material,
+and then returns every harness to vault-only background access:
+
+```bash
+hol-guard install codex
+```
+
 Inspect local policy integrity:
 
 ```bash
@@ -254,9 +268,16 @@ hol-guard policies verify
 
 If you upgraded from an older local database, legacy unsigned rows start in
 `warn` so Guard can show what must be migrated without silently blessing those
-rows forever. Rows can also show `unknown_key` after an OS keyring reset or
-reinstall. Move to `enforce` with an explicit migration after reviewing the
-listed rows:
+rows forever. Rows can also show `unknown_key` after an OS keyring reset,
+reinstall, or migration from a Keychain-only installation. On macOS, run
+explicit native trust setup once to recover available Keychain material into the
+local vault:
+
+```bash
+hol-guard guard trust setup --backend macos-native
+```
+
+Move to `enforce` with an explicit migration after reviewing the listed rows:
 
 ```bash
 hol-guard policies migrate-local-integrity --preserve-all-local

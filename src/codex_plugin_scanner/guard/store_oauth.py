@@ -11,6 +11,45 @@ from .store_base import *
 
 
 class StoreOAuthConnectMixin:
+    def legacy_macos_oauth_secret_migration_required(self) -> bool:
+        """Return whether authenticated OAuth metadata lacks its local vault copy."""
+
+        if sys.platform != "darwin":
+            return False
+        payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
+        if not isinstance(payload, dict):
+            return False
+        secret_ref = _string_value(payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY))
+        secret_hash = _string_value(payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY))
+        if secret_ref is None or secret_hash is None:
+            return False
+        fallback = self._resolve_oauth_fallback_store()
+        return fallback is not None and fallback.get_secret(secret_ref) is None
+
+    def migrate_legacy_macos_oauth_secret(self, *, allow_interactive: bool = True) -> bool:
+        """Mirror legacy Keychain OAuth state during an explicit action."""
+
+        if not self._allow_system_keyring or not self.legacy_macos_oauth_secret_migration_required():
+            return False
+        payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
+        assert isinstance(payload, dict)
+        secret_ref = _string_value(payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY))
+        secret_hash = _string_value(payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY))
+        assert secret_ref is not None and secret_hash is not None
+        secret_store = self._oauth_secret_store
+        if not allow_interactive and isinstance(secret_store, MigratingFallbackSecretStore):
+            secret_json = secret_store.get_secret_no_ui(secret_ref)
+        else:
+            secret_json = self._get_secret_from_store(secret_store, secret_ref)
+        if (
+            secret_json is None
+            or not _secret_matches_hash(secret_json, secret_hash)
+            or self._parse_oauth_secret_payload(secret_json) is None
+        ):
+            return False
+        self._remember_oauth_secret_payload(secret_ref, secret_hash, secret_json)
+        return True
+
     def get_cloud_sync_profile(self) -> dict[str, str] | None:
         oauth_payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
         if not isinstance(oauth_payload, dict) and self.repair_oauth_local_credential_storage_from_primary():
