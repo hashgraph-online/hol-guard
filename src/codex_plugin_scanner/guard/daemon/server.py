@@ -149,7 +149,9 @@ from ..review_contracts import (
     validated_remote_approval_envelope,
 )
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
+from ..runtime.containment_health import containment_health_signals
 from ..runtime.live_request_sync import LiveRequestSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
+from ..runtime.protection_health import ProtectionCheckStatus
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotAvailableError,
@@ -4078,7 +4080,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_protection_repair(self, payload: dict[str, object]) -> None:
         check_id = self._optional_string(payload.get("check_id"))
         store = self.server.store  # type: ignore[attr-defined]
-        if check_id in {"policy_engine", "rule_packs", "tamper_checks"}:
+        if check_id in {"all", "policy_engine", "rule_packs", "tamper_checks"}:
             try:
                 status = store.setup_policy_integrity(now=_now(), include_items=False)
             except (OSError, RuntimeError, ValueError):
@@ -4091,14 +4093,72 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 return
             repaired = status.get("mode") == "protected"
+            degraded_reasons = status.get("degraded_reasons")
+            reason_count = len(degraded_reasons) if isinstance(degraded_reasons, list) else 0
+            repaired_check_ids = ["policy_engine", "rule_packs", "tamper_checks"]
+            pending_check_ids: list[str] = []
+            if check_id == "all" and repaired:
+                failed_check_ids: list[str] = []
+                try:
+                    containment_health = self._containment_health_payload(force_refresh=True)
+                    refreshed_signals = containment_health_signals(
+                        containment_health,
+                        now=datetime.now(timezone.utc),
+                    )
+                    for containment_check_id in (
+                        "decision_plane_compatibility",
+                        "containment_compatibility",
+                        "sandbox",
+                    ):
+                        if refreshed_signals[containment_check_id].status is ProtectionCheckStatus.PASS:
+                            repaired_check_ids.append(containment_check_id)
+                        else:
+                            failed_check_ids.append(containment_check_id)
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    failed_check_ids.extend(["decision_plane_compatibility", "containment_compatibility", "sandbox"])
+                try:
+                    config = load_guard_config(store.guard_home)
+                    store.maintain_command_activity(
+                        now=datetime.now(timezone.utc),
+                        detail_retain_days=config.evidence_retain_days,
+                    )
+                    evidence_health = store.get_command_activity_persistence_health()
+                    if evidence_health.active_error_count > 0:
+                        failed_check_ids.append("decision_stream")
+                    elif store.count_command_activities() > 0:
+                        repaired_check_ids.append("decision_stream")
+                    else:
+                        pending_check_ids.append("decision_stream")
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    failed_check_ids.append("decision_stream")
+                if failed_check_ids or pending_check_ids:
+                    self._write_json(
+                        {
+                            "error": "protection_repair_incomplete",
+                            "repaired": False,
+                            "check_ids": repaired_check_ids,
+                            "failed_check_ids": failed_check_ids,
+                            "pending_check_ids": pending_check_ids,
+                            "message": (
+                                "Repair paused before every protection layer could be confirmed. Retry repair here."
+                            ),
+                        },
+                        status=409,
+                    )
+                    return
             self._write_json(
                 {
                     "repaired": repaired,
-                    "check_ids": ["policy_engine", "rule_packs", "tamper_checks"],
+                    "check_ids": repaired_check_ids,
+                    "pending_check_ids": pending_check_ids,
                     "message": (
                         "Integrity protection restored."
                         if repaired
-                        else "Guard could not confirm integrity protection yet."
+                        else (
+                            "Integrity repair preserved unauthenticated policy data instead of trusting it. "
+                            "Retry repair from Protect; Guard will keep the remaining "
+                            f"{reason_count or 1} issue isolated."
+                        )
                     ),
                 },
                 status=200 if repaired else 409,
@@ -4106,6 +4166,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if check_id == "decision_stream":
             try:
+                config = load_guard_config(store.guard_home)
+                store.maintain_command_activity(
+                    now=datetime.now(timezone.utc),
+                    detail_retain_days=config.evidence_retain_days,
+                )
                 health = store.get_command_activity_persistence_health()
                 observed = store.count_command_activities() > 0
             except (OSError, RuntimeError, TypeError, ValueError):
