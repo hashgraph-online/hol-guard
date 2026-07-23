@@ -1053,6 +1053,34 @@ class FallbackSecretStore:
                 continue
 
 
+class MigratingFallbackSecretStore(FallbackSecretStore):
+    """Prefer the local fallback and migrate a legacy primary value once."""
+
+    def set_secret(self, secret_id: str, value: str) -> None:
+        with suppress(Exception):
+            self.primary.set_secret(secret_id, value)
+        self.fallback.set_secret(secret_id, value)
+
+    def get_secret(self, secret_id: str) -> str | None:
+        try:
+            fallback_value = self.fallback.get_secret(secret_id)
+        except Exception:
+            fallback_value = None
+        if fallback_value is not None:
+            return fallback_value
+        try:
+            primary_value = self.primary.get_secret(secret_id)
+        except Exception:
+            return None
+        if primary_value is None:
+            return None
+        try:
+            self.fallback.set_secret(secret_id, primary_value)
+        except Exception:
+            return None
+        return primary_value
+
+
 def _expand_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
     chunks: list[bytes] = []
     generated = 0
@@ -1145,18 +1173,10 @@ def _build_oauth_secret_store(
     if sys.platform == "darwin":
         if not allow_system_keyring:
             return fallback_store
-        cached_availability = _read_system_keyring_availability_cache(guard_home)
-        if cached_availability is True:
-            return FallbackSecretStore(
-                SystemKeyringSecretStore(service_name="hol-guard.oauth"),
-                fallback_store,
-            )
-        if _system_keyring_is_available(guard_home, use_cache=False):
-            return FallbackSecretStore(
-                SystemKeyringSecretStore(service_name="hol-guard.oauth"),
-                fallback_store,
-            )
-        return UnavailableSecretStore(guard_home)
+        return MigratingFallbackSecretStore(
+            SystemKeyringSecretStore(service_name="hol-guard.oauth"),
+            fallback_store,
+        )
     if _system_keyring_is_available(guard_home):
         return FallbackSecretStore(
             SystemKeyringSecretStore(service_name="hol-guard.oauth"),
@@ -1175,7 +1195,7 @@ def _build_policy_integrity_secret_store(
         if not allow_system_keyring:
             return fallback_store
         if SystemKeyringSecretStore._test_keyring_module() is not None:
-            return FallbackSecretStore(
+            return MigratingFallbackSecretStore(
                 SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME),
                 fallback_store,
             )
@@ -1183,7 +1203,7 @@ def _build_policy_integrity_secret_store(
             return fallback_store
         if not SystemKeyringSecretStore._supports_native_macos_security_reads():
             return fallback_store
-        return FallbackSecretStore(
+        return MigratingFallbackSecretStore(
             SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME),
             fallback_store,
         )

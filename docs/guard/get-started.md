@@ -251,6 +251,14 @@ Keychain UI. Explicit foreground account commands may use the login Keychain to
 enroll or recover credentials, then mirror validated material into the local vault
 for background use.
 
+After upgrading a Keychain-only installation, rerun the foreground harness install
+command once. Guard checks authenticated legacy rows, imports only missing material,
+and then returns every harness to vault-only background access:
+
+```bash
+hol-guard install codex
+```
+
 Inspect local policy integrity:
 
 ```bash
