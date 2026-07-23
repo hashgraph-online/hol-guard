@@ -184,6 +184,14 @@ def test_canonical_managed_install_supersedes_legacy_alias() -> None:
         {"harness": "claude-code", "active": True, "manifest": {"canonical": True}}
     ]
 
+    active_alias = [
+        {"harness": "claude", "active": True, "manifest": {"alias": True}},
+        {"harness": "claude-code", "active": False, "manifest": {"canonical": True}},
+    ]
+    assert approvals_module._canonical_managed_installs_for_health(active_alias) == [
+        {"harness": "claude-code", "active": True, "manifest": {"alias": True}}
+    ]
+
 
 def test_historical_persistence_errors_do_not_keep_current_health_degraded() -> None:
     payload = _payload(dropped=4, errors=4, active_errors=0, activity_count=3)

@@ -1334,7 +1334,7 @@ def _live_hook_verification(
 def _canonical_managed_installs_for_health(
     managed_installs: Sequence[Mapping[str, object]],
 ) -> list[dict[str, object]]:
-    canonical: dict[str, tuple[bool, dict[str, object]]] = {}
+    canonical: dict[str, tuple[tuple[bool, bool], dict[str, object]]] = {}
     for install in managed_installs:
         harness = install.get("harness")
         if not isinstance(harness, str):
@@ -1346,9 +1346,10 @@ def _canonical_managed_installs_for_health(
         candidate = dict(install)
         candidate["harness"] = canonical_harness
         exact = harness == canonical_harness
+        priority = (install.get("active") is True, exact)
         existing = canonical.get(canonical_harness)
-        if existing is None or (exact and not existing[0]):
-            canonical[canonical_harness] = (exact, candidate)
+        if existing is None or priority > existing[0]:
+            canonical[canonical_harness] = (priority, candidate)
     return [canonical[harness][1] for harness in sorted(canonical)]
 
 
