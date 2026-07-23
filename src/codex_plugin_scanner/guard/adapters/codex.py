@@ -1067,7 +1067,10 @@ class CodexHarnessAdapter(HarnessAdapter):
                     if not isinstance(name, str) or not isinstance(server_config, dict):
                         continue
                     command = server_config.get("command")
-                    args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
+                    raw_args = server_config.get("args")
+                    if raw_args is not None and not isinstance(raw_args, list):
+                        continue
+                    args = tuple(str(value) for value in (raw_args or []) if isinstance(value, str))
                     if is_guard_proxy_command(command if isinstance(command, str) else None, args):
                         proxy_artifact = _artifact_from_guard_proxy_args(
                             args=args,
@@ -1429,10 +1432,13 @@ class CodexHarnessAdapter(HarnessAdapter):
         current_interpreter = _guard_python_executable()
         migrated: list[str] = []
         for name, server_config in mcp_servers.items():
-            if not isinstance(name, str) or not isinstance(server_config, dict):
+            if not isinstance(server_config, dict):
                 continue
             command = server_config.get("command")
-            args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
+            raw_args = server_config.get("args")
+            if not isinstance(raw_args, list):
+                continue
+            args = tuple(str(value) for value in raw_args if isinstance(value, str))
             if not is_guard_proxy_command(command if isinstance(command, str) else None, args):
                 continue
             if command == current_interpreter:

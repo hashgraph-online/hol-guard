@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 from pathlib import Path
 
 import pytest
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10
+    tomllib = importlib.import_module("tomli")
 
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -60,6 +65,27 @@ def test_guard_install_codex_adopts_equivalent_package_with_relocated_interprete
 
     assert reinstalled["migrated_proxy_servers"] == []
     assert reinstalled["runtime_restart_required"] is False
+
+
+def test_guard_install_codex_ignores_proxy_with_scalar_args(
+    tmp_path: Path,
+) -> None:
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=None,
+        guard_home=tmp_path / "guard-home",
+    )
+    config_path = context.home_dir / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        '[mcp_servers.invalid]\ncommand = "/usr/bin/python"\nargs = 1\n',
+        encoding="utf-8",
+    )
+
+    installed = CodexHarnessAdapter().install(context)
+
+    assert installed["migrated_proxy_servers"] == []
+    assert installed["runtime_restart_required"] is False
 
 
 def test_reauthentication_rejects_incomplete_package_identity() -> None:
