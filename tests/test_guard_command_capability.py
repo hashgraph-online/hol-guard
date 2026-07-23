@@ -158,6 +158,51 @@ def test_every_supported_operation_has_one_local_side_effect_classification() ->
     assert not (set(READ_ONLY_COMMAND_OPERATIONS) & set(STATE_CHANGING_COMMAND_OPERATIONS))
 
 
+def test_existing_review_capability_implies_mfa_gated_sync_repair(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    status = _issue(
+        store,
+        "guard.approval.resolve",
+        "guard.localRequests.snapshot",
+    )
+
+    operations = status["operations"]
+    assert isinstance(operations, list)
+    assert "guard.liveRequests.reassignQuarantined" in operations
+
+
+def test_snapshot_only_capability_does_not_imply_sync_repair(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    status = _issue(store, "guard.localRequests.snapshot")
+
+    operations = status["operations"]
+    assert isinstance(operations, list)
+    assert "guard.liveRequests.reassignQuarantined" not in operations
+
+
+def test_mfa_gated_sync_repair_does_not_require_a_second_local_approval(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    _issue(
+        store,
+        "guard.approval.resolve",
+        "guard.localRequests.snapshot",
+    )
+    authorized = authorize_command_job(
+        store,
+        _job(
+            store,
+            "guard.liveRequests.reassignQuarantined",
+            payload={
+                "source": "default",
+                "workspaceId": "workspace-1",
+            },
+        ),
+        schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
+    )
+
+    assert authorized.requires_local_approval is False
+
+
 def test_capability_is_signed_exact_revocable_and_does_not_disable_sync(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
     store.set_sync_payload(
