@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from .local_trust_contract import (
     POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
+    POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
     LocalTrustMode,
     TrustBackend,
     TrustBackendUnavailableError,
@@ -73,7 +74,14 @@ class _MacOSNativeTrustBackend:
         self.passive_no_ui_safe = macos_native_backend_supported(store)
 
     def status(self) -> TrustStatus:
-        return TrustStatus.from_policy_integrity_state(self._store.get_policy_integrity_status())
+        state = self._store.get_cached_policy_integrity_state()
+        if not state:
+            return _degraded_safe_status(
+                backend=self.name,
+                reason=POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
+                setup_available=True,
+            )
+        return TrustStatus.from_policy_integrity_state(state)
 
     def sign(self, payload: bytes) -> str:
         raise TrustBackendUnavailableError("macos_native_backend_signing_is_managed_by_guard_store")

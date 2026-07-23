@@ -12,7 +12,7 @@ from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.cli import commands_dispatch_trust as trust_dispatch_module
 from codex_plugin_scanner.guard.local_trust_contract import TrustStatus
 from codex_plugin_scanner.guard.local_trust_controller import _trust_mode_for_backend
-from codex_plugin_scanner.guard.store import SystemKeyringSecretStore
+from codex_plugin_scanner.guard.store import GuardStore, SystemKeyringSecretStore
 
 
 @pytest.fixture(autouse=True)
@@ -118,6 +118,54 @@ def test_trust_cli_macos_native_status_reports_setup_required_when_passive_backe
     assert payload["backend_requested"] == "macos-native"
     assert payload["backend_selected"] == "macos-native"
     assert payload["setup_available"] is True
+    assert payload["passive_prompt_allowed"] is False
+
+
+def test_trust_cli_macos_native_status_uses_daemon_authored_cached_state_without_keychain_read(
+    tmp_path: Path,
+    capsys,
+    monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
+) -> None:
+    _enable_macos_native_policy_integrity(monkeypatch, install_fake_system_keyring)
+    home_dir = tmp_path / "home"
+    monkeypatch.setattr(
+        GuardStore,
+        "get_policy_integrity_status",
+        lambda self, harness=None: (_ for _ in ()).throw(AssertionError("passive status must not verify Keychain")),
+    )
+    monkeypatch.setattr(
+        GuardStore,
+        "get_cached_policy_integrity_state",
+        lambda self: {
+            "backend": "system-keyring",
+            "cutover_complete": True,
+            "degraded_reasons": [],
+            "enforcement": "enforce",
+            "generation": 4,
+            "key_id": "key-id",
+            "mode": "protected",
+        },
+    )
+
+    rc = main(
+        [
+            "guard",
+            "trust",
+            "status",
+            "--backend",
+            "macos-native",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["mode"] == "protected"
+    assert payload["runtime_protection"] == "protected"
+    assert payload["remembered_rules"] == "enforced"
     assert payload["passive_prompt_allowed"] is False
 
 

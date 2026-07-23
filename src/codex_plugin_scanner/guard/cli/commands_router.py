@@ -96,6 +96,12 @@ def _normalize_guard_handler_result(result: object) -> int:
     return result if isinstance(result, int) else 1
 
 
+def _should_prime_policy_integrity(args: argparse.Namespace) -> bool:
+    """Keep eager Keychain ownership in the long-lived daemon process."""
+
+    return args.guard_command == "daemon" and bool(getattr(args, "serve", False))
+
+
 def run_guard_command(
     args: argparse.Namespace,
     *,
@@ -138,7 +144,11 @@ def run_guard_command(
 
     source = getattr(args, "source", "default")
     try:
-        store = GuardStore(guard_home, source=source, prime_policy_integrity=args.guard_command != "hook")
+        store = GuardStore(
+            guard_home,
+            source=source,
+            prime_policy_integrity=_should_prime_policy_integrity(args),
+        )
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
