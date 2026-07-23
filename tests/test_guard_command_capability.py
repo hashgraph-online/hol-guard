@@ -402,5 +402,7 @@ def test_cli_and_runtime_snapshot_surface_capability_state(
     assert payload["status"] == "enabled"
     assert payload["capability"]["enabled"] is True
     snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
-    assert snapshot["cloud_command_capability"]["enabled"] is True
-    assert snapshot["cloud_command_capability"]["pending_commands"] == []
+    capability = snapshot["cloud_command_capability"]
+    assert isinstance(capability, dict)
+    assert capability["enabled"] is True
+    assert capability["pending_commands"] == []
