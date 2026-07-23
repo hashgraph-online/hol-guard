@@ -242,6 +242,16 @@ def test_valid_hook_json_degrades_empty_daemon_body() -> None:
     assert "full HOL Guard approval flow" in payload["systemMessage"]
 
 
+def test_daemon_response_body_is_size_bounded() -> None:
+    class OversizedResponse:
+        def read(self, amt: int = -1) -> bytes:
+            assert amt == bridge._MAX_DAEMON_RESPONSE_BYTES + 1
+            return b"x" * amt
+
+    with pytest.raises(ValueError, match="safe size limit"):
+        bridge._read_bounded_response(OversizedResponse())
+
+
 def test_bridge_timeouts_stay_under_harness_budget() -> None:
     assert bridge._HARNESS_TIMEOUT_BUDGET_SECONDS == 10
     assert (

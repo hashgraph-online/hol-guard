@@ -10,7 +10,7 @@ import threading
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import parse_qs, urljoin, urlparse
 
 from ..codex_hook_launch_runtime import isolated_daemon_start_command
@@ -38,6 +38,11 @@ _HARNESS_TIMEOUT_BUDGET_SECONDS = 10
 _DAEMON_IO_TIMEOUT_SECONDS = 2
 _RECOVERY_TIMEOUT_SECONDS = 3
 _FALLBACK_TIMEOUT_SECONDS = 2
+_MAX_DAEMON_RESPONSE_BYTES = 1_000_000
+
+
+class _ResponseReader(Protocol):
+    def read(self, amt: int = -1) -> bytes: ...
 
 
 class _DaemonHTTPError(RuntimeError):
@@ -121,7 +126,7 @@ def _post_to_loopback_daemon(endpoint: str, data: str, *, state_path: str | Path
         try:
             result_queue.put((_blocking_post_to_loopback_daemon(endpoint, data, state_path=state_path), None))
         except urllib.error.HTTPError as error:
-            detail = error.read().decode("utf-8", errors="replace").strip()
+            detail = _read_bounded_response(error).strip()
             result_queue.put((None, _DaemonHTTPError(error.code, detail)))
         except Exception as error:
             result_queue.put((None, error))
@@ -154,7 +159,14 @@ def _blocking_post_to_loopback_daemon(endpoint: str, data: str, *, state_path: s
         final_url = response.geturl()
         if final_url:
             _assert_loopback_http_url(final_url)
-        return response.read().decode("utf-8", errors="replace")
+        return _read_bounded_response(response)
+
+
+def _read_bounded_response(response: _ResponseReader) -> str:
+    body = response.read(_MAX_DAEMON_RESPONSE_BYTES + 1)
+    if len(body) > _MAX_DAEMON_RESPONSE_BYTES:
+        raise ValueError("Guard daemon hook response exceeded the safe size limit")
+    return body.decode("utf-8", errors="replace")
 
 
 def _daemon_url(state_path: str | Path, fallback_daemon_url: str) -> str:
