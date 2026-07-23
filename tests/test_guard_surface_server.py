@@ -134,6 +134,7 @@ class TestGuardSurfaceServer:
         assert payload == {
             "repaired": True,
             "check_ids": ["policy_engine", "rule_packs", "tamper_checks"],
+            "pending_check_ids": [],
             "message": "Integrity protection restored.",
         }
 
@@ -154,6 +155,18 @@ class TestGuardSurfaceServer:
             "_containment_health_payload",
             lambda self, *, force_refresh=False: containment_probes.append(force_refresh) or {},
         )
+        monkeypatch.setattr(
+            daemon_server_module,
+            "containment_health_signals",
+            lambda value, **_kwargs: {
+                check_id: SimpleNamespace(status=daemon_server_module.ProtectionCheckStatus.PASS)
+                for check_id in (
+                    "decision_plane_compatibility",
+                    "containment_compatibility",
+                    "sandbox",
+                )
+            },
+        )
         maintained: list[bool] = []
         monkeypatch.setattr(
             GuardStore,
@@ -165,7 +178,7 @@ class TestGuardSurfaceServer:
             "get_command_activity_persistence_health",
             lambda self: SimpleNamespace(active_error_count=0),
         )
-        monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 1)
+        monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 0)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
         request = urllib.request.Request(
@@ -184,7 +197,15 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         assert payload["repaired"] is True
-        assert payload["check_ids"] == ["policy_engine", "rule_packs", "tamper_checks", "decision_stream"]
+        assert payload["check_ids"] == [
+            "policy_engine",
+            "rule_packs",
+            "tamper_checks",
+            "decision_plane_compatibility",
+            "containment_compatibility",
+            "sandbox",
+        ]
+        assert payload["pending_check_ids"] == ["decision_stream"]
         assert payload["message"] == "Integrity protection restored."
         assert maintained
         assert containment_probes == [True]
