@@ -1235,6 +1235,8 @@ class CodexHarnessAdapter(HarnessAdapter):
         mcp_servers = payload.get("mcp_servers")
         if not isinstance(mcp_servers, dict):
             mcp_servers = {}
+        migrated_proxy_servers = self._refresh_managed_proxy_interpreters(mcp_servers)
+        skipped_servers = tuple(name for name in skipped_servers if name not in migrated_proxy_servers)
         features = hook_payload.get("features")
         if not isinstance(features, dict):
             features = {}
@@ -1315,6 +1317,8 @@ class CodexHarnessAdapter(HarnessAdapter):
             "legacy_shell_guard_cleanup": "complete",
             "backup_path": str(backup_path),
             "managed_servers": [server.name for server in managed_servers],
+            "migrated_proxy_servers": list(migrated_proxy_servers),
+            "runtime_restart_required": bool(migrated_proxy_servers),
             "skipped_servers": list(skipped_servers),
             "source_config_paths": list(detection.config_paths),
         }
@@ -1419,6 +1423,23 @@ class CodexHarnessAdapter(HarnessAdapter):
         if env:
             entry["env"] = env
         return entry
+
+    @staticmethod
+    def _refresh_managed_proxy_interpreters(mcp_servers: dict[str, object]) -> tuple[str, ...]:
+        current_interpreter = _guard_python_executable()
+        migrated: list[str] = []
+        for name, server_config in mcp_servers.items():
+            if not isinstance(name, str) or not isinstance(server_config, dict):
+                continue
+            command = server_config.get("command")
+            args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
+            if not is_guard_proxy_command(command if isinstance(command, str) else None, args):
+                continue
+            if command == current_interpreter:
+                continue
+            server_config["command"] = current_interpreter
+            migrated.append(name)
+        return tuple(sorted(migrated))
 
     @staticmethod
     def _should_skip_workspace_override(
