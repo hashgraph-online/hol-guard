@@ -13,6 +13,7 @@ import mimetypes
 import os
 import platform
 import secrets
+import sqlite3
 import tempfile
 import threading
 import time
@@ -149,6 +150,15 @@ from ..review_contracts import (
     validated_remote_approval_envelope,
 )
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
+from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, ActivityDecisionReason
+from ..runtime.command_activity_lifecycle import CommandActivityDecisionFacts, build_pre_hook_evidence
+from ..runtime.command_evaluation import evaluate_command
+from ..runtime.command_shadow_evaluation import (
+    CommandShadowCohort,
+    CommandShadowControl,
+    baseline_command_shadow_proposal,
+    build_command_shadow_observation,
+)
 from ..runtime.containment_health import containment_health_signals
 from ..runtime.live_request_sync import LiveRequestSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.protection_health import ProtectionCheckStatus
@@ -1404,6 +1414,43 @@ def _finalize_daemon_guard_connect_payload(
     except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError, RuntimeError) as error:
         payload["supply_chain_error"] = str(error)
     return payload
+
+
+def _repair_command_activity_persistence_health(store: GuardStore) -> None:
+    shadow_evaluation = evaluate_command("git push origin release/2.1 --force")
+    shadow_proposal = baseline_command_shadow_proposal(shadow_evaluation)
+    occurred_at = datetime.now(timezone.utc)
+    evidence = build_pre_hook_evidence(
+        shadow_evaluation,
+        CommandActivityDecisionFacts(
+            policy_action="allow",
+            decision_reason_code=ActivityDecisionReason.EXTENSION_MATCH,
+            prompted=False,
+            approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
+            receipt_id=None,
+        ),
+        activity_id="activity:protection-repair-probe",
+        occurred_at=occurred_at,
+        harness="codex",
+        request_correlation=None,
+    )
+    shadow = build_command_shadow_observation(
+        shadow_evaluation,
+        authoritative_action="allow",
+        proposal=shadow_proposal,
+        activity_id="activity:protection-repair-probe",
+        occurred_at=occurred_at,
+        control=CommandShadowControl(
+            enabled=True,
+            kill_switch=False,
+            release_cohorts=frozenset({CommandShadowCohort.BASELINE}),
+            disabled_cohorts=frozenset(),
+            sample_basis_points=10_000,
+        ),
+    )
+    if shadow is None:
+        raise RuntimeError("command shadow repair probe was not selected")
+    store.probe_command_activity_persistence(evidence, shadow=shadow)
 
 
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
@@ -4125,10 +4172,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                             repaired_check_ids.append(containment_check_id)
                         else:
                             failed_check_ids.append(containment_check_id)
-                except (OSError, RuntimeError, TypeError, ValueError):
+                except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                     failed_check_ids.extend(["decision_plane_compatibility", "containment_compatibility", "sandbox"])
                 try:
                     config = load_guard_config(store.guard_home)
+                    _repair_command_activity_persistence_health(store)
                     store.maintain_command_activity(
                         now=datetime.now(timezone.utc),
                         detail_retain_days=config.evidence_retain_days,
@@ -4176,12 +4224,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if check_id == "decision_stream":
             try:
                 config = load_guard_config(store.guard_home)
+                _repair_command_activity_persistence_health(store)
                 store.maintain_command_activity(
                     now=datetime.now(timezone.utc),
                     detail_retain_days=config.evidence_retain_days,
                 )
                 health = store.get_command_activity_persistence_health()
-            except (OSError, RuntimeError, TypeError, ValueError):
+            except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                 self._write_json(
                     {
                         "error": "protection_repair_failed",
