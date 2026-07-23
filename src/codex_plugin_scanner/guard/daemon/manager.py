@@ -59,6 +59,7 @@ _GUARD_DAEMON_PRIVATE_FILE_MODE = 0o600
 _GUARD_DAEMON_PRIVATE_DIR_MODE = 0o700
 _APPROVAL_CENTER_LOCATOR_FILE = "approval-center-locator.json"
 _GUARD_DAEMON_PENDING_LAUNCH_FILE = "daemon-launch-pending.json"
+_GUARD_DAEMON_OWNER_LOCK_FILE = "daemon-owner.lock"
 _GUARD_DAEMON_STATE_MAX_BYTES = 64 * 1024
 _GUARD_DAEMON_PENDING_LAUNCH_MAX_BYTES = 4096
 _GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS = 5.0
@@ -2250,6 +2251,35 @@ def _guard_daemon_start_lock(guard_home: Path):
                 _unlock_daemon_start_file(handle)
 
 
+def acquire_guard_daemon_owner_lock(guard_home: Path) -> BinaryIO:
+    """Claim the single daemon slot before any background worker can read secrets."""
+
+    inventory = _guard_daemon_process_inventory_for_guard_home(guard_home)
+    if inventory is None:
+        raise RuntimeError("Guard could not verify that the daemon slot is available.")
+    if any(pid != os.getpid() for pid, _port in inventory):
+        raise RuntimeError("A Guard daemon is already active for this Guard home.")
+    lock_path = guard_home / _GUARD_DAEMON_OWNER_LOCK_FILE
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = lock_path.open("a+b")
+    if not _try_lock_daemon_file(handle):
+        handle.close()
+        raise RuntimeError("A Guard daemon is already active for this Guard home.")
+    inventory = _guard_daemon_process_inventory_for_guard_home(guard_home)
+    if inventory is None or any(pid != os.getpid() for pid, _port in inventory):
+        _unlock_daemon_start_file(handle)
+        handle.close()
+        raise RuntimeError("A Guard daemon is already active for this Guard home.")
+    return handle
+
+
+def release_guard_daemon_owner_lock(handle: BinaryIO | None) -> None:
+    if handle is None or handle.closed:
+        return
+    _unlock_daemon_start_file(handle)
+    handle.close()
+
+
 @contextmanager
 def _guard_daemon_state_write_lock(guard_home: Path):
     """Serialize the token/state generation across threads and processes."""
@@ -2287,6 +2317,29 @@ def _lock_daemon_start_file(handle: BinaryIO) -> None:
     import fcntl
 
     fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+
+def _try_lock_daemon_file(handle: BinaryIO) -> bool:
+    if os.name == "nt":
+        import msvcrt
+
+        handle.seek(0)
+        if os.fstat(handle.fileno()).st_size == 0:
+            handle.write(b"0")
+            handle.flush()
+        handle.seek(0)
+        try:
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError:
+            return False
+        return True
+    import fcntl
+
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    return True
 
 
 def _unlock_daemon_start_file(handle: BinaryIO) -> None:
