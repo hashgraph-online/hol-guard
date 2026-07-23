@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.local_dashboard_session import (
     LOCAL_DASHBOARD_SESSION_AUDIENCE,
@@ -105,6 +106,11 @@ class TestGuardSurfaceServer:
             "setup_policy_integrity",
             lambda self, **_kwargs: {"mode": "protected"},
         )
+        monkeypatch.setattr(
+            GuardStore,
+            "get_cached_policy_integrity_state",
+            lambda self: {"backend": "system-keyring", "degraded_reasons": [], "mode": "protected"},
+        )
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
 
@@ -128,6 +134,7 @@ class TestGuardSurfaceServer:
                 urllib.request.urlopen(unauthenticated, timeout=5)
             with urllib.request.urlopen(authenticated, timeout=5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
+            authenticated_state = load_authenticated_daemon_state(store.guard_home)
         finally:
             daemon.stop()
 
@@ -137,6 +144,12 @@ class TestGuardSurfaceServer:
             "check_ids": ["policy_engine", "rule_packs", "tamper_checks"],
             "pending_check_ids": [],
             "message": "Integrity protection restored.",
+        }
+        assert authenticated_state is not None
+        assert authenticated_state["trust_status"] == {
+            "backend": "system-keyring",
+            "degraded_reasons": [],
+            "mode": "protected",
         }
 
     def test_protection_repair_all_returns_an_inline_recovery_result(

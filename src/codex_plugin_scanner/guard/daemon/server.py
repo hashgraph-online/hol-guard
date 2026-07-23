@@ -390,6 +390,17 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     def daemon_port(self) -> int:
         return int(self.server_address[1])
 
+    def publish_trust_state(self) -> None:
+        write_guard_daemon_state(
+            self.store.guard_home,
+            self.daemon_port(),
+            self.auth_token,
+            host=self.daemon_host(),
+            state_id=self.runtime_session_id,
+            started_at=self.runtime_started_at,
+            trust_status=self.store.get_cached_policy_integrity_state(),
+        )
+
 
 _STATIC_DIR = Path(__file__).with_name("static")
 _INDEX_PATH = _STATIC_DIR / "index.html"
@@ -4151,6 +4162,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 return
             repaired = status.get("mode") == "protected"
+            self.server.publish_trust_state()  # type: ignore[attr-defined]
             degraded_reasons = status.get("degraded_reasons")
             reason_count = len(degraded_reasons) if isinstance(degraded_reasons, list) else 0
             repaired_check_ids = ["policy_engine", "rule_packs", "tamper_checks"]
@@ -6431,14 +6443,7 @@ class GuardDaemonServer:
         self._maintain_command_activity_best_effort()
         self._persist_aibom_inventory_context()
         self._server.last_activity_monotonic = time.monotonic()
-        write_guard_daemon_state(
-            self._server.store.guard_home,
-            self.port,
-            self._server.auth_token,
-            host=self._server.daemon_host(),
-            state_id=self._server.runtime_session_id,
-            started_at=self._server.runtime_started_at,
-        )
+        self._server.publish_trust_state()
         self._server.store.upsert_runtime_state(
             session_id=self._server.runtime_session_id,
             daemon_host=self._server.runtime_host,

@@ -831,25 +831,29 @@ def write_guard_daemon_state(
     host: str = "127.0.0.1",
     state_id: str | None = None,
     started_at: str | None = None,
+    trust_status: dict[str, object] | None = None,
 ) -> None:
     state_path = _state_path(guard_home)
     _ensure_private_directory(state_path.parent)
     with _guard_daemon_state_write_lock(guard_home):
         discovery_key = ensure_daemon_discovery_key(guard_home)
+        state_payload: dict[str, object] = {
+            "guard_home": str(guard_home.resolve()),
+            "host": host,
+            "port": port,
+            "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
+            "package_version": __version__,
+            "source_root": _current_guard_daemon_source_root(),
+            "runtime_fingerprint": _current_guard_daemon_runtime_fingerprint(),
+            "pid": pid if isinstance(pid, int) and pid > 0 else os.getpid(),
+            "started_at": started_at or datetime.now(timezone.utc).isoformat(),
+            "state_id": state_id or secrets.token_hex(16),
+            "auth_token_id": hashlib.sha256(auth_token.encode("utf-8")).hexdigest(),
+        }
+        if trust_status is not None:
+            state_payload["trust_status"] = trust_status
         daemon_state = authenticate_daemon_state(
-            {
-                "guard_home": str(guard_home.resolve()),
-                "host": host,
-                "port": port,
-                "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
-                "package_version": __version__,
-                "source_root": _current_guard_daemon_source_root(),
-                "runtime_fingerprint": _current_guard_daemon_runtime_fingerprint(),
-                "pid": pid if isinstance(pid, int) and pid > 0 else os.getpid(),
-                "started_at": started_at or datetime.now(timezone.utc).isoformat(),
-                "state_id": state_id or secrets.token_hex(16),
-                "auth_token_id": hashlib.sha256(auth_token.encode("utf-8")).hexdigest(),
-            },
+            state_payload,
             discovery_key=discovery_key,
         )
         if write_auth_token:
