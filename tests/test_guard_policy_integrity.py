@@ -155,8 +155,8 @@ def _enable_macos_native_policy_integrity(
     )
     monkeypatch.setattr(
         SystemKeyringSecretStore,
-        "_get_secret_without_macos_ui",
-        lambda self, secret_id: fake_keyring.get_password(self.service_name, secret_id),
+        "_get_macos_secret_in_isolated_process",
+        lambda self, secret_id, *, timeout_seconds: fake_keyring.get_password(self.service_name, secret_id),
     )
     return fake_keyring
 
