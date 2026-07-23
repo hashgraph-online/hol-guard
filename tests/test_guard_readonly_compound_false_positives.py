@@ -104,6 +104,9 @@ grep -n "previewLabel\\|Value" src/emails/notice.tsx"""
         ("sed -i '' -e 's/old/new/g' src/safe.ts", "grep -n new ../../outside.ts"),
         ("sed -i '' -e 's/old/new/g' src/safe.ts", ""),
         ("sed -i '' -e 's/old/$HOME/g' src/safe.ts", "grep -n HOME src/safe.ts"),
+        ("sed -i '' -e 's/.*/new/g' src/safe.ts", "grep -n new src/safe.ts"),
+        ("sed -i '' -e 's/old/prefix-&/g' src/safe.ts", "grep -n prefix src/safe.ts"),
+        (r"sed -i '' -e 's/(old)/\\1/g' src/safe.ts", "grep -n old src/safe.ts"),
     ),
 )
 def test_bounded_sed_edit_rejects_unverified_or_sensitive_variants(

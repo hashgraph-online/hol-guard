@@ -2209,7 +2209,41 @@ def _literal_sed_substitution_is_safe(script: str) -> bool:
         return False
     flags = "".join(current)
     pattern, replacement = fields
-    return bool(pattern) and "\n" not in replacement and all(flag in {"g", "i", "I", "p"} for flag in flags)
+    return (
+        bool(pattern)
+        and flags in {"", "g"}
+        and _sed_pattern_is_literal(pattern, delimiter=delimiter)
+        and _sed_replacement_is_literal(replacement, delimiter=delimiter)
+    )
+
+
+def _sed_pattern_is_literal(pattern: str, *, delimiter: str) -> bool:
+    regex_metacharacters = frozenset(".^$*+?{}[]()|")
+    escaped = False
+    for character in pattern:
+        if escaped:
+            if character not in regex_metacharacters | {delimiter, "\\"}:
+                return False
+            escaped = False
+        elif character == "\\":
+            escaped = True
+        elif character in regex_metacharacters:
+            return False
+    return not escaped
+
+
+def _sed_replacement_is_literal(replacement: str, *, delimiter: str) -> bool:
+    escaped = False
+    for character in replacement:
+        if escaped:
+            if character not in {delimiter, "\\", "&"}:
+                return False
+            escaped = False
+        elif character == "\\":
+            escaped = True
+        elif character == "&" or character == "\n":
+            return False
+    return not escaped
 
 
 def _same_workspace_file(left: str, right: str, *, cwd: Path) -> bool:
