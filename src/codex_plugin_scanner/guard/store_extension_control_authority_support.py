@@ -8,6 +8,7 @@ import base64
 import hashlib
 import hmac
 import sqlite3
+import sys
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -24,7 +25,7 @@ from .runtime.extension_control_authority import (
 )
 from .runtime.extension_control_contract import ControlLayerKind, ExtensionControlLayer
 from .runtime.extension_control_resolver import compose_control_layers
-from .store_base import SecretStore, SystemKeyringSecretStore
+from .store_base import EncryptedFileSecretStore, SecretStore, SystemKeyringSecretStore
 
 _KEY_REF_SUFFIX = ":authentication-key"
 _ANCHOR_REF_SUFFIX = ":anchor"
@@ -67,7 +68,10 @@ class _ExtensionControlAuthoritySupportMixin:
     def _secret_store(self) -> SecretStore:
         current = self._extension_control_authority_secret_store
         if current is None:
-            current = SystemKeyringSecretStore(service_name="hol-guard.extension-control-authority")
+            if sys.platform == "darwin":
+                current = EncryptedFileSecretStore(cast(Path, self.guard_home))
+            else:
+                current = SystemKeyringSecretStore(service_name="hol-guard.extension-control-authority")
             self._extension_control_authority_secret_store = current
         if isinstance(current, SystemKeyringSecretStore) and not current._is_available():
             raise RuntimeError("extension control credential store unavailable")

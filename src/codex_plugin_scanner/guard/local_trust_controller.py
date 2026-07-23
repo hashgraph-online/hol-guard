@@ -20,18 +20,34 @@ from .local_trust_contract import (
     run_trust_backend_check,
     select_trust_backend,
 )
-from .store import GuardStore, SystemKeyringSecretStore
+from .store import (
+    EncryptedFileSecretStore,
+    FallbackSecretStore,
+    GuardStore,
+    SystemKeyringSecretStore,
+)
 
 PASSIVE_TRUST_TIMEOUT_SECONDS = 0.25
 
 
 def macos_native_backend_supported(store: GuardStore) -> bool:
     secret_store = getattr(store, "_policy_integrity_secret_store", None)
+    if isinstance(secret_store, FallbackSecretStore):
+        secret_store = secret_store.primary
     return (
         sys.platform == "darwin"
         and isinstance(secret_store, SystemKeyringSecretStore)
         and secret_store._supports_native_macos_security_reads()
     )
+
+
+def local_vault_backend_supported(store: GuardStore | None) -> bool:
+    if store is None:
+        return True
+    secret_store = getattr(store, "_policy_integrity_secret_store", None)
+    if isinstance(secret_store, FallbackSecretStore):
+        secret_store = secret_store.fallback
+    return isinstance(secret_store, EncryptedFileSecretStore)
 
 
 def _degraded_safe_status(*, backend: str, reason: str, setup_available: bool = False) -> TrustStatus:
@@ -116,6 +132,46 @@ class _MacOSNativeTrustBackend:
         raise TrustBackendUnavailableError("macos_native_backend_reset_is_managed_by_guard_store")
 
 
+class _LocalVaultTrustBackend:
+    name = "local-vault"
+    priority = 110
+    passive_no_ui_safe = True
+
+    def __init__(self, store: GuardStore | None = None, *, guard_home: Path | None = None) -> None:
+        self._store = store
+        self._guard_home = store.guard_home if store is not None else guard_home
+        self.supported = local_vault_backend_supported(store)
+
+    def status(self) -> TrustStatus:
+        if self._store is not None:
+            state: object = self._store.get_cached_policy_integrity_state()
+        elif self._guard_home is not None:
+            daemon_state = load_authenticated_daemon_state(self._guard_home)
+            state = daemon_state.get("trust_status") if isinstance(daemon_state, dict) else None
+        else:
+            state = None
+        if not isinstance(state, dict):
+            return _degraded_safe_status(
+                backend=self.name,
+                reason=POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
+                setup_available=True,
+            )
+        return TrustStatus.from_policy_integrity_state(state)
+
+    def sign(self, payload: bytes) -> str:
+        raise TrustBackendUnavailableError("local_vault_signing_is_managed_by_guard_store")
+
+    def verify(self, payload: bytes, signature: str) -> bool:
+        del payload, signature
+        return False
+
+    def setup(self) -> TrustStatus:
+        raise TrustBackendUnavailableError("local_vault_setup_is_managed_by_guard_store")
+
+    def revoke(self) -> TrustStatus:
+        raise TrustBackendUnavailableError("local_vault_reset_is_managed_by_guard_store")
+
+
 @dataclass(frozen=True)
 class ResolvedTrustState:
     mode: LocalTrustMode
@@ -127,7 +183,11 @@ class ResolvedTrustState:
 
 
 def _trust_backends(store: GuardStore | None, *, guard_home: Path | None = None) -> tuple[TrustBackend, ...]:
-    return (_MacOSNativeTrustBackend(store, guard_home=guard_home), _DegradedSafeTrustBackend())
+    return (
+        _LocalVaultTrustBackend(store, guard_home=guard_home),
+        _MacOSNativeTrustBackend(store, guard_home=guard_home),
+        _DegradedSafeTrustBackend(),
+    )
 
 
 def _backend_by_name(
@@ -207,6 +267,7 @@ def resolve_passive_trust_state(
 __all__ = [
     "PASSIVE_TRUST_TIMEOUT_SECONDS",
     "ResolvedTrustState",
+    "local_vault_backend_supported",
     "macos_native_backend_supported",
     "resolve_passive_trust_state",
 ]

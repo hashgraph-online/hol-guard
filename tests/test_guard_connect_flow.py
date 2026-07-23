@@ -133,7 +133,7 @@ def _daemon_json_request(
 
 
 def test_daemon_rejects_legacy_connect_pairing_endpoints(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
+    store = GuardStore(tmp_path / "guard-home", allow_system_keyring=True)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
 
@@ -554,7 +554,7 @@ def test_browser_connect_persists_oauth_state_when_macos_keychain_readback_succe
 ) -> None:
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     _install_fake_system_keyring(monkeypatch)
-    store = GuardStore(tmp_path / "guard-home")
+    store = GuardStore(tmp_path / "guard-home", allow_system_keyring=True)
 
     class _BrowserSession:
         authorize_url = "https://hol.org/guard/connect?step=authorize"
@@ -896,7 +896,7 @@ def test_connect_status_recovers_missing_oauth_metadata_from_surviving_secret(
     assert entitlement["upgrade_cta"] is None
 
 
-def test_connect_status_does_not_recover_missing_oauth_metadata_from_fallback_only_secret_on_macos(
+def test_connect_status_recovers_missing_oauth_metadata_from_local_vault_on_macos(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -954,9 +954,9 @@ def test_connect_status_does_not_recover_missing_oauth_metadata_from_fallback_on
         connect_url="https://hol.org/guard/connect",
     )
 
-    assert payload["status"] == "retry_required"
-    assert payload["milestone"] == "first_sync_failed"
-    assert store.get_sync_payload("oauth_local_credentials") is None
+    assert payload["status"] == "connected"
+    assert payload["milestone"] == "first_sync_succeeded"
+    assert isinstance(store.get_sync_payload("oauth_local_credentials"), dict)
 
 
 def test_retry_required_connect_state_prefers_reconnect_over_false_paywall(tmp_path: Path) -> None:

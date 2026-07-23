@@ -17,3 +17,10 @@ def test_only_daemon_server_eagerly_primes_policy_integrity() -> None:
     assert not commands_router._should_prime_policy_integrity(Namespace(guard_command="trust"))
     assert not commands_router._should_prime_policy_integrity(Namespace(guard_command="codex-mcp-proxy"))
     assert not commands_router._should_prime_policy_integrity(Namespace(guard_command="hook"))
+
+
+def test_only_explicit_account_actions_allow_system_keyring() -> None:
+    for command in ("connect", "disconnect", "login", "remote-pair"):
+        assert commands_router._should_allow_system_keyring(Namespace(guard_command=command))
+    for command in ("daemon", "hook", "status", "sync", "codex-mcp-proxy"):
+        assert not commands_router._should_allow_system_keyring(Namespace(guard_command=command))

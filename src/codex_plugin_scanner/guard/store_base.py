@@ -1136,9 +1136,15 @@ def _system_keyring_is_available(guard_home: Path, *, use_cache: bool = True) ->
     return available
 
 
-def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
+def _build_oauth_secret_store(
+    guard_home: Path,
+    *,
+    allow_system_keyring: bool = True,
+) -> SecretStore:
     fallback_store = EncryptedFileSecretStore(guard_home)
     if sys.platform == "darwin":
+        if not allow_system_keyring:
+            return fallback_store
         cached_availability = _read_system_keyring_availability_cache(guard_home)
         if cached_availability is True:
             return FallbackSecretStore(
@@ -1159,15 +1165,28 @@ def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
     return fallback_store
 
 
-def _build_policy_integrity_secret_store() -> SystemKeyringSecretStore | None:
+def _build_policy_integrity_secret_store(
+    guard_home: Path,
+    *,
+    allow_system_keyring: bool = True,
+) -> SecretStore | None:
     if sys.platform == "darwin":
+        fallback_store = EncryptedFileSecretStore(guard_home)
+        if not allow_system_keyring:
+            return fallback_store
         if SystemKeyringSecretStore._test_keyring_module() is not None:
-            return SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME)
+            return FallbackSecretStore(
+                SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME),
+                fallback_store,
+            )
         if not SystemKeyringSecretStore._backend_is_available():
-            return None
+            return fallback_store
         if not SystemKeyringSecretStore._supports_native_macos_security_reads():
-            return None
-        return SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME)
+            return fallback_store
+        return FallbackSecretStore(
+            SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME),
+            fallback_store,
+        )
     if SystemKeyringSecretStore._backend_is_available():
         return SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME)
     return None
