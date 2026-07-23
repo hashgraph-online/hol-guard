@@ -901,7 +901,10 @@ def test_oauth_secret_store_skips_system_keyring_when_macos_default_keychain_is_
         staticmethod(lambda: None),
     )
 
-    secret_store = _build_oauth_secret_store(tmp_path / "guard-home")
+    secret_store = _build_oauth_secret_store(
+        tmp_path / "guard-home",
+        allow_system_keyring=True,
+    )
 
     assert SystemKeyringSecretStore._is_available() is False
     assert isinstance(secret_store, UnavailableSecretStore)
@@ -947,7 +950,10 @@ def test_oauth_secret_store_skips_system_keyring_when_macos_user_keychain_search
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    secret_store = _build_oauth_secret_store(tmp_path / "guard-home")
+    secret_store = _build_oauth_secret_store(
+        tmp_path / "guard-home",
+        allow_system_keyring=True,
+    )
 
     assert SystemKeyringSecretStore._is_available() is False
     assert isinstance(secret_store, UnavailableSecretStore)
@@ -961,7 +967,10 @@ def test_oauth_secret_store_uses_system_keyring_with_encrypted_fallback_on_macos
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     SystemKeyringSecretStore._clear_macos_keychain_health_cache()
 
-    secret_store = _build_oauth_secret_store(tmp_path / "guard-home")
+    secret_store = _build_oauth_secret_store(
+        tmp_path / "guard-home",
+        allow_system_keyring=True,
+    )
 
     assert isinstance(secret_store, FallbackSecretStore)
     assert isinstance(secret_store.primary, SystemKeyringSecretStore)
@@ -979,7 +988,10 @@ def test_oauth_secret_store_uses_cached_macos_availability_when_healthy(tmp_path
         classmethod(lambda cls: (_ for _ in ()).throw(AssertionError("cache miss"))),
     )
 
-    secret_store = _build_oauth_secret_store(guard_home)
+    secret_store = _build_oauth_secret_store(
+        guard_home,
+        allow_system_keyring=True,
+    )
 
     assert isinstance(secret_store, FallbackSecretStore)
     assert isinstance(secret_store.primary, SystemKeyringSecretStore)
@@ -1026,7 +1038,10 @@ def test_oauth_secret_store_ignores_stale_macos_unavailable_cache_for_login(tmp_
     guard_store_module._write_system_keyring_availability_cache(guard_home, available=False)
     monkeypatch.setattr(SystemKeyringSecretStore, "_is_available", classmethod(lambda cls: True))
 
-    secret_store = _build_oauth_secret_store(guard_home)
+    secret_store = _build_oauth_secret_store(
+        guard_home,
+        allow_system_keyring=True,
+    )
 
     assert isinstance(secret_store, FallbackSecretStore)
     assert isinstance(secret_store.primary, SystemKeyringSecretStore)
@@ -1044,7 +1059,10 @@ def test_oauth_secret_store_rechecks_stale_macos_health_cache_for_login(tmp_path
         SystemKeyringSecretStore, "_macos_default_keychain_is_usable_uncached", classmethod(lambda cls: True)
     )
 
-    secret_store = _build_oauth_secret_store(guard_home)
+    secret_store = _build_oauth_secret_store(
+        guard_home,
+        allow_system_keyring=True,
+    )
 
     assert isinstance(secret_store, FallbackSecretStore)
     assert isinstance(secret_store.primary, SystemKeyringSecretStore)

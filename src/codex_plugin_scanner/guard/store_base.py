@@ -1139,7 +1139,7 @@ def _system_keyring_is_available(guard_home: Path, *, use_cache: bool = True) ->
 def _build_oauth_secret_store(
     guard_home: Path,
     *,
-    allow_system_keyring: bool = True,
+    allow_system_keyring: bool = False,
 ) -> SecretStore:
     fallback_store = EncryptedFileSecretStore(guard_home)
     if sys.platform == "darwin":
@@ -1168,7 +1168,7 @@ def _build_oauth_secret_store(
 def _build_policy_integrity_secret_store(
     guard_home: Path,
     *,
-    allow_system_keyring: bool = True,
+    allow_system_keyring: bool = False,
 ) -> SecretStore | None:
     if sys.platform == "darwin":
         fallback_store = EncryptedFileSecretStore(guard_home)
