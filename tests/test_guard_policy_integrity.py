@@ -3198,8 +3198,14 @@ def test_trust_cli_doctor_redacts_secret_like_assignments_in_json_output(
     home_dir = tmp_path / "home"
     original_trust_payload = trust_dispatch_module._trust_status_payload
 
-    def fake_trust_payload(store: GuardStore, *, command: str, backend: str) -> dict[str, object]:
-        payload = original_trust_payload(store, command=command, backend=backend)
+    def fake_trust_payload(
+        store: GuardStore | None,
+        *,
+        guard_home: Path | None = None,
+        command: str,
+        backend: str,
+    ) -> dict[str, object]:
+        payload = original_trust_payload(store, guard_home=guard_home, command=command, backend=backend)
         payload["summary"] = (
             "Guard saw MY_SECRET_TOKEN=super-secret-value and "
             "guard-oauth-local-credentials:8126370c0eb65a02 while checking trust."
