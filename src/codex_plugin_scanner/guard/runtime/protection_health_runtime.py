@@ -46,11 +46,9 @@ def _hook_signals(
         harness = install.get("harness")
         if not isinstance(harness, str) or len(harness) > 64 or _STABLE_HARNESS.fullmatch(harness) is None:
             continue
-        candidate = (
-            _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
-            if install.get("active") is True
-            else _signal(ProtectionCheckStatus.FAIL, "hooks_inactive")
-        )
+        if install.get("active") is not True:
+            continue
+        candidate = _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
         existing = result.get(harness)
         result[harness] = (
             _signal(ProtectionCheckStatus.FAIL, "hooks_inactive")
