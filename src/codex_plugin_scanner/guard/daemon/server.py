@@ -375,6 +375,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.containment_health_cache = None
         self.containment_health_cache_monotonic = 0.0
         self.containment_health_cache_lock = threading.Lock()
+        self.store.set_policy_integrity_state_listener(self.publish_trust_state)
         from .hook_worker import HookWorker
 
         self.hook_worker = HookWorker(store=store)
@@ -390,7 +391,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     def daemon_port(self) -> int:
         return int(self.server_address[1])
 
-    def publish_trust_state(self) -> None:
+    def publish_trust_state(self, trust_status: dict[str, object] | None = None) -> None:
         write_guard_daemon_state(
             self.store.guard_home,
             self.daemon_port(),
@@ -398,7 +399,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
             host=self.daemon_host(),
             state_id=self.runtime_session_id,
             started_at=self.runtime_started_at,
-            trust_status=self.store.get_cached_policy_integrity_state(),
+            trust_status=trust_status or self.store.get_cached_policy_integrity_state(),
         )
 
 
@@ -4162,7 +4163,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 return
             repaired = status.get("mode") == "protected"
-            self.server.publish_trust_state()  # type: ignore[attr-defined]
             degraded_reasons = status.get("degraded_reasons")
             reason_count = len(degraded_reasons) if isinstance(degraded_reasons, list) else 0
             repaired_check_ids = ["policy_engine", "rule_packs", "tamper_checks"]

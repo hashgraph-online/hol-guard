@@ -95,6 +95,38 @@ def _decode_dashboard_session_claims(token: str) -> dict[str, object]:
 
 
 class TestGuardSurfaceServer:
+    def test_daemon_trust_snapshot_tracks_only_committed_integrity_transitions(self, tmp_path: Path) -> None:
+        store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        degraded = {
+            "backend": "system-keyring",
+            "degraded_reasons": ["policy_integrity_key_unavailable"],
+            "mode": "degraded",
+        }
+        protected = {
+            "backend": "system-keyring",
+            "degraded_reasons": [],
+            "mode": "protected",
+        }
+
+        try:
+            with store._connect() as connection:
+                store._queue_policy_integrity_state_notification(connection, degraded)
+            committed_state = load_authenticated_daemon_state(store.guard_home)
+
+            with pytest.raises(RuntimeError, match="rollback"), store._connect() as connection:
+                store._queue_policy_integrity_state_notification(connection, protected)
+                raise RuntimeError("rollback")
+            rolled_back_state = load_authenticated_daemon_state(store.guard_home)
+        finally:
+            daemon.stop()
+
+        assert committed_state is not None
+        assert committed_state["trust_status"] == degraded
+        assert rolled_back_state is not None
+        assert rolled_back_state["trust_status"] == degraded
+
     def test_protection_repair_requires_auth_and_repairs_integrity(
         self,
         tmp_path: Path,
