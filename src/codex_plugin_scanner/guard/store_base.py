@@ -802,7 +802,8 @@ class SystemKeyringSecretStore:
         if sys.platform == "darwin":
             if (
                 self._test_keyring_module() is not None
-                and getattr(type(self)._get_secret_without_macos_ui, "__name__", "") == "_get_secret_without_macos_ui"
+                and getattr(type(self)._get_macos_secret_in_isolated_process, "__name__", "")
+                == "_get_macos_secret_in_isolated_process"
             ):
                 return self.get_secret(secret_id)
             if self._supports_native_macos_security_reads():
