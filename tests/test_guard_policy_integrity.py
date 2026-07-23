@@ -19,6 +19,7 @@ import pytest
 
 from codex_plugin_scanner.cli import _resolve_legacy_args, main
 from codex_plugin_scanner.guard import local_trust_contract as local_trust_contract_module
+from codex_plugin_scanner.guard import local_trust_controller as local_trust_controller_module
 from codex_plugin_scanner.guard import policy_integrity as policy_integrity_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard import store_policy_integrity_runtime as policy_integrity_runtime_module
@@ -3339,6 +3340,11 @@ def test_trust_cli_explain_reports_protected_local_rule(
         started_at="2026-06-19T12:00:00Z",
         last_heartbeat_at=datetime.now(timezone.utc).isoformat(),
     )
+    monkeypatch.setattr(
+        local_trust_controller_module,
+        "load_guard_daemon_url",
+        lambda guard_home: "http://127.0.0.1:5474",
+    )
     store.upsert_policy(_decision(artifact_id="codex:project:local-rule"), "2026-06-19T12:01:00Z")
     decision_id = int(_policy_row(home_dir, artifact_id="codex:project:local-rule")["decision_id"])
 
@@ -3370,6 +3376,11 @@ def test_trust_cli_explain_human_output_uses_trust_renderer(
         daemon_port=5474,
         started_at="2026-06-19T12:00:00Z",
         last_heartbeat_at=datetime.now(timezone.utc).isoformat(),
+    )
+    monkeypatch.setattr(
+        local_trust_controller_module,
+        "load_guard_daemon_url",
+        lambda guard_home: "http://127.0.0.1:5474",
     )
     store.upsert_policy(_decision(artifact_id="codex:project:local-rule-human"), "2026-06-19T12:01:00Z")
     decision_id = int(_policy_row(home_dir, artifact_id="codex:project:local-rule-human")["decision_id"])

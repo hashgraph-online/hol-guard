@@ -6,6 +6,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from .daemon.manager import load_guard_daemon_url
 from .local_trust_contract import (
     POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
     POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE,
@@ -84,9 +85,8 @@ class _MacOSNativeTrustBackend:
                 reason=POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
                 setup_available=True,
             )
-        if not daemon_runtime_is_current(
-            self._store.get_runtime_state(),
-            now=datetime.now(timezone.utc),
+        if load_guard_daemon_url(self._store.guard_home) is None or not daemon_runtime_is_current(
+            self._store.get_runtime_state(), now=datetime.now(timezone.utc)
         ):
             return _degraded_safe_status(
                 backend=self.name,
