@@ -606,17 +606,11 @@ class StoreOAuthConnectMixin:
         if cached_secret_payload is not None:
             return cached_secret_payload
         fallback_secret_json = self._load_oauth_fallback_secret_json(secret_ref)
-        skip_fallback_first = (
-            sys.platform == "darwin"
-            and isinstance(self._oauth_secret_store, FallbackSecretStore)
-            and isinstance(self._oauth_secret_store.primary, SystemKeyringSecretStore)
-        )
         fallback_secret_payload = self._load_validated_oauth_fallback_secret_payload(
             fallback_secret_json,
             secret_hash,
         )
-        prefer_primary_over_fallback = skip_fallback_first and allow_primary
-        if fallback_secret_payload is not None and not prefer_primary_over_fallback:
+        if fallback_secret_payload is not None:
             self._remember_oauth_secret_payload(secret_ref, secret_hash, fallback_secret_json)
             return fallback_secret_payload
         if not allow_primary:

@@ -24,7 +24,7 @@ from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, TypedDict, TypeGuard, cast
+from typing import Any, BinaryIO, TypedDict, TypeGuard, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
@@ -229,9 +229,11 @@ from .discovery import (
 )
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
+    acquire_guard_daemon_owner_lock,
     clear_guard_daemon_state_if_current,
     current_guard_daemon_runtime_fingerprint,
     load_guard_daemon_auth_token,
+    release_guard_daemon_owner_lock,
     repair_approval_center_locator,
     write_guard_daemon_state,
 )
@@ -6361,6 +6363,7 @@ class GuardDaemonServer:
     ) -> None:
         _validate_dashboard_bundle()
         self._shutdown_started = threading.Event()
+        self._owner_lock: BinaryIO | None = None
         self._server = _GuardDaemonHttpServer(
             (host, port),
             _GuardDaemonHandler,
@@ -6434,6 +6437,15 @@ class GuardDaemonServer:
         self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
 
     def _begin_service(self) -> None:
+        self._owner_lock = acquire_guard_daemon_owner_lock(self._server.store.guard_home)
+        try:
+            self._begin_owned_service()
+        except BaseException:
+            release_guard_daemon_owner_lock(self._owner_lock)
+            self._owner_lock = None
+            raise
+
+    def _begin_owned_service(self) -> None:
         if self._aibom_refresh_thread is not None:
             if self._aibom_refresh_thread.is_alive():
                 raise RuntimeError("AIBOM inventory refresh is still stopping")
@@ -6540,14 +6552,18 @@ class GuardDaemonServer:
             self._finish_service()
 
     def _finish_service(self) -> None:
-        self._shutdown_started.set()
-        approval_attention = getattr(self._server, "approval_attention", None)
-        if approval_attention is not None:
-            approval_attention.stop()
-        self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
-        self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
-        clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
-        self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
+        try:
+            self._shutdown_started.set()
+            approval_attention = getattr(self._server, "approval_attention", None)
+            if approval_attention is not None:
+                approval_attention.stop()
+            self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
+            self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
+            clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
+            self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
+        finally:
+            release_guard_daemon_owner_lock(self._owner_lock)
+            self._owner_lock = None
 
     def _start_watchdog(self) -> None:
         if self._watchdog_thread is not None and self._watchdog_thread.is_alive():
