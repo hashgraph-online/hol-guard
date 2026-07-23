@@ -749,18 +749,68 @@ class SystemKeyringSecretStore:
             return None
         return None  # unknown non-zero status
 
+    def _get_macos_secret_in_isolated_process(
+        self,
+        secret_id: str,
+        *,
+        timeout_seconds: float,
+    ) -> str | None:
+        """Read one Keychain item behind a killable process boundary.
+
+        Some macOS Keychain configurations can block inside
+        ``SecItemCopyMatching`` even with the query-local no-UI flag. A thread
+        timeout cannot recover from that native call, so passive Guard reads
+        run in a disposable interpreter and fail closed when the deadline
+        expires.
+        """
+
+        worker = (
+            "import json,sys;"
+            "from codex_plugin_scanner.guard.store_base import SystemKeyringSecretStore;"
+            "value=SystemKeyringSecretStore(service_name=sys.argv[1])."
+            "_get_secret_without_macos_ui(sys.argv[2]);"
+            "sys.stdout.write(json.dumps({'value':value},separators=(',',':')))"
+        )
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key in {"HOME", "LANG", "LC_ALL", "LOGNAME", "PATH", "TMPDIR", "USER"} or key.startswith("LC_")
+        }
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-I", "-c", worker, self.service_name, secret_id],
+                check=False,
+                capture_output=True,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                timeout=max(timeout_seconds, 0.1),
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if completed.returncode != 0:
+            return None
+        try:
+            payload = json.loads(completed.stdout.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        value = payload.get("value") if isinstance(payload, dict) else None
+        return value if isinstance(value, str) and value else None
+
     def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
-        _ = timeout_seconds
         if sys.platform != "darwin" and self._test_keyring_module() is not None:
             return self.get_secret(secret_id)
         if sys.platform == "darwin":
             if (
                 self._test_keyring_module() is not None
-                and getattr(type(self)._get_secret_without_macos_ui, "__name__", "") == "_get_secret_without_macos_ui"
+                and getattr(type(self)._get_macos_secret_in_isolated_process, "__name__", "")
+                == "_get_macos_secret_in_isolated_process"
             ):
                 return self.get_secret(secret_id)
             if self._supports_native_macos_security_reads():
-                return self._get_secret_without_macos_ui(secret_id)
+                return self._get_macos_secret_in_isolated_process(
+                    secret_id,
+                    timeout_seconds=timeout_seconds,
+                )
             if self._test_keyring_module() is not None:
                 return self.get_secret(secret_id)
             if self.service_name == _POLICY_INTEGRITY_SERVICE_NAME:
