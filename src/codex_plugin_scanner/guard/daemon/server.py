@@ -4131,7 +4131,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         pending_check_ids.append("decision_stream")
                 except (OSError, RuntimeError, TypeError, ValueError):
                     failed_check_ids.append("decision_stream")
-                if failed_check_ids:
+                if failed_check_ids or pending_check_ids:
                     self._write_json(
                         {
                             "error": "protection_repair_incomplete",
@@ -4140,7 +4140,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                             "failed_check_ids": failed_check_ids,
                             "pending_check_ids": pending_check_ids,
                             "message": (
-                                "Repair paused before every protection layer could be rechecked. Retry repair here."
+                                "Repair paused before every protection layer could be confirmed. Retry repair here."
                             ),
                         },
                         status=409,

@@ -191,12 +191,15 @@ class TestGuardSurfaceServer:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=5) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request, timeout=5)
+            payload = json.loads(error.value.read().decode("utf-8"))
         finally:
             daemon.stop()
 
-        assert payload["repaired"] is True
+        assert error.value.code == 409
+        assert payload["error"] == "protection_repair_incomplete"
+        assert payload["repaired"] is False
         assert payload["check_ids"] == [
             "policy_engine",
             "rule_packs",
@@ -205,8 +208,11 @@ class TestGuardSurfaceServer:
             "containment_compatibility",
             "sandbox",
         ]
+        assert payload["failed_check_ids"] == []
         assert payload["pending_check_ids"] == ["decision_stream"]
-        assert payload["message"] == "Integrity protection restored."
+        assert payload["message"] == (
+            "Repair paused before every protection layer could be confirmed. Retry repair here."
+        )
         assert maintained
         assert containment_probes == [True]
 
@@ -278,7 +284,7 @@ class TestGuardSurfaceServer:
             "sandbox",
         ]
         assert payload["message"] == (
-            "Repair paused before every protection layer could be rechecked. Retry repair here."
+            "Repair paused before every protection layer could be confirmed. Retry repair here."
         )
 
     def test_local_dashboard_session_preserves_reserved_claims(self) -> None:
