@@ -40,7 +40,7 @@ _EXPECTED_FLOORS = {
     ("args", "capabilities", "workflow_authorizable"),
     (
         (("pr", "view", "17"), ("read_remote",), False),
-        (("pr", "create", "--title", "Ready"), ("propose_remote",), False),
+        (("pr", "create", "--title", "Ready", "--body", "Static summary"), ("propose_remote",), False),
         (
             (
                 "api",
