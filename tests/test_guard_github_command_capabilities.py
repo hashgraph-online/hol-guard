@@ -17,6 +17,9 @@ def _text(*parts: str) -> str:
     ("args", "capability", "reason_code"),
     (
         (("pr", "view", "17"), "read_remote", "github.command.proven-read"),
+        (("pr", "create", "--title", "Ready"), "propose_remote", "github.command.pr-proposal"),
+        (("pr", "create", "--body-file", "body.md"), "content_remote", "github.command.content-mutation"),
+        (("pr", "create", "-Fbody.md"), "content_remote", "github.command.content-mutation"),
         (("issue", "list"), "read_remote", "github.command.proven-read"),
         (("auth", "status"), "read_local", "github.command.local-auth-read"),
         (("auth", "token"), "secret_remote", "github.command.auth-token-read"),

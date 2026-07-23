@@ -235,6 +235,12 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
                 "github.command.force-mutation",
                 "The command forcefully changes remote repository state.",
             )
+        if top_level == "pr" and subcommand == "create" and not _pr_create_reads_body_file(tail):
+            return _assessment(
+                "propose_remote",
+                "github.command.pr-proposal",
+                "The command creates a pull-request proposal without merging or changing repository controls.",
+            )
         if subcommand in _MAINTENANCE_SUBCOMMANDS.get(top_level, frozenset()):
             if _has_dynamic_value(original):
                 return _assessment(
@@ -271,6 +277,16 @@ def _has_option(args: Sequence[str], option: str) -> bool:
 
 def _has_any_option(args: Sequence[str], *options: str) -> bool:
     return any(_has_option(args, option) for option in options)
+
+
+def _pr_create_reads_body_file(args: Sequence[str]) -> bool:
+    return any(
+        token == "--body-file"
+        or token.startswith("--body-file=")
+        or token == "-F"
+        or (token.startswith("-F") and len(token) > 2)
+        for token in args
+    )
 
 
 def _has_dynamic_value(args: Sequence[str]) -> bool:
