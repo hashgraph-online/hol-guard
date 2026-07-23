@@ -46,18 +46,22 @@ def live_request_sync_repair_status(
         machine_id=str(binding["machine_id"]),
         machine_installation_id=str(binding["machine_installation_id"]),
     )
-    binding_state = str(status.get("binding_state") or "healthy")
-    quarantined_count = sum(
-        _count(status, key)
-        for key in (
-            "identity_mismatch_depth",
-            "legacy_unbound_depth",
-        )
-    )
+    identity_mismatch_count = _count(status, "identity_mismatch_depth")
+    repairable_legacy_count = _count(status, "repairable_legacy_unbound_depth")
+    legacy_count = _count(status, "legacy_unbound_depth")
+    if repairable_legacy_count:
+        binding_state = "legacy_ambiguous"
+    elif identity_mismatch_count:
+        binding_state = "identity_mismatch"
+    elif legacy_count:
+        binding_state = "workspace_mismatch"
+    else:
+        binding_state = str(status.get("binding_state") or "healthy")
+    quarantined_count = identity_mismatch_count + repairable_legacy_count
     return {
         "bindingState": binding_state,
         "quarantinedCount": quarantined_count,
-        "repairable": binding_state in REPAIRABLE_LIVE_REQUEST_BINDING_STATES,
+        "repairable": (quarantined_count > 0 and binding_state in REPAIRABLE_LIVE_REQUEST_BINDING_STATES),
         "source": store.guard_source,
         "workspaceId": str(binding["workspace_id"]),
     }

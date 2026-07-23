@@ -94,7 +94,7 @@ def test_cloud_repair_rebinds_only_the_confirmed_source_and_workspace(tmp_path: 
         connection.execute(
             """
             update guard_live_request_outbox
-            set workspace_id = ?
+            set oauth_source = null, workspace_id = ?
             where local_request_id = ?
             """,
             ("workspace-other", "request-other"),
@@ -123,6 +123,8 @@ def test_cloud_repair_rebinds_only_the_confirmed_source_and_workspace(tmp_path: 
     assert isinstance(status, dict)
     assert data["reassignedCount"] == 1
     assert status["bindingState"] == "workspace_mismatch"
+    assert status["quarantinedCount"] == 0
+    assert status["repairable"] is False
     with store._connect() as connection:
         rows = connection.execute(
             """
