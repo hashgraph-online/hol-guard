@@ -337,6 +337,26 @@ def test_explicit_macos_extension_authority_migration_enables_passive_vault_read
     assert passive_view.health is AuthorityHealth.PROTECTED
 
 
+def test_explicit_macos_extension_authority_migration_rejects_partial_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "platform", "darwin")
+    legacy_secrets = MemorySecretStore()
+    legacy_store = _store(tmp_path, legacy_secrets)
+    legacy_store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    anchor_ref = legacy_store._anchor_ref()
+    legacy_secrets.delete_secret(anchor_ref)
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "get_secret",
+        lambda _self, secret_id: legacy_secrets.get_secret(secret_id),
+    )
+    explicit_store = GuardStore(tmp_path, prime_policy_integrity=False, allow_system_keyring=True)
+
+    assert explicit_store.migrate_legacy_extension_control_authority_secrets() is False
+
+
 def test_failed_anchor_write_leaves_recoverable_prepared_transition(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)

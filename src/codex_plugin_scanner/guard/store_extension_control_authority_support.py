@@ -121,7 +121,7 @@ class _ExtensionControlAuthoritySupportMixin:
             if store.fallback.get_secret(secret_ref) is not None:
                 continue
             if store.get_secret(secret_ref) is None:
-                return migrated
+                return False
             migrated = True
         return migrated
 
