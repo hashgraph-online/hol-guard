@@ -27,6 +27,7 @@ _EARLY_HANDLERS = {
 
 _PRESTORE_HANDLERS = {
     "update": "_run_guard_update_command",
+    "trust": "_run_guard_trust_command",
 }
 
 _COMMON_HANDLERS = {
@@ -58,7 +59,6 @@ _COMMON_HANDLERS = {
     "abom": "_run_guard_abom_command",
     "policy": "_run_guard_policy_document_command",
     "policies": "_run_guard_policies_command",
-    "trust": "_run_guard_trust_command",
     "settings": "_run_guard_settings_command",
     "exceptions": "_run_guard_exceptions_command",
     "advisories": "_run_guard_advisories_command",

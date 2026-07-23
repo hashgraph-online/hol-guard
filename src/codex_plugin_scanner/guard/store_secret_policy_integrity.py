@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+import threading
+from collections.abc import Callable
+
 from .policy_integrity import POLICY_INTEGRITY_VERSION
 
 # ruff: noqa: F403,F405
@@ -74,6 +77,8 @@ class StoreSecretPolicyIntegrityMixin:
             _POLICY_INTEGRITY_LOOKUP_UNSET
         )
         self._startup_prefetched_policy_integrity_repair_failed = False
+        self._policy_integrity_state_listener: Callable[[dict[str, object]], None] | None = None
+        self._policy_integrity_notification_local = threading.local()
         self._policy_integrity_key_ref = self._build_scoped_secret_ref(_POLICY_INTEGRITY_KEY_REF)
         self._policy_integrity_control_ref = self._build_scoped_secret_ref(_POLICY_INTEGRITY_CONTROL_REF)
         self._guard_source = _normalize_source_name(source)
@@ -89,6 +94,38 @@ class StoreSecretPolicyIntegrityMixin:
         self._prime_policy_integrity_on_initialize = prime_policy_integrity
         self.path = self.guard_home / "guard.db"
         self._initialize()
+
+    def set_policy_integrity_state_listener(
+        self,
+        listener: Callable[[dict[str, object]], None] | None,
+    ) -> None:
+        self._policy_integrity_state_listener = listener
+
+    def _queue_policy_integrity_state_notification(
+        self,
+        connection: sqlite3.Connection,
+        payload: dict[str, object],
+    ) -> None:
+        pending = getattr(self._policy_integrity_notification_local, "pending", None)
+        if not isinstance(pending, dict):
+            pending = {}
+            self._policy_integrity_notification_local.pending = pending
+        pending[id(connection)] = dict(payload)
+
+    def _take_policy_integrity_state_notification(
+        self,
+        connection: sqlite3.Connection,
+    ) -> dict[str, object] | None:
+        pending = getattr(self._policy_integrity_notification_local, "pending", None)
+        if not isinstance(pending, dict):
+            return None
+        payload = pending.pop(id(connection), None)
+        return payload if isinstance(payload, dict) else None
+
+    def _publish_policy_integrity_state_notification(self, payload: dict[str, object]) -> None:
+        listener = self._policy_integrity_state_listener
+        if listener is not None:
+            listener(dict(payload))
 
     @property
     def guard_source(self) -> str:
@@ -976,6 +1013,7 @@ class StoreSecretPolicyIntegrityMixin:
         }
         if payload != existing:
             self._store_policy_integrity_state(connection, payload, now=now)
+            self._queue_policy_integrity_state_notification(connection, payload)
         return payload
 
     def _prepare_startup_prefetched_policy_integrity_state(self) -> None:

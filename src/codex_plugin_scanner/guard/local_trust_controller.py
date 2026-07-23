@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from pathlib import Path
 
+from .daemon.discovery import load_authenticated_daemon_state
 from .daemon.manager import load_guard_daemon_url
 from .local_trust_contract import (
     POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
@@ -19,7 +20,6 @@ from .local_trust_contract import (
     run_trust_backend_check,
     select_trust_backend,
 )
-from .runtime.protection_health_runtime import daemon_runtime_is_current
 from .store import GuardStore, SystemKeyringSecretStore
 
 PASSIVE_TRUST_TIMEOUT_SECONDS = 0.25
@@ -72,25 +72,32 @@ class _MacOSNativeTrustBackend:
     name = "macos-native"
     priority = 100
 
-    def __init__(self, store: GuardStore) -> None:
+    def __init__(self, store: GuardStore | None = None, *, guard_home: Path | None = None) -> None:
         self._store = store
+        self._guard_home = store.guard_home if store is not None else guard_home
         self.supported = sys.platform == "darwin"
-        self.passive_no_ui_safe = macos_native_backend_supported(store)
+        self.passive_no_ui_safe = (
+            macos_native_backend_supported(store)
+            if store is not None
+            else self.supported and SystemKeyringSecretStore._supports_native_macos_security_reads()
+        )
 
     def status(self) -> TrustStatus:
-        state = self._store.get_cached_policy_integrity_state()
-        if not state:
-            return _degraded_safe_status(
-                backend=self.name,
-                reason=POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
-                setup_available=True,
-            )
-        if load_guard_daemon_url(self._store.guard_home) is None or not daemon_runtime_is_current(
-            self._store.get_runtime_state(), now=datetime.now(timezone.utc)
-        ):
+        if self._guard_home is None or load_guard_daemon_url(self._guard_home) is None:
             return _degraded_safe_status(
                 backend=self.name,
                 reason=POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE,
+                setup_available=True,
+            )
+        if self._store is not None:
+            state: object = self._store.get_cached_policy_integrity_state()
+        else:
+            daemon_state = load_authenticated_daemon_state(self._guard_home)
+            state = daemon_state.get("trust_status") if isinstance(daemon_state, dict) else None
+        if not isinstance(state, dict):
+            return _degraded_safe_status(
+                backend=self.name,
+                reason=POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
                 setup_available=True,
             )
         return TrustStatus.from_policy_integrity_state(state)
@@ -119,12 +126,17 @@ class ResolvedTrustState:
     trust_status: TrustStatus
 
 
-def _trust_backends(store: GuardStore) -> tuple[TrustBackend, ...]:
-    return (_MacOSNativeTrustBackend(store), _DegradedSafeTrustBackend())
+def _trust_backends(store: GuardStore | None, *, guard_home: Path | None = None) -> tuple[TrustBackend, ...]:
+    return (_MacOSNativeTrustBackend(store, guard_home=guard_home), _DegradedSafeTrustBackend())
 
 
-def _backend_by_name(store: GuardStore, backend_requested: str) -> TrustBackend:
-    backends = {backend.name: backend for backend in _trust_backends(store)}
+def _backend_by_name(
+    store: GuardStore | None,
+    backend_requested: str,
+    *,
+    guard_home: Path | None = None,
+) -> TrustBackend:
+    backends = {backend.name: backend for backend in _trust_backends(store, guard_home=guard_home)}
     return backends.get(backend_requested, _DegradedSafeTrustBackend())
 
 
@@ -146,15 +158,19 @@ def _trust_mode_for_backend(
 
 
 def resolve_passive_trust_state(
-    store: GuardStore,
+    store: GuardStore | None = None,
     *,
+    guard_home: Path | None = None,
     backend_requested: str,
     timeout_seconds: float = PASSIVE_TRUST_TIMEOUT_SECONDS,
 ) -> ResolvedTrustState:
     if backend_requested == "auto":
-        selected = select_trust_backend(_trust_backends(store), passive=True) or _DegradedSafeTrustBackend()
+        selected = (
+            select_trust_backend(_trust_backends(store, guard_home=guard_home), passive=True)
+            or _DegradedSafeTrustBackend()
+        )
     else:
-        selected = _backend_by_name(store, backend_requested)
+        selected = _backend_by_name(store, backend_requested, guard_home=guard_home)
     timeout_result = _degraded_safe_status(
         backend=selected.name,
         reason=POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
