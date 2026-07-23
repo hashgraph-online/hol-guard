@@ -47,14 +47,13 @@ def _migrate_legacy_macos_secrets(store: GuardStore) -> None:
         )
     except Exception:
         return
+    allow_interactive = True
     for method_name in required_migrations:
         method = getattr(explicit_store, method_name, None)
         if callable(method):
-            try:
-                if not bool(method()):
-                    return
-            except Exception:
-                return
+            with suppress(Exception):
+                method(allow_interactive=allow_interactive)
+            allow_interactive = False
 
 
 def _run_guard_pytest_contained_command(

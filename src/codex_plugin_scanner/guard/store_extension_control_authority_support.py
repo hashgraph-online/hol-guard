@@ -106,7 +106,7 @@ class _ExtensionControlAuthoritySupportMixin:
         store = EncryptedFileSecretStore(cast(Path, self.guard_home))
         return any(store.get_secret(secret_ref) is None for secret_ref in (self._key_ref(), self._anchor_ref()))
 
-    def migrate_legacy_extension_control_authority_secrets(self) -> bool:
+    def migrate_legacy_extension_control_authority_secrets(self, *, allow_interactive: bool = True) -> bool:
         """Mirror legacy Keychain authority material during an explicit action."""
 
         if not bool(getattr(self, "_allow_system_keyring", False)):
@@ -117,10 +117,13 @@ class _ExtensionControlAuthoritySupportMixin:
         if not isinstance(store, MigratingFallbackSecretStore):
             return False
         migrated = False
+        allow_interactive_read = allow_interactive
         for secret_ref in (self._key_ref(), self._anchor_ref()):
             if store.fallback.get_secret(secret_ref) is not None:
                 continue
-            if store.get_secret(secret_ref) is None:
+            value = store.get_secret(secret_ref) if allow_interactive_read else store.get_secret_no_ui(secret_ref)
+            allow_interactive_read = False
+            if value is None:
                 return False
             migrated = True
         return migrated

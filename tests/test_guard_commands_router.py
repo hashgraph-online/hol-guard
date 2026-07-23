@@ -31,9 +31,11 @@ def test_only_explicit_account_actions_allow_system_keyring() -> None:
         assert not commands_router._should_allow_system_keyring(Namespace(guard_command=command))
 
 
-def test_foreground_migration_prioritizes_authority_and_stops_after_failed_recovery(
+@pytest.mark.parametrize("authority_outcome", ["success", "false", "exception"])
+def test_foreground_migration_allows_only_first_required_store_to_use_ui(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    authority_outcome: str,
 ) -> None:
     class PassiveStore:
         guard_home = tmp_path
@@ -50,17 +52,19 @@ def test_foreground_migration_prioritizes_authority_and_stops_after_failed_recov
 
     class ExplicitStore:
         @staticmethod
-        def migrate_legacy_macos_oauth_secret() -> bool:
-            migration_calls.append("oauth")
+        def migrate_legacy_macos_oauth_secret(*, allow_interactive: bool) -> bool:
+            migration_calls.append(f"oauth:{allow_interactive}")
             return True
 
         @staticmethod
-        def migrate_legacy_extension_control_authority_secrets() -> bool:
-            migration_calls.append("extension")
-            return False
+        def migrate_legacy_extension_control_authority_secrets(*, allow_interactive: bool) -> bool:
+            migration_calls.append(f"extension:{allow_interactive}")
+            if authority_outcome == "exception":
+                raise RuntimeError("legacy authority unavailable")
+            return authority_outcome == "success"
 
     monkeypatch.setattr(commands_dispatch_local, "GuardStore", lambda *_args, **_kwargs: ExplicitStore())
 
     commands_dispatch_local._migrate_legacy_macos_secrets(cast(GuardStore, PassiveStore()))
 
-    assert migration_calls == ["extension"]
+    assert migration_calls == ["extension:True", "oauth:False"]

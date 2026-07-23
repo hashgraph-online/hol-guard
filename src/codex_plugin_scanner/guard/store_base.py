@@ -1062,6 +1062,14 @@ class MigratingFallbackSecretStore(FallbackSecretStore):
         self.fallback.set_secret(secret_id, value)
 
     def get_secret(self, secret_id: str) -> str | None:
+        return self._get_secret_and_migrate(secret_id, allow_interactive=True)
+
+    def get_secret_no_ui(self, secret_id: str) -> str | None:
+        """Migrate only when the primary can answer without authentication UI."""
+
+        return self._get_secret_and_migrate(secret_id, allow_interactive=False)
+
+    def _get_secret_and_migrate(self, secret_id: str, *, allow_interactive: bool) -> str | None:
         try:
             fallback_value = self.fallback.get_secret(secret_id)
         except Exception:
@@ -1069,7 +1077,10 @@ class MigratingFallbackSecretStore(FallbackSecretStore):
         if fallback_value is not None:
             return fallback_value
         try:
-            primary_value = self.primary.get_secret(secret_id)
+            if not allow_interactive and isinstance(self.primary, SystemKeyringSecretStore):
+                primary_value = self.primary.get_secret_with_timeout(secret_id, timeout_seconds=0.5)
+            else:
+                primary_value = self.primary.get_secret(secret_id)
         except Exception:
             return None
         if primary_value is None:

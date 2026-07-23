@@ -26,7 +26,7 @@ class StoreOAuthConnectMixin:
         fallback = self._resolve_oauth_fallback_store()
         return fallback is not None and fallback.get_secret(secret_ref) is None
 
-    def migrate_legacy_macos_oauth_secret(self) -> bool:
+    def migrate_legacy_macos_oauth_secret(self, *, allow_interactive: bool = True) -> bool:
         """Mirror legacy Keychain OAuth state during an explicit action."""
 
         if not self._allow_system_keyring or not self.legacy_macos_oauth_secret_migration_required():
@@ -36,7 +36,11 @@ class StoreOAuthConnectMixin:
         secret_ref = _string_value(payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY))
         secret_hash = _string_value(payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY))
         assert secret_ref is not None and secret_hash is not None
-        secret_json = self._get_secret_from_store(self._oauth_secret_store, secret_ref)
+        secret_store = self._oauth_secret_store
+        if not allow_interactive and isinstance(secret_store, MigratingFallbackSecretStore):
+            secret_json = secret_store.get_secret_no_ui(secret_ref)
+        else:
+            secret_json = self._get_secret_from_store(secret_store, secret_ref)
         if (
             secret_json is None
             or not _secret_matches_hash(secret_json, secret_hash)
