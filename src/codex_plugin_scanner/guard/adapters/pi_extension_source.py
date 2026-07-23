@@ -13,7 +13,7 @@ from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
 # resident daemon and never hard-block tool calls solely because review timed out.
 GUARD_HOOK_TIMEOUT_MS = 12_000
 GUARD_HOOK_DEADLINE_RESERVE_MS = 250
-GUARD_DAEMON_HOOK_TIMEOUT_MS = 10_000
+GUARD_DAEMON_HOOK_TIMEOUT_MS = 2_000
 GUARD_CLI_HOOK_TIMEOUT_MS = 10_000
 GUARD_HOOK_TEXT_LIMIT_CHARS = 12_000
 GUARD_HOOK_CONTENT_ITEM_LIMIT = 24
@@ -126,13 +126,9 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    return parsed && typeof parsed === 'object' ? parsed : null;\n"
         "  } catch (error) {\n"
         "    if (error instanceof Error && error.name === 'AbortError') {\n"
-        "      // Infrastructure timeout: fail open so Pi remains usable; still surface a warning.\n"
-        "      return {\n"
-        '        decision: "allow",\n'
-        '        notice: "warning",\n'
-        "        reason: `HOL Guard Pi hook timed out after ${GUARD_DAEMON_TIMEOUT_MS}ms `\n"
-        "          + `while reviewing this action; continuing without a completed review.`,\n"
-        "      };\n"
+        "      // The daemon is only a fast path. Fall through to the bounded local CLI so\n"
+        "      // an unresponsive daemon cannot stall or bypass Guard enforcement.\n"
+        "      return null;\n"
         "    }\n"
         "    return null;\n"
         "  } finally {\n"

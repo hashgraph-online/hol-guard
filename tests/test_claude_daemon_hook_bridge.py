@@ -189,7 +189,81 @@ def test_valid_hook_json_degrades_empty_daemon_body() -> None:
 
 def test_bridge_timeouts_stay_under_harness_budget() -> None:
     assert bridge._HARNESS_TIMEOUT_BUDGET_SECONDS == 10
-    assert bridge._HOOK_IO_TIMEOUT_SECONDS == bridge._HARNESS_TIMEOUT_BUDGET_SECONDS - 2
+    assert (
+        2 * bridge._DAEMON_IO_TIMEOUT_SECONDS
+    ) + bridge._RECOVERY_TIMEOUT_SECONDS + bridge._FALLBACK_TIMEOUT_SECONDS < bridge._HARNESS_TIMEOUT_BUDGET_SECONDS
+
+
+def test_main_recovers_missing_daemon_and_retries_hook(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    attempts = 0
+    recovery_commands: list[tuple[str, ...]] = []
+
+    def fake_post(endpoint: str, data: str, *, state_path: str | Path) -> str:
+        del endpoint, data, state_path
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise urllib.error.URLError("daemon unavailable")
+        return json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                }
+            }
+        )
+
+    def fake_recover(command: tuple[str, ...]) -> bool:
+        recovery_commands.append(command)
+        return True
+
+    monkeypatch.setattr(bridge, "_post_to_loopback_daemon", fake_post)
+    monkeypatch.setattr(bridge, "_run_recovery_command", fake_recover)
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
+
+    result = bridge.main(
+        state_path=tmp_path / "guard-home" / "daemon-state.json",
+        fallback_daemon_url="http://127.0.0.1:5474",
+        fallback_command=("python3", "-c", "raise SystemExit(99)"),
+        query="guard-home=%2Ftmp",
+    )
+
+    assert result == 0
+    assert attempts == 2
+    assert len(recovery_commands) == 1
+    assert recovery_commands[0][1:3] == ("-I", "-c")
+    assert "recover_guard_daemon_after_hook_failure" in recovery_commands[0][3]
+    assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+
+def test_recovery_only_restarts_for_transport_auth_and_server_failures() -> None:
+    assert not bridge._daemon_failure_is_recoverable(ValueError("invalid loopback URL"))
+    assert not bridge._daemon_failure_is_recoverable(
+        urllib.error.HTTPError("http://127.0.0.1", 400, "Bad Request", {}, None)
+    )
+    assert bridge._daemon_failure_is_recoverable(
+        urllib.error.HTTPError("http://127.0.0.1", 503, "Unavailable", {}, None)
+    )
+    assert bridge._daemon_failure_is_recoverable(urllib.error.URLError("connection refused"))
+
+
+def test_recovery_command_preserves_custom_home_and_guard_home(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard home"
+    home_dir = tmp_path / "user home"
+
+    command = bridge._recovery_command(
+        guard_home / "daemon-state.json",
+        f"guard-home={guard_home.as_posix()}&home={home_dir.as_posix()}",
+    )
+
+    assert command[1:3] == ("-I", "-c")
+    assert "recover_guard_daemon_after_hook_failure" in command[3]
+    assert str(guard_home) in command[3]
+    assert str(home_dir) in command[3]
 
 
 def test_loopback_redirect_handler_rejects_remote_redirect() -> None:
