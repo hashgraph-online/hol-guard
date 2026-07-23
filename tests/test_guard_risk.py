@@ -1235,6 +1235,59 @@ def test_tool_action_request_classifier_allows_static_inline_gh_pr_create_compou
     assert request is None
 
 
+@pytest.mark.parametrize(
+    "command",
+    (
+        'gh pr create --title "$GITHUB_TOKEN" --body "Static summary"',
+        'gh pr create --title "Static title" --body "${GITHUB_TOKEN}"',
+        'gh pr create --title "$(printenv GITHUB_TOKEN)" --body "Static summary"',
+        'gh pr create --title "Static title" --body "Static summary" --label "$GITHUB_TOKEN"',
+        'gh pr create -t"$GITHUB_TOKEN" -b"Static summary"',
+        'sudo gh pr create --title "Static title" --body "$GITHUB_TOKEN"',
+        'command -- gh pr create --title "Static title" --body "$GITHUB_TOKEN"',
+        'env GH_HOST=github.com gh pr create --title "Static title" --body "$GITHUB_TOKEN"',
+    ),
+)
+def test_tool_action_request_classifier_reviews_dynamic_gh_pr_create_content(command):
+    request = extract_sensitive_tool_action_request("bash", {"command": command})
+
+    assert request is not None
+    assert request.action_class == "GitHub PR dynamic content"
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "gh pr create --fill",
+        "gh pr create -f",
+        'gh pr create --title "Static title"',
+        'gh pr create --title "Static title" --body "Static summary" -e',
+        'gh pr create --title "Static title" --body "Static summary" --recover input',
+        'gh pr create --title "Static title" --body "Static summary" --web',
+        'gh pr create --title "Static title" --body "Static summary" -w',
+    ),
+)
+def test_tool_action_request_classifier_reviews_content_derived_gh_pr_create(command):
+    request = extract_sensitive_tool_action_request("bash", {"command": command})
+
+    assert request is not None
+    assert request.action_class == "GitHub content mutation command"
+
+
+def test_tool_action_request_classifier_allows_single_quoted_pr_literals_with_shell_metacharacters():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "gh pr create --title 'Document $GITHUB_TOKEN handling' "
+                "--body 'Verification: `python -m pytest` and ${TOKEN} remain literal.'"
+            )
+        },
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_preserves_dangerous_action_after_pr_create():
     request = extract_sensitive_tool_action_request(
         "bash",
