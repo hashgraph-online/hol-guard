@@ -10,7 +10,8 @@ from datetime import datetime, timezone
 import pytest
 
 from codex_plugin_scanner.guard.cli.connect_flow import run_guard_connect_repair_command
-from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+from codex_plugin_scanner.guard.cli.oauth_client import PRODUCTION_GUARD_ISSUER, generate_dpop_key_pair
+from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -110,6 +111,93 @@ def test_invalid_grant_refresh_preserves_sign_in_until_explicit_repair(tmp_path,
     assert "hol-guard connect" in str(error.value)
     assert "hol-guard disconnect" not in str(error.value)
     assert store.get_oauth_local_credentials(allow_primary=True) is not None
+
+
+def test_storage_repair_recovers_missing_oauth_binding_and_claims_unowned_requests(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    access_token = ".".join(
+        (
+            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
+            guard_runner_module._encode_jwt_segment(
+                {
+                    "iss": PRODUCTION_GUARD_ISSUER,
+                    "grant": {"grantId": "grant-1"},
+                    "machine": {"machineId": "machine-1"},
+                    "workspace": {"workspaceId": "workspace-1"},
+                }
+            ),
+            "signature",
+        )
+    )
+    store.set_oauth_local_credentials(
+        issuer=PRODUCTION_GUARD_ISSUER,
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        access_token=access_token,
+        now="2026-06-01T00:00:00+00:00",
+    )
+    store.add_approval_request(
+        GuardApprovalRequest(
+            request_id="request-unowned",
+            harness="codex",
+            artifact_id="codex:project:request-unowned",
+            artifact_name="Test action",
+            artifact_hash="hash-abc",
+            policy_action="require-reapproval",
+            recommended_scope="artifact",
+            changed_fields=("tool_action_request",),
+            source_scope="project",
+            config_path="config.toml",
+            review_command="hol-guard approvals approve request-unowned",
+            approval_url="http://127.0.0.1:5474/requests/request-unowned",
+            action_identity="request-unowned",
+            queue_group_id="request-unowned",
+            trigger_summary="Review test action",
+            last_seen_at="2026-06-01T00:00:00+00:00",
+        ),
+        "2026-06-01T00:00:00+00:00",
+    )
+
+    result = guard_runner_module.repair_guard_cloud_connect_storage(store)
+
+    credentials = store.get_oauth_local_credentials(allow_primary=True)
+    assert credentials is not None
+    assert credentials["grant_id"] == "grant-1"
+    assert result["repaired_oauth_binding"] is True
+    assert result["claimed_live_requests"] == 1
+    binding = store.get_live_request_oauth_binding()
+    assert binding is not None
+    rows = store.list_ready_live_request_outbox(now="9999-12-31T23:59:59+00:00", limit=10)
+    assert rows[0]["oauth_subject_hash"] == binding["oauth_subject_hash"]
+
+
+def test_storage_repair_rejects_conflicting_cached_token_identity(tmp_path) -> None:
+    store = _store_with_oauth_credentials(tmp_path)
+    credentials = store.get_oauth_local_credentials(allow_primary=True)
+    assert credentials is not None
+    conflicting_token = ".".join(
+        (
+            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
+            guard_runner_module._encode_jwt_segment(
+                {
+                    "iss": PRODUCTION_GUARD_ISSUER,
+                    "grant": {"grantId": "grant-other"},
+                    "machine": {"machineId": "machine-1"},
+                    "workspace": {"workspaceId": "workspace-1"},
+                }
+            ),
+            "signature",
+        )
+    )
+    credentials["access_token"] = conflicting_token
+
+    assert guard_runner_module._oauth_binding_metadata_from_access_token(credentials) == {}
 
 
 def test_upgraded_running_process_does_not_refresh_shared_oauth_grant(monkeypatch) -> None:

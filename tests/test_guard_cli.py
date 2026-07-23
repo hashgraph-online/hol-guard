@@ -7219,6 +7219,29 @@ url = http://127.0.0.1:8787/guard-canary
         assert payload["cloud_policy_rollout_state"] == "enforcing"
         assert payload["cloud_policy_sync_error"] == "auth_expired"
 
+    def test_guard_status_does_not_mask_current_auth_failure_with_stale_sync_success(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        _seed_guard_cloud(store)
+        store.set_sync_payload(
+            "sync_summary",
+            {"synced_at": "2026-05-01T00:00:00Z", "receipts_stored": 1},
+            "2026-05-01T00:00:00Z",
+        )
+        store.set_sync_payload(
+            "headless_app_sync_summary",
+            {"status": "auth_expired"},
+            "2026-05-01T01:00:00Z",
+        )
+
+        rc = main(["guard", "status", "--home", str(home_dir), "--json"])
+        payload = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert payload["cloud_state"] == "local_only"
+        assert "repair" in str(payload["cloud_state_detail"]).lower()
+        assert payload["last_sync_at"] == "2026-05-01T00:00:00Z"
+
     def test_guard_status_rejects_digest_only_cached_bundle_metadata(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
