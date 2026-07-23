@@ -40,6 +40,13 @@ _RECOVERY_TIMEOUT_SECONDS = 3
 _FALLBACK_TIMEOUT_SECONDS = 2
 
 
+class _DaemonHTTPError(RuntimeError):
+    def __init__(self, code: int, detail: str) -> None:
+        super().__init__(f"daemon returned HTTP {code}")
+        self.code = code
+        self.detail = detail
+
+
 def main(
     *,
     state_path: str | Path,
@@ -113,6 +120,9 @@ def _post_to_loopback_daemon(endpoint: str, data: str, *, state_path: str | Path
     def request_once() -> None:
         try:
             result_queue.put((_blocking_post_to_loopback_daemon(endpoint, data, state_path=state_path), None))
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace").strip()
+            result_queue.put((None, _DaemonHTTPError(error.code, detail)))
         except Exception as error:
             result_queue.put((None, error))
 
@@ -273,10 +283,11 @@ def _run_local_fallback(reason: str, data: str, fallback_command: tuple[str, ...
 
 
 def _daemon_failure_reason(error: Exception) -> str:
+    if isinstance(error, _DaemonHTTPError):
+        reason = str(error)
+        return f"{reason}: {error.detail}" if error.detail else reason
     if isinstance(error, urllib.error.HTTPError):
-        detail = error.read().decode("utf-8", errors="replace").strip()
-        reason = f"daemon returned HTTP {error.code}"
-        return f"{reason}: {detail}" if detail else reason
+        return f"daemon returned HTTP {error.code}"
     if isinstance(error, urllib.error.URLError):
         return str(error.reason or error)
     return str(error)
@@ -285,7 +296,7 @@ def _daemon_failure_reason(error: Exception) -> str:
 def _daemon_failure_is_recoverable(error: Exception) -> bool:
     if isinstance(error, ValueError):
         return False
-    if isinstance(error, urllib.error.HTTPError):
+    if isinstance(error, (urllib.error.HTTPError, _DaemonHTTPError)):
         return error.code in {401, 403, 408, 500, 502, 503, 504}
     return True
 

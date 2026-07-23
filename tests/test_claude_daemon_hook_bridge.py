@@ -84,10 +84,12 @@ class _DaemonHandler(BaseHTTPRequestHandler):
 
 
 class _StreamingDaemonHandler(BaseHTTPRequestHandler):
+    status_code = 200
+
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
         _ = self.rfile.read(length)
-        self.send_response(200)
+        self.send_response(self.status_code)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         try:
@@ -100,6 +102,10 @@ class _StreamingDaemonHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt: str, *args: object) -> None:
         return
+
+
+class _StreamingErrorDaemonHandler(_StreamingDaemonHandler):
+    status_code = 503
 
 
 def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -147,11 +153,15 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
     assert _DaemonHandler.captured_guard_token == auth_token
 
 
-def test_post_to_loopback_daemon_enforces_absolute_streaming_deadline(tmp_path: Path) -> None:
+@pytest.mark.parametrize("handler", [_StreamingDaemonHandler, _StreamingErrorDaemonHandler])
+def test_post_to_loopback_daemon_enforces_absolute_streaming_deadline(
+    tmp_path: Path,
+    handler: type[BaseHTTPRequestHandler],
+) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(mode=0o700)
     (guard_home / "daemon-auth-token").write_text("test-token", encoding="utf-8")
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _StreamingDaemonHandler)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     server.daemon_threads = True
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
@@ -294,6 +304,9 @@ def test_recovery_only_restarts_for_transport_auth_and_server_failures() -> None
         urllib.error.HTTPError("http://127.0.0.1", 503, "Unavailable", {}, None)
     )
     assert bridge._daemon_failure_is_recoverable(urllib.error.URLError("connection refused"))
+    bounded_http_error = bridge._DaemonHTTPError(503, "worker-captured detail")
+    assert bridge._daemon_failure_is_recoverable(bounded_http_error)
+    assert bridge._daemon_failure_reason(bounded_http_error).endswith("worker-captured detail")
 
 
 def test_recovery_command_preserves_custom_home_and_guard_home(tmp_path: Path) -> None:
