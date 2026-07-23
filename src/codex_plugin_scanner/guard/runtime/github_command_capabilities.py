@@ -309,16 +309,46 @@ def _has_short_option(args: Sequence[str], option: str) -> bool:
 
 
 def _has_short_boolean_option(args: Sequence[str], option: str) -> bool:
-    value_options = frozenset("aBbFHlmprTt")
+    long_value_options = frozenset(
+        {
+            "--assignee",
+            "--base",
+            "--body",
+            "--body-file",
+            "--head",
+            "--label",
+            "--milestone",
+            "--project",
+            "--recover",
+            "--repo",
+            "--reviewer",
+            "--template",
+            "--title",
+        }
+    )
+    short_value_options = frozenset("aBbFHlmprRTt")
     option_name = option.removeprefix("-")
-    for token in args:
+    index = 0
+    while index < len(args):
+        token = args[index]
+        is_short_value_option = (
+            len(token) == 2 and token.startswith("-") and token[1] in short_value_options
+        )
+        if token in long_value_options or is_short_value_option:
+            index += 2
+            continue
+        if any(token.startswith(f"{value_option}=") for value_option in long_value_options):
+            index += 1
+            continue
         if token == option:
             return True
         if not token.startswith("-") or token.startswith("--") or len(token) < 3:
+            index += 1
             continue
         cluster = token[1:]
-        if cluster[0] not in value_options and option_name in cluster:
+        if cluster[0] not in short_value_options and option_name in cluster:
             return True
+        index += 1
     return False
 
 
