@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+import queue
 import subprocess
 import sys
+import threading
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any
-from urllib.parse import urljoin, urlparse
+from typing import Any, Protocol
+from urllib.parse import parse_qs, urljoin, urlparse
 
+from ..codex_hook_launch_runtime import isolated_daemon_start_command
 from ..daemon.manager import load_guard_daemon_auth_token
 from .claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 
@@ -32,7 +35,21 @@ _RISKY_PROMPT_ADDITIONAL_CONTEXT = (
     "approval question to protect you."
 )
 _HARNESS_TIMEOUT_BUDGET_SECONDS = 10
-_HOOK_IO_TIMEOUT_SECONDS = _HARNESS_TIMEOUT_BUDGET_SECONDS - 2
+_DAEMON_IO_TIMEOUT_SECONDS = 2
+_RECOVERY_TIMEOUT_SECONDS = 3
+_FALLBACK_TIMEOUT_SECONDS = 2
+_MAX_DAEMON_RESPONSE_BYTES = 1_000_000
+
+
+class _ResponseReader(Protocol):
+    def read(self, size: int = -1, /) -> bytes: ...
+
+
+class _DaemonHTTPError(RuntimeError):
+    def __init__(self, code: int, detail: str) -> None:
+        super().__init__(f"daemon returned HTTP {code}")
+        self.code = code
+        self.detail = detail
 
 
 def main(
@@ -47,6 +64,7 @@ def main(
     _ = CLAUDE_GUARD_DAEMON_HOOK_MARKER
     body = sys.stdin.read()
     data = body.strip() or "{}"
+    recovery_command = _recovery_command(state_path, query)
     try:
         endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")
         _assert_loopback_http_url(endpoint)
@@ -55,22 +73,21 @@ def main(
             reason="daemon returned malformed hook JSON",
             data=data,
         )
-    except ValueError as error:
-        sys.stdout.write(_run_local_fallback(str(error), data, fallback_command))
-        return 0
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")
-        reason = f"daemon returned HTTP {error.code}"
-        if detail.strip():
-            reason = f"{reason}: {detail.strip()}"
-        sys.stdout.write(_run_local_fallback(reason, data, fallback_command))
-        return 0
-    except urllib.error.URLError as error:
-        reason = str(error.reason or error)
-        sys.stdout.write(_run_local_fallback(reason, data, fallback_command))
-        return 0
     except Exception as error:
-        sys.stdout.write(_run_local_fallback(str(error), data, fallback_command))
+        reason = _daemon_failure_reason(error)
+        if _daemon_failure_is_recoverable(error):
+            response_body = _recover_retry_or_fallback(
+                reason,
+                data,
+                state_path=state_path,
+                fallback_daemon_url=fallback_daemon_url,
+                fallback_command=fallback_command,
+                recovery_command=recovery_command,
+                query=query,
+            )
+        else:
+            response_body = _run_local_fallback(reason, data, fallback_command)
+        sys.stdout.write(response_body)
         return 0
     if _should_suppress_output(data, response_body):
         return 0
@@ -103,6 +120,30 @@ def _assert_loopback_http_url(url: str) -> None:
 
 
 def _post_to_loopback_daemon(endpoint: str, data: str, *, state_path: str | Path) -> str:
+    result_queue: queue.Queue[tuple[str | None, Exception | None]] = queue.Queue(maxsize=1)
+
+    def request_once() -> None:
+        try:
+            result_queue.put((_blocking_post_to_loopback_daemon(endpoint, data, state_path=state_path), None))
+        except urllib.error.HTTPError as error:
+            detail = _read_bounded_response(error).strip()
+            result_queue.put((None, _DaemonHTTPError(error.code, detail)))
+        except Exception as error:
+            result_queue.put((None, error))
+
+    threading.Thread(target=request_once, daemon=True, name="hol-guard-claude-hook-request").start()
+    try:
+        response_body, error = result_queue.get(timeout=_DAEMON_IO_TIMEOUT_SECONDS)
+    except queue.Empty as error:
+        raise TimeoutError("Guard daemon hook request exceeded its absolute deadline") from error
+    if error is not None:
+        raise error
+    if response_body is None:
+        raise RuntimeError("Guard daemon hook request returned no response")
+    return response_body
+
+
+def _blocking_post_to_loopback_daemon(endpoint: str, data: str, *, state_path: str | Path) -> str:
     auth_token = load_guard_daemon_auth_token(Path(state_path).parent)
     headers = {"Content-Type": "application/json"}
     if isinstance(auth_token, str) and auth_token.strip():
@@ -114,11 +155,18 @@ def _post_to_loopback_daemon(endpoint: str, data: str, *, state_path: str | Path
         method="POST",
     )
     opener = _build_loopback_opener()
-    with opener.open(request, timeout=_HOOK_IO_TIMEOUT_SECONDS) as response:
+    with opener.open(request, timeout=_DAEMON_IO_TIMEOUT_SECONDS) as response:
         final_url = response.geturl()
         if final_url:
             _assert_loopback_http_url(final_url)
-        return response.read().decode("utf-8", errors="replace")
+        return _read_bounded_response(response)
+
+
+def _read_bounded_response(response: _ResponseReader) -> str:
+    body = response.read(_MAX_DAEMON_RESPONSE_BYTES + 1)
+    if len(body) > _MAX_DAEMON_RESPONSE_BYTES:
+        raise ValueError("Guard daemon hook response exceeded the safe size limit")
+    return body.decode("utf-8", errors="replace")
 
 
 def _daemon_url(state_path: str | Path, fallback_daemon_url: str) -> str:
@@ -225,7 +273,7 @@ def _run_local_fallback(reason: str, data: str, fallback_command: tuple[str, ...
             capture_output=True,
             text=True,
             errors="replace",
-            timeout=_HOOK_IO_TIMEOUT_SECONDS,
+            timeout=_FALLBACK_TIMEOUT_SECONDS,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
@@ -244,6 +292,77 @@ def _run_local_fallback(reason: str, data: str, fallback_command: tuple[str, ...
     if detail:
         suffix = f"{suffix}: {detail}"
     return _degraded(f"{reason}{suffix}", data)
+
+
+def _daemon_failure_reason(error: Exception) -> str:
+    if isinstance(error, _DaemonHTTPError):
+        reason = str(error)
+        return f"{reason}: {error.detail}" if error.detail else reason
+    if isinstance(error, urllib.error.HTTPError):
+        return f"daemon returned HTTP {error.code}"
+    if isinstance(error, urllib.error.URLError):
+        return str(error.reason or error)
+    return str(error)
+
+
+def _daemon_failure_is_recoverable(error: Exception) -> bool:
+    if isinstance(error, ValueError):
+        return False
+    if isinstance(error, (urllib.error.HTTPError, _DaemonHTTPError)):
+        return error.code in {401, 403, 408, 500, 502, 503, 504}
+    return True
+
+
+def _recover_retry_or_fallback(
+    reason: str,
+    data: str,
+    *,
+    state_path: str | Path,
+    fallback_daemon_url: str,
+    fallback_command: tuple[str, ...],
+    recovery_command: tuple[str, ...],
+    query: str,
+) -> str:
+    if recovery_command and _run_recovery_command(recovery_command):
+        try:
+            endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")
+            _assert_loopback_http_url(endpoint)
+            return _valid_hook_json_or_degraded(
+                _post_to_loopback_daemon(endpoint, data, state_path=state_path),
+                reason=f"{reason}; recovered daemon returned malformed hook JSON",
+                data=data,
+            )
+        except Exception as retry_error:
+            reason = f"{reason}; daemon recovery retry failed: {retry_error}"
+    return _run_local_fallback(reason, data, fallback_command)
+
+
+def _run_recovery_command(recovery_command: tuple[str, ...]) -> bool:
+    try:
+        result = subprocess.run(
+            list(recovery_command),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=_RECOVERY_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
+
+
+def _recovery_command(state_path: str | Path, query: str) -> tuple[str, ...]:
+    query_values = parse_qs(query)
+    home_values = query_values.get("home")
+    home_dir = Path(home_values[0]) if home_values and home_values[0] else Path.home()
+    package_root = Path(__file__).resolve().parents[3]
+    return isolated_daemon_start_command(
+        sys.executable,
+        package_root,
+        Path(state_path).parent,
+        home_dir,
+    )
 
 
 def _bridge_config_from_argv(argv: list[str]) -> dict[str, Any]:

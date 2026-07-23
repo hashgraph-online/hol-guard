@@ -8,7 +8,12 @@ from pathlib import Path
 from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
 from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
 
-GUARD_HOOK_TIMEOUT_MS = 10_000
+# Keep the end-to-end budget short enough for interactive Pi, but prefer the
+# resident daemon and never hard-block tool calls solely because review timed out.
+GUARD_HOOK_TIMEOUT_MS = 12_000
+GUARD_HOOK_DEADLINE_RESERVE_MS = 250
+GUARD_DAEMON_HOOK_TIMEOUT_MS = 2_000
+GUARD_CLI_HOOK_TIMEOUT_MS = 10_000
 GUARD_HOOK_TEXT_LIMIT_CHARS = 12_000
 GUARD_HOOK_CONTENT_ITEM_LIMIT = 24
 GUARD_HOOK_OBJECT_KEY_LIMIT = 24
@@ -110,7 +115,12 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    if (!raw) return {};\n"
         "    const parsed = JSON.parse(raw) as GuardResponse;\n"
         "    return parsed && typeof parsed === 'object' ? parsed : null;\n"
-        "  } catch {\n"
+        "  } catch (error) {\n"
+        "    if (error instanceof Error && error.name === 'AbortError') {\n"
+        "      // The daemon is only a fast path. Fall through to the bounded local CLI so\n"
+        "      // an unresponsive daemon cannot stall or bypass Guard enforcement.\n"
+        "      return null;\n"
+        "    }\n"
         "    return null;\n"
         "  } finally {\n"
         "    clearTimeout(timeoutHandle);\n"
