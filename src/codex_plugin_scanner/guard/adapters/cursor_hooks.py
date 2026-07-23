@@ -222,6 +222,8 @@ def _cleanup_legacy_project_cursor_hooks(context: HarnessContext) -> None:
         return
     hooks_path = _legacy_project_cursor_hooks_path(context.workspace_dir)
     script_path = _legacy_project_cursor_hook_script_path(context.workspace_dir)
+    if hooks_path.resolve() == cursor_hooks_path(context).resolve():
+        return
     if not hooks_path.is_file() and not script_path.is_file():
         return
     managed = False
