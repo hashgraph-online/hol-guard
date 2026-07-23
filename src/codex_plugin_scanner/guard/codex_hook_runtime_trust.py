@@ -218,13 +218,22 @@ def _verify_launch_contracts(
     daemon_argv = tuple(_string_list(daemon_start.get("argv"), label="daemon start argv"))
     context = _mapping(manifest.get("context"), label="context")
     authenticated_guard_home = context.get("runtime_guard_home")
+    authenticated_home_dir = context.get("home_dir")
     if (
         not isinstance(authenticated_guard_home, str)
+        or not isinstance(authenticated_home_dir, str)
         or canonical_path(runtime_guard_home) != authenticated_guard_home
+        or canonical_path(Path(authenticated_home_dir)) != authenticated_home_dir
         or daemon_argv != tuple(start_command)
         or daemon_start.get("interpreter") != interpreter
         or daemon_start.get("package_roles") != ["daemon_entrypoint", "daemon_manager"]
-        or isolated_daemon_start_command(interpreter_path, package_root, runtime_guard_home) != daemon_argv
+        or isolated_daemon_start_command(
+            interpreter_path,
+            package_root,
+            runtime_guard_home,
+            Path(authenticated_home_dir),
+        )
+        != daemon_argv
     ):
         raise ValueError("managed Codex hook daemon-start contract is invalid")
 

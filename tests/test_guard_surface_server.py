@@ -3269,7 +3269,7 @@ class TestGuardDaemonFastHookPath:
     HOL_GUARD_HOOK_FAST_PATH=1 enabled, proving that:
     - PostToolUse with guard_source_ref uses the resident worker
     - PreToolUse falls through to legacy CLI (not the worker)
-    - PostToolUse without source_ref falls through to legacy CLI
+    - PostToolUse inline output uses the resident scanner
     - Worker exceptions return fail-safe deny/block
     """
 
@@ -3385,8 +3385,8 @@ class TestGuardDaemonFastHookPath:
         assert result.get("model_output_action") != "not_applicable"
         assert result.get("reason_code") != "non_post_tool_event"
 
-    def test_fast_path_post_tool_use_without_source_ref_falls_back(self, tmp_path, monkeypatch) -> None:
-        """PostToolUse without guard_source_ref must fall through to legacy CLI."""
+    def test_fast_path_post_tool_use_without_source_ref_scans_inline_output(self, tmp_path, monkeypatch) -> None:
+        """PostToolUse inline output is scanned without a second approval."""
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -3424,17 +3424,18 @@ class TestGuardDaemonFastHookPath:
             daemon.stop()
             monkeypatch.delenv("HOL_GUARD_HOOK_FAST_PATH", raising=False)
 
-        # Legacy CLI path handles this (may return {} for allow).
-        assert result.get("model_output_action") != "not_applicable"
+        assert result["decision"] == "allow"
+        assert result["model_output_action"] == "allow_original"
+        assert result["reason_code"] == "output_scan_allow"
 
-    def test_fast_path_disabled_uses_legacy(self, tmp_path, monkeypatch) -> None:
-        """When HOL_GUARD_HOOK_FAST_PATH is not set, legacy CLI is used."""
+    def test_fast_path_explicitly_disabled_uses_legacy(self, tmp_path, monkeypatch) -> None:
+        """An emergency environment override can restore the legacy path."""
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
 
         store = GuardStore(home_dir)
-        monkeypatch.delenv("HOL_GUARD_HOOK_FAST_PATH", raising=False)
+        monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "0")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
 

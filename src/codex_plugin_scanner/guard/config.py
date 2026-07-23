@@ -47,7 +47,8 @@ GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 MAX_APPROVAL_WAIT_TIMEOUT_SECONDS = 600
 
-# Fast hook review rollout flags (environment-controlled for safe staged rollout).
+# Hook review controls. The resident worker is the safe production default;
+# operators can explicitly disable it for emergency rollback.
 # These are read from os.environ at call time so tests/daemon can toggle without restart.
 HOOK_FAST_PATH_ENV = "HOL_GUARD_HOOK_FAST_PATH"
 HOOK_SOURCE_REF_ENV = "HOL_GUARD_HOOK_SOURCE_REF"
@@ -58,7 +59,7 @@ def hook_fast_path_enabled() -> bool:
     """Whether the daemon should use the resident hook worker for fast-path review."""
     import os
 
-    return os.environ.get(HOOK_FAST_PATH_ENV, "0") == "1"
+    return os.environ.get(HOOK_FAST_PATH_ENV, "1") == "1"
 
 
 def hook_source_ref_enabled() -> bool:

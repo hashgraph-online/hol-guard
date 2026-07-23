@@ -277,9 +277,19 @@ def _local_hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
     )
 
 
-def _daemon_start_command(guard_home: Path, *, python_executable: str = sys.executable) -> tuple[str, ...]:
+def _daemon_start_command(
+    guard_home: Path,
+    home_dir: Path,
+    *,
+    python_executable: str = sys.executable,
+) -> tuple[str, ...]:
     package_root = Path(__file__).resolve().parents[3]
-    return isolated_daemon_start_command(python_executable, package_root, guard_home)
+    return isolated_daemon_start_command(
+        python_executable,
+        package_root,
+        guard_home.resolve(strict=False),
+        home_dir.resolve(strict=False),
+    )
 
 
 def _hook_command_parts_for_home_mode(
@@ -289,9 +299,10 @@ def _hook_command_parts_for_home_mode(
     python_executable: str,
 ) -> tuple[str, ...]:
     guard_home = (resolve_guard_home() if home_is_current else context.guard_home).resolve(strict=False)
-    query = {"guard-home": str(guard_home)}
-    if not home_is_current:
-        query["home"] = str(context.home_dir)
+    # Bind the daemon fast path to the install context explicitly. Omitting
+    # ``home`` for the common current-user install silently forced every
+    # PostToolUse event through the legacy CLI path.
+    query = {"guard-home": str(guard_home), "home": str(context.home_dir.resolve(strict=False))}
     hook_workspace = _hook_workspace_dir(context)
     if hook_workspace is not None:
         query["workspace"] = str(hook_workspace)
@@ -311,7 +322,7 @@ def _hook_command_parts_for_home_mode(
                 python_executable=python_executable,
             )
         ),
-        "start_command": list(_daemon_start_command(guard_home, python_executable=python_executable)),
+        "start_command": list(_daemon_start_command(guard_home, context.home_dir, python_executable=python_executable)),
         "query": urlencode(query),
         "hook_timeouts": {
             "PreToolUse": long_timeout,
@@ -465,6 +476,7 @@ def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
         fallback_argv=_local_hook_command_parts(context),
         daemon_start_argv=_daemon_start_command(
             _runtime_guard_home(context),
+            context.home_dir,
             python_executable=_guard_python_executable(),
         ),
         event_bindings=tuple(_manifest_event_bindings(context)),

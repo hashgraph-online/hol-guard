@@ -6,6 +6,7 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import parse_qs
 
 import pytest
 
@@ -173,6 +174,7 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
     assert bridge_config["state_path"] == str(guard_home / "daemon-state.json")
     assert bridge_config["manifest_path"].startswith(str(guard_home / "managed" / "codex"))
     assert bridge_config["query"].startswith("guard-home=")
+    assert parse_qs(bridge_config["query"])["home"] == [str(home_dir.resolve())]
     assert bridge_config["fallback_command"][:3] == [
         str(Path(sys.executable).absolute()),
         "-I",
@@ -180,6 +182,7 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
     ]
     assert bridge_config["fallback_command"][4:8] == ["guard", "hook", "--harness", "codex"]
     assert bridge_config["start_command"][:3] == [str(Path(sys.executable).absolute()), "-I", "-c"]
+    assert str(home_dir.resolve()) in bridge_config["start_command"][-1]
     assert bridge_config["hook_timeouts"]["PreToolUse"] > bridge_config["hook_timeouts"]["UserPromptSubmit"]
 
 
