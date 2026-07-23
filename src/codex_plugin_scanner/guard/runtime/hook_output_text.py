@@ -110,13 +110,12 @@ def collect_output_text(value: object) -> ExtractedOutput:
         seen.add(obj_id)
         try:
             if isinstance(val, list):
-                if len(val) > MAX_CONTENT_ITEMS:
-                    truncated = True
-                    return
-                for item in val:
+                for item in val[:MAX_CONTENT_ITEMS]:
                     if truncated:
                         return
                     _traverse(item, depth + 1)
+                if len(val) > MAX_CONTENT_ITEMS:
+                    truncated = True
                 return
             # Mapping — match collectOutputText: only extract text from
             # {type: "text", text: ...} objects, not from metadata keys.
@@ -159,14 +158,14 @@ def extract_payload_output(payload: Mapping[str, object]) -> ExtractedOutput:
         value = payload.get(key)
         if value is not None:
             result = collect_output_text(value)
+            if result.truncated:
+                any_truncated = True
             if result.text:
                 all_parts.append(result.text)
                 total_chars += result.chars
-                if result.truncated:
-                    any_truncated = True
 
     if not all_parts:
-        return ExtractedOutput(text="", chars=0, truncated=False)
+        return ExtractedOutput(text="", chars=0, truncated=any_truncated)
 
     joined = "\n".join(all_parts)
     return ExtractedOutput(

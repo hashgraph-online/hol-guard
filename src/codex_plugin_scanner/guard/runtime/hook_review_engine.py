@@ -203,6 +203,16 @@ class HookReviewEngine:
         extracted = extract_payload_output(request.payload)
 
         if not extracted.text:
+            if extracted.truncated:
+                return HookReviewResponse(
+                    decision="deny",
+                    reason=(
+                        "HOL Guard blocked this output because it could not be safely excerpted within local limits."
+                    ),
+                    model_output_action="block",
+                    notice="warning",
+                    reason_code="output_too_large",
+                )
             if not any(key in request.payload for key in PAYLOAD_OUTPUT_KEYS):
                 return self._review_standard(request, envelope, config, start)
             # The action already completed and produced nothing for the model.

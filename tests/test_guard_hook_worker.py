@@ -678,6 +678,58 @@ class TestHookWorkerOutputScanning:
         assert result["policy_action"] == "allow"
         assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
 
+    def test_oversized_output_array_never_allows_unscanned_tail(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        payload: dict[str, object] = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "src/config.ts"},
+            "tool_response": [
+                *({"type": "text", "text": f"safe line {index}\n"} for index in range(24)),
+                {"type": "text", "text": "credential = 'prod-live-value'\n"},
+            ],
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="pi",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        assert result["decision"] == "allow"
+        assert result["model_output_action"] == "replace_with_reviewed_excerpt"
+        assert result["reason_code"] == "output_too_large"
+        reviewed_excerpt = result["reviewed_excerpt"]
+        assert isinstance(reviewed_excerpt, str)
+        assert "prod-live-value" not in reviewed_excerpt
+
+    def test_oversized_nontext_output_array_blocks_original(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        payload: dict[str, object] = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "src/config.ts"},
+            "tool_response": [{"metadata": index} for index in range(25)],
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="pi",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        assert result["decision"] == "deny"
+        assert result["model_output_action"] == "block"
+        assert result["reason_code"] == "output_too_large"
+
     def test_codex_stdout_uses_fast_path(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
