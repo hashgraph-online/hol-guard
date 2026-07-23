@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -147,6 +148,13 @@ def test_trust_cli_macos_native_status_uses_daemon_authored_cached_state_without
             "mode": "protected",
         },
     )
+    monkeypatch.setattr(
+        GuardStore,
+        "get_runtime_state",
+        lambda self: {
+            "last_heartbeat_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
 
     rc = main(
         [
@@ -167,6 +175,82 @@ def test_trust_cli_macos_native_status_uses_daemon_authored_cached_state_without
     assert payload["runtime_protection"] == "protected"
     assert payload["remembered_rules"] == "enforced"
     assert payload["passive_prompt_allowed"] is False
+
+
+@pytest.mark.parametrize("runtime_state", (None, {}, {"last_heartbeat_at": "invalid"}))
+def test_trust_cli_rejects_protected_cache_without_current_daemon(
+    tmp_path: Path,
+    capsys,
+    monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
+    runtime_state: dict[str, object] | None,
+) -> None:
+    _enable_macos_native_policy_integrity(monkeypatch, install_fake_system_keyring)
+    home_dir = tmp_path / "home"
+    monkeypatch.setattr(
+        GuardStore,
+        "get_cached_policy_integrity_state",
+        lambda self: {"backend": "system-keyring", "degraded_reasons": [], "mode": "protected"},
+    )
+    monkeypatch.setattr(GuardStore, "get_runtime_state", lambda self: runtime_state)
+
+    rc = main(
+        [
+            "guard",
+            "trust",
+            "status",
+            "--backend",
+            "macos-native",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["runtime_protection"] == "degraded"
+    assert payload["remembered_rules"] == "disabled_degraded"
+    assert payload["degraded_reasons"] == ["trust_backend_unavailable"]
+
+
+def test_trust_cli_rejects_protected_cache_with_stale_daemon_heartbeat(
+    tmp_path: Path,
+    capsys,
+    monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
+) -> None:
+    _enable_macos_native_policy_integrity(monkeypatch, install_fake_system_keyring)
+    home_dir = tmp_path / "home"
+    stale_heartbeat = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    monkeypatch.setattr(
+        GuardStore,
+        "get_cached_policy_integrity_state",
+        lambda self: {"backend": "system-keyring", "degraded_reasons": [], "mode": "protected"},
+    )
+    monkeypatch.setattr(
+        GuardStore,
+        "get_runtime_state",
+        lambda self: {"last_heartbeat_at": stale_heartbeat},
+    )
+
+    rc = main(
+        [
+            "guard",
+            "trust",
+            "status",
+            "--backend",
+            "macos-native",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["runtime_protection"] == "degraded"
+    assert payload["degraded_reasons"] == ["trust_backend_unavailable"]
 
 
 def test_trust_cli_macos_native_status_uses_native_api_even_when_keyring_module_is_shimmed(

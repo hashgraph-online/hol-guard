@@ -11,6 +11,7 @@ import pickle
 import sqlite3
 import time
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
@@ -3331,6 +3332,13 @@ def test_trust_cli_explain_reports_protected_local_rule(
     store = GuardStore(home_dir)
     setup = store.setup_policy_integrity(now="2026-06-19T12:00:00Z")
     assert setup["mode"] == "protected"
+    store.upsert_runtime_state(
+        session_id="trust-explain",
+        daemon_host="127.0.0.1",
+        daemon_port=5474,
+        started_at="2026-06-19T12:00:00Z",
+        last_heartbeat_at=datetime.now(timezone.utc).isoformat(),
+    )
     store.upsert_policy(_decision(artifact_id="codex:project:local-rule"), "2026-06-19T12:01:00Z")
     decision_id = int(_policy_row(home_dir, artifact_id="codex:project:local-rule")["decision_id"])
 
@@ -3356,6 +3364,13 @@ def test_trust_cli_explain_human_output_uses_trust_renderer(
     _enable_macos_native_policy_integrity(monkeypatch, install_fake_system_keyring)
     store = GuardStore(home_dir)
     store.setup_policy_integrity(now="2026-06-19T12:00:00Z")
+    store.upsert_runtime_state(
+        session_id="trust-explain-human",
+        daemon_host="127.0.0.1",
+        daemon_port=5474,
+        started_at="2026-06-19T12:00:00Z",
+        last_heartbeat_at=datetime.now(timezone.utc).isoformat(),
+    )
     store.upsert_policy(_decision(artifact_id="codex:project:local-rule-human"), "2026-06-19T12:01:00Z")
     decision_id = int(_policy_row(home_dir, artifact_id="codex:project:local-rule-human")["decision_id"])
 

@@ -114,6 +114,15 @@ def _daemon_signal(runtime_state: Mapping[str, object] | None, *, now: datetime)
     return _signal(ProtectionCheckStatus.PASS, "daemon_healthy")
 
 
+def daemon_runtime_is_current(
+    runtime_state: Mapping[str, object] | None,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    evaluated_at = now or datetime.now(timezone.utc)
+    return _daemon_signal(runtime_state, now=evaluated_at).status is ProtectionCheckStatus.PASS
+
+
 def _decision_stream_signal(store: ProtectionHealthStore) -> ProtectionSignal:
     try:
         health = store.get_command_activity_persistence_health()
