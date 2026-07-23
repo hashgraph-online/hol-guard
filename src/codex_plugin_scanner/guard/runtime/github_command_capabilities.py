@@ -331,9 +331,7 @@ def _has_short_boolean_option(args: Sequence[str], option: str) -> bool:
     index = 0
     while index < len(args):
         token = args[index]
-        is_short_value_option = (
-            len(token) == 2 and token.startswith("-") and token[1] in short_value_options
-        )
+        is_short_value_option = len(token) == 2 and token.startswith("-") and token[1] in short_value_options
         if token in long_value_options or is_short_value_option:
             index += 2
             continue
