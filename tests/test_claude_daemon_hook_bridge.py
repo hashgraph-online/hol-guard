@@ -6,8 +6,9 @@ import io
 import json
 import os
 import threading
+import time
 import urllib.request
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
 
@@ -82,6 +83,25 @@ class _DaemonHandler(BaseHTTPRequestHandler):
         return
 
 
+class _StreamingDaemonHandler(BaseHTTPRequestHandler):
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        _ = self.rfile.read(length)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        try:
+            for _ in range(50):
+                self.wfile.write(b"{")
+                self.wfile.flush()
+                time.sleep(0.1)
+        except (BrokenPipeError, ConnectionResetError):
+            return
+
+    def log_message(self, fmt: str, *args: object) -> None:
+        return
+
+
 def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _CapturingProxyHandler.captured_paths = []
     proxy_server = HTTPServer(("127.0.0.1", 0), _CapturingProxyHandler)
@@ -125,6 +145,31 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
     assert payload["marker"] == _DaemonHandler.response_marker
     assert _CapturingProxyHandler.captured_paths == []
     assert _DaemonHandler.captured_guard_token == auth_token
+
+
+def test_post_to_loopback_daemon_enforces_absolute_streaming_deadline(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(mode=0o700)
+    (guard_home / "daemon-auth-token").write_text("test-token", encoding="utf-8")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _StreamingDaemonHandler)
+    server.daemon_threads = True
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    started_at = time.monotonic()
+
+    try:
+        with pytest.raises(TimeoutError, match="absolute deadline"):
+            bridge._post_to_loopback_daemon(
+                f"http://127.0.0.1:{server.server_address[1]}/v1/hooks/claude-code",
+                "{}",
+                state_path=guard_home / "daemon-state.json",
+            )
+    finally:
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=2)
+
+    assert time.monotonic() - started_at < bridge._DAEMON_IO_TIMEOUT_SECONDS + 1
 
 
 def test_main_degrades_when_daemon_returns_malformed_json(

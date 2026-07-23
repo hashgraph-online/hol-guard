@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import queue
 import subprocess
 import sys
+import threading
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -106,6 +108,27 @@ def _assert_loopback_http_url(url: str) -> None:
 
 
 def _post_to_loopback_daemon(endpoint: str, data: str, *, state_path: str | Path) -> str:
+    result_queue: queue.Queue[tuple[str | None, Exception | None]] = queue.Queue(maxsize=1)
+
+    def request_once() -> None:
+        try:
+            result_queue.put((_blocking_post_to_loopback_daemon(endpoint, data, state_path=state_path), None))
+        except Exception as error:
+            result_queue.put((None, error))
+
+    threading.Thread(target=request_once, daemon=True, name="hol-guard-claude-hook-request").start()
+    try:
+        response_body, error = result_queue.get(timeout=_DAEMON_IO_TIMEOUT_SECONDS)
+    except queue.Empty as error:
+        raise TimeoutError("Guard daemon hook request exceeded its absolute deadline") from error
+    if error is not None:
+        raise error
+    if response_body is None:
+        raise RuntimeError("Guard daemon hook request returned no response")
+    return response_body
+
+
+def _blocking_post_to_loopback_daemon(endpoint: str, data: str, *, state_path: str | Path) -> str:
     auth_token = load_guard_daemon_auth_token(Path(state_path).parent)
     headers = {"Content-Type": "application/json"}
     if isinstance(auth_token, str) and auth_token.strip():
