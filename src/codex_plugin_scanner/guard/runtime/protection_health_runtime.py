@@ -37,7 +37,10 @@ def _signal(status: ProtectionCheckStatus, reason_code: str) -> ProtectionSignal
     return ProtectionSignal(status, reason_code)
 
 
-def _hook_signals(managed_installs: Sequence[Mapping[str, object]]) -> dict[str, ProtectionSignal]:
+def _hook_signals(
+    managed_installs: Sequence[Mapping[str, object]],
+    hook_verification: Mapping[str, bool] | None,
+) -> dict[str, ProtectionSignal]:
     result: dict[str, ProtectionSignal] = {}
     for install in managed_installs:
         harness = install.get("harness")
@@ -63,7 +66,9 @@ def _global_hook_signal(harness_signals: Mapping[str, ProtectionSignal]) -> Prot
         return _signal(ProtectionCheckStatus.FAIL, "no_managed_harness")
     if any(signal.status is ProtectionCheckStatus.FAIL for signal in harness_signals.values()):
         return _signal(ProtectionCheckStatus.FAIL, "one_or_more_hooks_inactive")
-    return _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
+    if all(signal.status is ProtectionCheckStatus.PASS for signal in harness_signals.values()):
+        return _signal(ProtectionCheckStatus.PASS, "hooks_verified")
+    return _signal(ProtectionCheckStatus.UNKNOWN, "hook_verification_unavailable")
 
 
 def _rule_pack_signal() -> ProtectionSignal:
@@ -127,12 +132,13 @@ def build_runtime_protection_health(
     store: ProtectionHealthStore,
     runtime_state: Mapping[str, object] | None,
     managed_installs: Sequence[Mapping[str, object]],
+    hook_verification: Mapping[str, bool] | None = None,
     trust_status: Mapping[str, object],
     now: datetime,
 ) -> dict[str, object]:
     """Build current health without treating configuration as runtime proof."""
 
-    harness_signals = _hook_signals(managed_installs)
+    harness_signals = _hook_signals(managed_installs, hook_verification)
     containment_signals = containment_health_signals(
         runtime_state.get("containment_health") if runtime_state is not None else None,
         now=now,

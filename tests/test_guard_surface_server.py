@@ -92,6 +92,7 @@ def _decode_dashboard_session_claims(token: str) -> dict[str, object]:
 
 
 class TestGuardSurfaceServer:
+
     def test_local_dashboard_session_preserves_reserved_claims(self) -> None:
         token = build_local_dashboard_session_token(
             auth_token="daemon-auth-token",

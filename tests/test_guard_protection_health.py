@@ -3,8 +3,14 @@ from __future__ import annotations
 import itertools
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import cast
 
+import pytest
+
+from codex_plugin_scanner.guard import approvals as approvals_module
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.managed_install_proof import bind_managed_install_proof
 from codex_plugin_scanner.guard.models import GuardRuntimeState
 from codex_plugin_scanner.guard.runtime.protection_health import (
     PROTECTION_CHECK_IDS,
@@ -16,6 +22,7 @@ from codex_plugin_scanner.guard.runtime.protection_health import (
 from codex_plugin_scanner.guard.runtime.protection_health_runtime import (
     build_runtime_protection_health,
 )
+from codex_plugin_scanner.guard.store import GuardStore
 
 _NOW = datetime(2026, 7, 19, 15, 0, tzinfo=timezone.utc)
 
@@ -57,11 +64,13 @@ def _payload(
     errors: int = 0,
     activity_count: int = 1,
     runtime_state: dict[str, object] | None = None,
+    hook_verification: dict[str, bool] | None = None,
 ) -> dict[str, object]:
     return build_runtime_protection_health(
         store=_Store(count=activity_count, dropped=dropped, errors=errors),
         runtime_state={"last_heartbeat_at": _NOW.isoformat()} if runtime_state is None else runtime_state,
         managed_installs=installs or [],
+        hook_verification=hook_verification,
         trust_status=trust or {},
         now=_NOW,
     )

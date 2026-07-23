@@ -11,6 +11,7 @@ from ..adapters.base import HarnessAdapter, HarnessContext
 from ..adapters.contracts import contract_for
 from ..adapters.cursor import CursorHarnessAdapter
 from ..consumer import detect_all
+from ..managed_install_proof import bind_managed_install_proof
 from ..runtime.mcp_skill_firewall import build_mcp_skill_firewall_fingerprints, portal_skill_identity
 from ..runtime.skill_protection import build_skill_identity, detect_skill_content_risk, skill_identity_metadata
 from ..store import GuardStore
@@ -54,6 +55,8 @@ def apply_managed_install(
             )
         else:
             manifest = adapter.install(context) if active else adapter.uninstall(context)
+        if active:
+            manifest = bind_managed_install_proof(manifest, context)
         store.set_managed_install(canonical_harness, active, workspace, manifest, now)
         managed_install = store.get_managed_install(canonical_harness)
         if managed_install is not None:
