@@ -15,6 +15,7 @@ from .command_permission_catalog import COMMAND_PERMISSION_SCHEMA_VERSION, Comma
 GitHubCommandCapability = Literal[
     "read_local",
     "read_remote",
+    "propose_remote",
     "write_local",
     "maintain_remote",
     "content_remote",
@@ -52,6 +53,7 @@ class GitHubCapabilityContract:
 _CAPABILITY_ORDER: Final[tuple[GitHubCommandCapability, ...]] = (
     "read_local",
     "read_remote",
+    "propose_remote",
     "write_local",
     "maintain_remote",
     "content_remote",
@@ -71,6 +73,7 @@ _CAPABILITY_FLOOR: Final[MappingProxyType[GitHubCommandCapability, GuardAction]]
     {
         "read_local": "allow",
         "read_remote": "allow",
+        "propose_remote": "allow",
         "write_local": "review",
         "maintain_remote": "review",
         "content_remote": "review",
@@ -97,16 +100,19 @@ def _contract(
     *,
     local: bool = False,
 ) -> GitHubCapabilityContract:
-    read_only = rule_suffix is None
-    description = (
-        f"Reads {title.lower()} without changing state."
-        if read_only
-        else (
-            "Identifies GitHub CLI operations that change local repository configuration."
-            if local
-            else f"Identifies {title.lower()} operations that change or may change GitHub-hosted state."
+    prompt_free = rule_suffix is None
+    if capability == "propose_remote":
+        description = "Creates a pull-request proposal without merging it or changing repository controls."
+    else:
+        description = (
+            f"Reads {title.lower()} without changing state."
+            if prompt_free
+            else (
+                "Identifies GitHub CLI operations that change local repository configuration."
+                if local
+                else f"Identifies {title.lower()} operations that change or may change GitHub-hosted state."
+            )
         )
-    )
     return GitHubCapabilityContract(
         capability=capability,
         permission_id=f"command.github.permission.{permission_suffix}",
@@ -116,11 +122,11 @@ def _contract(
         rule_id=None if rule_suffix is None else f"command.github.{rule_suffix}",
         title=title,
         description=description,
-        risk_tier="low" if read_only else "high",
-        risk_classes=() if read_only else (_LOCAL_WRITE_RISKS if local else _REMOTE_MUTATION_RISKS),
+        risk_tier="low" if prompt_free else "high",
+        risk_classes=() if prompt_free else (_LOCAL_WRITE_RISKS if local else _REMOTE_MUTATION_RISKS),
         safer_alternatives=(
-            "Keep the operation read-only."
-            if read_only
+            "Keep the operation read-only or limited to opening a pull-request proposal."
+            if prompt_free
             else "Inspect the exact repository, resource, and operation before confirming it.",
         ),
     )
@@ -132,6 +138,7 @@ _CONTRACTS: Final = MappingProxyType(
         for contract in (
             _contract("read_local", "read-local", None, None, "local GitHub state"),
             _contract("read_remote", "read-remote", None, None, "remote GitHub state"),
+            _contract("propose_remote", "propose-remote", None, None, "pull-request proposal"),
             _contract(
                 "write_local",
                 "write-local",
