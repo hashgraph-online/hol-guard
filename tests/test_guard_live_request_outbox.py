@@ -809,7 +809,7 @@ def test_partial_acknowledgement_preserves_sanitized_cloud_retry_reason(tmp_path
     assert result["errors"] == [
         "1 live request events require retry. Cloud reported: oauth_subject_mismatch: binding rejected."
     ]
-    state = store.get_sync_payload("guard_live_request_sync_state")
+    state = store.get_sync_payload(live_request_sync.LIVE_REQUEST_SYNC_STATE_KEY)
     assert isinstance(state, dict)
     assert state["last_error"] == result["errors"][0]
 
