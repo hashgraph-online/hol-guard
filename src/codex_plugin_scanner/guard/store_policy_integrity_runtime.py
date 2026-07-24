@@ -251,9 +251,13 @@ class StorePolicyIntegrityAdminMixin:
         )
 
     def get_cached_policy_trust_status(self) -> dict[str, object]:
+        state = self.get_cached_policy_integrity_state()
+        return TrustStatus.from_policy_integrity_state(state).to_dict()
+
+    def get_cached_policy_integrity_state(self) -> dict[str, object]:
         with self._connect() as connection:
             state = self._load_policy_integrity_state(connection) or {}
-        return TrustStatus.from_policy_integrity_state(state).to_dict()
+        return state
 
     def verify_policy_integrity(self, harness: str | None = None) -> dict[str, object]:
         now = _now()

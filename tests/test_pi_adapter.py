@@ -286,7 +286,7 @@ class TestPiInstall:
         assert '"hook", "--json"' in text
         assert '"--home"' in text
         assert "ctx.cwd" in text
-        assert "timeout: cliTimeoutMs" in text
+        assert "await runGuardCliCommand(command, args, serializedPayload, cliTimeoutMs)" in text
         assert str(extension_path) in json.loads(settings_path.read_text(encoding="utf-8"))["extensions"]
         assert omp_extension_path.is_file()
         assert str(omp_extension_path) in json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"]
@@ -304,19 +304,17 @@ class TestPiInstall:
         assert "serializedPayload = JSON.stringify(payloadToSend);" in text
         assert "serializedPayload.length > GUARD_MAX_SERIALIZED_PAYLOAD_CHARS" in text
         assert "for (const command of GUARD_COMMAND_CANDIDATES)" in text
-        assert "resultError?.code === 'ENOENT'" in text
+        assert "result.error.code === 'ENOENT'" in text
         assert "async function daemonGuardResponse(" in text
         assert "await fetch(`http://127.0.0.1:${connection.port}/v1/hooks/pi?" in text
         assert "const daemonResponse = await daemonGuardResponse(serializedPayload, cwd);" in text
         assert "const response = await runGuard(" in text
         assert "if (result.error) {" in text
-        assert "const resultError =" in text
         assert "const errorCode =" in text
-        assert 'decision: "allow"' in text
-        assert 'notice: "warning"' in text
         assert "errorCode === 'ETIMEDOUT'" in text
-        assert "HOL Guard Pi hook timed out" in text
-        assert "continuing without a completed review" in text
+        assert 'reason_code: "guard_cli_recovery_timeout"' in text
+        assert 'reason_code: "guard_cli_recovery_busy"' in text
+        assert "spawnSync" not in text
         assert "HOL Guard Pi hook failed before completing review" in text
         assert "GUARD_COMPATIBILITY_VERSION" in text
         assert "compatibility_version !== GUARD_COMPATIBILITY_VERSION" in text

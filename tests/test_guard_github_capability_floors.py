@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
 _EXPECTED_FLOORS = {
     "read_local": "allow",
     "read_remote": "allow",
+    "propose_remote": "allow",
     "write_local": "review",
     "maintain_remote": "review",
     "content_remote": "review",
@@ -39,6 +40,7 @@ _EXPECTED_FLOORS = {
     ("args", "capabilities", "workflow_authorizable"),
     (
         (("pr", "view", "17"), ("read_remote",), False),
+        (("pr", "create", "--title", "Ready", "--body", "Static summary"), ("propose_remote",), False),
         (
             (
                 "api",
@@ -107,8 +109,8 @@ def test_every_capability_has_an_explicit_floor(capability: GitHubCommandCapabil
     assert assessment.action_floor == expected
 
 
-@pytest.mark.parametrize("capability", ("read_local", "read_remote"))
-def test_read_capabilities_cannot_be_rendered_as_review_actions(capability: GitHubCommandCapability) -> None:
+@pytest.mark.parametrize("capability", ("read_local", "read_remote", "propose_remote"))
+def test_prompt_free_capabilities_cannot_be_rendered_as_review_actions(capability: GitHubCommandCapability) -> None:
     assessment = github_assessment(capability, "test.read", "test read")
 
     with pytest.raises(ValueError, match="read-only"):

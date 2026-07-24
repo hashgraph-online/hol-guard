@@ -1,7 +1,7 @@
 """Guard CLI command dispatch helpers."""
 
 # fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
@@ -20,6 +20,41 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+
+def _migrate_legacy_macos_secrets(store: GuardStore) -> None:
+    migration_pairs = (
+        (
+            "legacy_extension_control_authority_secret_migration_required",
+            "migrate_legacy_extension_control_authority_secrets",
+        ),
+        ("legacy_macos_oauth_secret_migration_required", "migrate_legacy_macos_oauth_secret"),
+    )
+    required_migrations: list[str] = []
+    for required_method_name, migration_method_name in migration_pairs:
+        method = getattr(store, required_method_name, None)
+        if callable(method):
+            with suppress(Exception):
+                if bool(method()):
+                    required_migrations.append(migration_method_name)
+    if not required_migrations:
+        return
+    try:
+        explicit_store = GuardStore(
+            store.guard_home,
+            prime_policy_integrity=False,
+            allow_system_keyring=True,
+        )
+    except Exception:
+        return
+    allow_interactive = True
+    for method_name in required_migrations:
+        method = getattr(explicit_store, method_name, None)
+        if callable(method):
+            with suppress(Exception):
+                method(allow_interactive=allow_interactive)
+            allow_interactive = False
+
 
 def _run_guard_pytest_contained_command(
     args: argparse.Namespace,
@@ -174,6 +209,7 @@ def _run_guard_update_command(
     else:
         try:
             store = GuardStore(guard_home)
+            _migrate_legacy_macos_secrets(store)
         except (OSError, RuntimeError, sqlite3.Error) as error:
             store = None
             update_store_error = error
@@ -430,6 +466,8 @@ def _run_guard_install_command(
 ) -> int:
     context = _require_guard_context(context)
     store = _require_guard_store(store)
+    if not bool(getattr(args, "dry_run", False)):
+        _migrate_legacy_macos_secrets(store)
     try:
         if bool(getattr(args, "dry_run", False)):
             payload = build_managed_install_plan(args.harness, bool(getattr(args, "all", False)), context, store)

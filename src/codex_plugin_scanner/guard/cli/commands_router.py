@@ -27,6 +27,7 @@ _EARLY_HANDLERS = {
 
 _PRESTORE_HANDLERS = {
     "update": "_run_guard_update_command",
+    "trust": "_run_guard_trust_command",
 }
 
 _COMMON_HANDLERS = {
@@ -57,7 +58,6 @@ _COMMON_HANDLERS = {
     "aibom": "_run_guard_aibom_command",
     "abom": "_run_guard_abom_command",
     "policies": "_run_guard_policies_command",
-    "trust": "_run_guard_trust_command",
     "settings": "_run_guard_settings_command",
     "exceptions": "_run_guard_exceptions_command",
     "advisories": "_run_guard_advisories_command",
@@ -94,6 +94,18 @@ def _normalize_guard_handler_result(result: object) -> int:
     if result is None:
         return 0
     return result if isinstance(result, int) else 1
+
+
+def _should_prime_policy_integrity(args: argparse.Namespace) -> bool:
+    """Prime local integrity state in the long-lived daemon process."""
+
+    return args.guard_command == "daemon" and bool(getattr(args, "serve", False))
+
+
+def _should_allow_system_keyring(args: argparse.Namespace) -> bool:
+    """Limit macOS Keychain access to explicit foreground account actions."""
+
+    return args.guard_command in {"connect", "disconnect", "login", "remote-pair"}
 
 
 def run_guard_command(
@@ -138,7 +150,12 @@ def run_guard_command(
 
     source = getattr(args, "source", "default")
     try:
-        store = GuardStore(guard_home, source=source, prime_policy_integrity=args.guard_command != "hook")
+        store = GuardStore(
+            guard_home,
+            source=source,
+            prime_policy_integrity=_should_prime_policy_integrity(args),
+            allow_system_keyring=_should_allow_system_keyring(args),
+        )
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2

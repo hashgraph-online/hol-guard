@@ -7,14 +7,15 @@ from pathlib import Path
 
 from ..daemon.manager import GUARD_DAEMON_COMPATIBILITY_VERSION
 from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
+from .pi_extension_cli_runtime_source import CLI_RUNTIME_HELPERS_SOURCE
 from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
 
-# Keep the end-to-end budget short enough for interactive Pi, but prefer the
-# resident daemon and never hard-block tool calls solely because review timed out.
-GUARD_HOOK_TIMEOUT_MS = 12_000
+# Pi terminates extension hooks at roughly 4.5 seconds. Keep Guard's daemon and
+# CLI fallback path below that host deadline so its fail-open result can return.
+GUARD_HOOK_TIMEOUT_MS = 4_000
 GUARD_HOOK_DEADLINE_RESERVE_MS = 250
-GUARD_DAEMON_HOOK_TIMEOUT_MS = 10_000
-GUARD_CLI_HOOK_TIMEOUT_MS = 10_000
+GUARD_DAEMON_HOOK_TIMEOUT_MS = 1_250
+GUARD_CLI_HOOK_TIMEOUT_MS = 2_250
 GUARD_HOOK_TEXT_LIMIT_CHARS = 12_000
 GUARD_HOOK_CONTENT_ITEM_LIMIT = 24
 GUARD_HOOK_OBJECT_KEY_LIMIT = 24
@@ -33,7 +34,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
     config_path_json = json.dumps(str(settings_path))
     compatibility_version_json = json.dumps(GUARD_DAEMON_COMPATIBILITY_VERSION)
     return (
-        'import { spawn, spawnSync } from "node:child_process";\n'
+        'import { spawn } from "node:child_process";\n'
         'import { createCipheriv, createHash, randomBytes } from "node:crypto";\n'
         'import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";\n'
         'import { tmpdir } from "node:os";\n'
@@ -75,7 +76,10 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  reviewed_output_sha256?: string;\n"
         '  notice?: "none" | "excerpt" | "warning";\n'
         "  reason_code?: string;\n"
-        "};\n" + CONTENT_REVIEW_HELPERS_SOURCE + "type GuardDaemonConnection = { port: number; authToken: string };\n"
+        "};\n"
+        + CLI_RUNTIME_HELPERS_SOURCE
+        + CONTENT_REVIEW_HELPERS_SOURCE
+        + "type GuardDaemonConnection = { port: number; authToken: string };\n"
         "\n"
         "function loadGuardDaemonConnection(): GuardDaemonConnection | null {\n"
         "  let port = 0;\n"
@@ -119,20 +123,32 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      body: serializedPayload,\n"
         "      signal: controller?.signal,\n"
         "    });\n"
-        "    if (!response.ok) return null;\n"
+        "    if (!response.ok) {\n"
+        "      if (response.status === 401 || response.status === 403) return null;\n"
+        "      let reasonCode = `daemon_http_${response.status}`;\n"
+        "      try {\n"
+        "        const errorPayload = JSON.parse((await response.text()).slice(0, GUARD_TEXT_LIMIT_CHARS)) as {\n"
+        "          error?: unknown;\n"
+        "        };\n"
+        "        if (typeof errorPayload.error === 'string' && errorPayload.error) {\n"
+        "          reasonCode = errorPayload.error;\n"
+        "        }\n"
+        "      } catch {}\n"
+        "      return {\n"
+        '        decision: "deny",\n'
+        "        reason: `HOL Guard could not safely review this action (${reasonCode}).`,\n"
+        "        reason_code: reasonCode,\n"
+        "      };\n"
+        "    }\n"
         "    const raw = (await response.text()).trim();\n"
         "    if (!raw) return {};\n"
         "    const parsed = JSON.parse(raw) as GuardResponse;\n"
         "    return parsed && typeof parsed === 'object' ? parsed : null;\n"
         "  } catch (error) {\n"
         "    if (error instanceof Error && error.name === 'AbortError') {\n"
-        "      // Infrastructure timeout: fail open so Pi remains usable; still surface a warning.\n"
-        "      return {\n"
-        '        decision: "allow",\n'
-        '        notice: "warning",\n'
-        "        reason: `HOL Guard Pi hook timed out after ${GUARD_DAEMON_TIMEOUT_MS}ms `\n"
-        "          + `while reviewing this action; continuing without a completed review.`,\n"
-        "      };\n"
+        "      // The daemon is only a fast path. Fall through to the bounded local CLI so\n"
+        "      // an unresponsive daemon cannot stall or bypass Guard enforcement.\n"
+        "      return null;\n"
         "    }\n"
         "    return null;\n"
         "  } finally {\n"
@@ -197,16 +213,24 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    cleanupPayloadReference();\n"
         "    return daemonResponse;\n"
         "  }\n"
-        "  let result: ReturnType<typeof spawnSync<string>> | null = null;\n"
+        "  if (guardCliEvaluationInFlight) {\n"
+        "    cleanupPayloadReference();\n"
+        "    return {\n"
+        '      decision: "deny",\n'
+        '      reason: "HOL Guard recovery is already reviewing another action. Retry after it completes.",\n'
+        '      reason_code: "guard_cli_recovery_busy",\n'
+        "    };\n"
+        "  }\n"
+        "  guardCliEvaluationInFlight = true;\n"
+        "  let result: GuardCliResult | null = null;\n"
         "  const cliTimeoutMs = Math.min(GUARD_CLI_TIMEOUT_MS, Math.max(deadlineAt - Date.now(), 1));\n"
-        "  for (const command of GUARD_COMMAND_CANDIDATES) {\n"
-        "    result = spawnSync(command, args, {\n"
-        "      input: `${serializedPayload}\\n`,\n"
-        '      encoding: "utf-8",\n'
-        "      timeout: cliTimeoutMs,\n"
-        "    });\n"
-        "    const resultError = result.error as (Error & { code?: unknown }) | undefined;\n"
-        "    if (!(result.error && resultError?.code === 'ENOENT')) break;\n"
+        "  try {\n"
+        "    for (const command of GUARD_COMMAND_CANDIDATES) {\n"
+        "      result = await runGuardCliCommand(command, args, serializedPayload, cliTimeoutMs);\n"
+        "      if (!(result.error && result.error.code === 'ENOENT')) break;\n"
+        "    }\n"
+        "  } finally {\n"
+        "    guardCliEvaluationInFlight = false;\n"
         "  }\n"
         "  cleanupPayloadReference();\n"
         "  if (result === null) {\n"
@@ -216,15 +240,13 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    };\n"
         "  }\n"
         "  if (result.error) {\n"
-        "    const resultError = result.error as (Error & { code?: unknown }) | undefined;\n"
-        "    const errorMessage = resultError instanceof Error ? resultError.message : String(result.error);\n"
-        "    const errorCode = typeof resultError?.code === 'string' ? resultError.code : '';\n"
-        "    if (errorCode === 'ETIMEDOUT' || result.error?.name === 'TimeoutError') {\n"
+        "    const errorMessage = result.error.message;\n"
+        "    const errorCode = typeof result.error.code === 'string' ? result.error.code : '';\n"
+        "    if (errorCode === 'ETIMEDOUT') {\n"
         "      return {\n"
-        '        decision: "allow",\n'
-        '        notice: "warning",\n'
-        "        reason: `HOL Guard Pi hook timed out while reviewing this action; `\n"
-        "          + `continuing without a completed review.`,\n"
+        '        decision: "deny",\n'
+        '        reason: "HOL Guard could not complete fallback review before the Pi deadline. Retry the action.",\n'
+        '        reason_code: "guard_cli_recovery_timeout",\n'
         "      };\n"
         "    }\n"
         "    return {\n"

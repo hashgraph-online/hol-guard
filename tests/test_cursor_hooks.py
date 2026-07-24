@@ -400,6 +400,17 @@ def test_cursor_install_persists_only_attested_cli_identity(
     assert cursor_native_hook_state(context)["protection_active"] is True
 
 
+def test_cursor_install_from_home_does_not_remove_global_hook_state(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    context = HarnessContext(home_dir=home, guard_home=tmp_path / "guard", workspace_dir=home)
+
+    manifest = install_cursor_hooks(context)
+
+    assert Path(str(manifest["state_path"])).is_file()
+    assert cursor_native_hook_state(context)["protection_active"] is True
+
+
 def test_cursor_update_repairs_tampered_cli_binding(tmp_path: Path) -> None:
     home = tmp_path / "home"
     workspace = tmp_path / "workspace"

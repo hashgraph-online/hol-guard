@@ -29854,25 +29854,30 @@ function App() {
       navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
     }
   }, []);
-  const handleRepairProtectionCheck = reactExports.useCallback(async (checkId, harnesses) => {
-    let message;
-    if (checkId === "harness_hooks") {
-      if (harnesses.length === 0) {
-        throw new Error("Guard could not find an installed app hook to repair.");
-      }
-      for (const harness of harnesses) {
-        await runHarnessAction({ harness, action: "repair", dryRun: false });
-      }
-      message = `Repaired ${harnesses.length} app hook${harnesses.length === 1 ? "" : "s"}. Run a protected action to confirm interception.`;
-    } else if (checkId === "daemon") {
+  const handleRepairProtection = reactExports.useCallback(async (harnesses) => {
+    const failures = [];
+    try {
       await repairApprovalCenter();
-      message = "Local runtime connection repaired.";
-    } else {
-      const result = await repairProtectionCheck(checkId);
-      message = result.message;
+    } catch {
+      failures.push("local runtime");
+    }
+    for (const harness of harnesses) {
+      try {
+        await runHarnessAction({ harness, action: "repair", dryRun: false });
+      } catch {
+        failures.push(`${harnessDisplayName(harness)} hooks`);
+      }
+    }
+    try {
+      await repairProtectionCheck("all");
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : "integrity protection");
     }
     await refreshStateAfterAction();
-    return message;
+    if (failures.length > 0) {
+      throw new Error(`Repair paused at ${failures.join(", ")}. Retry repair to continue from this page.`);
+    }
+    return "Automatic repairs completed. Guard rechecked every protection layer below.";
   }, [refreshStateAfterAction]);
   const appDetailContent = reactExports.useMemo(() => {
     if (view !== "app-detail" || !appDetailHarness || runtime.kind !== "ready") {
@@ -29991,7 +29996,7 @@ function App() {
             onConnectHarness: handleConnectHarness,
             onTestHarness: handleTestHarness,
             onRepairHarness: handleRepairHarness,
-            onRepairProtectionCheck: handleRepairProtectionCheck,
+            onRepairProtection: handleRepairProtection,
             onOpenAppDetail: handleOpenAppDetail
           }
         ) }) : null,

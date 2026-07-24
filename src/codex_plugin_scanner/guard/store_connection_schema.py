@@ -142,11 +142,15 @@ class StoreConnectionSchemaMixin:
         connection = sqlite3.connect(self.path, timeout=SQLITE_CONNECT_TIMEOUT_SECONDS)
         connection.row_factory = sqlite3.Row
         start = time.monotonic()
+        notification: dict[str, object] | None = None
         try:
             connection.execute(f"pragma busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
             yield connection
             connection.commit()
+            notification = self._take_policy_integrity_state_notification(connection)
         finally:
+            if notification is None:
+                self._take_policy_integrity_state_notification(connection)
             connection.close()
             elapsed_ms = (time.monotonic() - start) * 1000
             self._repair_store_permissions()
@@ -156,6 +160,8 @@ class StoreConnectionSchemaMixin:
                     "Guard store slow transaction (%.0fms); consider indexing hot query paths.",
                     elapsed_ms,
                 )
+        if notification is not None:
+            self._publish_policy_integrity_state_notification(notification)
 
     @contextmanager
     def hold_oauth_refresh_lock(

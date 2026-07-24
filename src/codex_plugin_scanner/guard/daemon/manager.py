@@ -51,6 +51,7 @@ GUARD_DAEMON_COMPATIBILITY_VERSION = 2
 GUARD_DAEMON_START_TIMEOUT_SECONDS = 5.0
 GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS = 30.0
 GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
+GUARD_DAEMON_HOOK_RECOVERY_COOLDOWN_SECONDS = 5.0
 _EPHEMERAL_GUARD_DAEMON_REAP_INTERVAL_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_MAX_STATES = 512
@@ -58,6 +59,7 @@ _GUARD_DAEMON_PRIVATE_FILE_MODE = 0o600
 _GUARD_DAEMON_PRIVATE_DIR_MODE = 0o700
 _APPROVAL_CENTER_LOCATOR_FILE = "approval-center-locator.json"
 _GUARD_DAEMON_PENDING_LAUNCH_FILE = "daemon-launch-pending.json"
+_GUARD_DAEMON_OWNER_LOCK_FILE = "daemon-owner.lock"
 _GUARD_DAEMON_STATE_MAX_BYTES = 64 * 1024
 _GUARD_DAEMON_PENDING_LAUNCH_MAX_BYTES = 4096
 _GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS = 5.0
@@ -435,6 +437,46 @@ def ensure_guard_daemon_after_update(
     )
 
 
+def recover_guard_daemon_after_hook_failure(
+    guard_home: Path,
+    *,
+    home_dir: Path | None = None,
+) -> str:
+    """Restart an older daemon after its authenticated hook endpoint fails.
+
+    The normal health endpoint can remain responsive while hook workers or the
+    identity challenge are wedged. The managed bridge invokes this only after
+    an authenticated hook request fails. A short generation cooldown prevents
+    concurrent failed hooks from repeatedly retiring the replacement daemon.
+    """
+
+    with _guard_daemon_start_lock(guard_home):
+        state = load_authenticated_daemon_state(guard_home)
+        current_url = load_guard_daemon_url(guard_home)
+        if current_url is not None and _daemon_generation_is_recent(state):
+            return current_url
+        retire_all_guard_daemons_for_home(guard_home)
+        if not guard_daemon_retirement_is_complete(guard_home):
+            raise RuntimeError("Unresponsive Guard daemon could not be retired safely.")
+    return ensure_guard_daemon(guard_home, home_dir=home_dir)
+
+
+def _daemon_generation_is_recent(state: dict[str, object] | None) -> bool:
+    if not isinstance(state, dict):
+        return False
+    started_at = state.get("started_at")
+    if not isinstance(started_at, str):
+        return False
+    try:
+        started = datetime.fromisoformat(started_at)
+    except ValueError:
+        return False
+    if started.tzinfo is None:
+        return False
+    age_seconds = (datetime.now(timezone.utc) - started.astimezone(timezone.utc)).total_seconds()
+    return 0 <= age_seconds <= GUARD_DAEMON_HOOK_RECOVERY_COOLDOWN_SECONDS
+
+
 def retire_all_guard_daemons_for_home(
     guard_home: Path,
     *,
@@ -790,25 +832,29 @@ def write_guard_daemon_state(
     host: str = "127.0.0.1",
     state_id: str | None = None,
     started_at: str | None = None,
+    trust_status: dict[str, object] | None = None,
 ) -> None:
     state_path = _state_path(guard_home)
     _ensure_private_directory(state_path.parent)
     with _guard_daemon_state_write_lock(guard_home):
         discovery_key = ensure_daemon_discovery_key(guard_home)
+        state_payload: dict[str, object] = {
+            "guard_home": str(guard_home.resolve()),
+            "host": host,
+            "port": port,
+            "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
+            "package_version": __version__,
+            "source_root": _current_guard_daemon_source_root(),
+            "runtime_fingerprint": _current_guard_daemon_runtime_fingerprint(),
+            "pid": pid if isinstance(pid, int) and pid > 0 else os.getpid(),
+            "started_at": started_at or datetime.now(timezone.utc).isoformat(),
+            "state_id": state_id or secrets.token_hex(16),
+            "auth_token_id": hashlib.sha256(auth_token.encode("utf-8")).hexdigest(),
+        }
+        if trust_status is not None:
+            state_payload["trust_status"] = trust_status
         daemon_state = authenticate_daemon_state(
-            {
-                "guard_home": str(guard_home.resolve()),
-                "host": host,
-                "port": port,
-                "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
-                "package_version": __version__,
-                "source_root": _current_guard_daemon_source_root(),
-                "runtime_fingerprint": _current_guard_daemon_runtime_fingerprint(),
-                "pid": pid if isinstance(pid, int) and pid > 0 else os.getpid(),
-                "started_at": started_at or datetime.now(timezone.utc).isoformat(),
-                "state_id": state_id or secrets.token_hex(16),
-                "auth_token_id": hashlib.sha256(auth_token.encode("utf-8")).hexdigest(),
-            },
+            state_payload,
             discovery_key=discovery_key,
         )
         if write_auth_token:
@@ -1924,7 +1970,9 @@ def _guard_daemon_process_inventory_for_guard_home(guard_home: Path) -> list[tup
         parts = _split_process_command(command_line)
         if parts is None:
             lowered = command_line.lower()
-            if "codex_plugin_scanner" in lowered or "guard" in lowered:
+            if ("codex_plugin_scanner" in lowered or "guard" in lowered) and _malformed_command_may_launch_guard(
+                command_line
+            ):
                 return None
             continue
         if not _guard_daemon_command_parts_match(parts):
@@ -1940,6 +1988,20 @@ def _guard_daemon_process_inventory_for_guard_home(guard_home: Path) -> list[tup
         if matches_home:
             processes.append((pid, port))
     return sorted(processes, key=lambda item: item[1])
+
+
+def _malformed_command_may_launch_guard(command_line: str) -> bool:
+    first_token = command_line.lstrip().split(maxsplit=1)[0].strip("\"'")
+    launcher = ntpath.basename(first_token).lower()
+    return launcher.startswith("python") or launcher in {
+        "env",
+        "hol-guard",
+        "hol-guard.exe",
+        "plugin-guard",
+        "plugin-guard.exe",
+        "uv",
+        "uv.exe",
+    }
 
 
 def _running_guard_daemon_processes_for_guard_home(guard_home: Path) -> list[tuple[int, int]]:
@@ -2205,6 +2267,35 @@ def _guard_daemon_start_lock(guard_home: Path):
                 _unlock_daemon_start_file(handle)
 
 
+def acquire_guard_daemon_owner_lock(guard_home: Path) -> BinaryIO:
+    """Claim the single daemon slot before any background worker can read secrets."""
+
+    inventory = _guard_daemon_process_inventory_for_guard_home(guard_home)
+    if inventory is None:
+        raise RuntimeError("Guard could not verify that the daemon slot is available.")
+    if any(pid != os.getpid() for pid, _port in inventory):
+        raise RuntimeError("A Guard daemon is already active for this Guard home.")
+    lock_path = guard_home / _GUARD_DAEMON_OWNER_LOCK_FILE
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = lock_path.open("a+b")
+    if not _try_lock_daemon_file(handle):
+        handle.close()
+        raise RuntimeError("A Guard daemon is already active for this Guard home.")
+    inventory = _guard_daemon_process_inventory_for_guard_home(guard_home)
+    if inventory is None or any(pid != os.getpid() for pid, _port in inventory):
+        _unlock_daemon_start_file(handle)
+        handle.close()
+        raise RuntimeError("A Guard daemon is already active for this Guard home.")
+    return handle
+
+
+def release_guard_daemon_owner_lock(handle: BinaryIO | None) -> None:
+    if handle is None or handle.closed:
+        return
+    _unlock_daemon_start_file(handle)
+    handle.close()
+
+
 @contextmanager
 def _guard_daemon_state_write_lock(guard_home: Path):
     """Serialize the token/state generation across threads and processes."""
@@ -2242,6 +2333,29 @@ def _lock_daemon_start_file(handle: BinaryIO) -> None:
     import fcntl
 
     fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+
+def _try_lock_daemon_file(handle: BinaryIO) -> bool:
+    if os.name == "nt":
+        import msvcrt
+
+        handle.seek(0)
+        if os.fstat(handle.fileno()).st_size == 0:
+            handle.write(b"0")
+            handle.flush()
+        handle.seek(0)
+        try:
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError:
+            return False
+        return True
+    import fcntl
+
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    return True
 
 
 def _unlock_daemon_start_file(handle: BinaryIO) -> None:

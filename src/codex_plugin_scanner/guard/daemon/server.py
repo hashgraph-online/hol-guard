@@ -13,6 +13,8 @@ import mimetypes
 import os
 import platform
 import secrets
+import sqlite3
+import stat
 import tempfile
 import threading
 import time
@@ -23,7 +25,7 @@ from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, TypedDict, TypeGuard, cast
+from typing import Any, BinaryIO, TypedDict, TypeGuard, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
@@ -149,7 +151,18 @@ from ..review_contracts import (
     validated_remote_approval_envelope,
 )
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
+from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, ActivityDecisionReason
+from ..runtime.command_activity_lifecycle import CommandActivityDecisionFacts, build_pre_hook_evidence
+from ..runtime.command_evaluation import evaluate_command
+from ..runtime.command_shadow_evaluation import (
+    CommandShadowCohort,
+    CommandShadowControl,
+    baseline_command_shadow_proposal,
+    build_command_shadow_observation,
+)
+from ..runtime.containment_health import containment_health_signals
 from ..runtime.live_request_sync import LiveRequestSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
+from ..runtime.protection_health import ProtectionCheckStatus
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotAvailableError,
@@ -217,9 +230,11 @@ from .discovery import (
 )
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
+    acquire_guard_daemon_owner_lock,
     clear_guard_daemon_state_if_current,
     current_guard_daemon_runtime_fingerprint,
     load_guard_daemon_auth_token,
+    release_guard_daemon_owner_lock,
     repair_approval_center_locator,
     write_guard_daemon_state,
 )
@@ -292,6 +307,29 @@ class _CursorReceiptContext(TypedDict):
     summary: dict[str, object]
 
 
+_MAX_CONCURRENT_DAEMON_REQUESTS = 64
+_MAX_CONCURRENT_DAEMON_CONTROL_REQUESTS = 8
+_MAX_CONCURRENT_DAEMON_CRITICAL_REQUESTS = 4
+_MAX_CONCURRENT_DAEMON_CONNECTIONS = (
+    _MAX_CONCURRENT_DAEMON_REQUESTS + _MAX_CONCURRENT_DAEMON_CONTROL_REQUESTS + _MAX_CONCURRENT_DAEMON_CRITICAL_REQUESTS
+)
+_MAX_CONCURRENT_RUNTIME_HOOKS = 32
+_MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS = 24
+_DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 2.0
+_DAEMON_CONTROL_PATHS = frozenset(
+    {
+        "/v1/healthz/details",
+        "/v1/healthz/verify",
+    }
+)
+_DAEMON_CRITICAL_PATHS = frozenset(
+    {
+        "/healthz",
+        "/v1/daemon/identity-challenge",
+    }
+)
+
+
 class _GuardDaemonHttpServer(ThreadingHTTPServer):
     store: GuardStore
     runtime: GuardSurfaceRuntime
@@ -321,6 +359,26 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     containment_health_cache: dict[str, object] | None
     containment_health_cache_monotonic: float
     containment_health_cache_lock: threading.Lock
+    hook_capacity: threading.BoundedSemaphore
+    hook_capacity_limit: int
+    active_hook_requests: int
+    rejected_hook_requests: int
+    hook_harness_capacity: dict[str, threading.BoundedSemaphore]
+    hook_harness_active: dict[str, int]
+    hook_harness_rejected: dict[str, int]
+    hook_capacity_lock: threading.Lock
+    request_capacity: threading.BoundedSemaphore
+    request_capacity_limit: int
+    connection_capacity: threading.BoundedSemaphore
+    connection_capacity_limit: int
+    control_request_capacity: threading.BoundedSemaphore
+    control_request_capacity_limit: int
+    critical_request_capacity: threading.BoundedSemaphore
+    critical_request_capacity_limit: int
+    active_requests: int
+    rejected_requests: int
+    request_capacity_kinds: dict[int, str]
+    request_capacity_lock: threading.Lock
 
     def __init__(
         self,
@@ -363,6 +421,27 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.containment_health_cache = None
         self.containment_health_cache_monotonic = 0.0
         self.containment_health_cache_lock = threading.Lock()
+        self.hook_capacity_limit = _MAX_CONCURRENT_RUNTIME_HOOKS
+        self.hook_capacity = threading.BoundedSemaphore(self.hook_capacity_limit)
+        self.active_hook_requests = 0
+        self.rejected_hook_requests = 0
+        self.hook_harness_capacity = {}
+        self.hook_harness_active = {}
+        self.hook_harness_rejected = {}
+        self.hook_capacity_lock = threading.Lock()
+        self.request_capacity_limit = _MAX_CONCURRENT_DAEMON_REQUESTS
+        self.request_capacity = threading.BoundedSemaphore(self.request_capacity_limit)
+        self.connection_capacity_limit = _MAX_CONCURRENT_DAEMON_CONNECTIONS
+        self.connection_capacity = threading.BoundedSemaphore(self.connection_capacity_limit)
+        self.control_request_capacity_limit = _MAX_CONCURRENT_DAEMON_CONTROL_REQUESTS
+        self.control_request_capacity = threading.BoundedSemaphore(self.control_request_capacity_limit)
+        self.critical_request_capacity_limit = _MAX_CONCURRENT_DAEMON_CRITICAL_REQUESTS
+        self.critical_request_capacity = threading.BoundedSemaphore(self.critical_request_capacity_limit)
+        self.active_requests = 0
+        self.rejected_requests = 0
+        self.request_capacity_kinds = {}
+        self.request_capacity_lock = threading.Lock()
+        self.store.set_policy_integrity_state_listener(self.publish_trust_state)
         from .hook_worker import HookWorker
 
         self.hook_worker = HookWorker(store=store)
@@ -372,11 +451,98 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
             opener=webbrowser.open,
         )
 
+    def process_request(self, request: Any, client_address: Any) -> None:
+        if not self.connection_capacity.acquire(blocking=False):
+            with self.request_capacity_lock:
+                self.rejected_requests += 1
+            self.shutdown_request(request)
+            return
+        with suppress(OSError):
+            request.settimeout(_DAEMON_REQUEST_READ_TIMEOUT_SECONDS)
+        with self.request_capacity_lock:
+            self.active_requests += 1
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._release_request_capacity(request)
+            raise
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._release_request_capacity(request)
+
+    def _release_request_capacity(self, request: Any) -> None:
+        with self.request_capacity_lock:
+            self.active_requests -= 1
+            capacity_kind = self.request_capacity_kinds.pop(id(request), None)
+        if capacity_kind is not None:
+            self._request_capacity_for_kind(capacity_kind).release()
+        self.connection_capacity.release()
+
+    def claim_request_capacity(self, request: Any, path: str) -> bool:
+        capacity_kind = self._request_capacity_kind(path)
+        capacity = self._request_capacity_for_kind(capacity_kind)
+        if not capacity.acquire(blocking=False):
+            with self.request_capacity_lock:
+                self.rejected_requests += 1
+            return False
+        with self.request_capacity_lock:
+            self.request_capacity_kinds[id(request)] = capacity_kind
+        return True
+
+    def _request_capacity_for_kind(self, capacity_kind: str) -> threading.BoundedSemaphore:
+        if capacity_kind == "critical":
+            return self.critical_request_capacity
+        if capacity_kind == "control":
+            return self.control_request_capacity
+        return self.request_capacity
+
+    @staticmethod
+    def _request_capacity_kind(path: str) -> str:
+        path = path.split("?", 1)[0]
+        if path in _DAEMON_CRITICAL_PATHS:
+            return "critical"
+        if path in _DAEMON_CONTROL_PATHS:
+            return "control"
+        return "general"
+
+    def hook_harness_semaphore(self, harness: str) -> threading.BoundedSemaphore:
+        try:
+            capacity_harness = get_adapter(harness).harness
+        except ValueError:
+            capacity_harness = "other"
+        with self.hook_capacity_lock:
+            capacity = self.hook_harness_capacity.get(capacity_harness)
+            if capacity is None:
+                capacity = threading.BoundedSemaphore(_MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS)
+                self.hook_harness_capacity[capacity_harness] = capacity
+            return capacity
+
+    @staticmethod
+    def canonical_hook_capacity_harness(harness: str) -> str:
+        try:
+            return get_adapter(harness).harness
+        except ValueError:
+            return "other"
+
     def daemon_host(self) -> str:
         return str(self.server_address[0])
 
     def daemon_port(self) -> int:
         return int(self.server_address[1])
+
+    def publish_trust_state(self, trust_status: dict[str, object] | None = None) -> None:
+        write_guard_daemon_state(
+            self.store.guard_home,
+            self.daemon_port(),
+            self.auth_token,
+            host=self.daemon_host(),
+            state_id=self.runtime_session_id,
+            started_at=self.runtime_started_at,
+            trust_status=trust_status or self.store.get_cached_policy_integrity_state(),
+        )
 
 
 _STATIC_DIR = Path(__file__).with_name("static")
@@ -1404,9 +1570,54 @@ def _finalize_daemon_guard_connect_payload(
     return payload
 
 
+def _repair_command_activity_persistence_health(store: GuardStore) -> None:
+    shadow_evaluation = evaluate_command("git push origin release/2.1 --force")
+    shadow_proposal = baseline_command_shadow_proposal(shadow_evaluation)
+    occurred_at = datetime.now(timezone.utc)
+    evidence = build_pre_hook_evidence(
+        shadow_evaluation,
+        CommandActivityDecisionFacts(
+            policy_action="allow",
+            decision_reason_code=ActivityDecisionReason.EXTENSION_MATCH,
+            prompted=False,
+            approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
+            receipt_id=None,
+        ),
+        activity_id="activity:protection-repair-probe",
+        occurred_at=occurred_at,
+        harness="codex",
+        request_correlation=None,
+    )
+    shadow = build_command_shadow_observation(
+        shadow_evaluation,
+        authoritative_action="allow",
+        proposal=shadow_proposal,
+        activity_id="activity:protection-repair-probe",
+        occurred_at=occurred_at,
+        control=CommandShadowControl(
+            enabled=True,
+            kill_switch=False,
+            release_cohorts=frozenset({CommandShadowCohort.BASELINE}),
+            disabled_cohorts=frozenset(),
+            sample_basis_points=10_000,
+        ),
+    )
+    if shadow is None:
+        raise RuntimeError("command shadow repair probe was not selected")
+    store.probe_command_activity_persistence(evidence, shadow=shadow)
+
+
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
     _MAX_BODY_BYTES = 1_000_000
     server: _GuardDaemonHttpServer  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    def parse_request(self) -> bool:
+        if not super().parse_request():
+            return False
+        if self._daemon_server().claim_request_capacity(self.request, self.path):
+            return True
+        self.send_error(503, "Guard daemon request capacity reached")
+        return False
 
     def do_OPTIONS(self) -> None:
         origin = self._normalize_origin(self.headers.get("Origin"))
@@ -4078,10 +4289,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_protection_repair(self, payload: dict[str, object]) -> None:
         check_id = self._optional_string(payload.get("check_id"))
         store = self.server.store  # type: ignore[attr-defined]
-        if check_id in {"policy_engine", "rule_packs", "tamper_checks"}:
+        if check_id in {"all", "policy_engine", "rule_packs", "tamper_checks"}:
             try:
                 status = store.setup_policy_integrity(now=_now(), include_items=False)
-            except (OSError, RuntimeError, ValueError):
+                if status.get("mode") != "protected":
+                    status = store.repair_policy_integrity(
+                        clear_invalid=False,
+                        now=_now(),
+                        include_items=False,
+                    )
+                counts = status.get("counts")
+                valid_count = counts.get("valid", 0) if isinstance(counts, dict) else 0
+                if status.get("mode") != "protected" and valid_count == 0:
+                    store.reset_policy_integrity(now=_now())
+                    status = store.setup_policy_integrity(now=_now(), include_items=False)
+            except (OSError, RuntimeError, TypeError, ValueError):
                 self._write_json(
                     {
                         "error": "protection_repair_failed",
@@ -4091,14 +4313,71 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 return
             repaired = status.get("mode") == "protected"
+            degraded_reasons = status.get("degraded_reasons")
+            reason_count = len(degraded_reasons) if isinstance(degraded_reasons, list) else 0
+            repaired_check_ids = ["policy_engine", "rule_packs", "tamper_checks"]
+            pending_check_ids: list[str] = []
+            if check_id == "all" and repaired:
+                failed_check_ids: list[str] = []
+                try:
+                    containment_health = self._containment_health_payload(force_refresh=True)
+                    refreshed_signals = containment_health_signals(
+                        containment_health,
+                        now=datetime.now(timezone.utc),
+                    )
+                    for containment_check_id in (
+                        "decision_plane_compatibility",
+                        "containment_compatibility",
+                        "sandbox",
+                    ):
+                        if refreshed_signals[containment_check_id].status is ProtectionCheckStatus.PASS:
+                            repaired_check_ids.append(containment_check_id)
+                        else:
+                            failed_check_ids.append(containment_check_id)
+                except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+                    failed_check_ids.extend(["decision_plane_compatibility", "containment_compatibility", "sandbox"])
+                try:
+                    config = load_guard_config(store.guard_home)
+                    _repair_command_activity_persistence_health(store)
+                    store.maintain_command_activity(
+                        now=datetime.now(timezone.utc),
+                        detail_retain_days=config.evidence_retain_days,
+                    )
+                    evidence_health = store.get_command_activity_persistence_health()
+                    if evidence_health.active_error_count > 0:
+                        failed_check_ids.append("decision_stream")
+                    else:
+                        repaired_check_ids.append("decision_stream")
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    failed_check_ids.append("decision_stream")
+                if failed_check_ids or pending_check_ids:
+                    self._write_json(
+                        {
+                            "error": "protection_repair_incomplete",
+                            "repaired": False,
+                            "check_ids": repaired_check_ids,
+                            "failed_check_ids": failed_check_ids,
+                            "pending_check_ids": pending_check_ids,
+                            "message": (
+                                "Repair paused before every protection layer could be confirmed. Retry repair here."
+                            ),
+                        },
+                        status=409,
+                    )
+                    return
             self._write_json(
                 {
                     "repaired": repaired,
-                    "check_ids": ["policy_engine", "rule_packs", "tamper_checks"],
+                    "check_ids": repaired_check_ids,
+                    "pending_check_ids": pending_check_ids,
                     "message": (
                         "Integrity protection restored."
                         if repaired
-                        else "Guard could not confirm integrity protection yet."
+                        else (
+                            "Integrity repair preserved unauthenticated policy data instead of trusting it. "
+                            "Retry repair from Protect; Guard will keep the remaining "
+                            f"{reason_count or 1} issue isolated."
+                        )
                     ),
                 },
                 status=200 if repaired else 409,
@@ -4106,9 +4385,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if check_id == "decision_stream":
             try:
+                config = load_guard_config(store.guard_home)
+                _repair_command_activity_persistence_health(store)
+                store.maintain_command_activity(
+                    now=datetime.now(timezone.utc),
+                    detail_retain_days=config.evidence_retain_days,
+                )
                 health = store.get_command_activity_persistence_health()
-                observed = store.count_command_activities() > 0
-            except (OSError, RuntimeError, TypeError, ValueError):
+            except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                 self._write_json(
                     {
                         "error": "protection_repair_failed",
@@ -4117,7 +4401,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     status=409,
                 )
                 return
-            repaired = health.active_error_count == 0 and observed
+            repaired = health.active_error_count == 0
             self._write_json(
                 {
                     "repaired": repaired,
@@ -4125,7 +4409,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "message": (
                         "Command evidence is healthy."
                         if repaired
-                        else "Guard still needs a successful protected command to confirm evidence health."
+                        else "Guard could not restore command evidence persistence."
                     ),
                 },
                 status=200 if repaired else 409,
@@ -4695,6 +4979,115 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": error.code}, status=400)
             return
 
+        daemon_server = self._daemon_server()
+        runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
+        capacity_harness = daemon_server.canonical_hook_capacity_harness(
+            (runtime_harness or default_harness).strip().lower().replace("_", "-")
+        )
+        harness_capacity = daemon_server.hook_harness_semaphore(capacity_harness)
+        if not harness_capacity.acquire(blocking=False):
+            with daemon_server.hook_capacity_lock:
+                daemon_server.rejected_hook_requests += 1
+                daemon_server.hook_harness_rejected[capacity_harness] = (
+                    daemon_server.hook_harness_rejected.get(capacity_harness, 0) + 1
+                )
+            self._write_json(
+                self._runtime_hook_capacity_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                )
+            )
+            return
+        if not daemon_server.hook_capacity.acquire(blocking=False):
+            harness_capacity.release()
+            with daemon_server.hook_capacity_lock:
+                daemon_server.rejected_hook_requests += 1
+                daemon_server.hook_harness_rejected[capacity_harness] = (
+                    daemon_server.hook_harness_rejected.get(capacity_harness, 0) + 1
+                )
+            self._write_json(
+                self._runtime_hook_capacity_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                )
+            )
+            return
+        with daemon_server.hook_capacity_lock:
+            daemon_server.active_hook_requests += 1
+            daemon_server.hook_harness_active[capacity_harness] = (
+                daemon_server.hook_harness_active.get(capacity_harness, 0) + 1
+            )
+        try:
+            self._execute_runtime_hook(
+                payload,
+                params,
+                hook_env=hook_env,
+                default_harness=default_harness,
+                home_dir=home_dir,
+                guard_home=guard_home,
+                workspace=workspace,
+            )
+        finally:
+            with daemon_server.hook_capacity_lock:
+                daemon_server.active_hook_requests -= 1
+                daemon_server.hook_harness_active[capacity_harness] -= 1
+            daemon_server.hook_capacity.release()
+            harness_capacity.release()
+
+    def _runtime_hook_capacity_response(
+        self,
+        payload: Mapping[str, object],
+        params: Mapping[str, list[str]],
+        *,
+        default_harness: str,
+    ) -> dict[str, object]:
+        runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
+        harness = (runtime_harness or default_harness).strip().lower().replace("_", "-")
+        event = self._optional_string(payload.get("hook_event_name", payload.get("event"))) or "PreToolUse"
+        reason = "HOL Guard is at local review capacity. Retry this action after the active reviews complete."
+        if harness == "pi":
+            return {
+                "decision": "deny",
+                "reason": reason,
+                "reason_code": "daemon_hook_capacity",
+            }
+        if event == "PermissionRequest":
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": event,
+                    "decision": {
+                        "behavior": "deny",
+                        "message": reason,
+                    },
+                }
+            }
+        if event == "PreToolUse":
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": event,
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                }
+            }
+        return {
+            "continue": False,
+            "stopReason": reason,
+            "systemMessage": reason,
+        }
+
+    def _execute_runtime_hook(
+        self,
+        payload: dict[str, object],
+        params: Mapping[str, list[str]],
+        *,
+        hook_env: dict[str, str],
+        default_harness: str,
+        home_dir: str | None,
+        guard_home: str | None,
+        workspace: str | None,
+    ) -> None:
         # Fast path: use the resident hook worker for supported hooks.
         if self._hook_fast_path_enabled():
             result = self._handle_runtime_hook_fast(
@@ -5703,6 +6096,25 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         store = self.server.store  # type: ignore[attr-defined]
         pending_approvals = store.count_approval_requests()
         activity_health = store.get_command_activity_persistence_health()
+        daemon_server = self._daemon_server()
+        with daemon_server.hook_capacity_lock:
+            hook_capacity = {
+                "active": daemon_server.active_hook_requests,
+                "limit": daemon_server.hook_capacity_limit,
+                "rejected": daemon_server.rejected_hook_requests,
+                "per_harness_active": dict(daemon_server.hook_harness_active),
+                "per_harness_limit": _MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS,
+                "per_harness_rejected": dict(daemon_server.hook_harness_rejected),
+            }
+        with daemon_server.request_capacity_lock:
+            request_capacity = {
+                "active": daemon_server.active_requests,
+                "connection_limit": daemon_server.connection_capacity_limit,
+                "control_limit": daemon_server.control_request_capacity_limit,
+                "critical_limit": daemon_server.critical_request_capacity_limit,
+                "limit": daemon_server.request_capacity_limit,
+                "rejected": daemon_server.rejected_requests,
+            }
         return {
             "ok": True,
             "receipts": len(store.list_receipts(limit=500)),
@@ -5725,6 +6137,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 ),
                 "schema_version": activity_health.schema_version,
             },
+            "hook_capacity": hook_capacity,
+            "request_capacity": request_capacity,
         }
 
     @staticmethod
@@ -5952,9 +6366,39 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         break
                 except ValueError:
                     continue
+            if not root_match and parameter == "workspace":
+                root_match = self._is_owned_temporary_hook_workspace(candidate)
             if not root_match:
                 raise _HookPathValidationError(parameter, "unexpected_root")
         return Path(candidate)
+
+    @staticmethod
+    def _is_owned_temporary_hook_workspace(candidate: str) -> bool:
+        candidate_path = Path(candidate)
+        primary_temporary_root = Path(os.path.realpath(tempfile.gettempdir()))
+        temporary_roots = [primary_temporary_root]
+        if os.name == "posix":
+            temporary_roots.extend(Path(os.path.realpath(root)) for root in ("/tmp", "/var/tmp"))
+        if not any(_GuardDaemonHandler._path_is_within_root(candidate_path, root) for root in temporary_roots):
+            return False
+        try:
+            # codeql[py/path-injection] candidate is a canonical absolute path contained by a fixed trusted temp root.
+            candidate_stat = candidate_path.stat()
+        except OSError:
+            return False
+        if not stat.S_ISDIR(candidate_stat.st_mode):
+            return False
+        getuid = getattr(os, "getuid", None)
+        if not callable(getuid):
+            current_home = Path.home().resolve()
+            return _GuardDaemonHandler._path_is_within_root(
+                primary_temporary_root,
+                current_home,
+            ) and _GuardDaemonHandler._path_is_within_root(
+                candidate_path,
+                primary_temporary_root,
+            )
+        return candidate_stat.st_uid == getuid()
 
     def _validated_hook_guard_home(self, value: str | None) -> str | None:
         if value is None:
@@ -6227,6 +6671,7 @@ class GuardDaemonServer:
     ) -> None:
         _validate_dashboard_bundle()
         self._shutdown_started = threading.Event()
+        self._owner_lock: BinaryIO | None = None
         self._server = _GuardDaemonHttpServer(
             (host, port),
             _GuardDaemonHandler,
@@ -6300,6 +6745,15 @@ class GuardDaemonServer:
         self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
 
     def _begin_service(self) -> None:
+        self._owner_lock = acquire_guard_daemon_owner_lock(self._server.store.guard_home)
+        try:
+            self._begin_owned_service()
+        except BaseException:
+            release_guard_daemon_owner_lock(self._owner_lock)
+            self._owner_lock = None
+            raise
+
+    def _begin_owned_service(self) -> None:
         if self._aibom_refresh_thread is not None:
             if self._aibom_refresh_thread.is_alive():
                 raise RuntimeError("AIBOM inventory refresh is still stopping")
@@ -6309,14 +6763,7 @@ class GuardDaemonServer:
         self._maintain_command_activity_best_effort()
         self._persist_aibom_inventory_context()
         self._server.last_activity_monotonic = time.monotonic()
-        write_guard_daemon_state(
-            self._server.store.guard_home,
-            self.port,
-            self._server.auth_token,
-            host=self._server.daemon_host(),
-            state_id=self._server.runtime_session_id,
-            started_at=self._server.runtime_started_at,
-        )
+        self._server.publish_trust_state()
         self._server.store.upsert_runtime_state(
             session_id=self._server.runtime_session_id,
             daemon_host=self._server.runtime_host,
@@ -6413,14 +6860,18 @@ class GuardDaemonServer:
             self._finish_service()
 
     def _finish_service(self) -> None:
-        self._shutdown_started.set()
-        approval_attention = getattr(self._server, "approval_attention", None)
-        if approval_attention is not None:
-            approval_attention.stop()
-        self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
-        self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
-        clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
-        self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
+        try:
+            self._shutdown_started.set()
+            approval_attention = getattr(self._server, "approval_attention", None)
+            if approval_attention is not None:
+                approval_attention.stop()
+            self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
+            self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
+            clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
+            self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
+        finally:
+            release_guard_daemon_owner_lock(getattr(self, "_owner_lock", None))
+            self._owner_lock = None
 
     def _start_watchdog(self) -> None:
         if self._watchdog_thread is not None and self._watchdog_thread.is_alive():

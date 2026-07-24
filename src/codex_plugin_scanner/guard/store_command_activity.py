@@ -39,15 +39,7 @@ class StoreCommandActivityMixin:
     ) -> bool:
         """Persist one logical command and its rule hits; return false for an exact replay."""
 
-        if not isinstance(cast(object, evidence), CommandActivityEvidence):
-            raise ValueError("evidence must be a CommandActivityEvidence")
-        if shadow is not None:
-            if not isinstance(cast(object, shadow), CommandShadowObservation):
-                raise ValueError("shadow must be a CommandShadowObservation")
-            if shadow.activity_id != evidence.activity.activity_id:
-                raise ValueError("shadow activity_id must match command evidence")
-            if shadow.occurred_at != evidence.activity.occurred_at:
-                raise ValueError("shadow occurred_at must match command evidence")
+        _validate_command_activity_write(evidence, shadow)
         with self._connect() as connection:
             connection.execute("begin immediate")
             existing = cast(
@@ -78,57 +70,47 @@ class StoreCommandActivityMixin:
                 is not None
             ):
                 return False
-            connection.execute(
-                """
-                insert into command_activity (
-                  activity_id, occurred_at, harness, hook_phase, execution_status,
-                  proof_level, policy_action, decision_reason_code, controlling_rule_id,
-                  parse_confidence, uncertainty_class, match_count, prompted,
-                  approval_reuse_status, receipt_link_status, receipt_id,
-                  evaluation_latency_bucket, persistence_latency_bucket, schema_version
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                _activity_values(evidence.activity),
+            _record_new_command_activity(
+                connection,
+                evidence,
+                shadow=shadow,
+                shadow_evaluation_succeeded=shadow_evaluation_succeeded,
             )
-            connection.executemany(
-                """
-                insert into command_activity_matches (
-                  activity_id, ordinal, extension_id, extension_version, rule_id,
-                  rule_version, match_class, severity, default_floor,
-                  safe_variant_id, schema_version
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                tuple(_match_values(item) for item in evidence.matches),
-            )
-            connection.executemany(
-                """
-                insert into command_activity_match_effects (
-                  activity_id, ordinal, effect_class
-                ) values (?, ?, ?)
-                """,
-                _effect_values(evidence),
-            )
-            connection.executemany(
-                """
-                insert into command_activity_correlations (
-                  activity_id, kind, harness, key_id, digest
-                ) values (?, ?, ?, ?, ?)
-                """,
-                _correlation_values(evidence.activity),
-            )
-            if shadow is not None:
-                record_command_shadow_observation(connection, shadow)
-            record_command_activity_rollups(connection, evidence)
+            return True
+
+    def probe_command_activity_persistence(
+        self: _ConnectionOwner,
+        evidence: CommandActivityEvidence,
+        *,
+        shadow: CommandShadowObservation,
+    ) -> None:
+        """Exercise and roll back the real command and shadow write path."""
+
+        _validate_command_activity_write(evidence, shadow)
+        with self._connect() as connection:
+            connection.execute("begin immediate")
+            connection.execute("savepoint command_activity_repair_probe")
+            try:
+                _record_new_command_activity(
+                    connection,
+                    evidence,
+                    shadow=shadow,
+                    shadow_evaluation_succeeded=True,
+                )
+            except BaseException:
+                connection.execute("rollback to command_activity_repair_probe")
+                connection.execute("release command_activity_repair_probe")
+                raise
+            connection.execute("rollback to command_activity_repair_probe")
+            connection.execute("release command_activity_repair_probe")
             recover_command_activity_persistence(
                 connection,
                 error_domain=COMMAND_PERSISTENCE_ERROR_DOMAIN,
             )
-            if shadow is not None or shadow_evaluation_succeeded:
-                recover_command_activity_persistence(
-                    connection,
-                    error_domain=SHADOW_PERSISTENCE_ERROR_DOMAIN,
-                )
-            return True
+            recover_command_activity_persistence(
+                connection,
+                error_domain=SHADOW_PERSISTENCE_ERROR_DOMAIN,
+            )
 
     def count_command_activities(self: _ConnectionOwner) -> int:
         with self._connect() as connection:
@@ -154,6 +136,81 @@ class StoreCommandActivityMixin:
                     ).fetchone(),
                 )
         return int(row[0]) if row is not None else 0
+
+
+def _validate_command_activity_write(
+    evidence: CommandActivityEvidence,
+    shadow: CommandShadowObservation | None,
+) -> None:
+    if not isinstance(cast(object, evidence), CommandActivityEvidence):
+        raise ValueError("evidence must be a CommandActivityEvidence")
+    if shadow is None:
+        return
+    if not isinstance(cast(object, shadow), CommandShadowObservation):
+        raise ValueError("shadow must be a CommandShadowObservation")
+    if shadow.activity_id != evidence.activity.activity_id:
+        raise ValueError("shadow activity_id must match command evidence")
+    if shadow.occurred_at != evidence.activity.occurred_at:
+        raise ValueError("shadow occurred_at must match command evidence")
+
+
+def _record_new_command_activity(
+    connection: sqlite3.Connection,
+    evidence: CommandActivityEvidence,
+    *,
+    shadow: CommandShadowObservation | None,
+    shadow_evaluation_succeeded: bool,
+) -> None:
+    connection.execute(
+        """
+        insert into command_activity (
+          activity_id, occurred_at, harness, hook_phase, execution_status,
+          proof_level, policy_action, decision_reason_code, controlling_rule_id,
+          parse_confidence, uncertainty_class, match_count, prompted,
+          approval_reuse_status, receipt_link_status, receipt_id,
+          evaluation_latency_bucket, persistence_latency_bucket, schema_version
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        _activity_values(evidence.activity),
+    )
+    connection.executemany(
+        """
+        insert into command_activity_matches (
+          activity_id, ordinal, extension_id, extension_version, rule_id,
+          rule_version, match_class, severity, default_floor,
+          safe_variant_id, schema_version
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        tuple(_match_values(item) for item in evidence.matches),
+    )
+    connection.executemany(
+        """
+        insert into command_activity_match_effects (
+          activity_id, ordinal, effect_class
+        ) values (?, ?, ?)
+        """,
+        _effect_values(evidence),
+    )
+    connection.executemany(
+        """
+        insert into command_activity_correlations (
+          activity_id, kind, harness, key_id, digest
+        ) values (?, ?, ?, ?, ?)
+        """,
+        _correlation_values(evidence.activity),
+    )
+    if shadow is not None:
+        record_command_shadow_observation(connection, shadow)
+    record_command_activity_rollups(connection, evidence)
+    recover_command_activity_persistence(
+        connection,
+        error_domain=COMMAND_PERSISTENCE_ERROR_DOMAIN,
+    )
+    if shadow is not None or shadow_evaluation_succeeded:
+        recover_command_activity_persistence(
+            connection,
+            error_domain=SHADOW_PERSISTENCE_ERROR_DOMAIN,
+        )
 
 
 def _require_exact_replay(

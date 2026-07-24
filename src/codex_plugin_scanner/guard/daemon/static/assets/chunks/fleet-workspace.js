@@ -1,213 +1,120 @@
-import { r as reactExports, j as jsxRuntimeExports, O as HiMiniWrenchScrewdriver, A as ActionButton, e as harnessDisplayName, m as HiMiniCheckCircle, P as HiMiniExclamationCircle, i as isConnectableAppHarness, p as protectionHealthFor, n as GuardHero, Q as ProofStrip, S as SectionLabel, k as EmptyState, c as HiMiniChevronRight, R as HiMiniEye, T as HiMiniXCircle, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, O as HiMiniWrenchScrewdriver, A as ActionButton, m as HiMiniCheckCircle, z as HiMiniChevronDown, P as HiMiniExclamationCircle, e as harnessDisplayName, i as isConnectableAppHarness, p as protectionHealthFor, n as GuardHero, Q as ProofStrip, S as SectionLabel, k as EmptyState, c as HiMiniChevronRight, R as HiMiniEye, T as HiMiniXCircle, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard } from "../guard-dashboard.js";
 import { S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
 const PROTECTION_CHECK_ACTIONS = {
   harness_hooks: {
     label: "App hooks",
-    detail: "One or more app hooks need setup or repair.",
-    fallbackHref: "/settings?section=apps",
-    cta: "Repair app hooks",
-    repairable: true
+    detail: "One or more app hooks need setup or repair."
   },
   daemon: {
     label: "Local runtime",
-    detail: "The local Guard runtime needs attention before protection can finish.",
-    fallbackHref: "/settings",
-    cta: "Repair local runtime",
-    repairable: true
+    detail: "The local Guard runtime needs attention before protection can finish."
   },
   policy_engine: {
     label: "Policy engine",
-    detail: "Guard could not confirm the local policy engine is ready.",
-    fallbackHref: "/policy",
-    cta: "Repair policy engine",
-    repairable: true
+    detail: "Guard could not confirm the local policy engine is ready."
   },
   rule_packs: {
     label: "Rule packs",
-    detail: "Guard cannot confirm the active rule-pack proof yet.",
-    fallbackHref: "/policy",
-    cta: "Repair rule packs",
-    repairable: true
+    detail: "Guard cannot confirm the active rule-pack proof yet."
   },
   decision_plane_compatibility: {
     label: "Decision plane",
-    detail: "Local decision-plane compatibility is unproven or failed.",
-    fallbackHref: "/settings",
-    cta: "Open diagnostics",
-    repairable: false
+    detail: "Guard reruns the decision-plane compatibility probe during repair. Retry here if it remains unproven."
   },
   containment_compatibility: {
     label: "Containment",
-    detail: "Containment compatibility is unproven or failed.",
-    fallbackHref: "/settings",
-    cta: "Open diagnostics",
-    repairable: false
+    detail: "Guard reruns the containment compatibility probe during repair. Retry here if it remains unproven."
   },
   sandbox: {
     label: "Sandbox",
-    detail: "Sandbox enforcement could not be confirmed.",
-    fallbackHref: "/settings",
-    cta: "Open diagnostics",
-    repairable: false
+    detail: "Guard reruns the sandbox enforcement probe during repair. Retry here if it remains unproven."
   },
   decision_stream: {
     label: "Command evidence",
-    detail: "Command activity evidence is incomplete or unavailable.",
-    fallbackHref: "/evidence?view=commands",
-    cta: "Check command evidence",
-    repairable: true
+    detail: "Guard attempts evidence-store recovery during repair. Run a protected command only if fresh proof is still needed."
   },
   tamper_checks: {
     label: "Integrity checks",
-    detail: "Managed Guard files or hooks did not pass integrity checks.",
-    fallbackHref: "/settings?section=security",
-    cta: "Repair integrity",
-    repairable: true
+    detail: "Managed Guard files or hooks did not pass integrity checks."
   }
 };
 function actionForCheck(check, repairHarness) {
   if (check.check_id === "harness_hooks" && repairHarness) {
     return {
-      checkId: check.check_id,
       label: "App hooks",
-      detail: `${harnessDisplayName(repairHarness)} hooks need setup or repair.`,
-      fallbackHref: `/apps/${repairHarness}?tab=settings`,
-      cta: `Repair ${harnessDisplayName(repairHarness)}`,
-      repairable: true
+      detail: `${harnessDisplayName(repairHarness)} hooks need setup or repair.`
     };
   }
   const action = PROTECTION_CHECK_ACTIONS[check.check_id];
-  return action ? { checkId: check.check_id, ...action } : {
-    checkId: check.check_id,
+  return action ? action : {
     label: check.check_id.replace(/_/g, " "),
-    detail: "Guard could not confirm this protection proof.",
-    fallbackHref: "/settings",
-    cta: "Open diagnostics",
-    repairable: false
+    detail: "Guard could not confirm this protection proof."
   };
-}
-function primaryProtectionRecoveryAction(health, repairHarness) {
-  const gaps = health.checks.filter((check) => check.status !== "pass");
-  const ordered = [
-    ...gaps.filter((check) => check.status === "fail"),
-    ...gaps.filter((check) => check.status !== "fail")
-  ];
-  const first = ordered[0];
-  return first ? actionForCheck(first, repairHarness) : null;
 }
 function ProtectionGapItem({
   action,
-  check,
-  repairState,
-  onRepair
+  check
 }) {
-  const handleRepair = reactExports.useCallback(() => {
-    void onRepair(check.check_id);
-  }, [check.check_id, onRepair]);
-  const working = repairState?.status === "working";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-col gap-2 rounded-xl border border-brand-attention/10 bg-white/70 px-3 py-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 text-xs text-slate-600", children: [
-      repairState?.status === "success" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        HiMiniCheckCircle,
-        {
-          className: "mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500",
-          "aria-hidden": "true"
-        }
-      ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-        HiMiniExclamationCircle,
-        {
-          className: `mt-0.5 h-3.5 w-3.5 shrink-0 ${check.status === "fail" ? "text-brand-attention" : "text-slate-400"}`,
-          "aria-hidden": "true"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "font-semibold text-brand-dark", children: action.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 text-[10px] font-medium uppercase tracking-wide text-slate-400", children: check.status === "fail" ? "Failed" : "Unproven" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block", children: action.detail })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-      action.repairable ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ActionButton,
-        {
-          onClick: handleRepair,
-          disabled: working,
-          variant: "outline",
-          children: working ? "Repairing…" : action.cta
-        }
-      ) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: action.fallbackHref, variant: "outline", children: action.cta }),
-      repairState?.status === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: action.fallbackHref, variant: "ghost", children: "Open diagnostics" }) : null
-    ] }),
-    repairState ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "p",
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "flex items-start gap-2 border-t border-brand-attention/10 py-3 first:border-t-0", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 text-xs text-slate-600", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      HiMiniExclamationCircle,
       {
-        className: `text-xs ${repairState.status === "error" ? "text-red-600" : "text-slate-500"}`,
-        "aria-live": "polite",
-        children: repairState.message
+        className: `mt-0.5 h-3.5 w-3.5 shrink-0 ${check.status === "fail" ? "text-brand-attention" : "text-slate-400"}`,
+        "aria-hidden": "true"
       }
-    ) : null
-  ] });
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "font-semibold text-brand-dark", children: action.label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 text-[10px] font-medium uppercase tracking-wide text-slate-400", children: check.status === "fail" ? "Failed" : "Unproven" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block", children: action.detail })
+    ] })
+  ] }) });
 }
 function recoverySummary(failCount, unknownCount) {
   if (failCount === 0) {
-    return "Complete the remaining proof here. Guard rechecks protection after each step.";
+    return "Complete the remaining proof here. Guard repairs and rechecks every protection layer in one pass.";
   }
   const failedChecks = `${failCount} failed check${failCount === 1 ? "" : "s"}`;
   let remainingProofs = "";
   if (unknownCount > 0) {
     remainingProofs = `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}`;
   }
-  return `Repair the ${failedChecks} here${remainingProofs}. Guard rechecks protection after each step.`;
+  return `Repair the ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every protection layer in one pass.`;
+}
+function repairButtonLabel(repairState) {
+  if (repairState?.status === "working") return "Repairing…";
+  if (repairState?.status === "error") return "Retry repair";
+  return "Repair protection";
 }
 function FleetProtectionRecovery(props) {
-  const [repairStates, setRepairStates] = reactExports.useState(
-    {}
-  );
+  const [repairState, setRepairState] = reactExports.useState(null);
+  const [detailsOpen, setDetailsOpen] = reactExports.useState(false);
   const gaps = props.health.checks.filter((check) => check.status !== "pass");
   const failCount = gaps.filter((check) => check.status === "fail").length;
   const unknownCount = gaps.length - failCount;
-  const handleRepair = reactExports.useCallback(
-    async (checkId) => {
-      setRepairStates((current) => ({
-        ...current,
-        [checkId]: { status: "working", message: "Repairing now…" }
-      }));
-      try {
-        const message = await props.onRepairProtectionCheck(
-          checkId,
-          props.repairHarnesses
-        );
-        setRepairStates((current) => ({
-          ...current,
-          [checkId]: { status: "success", message }
-        }));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Guard could not complete this repair.";
-        setRepairStates((current) => ({
-          ...current,
-          [checkId]: { status: "error", message }
-        }));
-      }
-    },
-    [props.onRepairProtectionCheck, props.repairHarnesses]
-  );
-  const handleRepairAll = reactExports.useCallback(async () => {
-    const repairedGroups = /* @__PURE__ */ new Set();
-    for (const check of gaps) {
-      if (!actionForCheck(check, props.repairHarness).repairable) continue;
-      const group = check.check_id === "rule_packs" || check.check_id === "tamper_checks" || check.check_id === "policy_engine" ? "integrity" : check.check_id;
-      if (repairedGroups.has(group)) continue;
-      repairedGroups.add(group);
-      await handleRepair(check.check_id);
+  const handleRepair = reactExports.useCallback(async () => {
+    setRepairState({
+      status: "working",
+      message: "Repairing app hooks, runtime, rule packs, and integrity…"
+    });
+    try {
+      const message = await props.onRepairProtection(props.repairHarnesses);
+      setRepairState({ status: "success", message });
+      setDetailsOpen(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Repair paused before every protection step completed. Retry to continue safely.";
+      setRepairState({ status: "error", message });
+      setDetailsOpen(true);
     }
-  }, [gaps, handleRepair]);
-  const handleRepairAllClick = reactExports.useCallback(() => {
-    void handleRepairAll();
-  }, [handleRepairAll]);
+  }, [props.onRepairProtection, props.repairHarnesses]);
+  const handleRepairClick = reactExports.useCallback(() => {
+    void handleRepair();
+  }, [handleRepair]);
+  const handleDetailsToggle = reactExports.useCallback(() => {
+    setDetailsOpen((open) => !open);
+  }, []);
   if (gaps.length === 0) return null;
-  const anyWorking = Object.values(repairStates).some(
-    (state) => state.status === "working"
-  );
+  const working = repairState?.status === "working";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "section",
     {
@@ -228,18 +135,52 @@ function FleetProtectionRecovery(props) {
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: recoverySummary(failCount, unknownCount) })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairAllClick, disabled: anyWorking, children: anyWorking ? "Repairing…" : "Repair failed checks" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairClick, disabled: working, children: repairButtonLabel(repairState) })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 grid gap-3 sm:grid-cols-2", children: gaps.map((check) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        repairState ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "p",
+          {
+            className: `mt-3 flex items-start gap-2 text-sm ${repairState.status === "error" ? "text-red-600" : "text-slate-600"}`,
+            "aria-live": "polite",
+            children: [
+              repairState.status === "success" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                HiMiniCheckCircle,
+                {
+                  className: "mt-0.5 h-4 w-4 shrink-0 text-emerald-500",
+                  "aria-hidden": "true"
+                }
+              ) : null,
+              repairState.message
+            ]
+          }
+        ) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handleDetailsToggle,
+            "aria-expanded": detailsOpen,
+            className: "mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
+            children: [
+              "View repair details",
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                HiMiniChevronDown,
+                {
+                  className: `h-4 w-4 transition-transform ${detailsOpen ? "rotate-180" : ""}`,
+                  "aria-hidden": "true"
+                }
+              )
+            ]
+          }
+        ),
+        detailsOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 border-t border-brand-attention/10", children: gaps.map((check) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           ProtectionGapItem,
           {
             action: actionForCheck(check, props.repairHarness),
-            check,
-            repairState: repairStates[check.check_id],
-            onRepair: handleRepair
+            check
           },
           check.check_id
-        )) })
+        )) }) : null
       ]
     }
   );
@@ -406,7 +347,6 @@ function FleetWorkspace(props) {
     (check) => check.check_id === "harness_hooks" && check.status === "fail"
   ));
   const repairHarnesses = Array.from(new Set(managedInstalls.map((install) => install.harness)));
-  const recoveryPrimary = primaryProtectionRecoveryAction(protectionHealth, repairHarness);
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
     activeInstalls.length,
@@ -424,8 +364,8 @@ function FleetWorkspace(props) {
         status: heroCopy.status,
         headline: heroCopy.headline,
         subheadline: heroCopy.subheadline,
-        cta: protectionHealth.state !== "protected" && recoveryPrimary ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "#protection-recovery", children: "Repair protection" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.primaryCtaHref, children: heroCopy.primaryCtaLabel }),
-        secondaryCta: protectionHealth.state !== "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "#protection-recovery", variant: "outline", children: "View all steps" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.secondaryCtaHref, variant: "outline", children: heroCopy.secondaryCtaLabel })
+        cta: protectionHealth.state !== "protected" ? null : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.primaryCtaHref, children: heroCopy.primaryCtaLabel }),
+        secondaryCta: protectionHealth.state !== "protected" ? null : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.secondaryCtaHref, variant: "outline", children: heroCopy.secondaryCtaLabel })
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -445,7 +385,7 @@ function FleetWorkspace(props) {
         health: protectionHealth,
         repairHarness,
         repairHarnesses,
-        onRepairProtectionCheck: props.onRepairProtectionCheck
+        onRepairProtection: props.onRepairProtection
       }
     ) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]", children: [
