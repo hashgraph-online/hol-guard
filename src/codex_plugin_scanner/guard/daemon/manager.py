@@ -1970,7 +1970,9 @@ def _guard_daemon_process_inventory_for_guard_home(guard_home: Path) -> list[tup
         parts = _split_process_command(command_line)
         if parts is None:
             lowered = command_line.lower()
-            if "codex_plugin_scanner" in lowered or "guard" in lowered:
+            if ("codex_plugin_scanner" in lowered or "guard" in lowered) and _malformed_command_may_launch_guard(
+                command_line
+            ):
                 return None
             continue
         if not _guard_daemon_command_parts_match(parts):
@@ -1986,6 +1988,20 @@ def _guard_daemon_process_inventory_for_guard_home(guard_home: Path) -> list[tup
         if matches_home:
             processes.append((pid, port))
     return sorted(processes, key=lambda item: item[1])
+
+
+def _malformed_command_may_launch_guard(command_line: str) -> bool:
+    first_token = command_line.lstrip().split(maxsplit=1)[0].strip("\"'")
+    launcher = ntpath.basename(first_token).lower()
+    return launcher.startswith("python") or launcher in {
+        "env",
+        "hol-guard",
+        "hol-guard.exe",
+        "plugin-guard",
+        "plugin-guard.exe",
+        "uv",
+        "uv.exe",
+    }
 
 
 def _running_guard_daemon_processes_for_guard_home(guard_home: Path) -> list[tuple[int, int]]:

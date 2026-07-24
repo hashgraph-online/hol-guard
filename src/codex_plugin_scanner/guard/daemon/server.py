@@ -306,6 +306,29 @@ class _CursorReceiptContext(TypedDict):
     summary: dict[str, object]
 
 
+_MAX_CONCURRENT_DAEMON_REQUESTS = 64
+_MAX_CONCURRENT_DAEMON_CONTROL_REQUESTS = 8
+_MAX_CONCURRENT_DAEMON_CRITICAL_REQUESTS = 4
+_MAX_CONCURRENT_DAEMON_CONNECTIONS = (
+    _MAX_CONCURRENT_DAEMON_REQUESTS + _MAX_CONCURRENT_DAEMON_CONTROL_REQUESTS + _MAX_CONCURRENT_DAEMON_CRITICAL_REQUESTS
+)
+_MAX_CONCURRENT_RUNTIME_HOOKS = 32
+_MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS = 24
+_DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 2.0
+_DAEMON_CONTROL_PATHS = frozenset(
+    {
+        "/v1/healthz/details",
+        "/v1/healthz/verify",
+    }
+)
+_DAEMON_CRITICAL_PATHS = frozenset(
+    {
+        "/healthz",
+        "/v1/daemon/identity-challenge",
+    }
+)
+
+
 class _GuardDaemonHttpServer(ThreadingHTTPServer):
     store: GuardStore
     runtime: GuardSurfaceRuntime
@@ -335,6 +358,26 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     containment_health_cache: dict[str, object] | None
     containment_health_cache_monotonic: float
     containment_health_cache_lock: threading.Lock
+    hook_capacity: threading.BoundedSemaphore
+    hook_capacity_limit: int
+    active_hook_requests: int
+    rejected_hook_requests: int
+    hook_harness_capacity: dict[str, threading.BoundedSemaphore]
+    hook_harness_active: dict[str, int]
+    hook_harness_rejected: dict[str, int]
+    hook_capacity_lock: threading.Lock
+    request_capacity: threading.BoundedSemaphore
+    request_capacity_limit: int
+    connection_capacity: threading.BoundedSemaphore
+    connection_capacity_limit: int
+    control_request_capacity: threading.BoundedSemaphore
+    control_request_capacity_limit: int
+    critical_request_capacity: threading.BoundedSemaphore
+    critical_request_capacity_limit: int
+    active_requests: int
+    rejected_requests: int
+    request_capacity_kinds: dict[int, str]
+    request_capacity_lock: threading.Lock
 
     def __init__(
         self,
@@ -377,6 +420,26 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.containment_health_cache = None
         self.containment_health_cache_monotonic = 0.0
         self.containment_health_cache_lock = threading.Lock()
+        self.hook_capacity_limit = _MAX_CONCURRENT_RUNTIME_HOOKS
+        self.hook_capacity = threading.BoundedSemaphore(self.hook_capacity_limit)
+        self.active_hook_requests = 0
+        self.rejected_hook_requests = 0
+        self.hook_harness_capacity = {}
+        self.hook_harness_active = {}
+        self.hook_harness_rejected = {}
+        self.hook_capacity_lock = threading.Lock()
+        self.request_capacity_limit = _MAX_CONCURRENT_DAEMON_REQUESTS
+        self.request_capacity = threading.BoundedSemaphore(self.request_capacity_limit)
+        self.connection_capacity_limit = _MAX_CONCURRENT_DAEMON_CONNECTIONS
+        self.connection_capacity = threading.BoundedSemaphore(self.connection_capacity_limit)
+        self.control_request_capacity_limit = _MAX_CONCURRENT_DAEMON_CONTROL_REQUESTS
+        self.control_request_capacity = threading.BoundedSemaphore(self.control_request_capacity_limit)
+        self.critical_request_capacity_limit = _MAX_CONCURRENT_DAEMON_CRITICAL_REQUESTS
+        self.critical_request_capacity = threading.BoundedSemaphore(self.critical_request_capacity_limit)
+        self.active_requests = 0
+        self.rejected_requests = 0
+        self.request_capacity_kinds = {}
+        self.request_capacity_lock = threading.Lock()
         self.store.set_policy_integrity_state_listener(self.publish_trust_state)
         from .hook_worker import HookWorker
 
@@ -386,6 +449,82 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
             runtime=self.runtime,
             opener=webbrowser.open,
         )
+
+    def process_request(self, request: Any, client_address: Any) -> None:
+        if not self.connection_capacity.acquire(blocking=False):
+            with self.request_capacity_lock:
+                self.rejected_requests += 1
+            self.shutdown_request(request)
+            return
+        with suppress(OSError):
+            request.settimeout(_DAEMON_REQUEST_READ_TIMEOUT_SECONDS)
+        with self.request_capacity_lock:
+            self.active_requests += 1
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._release_request_capacity(request)
+            raise
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._release_request_capacity(request)
+
+    def _release_request_capacity(self, request: Any) -> None:
+        with self.request_capacity_lock:
+            self.active_requests -= 1
+            capacity_kind = self.request_capacity_kinds.pop(id(request), None)
+        if capacity_kind is not None:
+            self._request_capacity_for_kind(capacity_kind).release()
+        self.connection_capacity.release()
+
+    def claim_request_capacity(self, request: Any, path: str) -> bool:
+        capacity_kind = self._request_capacity_kind(path)
+        capacity = self._request_capacity_for_kind(capacity_kind)
+        if not capacity.acquire(blocking=False):
+            with self.request_capacity_lock:
+                self.rejected_requests += 1
+            return False
+        with self.request_capacity_lock:
+            self.request_capacity_kinds[id(request)] = capacity_kind
+        return True
+
+    def _request_capacity_for_kind(self, capacity_kind: str) -> threading.BoundedSemaphore:
+        if capacity_kind == "critical":
+            return self.critical_request_capacity
+        if capacity_kind == "control":
+            return self.control_request_capacity
+        return self.request_capacity
+
+    @staticmethod
+    def _request_capacity_kind(path: str) -> str:
+        path = path.split("?", 1)[0]
+        if path in _DAEMON_CRITICAL_PATHS:
+            return "critical"
+        if path in _DAEMON_CONTROL_PATHS:
+            return "control"
+        return "general"
+
+    def hook_harness_semaphore(self, harness: str) -> threading.BoundedSemaphore:
+        try:
+            capacity_harness = get_adapter(harness).harness
+        except ValueError:
+            capacity_harness = "other"
+        with self.hook_capacity_lock:
+            capacity = self.hook_harness_capacity.get(capacity_harness)
+            if capacity is None:
+                capacity = threading.BoundedSemaphore(_MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS)
+                self.hook_harness_capacity[capacity_harness] = capacity
+            return capacity
+
+    @staticmethod
+    def canonical_hook_capacity_harness(harness: str) -> str:
+        try:
+            return get_adapter(harness).harness
+        except ValueError:
+            return "other"
 
     def daemon_host(self) -> str:
         return str(self.server_address[0])
@@ -1470,6 +1609,14 @@ def _repair_command_activity_persistence_health(store: GuardStore) -> None:
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
     _MAX_BODY_BYTES = 1_000_000
     server: _GuardDaemonHttpServer  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    def parse_request(self) -> bool:
+        if not super().parse_request():
+            return False
+        if self._daemon_server().claim_request_capacity(self.request, self.path):
+            return True
+        self.send_error(503, "Guard daemon request capacity reached")
+        return False
 
     def do_OPTIONS(self) -> None:
         origin = self._normalize_origin(self.headers.get("Origin"))
@@ -4831,6 +4978,115 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": error.code}, status=400)
             return
 
+        daemon_server = self._daemon_server()
+        runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
+        capacity_harness = daemon_server.canonical_hook_capacity_harness(
+            (runtime_harness or default_harness).strip().lower().replace("_", "-")
+        )
+        harness_capacity = daemon_server.hook_harness_semaphore(capacity_harness)
+        if not harness_capacity.acquire(blocking=False):
+            with daemon_server.hook_capacity_lock:
+                daemon_server.rejected_hook_requests += 1
+                daemon_server.hook_harness_rejected[capacity_harness] = (
+                    daemon_server.hook_harness_rejected.get(capacity_harness, 0) + 1
+                )
+            self._write_json(
+                self._runtime_hook_capacity_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                )
+            )
+            return
+        if not daemon_server.hook_capacity.acquire(blocking=False):
+            harness_capacity.release()
+            with daemon_server.hook_capacity_lock:
+                daemon_server.rejected_hook_requests += 1
+                daemon_server.hook_harness_rejected[capacity_harness] = (
+                    daemon_server.hook_harness_rejected.get(capacity_harness, 0) + 1
+                )
+            self._write_json(
+                self._runtime_hook_capacity_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                )
+            )
+            return
+        with daemon_server.hook_capacity_lock:
+            daemon_server.active_hook_requests += 1
+            daemon_server.hook_harness_active[capacity_harness] = (
+                daemon_server.hook_harness_active.get(capacity_harness, 0) + 1
+            )
+        try:
+            self._execute_runtime_hook(
+                payload,
+                params,
+                hook_env=hook_env,
+                default_harness=default_harness,
+                home_dir=home_dir,
+                guard_home=guard_home,
+                workspace=workspace,
+            )
+        finally:
+            with daemon_server.hook_capacity_lock:
+                daemon_server.active_hook_requests -= 1
+                daemon_server.hook_harness_active[capacity_harness] -= 1
+            daemon_server.hook_capacity.release()
+            harness_capacity.release()
+
+    def _runtime_hook_capacity_response(
+        self,
+        payload: Mapping[str, object],
+        params: Mapping[str, list[str]],
+        *,
+        default_harness: str,
+    ) -> dict[str, object]:
+        runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
+        harness = (runtime_harness or default_harness).strip().lower().replace("_", "-")
+        event = self._optional_string(payload.get("hook_event_name", payload.get("event"))) or "PreToolUse"
+        reason = "HOL Guard is at local review capacity. Retry this action after the active reviews complete."
+        if harness == "pi":
+            return {
+                "decision": "deny",
+                "reason": reason,
+                "reason_code": "daemon_hook_capacity",
+            }
+        if event == "PermissionRequest":
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": event,
+                    "decision": {
+                        "behavior": "deny",
+                        "message": reason,
+                    },
+                }
+            }
+        if event == "PreToolUse":
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": event,
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                }
+            }
+        return {
+            "continue": False,
+            "stopReason": reason,
+            "systemMessage": reason,
+        }
+
+    def _execute_runtime_hook(
+        self,
+        payload: dict[str, object],
+        params: Mapping[str, list[str]],
+        *,
+        hook_env: dict[str, str],
+        default_harness: str,
+        home_dir: str | None,
+        guard_home: str | None,
+        workspace: str | None,
+    ) -> None:
         # Fast path: use the resident hook worker for supported hooks.
         if self._hook_fast_path_enabled():
             result = self._handle_runtime_hook_fast(
@@ -5839,6 +6095,25 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         store = self.server.store  # type: ignore[attr-defined]
         pending_approvals = store.count_approval_requests()
         activity_health = store.get_command_activity_persistence_health()
+        daemon_server = self._daemon_server()
+        with daemon_server.hook_capacity_lock:
+            hook_capacity = {
+                "active": daemon_server.active_hook_requests,
+                "limit": daemon_server.hook_capacity_limit,
+                "rejected": daemon_server.rejected_hook_requests,
+                "per_harness_active": dict(daemon_server.hook_harness_active),
+                "per_harness_limit": _MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS,
+                "per_harness_rejected": dict(daemon_server.hook_harness_rejected),
+            }
+        with daemon_server.request_capacity_lock:
+            request_capacity = {
+                "active": daemon_server.active_requests,
+                "connection_limit": daemon_server.connection_capacity_limit,
+                "control_limit": daemon_server.control_request_capacity_limit,
+                "critical_limit": daemon_server.critical_request_capacity_limit,
+                "limit": daemon_server.request_capacity_limit,
+                "rejected": daemon_server.rejected_requests,
+            }
         return {
             "ok": True,
             "receipts": len(store.list_receipts(limit=500)),
@@ -5861,6 +6136,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 ),
                 "schema_version": activity_health.schema_version,
             },
+            "hook_capacity": hook_capacity,
+            "request_capacity": request_capacity,
         }
 
     @staticmethod
@@ -6088,9 +6365,37 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         break
                 except ValueError:
                     continue
+            if not root_match and parameter == "workspace":
+                root_match = self._is_owned_temporary_hook_workspace(candidate)
             if not root_match:
                 raise _HookPathValidationError(parameter, "unexpected_root")
         return Path(candidate)
+
+    @staticmethod
+    def _is_owned_temporary_hook_workspace(candidate: str) -> bool:
+        candidate_path = Path(candidate)
+        primary_temporary_root = Path(os.path.realpath(tempfile.gettempdir()))
+        temporary_roots = [primary_temporary_root]
+        if os.name == "posix":
+            temporary_roots.extend(Path(os.path.realpath(root)) for root in ("/tmp", "/var/tmp"))
+        if not candidate_path.is_dir() or not any(
+            _GuardDaemonHandler._path_is_within_root(candidate_path, root) for root in temporary_roots
+        ):
+            return False
+        getuid = getattr(os, "getuid", None)
+        if not callable(getuid):
+            current_home = Path.home().resolve()
+            return _GuardDaemonHandler._path_is_within_root(
+                primary_temporary_root,
+                current_home,
+            ) and _GuardDaemonHandler._path_is_within_root(
+                candidate_path,
+                primary_temporary_root,
+            )
+        try:
+            return candidate_path.stat().st_uid == getuid()
+        except OSError:
+            return False
 
     def _validated_hook_guard_home(self, value: str | None) -> str | None:
         if value is None:
