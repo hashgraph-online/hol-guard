@@ -84,10 +84,10 @@ def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path)
         settings_path=tmp_path / "settings.json",
     )
 
-    assert "const GUARD_TIMEOUT_MS = 12000;" in source
+    assert "const GUARD_TIMEOUT_MS = 4000;" in source
     assert "const GUARD_DEADLINE_RESERVE_MS = 250;" in source
-    assert "const GUARD_DAEMON_TIMEOUT_MS = 2000;" in source
-    assert "const GUARD_CLI_TIMEOUT_MS = 10000;" in source
+    assert "const GUARD_DAEMON_TIMEOUT_MS = 1250;" in source
+    assert "const GUARD_CLI_TIMEOUT_MS = 2500;" in source
     assert 'const GUARD_ARGS = ["hook", "--json"' in source
     assert "compatibility_version !== GUARD_COMPATIBILITY_VERSION" in source
     assert "error.name === 'AbortError'" in source
@@ -98,3 +98,19 @@ def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path)
     assert "const deadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS" in source
     assert "Math.max(deadlineAt - Date.now(), 1)" in source
     assert "timeout: cliTimeoutMs" in source
+
+
+def test_pi_hook_deadline_stays_inside_host_timeout() -> None:
+    from codex_plugin_scanner.guard.adapters.pi_extension_source import (
+        GUARD_CLI_HOOK_TIMEOUT_MS,
+        GUARD_DAEMON_HOOK_TIMEOUT_MS,
+        GUARD_HOOK_DEADLINE_RESERVE_MS,
+        GUARD_HOOK_TIMEOUT_MS,
+        PI_HOOK_HOST_TIMEOUT_MS,
+    )
+
+    assert GUARD_HOOK_TIMEOUT_MS < PI_HOOK_HOST_TIMEOUT_MS
+    assert (
+        GUARD_DAEMON_HOOK_TIMEOUT_MS + GUARD_CLI_HOOK_TIMEOUT_MS + GUARD_HOOK_DEADLINE_RESERVE_MS
+        <= GUARD_HOOK_TIMEOUT_MS
+    )
