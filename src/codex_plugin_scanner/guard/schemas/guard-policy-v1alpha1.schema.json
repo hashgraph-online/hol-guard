@@ -197,6 +197,63 @@
         "maxLength": 512
       }
     },
+    "commandCondition": {
+      "type": "object",
+      "required": [
+        "field",
+        "operator",
+        "value"
+      ],
+      "properties": {
+        "field": {
+          "const": "command"
+        },
+        "operator": {
+          "enum": [
+            "exact",
+            "startsWith",
+            "contains",
+            "endsWith",
+            "glob",
+            "regex"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "caseSensitive": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "commandExpression": {
+      "type": "object",
+      "required": [
+        "combinator",
+        "conditions"
+      ],
+      "properties": {
+        "combinator": {
+          "enum": [
+            "all",
+            "any"
+          ]
+        },
+        "conditions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/commandCondition"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "match": {
       "type": "object",
       "properties": {
@@ -213,7 +270,14 @@
           "$ref": "#/$defs/stringSet"
         },
         "commands": {
-          "$ref": "#/$defs/stringSet"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/stringSet"
+            },
+            {
+              "$ref": "#/$defs/commandExpression"
+            }
+          ]
         },
         "devices": {
           "$ref": "#/$defs/stringSet"

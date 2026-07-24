@@ -24,6 +24,21 @@ def _configure_guard_policy_parsers(
         help="Inspect, validate, format, diff, export, or import canonical Guard policy YAML",
     )
     policy_subparsers = policy_parser.add_subparsers(dest="policy_command", required=True)
+    policy_capabilities_parser = policy_subparsers.add_parser(
+        "capabilities", help="Show portable policy capabilities supported by this Guard runtime"
+    )
+    _add_guard_common_args(policy_capabilities_parser)
+    policy_capabilities_parser.add_argument("--json", action="store_true")
+    policy_evaluate_command_parser = policy_subparsers.add_parser(
+        "evaluate-command",
+        help="Evaluate a command against typed command-expression policy rules",
+    )
+    policy_evaluate_command_parser.add_argument("file")
+    policy_evaluate_command_parser.add_argument("--command", dest="command_text", required=True)
+    _add_guard_common_args(policy_evaluate_command_parser)
+    policy_evaluate_command_parser.add_argument("--json", action="store_true")
+
+
 
     policy_validate_parser = policy_subparsers.add_parser("validate", help="Validate a policy document")
     policy_validate_parser.add_argument("file")

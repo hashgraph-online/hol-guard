@@ -345,3 +345,62 @@ def test_canonical_object_keys_use_utf16_order() -> None:
     canonical = canonical_policy_document_bytes(parse_policy_document_yaml(_yaml(value))).decode("utf-8")
 
     assert canonical.index('"😀"') < canonical.index('"\ue000"')
+
+
+
+def test_command_expression_round_trips_without_flattening_boolean_semantics() -> None:
+    value = _basic_mapping()
+    spec = value["spec"]
+    assert isinstance(spec, dict)
+    rules = spec["rules"]
+    assert isinstance(rules, list)
+    rule = rules[0]
+    assert isinstance(rule, dict)
+    match = rule["match"]
+    assert isinstance(match, dict)
+    match["commands"] = {
+        "combinator": "any",
+        "conditions": [
+            {
+                "field": "command",
+                "operator": "exact",
+                "value": "git push",
+                "caseSensitive": True,
+            },
+            {
+                "field": "command",
+                "operator": "regex",
+                "value": r"^docker\s+compose\s+(up|down)$",
+                "caseSensitive": True,
+            },
+        ],
+    }
+
+    document = parse_policy_document_yaml(_yaml(value))
+    formatted = format_policy_document_yaml(document)
+    reparsed = parse_policy_document_yaml(formatted)
+
+    assert reparsed == document
+    assert reparsed.rules[0].match.to_mapping()["commands"] == match["commands"]
+
+
+def test_command_expression_reports_invalid_runtime_regex_at_commands_path() -> None:
+    value = _basic_mapping()
+    spec = value["spec"]
+    assert isinstance(spec, dict)
+    rules = spec["rules"]
+    assert isinstance(rules, list)
+    rule = rules[0]
+    assert isinstance(rule, dict)
+    match = rule["match"]
+    assert isinstance(match, dict)
+    match["commands"] = {
+        "combinator": "all",
+        "conditions": [{"field": "command", "operator": "regex", "value": "[unclosed"}],
+    }
+
+    with pytest.raises(PolicyDocumentError) as error:
+        parse_policy_document_yaml(_yaml(value))
+
+    assert error.value.diagnostics[0].path == ("spec", "rules", 0, "match", "commands")
+    assert error.value.diagnostics[0].code.startswith("invalid_command_regex")
