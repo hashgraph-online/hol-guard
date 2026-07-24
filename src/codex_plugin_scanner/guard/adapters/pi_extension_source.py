@@ -11,11 +11,10 @@ from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
 
 # Pi terminates extension hooks at roughly 4.5 seconds. Keep Guard's daemon and
 # CLI fallback path below that host deadline so its fail-open result can return.
-PI_HOOK_HOST_TIMEOUT_MS = 4_500
 GUARD_HOOK_TIMEOUT_MS = 4_000
 GUARD_HOOK_DEADLINE_RESERVE_MS = 250
 GUARD_DAEMON_HOOK_TIMEOUT_MS = 1_250
-GUARD_CLI_HOOK_TIMEOUT_MS = 2_500
+GUARD_CLI_HOOK_TIMEOUT_MS = 2_250
 GUARD_HOOK_TEXT_LIMIT_CHARS = 12_000
 GUARD_HOOK_CONTENT_ITEM_LIMIT = 24
 GUARD_HOOK_OBJECT_KEY_LIMIT = 24
