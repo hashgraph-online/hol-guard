@@ -31,6 +31,11 @@ from yaml.tokens import (
 )
 
 from .policy_document import GuardPolicyDocument
+from .runtime.command_expression import (
+    CommandExpressionError,
+    command_expression_from_mapping,
+    validate_command_expression,
+)
 
 MAX_POLICY_BYTES = 1_048_576
 MAX_POLICY_DEPTH = 32
@@ -450,6 +455,27 @@ def _validate_timestamps(value: dict[str, object]) -> None:
             raise PolicyDocumentError((PolicyDiagnostic("invalid_timestamp", path),)) from error
 
 
+def _validate_command_expressions(value: dict[str, object]) -> None:
+    spec = value.get("spec")
+    if not isinstance(spec, dict):
+        return
+    rules = spec.get("rules")
+    if not isinstance(rules, list):
+        return
+    for index, rule in enumerate(rules):
+        if not isinstance(rule, dict):
+            continue
+        match = rule.get("match")
+        if not isinstance(match, dict) or not isinstance(match.get("commands"), dict):
+            continue
+        path: JsonPath = ("spec", "rules", index, "match", "commands")
+        try:
+            expression = command_expression_from_mapping(match["commands"])
+            validate_command_expression(expression)
+        except CommandExpressionError as error:
+            raise PolicyDocumentError((PolicyDiagnostic(str(error), path),)) from error
+
+
 def parse_policy_document_yaml(source: str | bytes) -> GuardPolicyDocument:
     """Parse and validate one strict GuardPolicy YAML document."""
 
@@ -472,6 +498,7 @@ def parse_policy_document_yaml(source: str | bytes) -> GuardPolicyDocument:
         raise PolicyDocumentError((PolicyDiagnostic("schema_type"),))
     _validate_rule_ids(value)
     _validate_timestamps(value)
+    _validate_command_expressions(value)
     return GuardPolicyDocument.from_mapping(value)
 
 

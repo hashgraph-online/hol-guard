@@ -7,6 +7,7 @@ import pytest
 
 from codex_plugin_scanner.cli import _resolve_legacy_args, main
 from codex_plugin_scanner.guard.policy_authority import PolicyAuthorityError
+from codex_plugin_scanner.guard.policy_document_io import write_private_policy_text
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -25,6 +26,87 @@ def test_hol_guard_routes_policy_export_format_as_a_top_level_command() -> None:
         program_name="hol-guard",
     ) == ["guard", "policy", "export", "--format", "yaml"]
 
+
+
+def test_policy_capabilities_advertise_command_expression_runtime(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    return_code = main(["guard", "policy", "capabilities", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert return_code == 0
+    assert payload["capabilities"] == ["command-pattern-expressions.v1"]
+    assert payload["command_pattern_expressions"]["combinators"] == ["all", "any"]
+    assert payload["command_pattern_expressions"]["operators"] == [
+        "exact",
+        "startsWith",
+        "contains",
+        "endsWith",
+        "glob",
+        "regex",
+    ]
+    assert payload["command_pattern_expressions"]["regex_timeout_ms"] == 50
+
+
+def test_policy_evaluate_command_returns_highest_matching_action(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    policy_directory = tmp_path / "private-policy"
+    policy_directory.mkdir(mode=0o700)
+    policy_file = policy_directory / "policy.yaml"
+    write_private_policy_text(
+        policy_file,
+        """
+apiVersion: guard.hashgraphonline.com/v1alpha1
+kind: GuardPolicy
+metadata:
+  id: policy.command-runtime
+  name: Command runtime
+  revision: 1
+spec:
+  defaults:
+    mode: prompt
+    defaultAction: warn
+  rolloutState: draft
+  rules:
+    - id: block-docker
+      enabled: true
+      effect: block
+      match:
+        commands:
+          combinator: any
+          conditions:
+            - field: command
+              operator: startsWith
+              value: docker
+      lifetime:
+        mode: permanent
+        expiresAt: null
+      provenance:
+        source: suggested-memory
+        receiptIds: []
+        suggestionId: suggestion-001
+        createdAt: 2026-07-24T00:00:00Z
+        createdBy: test
+""".lstrip(),
+    )
+    return_code = main(
+        [
+            "guard",
+            "policy",
+            "evaluate-command",
+            str(policy_file),
+            "--command",
+            "docker compose up",
+            "--json",
+        ],
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert return_code == 0
+    assert payload["action"] == "block"
+    assert payload["matching_rule_ids"] == ["block-docker"]
 
 def test_policy_export_validate_format_and_diff(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     home = tmp_path / "home"

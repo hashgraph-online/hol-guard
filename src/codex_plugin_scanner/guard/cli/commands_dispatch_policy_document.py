@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol, TextIO, cast
 
+from ...version import __version__
 from ..approval_gate import ApprovalGateError, require_high_risk
 from ..policy_authority import PolicyAuthorityError
 from ..policy_document import policy_document_digest
@@ -24,6 +25,7 @@ from ..policy_document_io import (
     write_private_policy_text,
 )
 from ..policy_document_yaml import PolicyDocumentError, format_policy_document_yaml
+from ..runtime.command_policy import compile_command_policy_rules, evaluate_command_policy_rules
 from ..store import GuardStore
 from ..store_policy_document import PolicyImportMode
 from .approval_gate_prompt import prompt_for_approval_gate
@@ -38,6 +40,7 @@ class PolicyDocumentCommandArgs(Protocol):
     include_provenance: bool
     mode: str
     dry_run: bool
+    command_text: str
     json: bool
 
 
@@ -72,6 +75,16 @@ def _load_and_compile(path: Path):
     return document, compile_policy_document(document)
 
 
+def _compile_for_local_store(path: Path):
+    document = load_trusted_policy_document(path)
+    try:
+        return document, compile_policy_document(document), None
+    except PolicyCompilationError as error:
+        if error.code != "command_expression_requires_guard_3_1_runtime":
+            raise
+        return document, (), error
+
+
 def _run_guard_policy_document_command(
     args: PolicyDocumentCommandArgs,
     *,
@@ -82,8 +95,34 @@ def _run_guard_policy_document_command(
     command = str(args.policy_command)
     as_json = bool(getattr(args, "json", False))
     try:
+        if command == "capabilities":
+            _write_payload(
+                "policy capabilities",
+                {
+                    "guard_version": __version__,
+                    "policy_schema": "guard.hashgraphonline.com/v1alpha1",
+                    "capabilities": ["command-pattern-expressions.v1"],
+                    "command_pattern_expressions": {
+                        "combinators": ["all", "any"],
+                        "operators": [
+                            "exact",
+                            "startsWith",
+                            "contains",
+                            "endsWith",
+                            "glob",
+                            "regex",
+                        ],
+                        "regex_timeout_ms": 50,
+                    },
+                    "message": "Command-pattern policy expressions are supported.",
+                },
+                as_json=as_json,
+                output_stream=output_stream,
+            )
+            return 0
+
         if command == "validate":
-            document, compiled = _load_and_compile(Path(args.file))
+            document, compiled, local_store_error = _compile_for_local_store(Path(args.file))
             _write_payload(
                 "policy validate",
                 {
@@ -91,7 +130,35 @@ def _run_guard_policy_document_command(
                     "document_id": document.metadata.id,
                     "digest": policy_document_digest(document),
                     "compiled_rows": len(compiled),
-                    "message": f"Valid Guard policy: {document.metadata.id} ({len(compiled)} rows)",
+                    "local_store_compilable": local_store_error is None,
+                    "local_store_reason": local_store_error.code if local_store_error is not None else None,
+                    "message": (
+                        f"Valid Guard policy: {document.metadata.id} ({len(compiled)} rows)"
+                        if local_store_error is None
+                        else f"Valid Guard 3.1 policy: {document.metadata.id}"
+                    ),
+                },
+                as_json=as_json,
+                output_stream=output_stream,
+            )
+            return 0
+
+        if command == "evaluate-command":
+            document = load_trusted_policy_document(Path(args.file))
+            evaluation = evaluate_command_policy_rules(
+                compile_command_policy_rules(document),
+                str(args.command_text),
+            )
+            _write_payload(
+                "policy evaluate-command",
+                {
+                    "action": evaluation.action,
+                    "matching_rule_ids": list(evaluation.matching_rule_ids),
+                    "message": (
+                        "No command expression matched; default allow."
+                        if not evaluation.matching_rule_ids
+                        else f"Command matched {len(evaluation.matching_rule_ids)} policy rule(s): {evaluation.action}."
+                    ),
                 },
                 as_json=as_json,
                 output_stream=output_stream,
@@ -101,7 +168,7 @@ def _run_guard_policy_document_command(
         if command == "fmt":
             path = Path(args.file)
             original = read_trusted_policy_text(path)
-            document, _compiled = _load_and_compile(path)
+            document = load_trusted_policy_document(path)
             formatted = format_policy_document_yaml(document)
             changed = original != formatted
             if bool(args.check):

@@ -7,6 +7,8 @@ import json
 from dataclasses import dataclass
 from typing import TypeAlias, cast
 
+from .runtime.command_expression import CommandExpression, command_expression_from_mapping
+
 POLICY_API_VERSION = "guard.hashgraphonline.com/v1alpha1"
 POLICY_KIND = "GuardPolicy"
 POLICY_RULE_EFFECTS = ("allow", "block", "review", "ignore")
@@ -158,19 +160,28 @@ class PolicyDefaults:
 @dataclass(frozen=True, slots=True)
 class PolicyMatch:
     fields: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    command_expression: CommandExpression | None = None
     extensions: EncodedExtensions = ()
 
     @classmethod
     def from_mapping(cls, value: dict[str, object]) -> PolicyMatch:
+        commands = value.get("commands")
+        command_expression = command_expression_from_mapping(commands) if isinstance(commands, dict) else None
         fields = tuple(
             (key, tuple(str(item) for item in _sequence(value[key])))
             for key in POLICY_MATCH_FIELDS
             if isinstance(value.get(key), list)
         )
-        return cls(fields=fields, extensions=_encode_extensions(value, frozenset(POLICY_MATCH_FIELDS)))
+        return cls(
+            fields=fields,
+            command_expression=command_expression,
+            extensions=_encode_extensions(value, frozenset(POLICY_MATCH_FIELDS)),
+        )
 
     def to_mapping(self) -> dict[str, JsonValue]:
         result: dict[str, JsonValue] = {key: list(values) for key, values in self.fields}
+        if self.command_expression is not None:
+            result["commands"] = cast(dict[str, JsonValue], self.command_expression.to_mapping())
         return _with_extensions(result, self.extensions)
 
 

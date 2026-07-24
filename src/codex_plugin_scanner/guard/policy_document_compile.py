@@ -297,6 +297,8 @@ def compile_policy_document(document: GuardPolicyDocument) -> tuple[CompiledPoli
         match = raw_rule.get("match")
         if not isinstance(match, Mapping):
             raise PolicyCompilationError("unsupported_policy_match", rule_id)
+        if isinstance(match.get("commands"), Mapping):
+            raise PolicyCompilationError("command_expression_requires_guard_3_1_runtime", rule_id)
         unsupported = {
             key
             for key, value in match.items()
