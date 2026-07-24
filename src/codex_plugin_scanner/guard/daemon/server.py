@@ -14,6 +14,7 @@ import os
 import platform
 import secrets
 import sqlite3
+import stat
 import tempfile
 import threading
 import time
@@ -6380,8 +6381,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             temporary_roots.extend(Path(os.path.realpath(root)) for root in ("/tmp", "/var/tmp"))
         if not any(_GuardDaemonHandler._path_is_within_root(candidate_path, root) for root in temporary_roots):
             return False
-        # codeql[py/path-injection] candidate is a canonical absolute path contained by a fixed trusted temp root.
-        if not candidate_path.is_dir():
+        try:
+            # codeql[py/path-injection] candidate is a canonical absolute path contained by a fixed trusted temp root.
+            candidate_stat = candidate_path.stat()
+        except OSError:
+            return False
+        if not stat.S_ISDIR(candidate_stat.st_mode):
             return False
         getuid = getattr(os, "getuid", None)
         if not callable(getuid):
@@ -6393,11 +6398,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 candidate_path,
                 primary_temporary_root,
             )
-        try:
-            # codeql[py/path-injection] candidate passed canonical temp-root containment and directory checks above.
-            return candidate_path.stat().st_uid == getuid()
-        except OSError:
-            return False
+        return candidate_stat.st_uid == getuid()
 
     def _validated_hook_guard_home(self, value: str | None) -> str | None:
         if value is None:
