@@ -6378,9 +6378,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         temporary_roots = [primary_temporary_root]
         if os.name == "posix":
             temporary_roots.extend(Path(os.path.realpath(root)) for root in ("/tmp", "/var/tmp"))
-        if not candidate_path.is_dir() or not any(
-            _GuardDaemonHandler._path_is_within_root(candidate_path, root) for root in temporary_roots
-        ):
+        if not any(_GuardDaemonHandler._path_is_within_root(candidate_path, root) for root in temporary_roots):
+            return False
+        # codeql[py/path-injection] candidate is a canonical absolute path contained by a fixed trusted temp root.
+        if not candidate_path.is_dir():
             return False
         getuid = getattr(os, "getuid", None)
         if not callable(getuid):
@@ -6393,6 +6394,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 primary_temporary_root,
             )
         try:
+            # codeql[py/path-injection] candidate passed canonical temp-root containment and directory checks above.
             return candidate_path.stat().st_uid == getuid()
         except OSError:
             return False
