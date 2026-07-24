@@ -58,6 +58,7 @@ from ..shims import (
 )
 from ..store import GuardStore
 from . import local_request_snapshots
+from .live_request_repair import execute_live_request_sync_repair
 
 _GUARD_REVIEW_MEMORY_REGISTRY_SYNC_KEY = "guard_review_memory_registry"
 _GUARD_REVIEW_MEMORY_VERSION_SYNC_KEY = "guard_review_memory_policy_version"
@@ -84,7 +85,13 @@ APPROVAL_OPERATIONS: tuple[str, ...] = (
     "guard.approval.resolve",
     "guard.localRequests.snapshot",
 )
-SUPPORTED_COMMAND_OPERATIONS: tuple[str, ...] = (*PACKAGE_SHIM_OPERATIONS, *APP_OPERATIONS, *APPROVAL_OPERATIONS)
+LIVE_REQUEST_OPERATIONS: tuple[str, ...] = ("guard.liveRequests.reassignQuarantined",)
+SUPPORTED_COMMAND_OPERATIONS: tuple[str, ...] = (
+    *PACKAGE_SHIM_OPERATIONS,
+    *APP_OPERATIONS,
+    *APPROVAL_OPERATIONS,
+    *LIVE_REQUEST_OPERATIONS,
+)
 COMMAND_OPERATION_SCHEMA_VERSIONS: dict[str, int] = {operation: 1 for operation in SUPPORTED_COMMAND_OPERATIONS}
 LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = local_request_snapshots.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
 LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = local_request_snapshots.LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT
@@ -123,6 +130,12 @@ def execute_guard_command_job(
                 operation,
                 job=job,
                 payload=payload,
+                store=store,
+                generated_at=generated_at,
+            )
+        if operation in LIVE_REQUEST_OPERATIONS:
+            return execute_live_request_sync_repair(
+                payload,
                 store=store,
                 generated_at=generated_at,
             )
