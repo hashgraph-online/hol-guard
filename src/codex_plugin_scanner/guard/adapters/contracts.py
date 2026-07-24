@@ -128,6 +128,7 @@ class HarnessSetupContract:
 
 
 _DISPLAY_NAMES = {
+    "adal": "AdaL",
     "codex": "Codex",
     "claude-code": "Claude Code",
     "opencode": "OpenCode",
@@ -145,6 +146,20 @@ _DISPLAY_NAMES = {
 
 
 HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
+    HarnessProtectionContract(
+        harness="adal",
+        install_aliases=("adal", "adal-cli"),
+        config_paths=("~/.adal/settings.json",),
+        event_surfaces=("shell", "prompt", "mcp_tool", "file_read", "tool_result"),
+        native_approval=False,
+        browser_fallback=True,
+        resume_support=False,
+        known_blind_spots=(
+            "PostToolUse, PostToolUseFailure, PermissionRequest, and Stop hooks are observational in AdaL. "
+            "Only PreToolUse and UserPromptSubmit can prevent an action."
+        ),
+        smoke_command="hol-guard install adal --dry-run",
+    ),
     HarnessProtectionContract(
         harness="codex",
         install_aliases=("codex",),

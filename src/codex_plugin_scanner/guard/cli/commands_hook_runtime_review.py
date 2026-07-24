@@ -122,6 +122,17 @@ def _review_runtime_artifact_hook(
         policy_action=policy_action,
         guard_payload=response_payload,
     )
+    if _canonical_harness_name(args.harness) == "adal" and event_name not in {
+        "PreToolUse",
+        "UserPromptSubmit",
+    }:
+        response_payload["observer_only_event"] = True
+        set_runtime_artifact_hook_final_action(
+            state,
+            _observe_mode_executable_action(state),
+            observed_policy_action=policy_action,
+        )
+        return None
     observe_mode = config.mode == "observe"
     terminal_action = policy_action in {
         "block",

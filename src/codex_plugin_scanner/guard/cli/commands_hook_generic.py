@@ -930,6 +930,16 @@ def _run_hook_generic_payload(
                 approval_payload=payload_map,
                 output_stream=output_stream,
             )
+        elif _canonical_harness_name(args.harness) == "adal":
+            from ..adapters.adal_hooks import emit_adal_hook_response
+
+            emit_adal_hook_response(
+                policy_action=policy_action,
+                reason=block_reason,
+                event_name=hook_event_name,
+                payload=payload_map,
+                output_stream=output_stream,
+            )
         elif _canonical_harness_name(args.harness) == "zcode":
             from ..adapters.zcode_hooks import emit_zcode_hook_response
 
@@ -988,6 +998,24 @@ def _run_hook_generic_payload(
                 output_stream=output_stream,
             )
             return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
+        if _canonical_harness_name(args.harness) == "adal":
+            from ..adapters.adal_hooks import adal_hook_should_block, emit_adal_hook_response
+
+            emit_adal_hook_response(
+                policy_action=policy_action,
+                reason=reason,
+                event_name=hook_event_name,
+                payload=payload_map,
+                output_stream=output_stream,
+            )
+            return (
+                2
+                if adal_hook_should_block(
+                    policy_action=policy_action,
+                    event_name=hook_event_name,
+                )
+                else 0
+            )
         if _canonical_harness_name(args.harness) == "zcode":
             from ..adapters.zcode_hooks import emit_zcode_hook_response
 

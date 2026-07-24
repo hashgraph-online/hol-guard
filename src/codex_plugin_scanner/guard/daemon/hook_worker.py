@@ -83,7 +83,7 @@ class HookWorker:
         The fast path handles ``PostToolUse`` events:
         + With ``guard_source_ref`` (Pi/OMP): uses the source-read fast
         + path with hash verification and file-system caching.
-        + Without ``guard_source_ref`` (claude-code, codex, grok, zcode,
+        + Without ``guard_source_ref`` (adal, claude-code, codex, grok, zcode,
         + etc.): uses the server-side output scanning path. The engine
         + extracts the full tool output from the payload, scans it for
         + secrets, and returns ``allow_original`` if clean.

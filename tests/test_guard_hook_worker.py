@@ -260,7 +260,7 @@ class TestHookWorkerAllHarnessFallback:
     """Tests proving all harnesses without client-side guard_source_ref
     use the server-side output scanning fast path.
 
-    All harnesses (claude-code, codex, grok, zcode) now get the fast path
+    All harnesses (adal, claude-code, codex, grok, zcode) now get the fast path
     for PostToolUse output. The engine extracts the full tool output
     from the payload, scans it for secrets, and returns allow_original
     if clean.
@@ -396,7 +396,7 @@ class TestHookWorkerAllHarnessFallback:
 class TestHookWorkerOutputScanning:
     """Tests for the server-side output scanning fast path."""
 
-    @pytest.mark.parametrize("harness", ["pi", "claude-code", "codex", "grok", "zcode"])
+    @pytest.mark.parametrize("harness", ["pi", "adal", "claude-code", "codex", "grok", "zcode"])
     def test_documentation_fixture_sample_output_allows_original(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path, harness: str
     ) -> None:
@@ -431,7 +431,7 @@ class TestHookWorkerOutputScanning:
         else:
             assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
 
-    @pytest.mark.parametrize("harness", ["pi", "claude-code", "codex", "grok", "zcode"])
+    @pytest.mark.parametrize("harness", ["pi", "adal", "claude-code", "codex", "grok", "zcode"])
     def test_documentation_fixture_patch_output_allows_original(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path, harness: str
     ) -> None:
