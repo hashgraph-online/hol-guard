@@ -47,6 +47,18 @@ STATE_CHANGING_COMMAND_OPERATIONS: frozenset[str] = frozenset(
         "guard.app.connect",
         "guard.app.update",
         "guard.approval.resolve",
+        "guard.liveRequests.reassignQuarantined",
+    }
+)
+REMOTE_STEP_UP_COMMAND_OPERATIONS: frozenset[str] = frozenset(
+    {
+        "guard.liveRequests.reassignQuarantined",
+    }
+)
+_REVIEW_SYNC_REPAIR_PREREQUISITES = frozenset(
+    {
+        "guard.approval.resolve",
+        "guard.localRequests.snapshot",
     }
 )
 
@@ -267,7 +279,13 @@ def _verified_capability(store: GuardStore, *, now: str | None = None) -> dict[s
     )
     if any(operation not in classified_operations for operation in operations):
         raise CommandCapabilityError("capability_operation_unsupported")
-    return capability
+    expanded_operations = set(operations)
+    if _REVIEW_SYNC_REPAIR_PREREQUISITES.issubset(expanded_operations):
+        expanded_operations.update(REMOTE_STEP_UP_COMMAND_OPERATIONS)
+    return {
+        **capability,
+        "operations": sorted(expanded_operations),
+    }
 
 
 def command_capability_status(store: GuardStore, *, now: str | None = None) -> dict[str, object]:
@@ -405,7 +423,9 @@ def authorize_command_job(
     return AuthorizedCommandJob(
         identity=identity,
         operation=operation,
-        requires_local_approval=operation in STATE_CHANGING_COMMAND_OPERATIONS,
+        requires_local_approval=(
+            operation in STATE_CHANGING_COMMAND_OPERATIONS and operation not in REMOTE_STEP_UP_COMMAND_OPERATIONS
+        ),
     )
 
 

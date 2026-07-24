@@ -33,6 +33,7 @@ from .command_executors import (
     command_job_operation,
     execute_guard_command_job,
 )
+from .live_request_repair import live_request_sync_repair_status
 from .runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotConfiguredError,
@@ -282,18 +283,30 @@ def _lease_payload(store: GuardStore) -> dict[str, object]:
     operations = command_capability_operations(store)
     if not operations:
         raise CommandCapabilityError("command_capability_required")
+    capabilities: dict[str, object] = {
+        "operations": list(operations),
+        "schemaVersions": {operation: COMMAND_OPERATION_SCHEMA_VERSIONS[operation] for operation in operations},
+    }
+    repair_status = _live_request_sync_repair_status(store)
+    if repair_status is not None:
+        capabilities["liveRequestSync"] = repair_status
     return {
         "workspaceId": workspace_id,
         "deviceId": machine_id,
         "daemonVersion": __version__,
-        "capabilities": {
-            "operations": list(operations),
-            "schemaVersions": {operation: COMMAND_OPERATION_SCHEMA_VERSIONS[operation] for operation in operations},
-        },
+        "capabilities": capabilities,
         "localRequestsSnapshot": _local_requests_snapshot(store),
         "maxJobs": 1,
         "waitMs": _command_queue_lease_wait_ms(),
     }
+
+
+def _live_request_sync_repair_status(store: GuardStore) -> dict[str, object] | None:
+    try:
+        return live_request_sync_repair_status(store)
+    except Exception as exc:
+        _LOGGER.warning("Guard live request repair status failed: %s", _redacted_error(exc))
+        return None
 
 
 def _local_requests_snapshot(store: GuardStore) -> dict[str, object]:

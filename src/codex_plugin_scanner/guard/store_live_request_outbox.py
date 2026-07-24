@@ -396,7 +396,7 @@ class StoreLiveRequestOutboxMixin:
         approved_source: str,
         approved_workspace_id: str,
     ) -> int:
-        """Explicitly bind legacy ambiguous rows after operator confirmation."""
+        """Bind same-workspace quarantined rows after explicit confirmation."""
         if approved_source.strip() != self._guard_source:
             raise ValueError("approved source does not match the active Guard connection source")
         with self._connect() as connection:
@@ -417,16 +417,37 @@ class StoreLiveRequestOutboxMixin:
                 """
                 insert or ignore into guard_quarantined_live_request_ids (local_request_id)
                 select request_id
-                from approval_requests
-                where oauth_source is null
-                  and request_id not in (
-                    select local_request_id
-                    from guard_live_request_outbox
-                    where oauth_source is not null
+                from approval_requests as requests
+                where requests.oauth_source is null
+                  and not exists (
+                    select 1
+                    from guard_live_request_outbox as outbox
+                    where outbox.local_request_id = requests.request_id
                   )
                 union
-                select local_request_id from guard_live_request_outbox where oauth_source is null
-                """
+                select local_request_id
+                from guard_live_request_outbox
+                where oauth_source is null
+                  and (workspace_id is null or workspace_id = ?)
+                union
+                select local_request_id
+                from guard_live_request_outbox
+                where oauth_source = ?
+                  and workspace_id = ?
+                  and (
+                    oauth_subject_hash is not ?
+                    or machine_id is not ?
+                    or machine_installation_id is not ?
+                  )
+                """,
+                (
+                    binding["workspace_id"],
+                    self._guard_source,
+                    binding["workspace_id"],
+                    binding["oauth_subject_hash"],
+                    binding["machine_id"],
+                    binding["machine_installation_id"],
+                ),
             )
             row = connection.execute("select count(*) as total from guard_quarantined_live_request_ids").fetchone()
             reassigned = int(row["total"] if row is not None else 0)
@@ -436,7 +457,10 @@ class StoreLiveRequestOutboxMixin:
                 set oauth_source = ?, oauth_subject_hash = ?, workspace_id = ?,
                     machine_id = ?, machine_installation_id = ?
                 where local_request_id in (select local_request_id from guard_quarantined_live_request_ids)
-                  and oauth_source is null
+                  and (
+                    oauth_source is null
+                    or (oauth_source = ? and workspace_id = ?)
+                  )
                 """,
                 (
                     self._guard_source,
@@ -444,6 +468,8 @@ class StoreLiveRequestOutboxMixin:
                     binding["workspace_id"],
                     binding["machine_id"],
                     binding["machine_installation_id"],
+                    self._guard_source,
+                    binding["workspace_id"],
                 ),
             )
             connection.execute(
@@ -687,7 +713,13 @@ class StoreLiveRequestOutboxMixin:
                     then 1
                     else 0
                   end) as identity_mismatch_depth,
-                  sum(case when oauth_source is null then 1 else 0 end) as legacy_unbound_depth
+                  sum(case when oauth_source is null then 1 else 0 end) as legacy_unbound_depth,
+                  sum(case
+                    when oauth_source is null
+                      and (workspace_id is null or (? is not null and workspace_id = ?))
+                    then 1
+                    else 0
+                  end) as repairable_legacy_unbound_depth
                 from guard_live_request_outbox
                 """,
                 (
@@ -701,11 +733,16 @@ class StoreLiveRequestOutboxMixin:
                     complete_binding[0] if complete_binding is not None else None,
                     complete_binding[2] if complete_binding is not None else None,
                     complete_binding[3] if complete_binding is not None else None,
+                    workspace_id,
+                    workspace_id,
                 ),
             ).fetchone()
         unbound_depth = int(diagnostic_row["unbound_depth"] or 0) if diagnostic_row is not None else 0
         other_workspace_depth = int(diagnostic_row["other_workspace_depth"] or 0) if diagnostic_row is not None else 0
         legacy_unbound_depth = int(diagnostic_row["legacy_unbound_depth"] or 0) if diagnostic_row is not None else 0
+        repairable_legacy_unbound_depth = (
+            int(diagnostic_row["repairable_legacy_unbound_depth"] or 0) if diagnostic_row is not None else 0
+        )
         identity_mismatch_depth = (
             int(diagnostic_row["identity_mismatch_depth"] or 0) if diagnostic_row is not None else 0
         )
@@ -737,5 +774,6 @@ class StoreLiveRequestOutboxMixin:
             "other_workspace_depth": other_workspace_depth,
             "identity_mismatch_depth": identity_mismatch_depth,
             "legacy_unbound_depth": legacy_unbound_depth,
+            "repairable_legacy_unbound_depth": repairable_legacy_unbound_depth,
             "checked_at": now,
         }
