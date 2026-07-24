@@ -8,6 +8,7 @@ from importlib import import_module
 from .base import HarnessAdapter, HarnessContext
 
 _ADAPTER_SPECS: tuple[tuple[str, str], ...] = (
+    (".adal", "AdaLHarnessAdapter"),
     (".codex", "CodexHarnessAdapter"),
     (".claude_code", "ClaudeCodeHarnessAdapter"),
     (".copilot", "CopilotHarnessAdapter"),

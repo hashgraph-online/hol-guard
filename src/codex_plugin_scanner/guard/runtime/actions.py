@@ -482,6 +482,25 @@ def normalize_zcode_hook_payload(
     )
 
 
+def normalize_adal_hook_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize an AdaL lifecycle hook payload into a typed action envelope."""
+
+    from ..adapters.adal_hooks import prepare_adal_hook_payload
+
+    return _normalize_action_payload(
+        prepare_adal_hook_payload(payload),
+        harness="adal",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
 def normalize_pi_payload(
     payload: Mapping[str, object],
     *,
@@ -511,6 +530,8 @@ def normalize_harness_payload(
 
     normalized_harness = harness.strip().lower()
     normalizers = {
+        "adal": normalize_adal_hook_payload,
+        "adal-cli": normalize_adal_hook_payload,
         "codex": normalize_codex_hook_payload,
         "claude": normalize_claude_hook_payload,
         "claude-code": normalize_claude_hook_payload,
@@ -1114,6 +1135,7 @@ def _normalized_command(command: str | None) -> str | None:
 __all__ = [
     "GuardActionEnvelope",
     "GuardActionType",
+    "normalize_adal_hook_payload",
     "normalize_claude_hook_payload",
     "normalize_codex_hook_payload",
     "normalize_copilot_payload",

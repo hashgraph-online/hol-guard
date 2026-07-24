@@ -129,6 +129,7 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
     review_url = _preferred_approval_review_url(response_payload, harness=harness) or approval_center_url.strip()
     canonical_harness = _canonical_harness_name(harness)
     harness_label = {
+        "adal": "AdaL",
         "claude-code": "Claude Code",
         "codex": "Codex",
         "copilot": "Copilot",

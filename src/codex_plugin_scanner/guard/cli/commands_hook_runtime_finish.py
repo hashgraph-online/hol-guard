@@ -236,6 +236,16 @@ def _finalize_runtime_artifact_hook(
                 approval_payload=response_payload,
                 output_stream=output_stream,
             )
+        elif _canonical_harness_name(args.harness) == "adal":
+            from ..adapters.adal_hooks import emit_adal_hook_response
+
+            emit_adal_hook_response(
+                policy_action=policy_action,
+                reason=native_block_reason,
+                event_name=event_name,
+                payload=payload,
+                output_stream=output_stream,
+            )
         elif _canonical_harness_name(args.harness) == "zcode":
             from ..adapters.zcode_hooks import emit_zcode_hook_response
 
@@ -328,6 +338,30 @@ def _finalize_runtime_artifact_hook(
                 policy_action=policy_action,
             )
             return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
+        if canonical_harness == "adal":
+            from ..adapters.adal_hooks import adal_hook_should_block, emit_adal_hook_response
+
+            emit_adal_hook_response(
+                policy_action=policy_action,
+                reason=runtime_reason,
+                event_name=event_name,
+                payload=payload,
+                output_stream=output_stream,
+            )
+            _record_harness_usage_for_hook(
+                store=store,
+                action_envelope=action_envelope,
+                payload=payload,
+                policy_action=policy_action,
+            )
+            return (
+                2
+                if adal_hook_should_block(
+                    policy_action=policy_action,
+                    event_name=event_name,
+                )
+                else 0
+            )
         if canonical_harness == "zcode":
             from ..adapters.zcode_hooks import emit_zcode_hook_response
 

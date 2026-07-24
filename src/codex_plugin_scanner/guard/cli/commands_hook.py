@@ -91,6 +91,10 @@ def _run_guard_hook_command(
         from ..adapters.zcode_hooks import prepare_zcode_hook_payload
 
         payload = _normalize_hook_payload(prepare_zcode_hook_payload(payload), harness=args.harness)
+    if _canonical_harness_name(args.harness) == "adal":
+        from ..adapters.adal_hooks import prepare_adal_hook_payload
+
+        payload = _normalize_hook_payload(prepare_adal_hook_payload(payload), harness=args.harness)
     managed_install = _managed_install_for(store, args.harness)
     workspace_was_explicit = workspace is not None
     runtime_workspace = workspace

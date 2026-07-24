@@ -192,6 +192,8 @@ artifact and policy pipeline as existing command classifications.
 <details>
 <summary>Harness approval strategy</summary>
 
+- `adal`
+  Guard preserves existing `~/.adal/settings.json` content while registering all six AdaL lifecycle events. `PreToolUse` and `UserPromptSubmit` enforce Guard decisions with AdaL-native deny/block responses; `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, and `Stop` provide observational evidence.
 - `claude-code`
   Guard prefers Claude hooks first, then the local approval center when the shell cannot prompt.
 - `copilot`
