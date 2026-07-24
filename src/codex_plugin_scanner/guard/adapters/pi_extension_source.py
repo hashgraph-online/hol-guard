@@ -9,12 +9,12 @@ from ..daemon.manager import GUARD_DAEMON_COMPATIBILITY_VERSION
 from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
 from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
 
-# Keep the end-to-end budget short enough for interactive Pi, but prefer the
-# resident daemon and never hard-block tool calls solely because review timed out.
-GUARD_HOOK_TIMEOUT_MS = 12_000
+# Pi terminates extension hooks at roughly 4.5 seconds. Keep Guard's daemon and
+# CLI fallback path below that host deadline so its fail-open result can return.
+GUARD_HOOK_TIMEOUT_MS = 4_000
 GUARD_HOOK_DEADLINE_RESERVE_MS = 250
-GUARD_DAEMON_HOOK_TIMEOUT_MS = 10_000
-GUARD_CLI_HOOK_TIMEOUT_MS = 10_000
+GUARD_DAEMON_HOOK_TIMEOUT_MS = 1_250
+GUARD_CLI_HOOK_TIMEOUT_MS = 2_250
 GUARD_HOOK_TEXT_LIMIT_CHARS = 12_000
 GUARD_HOOK_CONTENT_ITEM_LIMIT = 24
 GUARD_HOOK_OBJECT_KEY_LIMIT = 24
@@ -126,13 +126,9 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    return parsed && typeof parsed === 'object' ? parsed : null;\n"
         "  } catch (error) {\n"
         "    if (error instanceof Error && error.name === 'AbortError') {\n"
-        "      // Infrastructure timeout: fail open so Pi remains usable; still surface a warning.\n"
-        "      return {\n"
-        '        decision: "allow",\n'
-        '        notice: "warning",\n'
-        "        reason: `HOL Guard Pi hook timed out after ${GUARD_DAEMON_TIMEOUT_MS}ms `\n"
-        "          + `while reviewing this action; continuing without a completed review.`,\n"
-        "      };\n"
+        "      // The daemon is only a fast path. Fall through to the bounded local CLI so\n"
+        "      // an unresponsive daemon cannot stall or bypass Guard enforcement.\n"
+        "      return null;\n"
         "    }\n"
         "    return null;\n"
         "  } finally {\n"

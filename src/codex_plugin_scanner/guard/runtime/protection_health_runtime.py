@@ -40,20 +40,23 @@ def _signal(status: ProtectionCheckStatus, reason_code: str) -> ProtectionSignal
     return ProtectionSignal(status, reason_code)
 
 
-def _hook_signals(managed_installs: Sequence[Mapping[str, object]]) -> dict[str, ProtectionSignal]:
+def _hook_signals(
+    managed_installs: Sequence[Mapping[str, object]],
+    hook_verification: Mapping[str, bool] | None,
+) -> dict[str, ProtectionSignal]:
     result: dict[str, ProtectionSignal] = {}
     for install in managed_installs:
         harness = install.get("harness")
         if not isinstance(harness, str) or len(harness) > 64 or _STABLE_HARNESS.fullmatch(harness) is None:
             continue
-        # Active install rows are not hook interception proof. Treat them as
-        # unproven until a dedicated attestation signal exists; only inactive
-        # managed installs are a confirmed failure.
-        candidate = (
-            _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
-            if install.get("active") is True
-            else _signal(ProtectionCheckStatus.FAIL, "hooks_inactive")
-        )
+        if install.get("active") is not True:
+            continue
+        if hook_verification is None or harness not in hook_verification:
+            candidate = _signal(ProtectionCheckStatus.UNKNOWN, "hook_verification_unavailable")
+        elif hook_verification[harness]:
+            candidate = _signal(ProtectionCheckStatus.PASS, "hooks_verified")
+        else:
+            candidate = _signal(ProtectionCheckStatus.FAIL, "hooks_verification_failed")
         existing = result.get(harness)
         result[harness] = (
             _signal(ProtectionCheckStatus.FAIL, "hooks_inactive")
@@ -69,7 +72,9 @@ def _global_hook_signal(harness_signals: Mapping[str, ProtectionSignal]) -> Prot
         return _signal(ProtectionCheckStatus.FAIL, "no_managed_harness")
     if any(signal.status is ProtectionCheckStatus.FAIL for signal in harness_signals.values()):
         return _signal(ProtectionCheckStatus.FAIL, "one_or_more_hooks_inactive")
-    return _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
+    if all(signal.status is ProtectionCheckStatus.PASS for signal in harness_signals.values()):
+        return _signal(ProtectionCheckStatus.PASS, "hooks_verified")
+    return _signal(ProtectionCheckStatus.UNKNOWN, "hook_verification_unavailable")
 
 
 def _rule_pack_signal(trust_status: Mapping[str, object]) -> ProtectionSignal:
@@ -109,6 +114,15 @@ def _daemon_signal(runtime_state: Mapping[str, object] | None, *, now: datetime)
     return _signal(ProtectionCheckStatus.PASS, "daemon_healthy")
 
 
+def daemon_runtime_is_current(
+    runtime_state: Mapping[str, object] | None,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    evaluated_at = now or datetime.now(timezone.utc)
+    return _daemon_signal(runtime_state, now=evaluated_at).status is ProtectionCheckStatus.PASS
+
+
 def _decision_stream_signal(store: ProtectionHealthStore) -> ProtectionSignal:
     try:
         health = store.get_command_activity_persistence_health()
@@ -118,9 +132,10 @@ def _decision_stream_signal(store: ProtectionHealthStore) -> ProtectionSignal:
         return _signal(ProtectionCheckStatus.FAIL, "decision_stream_health_unavailable")
     if active_errors > 0:
         return _signal(ProtectionCheckStatus.FAIL, "decision_stream_degraded")
-    if activity_count == 0:
-        return _signal(ProtectionCheckStatus.UNKNOWN, "decision_stream_not_observed")
-    return _signal(ProtectionCheckStatus.PASS, "decision_stream_healthy")
+    return _signal(
+        ProtectionCheckStatus.PASS,
+        "decision_stream_ready" if activity_count == 0 else "decision_stream_healthy",
+    )
 
 
 def _tamper_signal(trust_status: Mapping[str, object]) -> ProtectionSignal:
@@ -137,12 +152,13 @@ def build_runtime_protection_health(
     store: ProtectionHealthStore,
     runtime_state: Mapping[str, object] | None,
     managed_installs: Sequence[Mapping[str, object]],
+    hook_verification: Mapping[str, bool] | None = None,
     trust_status: Mapping[str, object],
     now: datetime,
 ) -> dict[str, object]:
     """Build current health using only operational runtime and trust proof."""
 
-    harness_signals = _hook_signals(managed_installs)
+    harness_signals = _hook_signals(managed_installs, hook_verification)
     containment_signals = containment_health_signals(
         runtime_state.get("containment_health") if runtime_state is not None else None,
         now=now,

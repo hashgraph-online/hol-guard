@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+import threading
+from collections.abc import Callable
+
 from .policy_integrity import POLICY_INTEGRITY_VERSION
 
 # ruff: noqa: F403,F405
@@ -25,24 +28,42 @@ def _set_private_mode_compat(path: Path, mode: int) -> None:
     setter(path, mode)
 
 
-def _build_oauth_secret_store_compat(guard_home: Path) -> SecretStore:
+def _build_oauth_secret_store_compat(
+    guard_home: Path,
+    *,
+    allow_system_keyring: bool,
+) -> SecretStore:
     builder = _facade_store_attr("_build_oauth_secret_store", _build_oauth_secret_store)
     if not callable(builder):
-        return _build_oauth_secret_store(guard_home)
-    return cast(SecretStore, builder(guard_home))
+        return _build_oauth_secret_store(
+            guard_home,
+            allow_system_keyring=allow_system_keyring,
+        )
+    return cast(
+        SecretStore,
+        builder(guard_home, allow_system_keyring=allow_system_keyring),
+    )
 
 
-def _build_policy_integrity_secret_store_compat() -> SystemKeyringSecretStore | None:
+def _build_policy_integrity_secret_store_compat(
+    guard_home: Path,
+    *,
+    allow_system_keyring: bool,
+) -> SecretStore | None:
     builder = _facade_store_attr(
         "_build_policy_integrity_secret_store",
         _build_policy_integrity_secret_store,
     )
     if not callable(builder):
-        return _build_policy_integrity_secret_store()
-    secret_store = builder()
-    if secret_store is None or isinstance(secret_store, SystemKeyringSecretStore):
-        return secret_store
-    return cast(SystemKeyringSecretStore, secret_store)
+        return _build_policy_integrity_secret_store(
+            guard_home,
+            allow_system_keyring=allow_system_keyring,
+        )
+    secret_store = builder(
+        guard_home,
+        allow_system_keyring=allow_system_keyring,
+    )
+    return cast(SecretStore, secret_store)
 
 
 _POLICY_INTEGRITY_LOOKUP_UNSET = object()
@@ -57,6 +78,7 @@ class StoreSecretPolicyIntegrityMixin:
         *,
         guard_event_queue_limit: int = 1000,
         prime_policy_integrity: bool = True,
+        allow_system_keyring: bool = False,
         source: str = "default",
     ) -> None:
         self.guard_home = guard_home
@@ -74,6 +96,8 @@ class StoreSecretPolicyIntegrityMixin:
             _POLICY_INTEGRITY_LOOKUP_UNSET
         )
         self._startup_prefetched_policy_integrity_repair_failed = False
+        self._policy_integrity_state_listener: Callable[[dict[str, object]], None] | None = None
+        self._policy_integrity_notification_local = threading.local()
         self._policy_integrity_key_ref = self._build_scoped_secret_ref(_POLICY_INTEGRITY_KEY_REF)
         self._policy_integrity_control_ref = self._build_scoped_secret_ref(_POLICY_INTEGRITY_CONTROL_REF)
         self._guard_source = _normalize_source_name(source)
@@ -87,8 +111,41 @@ class StoreSecretPolicyIntegrityMixin:
         self._oauth_local_credentials_state_key = oauth_state_key
         self._guard_event_queue_limit = max(1, guard_event_queue_limit)
         self._prime_policy_integrity_on_initialize = prime_policy_integrity
+        self._allow_system_keyring = allow_system_keyring
         self.path = self.guard_home / "guard.db"
         self._initialize()
+
+    def set_policy_integrity_state_listener(
+        self,
+        listener: Callable[[dict[str, object]], None] | None,
+    ) -> None:
+        self._policy_integrity_state_listener = listener
+
+    def _queue_policy_integrity_state_notification(
+        self,
+        connection: sqlite3.Connection,
+        payload: dict[str, object],
+    ) -> None:
+        pending = getattr(self._policy_integrity_notification_local, "pending", None)
+        if not isinstance(pending, dict):
+            pending = {}
+            self._policy_integrity_notification_local.pending = pending
+        pending[id(connection)] = dict(payload)
+
+    def _take_policy_integrity_state_notification(
+        self,
+        connection: sqlite3.Connection,
+    ) -> dict[str, object] | None:
+        pending = getattr(self._policy_integrity_notification_local, "pending", None)
+        if not isinstance(pending, dict):
+            return None
+        payload = pending.pop(id(connection), None)
+        return payload if isinstance(payload, dict) else None
+
+    def _publish_policy_integrity_state_notification(self, payload: dict[str, object]) -> None:
+        listener = self._policy_integrity_state_listener
+        if listener is not None:
+            listener(dict(payload))
 
     @property
     def guard_source(self) -> str:
@@ -99,7 +156,10 @@ class StoreSecretPolicyIntegrityMixin:
     def _oauth_secret_store(self) -> SecretStore:
         secret_store = getattr(self, "_StoreSecretPolicyIntegrityMixin__oauth_secret_store", _OAUTH_SECRET_STORE_UNSET)
         if secret_store is _OAUTH_SECRET_STORE_UNSET:
-            secret_store = _build_oauth_secret_store_compat(self.guard_home)
+            secret_store = _build_oauth_secret_store_compat(
+                self.guard_home,
+                allow_system_keyring=self._allow_system_keyring,
+            )
             self.__oauth_secret_store = secret_store
         return cast(SecretStore, secret_store)
 
@@ -108,19 +168,22 @@ class StoreSecretPolicyIntegrityMixin:
         self.__oauth_secret_store = value
 
     @property
-    def _policy_integrity_secret_store(self) -> SystemKeyringSecretStore | None:
+    def _policy_integrity_secret_store(self) -> SecretStore | None:
         secret_store = getattr(
             self,
             "_StoreSecretPolicyIntegrityMixin__policy_integrity_secret_store",
             _POLICY_INTEGRITY_SECRET_STORE_UNSET,
         )
         if secret_store is _POLICY_INTEGRITY_SECRET_STORE_UNSET:
-            secret_store = _build_policy_integrity_secret_store_compat()
+            secret_store = _build_policy_integrity_secret_store_compat(
+                self.guard_home,
+                allow_system_keyring=self._allow_system_keyring,
+            )
             self.__policy_integrity_secret_store = secret_store
-        return cast(SystemKeyringSecretStore | None, secret_store)
+        return cast(SecretStore | None, secret_store)
 
     @_policy_integrity_secret_store.setter
-    def _policy_integrity_secret_store(self, value: SystemKeyringSecretStore | None | object) -> None:
+    def _policy_integrity_secret_store(self, value: SecretStore | None | object) -> None:
         self.__policy_integrity_secret_store = value
 
     def _build_scoped_secret_ref(self, prefix: str) -> str:
@@ -210,6 +273,18 @@ class StoreSecretPolicyIntegrityMixin:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None
+        if isinstance(secret_store, FallbackSecretStore):
+            fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
+            if fallback_value is not None:
+                return fallback_value
+            primary_value = self._get_secret_from_primary_store(secret_store.primary, secret_id)
+            if primary_value is None:
+                return None
+            try:
+                secret_store.fallback.set_secret(secret_id, primary_value)
+            except Exception:
+                return None
+            return primary_value
         if isinstance(secret_store, SystemKeyringSecretStore):
             return secret_store.get_secret_with_timeout(
                 secret_id,
@@ -976,6 +1051,7 @@ class StoreSecretPolicyIntegrityMixin:
         }
         if payload != existing:
             self._store_policy_integrity_state(connection, payload, now=now)
+            self._queue_policy_integrity_state_notification(connection, payload)
         return payload
 
     def _prepare_startup_prefetched_policy_integrity_state(self) -> None:

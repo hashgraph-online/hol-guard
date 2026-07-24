@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from pathlib import Path
 from typing import cast
 
@@ -31,7 +32,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_proof import (
     issue_extension_control_proof,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_base import SystemKeyringSecretStore
+from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore, SystemKeyringSecretStore
 
 _PASSWORD = "correct horse battery staple"
 
@@ -271,6 +272,7 @@ def test_credential_store_failure_requires_explicit_degraded_acknowledgement(tmp
 
 
 def test_unavailable_system_keyring_never_silently_falls_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "_is_available",
@@ -282,6 +284,111 @@ def test_unavailable_system_keyring_never_silently_falls_back(tmp_path: Path, mo
 
     assert view.health is AuthorityHealth.DEGRADED_UNACKNOWLEDGED
     assert view.layers_for(ControlSurface.COMMAND_EVALUATION)[0].global_lockdown is True
+
+
+def test_macos_extension_authority_never_probes_keychain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_is_available",
+        classmethod(lambda cls: (_ for _ in ()).throw(AssertionError("macOS authority must not probe Keychain"))),
+    )
+    store = GuardStore(tmp_path, prime_policy_integrity=False)
+
+    view = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+
+    assert view.health is AuthorityHealth.PROTECTED
+    assert isinstance(store._extension_control_authority_secret_store, EncryptedFileSecretStore)
+
+
+def test_explicit_macos_extension_authority_migration_enables_passive_vault_reads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "platform", "darwin")
+    legacy_secrets = MemorySecretStore()
+    legacy_store = _store(tmp_path, legacy_secrets)
+    legacy_view = legacy_store.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    )
+    assert legacy_view.health is AuthorityHealth.PROTECTED
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "get_secret",
+        lambda _self, secret_id: legacy_secrets.get_secret(secret_id),
+    )
+    explicit_store = GuardStore(tmp_path, prime_policy_integrity=False, allow_system_keyring=True)
+
+    assert explicit_store.migrate_legacy_extension_control_authority_secrets() is True
+
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "get_secret",
+        lambda _self, _secret_id: (_ for _ in ()).throw(AssertionError("passive read probed Keychain")),
+    )
+    passive_store = GuardStore(tmp_path, prime_policy_integrity=False)
+    passive_view = passive_store.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    )
+
+    assert passive_view.health is AuthorityHealth.PROTECTED
+
+
+def test_explicit_macos_extension_authority_migration_rejects_partial_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "platform", "darwin")
+    legacy_secrets = MemorySecretStore()
+    legacy_store = _store(tmp_path, legacy_secrets)
+    legacy_store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    anchor_ref = legacy_store._anchor_ref()
+    legacy_secrets.delete_secret(anchor_ref)
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "get_secret",
+        lambda _self, secret_id: legacy_secrets.get_secret(secret_id),
+    )
+    explicit_store = GuardStore(tmp_path, prime_policy_integrity=False, allow_system_keyring=True)
+
+    assert explicit_store.migrate_legacy_extension_control_authority_secrets() is False
+
+
+def test_explicit_macos_extension_authority_spends_one_interactive_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "platform", "darwin")
+    legacy_secrets = MemorySecretStore()
+    legacy_store = _store(tmp_path, legacy_secrets)
+    legacy_store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    interactive_reads: list[str] = []
+    bounded_reads: list[str] = []
+
+    def tracked_interactive_read(_self: SystemKeyringSecretStore, secret_id: str) -> str | None:
+        interactive_reads.append(secret_id)
+        return legacy_secrets.get_secret(secret_id)
+
+    def tracked_bounded_read(
+        _self: SystemKeyringSecretStore,
+        secret_id: str,
+        *,
+        timeout_seconds: float = 0.0,
+    ) -> str | None:
+        _ = timeout_seconds
+        bounded_reads.append(secret_id)
+        return legacy_secrets.get_secret(secret_id)
+
+    monkeypatch.setattr(SystemKeyringSecretStore, "get_secret", tracked_interactive_read)
+    monkeypatch.setattr(SystemKeyringSecretStore, "get_secret_with_timeout", tracked_bounded_read)
+    explicit_store = GuardStore(tmp_path, prime_policy_integrity=False, allow_system_keyring=True)
+
+    assert explicit_store.migrate_legacy_extension_control_authority_secrets() is True
+    assert interactive_reads == [legacy_store._key_ref()]
+    assert bounded_reads == [legacy_store._anchor_ref()]
 
 
 def test_failed_anchor_write_leaves_recoverable_prepared_transition(tmp_path: Path) -> None:

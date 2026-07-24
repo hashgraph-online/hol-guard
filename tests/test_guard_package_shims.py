@@ -488,7 +488,7 @@ def test_enable_wal_mode_uses_bounded_busy_timeout(monkeypatch: pytest.MonkeyPat
     assert sleep_calls == [guard_store_module._SQLITE_LOCK_RETRY_DELAY_SECONDS]
 
 
-def test_guard_store_init_does_not_hold_sqlite_writer_during_missing_policy_integrity_retry(tmp_path: Path) -> None:
+def test_guard_protect_does_not_prime_policy_integrity_or_hold_sqlite_writer(tmp_path: Path) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     home_dir.mkdir(parents=True, exist_ok=True)
@@ -505,7 +505,6 @@ def test_guard_store_init_does_not_hold_sqlite_writer_during_missing_policy_inte
         },
     )
     slow_process.start()
-    assert refresh_started_event.wait(timeout=5)
 
     with sqlite3.connect(home_dir / "guard.db", timeout=1.0) as writer_probe:
         writer_probe.execute("pragma busy_timeout=1000")
@@ -520,6 +519,7 @@ def test_guard_store_init_does_not_hold_sqlite_writer_during_missing_policy_inte
     assert slow_process.exitcode == 0
     slow_result = slow_results.get(timeout=1)
 
+    assert not refresh_started_event.is_set()
     assert fast_result["returncode"] == 2
     assert slow_result["returncode"] == 2
 

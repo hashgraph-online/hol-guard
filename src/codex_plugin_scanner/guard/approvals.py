@@ -42,6 +42,7 @@ from .desktop_notifications import (
 from .incident import build_incident_context
 from .local_dashboard_session import build_local_dashboard_session_token
 from .local_supply_chain import build_local_supply_chain_posture
+from .managed_install_proof import verify_managed_install_proof
 from .memory_decision_outbox import enqueue_memory_decision_event
 from .models import (
     DECISION_SCOPE_VALUES,
@@ -1299,6 +1300,59 @@ def attach_primary_approval_link(
         payload["primary_approval_url"] = review_url
 
 
+def _live_hook_verification(
+    managed_installs: Sequence[Mapping[str, object]],
+    store: GuardStore,
+) -> dict[str, bool]:
+    context = HarnessContext(
+        home_dir=Path.home().resolve(),
+        workspace_dir=None,
+        guard_home=store.guard_home,
+    )
+    verified: dict[str, bool] = {}
+    for install in managed_installs:
+        harness = install.get("harness")
+        if not isinstance(harness, str) or install.get("active") is not True:
+            continue
+        try:
+            if harness == "codex":
+                from .adapters.codex import codex_native_hook_state
+
+                verified[harness] = codex_native_hook_state(context).get("protection_active") is True
+                continue
+            if harness == "cursor":
+                from .adapters.cursor_hooks import cursor_native_hook_state
+
+                verified[harness] = cursor_native_hook_state(context).get("protection_active") is True
+                continue
+            verified[harness] = verify_managed_install_proof(install.get("manifest"), context) is True
+        except (ImportError, OSError, RuntimeError, TypeError, ValueError):
+            continue
+    return verified
+
+
+def _canonical_managed_installs_for_health(
+    managed_installs: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    canonical: dict[str, tuple[tuple[bool, bool], dict[str, object]]] = {}
+    for install in managed_installs:
+        harness = install.get("harness")
+        if not isinstance(harness, str):
+            continue
+        try:
+            canonical_harness = get_adapter(harness).harness
+        except (ImportError, RuntimeError, TypeError, ValueError):
+            canonical_harness = harness
+        candidate = dict(install)
+        candidate["harness"] = canonical_harness
+        exact = harness == canonical_harness
+        priority = (install.get("active") is True, exact)
+        existing = canonical.get(canonical_harness)
+        if existing is None or priority > existing[0]:
+            canonical[canonical_harness] = (priority, candidate)
+    return [canonical[harness][1] for harness in sorted(canonical)]
+
+
 def build_runtime_snapshot(
     *,
     store: GuardStore,
@@ -1330,6 +1384,8 @@ def build_runtime_snapshot(
     )
     trust_status = store.get_cached_policy_trust_status()
     managed_installs = store.list_managed_installs()
+    health_managed_installs = _canonical_managed_installs_for_health(managed_installs)
+    hook_verification = _live_hook_verification(health_managed_installs, store)
     runtime_state = store.get_runtime_state()
     health_runtime_state = dict(runtime_state) if runtime_state is not None else None
     if health_runtime_state is not None and containment_health is not None:
@@ -1337,7 +1393,8 @@ def build_runtime_snapshot(
     protection_health = build_runtime_protection_health(
         store=store,
         runtime_state=health_runtime_state,
-        managed_installs=managed_installs,
+        managed_installs=health_managed_installs,
+        hook_verification=hook_verification,
         trust_status=trust_status,
         now=datetime.fromisoformat(snapshot_now.replace("Z", "+00:00")),
     )

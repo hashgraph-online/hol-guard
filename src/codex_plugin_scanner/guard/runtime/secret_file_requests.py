@@ -1701,6 +1701,24 @@ def _destructive_shell_tool_action_request(
             canonical_command=canonical_command,
             interpreter_executable_identities=interpreter_executable_identities,
         )
+    if _gh_pr_create_has_active_shell_expansion(detection_command_text) or (
+        raw_command_text is not None
+        and raw_command_text != detection_command_text
+        and _gh_pr_create_has_active_shell_expansion(raw_command_text)
+    ):
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="GitHub PR dynamic content",
+            reason=(
+                "Guard reviews `gh pr create` arguments with active shell expansion because environment variables "
+                "or command substitutions can publish local secrets as pull-request metadata. Quote literal `$` "
+                "and backticks with single quotes to keep static PR creation prompt-free."
+            ),
+            canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
+        )
     extension_interaction = classify_command_extension_interaction(
         canonical_command,
         BUILT_IN_COMMAND_EXTENSION_REGISTRY,
@@ -2630,6 +2648,76 @@ def _gh_pr_create_body_has_shell_command_substitution(command_text: str, *, dept
             continue
         if _gh_pr_create_body_args_have_substitution(segment[body_args_start_index:]):
             return True
+    return False
+
+
+def _gh_pr_create_has_active_shell_expansion(command_text: str, *, depth: int = 0) -> bool:
+    if depth > 2 or ("$" not in command_text and "`" not in command_text):
+        return False
+    tokens = _shell_tokens_preserving_quote_context(command_text)
+    for segment in _shell_token_segments(tokens):
+        for env_split_string in _gh_pr_env_split_string_payloads_with_active_expansion(segment):
+            if _gh_pr_create_has_active_shell_expansion(env_split_string, depth=depth + 1):
+                return True
+        args_start_index = _gh_pr_create_body_args_start_index(segment)
+        if args_start_index is None:
+            continue
+        plain_segment = [token.plain for token in segment]
+        index = args_start_index
+        while index < len(segment):
+            redirect_tokens_consumed = _leading_shell_redirection_tokens_consumed(plain_segment, index)
+            if redirect_tokens_consumed > 0:
+                index += redirect_tokens_consumed
+                continue
+            if _shell_token_has_active_expansion(segment[index].raw):
+                return True
+            index += 1
+    return False
+
+
+def _gh_pr_env_split_string_payloads_with_active_expansion(
+    segment: list[_ShellTokenWithQuoteContext],
+) -> tuple[str, ...]:
+    env_index = _shell_segment_env_index([token.plain for token in segment])
+    if env_index is None:
+        return ()
+    parsed = parse_env_wrapper([token.plain for token in segment[env_index + 1 :]])
+    payloads: list[str] = []
+    for expansion in parsed.split_expansions:
+        source_index = env_index + 1 + expansion.source_index
+        if source_index < len(segment) and _shell_token_has_active_expansion(segment[source_index].raw):
+            payloads.append(expansion.payload.strip())
+    return tuple(payload for payload in payloads if payload)
+
+
+def _shell_token_has_active_expansion(raw_token: str) -> bool:
+    index = 0
+    single_quoted = False
+    double_quoted = False
+    parameter_prefixes = frozenset("{(_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz*?@#$!-")
+    while index < len(raw_token):
+        character = raw_token[index]
+        if single_quoted:
+            if character == "'":
+                single_quoted = False
+            index += 1
+            continue
+        if character == "\\":
+            index += 2
+            continue
+        if character == "'" and not double_quoted:
+            single_quoted = True
+            index += 1
+            continue
+        if character == '"':
+            double_quoted = not double_quoted
+            index += 1
+            continue
+        if character == "`":
+            return True
+        if character == "$" and index + 1 < len(raw_token) and raw_token[index + 1] in parameter_prefixes:
+            return True
+        index += 1
     return False
 
 

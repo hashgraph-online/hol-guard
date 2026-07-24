@@ -13,6 +13,7 @@ import mimetypes
 import os
 import platform
 import secrets
+import sqlite3
 import tempfile
 import threading
 import time
@@ -23,7 +24,7 @@ from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, TypedDict, TypeGuard, cast
+from typing import Any, BinaryIO, TypedDict, TypeGuard, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
@@ -149,7 +150,18 @@ from ..review_contracts import (
     validated_remote_approval_envelope,
 )
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
+from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, ActivityDecisionReason
+from ..runtime.command_activity_lifecycle import CommandActivityDecisionFacts, build_pre_hook_evidence
+from ..runtime.command_evaluation import evaluate_command
+from ..runtime.command_shadow_evaluation import (
+    CommandShadowCohort,
+    CommandShadowControl,
+    baseline_command_shadow_proposal,
+    build_command_shadow_observation,
+)
+from ..runtime.containment_health import containment_health_signals
 from ..runtime.live_request_sync import LiveRequestSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
+from ..runtime.protection_health import ProtectionCheckStatus
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotAvailableError,
@@ -217,9 +229,11 @@ from .discovery import (
 )
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
+    acquire_guard_daemon_owner_lock,
     clear_guard_daemon_state_if_current,
     current_guard_daemon_runtime_fingerprint,
     load_guard_daemon_auth_token,
+    release_guard_daemon_owner_lock,
     repair_approval_center_locator,
     write_guard_daemon_state,
 )
@@ -363,6 +377,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.containment_health_cache = None
         self.containment_health_cache_monotonic = 0.0
         self.containment_health_cache_lock = threading.Lock()
+        self.store.set_policy_integrity_state_listener(self.publish_trust_state)
         from .hook_worker import HookWorker
 
         self.hook_worker = HookWorker(store=store)
@@ -377,6 +392,17 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
 
     def daemon_port(self) -> int:
         return int(self.server_address[1])
+
+    def publish_trust_state(self, trust_status: dict[str, object] | None = None) -> None:
+        write_guard_daemon_state(
+            self.store.guard_home,
+            self.daemon_port(),
+            self.auth_token,
+            host=self.daemon_host(),
+            state_id=self.runtime_session_id,
+            started_at=self.runtime_started_at,
+            trust_status=trust_status or self.store.get_cached_policy_integrity_state(),
+        )
 
 
 _STATIC_DIR = Path(__file__).with_name("static")
@@ -1402,6 +1428,43 @@ def _finalize_daemon_guard_connect_payload(
     except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError, RuntimeError) as error:
         payload["supply_chain_error"] = str(error)
     return payload
+
+
+def _repair_command_activity_persistence_health(store: GuardStore) -> None:
+    shadow_evaluation = evaluate_command("git push origin release/2.1 --force")
+    shadow_proposal = baseline_command_shadow_proposal(shadow_evaluation)
+    occurred_at = datetime.now(timezone.utc)
+    evidence = build_pre_hook_evidence(
+        shadow_evaluation,
+        CommandActivityDecisionFacts(
+            policy_action="allow",
+            decision_reason_code=ActivityDecisionReason.EXTENSION_MATCH,
+            prompted=False,
+            approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
+            receipt_id=None,
+        ),
+        activity_id="activity:protection-repair-probe",
+        occurred_at=occurred_at,
+        harness="codex",
+        request_correlation=None,
+    )
+    shadow = build_command_shadow_observation(
+        shadow_evaluation,
+        authoritative_action="allow",
+        proposal=shadow_proposal,
+        activity_id="activity:protection-repair-probe",
+        occurred_at=occurred_at,
+        control=CommandShadowControl(
+            enabled=True,
+            kill_switch=False,
+            release_cohorts=frozenset({CommandShadowCohort.BASELINE}),
+            disabled_cohorts=frozenset(),
+            sample_basis_points=10_000,
+        ),
+    )
+    if shadow is None:
+        raise RuntimeError("command shadow repair probe was not selected")
+    store.probe_command_activity_persistence(evidence, shadow=shadow)
 
 
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
@@ -4078,10 +4141,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_protection_repair(self, payload: dict[str, object]) -> None:
         check_id = self._optional_string(payload.get("check_id"))
         store = self.server.store  # type: ignore[attr-defined]
-        if check_id in {"policy_engine", "rule_packs", "tamper_checks"}:
+        if check_id in {"all", "policy_engine", "rule_packs", "tamper_checks"}:
             try:
                 status = store.setup_policy_integrity(now=_now(), include_items=False)
-            except (OSError, RuntimeError, ValueError):
+                if status.get("mode") != "protected":
+                    status = store.repair_policy_integrity(
+                        clear_invalid=False,
+                        now=_now(),
+                        include_items=False,
+                    )
+                counts = status.get("counts")
+                valid_count = counts.get("valid", 0) if isinstance(counts, dict) else 0
+                if status.get("mode") != "protected" and valid_count == 0:
+                    store.reset_policy_integrity(now=_now())
+                    status = store.setup_policy_integrity(now=_now(), include_items=False)
+            except (OSError, RuntimeError, TypeError, ValueError):
                 self._write_json(
                     {
                         "error": "protection_repair_failed",
@@ -4091,14 +4165,71 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 return
             repaired = status.get("mode") == "protected"
+            degraded_reasons = status.get("degraded_reasons")
+            reason_count = len(degraded_reasons) if isinstance(degraded_reasons, list) else 0
+            repaired_check_ids = ["policy_engine", "rule_packs", "tamper_checks"]
+            pending_check_ids: list[str] = []
+            if check_id == "all" and repaired:
+                failed_check_ids: list[str] = []
+                try:
+                    containment_health = self._containment_health_payload(force_refresh=True)
+                    refreshed_signals = containment_health_signals(
+                        containment_health,
+                        now=datetime.now(timezone.utc),
+                    )
+                    for containment_check_id in (
+                        "decision_plane_compatibility",
+                        "containment_compatibility",
+                        "sandbox",
+                    ):
+                        if refreshed_signals[containment_check_id].status is ProtectionCheckStatus.PASS:
+                            repaired_check_ids.append(containment_check_id)
+                        else:
+                            failed_check_ids.append(containment_check_id)
+                except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+                    failed_check_ids.extend(["decision_plane_compatibility", "containment_compatibility", "sandbox"])
+                try:
+                    config = load_guard_config(store.guard_home)
+                    _repair_command_activity_persistence_health(store)
+                    store.maintain_command_activity(
+                        now=datetime.now(timezone.utc),
+                        detail_retain_days=config.evidence_retain_days,
+                    )
+                    evidence_health = store.get_command_activity_persistence_health()
+                    if evidence_health.active_error_count > 0:
+                        failed_check_ids.append("decision_stream")
+                    else:
+                        repaired_check_ids.append("decision_stream")
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    failed_check_ids.append("decision_stream")
+                if failed_check_ids or pending_check_ids:
+                    self._write_json(
+                        {
+                            "error": "protection_repair_incomplete",
+                            "repaired": False,
+                            "check_ids": repaired_check_ids,
+                            "failed_check_ids": failed_check_ids,
+                            "pending_check_ids": pending_check_ids,
+                            "message": (
+                                "Repair paused before every protection layer could be confirmed. Retry repair here."
+                            ),
+                        },
+                        status=409,
+                    )
+                    return
             self._write_json(
                 {
                     "repaired": repaired,
-                    "check_ids": ["policy_engine", "rule_packs", "tamper_checks"],
+                    "check_ids": repaired_check_ids,
+                    "pending_check_ids": pending_check_ids,
                     "message": (
                         "Integrity protection restored."
                         if repaired
-                        else "Guard could not confirm integrity protection yet."
+                        else (
+                            "Integrity repair preserved unauthenticated policy data instead of trusting it. "
+                            "Retry repair from Protect; Guard will keep the remaining "
+                            f"{reason_count or 1} issue isolated."
+                        )
                     ),
                 },
                 status=200 if repaired else 409,
@@ -4106,9 +4237,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if check_id == "decision_stream":
             try:
+                config = load_guard_config(store.guard_home)
+                _repair_command_activity_persistence_health(store)
+                store.maintain_command_activity(
+                    now=datetime.now(timezone.utc),
+                    detail_retain_days=config.evidence_retain_days,
+                )
                 health = store.get_command_activity_persistence_health()
-                observed = store.count_command_activities() > 0
-            except (OSError, RuntimeError, TypeError, ValueError):
+            except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                 self._write_json(
                     {
                         "error": "protection_repair_failed",
@@ -4117,7 +4253,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     status=409,
                 )
                 return
-            repaired = health.active_error_count == 0 and observed
+            repaired = health.active_error_count == 0
             self._write_json(
                 {
                     "repaired": repaired,
@@ -4125,7 +4261,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "message": (
                         "Command evidence is healthy."
                         if repaired
-                        else "Guard still needs a successful protected command to confirm evidence health."
+                        else "Guard could not restore command evidence persistence."
                     ),
                 },
                 status=200 if repaired else 409,
@@ -6227,6 +6363,7 @@ class GuardDaemonServer:
     ) -> None:
         _validate_dashboard_bundle()
         self._shutdown_started = threading.Event()
+        self._owner_lock: BinaryIO | None = None
         self._server = _GuardDaemonHttpServer(
             (host, port),
             _GuardDaemonHandler,
@@ -6300,6 +6437,15 @@ class GuardDaemonServer:
         self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
 
     def _begin_service(self) -> None:
+        self._owner_lock = acquire_guard_daemon_owner_lock(self._server.store.guard_home)
+        try:
+            self._begin_owned_service()
+        except BaseException:
+            release_guard_daemon_owner_lock(self._owner_lock)
+            self._owner_lock = None
+            raise
+
+    def _begin_owned_service(self) -> None:
         if self._aibom_refresh_thread is not None:
             if self._aibom_refresh_thread.is_alive():
                 raise RuntimeError("AIBOM inventory refresh is still stopping")
@@ -6309,14 +6455,7 @@ class GuardDaemonServer:
         self._maintain_command_activity_best_effort()
         self._persist_aibom_inventory_context()
         self._server.last_activity_monotonic = time.monotonic()
-        write_guard_daemon_state(
-            self._server.store.guard_home,
-            self.port,
-            self._server.auth_token,
-            host=self._server.daemon_host(),
-            state_id=self._server.runtime_session_id,
-            started_at=self._server.runtime_started_at,
-        )
+        self._server.publish_trust_state()
         self._server.store.upsert_runtime_state(
             session_id=self._server.runtime_session_id,
             daemon_host=self._server.runtime_host,
@@ -6413,14 +6552,18 @@ class GuardDaemonServer:
             self._finish_service()
 
     def _finish_service(self) -> None:
-        self._shutdown_started.set()
-        approval_attention = getattr(self._server, "approval_attention", None)
-        if approval_attention is not None:
-            approval_attention.stop()
-        self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
-        self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
-        clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
-        self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
+        try:
+            self._shutdown_started.set()
+            approval_attention = getattr(self._server, "approval_attention", None)
+            if approval_attention is not None:
+                approval_attention.stop()
+            self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
+            self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
+            clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
+            self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
+        finally:
+            release_guard_daemon_owner_lock(getattr(self, "_owner_lock", None))
+            self._owner_lock = None
 
     def _start_watchdog(self) -> None:
         if self._watchdog_thread is not None and self._watchdog_thread.is_alive():

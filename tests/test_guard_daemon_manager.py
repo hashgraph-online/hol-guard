@@ -57,6 +57,48 @@ def _disable_duplicate_retire(monkeypatch) -> None:
     )
 
 
+def test_hook_failure_restarts_an_older_unresponsive_daemon(tmp_path, monkeypatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    old_state = {"started_at": "2020-01-01T00:00:00+00:00"}
+    retired: list[Path] = []
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_lock", lambda _home: nullcontext())
+    monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: old_state)
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "retire_all_guard_daemons_for_home",
+        lambda home: retired.append(home) or [],
+    )
+    monkeypatch.setattr(daemon_manager_module, "guard_daemon_retirement_is_complete", lambda _home: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "ensure_guard_daemon",
+        lambda _home, *, home_dir=None: "http://127.0.0.1:5475",
+    )
+
+    recovered = daemon_manager_module.recover_guard_daemon_after_hook_failure(guard_home)
+
+    assert recovered == "http://127.0.0.1:5475"
+    assert retired == [guard_home]
+
+
+def test_hook_failure_preserves_a_concurrently_started_replacement(tmp_path, monkeypatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    recent_state = {"started_at": datetime.now(timezone.utc).isoformat()}
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_lock", lambda _home: nullcontext())
+    monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: recent_state)
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:5475")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "retire_all_guard_daemons_for_home",
+        lambda _home: pytest.fail("recent replacement must not be retired"),
+    )
+
+    recovered = daemon_manager_module.recover_guard_daemon_after_hook_failure(guard_home)
+
+    assert recovered == "http://127.0.0.1:5475"
+
+
 def test_write_guard_daemon_state_keeps_auth_token_out_of_state_file(tmp_path):
     guard_home = tmp_path / "guard-home"
 
@@ -76,6 +118,34 @@ def test_write_guard_daemon_state_keeps_auth_token_out_of_state_file(tmp_path):
         assert stat.S_IMODE(state_path.stat().st_mode) & 0o077 == 0
         assert stat.S_IMODE(token_path.stat().st_mode) & 0o077 == 0
         assert stat.S_IMODE(discovery_key_path.stat().st_mode) & 0o077 == 0
+
+
+def test_write_guard_daemon_state_authenticates_trust_snapshot(tmp_path):
+    guard_home = tmp_path / "guard-home"
+    trust_status = {
+        "backend": "system-keyring",
+        "degraded_reasons": [],
+        "enforcement": "enforce",
+        "mode": "protected",
+    }
+
+    daemon_manager_module.write_guard_daemon_state(
+        guard_home,
+        4781,
+        "secret-token",
+        trust_status=trust_status,
+    )
+
+    authenticated = load_authenticated_daemon_state(guard_home)
+    assert authenticated is not None
+    assert authenticated["trust_status"] == trust_status
+
+    state_path = daemon_manager_module._state_path(guard_home)
+    tampered = json.loads(state_path.read_text(encoding="utf-8"))
+    tampered["trust_status"]["mode"] = "degraded"
+    state_path.write_text(json.dumps(tampered), encoding="utf-8")
+
+    assert load_authenticated_daemon_state(guard_home) is None
 
 
 def test_clear_guard_daemon_state_preserves_auth_token_file(tmp_path):

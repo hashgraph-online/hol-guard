@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
+    isolated_daemon_start_command,
     isolated_hook_environment,
     run_isolated_hook_process,
 )
@@ -55,6 +56,12 @@ def _config_command(config: dict[str, object], name: str) -> list[str]:
     assert isinstance(value, list)
     assert value and all(isinstance(token, str) for token in value)
     return [token for token in value if isinstance(token, str)]
+
+
+def test_daemon_start_command_keeps_pre_home_argument_compatibility(tmp_path: Path) -> None:
+    command = isolated_daemon_start_command(sys.executable, tmp_path, tmp_path / "guard")
+
+    assert f"home_dir=Path({str(Path.home())!r})" in command[3]
 
 
 def test_fallback_environment_drops_import_virtualenv_project_and_loader_controls(
