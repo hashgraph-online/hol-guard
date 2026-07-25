@@ -47,6 +47,8 @@ from .github_capability_interaction import (
     github_capability_action_class,
     github_capability_requires_confirmation,
 )
+from .github_command_capabilities import static_markdown_pr_body_file_operand
+from .github_pr_body_file import github_pr_body_file_is_safe
 from .github_shell_capabilities import GitHubShellAnalysis
 from .github_shell_capabilities import classify_github_shell_capabilities as _classify_github_shell_capabilities
 from .interpreter_options import shell_interpreter_command_payload as _shell_interpreter_command_payload
@@ -1675,6 +1677,20 @@ def _destructive_shell_tool_action_request(
             pytest_config_reason_codes=pytest_config_assessment.reason_codes,
             interpreter_executable_identities=interpreter_executable_identities,
         )
+    if _gh_pr_create_uses_safe_static_body_file(
+        detection_command_text,
+        cwd=cwd,
+        home_dir=home_dir,
+    ) and (
+        raw_command_text is None
+        or raw_command_text == detection_command_text
+        or _gh_pr_create_uses_safe_static_body_file(
+            raw_command_text,
+            cwd=cwd,
+            home_dir=home_dir,
+        )
+    ):
+        return None
     github_assessment = classify_github_shell_capabilities(
         raw_command_text or detection_command_text,
         home_dir=home_dir,
@@ -2127,6 +2143,27 @@ def _gh_pr_create_body_args_have_substitution(args: list[_ShellTokenWithQuoteCon
             return True
         index += 1
     return False
+
+
+def _gh_pr_create_uses_safe_static_body_file(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    segments = _shell_token_segments(_shell_tokens_preserving_quote_context(command_text))
+    if len(segments) != 1:
+        return False
+    segment = segments[0]
+    args_start_index = _gh_pr_create_body_args_start_index(segment)
+    if args_start_index is None:
+        return False
+    operand = static_markdown_pr_body_file_operand(tuple(token.plain for token in segment[args_start_index:]))
+    return operand is not None and github_pr_body_file_is_safe(
+        operand,
+        cwd=cwd,
+        home_dir=home_dir,
+    )
 
 
 def _shell_tokens_preserving_quote_context(command_text: str) -> list[_ShellTokenWithQuoteContext]:

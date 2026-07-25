@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime.command_activity_contract import (
@@ -28,6 +28,8 @@ from codex_plugin_scanner.guard.runtime.effect_contract import EffectKind
 from codex_plugin_scanner.guard.runtime.extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
 from codex_plugin_scanner.guard.store import GuardStore
 
+_FIXTURE_OCCURRED_ON = date(2026, 7, 18)
+
 
 def evidence(
     activity_id: str,
@@ -35,10 +37,18 @@ def evidence(
     minute: int,
     prompted: bool = False,
     harness: str = "codex",
+    occurred_on: date = _FIXTURE_OCCURRED_ON,
 ) -> CommandActivityEvidence:
     activity = CommandActivity(
         activity_id=activity_id,
-        occurred_at=datetime(2026, 7, 18, 20, minute, tzinfo=timezone.utc),
+        occurred_at=datetime(
+            occurred_on.year,
+            occurred_on.month,
+            occurred_on.day,
+            20,
+            minute,
+            tzinfo=timezone.utc,
+        ),
         harness=harness,
         hook_phase=CommandHookPhase.PRE,
         execution_status=CommandExecutionStatus.ALLOWED_UNCONFIRMED,
@@ -70,13 +80,14 @@ def evidence(
     return CommandActivityEvidence(activity, (match,))
 
 
-def seed(store: GuardStore) -> None:
+def seed(store: GuardStore, *, occurred_on: date = _FIXTURE_OCCURRED_ON) -> None:
     for index in range(3):
         store.record_command_activity(
             evidence(
                 f"activity:{index + 1:02d}",
                 minute=index,
                 prompted=index == 1,
+                occurred_on=occurred_on,
             )
         )
 

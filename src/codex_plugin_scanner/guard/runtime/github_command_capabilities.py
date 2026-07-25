@@ -304,6 +304,59 @@ def _pr_create_has_static_inline_content(args: Sequence[str]) -> bool:
     )
 
 
+def static_markdown_pr_body_file_operand(args: Sequence[str]) -> str | None:
+    """Return one unambiguous Markdown body file from a static PR proposal."""
+
+    incompatible_options = (
+        "--body",
+        "--template",
+        "--fill",
+        "--fill-first",
+        "--fill-verbose",
+        "--recover",
+        "--web",
+        "--editor",
+        "--dry-run",
+    )
+    if any(_has_option(args, option) for option in incompatible_options):
+        return None
+    if any(_has_short_option(args, option) for option in ("-T", "-b")):
+        return None
+    if any(_has_short_boolean_option(args, option) for option in ("-e", "-f", "-w")):
+        return None
+    if not _has_explicit_option_value(args, "--title", "-t"):
+        return None
+    body_files: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token in {"--body-file", "-F"}:
+            if index + 1 >= len(args):
+                return None
+            body_files.append(args[index + 1])
+            index += 2
+            continue
+        if token.startswith("--body-file="):
+            body_files.append(token.partition("=")[2])
+        elif token.startswith("-F") and len(token) > 2:
+            body_files.append(token[2:])
+        index += 1
+    if len(body_files) != 1:
+        return None
+    body_file = body_files[0]
+    shell_expansion_markers = ("$", "`", "*", "?", "[", "]", "{", "}", "(", ")", "<", ">", "^", "#", "~")
+    if (
+        not body_file
+        or body_file == "-"
+        or body_file.startswith("=")
+        or any(marker in body_file for marker in shell_expansion_markers)
+    ):
+        return None
+    if not body_file.lower().endswith((".md", ".markdown")):
+        return None
+    return body_file
+
+
 def _has_short_option(args: Sequence[str], option: str) -> bool:
     return any(token == option or (token.startswith(option) and len(token) > len(option)) for token in args)
 

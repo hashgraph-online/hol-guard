@@ -10,6 +10,7 @@ import base64
 import json
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon.command_activity_api import stream_command_activity_events
@@ -190,7 +191,7 @@ def test_query_and_feedback_payloads_fail_closed(tmp_path: Path) -> None:
 
 def test_analytics_and_extensions_are_paginated_bounded_contracts(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    seed(store)
+    seed(store, occurred_on=datetime.now(timezone.utc).date())
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
