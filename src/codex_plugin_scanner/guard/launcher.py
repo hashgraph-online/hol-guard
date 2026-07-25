@@ -36,7 +36,22 @@ def merge_guard_launcher_env(env: Mapping[str, str] | None = None, *, pin_packag
 
 
 def _normalize_launcher_pythonpath(value: str | None) -> str:
-    return _merge_path_entries("", value or "", relative_base=Path.cwd())
+    try:
+        relative_base = Path.cwd()
+    except OSError:
+        return _absolute_path_entries(value or "")
+    return _merge_path_entries("", value or "", relative_base=relative_base)
+
+
+def _absolute_path_entries(value: str) -> str:
+    entries: list[str] = []
+    for entry in value.split(os.pathsep):
+        path = Path(entry.strip()).expanduser()
+        if path.is_absolute():
+            normalized = str(path)
+            if normalized not in entries:
+                entries.append(normalized)
+    return os.pathsep.join(entries)
 
 
 def _merge_path_entries(left: str, right: str, relative_base: Path | None = None) -> str:

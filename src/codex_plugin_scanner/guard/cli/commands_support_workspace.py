@@ -492,11 +492,14 @@ def _resolve_default_install_workspace(
 ) -> Path | None:
     """Pick a project workspace for install/uninstall when --workspace is omitted."""
 
-    cwd = Path.cwd().resolve()
     harness = _requested_install_harness(args)
     cursor_project_dir = _workspace_from_cursor_project_dir()
     if cursor_project_dir is not None and (harness is None or harness == "cursor"):
         return cursor_project_dir
+    try:
+        cwd = Path.cwd().resolve()
+    except OSError:
+        return None
 
     if _workspace_has_project_markers(cwd):
         return cwd

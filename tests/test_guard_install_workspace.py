@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.cli.commands import (
     _resolve_guard_workspace,
 )
 from codex_plugin_scanner.guard.config import resolve_guard_home
+from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
 
 
 def _install_args(*, harness: str = "cursor", workspace: str | None = None) -> argparse.Namespace:
@@ -68,6 +69,49 @@ def test_resolve_default_install_workspace_uses_cursor_project_dir(
     guard_home = resolve_guard_home(None)
     resolved = _resolve_default_install_workspace(_install_args(), guard_home=guard_home)
     assert resolved == project.resolve()
+
+
+def test_install_and_uninstall_omp_survive_unavailable_current_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+
+    def unavailable_cwd() -> Path:
+        raise FileNotFoundError("current directory was removed")
+
+    monkeypatch.setattr(Path, "cwd", staticmethod(unavailable_cwd))
+
+    install_rc = main(["guard", "install", "omp", "--home", str(home_dir), "--json"])
+    install_capture = capsys.readouterr()
+    assert install_rc == 0, install_capture.err
+    install_output = json.loads(install_capture.out)
+    uninstall_rc = main(["guard", "uninstall", "omp", "--home", str(home_dir), "--json"])
+    uninstall_capture = capsys.readouterr()
+    assert uninstall_rc == 0, uninstall_capture.err
+    uninstall_output = json.loads(uninstall_capture.out)
+
+    assert install_output["managed_install"]["harness"] == "pi"
+    assert install_output["managed_install"]["workspace"] is None
+    assert uninstall_output["managed_install"]["harness"] == "pi"
+    assert uninstall_output["managed_install"]["workspace"] is None
+
+
+def test_launcher_drops_relative_pythonpath_when_current_directory_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    absolute_entry = tmp_path / "trusted"
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(("relative-package", str(absolute_entry))))
+
+    def unavailable_cwd() -> Path:
+        raise FileNotFoundError("current directory was removed")
+
+    monkeypatch.setattr(Path, "cwd", staticmethod(unavailable_cwd))
+
+    assert merge_guard_launcher_env() == {"PYTHONPATH": str(absolute_entry)}
 
 
 def test_resolve_guard_workspace_explicit_flag_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
