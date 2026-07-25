@@ -98,8 +98,10 @@ from ..consumer import (
 from ..daemon.manager import (
     _guard_daemon_pid_is_running,
     _guard_daemon_pid_matches_command,
+    clear_guard_daemon_wake_reservation,
     load_guard_daemon_auth_token,
     load_guard_daemon_url,
+    schedule_guard_daemon_ensure,
 )
 from ..desktop_notifications import (
     desktop_notification_setup_payload,

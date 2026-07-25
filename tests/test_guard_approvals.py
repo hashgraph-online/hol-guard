@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -1916,7 +1917,14 @@ class TestGuardApprovals:
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=5):
                 pass
-            runtime_state = store.get_runtime_state()
+            deadline = time.monotonic() + 1
+            while True:
+                runtime_state = store.get_runtime_state()
+                if runtime_state is not None and runtime_state["last_heartbeat_at"] == "2026-04-11T00:05:00+00:00":
+                    break
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.01)
         finally:
             daemon.stop()
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -196,7 +197,7 @@ def test_detector_registry_skips_disabled_detector_ids(tmp_path):
     ]
 
 
-def test_detector_registry_discards_signals_when_detector_exceeds_timeout(tmp_path):
+def test_detector_registry_preserves_completed_signals_when_detector_exceeds_timeout(tmp_path):
     calls: list[str] = []
     registry = DetectorRegistry(
         (RecordingDetector("secret.slow", ("secret",), calls, _signal("secret:slow", "secret")),),
@@ -206,9 +207,36 @@ def test_detector_registry_discards_signals_when_detector_exceeds_timeout(tmp_pa
     result = registry.run(_action(), _context(tmp_path), timeout_ms=50)
 
     assert calls == ["secret.slow"]
-    assert result.signals == ()
+    assert [signal.signal_id for signal in result.signals] == ["secret:slow"]
     assert result.telemetry[0].status == "timeout"
     assert result.telemetry[0].elapsed_ms == 75
+    assert result.slow_detectors(threshold_ms=50) == result.telemetry
+
+
+def test_detector_registry_preserves_signals_after_cpu_bound_timeout(tmp_path):
+    class CpuBoundDetector:
+        detector_id = "secret.cpu-bound"
+        categories: tuple[RiskSignalCategory, ...] = ("secret",)
+
+        def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+            assert action.action_type == "harness_start"
+            assert context.workspace is not None
+            deadline = time.monotonic() + 0.005
+            accumulator = 0
+            while time.monotonic() < deadline:
+                accumulator += 1
+            assert accumulator > 0
+            return (_signal("secret:cpu-bound", "secret"),)
+
+    result = DetectorRegistry((CpuBoundDetector(),)).run(
+        _action(),
+        _context(tmp_path),
+        timeout_ms=1,
+    )
+
+    assert [signal.signal_id for signal in result.signals] == ["secret:cpu-bound"]
+    assert result.telemetry[0].status == "timeout"
+    assert result.telemetry[0].elapsed_ms >= 5
 
 
 def test_detector_registry_isolates_detector_exceptions_as_telemetry(tmp_path):

@@ -7,11 +7,15 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import pickle
+import signal
 import sqlite3
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import cast
 
@@ -24,7 +28,7 @@ from codex_plugin_scanner.guard import policy_integrity as policy_integrity_modu
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard import store_policy_integrity_runtime as policy_integrity_runtime_module
 from codex_plugin_scanner.guard.cli import commands_dispatch_trust as trust_dispatch_module
-from codex_plugin_scanner.guard.daemon.manager import ApprovalCenterLocator
+from codex_plugin_scanner.guard.daemon.manager import ApprovalCenterLocator, write_guard_daemon_state
 from codex_plugin_scanner.guard.local_trust_contract import (
     LOCAL_TRUST_DEGRADED_REASON_LABELS,
     LOCAL_TRUST_MODES,
@@ -38,6 +42,7 @@ from codex_plugin_scanner.guard.local_trust_contract import (
     POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
     POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE,
     POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE,
+    POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
     TrustBackendCorruptResultError,
     TrustBackendProcessFailedError,
     TrustBackendUnavailableError,
@@ -210,20 +215,76 @@ def _write_delayed_nested_trust_marker(marker_path: str) -> None:
     Path(marker_path).write_text("late", encoding="utf-8")
 
 
-def _write_corrupt_trust_result(operation, result_path: str) -> None:
+def _write_delayed_nested_trust_marker_ignoring_term(marker_path: str) -> None:
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    _write_delayed_nested_trust_marker(marker_path)
+
+
+def _protected_trust_result() -> dict[str, str]:
+    return {"mode": "protected"}
+
+
+def _delayed_trust_status(delay_seconds: float) -> TrustStatus:
+    time.sleep(delay_seconds)
+    return _FakeTrustBackend("slow", 1).status()
+
+
+def _delayed_trust_mutation(marker_path: str, delay_seconds: float) -> TrustStatus:
+    time.sleep(delay_seconds)
+    Path(marker_path).write_text("mutated", encoding="utf-8")
+    return _FakeTrustBackend("slow", 1).status()
+
+
+def _delayed_nested_trust_mutation(marker_path: str) -> TrustStatus:
+    context = local_trust_contract_module.multiprocessing.get_context("spawn")
+    process = context.Process(target=_write_delayed_nested_trust_marker_ignoring_term, args=(marker_path,))
+    process.start()
+    time.sleep(2.0)
+    return _FakeTrustBackend("slow", 1).status()
+
+
+def _large_trust_result(payload: str) -> dict[str, str]:
+    return {"mode": "protected", "payload": payload}
+
+
+def _nested_trust_result(marker_path: str) -> dict[str, str]:
+    context = local_trust_contract_module.multiprocessing.get_context("spawn")
+    process = context.Process(target=_write_nested_trust_marker, args=(marker_path,))
+    process.start()
+    process.join(timeout=3.0)
+    return {"mode": "protected", "nested": str(Path(marker_path).exists())}
+
+
+def _trust_result_with_delayed_descendant(marker_path: str) -> dict[str, str]:
+    context = local_trust_contract_module.multiprocessing.get_context("spawn")
+    process = context.Process(target=_write_delayed_nested_trust_marker, args=(marker_path,))
+    process.start()
+    return {"mode": "protected"}
+
+
+def _write_corrupt_trust_result(operation_path: str, ready_path: str, result_path: str) -> None:
+    del operation_path
+    Path(ready_path).touch()
     Path(result_path).write_bytes(b"not a pickle")
 
 
-def _write_malformed_trust_result(operation, result_path: str) -> None:
+def _write_malformed_trust_result(operation_path: str, ready_path: str, result_path: str) -> None:
+    del operation_path
+    Path(ready_path).touch()
     Path(result_path).write_bytes(pickle.dumps({"ok": True}))
 
 
-def _write_list_trust_result(operation, result_path: str) -> None:
+def _write_list_trust_result(operation_path: str, ready_path: str, result_path: str) -> None:
+    del operation_path
+    Path(ready_path).touch()
     Path(result_path).write_bytes(pickle.dumps([True, {"mode": "protected"}]))
 
 
-def _skip_trust_result(operation, result_path: str) -> None:
-    operation()
+def _skip_trust_result(operation_path: str, ready_path: str, result_path: str) -> None:
+    Path(ready_path).touch()
+    del result_path
+    local_trust_contract_module._load_trust_backend_operation(operation_path)()
 
 
 def test_local_trust_contract_exports_stable_status_vocabulary() -> None:
@@ -282,7 +343,7 @@ def test_trust_backend_timeout_returns_degraded_result_without_waiting() -> None
 
     started = time.monotonic()
     result = run_trust_backend_check(
-        lambda: (time.sleep(1.0), _FakeTrustBackend("slow", 1).status())[1],
+        partial(_delayed_trust_status, 1.0),
         timeout_seconds=0.01,
         timeout_result=timeout_result,
         on_error=lambda error: TrustStatus(
@@ -301,11 +362,6 @@ def test_trust_backend_timeout_returns_degraded_result_without_waiting() -> None
 def test_trust_backend_timeout_contains_late_side_effects(tmp_path: Path) -> None:
     marker_path = tmp_path / "late-side-effect"
 
-    def slow_mutation() -> TrustStatus:
-        time.sleep(0.5)
-        marker_path.write_text("mutated", encoding="utf-8")
-        return _FakeTrustBackend("slow", 1).status()
-
     timeout_result = TrustStatus(
         runtime_protection="degraded",
         remembered_rules="disabled_degraded",
@@ -315,7 +371,7 @@ def test_trust_backend_timeout_contains_late_side_effects(tmp_path: Path) -> Non
     )
 
     result = run_trust_backend_check(
-        slow_mutation,
+        partial(_delayed_trust_mutation, str(marker_path), 0.5),
         timeout_seconds=0.01,
         timeout_result=timeout_result,
     )
@@ -328,13 +384,6 @@ def test_trust_backend_timeout_contains_late_side_effects(tmp_path: Path) -> Non
 def test_trust_backend_timeout_kills_nested_helper_process(tmp_path: Path) -> None:
     marker_path = tmp_path / "nested-late-side-effect"
 
-    def slow_nested_mutation() -> TrustStatus:
-        context = local_trust_contract_module.multiprocessing.get_context("fork")
-        process = context.Process(target=_write_delayed_nested_trust_marker, args=(str(marker_path),))
-        process.start()
-        time.sleep(2.0)
-        return _FakeTrustBackend("slow", 1).status()
-
     timeout_result = TrustStatus(
         runtime_protection="degraded",
         remembered_rules="disabled_degraded",
@@ -344,7 +393,7 @@ def test_trust_backend_timeout_kills_nested_helper_process(tmp_path: Path) -> No
     )
 
     result = run_trust_backend_check(
-        slow_nested_mutation,
+        partial(_delayed_nested_trust_mutation, str(marker_path)),
         timeout_seconds=0.05,
         timeout_result=timeout_result,
     )
@@ -354,7 +403,22 @@ def test_trust_backend_timeout_kills_nested_helper_process(tmp_path: Path) -> No
     assert not marker_path.exists()
 
 
-def test_trust_backend_timeout_falls_back_when_process_group_missing(
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows Job Object inheritance")
+def test_completed_windows_trust_worker_job_kills_delayed_descendant(tmp_path: Path) -> None:
+    marker_path = tmp_path / "windows-trust-descendant"
+
+    result = run_trust_backend_check(
+        partial(_trust_result_with_delayed_descendant, str(marker_path)),
+        timeout_seconds=2.0,
+        timeout_result={"mode": "degraded"},
+    )
+    time.sleep(0.8)
+
+    assert result == {"mode": "protected"}
+    assert not marker_path.exists()
+
+
+def test_trust_backend_cleanup_does_not_signal_an_exited_process_group(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[str] = []
@@ -374,15 +438,14 @@ def test_trust_backend_timeout_falls_back_when_process_group_missing(
         def kill(self) -> None:
             calls.append("kill")
 
-    def fake_killpg(pid: int, sig: int) -> None:
-        calls.append(f"killpg:{pid}:{sig}")
-        raise ProcessLookupError("process group not ready")
+    def unexpected_killpg(pid: int, sig: int) -> None:
+        raise AssertionError(f"exited process group must not be signaled: {pid}:{sig}")
 
-    monkeypatch.setattr(local_trust_contract_module.os, "killpg", fake_killpg)
+    monkeypatch.setattr(local_trust_contract_module.os, "killpg", unexpected_killpg)
 
     local_trust_contract_module._terminate_trust_backend_process_tree(FakeProcess())
 
-    assert calls == ["killpg:12345:15", "terminate", "join:0.2"]
+    assert calls == []
 
 
 def test_trust_backend_check_handles_corrupt_result_file(
@@ -391,7 +454,7 @@ def test_trust_backend_check_handles_corrupt_result_file(
     monkeypatch.setattr(local_trust_contract_module, "_trust_backend_check_worker", _write_corrupt_trust_result)
 
     result = run_trust_backend_check(
-        lambda: {"mode": "protected"},
+        _protected_trust_result,
         timeout_seconds=1.0,
         timeout_result={"mode": "degraded"},
         on_error=lambda error: {
@@ -414,7 +477,7 @@ def test_trust_backend_check_rejects_malformed_result_payload(
     monkeypatch.setattr(local_trust_contract_module, "_trust_backend_check_worker", _write_malformed_trust_result)
 
     result = run_trust_backend_check(
-        lambda: {"mode": "protected"},
+        _protected_trust_result,
         timeout_seconds=1.0,
         timeout_result={"mode": "degraded"},
         on_error=lambda error: {
@@ -437,7 +500,7 @@ def test_trust_backend_check_rejects_list_result_payload(
     monkeypatch.setattr(local_trust_contract_module, "_trust_backend_check_worker", _write_list_trust_result)
 
     result = run_trust_backend_check(
-        lambda: {"mode": "protected"},
+        _protected_trust_result,
         timeout_seconds=1.0,
         timeout_result={"mode": "degraded"},
         on_error=lambda error: {
@@ -472,7 +535,7 @@ def test_trust_backend_check_handles_result_permission_denied(
     monkeypatch.setattr(local_trust_contract_module, "_load_trust_backend_result", denied_loader)
 
     result = run_trust_backend_check(
-        lambda: {"mode": "protected"},
+        _protected_trust_result,
         timeout_seconds=1.0,
         timeout_result={"mode": "degraded"},
         on_error=lambda error: {
@@ -495,7 +558,7 @@ def test_trust_backend_check_reports_missing_result_with_exit_code(
     monkeypatch.setattr(local_trust_contract_module, "_trust_backend_check_worker", _skip_trust_result)
 
     result = run_trust_backend_check(
-        lambda: {"mode": "protected"},
+        _protected_trust_result,
         timeout_seconds=1.0,
         timeout_result={"mode": "degraded"},
         on_error=lambda error: {"mode": "degraded", "error": str(error)},
@@ -508,7 +571,7 @@ def test_trust_backend_timeout_helper_allows_minimal_fallback_contract() -> None
     timeout_result = {"mode": "degraded"}
 
     result = run_trust_backend_check(
-        lambda: (time.sleep(1.0), {"mode": "protected"})[1],
+        partial(_delayed_trust_status, 1.0),
         timeout_seconds=0.01,
         timeout_result=timeout_result,
     )
@@ -521,7 +584,7 @@ def test_trust_backend_check_drains_large_completed_result_before_timeout() -> N
     large_status = {"mode": "protected", "payload": "x" * 1_000_000}
 
     result = run_trust_backend_check(
-        lambda: large_status,
+        partial(_large_trust_result, large_status["payload"]),
         timeout_seconds=1.0,
         timeout_result=timeout_result,
     )
@@ -529,53 +592,100 @@ def test_trust_backend_check_drains_large_completed_result_before_timeout() -> N
     assert result == large_status
 
 
-def test_trust_backend_check_allows_native_helper_child_process(tmp_path: Path) -> None:
+def test_trust_backend_check_allows_spawned_helper_child_process(tmp_path: Path) -> None:
     marker_path = tmp_path / "nested-helper"
 
-    def operation() -> dict[str, str]:
-        context = local_trust_contract_module.multiprocessing.get_context("fork")
-        process = context.Process(target=_write_nested_trust_marker, args=(str(marker_path),))
-        process.start()
-        process.join(timeout=1.0)
-        return {"mode": "protected", "nested": str(marker_path.exists())}
-
     result = run_trust_backend_check(
-        operation,
-        timeout_seconds=1.0,
+        partial(_nested_trust_result, str(marker_path)),
+        # This verifies nested containment, while concurrent spawn runners need startup headroom.
+        timeout_seconds=4.0,
         timeout_result={"mode": "degraded", "nested": "False"},
     )
 
     assert result == {"mode": "protected", "nested": "True"}
 
 
-def test_trust_backend_check_degrades_without_spawn_when_fork_unavailable(
+def test_trust_backend_check_degrades_when_spawn_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[str | None] = []
 
     def fake_get_context(method: str | None = None):
         calls.append(method)
-        if method == "fork":
-            raise ValueError("fork unavailable")
-        raise AssertionError("spawn fallback must not be used for passive trust checks")
+        if method == "spawn":
+            raise ValueError("spawn unavailable")
+        raise AssertionError("passive trust checks must only request spawn")
 
     monkeypatch.setattr(local_trust_contract_module.multiprocessing, "get_context", fake_get_context)
 
     result = run_trust_backend_check(
-        lambda: {"mode": "protected"},
+        _protected_trust_result,
         timeout_seconds=1.0,
         timeout_result={"mode": "degraded"},
         on_error=lambda error: {"mode": "degraded", "reason": degraded_reason_for_backend_error(error)},
     )
 
     assert result == {"mode": "degraded", "reason": POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE}
-    assert calls == ["fork"]
+    assert calls == ["spawn"]
+
+
+def test_trust_backend_check_uses_spawn_from_concurrent_threads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    get_context = local_trust_contract_module.multiprocessing.get_context
+    calls: list[str | None] = []
+
+    def recording_get_context(method: str | None = None):
+        calls.append(method)
+        return get_context(method)
+
+    monkeypatch.setattr(local_trust_contract_module.multiprocessing, "get_context", recording_get_context)
+
+    def run_check(_: int) -> dict[str, str]:
+        return run_trust_backend_check(
+            _protected_trust_result,
+            timeout_seconds=2.0,
+            timeout_result={"mode": "degraded"},
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(run_check, range(8)))
+
+    assert results == [{"mode": "protected"}] * 8
+    assert calls == ["spawn"] * 8
+
+
+def test_passive_trust_probe_prefers_authenticated_daemon_degradation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        local_trust_controller_module,
+        "load_authenticated_daemon_state",
+        lambda guard_home: {
+            "trust_status": {
+                "mode": POLICY_INTEGRITY_MODE_DEGRADED,
+                "runtime_protection": "degraded",
+                "cloud_policies": "setup_unavailable",
+                "backend": "local-vault",
+                "degraded_reasons": [POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE],
+            }
+        },
+    )
+
+    result = local_trust_controller_module._built_in_cached_trust_status(
+        local_trust_controller_module._LocalVaultTrustBackend(guard_home=tmp_path)
+    )
+
+    assert result.runtime_protection == "degraded"
+    assert result.remembered_rules == "disabled_degraded"
+    assert result.degraded_reasons == (POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,)
 
 
 def test_trust_backend_errors_normalize_to_safe_degraded_reasons() -> None:
     assert degraded_reason_for_backend_error(TimeoutError("slow")) == POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT
     assert (
-        degraded_reason_for_backend_error(TrustBackendUnavailableError("fork unavailable"))
+        degraded_reason_for_backend_error(TrustBackendUnavailableError("spawn unavailable"))
         == POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
     )
     assert (
@@ -3343,6 +3453,12 @@ def test_trust_cli_explain_reports_protected_local_rule(
     store = GuardStore(home_dir)
     setup = store.setup_policy_integrity(now="2026-06-19T12:00:00Z")
     assert setup["mode"] == "protected"
+    write_guard_daemon_state(
+        home_dir,
+        5474,
+        "trust-explain-token",
+        trust_status=store.get_cached_policy_integrity_state(),
+    )
     store.upsert_runtime_state(
         session_id="trust-explain",
         daemon_host="127.0.0.1",
@@ -3380,6 +3496,12 @@ def test_trust_cli_explain_human_output_uses_trust_renderer(
     _enable_macos_native_policy_integrity(monkeypatch, install_fake_system_keyring)
     store = GuardStore(home_dir)
     store.setup_policy_integrity(now="2026-06-19T12:00:00Z")
+    write_guard_daemon_state(
+        home_dir,
+        5474,
+        "trust-explain-human-token",
+        trust_status=store.get_cached_policy_integrity_state(),
+    )
     store.upsert_runtime_state(
         session_id="trust-explain-human",
         daemon_host="127.0.0.1",

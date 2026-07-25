@@ -85,7 +85,7 @@ class ApprovalAttentionCoordinator:
             )
             self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self) -> bool:
         with self._condition:
             self._stopping = True
             self._pending.clear()
@@ -94,7 +94,9 @@ class ApprovalAttentionCoordinator:
         if thread is not None:
             thread.join(timeout=5)
         with self._condition:
-            self._thread = None
+            if self._thread is thread and (thread is None or not thread.is_alive()):
+                self._thread = None
+            return self._thread is None
 
     def schedule(
         self,

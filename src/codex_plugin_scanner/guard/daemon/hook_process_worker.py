@@ -10,6 +10,8 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from ..codex_hook_windows_job import windows_system_executable_path
+
 
 class WorkerProcess(Protocol):
     @property
@@ -34,6 +36,8 @@ class HookWorkerSlot:
     connection: WorkerConnection
     retire_lock: threading.Lock = field(default_factory=threading.Lock)
     retired: bool = False
+    windows_job_contained: bool = False
+    isolation_ready: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,15 +48,13 @@ class HookProcessReview:
     reason_code: str | None
 
 
-def terminate_worker_tree(process: WorkerProcess, signal_number: int) -> None:
-    """Signal one isolated worker and its descendants."""
+def terminate_worker_tree(process: WorkerProcess, signal_number: int) -> bool:
+    """Signal one isolated worker tree and report whether tree containment was proven."""
 
     if os.name == "nt" and process.pid is not None:
-        system_root = os.environ.get("SYSTEMROOT")
-        taskkill = os.path.join(system_root, "System32", "taskkill.exe") if system_root else "taskkill.exe"
         try:
             result = subprocess.run(
-                [taskkill, "/PID", str(process.pid), "/T", "/F"],
+                [windows_system_executable_path("taskkill.exe"), "/PID", str(process.pid), "/T", "/F"],
                 check=False,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
@@ -61,14 +63,16 @@ def terminate_worker_tree(process: WorkerProcess, signal_number: int) -> None:
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             if result.returncode == 0:
-                return
+                return True
         except (OSError, subprocess.TimeoutExpired):
             pass
     if os.name != "nt" and process.pid is not None:
         try:
             os.killpg(process.pid, signal_number)
-            return
-        except (OSError, ProcessLookupError):
+            return True
+        except ProcessLookupError:
+            pass
+        except OSError:
             pass
     if signal_number == getattr(signal, "SIGKILL", 9):
         with suppress(OSError):
@@ -76,6 +80,31 @@ def terminate_worker_tree(process: WorkerProcess, signal_number: int) -> None:
     else:
         with suppress(OSError):
             process.terminate()
+    return False
+
+
+def retire_worker_slot(slot: HookWorkerSlot, *, graceful: bool = False) -> bool:
+    """Contain one worker tree; callers may run this outside request deadlines."""
+
+    with slot.retire_lock:
+        if slot.retired:
+            return not slot.process.is_alive()
+        slot.retired = True
+    if graceful and slot.process.is_alive():
+        with suppress(BrokenPipeError, OSError):
+            slot.connection.send(("stop", None))
+        slot.process.join(timeout=0.2)
+    if not slot.process.is_alive():
+        return True
+    tree_contained = terminate_worker_tree(slot.process, getattr(signal, "SIGKILL", 9))
+    slot.process.join(timeout=0.5)
+    contained = (
+        tree_contained or slot.windows_job_contained or not slot.isolation_ready
+    ) and not slot.process.is_alive()
+    if not contained:
+        with slot.retire_lock:
+            slot.retired = False
+    return contained
 
 
 __all__ = [
@@ -83,5 +112,6 @@ __all__ = [
     "HookWorkerSlot",
     "WorkerConnection",
     "WorkerProcess",
+    "retire_worker_slot",
     "terminate_worker_tree",
 ]

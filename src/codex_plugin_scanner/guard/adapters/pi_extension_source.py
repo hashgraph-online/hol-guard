@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
+from ..codex_hook_windows_job import windows_system_executable_path
+from ..daemon.manager import GUARD_DAEMON_COMPATIBILITY_VERSION
 from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
 from .pi_extension_cli_runtime_source import CLI_RUNTIME_HELPERS_SOURCE
 from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
@@ -14,10 +17,10 @@ from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
 # recovery/fallback paths below that host deadline so a fail-safe result returns.
 GUARD_HOOK_TIMEOUT_MS = 4_000
 GUARD_HOOK_DEADLINE_RESERVE_MS = 250
-GUARD_DAEMON_HOOK_TIMEOUT_MS = 1_600
-GUARD_DAEMON_RECOVERY_TIMEOUT_MS = 600
-GUARD_DAEMON_RETRY_TIMEOUT_MS = 500
-GUARD_CLI_HOOK_TIMEOUT_MS = 1_000
+GUARD_DAEMON_HOOK_TIMEOUT_MS = 2_000
+GUARD_DAEMON_RECOVERY_TIMEOUT_MS = 500
+GUARD_DAEMON_RETRY_TIMEOUT_MS = 300
+GUARD_CLI_HOOK_TIMEOUT_MS = 900
 GUARD_HOOK_TEXT_LIMIT_CHARS = 12_000
 GUARD_HOOK_CONTENT_ITEM_LIMIT = 24
 GUARD_HOOK_OBJECT_KEY_LIMIT = 24
@@ -37,8 +40,13 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
     compatibility_version_json = json.dumps(GUARD_DAEMON_COMPATIBILITY_VERSION)
     package_root = Path(__file__).resolve().parents[3]
     cli_wrapper_bootstrap = (
-        "import json,sys;"
+        "import json,os,sys;"
         f"sys.path.insert(0,{str(package_root)!r});"
+        "from codex_plugin_scanner.guard.codex_hook_windows_job import "
+        "assign_current_process_to_windows_hook_job;"
+        "_windows_job=assign_current_process_to_windows_hook_job() if os.name=='nt' else None;"
+        "sys.stderr.write('HOL_GUARD_WINDOWS_JOB_CONTAINED\\n') if _windows_job is not None else None;"
+        "sys.stderr.flush() if _windows_job is not None else None;"
         "from pathlib import Path;"
         "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import run_bounded_cli_hook;"
         "argv=json.loads(sys.argv[1]);"
@@ -51,8 +59,13 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
     cli_wrapper_command_json = json.dumps(str(Path(sys.executable).expanduser().absolute()))
     cli_wrapper_args_json = json.dumps(["-I", "-c", cli_wrapper_bootstrap])
     recovery_bootstrap = (
-        "import sys;"
+        "import os,sys;"
         f"sys.path.insert(0,{str(package_root)!r});"
+        "from codex_plugin_scanner.guard.codex_hook_windows_job import "
+        "assign_current_process_to_windows_hook_job;"
+        "_windows_job=assign_current_process_to_windows_hook_job(allow_breakaway=True) if os.name=='nt' else None;"
+        "sys.stderr.write('HOL_GUARD_WINDOWS_JOB_CONTAINED\\n') if _windows_job is not None else None;"
+        "sys.stderr.flush() if _windows_job is not None else None;"
         "from pathlib import Path;"
         "from codex_plugin_scanner.guard.daemon.manager import recover_guard_daemon_after_hook_failure;"
         f"recover_guard_daemon_after_hook_failure(Path({str(guard_home)!r}),"
@@ -60,6 +73,11 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
     )
     recovery_command_json = json.dumps(str(Path(sys.executable).expanduser().absolute()))
     recovery_args_json = json.dumps(["-I", "-c", recovery_bootstrap])
+    try:
+        taskkill_path = windows_system_executable_path("taskkill.exe") if os.name == "nt" else None
+    except (OSError, ValueError):
+        taskkill_path = None
+    taskkill_path_json = json.dumps(taskkill_path)
     return (
         'import { spawn } from "node:child_process";\n'
         + 'import { createCipheriv, createHash, randomBytes } from "node:crypto";\n'  # pyright: ignore[reportImplicitStringConcatenation]
@@ -72,6 +90,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         f"const GUARD_CLI_WRAPPER_ARGS = {cli_wrapper_args_json};\n"
         f"const GUARD_DAEMON_RECOVERY_COMMAND = {recovery_command_json};\n"
         f"const GUARD_DAEMON_RECOVERY_ARGS = {recovery_args_json};\n"
+        f"const GUARD_TASKKILL_PATH = {taskkill_path_json};\n"
         f"const GUARD_ARGS = {guard_args_json};\n"
         f"const GUARD_HOME = {guard_home_json};\n"
         f"const GUARD_HOME_DIR = {home_dir_json};\n"

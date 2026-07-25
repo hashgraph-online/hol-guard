@@ -379,6 +379,9 @@ def test_claude_daemon_hook_bridge_sends_guard_token_header(tmp_path, monkeypatc
             del amt
             return b"{}"
 
+        def close(self) -> None:
+            return None
+
     class FakeOpener:
         def open(self, request, timeout=30):
             captured_headers.update(dict(request.header_items()))

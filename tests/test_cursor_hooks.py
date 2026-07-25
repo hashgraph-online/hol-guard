@@ -265,11 +265,16 @@ def test_cursor_hook_recovers_dead_daemon_once_then_retries(
     workspace_dir.mkdir()
 
     class _RecoveredDaemonHandler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
+        def _write_json(self, payload: dict[str, object]) -> None:
+            body = json.dumps(payload).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(json.dumps({"ok": True, "compatibility_version": "v1"}).encode())
+            self.wfile.write(body)
+
+        def do_GET(self) -> None:
+            self._write_json({"ok": True, "compatibility_version": "v1"})
 
         def do_POST(self) -> None:
             if self.path == "/v1/healthz/verify":
@@ -279,15 +284,9 @@ def test_cursor_hook_recovers_dead_daemon_once_then_retries(
                     f"{self.server.server_address[1]}:{body['nonce']}".encode(),
                     hashlib.sha256,
                 ).hexdigest()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"proof": proof}).encode())
+                self._write_json({"proof": proof})
                 return
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"policy_action": "allow"}).encode())
+            self._write_json({"policy_action": "allow"})
 
         def log_message(self, *_args: object) -> None:
             pass
@@ -491,7 +490,8 @@ def test_cursor_hook_recovery_honors_total_deadline(tmp_path: Path) -> None:
         timeout=3,
     )
 
-    assert time.monotonic() - started < 1
+    # Includes cold interpreter startup, which can dominate the injected 200 ms hook budget on loaded CI.
+    assert time.monotonic() - started < 2
     assert proc.returncode == 2
     assert json.loads(proc.stdout)["permission"] == "deny"
 

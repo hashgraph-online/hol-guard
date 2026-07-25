@@ -186,8 +186,8 @@ class TestHeadlessApprovalResolverNoninteractive:
         )
         monkeypatch.setattr(
             guard_commands_module,
-            "ensure_guard_daemon",
-            lambda _: "http://127.0.0.1:4455",
+            "schedule_guard_daemon_ensure",
+            lambda _guard_home, **_kwargs: "http://127.0.0.1:4455",
         )
         monkeypatch.setattr(
             guard_commands_module,

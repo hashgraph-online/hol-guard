@@ -216,7 +216,7 @@ def test_trust_cli_rejects_protected_cache_without_current_daemon(
     assert rc == 0
     assert payload["runtime_protection"] == "degraded"
     assert payload["remembered_rules"] == "disabled_degraded"
-    assert payload["degraded_reasons"] == ["trust_backend_unavailable"]
+    assert payload["degraded_reasons"] == ["policy_integrity_key_unavailable"]
 
 
 def test_trust_cli_rejects_live_daemon_without_authenticated_trust_snapshot(
@@ -290,7 +290,7 @@ def test_trust_cli_rejects_protected_cache_when_daemon_process_is_not_live(
     assert rc == 0
     assert payload["runtime_protection"] == "degraded"
     assert payload["remembered_rules"] == "disabled_degraded"
-    assert payload["degraded_reasons"] == ["trust_backend_unavailable"]
+    assert payload["degraded_reasons"] == ["policy_integrity_key_unavailable"]
 
 
 def test_trust_cli_macos_native_status_uses_native_api_even_when_keyring_module_is_shimmed(

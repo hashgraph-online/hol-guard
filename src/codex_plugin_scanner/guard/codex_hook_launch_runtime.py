@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
@@ -20,6 +21,10 @@ from .codex_hook_windows_job import (
 )
 
 _HOOK_SUBPROCESS_OUTPUT_LIMIT = 1_000_000
+_HOOK_PROCESS_REAP_TIMEOUT_SECONDS = 0.2
+_HOOK_PROCESS_FINAL_REAP_TIMEOUT_SECONDS = 0.1
+_HOOK_PROCESS_IO_THREAD_JOIN_TIMEOUT_SECONDS = 0.05
+_HOOK_PROCESS_FINAL_IO_JOIN_TIMEOUT_SECONDS = 1.0
 _HOOK_ENVIRONMENT_KEYS = frozenset(
     {
         "CODEX_HOME",
@@ -47,6 +52,73 @@ class BoundedHookProcessResult:
     stdout: str
     output_limit_exceeded: bool
     timed_out: bool
+    containment_failed: bool = False
+
+
+@dataclass(slots=True)
+class _QuarantinedHookProcess:
+    process: subprocess.Popen[bytes]
+    windows_job: WindowsHookJob | None
+    io_threads: tuple[threading.Thread, ...]
+
+
+_HOOK_PROCESS_CONTAINMENT_FAILED = threading.Event()
+_HOOK_PROCESS_QUARANTINE_LOCK = threading.Lock()
+_HOOK_PROCESS_QUARANTINE: list[_QuarantinedHookProcess] = []
+
+
+def _retry_quarantined_hook_processes() -> bool:
+    with _HOOK_PROCESS_QUARANTINE_LOCK:
+        retry_deadline = time.monotonic() + _HOOK_PROCESS_FINAL_IO_JOIN_TIMEOUT_SECONDS
+        survivors: list[_QuarantinedHookProcess] = []
+        for quarantined in _HOOK_PROCESS_QUARANTINE:
+            contained = _kill_hook_process(quarantined.process, quarantined.windows_job)
+            remaining = max(0.0, retry_deadline - time.monotonic())
+            try:
+                _ = quarantined.process.wait(timeout=min(_HOOK_PROCESS_FINAL_REAP_TIMEOUT_SECONDS, remaining))
+            except subprocess.TimeoutExpired:
+                contained = False
+            if quarantined.windows_job is not None:
+                try:
+                    close_windows_hook_job(quarantined.windows_job)
+                except OSError:
+                    contained = False
+                else:
+                    quarantined.windows_job = None
+            for thread in quarantined.io_threads:
+                _ = thread.join(timeout=max(0.0, retry_deadline - time.monotonic()))
+            contained = (
+                contained
+                and quarantined.process.poll() is not None
+                and all(not thread.is_alive() for thread in quarantined.io_threads)
+            )
+            if not contained:
+                survivors.append(quarantined)
+        _HOOK_PROCESS_QUARANTINE[:] = survivors
+        if survivors:
+            _HOOK_PROCESS_CONTAINMENT_FAILED.set()
+            return False
+        _HOOK_PROCESS_CONTAINMENT_FAILED.clear()
+        return True
+
+
+def _quarantine_hook_process(
+    process: subprocess.Popen[bytes],
+    windows_job: WindowsHookJob | None,
+    io_threads: Sequence[threading.Thread],
+) -> None:
+    with _HOOK_PROCESS_QUARANTINE_LOCK:
+        if any(quarantined.process is process for quarantined in _HOOK_PROCESS_QUARANTINE):
+            _HOOK_PROCESS_CONTAINMENT_FAILED.set()
+            return
+        _HOOK_PROCESS_QUARANTINE.append(
+            _QuarantinedHookProcess(
+                process=process,
+                windows_job=windows_job,
+                io_threads=tuple(io_threads),
+            )
+        )
+        _HOOK_PROCESS_CONTAINMENT_FAILED.set()
 
 
 def isolated_guard_cli_command(
@@ -140,6 +212,8 @@ def run_isolated_hook_process(
 ) -> BoundedHookProcessResult:
     """Run one child with bounded input lifetime and combined output bytes."""
 
+    if _HOOK_PROCESS_CONTAINMENT_FAILED.is_set() and not _retry_quarantined_hook_processes():
+        return BoundedHookProcessResult(None, "", False, False, containment_failed=True)
     windows_job: WindowsHookJob | None = None
     try:
         if os.name == "nt":
@@ -201,68 +275,87 @@ def run_isolated_hook_process(
 
     deadline = time.monotonic() + max(0.0, timeout_seconds)
     timed_out = False
+    containment_confirmed = True
     while process.poll() is None:
         if output_limit_exceeded.is_set():
-            _kill_hook_process(process, windows_job)
+            containment_confirmed = _kill_hook_process(process, windows_job)
             break
         if time.monotonic() >= deadline:
             timed_out = True
-            _kill_hook_process(process, windows_job)
+            containment_confirmed = _kill_hook_process(process, windows_job)
             break
         time.sleep(0.01)
     try:
-        returncode = process.wait(timeout=1)
+        returncode = process.wait(timeout=_HOOK_PROCESS_REAP_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
-        _kill_hook_process(process, windows_job)
-        returncode = process.wait()
+        containment_confirmed = _kill_hook_process(process, windows_job) and containment_confirmed
+        try:
+            returncode = process.wait(timeout=_HOOK_PROCESS_FINAL_REAP_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            containment_confirmed = False
+            returncode = None
     job_cleanup_failed = False
     if windows_job is not None:
         try:
             close_windows_hook_job(windows_job)
         except OSError:
             job_cleanup_failed = True
-            _kill_hook_process(process, windows_job)
-    writer.join(timeout=1)
-    for thread in readers:
-        thread.join(timeout=0.05)
-    if any(thread.is_alive() for thread in readers):
-        _kill_hook_process(process, windows_job)
-        for thread in readers:
-            thread.join(timeout=1)
+            containment_confirmed = False
+            _ = _kill_hook_process(process, windows_job)
+        else:
+            windows_job = None
+    io_threads = [writer, *readers]
+    io_join_deadline = time.monotonic() + _HOOK_PROCESS_IO_THREAD_JOIN_TIMEOUT_SECONDS
+    for thread in io_threads:
+        thread.join(timeout=max(0.0, io_join_deadline - time.monotonic()))
+    if any(thread.is_alive() for thread in io_threads):
+        containment_confirmed = _kill_hook_process(process, windows_job) and containment_confirmed
+        final_io_join_deadline = time.monotonic() + _HOOK_PROCESS_FINAL_IO_JOIN_TIMEOUT_SECONDS
+        for thread in io_threads:
+            thread.join(timeout=max(0.0, final_io_join_deadline - time.monotonic()))
+        if any(thread.is_alive() for thread in io_threads):
+            containment_confirmed = False
+    if not containment_confirmed:
+        _quarantine_hook_process(process, windows_job, io_threads)
     with output_lock:
         stdout_decoded = stdout_bytes.decode("utf-8", errors="replace")
     return BoundedHookProcessResult(
-        returncode=None if job_cleanup_failed else returncode,
+        returncode=None if job_cleanup_failed or not containment_confirmed else returncode,
         stdout=stdout_decoded,
         output_limit_exceeded=output_limit_exceeded.is_set(),
         timed_out=timed_out,
+        containment_failed=not containment_confirmed,
     )
 
 
-def _kill_hook_process(process: subprocess.Popen[bytes], windows_job: WindowsHookJob | None) -> None:
+def _kill_hook_process(process: subprocess.Popen[bytes], windows_job: WindowsHookJob | None) -> bool:
     if windows_job is not None:
         try:
             windows_job.terminate()
-            return
+            return True
         except OSError:
             pass
     if os.name != "nt":
-        _kill_hook_process_group(process)
-        return
+        return _kill_hook_process_group(process)
     if process.poll() is not None:
-        return
+        return windows_job is None
     try:
         process.kill()
     except (OSError, ProcessLookupError):
-        process.kill()
+        return False
+    return windows_job is None
 
 
-def _kill_hook_process_group(process: subprocess.Popen[bytes]) -> None:
+def _kill_hook_process_group(process: subprocess.Popen[bytes]) -> bool:
     try:
         os.killpg(process.pid, signal.SIGKILL)
+        return True
     except (OSError, ProcessLookupError):
         if process.poll() is None:
-            process.kill()
+            with suppress(OSError, ProcessLookupError):
+                process.kill()
+            return False
+        return True
 
 
 __all__ = [

@@ -56,7 +56,7 @@ class RuntimeHeartbeatWriter:
             self._pending_heartbeat = last_heartbeat_at
             self._condition.notify()
 
-    def stop(self, *, timeout_seconds: float = 1.0) -> None:
+    def stop(self, *, timeout_seconds: float = 1.0) -> bool:
         with self._condition:
             self._stopping = True
             self._condition.notify_all()
@@ -66,6 +66,7 @@ class RuntimeHeartbeatWriter:
         with self._condition:
             if self._thread is thread and (thread is None or not thread.is_alive()):
                 self._thread = None
+            return self._thread is None
 
     def _run(self) -> None:
         while True:

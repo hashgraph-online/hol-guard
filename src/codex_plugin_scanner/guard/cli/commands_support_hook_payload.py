@@ -174,10 +174,12 @@ def _headless_approval_resolver(
             return payload
         managed_install = _managed_install_for(store, args.harness)
         approval_flow = approval_prompt_flow(args.harness, managed_install=managed_install)
-        approval_center_url = ensure_guard_daemon(context.guard_home)
-        try:
-            daemon_client = load_guard_surface_daemon_client(context.guard_home)
-        except RuntimeError:
+        approval_center_url = schedule_guard_daemon_ensure(
+            context.guard_home,
+            home_dir=context.home_dir,
+        )
+
+        def resolve_from_local_queue():
             queued = queue_blocked_approvals(
                 redaction_level=config.receipt_redaction_level,
                 detection=detection,
@@ -228,30 +230,38 @@ def _headless_approval_resolver(
                     f"{', '.join(str(item) for item in pending_request_ids)}."
                 )
             return payload
-        session = daemon_client.start_session(
-            harness=args.harness,
-            surface="cli",
-            workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
-            client_name="hol-guard",
-            client_title="HOL Guard CLI",
-            client_version=_GUARD_CLIENT_VERSION,
-            capabilities=["approval-resolution", "receipt-view"],
-        )
-        blocked_operation = daemon_client.queue_blocked_operation(
-            session_id=str(session["session_id"]),
-            operation_type="run",
-            harness=args.harness,
-            metadata={"command": f"hol-guard run {args.harness}"},
-            detection=detection.to_dict(),
-            evaluation=payload,
-            approval_center_url=approval_center_url,
-            approval_surface_policy=_approval_surface_policy_for_flow(
-                config.approval_surface_policy,
-                approval_flow,
-            ),
-            open_key=None,
-            redaction_level=config.receipt_redaction_level,
-        )
+
+        try:
+            daemon_client = load_guard_surface_daemon_client(context.guard_home)
+        except RuntimeError:
+            return resolve_from_local_queue()
+        try:
+            session = daemon_client.start_session(
+                harness=args.harness,
+                surface="cli",
+                workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
+                client_name="hol-guard",
+                client_title="HOL Guard CLI",
+                client_version=_GUARD_CLIENT_VERSION,
+                capabilities=["approval-resolution", "receipt-view"],
+            )
+            blocked_operation = daemon_client.queue_blocked_operation(
+                session_id=str(session["session_id"]),
+                operation_type="run",
+                harness=args.harness,
+                metadata={"command": f"hol-guard run {args.harness}"},
+                detection=detection.to_dict(),
+                evaluation=payload,
+                approval_center_url=approval_center_url,
+                approval_surface_policy=_approval_surface_policy_for_flow(
+                    config.approval_surface_policy,
+                    approval_flow,
+                ),
+                open_key=None,
+                redaction_level=config.receipt_redaction_level,
+            )
+        except RuntimeError:
+            return resolve_from_local_queue()
         operation = blocked_operation["operation"] if isinstance(blocked_operation.get("operation"), dict) else {}
         queued = (
             blocked_operation["approval_requests"]
@@ -295,23 +305,26 @@ def _headless_approval_resolver(
             payload["blocked"] = any(str(item.get("resolution_action")) == "block" for item in resolved_items)
             if not payload["blocked"]:
                 payload["blocked"] = False
-                daemon_client.update_operation_status(
-                    operation_id=str(operation["operation_id"]),
-                    status="completed",
-                )
+                with suppress(RuntimeError):
+                    daemon_client.update_operation_status(
+                        operation_id=str(operation["operation_id"]),
+                        status="completed",
+                    )
                 payload["review_hint"] = "Approval received. Guard is resuming the harness launch."
             else:
-                daemon_client.update_operation_status(
-                    operation_id=str(operation["operation_id"]),
-                    status="blocked",
-                )
+                with suppress(RuntimeError):
+                    daemon_client.update_operation_status(
+                        operation_id=str(operation["operation_id"]),
+                        status="blocked",
+                    )
         else:
             pending_request_ids = _object_list(wait_result.get("pending_request_ids"))
-            daemon_client.update_operation_status(
-                operation_id=str(operation["operation_id"]),
-                status="waiting_on_approval",
-                approval_request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
-            )
+            with suppress(RuntimeError):
+                daemon_client.update_operation_status(
+                    operation_id=str(operation["operation_id"]),
+                    status="waiting_on_approval",
+                    approval_request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
+                )
             payload["review_hint"] = (
                 f"Approval is still pending in the Guard approval center at {approval_center_url}. Resolve request "
                 f"{', '.join(str(item) for item in pending_request_ids)}."

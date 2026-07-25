@@ -276,7 +276,11 @@ def test_guard_run_keeps_direct_env_prompt_terminal_when_sandbox_is_required(mon
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\nmode = "prompt"\n')
     _make_fake_codex(fake_bin, marker_path)
     monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(
+        guard_commands_module,
+        "schedule_guard_daemon_ensure",
+        lambda _guard_home, **_kwargs: "http://127.0.0.1:4455",
+    )
     monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
 
     first_rc = main(
@@ -1181,7 +1185,11 @@ def test_opencode_prompt_hook_queues_prompt_approval(monkeypatch, tmp_path, caps
             "source_scope": "project",
         },
     )
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(
+        guard_commands_module,
+        "schedule_guard_daemon_ensure",
+        lambda _guard_home, **_kwargs: "http://127.0.0.1:4455",
+    )
     monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
 
     rc = main(

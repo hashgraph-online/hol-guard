@@ -58,7 +58,7 @@ from .runtime.actions import GuardActionEnvelope
 from .runtime.approval_context import parse_approval_context_token
 from .runtime.scanner_cache import scanner_cache_key
 from .schemas.guard_event_v1 import GuardEventV1
-from .sqlite_tuning import SQLITE_WAL_BUSY_TIMEOUT_MS, sqlite_connect_timeout_seconds
+from .sqlite_tuning import SQLITE_BUSY_TIMEOUT_MS, SQLITE_WAL_BUSY_TIMEOUT_MS, sqlite_connect_timeout_seconds
 from .store_approvals import (
     _json_object,
     _json_object_list,

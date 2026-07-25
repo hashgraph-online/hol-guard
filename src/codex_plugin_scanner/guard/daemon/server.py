@@ -24,7 +24,7 @@ from contextlib import suppress
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, BinaryIO, TypedDict, TypeGuard, cast
+from typing import Any, BinaryIO, ClassVar, TypedDict, TypeGuard, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
@@ -260,7 +260,6 @@ _SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS = 180
 _LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS = 7 * 24 * 60 * 60
 _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS = 30.0
 _DEFAULT_HEADLESS_CLOUD_SYNC_BACKOFF_SECONDS = 10.0
-_AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS = 5.0
 
 
 class _HookPathValidationError(ValueError):
@@ -319,6 +318,7 @@ _MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS = 24
 _DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 0.25
 _DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS = 0.05
 _DAEMON_UNCLASSIFIED_WATCHDOG_POLL_SECONDS = 0.025
+_AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS = 5.0
 _DAEMON_CONTROL_PATHS = frozenset(
     {
         "/v1/healthz/details",
@@ -335,6 +335,8 @@ _PEER_DISCONNECT_ERRORS = (BrokenPipeError, ConnectionResetError, ConnectionAbor
 
 
 class _GuardDaemonHttpServer(ThreadingHTTPServer):
+    request_queue_size = _MAX_CONCURRENT_DAEMON_CONNECTIONS
+
     store: GuardStore
     runtime: GuardSurfaceRuntime
     auth_token: str
@@ -390,14 +392,14 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     hook_process_runner: HookProcessRunner
     runtime_heartbeat: RuntimeHeartbeatWriter
 
-    def handle_error(self, request: socket.socket, client_address: tuple[str, int]) -> None:
+    def handle_error(self, request: object, client_address: tuple[str, int]) -> None:
         """Suppress expected peer disconnects without hiding server defects."""
 
         import sys
 
         if isinstance(sys.exc_info()[1], _PEER_DISCONNECT_ERRORS):
             return
-        super().handle_error(request, client_address)
+        super().handle_error(cast(socket.socket, request), client_address)
 
     def __init__(
         self,
@@ -496,7 +498,9 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
             catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
         )
         return self.extension_control_runtime.refresh(view)
-    def process_request(self, request: socket.socket, client_address: tuple[str, int]) -> None:
+
+    def process_request(self, request: object, client_address: tuple[str, int]) -> None:
+        request_socket = cast(socket.socket, request)
         admitted = self.connection_capacity.acquire(blocking=False)
         if not admitted:
             self._evict_oldest_unclassified_connection()
@@ -507,24 +511,25 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         if not admitted:
             with self.request_capacity_lock:
                 self.rejected_requests += 1
-            self.shutdown_request(request)
+            self.shutdown_request(request_socket)
             return
         with suppress(OSError):
-            request.settimeout(_DAEMON_REQUEST_READ_TIMEOUT_SECONDS)
-        self._register_unclassified_connection(request)
+            request_socket.settimeout(_DAEMON_REQUEST_READ_TIMEOUT_SECONDS)
+        self._register_unclassified_connection(request_socket)
         with self.request_capacity_lock:
             self.active_requests += 1
         try:
-            super().process_request(request, client_address)
+            super().process_request(request_socket, client_address)
         except BaseException:
-            self._release_request_capacity(request)
+            self._release_request_capacity(request_socket)
             raise
 
-    def process_request_thread(self, request: socket.socket, client_address: tuple[str, int]) -> None:
+    def process_request_thread(self, request: object, client_address: tuple[str, int]) -> None:
+        request_socket = cast(socket.socket, request)
         try:
-            super().process_request_thread(request, client_address)
+            super().process_request_thread(request_socket, client_address)
         finally:
-            self._release_request_capacity(request)
+            self._release_request_capacity(request_socket)
 
     def _release_request_capacity(self, request: socket.socket) -> None:
         self.classify_connection(request)
@@ -568,12 +573,14 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         )
         self.unclassified_watchdog_thread.start()
 
-    def stop_unclassified_watchdog(self) -> None:
+    def stop_unclassified_watchdog(self) -> bool:
         self.unclassified_watchdog_stop.set()
         thread = self.unclassified_watchdog_thread
         if thread is not None:
             thread.join(timeout=1.0)
-        self.unclassified_watchdog_thread = None
+        if thread is None or not thread.is_alive():
+            self.unclassified_watchdog_thread = None
+        return self.unclassified_watchdog_thread is None
 
     def _watch_unclassified_connections(self) -> None:
         while not self.unclassified_watchdog_stop.wait(_DAEMON_UNCLASSIFIED_WATCHDOG_POLL_SECONDS):
@@ -7025,6 +7032,41 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 class GuardDaemonServer:
     """Small local daemon for health, receipts, and approval-center introspection."""
 
+    _quarantine_lock: ClassVar[threading.Lock] = threading.Lock()
+    _quarantined_services: ClassVar[dict[str, GuardDaemonServer]] = {}
+
+    @staticmethod
+    def _quarantine_key(guard_home: Path) -> str:
+        try:
+            return str(guard_home.resolve())
+        except OSError:
+            return str(guard_home)
+
+    @classmethod
+    def _retry_quarantined_service(cls, guard_home: Path) -> bool:
+        key = cls._quarantine_key(guard_home)
+        with cls._quarantine_lock:
+            service = cls._quarantined_services.get(key)
+        if service is None:
+            return True
+        return service._finish_service()
+
+    def _is_quarantined(self) -> bool:
+        key = self._quarantine_key(self._server.store.guard_home)
+        with type(self)._quarantine_lock:
+            return type(self)._quarantined_services.get(key) is self
+
+    def _record_quarantine_state(self, *, contained: bool) -> bool:
+        key = self._quarantine_key(self._server.store.guard_home)
+        with type(self)._quarantine_lock:
+            current = type(self)._quarantined_services.get(key)
+            if contained:
+                if current is self:
+                    _ = type(self)._quarantined_services.pop(key, None)
+            else:
+                type(self)._quarantined_services[key] = self
+        return contained
+
     def __init__(
         self,
         store: GuardStore,
@@ -7040,8 +7082,11 @@ class GuardDaemonServer:
         home_dir: Path | None = None,
         workspace_dir: Path | None = None,
     ) -> None:
+        if not type(self)._retry_quarantined_service(store.guard_home):
+            raise RuntimeError("A previous Guard daemon remains quarantined after unconfirmed containment.")
         _validate_dashboard_bundle()
         self._shutdown_started = threading.Event()
+        self._finish_service_lock = threading.Lock()
         self._owner_lock: BinaryIO | None = None
         self._server = _GuardDaemonHttpServer(
             (host, port),
@@ -7085,21 +7130,32 @@ class GuardDaemonServer:
             return
         self._thread = None
         self._begin_service()
-        self._thread = threading.Thread(target=self._serve_forever, daemon=True)
-        self._thread.start()
+        try:
+            self._thread = threading.Thread(target=self._serve_forever, daemon=True)
+            self._thread.start()
+            self._server.hook_process_runner.enable_full_capacity()
+        except BaseException as error:
+            self._thread = None
+            if not self._finish_service():
+                add_note = getattr(error, "add_note", None)
+                if callable(add_note):
+                    add_note("Guard retained daemon ownership because startup containment was unconfirmed.")
+            raise
 
     def serve(self) -> None:
         self._begin_service()
+        self._server.hook_process_runner.enable_full_capacity()
         self._serve_forever()
 
     def stop(self) -> None:
         self._shutdown_started.set()
         self._server.shutdown()
         self._server.server_close()
-        self._finish_service()
+        _ = self._finish_service()
         if self._thread is not None:
             self._thread.join(timeout=5)
-            self._thread = None
+            if not self._thread.is_alive():
+                self._thread = None
         if self._watchdog_thread is not None:
             self._watchdog_thread.join(timeout=5)
             self._watchdog_thread = None
@@ -7121,12 +7177,19 @@ class GuardDaemonServer:
         self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
 
     def _begin_service(self) -> None:
+        if self._is_quarantined():
+            if self._aibom_refresh_thread is not None and self._aibom_refresh_thread.is_alive():
+                raise RuntimeError("AIBOM inventory refresh is still stopping")
+            self._require_command_activity_maintenance_stopped()
+            raise RuntimeError("This Guard daemon is quarantined after unconfirmed containment.")
         self._owner_lock = acquire_guard_daemon_owner_lock(self._server.store.guard_home)
         try:
             self._begin_owned_service()
-        except BaseException:
-            release_guard_daemon_owner_lock(self._owner_lock)
-            self._owner_lock = None
+        except BaseException as error:
+            if not self._finish_service():
+                add_note = getattr(error, "add_note", None)
+                if callable(add_note):
+                    add_note("Guard retained daemon ownership because partial-start containment was unconfirmed.")
             raise
 
     def _begin_owned_service(self) -> None:
@@ -7136,7 +7199,7 @@ class GuardDaemonServer:
             self._aibom_refresh_thread = None
         self._require_command_activity_maintenance_stopped()
         self._shutdown_started.clear()
-        self._server.hook_process_runner.start()
+        self._server.hook_process_runner.start(defer_backfill=True)
         self._maintain_command_activity_best_effort()
         self._persist_aibom_inventory_context()
         self._server.last_activity_monotonic = time.monotonic()
@@ -7251,24 +7314,127 @@ class GuardDaemonServer:
             self._server.serve_forever()
         finally:
             self._server.server_close()
-            self._finish_service()
+            _ = self._finish_service()
 
-    def _finish_service(self) -> None:
+    def _finish_service(self) -> bool:
+        finish_lock = getattr(self, "_finish_service_lock", None)
+        if finish_lock is None:
+            with type(self)._quarantine_lock:
+                finish_lock = getattr(self, "_finish_service_lock", None)
+                if finish_lock is None:
+                    finish_lock = threading.Lock()
+                    self._finish_service_lock = finish_lock
+        with finish_lock:
+            return self._finish_service_locked()
+
+    def _finish_service_locked(self) -> bool:
+        self._shutdown_started.set()
+        contained = True
+        stop_unclassified_watchdog = getattr(self._server, "stop_unclassified_watchdog", None)
+        if callable(stop_unclassified_watchdog):
+            try:
+                contained = stop_unclassified_watchdog() is not False and contained
+            except Exception:
+                contained = False
+        approval_attention = getattr(self._server, "approval_attention", None)
+        if approval_attention is not None:
+            try:
+                contained = approval_attention.stop() is not False and contained
+            except Exception:
+                contained = False
         try:
-            self._shutdown_started.set()
-            self._server.stop_unclassified_watchdog()
-            approval_attention = getattr(self._server, "approval_attention", None)
-            if approval_attention is not None:
-                approval_attention.stop()
             self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
+            contained = self._command_queue_worker is None and contained
+        except Exception:
+            contained = False
+        try:
             self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
-            self._server.runtime_heartbeat.stop(timeout_seconds=1.0)
-            self._server.hook_process_runner.close()
-            clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
+            contained = self._live_request_sync_worker is None and contained
+        except Exception:
+            contained = False
+        runtime_heartbeat = getattr(self._server, "runtime_heartbeat", None)
+        if runtime_heartbeat is not None:
+            try:
+                contained = runtime_heartbeat.stop(timeout_seconds=1.0) is not False and contained
+            except Exception:
+                contained = False
+        hook_process_runner = getattr(self._server, "hook_process_runner", None)
+        if hook_process_runner is not None:
+            try:
+                close_contained = getattr(hook_process_runner, "close_contained", None)
+                if callable(close_contained):
+                    contained = close_contained() is not False and contained
+                else:
+                    contained = hook_process_runner.close() is not False and contained
+            except Exception:
+                contained = False
+        contained = self._join_service_background_threads() and contained
+        with suppress(Exception):
+            clear_guard_daemon_state_if_current(
+                self._server.store.guard_home,
+                pid=os.getpid(),
+                port=self.port,
+            )
+        with suppress(Exception):
             self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
-        finally:
-            release_guard_daemon_owner_lock(getattr(self, "_owner_lock", None))
-            self._owner_lock = None
+        if contained and self._is_quarantined():
+            try:
+                self._server.server_close()
+            except Exception:
+                contained = False
+        if contained:
+            try:
+                release_guard_daemon_owner_lock(getattr(self, "_owner_lock", None))
+            except Exception:
+                contained = False
+            else:
+                self._owner_lock = None
+        return self._record_quarantine_state(contained=contained)
+
+    @staticmethod
+    def _join_service_thread(
+        thread: threading.Thread | None,
+        *,
+        deadline: float,
+    ) -> threading.Thread | None:
+        if thread is None:
+            return None
+        if thread is not threading.current_thread():
+            thread.join(timeout=max(0.0, deadline - time.monotonic()))
+        return thread if thread.is_alive() else None
+
+    def _join_service_background_threads(self) -> bool:
+        deadline = time.monotonic() + _AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS
+        self._watchdog_thread = self._join_service_thread(
+            getattr(self, "_watchdog_thread", None),
+            deadline=deadline,
+        )
+        self._bundle_refresh_thread = self._join_service_thread(
+            getattr(self, "_bundle_refresh_thread", None),
+            deadline=deadline,
+        )
+        self._aibom_refresh_thread = self._join_service_thread(
+            getattr(self, "_aibom_refresh_thread", None),
+            deadline=deadline,
+        )
+        self._headless_cloud_sync_thread = self._join_service_thread(
+            getattr(self, "_headless_cloud_sync_thread", None),
+            deadline=deadline,
+        )
+        self._command_activity_maintenance_thread = self._join_service_thread(
+            getattr(self, "_command_activity_maintenance_thread", None),
+            deadline=deadline,
+        )
+        return all(
+            thread is None
+            for thread in (
+                self._watchdog_thread,
+                self._bundle_refresh_thread,
+                self._aibom_refresh_thread,
+                self._headless_cloud_sync_thread,
+                self._command_activity_maintenance_thread,
+            )
+        )
 
     def _start_watchdog(self) -> None:
         if self._watchdog_thread is not None and self._watchdog_thread.is_alive():

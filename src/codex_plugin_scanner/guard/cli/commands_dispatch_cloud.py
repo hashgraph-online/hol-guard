@@ -617,6 +617,17 @@ def _run_guard_daemon_command(
     if guard_home is None:
         raise RuntimeError("Guard home is required")
     daemon_command = getattr(args, "daemon_command", None)
+    if daemon_command == "ensure":
+        wake_token = getattr(args, "wake_token", None)
+        try:
+            ensure_guard_daemon(
+                guard_home,
+                home_dir=context.home_dir if context is not None else None,
+            )
+        finally:
+            if isinstance(wake_token, str) and wake_token:
+                clear_guard_daemon_wake_reservation(guard_home, token=wake_token)
+        return 0
     if daemon_command == "status":
         return _handle_daemon_status(guard_home, getattr(args, "json", False))
     if daemon_command == "repair":

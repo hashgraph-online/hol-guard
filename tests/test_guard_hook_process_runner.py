@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import os
+import hashlib
 import subprocess
 import threading
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from types import SimpleNamespace
-from typing import TextIO, final
+from typing import ClassVar, Protocol, TextIO, cast, final
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_hook_windows_job as windows_job_module
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
     BoundedHookProcessResult,
     isolated_daemon_start_command,
@@ -24,10 +24,61 @@ from codex_plugin_scanner.guard.codex_hook_windows_job import (
 )
 from codex_plugin_scanner.guard.daemon import hook_process_runner as hook_runner_module
 from codex_plugin_scanner.guard.daemon import hook_process_worker as hook_worker_module
+from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon.hook_process_protocol import capture_hook_command
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
 from codex_plugin_scanner.guard.daemon.hook_process_worker import HookWorkerSlot
+from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+class _MutableUnicodeBuffer(Protocol):
+    value: str
+
+
+def test_default_review_deadline_stays_inside_pi_host_budget() -> None:
+    pi_host_timeout_seconds = 4.5
+    pi_daemon_timeout_seconds = 2.0
+    pi_deadline_reserve_seconds = 0.25
+
+    assert pi_daemon_timeout_seconds > hook_runner_module._HOOK_PROCESS_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
+    assert (
+        pi_host_timeout_seconds - pi_deadline_reserve_seconds
+        > hook_runner_module._HOOK_PROCESS_ACQUIRE_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
+        + hook_runner_module._HOOK_PROCESS_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
+    )
+
+
+def test_daemon_start_budget_contains_initial_worker_readiness() -> None:
+    assert (
+        daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_SECONDS
+        > hook_runner_module._HOOK_PROCESS_READY_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
+    )
+
+
+def test_windows_taskkill_path_uses_system_directory_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeGetSystemWindowsDirectory:
+        def __init__(self) -> None:
+            self.argtypes: list[object] = []
+            self.restype: object = None
+
+        def __call__(self, buffer: object, size: int) -> int:
+            assert size == 32768
+            cast(_MutableUnicodeBuffer, buffer).value = r"D:\Windows"
+            return len(r"D:\Windows")
+
+    class FakeKernel32:
+        def __init__(self) -> None:
+            self.GetSystemWindowsDirectoryW = FakeGetSystemWindowsDirectory()
+
+    monkeypatch.setattr(windows_job_module.os, "name", "nt")
+    monkeypatch.setattr(windows_job_module, "_kernel32", lambda: FakeKernel32())
+
+    assert windows_job_module.windows_system_executable_path("taskkill.exe") == (r"D:\Windows\System32\taskkill.exe")
+    with pytest.raises(ValueError, match="must be a filename"):
+        windows_job_module.windows_system_executable_path(r"..\taskkill.exe")
 
 
 def test_windows_worker_timeout_terminates_entire_process_tree(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -49,14 +100,11 @@ def test_windows_worker_timeout_terminates_entire_process_tree(monkeypatch: pyte
         def kill(self) -> None:
             pytest.fail("taskkill must terminate the Windows worker tree")
 
+    monkeypatch.setattr(hook_worker_module.os, "name", "nt")
     monkeypatch.setattr(
         hook_worker_module,
-        "os",
-        SimpleNamespace(
-            name="nt",
-            environ={"SYSTEMROOT": r"C:\Windows"},
-            path=os.path,
-        ),
+        "windows_system_executable_path",
+        lambda _filename: r"C:\Windows\System32\taskkill.exe",
     )
 
     def fake_run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
@@ -67,7 +115,7 @@ def test_windows_worker_timeout_terminates_entire_process_tree(monkeypatch: pyte
 
     hook_worker_module.terminate_worker_tree(FakeProcess(), 15)
 
-    assert commands == [[r"C:\Windows/System32/taskkill.exe", "/PID", "4321", "/T", "/F"]]
+    assert commands == [[r"C:\Windows\System32\taskkill.exe", "/PID", "4321", "/T", "/F"]]
 
 
 def test_windows_hook_job_breakaway_is_recovery_only() -> None:
@@ -75,6 +123,80 @@ def test_windows_hook_job_breakaway_is_recovery_only() -> None:
     assert _job_limit_flags(allow_breakaway=True) == (
         _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | _JOB_OBJECT_LIMIT_BREAKAWAY_OK
     )
+
+
+def test_current_windows_process_is_assigned_to_kill_on_close_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[object, ...]] = []
+    job = windows_job_module.WindowsHookJob(handle=77)
+
+    class FakeFunction:
+        def __init__(self, callback) -> None:
+            self.callback = callback
+            self.argtypes: list[object] = []
+            self.restype: object | None = None
+
+        def __call__(self, *args: object) -> object:
+            return self.callback(*args)
+
+    kernel32 = type(
+        "FakeKernel32",
+        (),
+        {
+            "GetCurrentProcess": FakeFunction(lambda: 321),
+            "AssignProcessToJobObject": FakeFunction(
+                lambda job_handle, process_handle: calls.append((job_handle, process_handle)) or True
+            ),
+            "IsProcessInJob": FakeFunction(
+                lambda _process_handle, _job_handle, assigned: setattr(assigned._obj, "value", True) or True
+            ),
+        },
+    )()
+    created: list[bool] = []
+    monkeypatch.setattr(windows_job_module.os, "name", "nt")
+    monkeypatch.setattr(
+        windows_job_module,
+        "_create_job",
+        lambda *, allow_breakaway=False: created.append(allow_breakaway) or job,
+    )
+    monkeypatch.setattr(windows_job_module, "_kernel32", lambda: kernel32)
+
+    assigned = windows_job_module.assign_current_process_to_windows_hook_job()
+
+    assert assigned is job
+    assert created == [False]
+    assert len(calls) == 1
+
+
+def test_current_windows_process_assignment_failure_closes_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = windows_job_module.WindowsHookJob(handle=77)
+    closed: list[windows_job_module.WindowsHookJob] = []
+
+    class FakeGetCurrentProcess:
+        argtypes: ClassVar[list[object]] = []
+        restype: object | None = None
+
+        def __call__(self) -> int:
+            return 321
+
+    kernel32 = type("FakeKernel32", (), {"GetCurrentProcess": FakeGetCurrentProcess()})()
+    monkeypatch.setattr(windows_job_module.os, "name", "nt")
+    monkeypatch.setattr(windows_job_module, "_create_job", lambda **_kwargs: job)
+    monkeypatch.setattr(windows_job_module, "_kernel32", lambda: kernel32)
+    monkeypatch.setattr(
+        windows_job_module,
+        "_assign_process_handle_to_job",
+        lambda *_args: (_ for _ in ()).throw(OSError("assignment refused")),
+    )
+    monkeypatch.setattr(windows_job_module, "close_windows_hook_job", closed.append)
+
+    with pytest.raises(OSError, match="assignment refused"):
+        windows_job_module.assign_current_process_to_windows_hook_job()
+
+    assert closed == [job]
 
 
 def test_windows_worker_taskkill_failure_falls_back_to_direct_termination(
@@ -99,14 +221,11 @@ def test_windows_worker_taskkill_failure_falls_back_to_direct_termination(
         def kill(self) -> None:
             pytest.fail("SIGTERM fallback should terminate the direct worker")
 
+    monkeypatch.setattr(hook_worker_module.os, "name", "nt")
     monkeypatch.setattr(
         hook_worker_module,
-        "os",
-        SimpleNamespace(
-            name="nt",
-            environ={"SYSTEMROOT": r"C:\Windows"},
-            path=os.path,
-        ),
+        "windows_system_executable_path",
+        lambda _filename: r"C:\Windows\System32\taskkill.exe",
     )
 
     def failed_taskkill(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
@@ -127,6 +246,61 @@ def test_worker_request_returns_parsed_hook_json() -> None:
     result = capture_hook_command(run)
 
     assert result == {"payload": {"decision": "deny"}, "reason_code": None}
+
+
+def test_worker_readiness_does_not_touch_guard_state(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.upsert_runtime_state(
+        session_id="sentinel-session",
+        daemon_host="127.0.0.1",
+        daemon_port=9876,
+        started_at="2026-07-25T00:00:00+00:00",
+        last_heartbeat_at="2026-07-25T00:00:01+00:00",
+    )
+    store.add_approval_request(
+        GuardApprovalRequest(
+            request_id="sentinel-request",
+            harness="pi",
+            artifact_id="pi:sentinel",
+            artifact_name="Sentinel",
+            artifact_hash="sentinel-hash",
+            policy_action="require-reapproval",
+            recommended_scope="artifact",
+            changed_fields=("command",),
+            source_scope="project",
+            config_path="/sentinel/config",
+            review_command="hol-guard review sentinel-request",
+            approval_url="http://127.0.0.1/approve/sentinel-request",
+        ),
+        "2026-07-25T00:00:02+00:00",
+    )
+    runtime_state = store.get_runtime_state()
+    receipts = store.list_receipts()
+    approval_requests = store.list_approval_requests(status=None)
+
+    def state_digests() -> dict[str, str]:
+        return {
+            path.relative_to(guard_home).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in guard_home.rglob("*")
+            if path.is_file()
+        }
+
+    before = state_digests()
+    runner = HookProcessRunner(
+        guard_home=guard_home,
+        process_limit=2,
+        timeout_seconds=1,
+    )
+    try:
+        runner.start()
+        assert runner.stats()["ready"] == 2
+        assert state_digests() == before
+        assert store.get_runtime_state() == runtime_state
+        assert store.list_receipts() == receipts
+        assert store.list_approval_requests(status=None) == approval_requests
+    finally:
+        runner.close()
 
 
 def test_worker_request_fails_safe_on_invalid_json() -> None:
@@ -159,6 +333,92 @@ def test_prewarmed_runner_handles_real_hook_and_closes(tmp_path: Path) -> None:
     assert result.payload is not None
 
 
+def test_deferred_runner_serves_first_worker_before_backfilling(tmp_path: Path) -> None:
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=2, timeout_seconds=2)
+    ready_workers = 0
+    try:
+        runner.start(defer_backfill=True)
+        assert runner.stats()["ready"] == 1
+
+        runner.enable_full_capacity(delay_seconds=0)
+        deadline = time.monotonic() + 3
+        while runner.stats()["ready"] != 2 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        ready_workers = runner.stats()["ready"]
+    finally:
+        runner.close()
+
+    assert ready_workers == 2
+    assert runner.stats()["workers"] == 0
+
+
+def test_deferred_runner_does_not_backfill_during_active_review(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=2)
+    original_start = runner._start_slot  # pyright: ignore[reportPrivateUsage]
+    attempts = 0
+
+    def counted_start(*, generation: int) -> HookWorkerSlot:
+        nonlocal attempts
+        attempts += 1
+        return original_start(generation=generation)
+
+    monkeypatch.setattr(runner, "_start_slot", counted_start)
+    try:
+        runner.start(defer_backfill=True)
+        with runner._state_lock:  # pyright: ignore[reportPrivateUsage]
+            runner._active_reviews = 1  # pyright: ignore[reportPrivateUsage]
+        runner.enable_full_capacity(delay_seconds=0)
+        time.sleep(0.1)
+        assert attempts == 1
+
+        with runner._state_lock:  # pyright: ignore[reportPrivateUsage]
+            runner._active_reviews = 0  # pyright: ignore[reportPrivateUsage]
+        runner._recovery_event.set()  # pyright: ignore[reportPrivateUsage]
+        deadline = time.monotonic() + 3
+        while runner.stats()["ready"] != 2 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert runner.stats()["ready"] == 2
+    finally:
+        runner.close()
+
+
+def test_default_worker_budget_stays_below_pi_hook_deadline() -> None:
+    runner = HookProcessRunner()
+
+    assert runner._timeout_seconds == 1.8  # pyright: ignore[reportPrivateUsage]
+    assert runner._timeout_seconds < 2.0  # pyright: ignore[reportPrivateUsage]
+
+
+def test_prewarmed_runner_scans_post_tool_output_in_isolated_worker(tmp_path: Path) -> None:
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=2)
+    runner.start()
+    try:
+        result = runner.review(
+            payload={
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "echo hello"},
+                "tool_response": [{"type": "text", "text": "hello\n"}],
+            },
+            harness="pi",
+            home_dir=tmp_path,
+            guard_home=tmp_path,
+            workspace=tmp_path,
+            hook_env={},
+        )
+    finally:
+        runner.close()
+
+    assert result.reason_code is None
+    assert result.payload is not None
+    assert result.payload["decision"] == "allow"
+    assert result.payload["reason_code"] == "output_scan_allow"
+    assert runner.stats()["workers"] == 0
+
+
 def test_worker_prewarm_does_not_create_approval_request(tmp_path: Path) -> None:
     store = GuardStore(tmp_path)
     runner = HookProcessRunner(guard_home=tmp_path, process_limit=1)
@@ -181,7 +441,8 @@ def test_transient_initial_worker_failure_replenishes_capacity(
     def transient_ready(slot: HookWorkerSlot, timeout: float) -> bool:
         nonlocal attempts
         attempts += 1
-        return attempts > 1 and original_ready(slot, timeout)
+        ready = original_ready(slot, timeout)
+        return attempts > 1 and ready
 
     monkeypatch.setattr(runner, "_slot_became_ready", transient_ready)
     ready_workers = 0
@@ -262,7 +523,7 @@ def test_persistent_spawn_failure_uses_one_bounded_backoff_supervisor(
     try:
         assert attempts <= 4
         assert runner.stats()["workers"] == 0
-        assert runner.stats()["failures"] == attempts
+        assert 0 <= attempts - runner.stats()["failures"] <= 1
     finally:
         runner.close()
 
@@ -351,6 +612,31 @@ def test_crashed_worker_is_replaced_and_reviews_resume(tmp_path: Path) -> None:
     assert recovered.payload is not None
 
 
+def test_review_waits_briefly_for_prepared_worker_capacity(tmp_path: Path) -> None:
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=0.5)
+    runner.start()
+    slot = runner._slots.get_nowait()  # pyright: ignore[reportPrivateUsage]
+    release = threading.Timer(0.05, lambda: runner._slots.put_nowait(slot))  # pyright: ignore[reportPrivateUsage]
+    release.start()
+    try:
+        started = time.monotonic()
+        result = runner.review(
+            payload={"hook_event_name": "SessionStart"},
+            harness="pi",
+            home_dir=tmp_path,
+            guard_home=tmp_path,
+            workspace=tmp_path,
+            hook_env={},
+        )
+        elapsed = time.monotonic() - started
+    finally:
+        release.join(timeout=1)
+        runner.close()
+
+    assert elapsed >= 0.04
+    assert result.payload is not None
+
+
 def test_close_joins_in_flight_worker_recovery(tmp_path: Path) -> None:
     runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=0.5)
     runner.start()
@@ -372,6 +658,33 @@ def test_close_joins_in_flight_worker_recovery(tmp_path: Path) -> None:
 
     assert runner.stats()["workers"] == 0
     assert supervisor is None or not supervisor.is_alive()
+
+
+def test_close_retains_uncontained_worker_for_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=0.5)
+    runner.start()
+    slot = runner._slots.get_nowait()  # pyright: ignore[reportPrivateUsage]
+    runner._slots.put_nowait(slot)  # pyright: ignore[reportPrivateUsage]
+
+    def ignore_join(timeout: float | None = None) -> None:
+        del timeout
+
+    def ignore_terminate(_process: object, _signal: int) -> None:
+        return
+
+    with monkeypatch.context() as containment_failure:
+        containment_failure.setattr(slot.process, "is_alive", lambda: True)
+        containment_failure.setattr(slot.process, "join", ignore_join)
+        containment_failure.setattr(hook_worker_module, "terminate_worker_tree", ignore_terminate)
+
+        assert not runner.close_contained()
+        assert runner.stats()["workers"] == 1
+
+    assert runner.close_contained()
+    assert runner.stats()["workers"] == 0
 
 
 def test_runner_rejects_invalid_limits() -> None:

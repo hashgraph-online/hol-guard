@@ -172,6 +172,21 @@ class _LocalVaultTrustBackend:
         raise TrustBackendUnavailableError("local_vault_reset_is_managed_by_guard_store")
 
 
+def _built_in_cached_trust_status(
+    selected: _LocalVaultTrustBackend | _MacOSNativeTrustBackend,
+) -> TrustStatus:
+    if selected._guard_home is not None:
+        daemon_state = load_authenticated_daemon_state(selected._guard_home)
+        daemon_trust_status = daemon_state.get("trust_status") if isinstance(daemon_state, dict) else None
+        if isinstance(daemon_trust_status, dict):
+            return TrustStatus.from_policy_integrity_state(daemon_trust_status)
+    return _degraded_safe_status(
+        backend=selected.name,
+        reason=POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
+        setup_available=bool(selected.name == "macos-native" and selected.supported),
+    )
+
+
 @dataclass(frozen=True)
 class ResolvedTrustState:
     mode: LocalTrustMode
@@ -236,18 +251,30 @@ def resolve_passive_trust_state(
         reason=POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
         setup_available=bool(selected.name == "macos-native" and selected.supported and selected.passive_no_ui_safe),
     )
-    trust_status = run_trust_backend_check(
-        selected.status,
-        timeout_seconds=timeout_seconds,
-        timeout_result=timeout_result,
-        on_error=lambda error: _degraded_safe_status(
-            backend=selected.name,
-            reason=degraded_reason_for_backend_error(error),
-            setup_available=bool(
-                selected.name == "macos-native" and selected.supported and selected.passive_no_ui_safe
+    if isinstance(selected, (_LocalVaultTrustBackend, _MacOSNativeTrustBackend)):
+        try:
+            trust_status = _built_in_cached_trust_status(selected)
+        except Exception as error:
+            trust_status = _degraded_safe_status(
+                backend=selected.name,
+                reason=degraded_reason_for_backend_error(error),
+                setup_available=bool(
+                    selected.name == "macos-native" and selected.supported and selected.passive_no_ui_safe
+                ),
+            )
+    else:
+        trust_status = run_trust_backend_check(
+            selected.status,
+            timeout_seconds=timeout_seconds,
+            timeout_result=timeout_result,
+            on_error=lambda error: _degraded_safe_status(
+                backend=selected.name,
+                reason=degraded_reason_for_backend_error(error),
+                setup_available=bool(
+                    selected.name == "macos-native" and selected.supported and selected.passive_no_ui_safe
+                ),
             ),
-        ),
-    )
+        )
     return ResolvedTrustState(
         mode=_trust_mode_for_backend(
             trust_status,

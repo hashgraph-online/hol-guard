@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from ..runtime.command_queue import command_queue_enabled, command_queue_loop, default_command_context
 from ..store import GuardStore
 
-_COMMAND_QUEUE_THREAD_JOIN_TIMEOUT_SECONDS = 100
+_COMMAND_QUEUE_THREAD_JOIN_TIMEOUT_SECONDS = 1.0
 
 
 @dataclass

@@ -679,7 +679,10 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         assert hook_payload["decision"] == "deny"
-        assert "Kubernetes secret read command" in str(hook_payload["reason"])
+        assert "Kubernetes secret read command" in str(hook_payload["reason"]), {
+            "hook_payload": hook_payload,
+            "worker_stats": daemon._server.hook_process_runner.stats(),
+        }
 
     def test_guard_daemon_cursor_hook_endpoint_applies_hook_env_overlay(self, tmp_path, monkeypatch) -> None:
         store = GuardStore(tmp_path / "guard-home")
@@ -3321,12 +3324,15 @@ class TestGuardDaemonFastHookPath:
         daemon.start()
 
         try:
-            from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessReview
+            from codex_plugin_scanner.guard.daemon.hook_process_runner import (
+                HookProcessReview,
+                HookProcessRunner,
+            )
 
             monkeypatch.setattr(
-                daemon._server.hook_process_runner,
+                HookProcessRunner,
                 "review",
-                lambda **_kwargs: HookProcessReview(None, "daemon_worker_exception"),
+                lambda _self, **_kwargs: HookProcessReview(None, "daemon_worker_exception"),
             )
             payload = {
                 "hook_event_name": "PostToolUse",

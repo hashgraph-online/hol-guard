@@ -164,10 +164,10 @@ def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path)
 
     assert "const GUARD_TIMEOUT_MS = 4000;" in source
     assert "const GUARD_DEADLINE_RESERVE_MS = 250;" in source
-    assert "const GUARD_DAEMON_TIMEOUT_MS = 1600;" in source
-    assert "const GUARD_DAEMON_RECOVERY_TIMEOUT_MS = 600;" in source
-    assert "const GUARD_DAEMON_RETRY_TIMEOUT_MS = 500;" in source
-    assert "const GUARD_CLI_TIMEOUT_MS = 1000;" in source
+    assert "const GUARD_DAEMON_TIMEOUT_MS = 2000;" in source
+    assert "const GUARD_DAEMON_RECOVERY_TIMEOUT_MS = 500;" in source
+    assert "const GUARD_DAEMON_RETRY_TIMEOUT_MS = 300;" in source
+    assert "const GUARD_CLI_TIMEOUT_MS = 900;" in source
     assert 'const GUARD_ARGS = ["hook", "--json"' in source
     assert "compatibility_version !== GUARD_COMPATIBILITY_VERSION" in source
     assert "error.name === 'AbortError'" in source
@@ -178,6 +178,10 @@ def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path)
     assert 'recoveryKind: "authenticated-control-plane-failure"' in source
     assert "failure_kind=sys.argv[1]" in source
     assert "recover_guard_daemon_after_hook_failure" in source
+    assert source.count("assign_current_process_to_windows_hook_job") == 4
+    assert "_windows_job=assign_current_process_to_windows_hook_job()" in source
+    assert "allow_breakaway=True" in source
+    assert "HOL_GUARD_WINDOWS_JOB_CONTAINED" in source
     assert "if (!response.ok) {" in source
     assert "reason_code: reasonCode" in source
     assert "const deadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS" in source
@@ -213,6 +217,164 @@ def test_pi_hook_deadline_stays_inside_host_timeout() -> None:
         + GUARD_HOOK_DEADLINE_RESERVE_MS
         < GUARD_HOOK_TIMEOUT_MS
     )
+
+
+@pytest.mark.skipif(_bun_executable() is None, reason="Bun is required to execute Pi cleanup helpers")
+def test_pi_cli_cleanup_failure_settles_and_latches(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.pi_extension_cli_runtime_source import CLI_RUNTIME_HELPERS_SOURCE
+
+    bun = _bun_executable()
+    assert bun is not None
+    script_path = tmp_path / "pi-cleanup-failure.ts"
+    source = CLI_RUNTIME_HELPERS_SOURCE.replace("process.platform", "guardPlatform")
+    _ = script_path.write_text(
+        """
+const guardPlatform = "win32";
+const GUARD_TASKKILL_PATH: string | null = null;
+const GUARD_TEXT_LIMIT_CHARS = 1_000;
+const child = {
+  pid: 123,
+  exitCode: null,
+  signalCode: null,
+  stdout: undefined,
+  stderr: undefined,
+  stdin: { once: () => {}, end: () => {} },
+  once: () => {},
+  kill: () => { throw new Error("kill refused"); },
+};
+const spawn = () => child;
+"""
+        + source
+        + """
+const startedAt = performance.now();
+const first = await runGuardCliCommand("guard", [], "", 1);
+const recoveryAllowed = await recoverGuardDaemon(1, "transport-failure");
+console.log(JSON.stringify({
+  elapsedMs: performance.now() - startedAt,
+  code: first.error?.code,
+  recoveryAllowed,
+}));
+""",
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [bun, str(script_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    payload = _decode_json_object(completed.stdout)
+
+    assert payload["code"] == "ECONTAINMENT"
+    assert payload["recoveryAllowed"] is False
+    assert float(payload["elapsedMs"]) < 1_000
+
+
+@pytest.mark.skipif(_bun_executable() is None, reason="Bun is required to execute Pi cleanup helpers")
+def test_pi_exited_windows_parent_without_job_proof_latches(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.pi_extension_cli_runtime_source import CLI_RUNTIME_HELPERS_SOURCE
+
+    bun = _bun_executable()
+    assert bun is not None
+    script_path = tmp_path / "pi-exited-parent.ts"
+    source = CLI_RUNTIME_HELPERS_SOURCE.replace("process.platform", "guardPlatform")
+    _ = script_path.write_text(
+        """
+const guardPlatform = "win32";
+const GUARD_TASKKILL_PATH: string | null = "taskkill.exe";
+const GUARD_TEXT_LIMIT_CHARS = 1_000;
+const GUARD_DAEMON_RECOVERY_COMMAND = "guard";
+const GUARD_DAEMON_RECOVERY_ARGS: string[] = [];
+let spawnCalls = 0;
+const child = {
+  pid: 123,
+  exitCode: 0,
+  signalCode: null,
+  stdout: undefined,
+  stderr: undefined,
+  stdin: { once: () => {}, end: () => {} },
+  once: () => {},
+  kill: () => true,
+};
+const spawn = () => {
+  spawnCalls += 1;
+  return child;
+};
+"""
+        + source
+        + """
+const first = await runGuardCliCommand("guard", [], "", 1);
+const recoveryAllowed = await recoverGuardDaemon(1, "transport-failure");
+console.log(JSON.stringify({
+  code: first.error?.code,
+  recoveryAllowed,
+  spawnCalls,
+}));
+""",
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [bun, str(script_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    payload = _decode_json_object(completed.stdout)
+
+    assert payload == {
+        "code": "ECONTAINMENT",
+        "recoveryAllowed": False,
+        "spawnCalls": 3,
+    }
+
+
+@pytest.mark.skipif(
+    _bun_executable() is None or os.name != "posix",
+    reason="Bun and POSIX process groups are required for fallback termination testing",
+)
+def test_pi_cleanup_kills_descendants_after_direct_parent_exits(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.pi_extension_cli_runtime_source import CLI_RUNTIME_HELPERS_SOURCE
+
+    bun = _bun_executable()
+    assert bun is not None
+    marker = tmp_path / "pi-exited-parent-descendant-ran"
+    descendant = f"import time;time.sleep(0.6);open({str(marker)!r},'w',encoding='utf-8').write('ran')"
+    parent = f"import subprocess,sys;subprocess.Popen([sys.executable,'-c',{descendant!r}])"
+    script_path = tmp_path / "pi-exited-parent-posix.ts"
+    _ = script_path.write_text(
+        """
+import { spawn } from "node:child_process";
+const GUARD_TASKKILL_PATH: string | null = null;
+const GUARD_TEXT_LIMIT_CHARS = 1_000;
+const GUARD_DAEMON_RECOVERY_COMMAND = "guard";
+const GUARD_DAEMON_RECOVERY_ARGS: string[] = [];
+"""
+        + CLI_RUNTIME_HELPERS_SOURCE
+        + f"""
+const result = await runGuardCliCommand(
+  {json.dumps(str(Path(sys.executable).absolute()))},
+  ["-c", {json.dumps(parent)}],
+  "",
+  100,
+);
+await new Promise((resolve) => setTimeout(resolve, 800));
+console.log(JSON.stringify({{ code: result.error?.code }}));
+""",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [bun, str(script_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert _decode_json_object(completed.stdout) == {"code": "ETIMEDOUT"}
+    assert not marker.exists()
 
 
 @pytest.mark.skipif(_bun_executable() is None, reason="Bun is required to execute the managed Pi extension")

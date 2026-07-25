@@ -7,10 +7,14 @@ import os
 import pickle
 import signal
 import tempfile
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol, TypeVar, cast
+
+from .codex_hook_windows_job import assign_current_process_to_windows_hook_job
+from .daemon.hook_process_worker import terminate_worker_tree
 
 LocalTrustMode = Literal[
     "protected",
@@ -129,6 +133,7 @@ class _ProcessHandle(Protocol):
 
 
 _TrustResult = TypeVar("_TrustResult")
+_TRUST_BACKEND_SPAWN_TIMEOUT_SECONDS = 3.0
 
 
 class TrustBackendUnavailableError(RuntimeError):
@@ -143,13 +148,21 @@ class TrustBackendCorruptResultError(ValueError):
     """Raised when passive trust backend worker writes malformed result data."""
 
 
-def _trust_backend_check_worker(
-    operation: Callable[[], object],
-    result_path: str,
-) -> None:
+def _load_trust_backend_operation(operation_path: str) -> Callable[[], object]:
+    with Path(operation_path).open("rb") as handle:
+        operation = pickle.load(handle)
+    if not callable(operation):
+        raise TrustBackendCorruptResultError("trust_backend_operation_corrupt")
+    return cast("Callable[[], object]", operation)
+
+
+def _trust_backend_check_worker(operation_path: str, ready_path: str, result_path: str) -> None:
     if hasattr(os, "setsid"):
         os.setsid()
+    windows_job = assign_current_process_to_windows_hook_job() if os.name == "nt" else None
     try:
+        operation = _load_trust_backend_operation(operation_path)
+        Path(ready_path).touch(mode=0o600)
         payload = (True, operation())
     except Exception as error:
         payload = (False, error)
@@ -157,36 +170,14 @@ def _trust_backend_check_worker(
     with Path(temp_result_path).open("wb") as handle:
         pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
     os.replace(temp_result_path, result_path)
+    _ = windows_job
 
 
 def _terminate_trust_backend_process_tree(process: _ProcessHandle) -> None:
-    pid = process.pid
-    if pid is None:
+    if not process.is_alive():
         return
-    if hasattr(os, "killpg"):
-        try:
-            os.killpg(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        except PermissionError:
-            pass
-        process.terminate()
-        process.join(timeout=0.2)
-        if process.is_alive():
-            try:
-                os.killpg(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            except PermissionError:
-                pass
-            process.kill()
-            process.join(timeout=0.2)
-        return
-    process.terminate()
+    terminate_worker_tree(process, signal.SIGKILL)
     process.join(timeout=0.2)
-    if process.is_alive():
-        process.kill()
-        process.join(timeout=0.2)
 
 
 def _trust_backend_process_failed_error(process: _ProcessHandle) -> TrustBackendProcessFailedError:
@@ -239,21 +230,43 @@ def run_trust_backend_check(
     if timeout_seconds <= 0:
         return timeout_result
     try:
-        context = multiprocessing.get_context("fork")
+        context = multiprocessing.get_context("spawn")
     except ValueError as error:
         if on_error is None:
             return timeout_result
         return on_error(TrustBackendUnavailableError(str(error)))
     with tempfile.TemporaryDirectory(prefix="hol-guard-trust-") as temp_dir:
+        operation_path = str(Path(temp_dir) / "operation.pickle")
+        ready_path = str(Path(temp_dir) / "ready")
         result_path = str(Path(temp_dir) / "result.pickle")
-        process = context.Process(target=_trust_backend_check_worker, args=(operation, result_path))
+        try:
+            with Path(operation_path).open("wb") as handle:
+                pickle.dump(operation, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        except Exception as error:
+            if on_error is None:
+                return timeout_result
+            return on_error(TrustBackendUnavailableError(str(error)))
+        process = context.Process(
+            target=_trust_backend_check_worker,
+            args=(operation_path, ready_path, result_path),
+        )
         try:
             process.start()
         except Exception as error:
             if on_error is None:
                 return timeout_result
             return on_error(error)
-        process.join(timeout=timeout_seconds)
+        spawn_timeout = min(_TRUST_BACKEND_SPAWN_TIMEOUT_SECONDS, timeout_seconds * 3)
+        spawn_deadline = time.monotonic() + spawn_timeout
+        while not Path(ready_path).exists() and process.is_alive() and time.monotonic() < spawn_deadline:
+            time.sleep(0.005)
+        if not Path(ready_path).exists():
+            if process.is_alive():
+                _terminate_trust_backend_process_tree(process)
+                return timeout_result
+            process.join(timeout=0)
+        else:
+            process.join(timeout=timeout_seconds)
         if process.is_alive():
             _terminate_trust_backend_process_tree(process)
             return timeout_result

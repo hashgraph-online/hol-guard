@@ -206,18 +206,18 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
 def main_from_argv(argv: Sequence[str]) -> int:
     """Parse the authenticated install-time hook config and run it."""
 
+    config = _json_object(argv[0]) if len(argv) == 1 else None
+    configured_harness = config.get("harness") if config is not None else None
+    harness = configured_harness if isinstance(configured_harness, str) else "unknown"
     input_text = _bounded_stdin()
     if input_text is None:
         return _emit_failure(
-            harness="unknown",
+            harness=harness,
             input_text="{}",
             reason="HOL Guard blocked this action because hook input exceeded the safe size limit.",
         )
-    if len(argv) != 1:
-        return _emit_failure(harness="unknown", input_text=input_text)
-    config = _json_object(argv[0])
     if config is None:
-        return _emit_failure(harness="unknown", input_text=input_text)
+        return _emit_failure(harness=harness, input_text=input_text)
     return run_bounded_cli_hook(config, input_text=input_text)
 
 

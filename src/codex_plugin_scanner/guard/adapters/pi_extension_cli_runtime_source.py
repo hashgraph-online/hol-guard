@@ -12,6 +12,7 @@ type GuardCliResult = {
 let guardCliEvaluationInFlight = false;
 let guardCliContainmentFailed = false;
 let guardDaemonRecoveryInFlight: Promise<boolean> | null = null;
+const GUARD_WINDOWS_JOB_MARKER = 'HOL_GUARD_WINDOWS_JOB_CONTAINED\n';
 
 function waitForGuardCliChildExit(
   child: ReturnType<typeof spawn>,
@@ -34,44 +35,110 @@ function waitForGuardCliChildExit(
   });
 }
 
+function guardCliProcessErrorCode(error: unknown): string | null {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string'
+  ) ? error.code : null;
+}
+
+function guardCliProcessGroupExited(processGroupId: number): boolean {
+  try {
+    process.kill(-processGroupId, 0);
+    return false;
+  } catch (error) {
+    return guardCliProcessErrorCode(error) === 'ESRCH';
+  }
+}
+
+async function waitForGuardCliProcessGroupExit(
+  processGroupId: number,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (guardCliProcessGroupExited(processGroupId)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return guardCliProcessGroupExited(processGroupId);
+}
+
 async function signalGuardCliChild(
   child: ReturnType<typeof spawn>,
   signal: NodeJS.Signals,
+  windowsJobContained: boolean,
 ): Promise<boolean> {
-  if (process.platform === 'win32' && typeof child.pid === 'number') {
-    const systemRoot = process.env.SystemRoot ?? process.env.SYSTEMROOT;
-    if (systemRoot) {
-      const treeKilled = await new Promise<boolean>((resolve) => {
-        const taskkill = spawn(
-          `${systemRoot}\\System32\\taskkill.exe`,
-          ['/PID', String(child.pid), '/T', '/F'],
-          { stdio: 'ignore', windowsHide: true },
-        );
-        const watchdog = setTimeout(() => {
-          taskkill.kill('SIGKILL');
-          resolve(false);
-        }, 200);
-        taskkill.once('error', () => {
-          clearTimeout(watchdog);
-          resolve(false);
+  try {
+    if (
+      process.platform === 'win32' &&
+      windowsJobContained &&
+      (child.exitCode !== null || child.signalCode !== null)
+    ) return true;
+    if (process.platform === 'win32' && typeof child.pid === 'number') {
+      if (GUARD_TASKKILL_PATH !== null) {
+        const treeKilled = await new Promise<boolean>((resolve) => {
+          let taskkill: ReturnType<typeof spawn>;
+          try {
+            taskkill = spawn(
+              GUARD_TASKKILL_PATH,
+              ['/PID', String(child.pid), '/T', '/F'],
+              { stdio: 'ignore', windowsHide: true },
+            );
+          } catch {
+            resolve(false);
+            return;
+          }
+          let settled = false;
+          const finish = (killed: boolean) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(watchdog);
+            resolve(killed);
+          };
+          const watchdog = setTimeout(() => {
+            try {
+              taskkill.kill('SIGKILL');
+            } catch {}
+            finish(false);
+          }, 200);
+          taskkill.once('error', () => finish(false));
+          taskkill.once('close', (status) => finish(status === 0));
         });
-        taskkill.once('close', (status) => {
-          clearTimeout(watchdog);
-          resolve(status === 0);
-        });
-      });
-      if (!treeKilled) child.kill('SIGKILL');
-      return waitForGuardCliChildExit(child, 200);
+        if (!treeKilled) {
+          try {
+            child.kill('SIGKILL');
+          } catch {}
+          const parentExited = await waitForGuardCliChildExit(child, 200);
+          return windowsJobContained && parentExited;
+        }
+        return waitForGuardCliChildExit(child, 200);
+      }
+      try {
+        child.kill('SIGKILL');
+      } catch {}
+      await waitForGuardCliChildExit(child, 200);
+      return false;
     }
-  }
-  if (process.platform !== 'win32' && typeof child.pid === 'number') {
+    if (process.platform !== 'win32' && typeof child.pid === 'number') {
+      try {
+        process.kill(-child.pid, signal);
+      } catch (error) {
+        return guardCliProcessErrorCode(error) === 'ESRCH' || guardCliProcessGroupExited(child.pid);
+      }
+      await waitForGuardCliChildExit(child, 200);
+      return waitForGuardCliProcessGroupExit(child.pid, 200);
+    }
     try {
-      process.kill(-child.pid, signal);
-      return waitForGuardCliChildExit(child, 200);
-    } catch {}
+      child.kill(signal);
+    } catch {
+      return false;
+    }
+    return waitForGuardCliChildExit(child, 200);
+  } catch {
+    return false;
   }
-  child.kill(signal);
-  return waitForGuardCliChildExit(child, 200);
 }
 
 function runGuardCliCommand(
@@ -85,6 +152,7 @@ function runGuardCliCommand(
     let timedOut = false;
     let stdout = '';
     let stderr = '';
+    let windowsJobContained = false;
     let escalationHandle: ReturnType<typeof setTimeout> | undefined;
     let forcedSettleHandle: ReturnType<typeof setTimeout> | undefined;
     const timeoutError = () => Object.assign(
@@ -111,29 +179,38 @@ function runGuardCliCommand(
     }
     const timeoutHandle = setTimeout(() => {
       timedOut = true;
-      void signalGuardCliChild(child, 'SIGTERM').then(() => {
-        escalationHandle = setTimeout(() => {
-          void signalGuardCliChild(child, 'SIGKILL').then((killed) => {
-            if (!killed) {
-              guardCliContainmentFailed = true;
-              settle({
-                status: null,
-                stdout,
-                stderr,
-                error: Object.assign(
-                  new Error('Guard child process containment could not be confirmed.'),
-                  { code: 'ECONTAINMENT' },
-                ),
-              });
-              return;
-            }
-            forcedSettleHandle = setTimeout(
-              () => settle({ status: null, stdout, stderr, error: timeoutError() }),
-              100,
+      const containmentFailure = () => {
+        guardCliContainmentFailed = true;
+        settle({
+          status: null,
+          stdout,
+          stderr,
+          error: Object.assign(
+            new Error('Guard child process containment could not be confirmed.'),
+            { code: 'ECONTAINMENT' },
+          ),
+        });
+      };
+      void signalGuardCliChild(child, 'SIGTERM', windowsJobContained).then(
+        () => {
+          escalationHandle = setTimeout(() => {
+            void signalGuardCliChild(child, 'SIGKILL', windowsJobContained).then(
+              (killed) => {
+                if (!killed) {
+                  containmentFailure();
+                  return;
+                }
+                forcedSettleHandle = setTimeout(
+                  () => settle({ status: null, stdout, stderr, error: timeoutError() }),
+                  100,
+                );
+              },
+              containmentFailure,
             );
-          });
-        }, 100);
-      });
+          }, 100);
+        },
+        containmentFailure,
+      );
     }, timeoutMs);
     child.stdout?.setEncoding('utf8');
     child.stderr?.setEncoding('utf8');
@@ -141,6 +218,10 @@ function runGuardCliCommand(
       stdout = (stdout + chunk).slice(-GUARD_TEXT_LIMIT_CHARS);
     });
     child.stderr?.on('data', (chunk: string) => {
+      if (chunk.includes(GUARD_WINDOWS_JOB_MARKER)) {
+        windowsJobContained = true;
+        chunk = chunk.replaceAll(GUARD_WINDOWS_JOB_MARKER, '');
+      }
       stderr = (stderr + chunk).slice(-GUARD_TEXT_LIMIT_CHARS);
     });
     child.once('error', (error) => {

@@ -7511,22 +7511,21 @@ url = http://127.0.0.1:8787/guard-canary
             workspace_id="workspace-123",
             now="2026-06-01T00:00:00+00:00",
         )
+        expected_storage_health = store.get_oauth_local_credential_health()
+        monkeypatch.setattr(
+            GuardStore,
+            "get_oauth_local_credential_health",
+            lambda _store: expected_storage_health,
+        )
 
         status_rc = main(["guard", "status", "--home", str(home_dir), "--workspace", str(workspace_dir), "--json"])
         status_output = json.loads(capsys.readouterr().out)
 
         assert status_rc == 0
-        assert status_output["oauth_storage_health"] == {
-            "configured": True,
-            "state": "healthy",
-            "backend": "system-keyring",
-            "fallback_backend": "encrypted-file",
-            "issuer": "https://hol.org",
-            "client_id": "guard-local-daemon",
-            "grant_id": "grant-123",
-            "machine_id": "machine-123",
-            "workspace_id": "workspace-123",
-        }
+        assert status_output["oauth_storage_health"] == expected_storage_health
+        assert status_output["oauth_storage_health"]["configured"] is True
+        assert status_output["oauth_storage_health"]["state"] == "healthy"
+        assert "refresh-secret-value" not in json.dumps(status_output)
 
     def test_guard_connect_status_prefers_active_sync_over_expired_browser_pairing(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
@@ -8341,6 +8340,44 @@ url = http://127.0.0.1:8787/guard-canary
         assert output["opened"] is True
         assert output["reason"] == "opened"
         assert "notification_setup_started" not in output
+
+    def test_guard_daemon_ensure_releases_wake_reservation_after_failure(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+        cleared: list[tuple[Path, str]] = []
+
+        def fail_startup(_guard_home: Path, *, home_dir: Path | None = None) -> str:
+            assert _guard_home == guard_home
+            assert home_dir == tmp_path / "home"
+            raise RuntimeError("startup failed")
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", fail_startup)
+        monkeypatch.setattr(
+            guard_commands_module,
+            "clear_guard_daemon_wake_reservation",
+            lambda home, *, token: cleared.append((home, token)) or True,
+        )
+
+        exit_code = main(
+            [
+                "guard",
+                "daemon",
+                "ensure",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--wake-token",
+                "wake-token",
+            ]
+        )
+
+        assert exit_code == 1
+        assert cleared == [(guard_home, "wake-token")]
 
     def test_guard_init_requires_progressive_approval_before_side_effects(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

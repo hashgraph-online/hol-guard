@@ -135,12 +135,21 @@ def _is_managed_hook_command(command: str) -> bool:
     if len(tokens) < 3:
         return False
     executable = Path(tokens[0]).name.lower()
-    if not executable.startswith("python") or tokens[1] != "-c":
+    if not executable.startswith("python"):
         return False
-    inline_code = tokens[2]
-    if "bounded_cli_hook_bridge" in inline_code and len(tokens) == 4:
+    try:
+        inline_code_index = tokens.index("-c", 1)
+    except ValueError:
+        return False
+    supported_interpreter_flags = {"-B", "-E", "-I", "-P", "-S", "-s", "-u"}
+    if any(flag not in supported_interpreter_flags for flag in tokens[1:inline_code_index]):
+        return False
+    if inline_code_index + 1 >= len(tokens):
+        return False
+    inline_code = tokens[inline_code_index + 1]
+    if "bounded_cli_hook_bridge" in inline_code and len(tokens) == inline_code_index + 3:
         try:
-            raw_config: object = json.loads(tokens[3])
+            raw_config: object = json.loads(tokens[inline_code_index + 2])
         except json.JSONDecodeError:
             return False
         if not isinstance(raw_config, dict):

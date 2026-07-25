@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from contextlib import redirect_stderr
 from io import StringIO
 from pathlib import Path
@@ -288,13 +289,19 @@ class TestPiInstall:
 =======
         assert "const timeoutHandle = setTimeout(() => {" in text
         assert "}, timeoutMs);" in text
-        assert "taskkill.exe" in text
+        assert "const GUARD_TASKKILL_PATH =" in text
+        assert "process.env.SystemRoot" not in text
+        assert "process.env.SYSTEMROOT" not in text
+        if os.name == "nt":
+            assert "taskkill.exe" in text
+        else:
+            assert "const GUARD_TASKKILL_PATH = null;" in text
         assert "['/PID', String(child.pid), '/T', '/F']" in text
-        assert "taskkill.once('close', (status) => {" in text
-        assert "resolve(status === 0)" in text
+        assert "taskkill.once('close', (status) => finish(status === 0))" in text
         assert "taskkill.kill('SIGKILL')" in text
         assert "return waitForGuardCliChildExit(child, 200)" in text
         assert "guardCliContainmentFailed = true" in text
+        assert "containmentFailure," in text
         assert 'reason_code: "guard_cli_containment_failed"' in text
         assert "{ code: 'ECONTAINMENT' }" in text
         recovery_block = text.split("async function recoverGuardDaemon(", 1)[1].split(

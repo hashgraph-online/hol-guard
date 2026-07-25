@@ -754,7 +754,10 @@ def _run_hermes_mcp_proxy(
             if response is not None:
                 print(json.dumps(response, separators=(",", ":")), flush=True)
         return 0
-    approval_center_url = ensure_guard_daemon(context.guard_home)
+    approval_center_url = schedule_guard_daemon_ensure(
+        context.guard_home,
+        home_dir=context.home_dir,
+    )
     command = _server_command(server)
     if len(command) == 0:
         print(f"Hermes MCP server {args.server} is missing a launch command.", file=sys.stderr)

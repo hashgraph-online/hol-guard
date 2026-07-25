@@ -184,3 +184,18 @@ def test_copilot_permission_timeout_uses_permission_request_contract(
 
     assert returncode == 0
     assert _json_object(output.getvalue())["behavior"] == "deny"
+
+
+def test_oversized_input_uses_configured_harness_native_deny(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path, harness="copilot")
+    monkeypatch.setattr(bounded_cli_hook_bridge, "_bounded_stdin", lambda: None)
+    output = io.StringIO()
+
+    with redirect_stdout(output):
+        returncode = bounded_cli_hook_bridge.main_from_argv([json.dumps(config)])
+
+    assert returncode == 0
+    assert _json_object(output.getvalue())["permissionDecision"] == "deny"
