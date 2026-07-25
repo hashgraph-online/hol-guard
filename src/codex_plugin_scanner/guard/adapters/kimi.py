@@ -20,6 +20,7 @@ from .base import (
     _json_payload,
     _shell_command,
 )
+from .bounded_cli_hook_bridge import bounded_cli_hook_command
 
 tomllib: Any
 try:
@@ -32,6 +33,7 @@ _KIMI_HOME_ENV_VAR = "KIMI_CODE_HOME"
 _KIMI_DIR = ".kimi-code"
 _KIMI_CONFIG_FILE = "config.toml"
 _KIMI_MCP_FILE = "mcp.json"
+_GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
 
 
 _GUARD_MANAGED_BEGIN = "# BEGIN HOL GUARD MANAGED HOOKS"
@@ -225,14 +227,14 @@ class KimiHarnessAdapter(HarnessAdapter):
             guard_args.extend(["--home", str(context.home_dir)])
         if context.workspace_dir is not None:
             guard_args.extend(["--workspace", str(context.workspace_dir)])
-        package_root = Path(__file__).resolve().parents[3]
-        code = (
-            "import sys;"
-            f"sys.path.insert(0, {str(package_root)!r});"
-            "from codex_plugin_scanner.cli import main;"
-            f"raise SystemExit(main({guard_args!r}))"
+        return bounded_cli_hook_command(
+            python_executable=sys.executable,
+            package_root=Path(__file__).resolve().parents[3],
+            guard_home=context.guard_home,
+            cli_args=guard_args,
+            harness="kimi",
+            timeout_seconds=_GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS,
         )
-        return (sys.executable, "-c", code)
 
     def install(self, context: HarnessContext) -> dict[str, object]:
         shim_manifest = install_guard_shim(

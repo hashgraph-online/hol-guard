@@ -31,6 +31,7 @@ from .base import (
     _json_payload,
     _shell_command,
 )
+from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .zcode_config import (
     GUARD_MANAGED_MARKER,
     ZCODE_BUNDLE_IDENTIFIER,
@@ -54,6 +55,7 @@ from .zcode_config import (
 _ZCODE_HOME_ENV_VAR = "ZCODE_HOME"
 _ZCODE_PRETOOL_TIMEOUT_SECONDS = 30
 _ZCODE_PROMPT_TIMEOUT_SECONDS = 30
+_GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
 
 
 class ZCodeHarnessAdapter(HarnessAdapter):
@@ -252,14 +254,14 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             guard_args.extend(["--home", str(context.home_dir)])
         if context.workspace_dir is not None:
             guard_args.extend(["--workspace", str(context.workspace_dir)])
-        package_root = Path(__file__).resolve().parents[3]
-        code = (
-            "import sys;"
-            f"sys.path.insert(0, {str(package_root)!r});"
-            "from codex_plugin_scanner.cli import main;"
-            f"raise SystemExit(main({guard_args!r}))"
+        return bounded_cli_hook_command(
+            python_executable=sys.executable,
+            package_root=Path(__file__).resolve().parents[3],
+            guard_home=context.guard_home,
+            cli_args=guard_args,
+            harness="zcode",
+            timeout_seconds=_GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS,
         )
-        return (sys.executable, "-c", code)
 
     @staticmethod
     def _managed_command_wrapper(hook_command: str) -> str:

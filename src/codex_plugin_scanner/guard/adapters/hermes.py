@@ -25,6 +25,7 @@ from ..skill_directory_identity import (
     skill_directory_identity_metadata,
 )
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
+from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .cloud_identity import cloud_agent_identity_environment, cloud_agent_identity_hints
 from .hermes_file_inspection import (
     HermesConfigInspection,
@@ -61,6 +62,8 @@ _SCANNABLE_NAMES = {".env", "Makefile", "Dockerfile", "Procfile"}
 
 _HERMES_MANAGED_APPROVAL_TIER = "native-or-center"
 _HERMES_MANAGED_PROMPT_CHANNEL = "native"
+_GUARD_PRETOOL_INTERNAL_TIMEOUT_SECONDS = 3
+_GUARD_PRETOOL_HOST_TIMEOUT_SECONDS = 5
 
 
 def _hermes_home(context: HarnessContext) -> Path:
@@ -1117,10 +1120,7 @@ def _mcp_proxy_command(*, context: HarnessContext, server_key: str) -> list[str]
 
 
 def _pretool_payload(*, context: HarnessContext) -> dict[str, object]:
-    command = [
-        str(Path(sys.executable)),
-        "-m",
-        "codex_plugin_scanner.cli",
+    cli_args = [
         "hermes",
         "pretool",
         "--guard-home",
@@ -1128,12 +1128,23 @@ def _pretool_payload(*, context: HarnessContext) -> dict[str, object]:
         "--json",
     ]
     if context.home_dir.resolve() != Path.home().resolve():
-        command.extend(["--home", str(context.home_dir)])
+        cli_args.extend(["--home", str(context.home_dir)])
     if context.workspace_dir is not None:
-        command.extend(["--workspace", str(context.workspace_dir)])
+        cli_args.extend(["--workspace", str(context.workspace_dir)])
     return {
-        "command": command,
+        "command": list(
+            bounded_cli_hook_command(
+                python_executable=sys.executable,
+                package_root=Path(__file__).resolve().parents[3],
+                guard_home=context.guard_home,
+                cli_args=cli_args,
+                harness="hermes",
+                timeout_seconds=_GUARD_PRETOOL_INTERNAL_TIMEOUT_SECONDS,
+            )
+        ),
         "harness": "hermes",
+        "timeout_seconds": _GUARD_PRETOOL_HOST_TIMEOUT_SECONDS,
+        "fail_open": False,
     }
 
 
@@ -1344,9 +1355,9 @@ def _write_guard_to_hermes_config_yaml(
     existing[_GUARD_CONFIG_KEY] = {
         "enabled": True,
         "base_url": _resolve_guard_consumer_base_url(context),
-        "timeout_seconds": 5,
+        "timeout_seconds": _GUARD_PRETOOL_HOST_TIMEOUT_SECONDS,
         "cache_ttl_seconds": 60,
-        "fail_open": True,
+        "fail_open": False,
         "token_env_var": "HERMES_GUARD_TOKEN",
         "enforce_mcp_tools": True,
         "pain_signals_enabled": True,

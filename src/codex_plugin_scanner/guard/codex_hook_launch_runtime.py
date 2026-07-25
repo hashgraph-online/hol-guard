@@ -25,6 +25,7 @@ _HOOK_ENVIRONMENT_KEYS = frozenset(
         "CODEX_HOME",
         "COMSPEC",
         "HOME",
+        "HOL_GUARD_HOOK_FAILURE_KIND",
         "LANG",
         "PATH",
         "PATHEXT",
@@ -79,11 +80,16 @@ def isolated_daemon_start_command(
     resolved_home_dir = Path.home() if home_dir is None else home_dir
 
     bootstrap = (
-        "import sys;"
+        "import os,sys;"
         f"sys.path.insert(0, {str(package_root.resolve())!r});"
         "from pathlib import Path;"
         "from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure;"
-        f"recover_guard_daemon_after_hook_failure(Path({str(guard_home)!r}),home_dir=Path({str(resolved_home_dir)!r}))"
+        "failure_kind=os.environ.get('HOL_GUARD_HOOK_FAILURE_KIND','transport-failure');"
+        "failure_kind=failure_kind if failure_kind in"
+        " {'overload','transport-failure','authenticated-control-plane-failure'}"
+        " else 'transport-failure';"
+        f"recover_guard_daemon_after_hook_failure(Path({str(guard_home)!r}),"
+        f"home_dir=Path({str(resolved_home_dir)!r}),failure_kind=failure_kind)"
     )
     return (python_executable, "-I", "-c", bootstrap)
 
@@ -130,6 +136,7 @@ def run_isolated_hook_process(
     environment: Mapping[str, str],
     timeout_seconds: float,
     output_limit: int = _HOOK_SUBPROCESS_OUTPUT_LIMIT,
+    allow_windows_breakaway: bool = False,
 ) -> BoundedHookProcessResult:
     """Run one child with bounded input lifetime and combined output bytes."""
 
@@ -140,6 +147,7 @@ def run_isolated_hook_process(
                 list(command),
                 cwd=cwd,
                 environment=dict(environment),
+                allow_breakaway=allow_windows_breakaway,
             )
         else:
             process = subprocess.Popen(

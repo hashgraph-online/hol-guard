@@ -78,10 +78,16 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(tmp_path: Pat
     overlay_path = Path(str(manifest["mcp_overlay_path"]))
     pretool_path = Path(str(manifest["pretool_hook_path"]))
     overlay_payload = json.loads(overlay_path.read_text(encoding="utf-8"))
+    pretool_payload = json.loads(pretool_path.read_text(encoding="utf-8"))
 
     assert manifest["install_state"] == "installed"
     assert overlay_path.exists() is True
     assert pretool_path.exists() is True
+    bridge_config = json.loads(pretool_payload["command"][-1])
+    assert bridge_config["harness"] == "hermes"
+    assert bridge_config["timeout_seconds"] == 3
+    assert pretool_payload["timeout_seconds"] == 5
+    assert pretool_payload["fail_open"] is False
     assert overlay_payload["github"]["command"] == str(Path(sys.executable))
     assert overlay_payload["github"]["args"][-3:] == ["--server", "yaml:github", "--stdio"]
     assert overlay_payload["remote-docs"]["command"] == str(Path(sys.executable))
@@ -134,6 +140,7 @@ def test_install_writes_guard_section_to_config_yaml(tmp_path: Path):
 
     assert "guard" in config
     assert config["guard"]["enabled"] is True
+    assert config["guard"]["fail_open"] is False
     assert config["guard"]["token_env_var"] == "HERMES_GUARD_TOKEN"
     assert config["guard"]["enforce_mcp_tools"] is True
 

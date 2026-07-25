@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import ast
-import importlib.util
 import json
-import os
 import re
 import shlex
 import subprocess
@@ -19,6 +17,7 @@ from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _json_payload, _run_command_probe
+from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
@@ -39,6 +38,7 @@ _DETECTABLE_HOOK_EVENTS = (
     "errorOccurred",
 )
 _MANAGED_HOOK_FILENAME = "hol-guard-copilot.json"
+_GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
 _LEGACY_MANAGED_HOOK_PATTERNS = (
     re.compile(r'(^|["\s])-m["\s]+codex_plugin_scanner\.cli(["\s]|$)'),
     re.compile(r'(^|["\s])guard(["\s]|$)'),
@@ -94,15 +94,14 @@ def _hook_command_parts(context: HarnessContext, *, include_workspace: bool) -> 
         guard_args.extend(["--home", str(context.home_dir)])
     if include_workspace and context.workspace_dir is not None:
         guard_args.extend(["--workspace", str(context.workspace_dir)])
-    trusted_path_entries = _trusted_pythonpath_entries()
-    guard_args_json = json.dumps(guard_args)
-    code = (
-        "import json,sys;"
-        f"sys.path[:0]={trusted_path_entries!r};"
-        "from codex_plugin_scanner.cli import main;"
-        f"raise SystemExit(main(json.loads({guard_args_json!r})))"
+    return bounded_cli_hook_command(
+        python_executable=sys.executable,
+        package_root=Path(__file__).resolve().parents[3],
+        guard_home=context.guard_home,
+        cli_args=guard_args,
+        harness="copilot",
+        timeout_seconds=_GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS,
     )
-    return (sys.executable, "-c", code)
 
 
 def _hook_shell_commands(context: HarnessContext, *, include_workspace: bool) -> tuple[str, str]:
@@ -139,32 +138,23 @@ def _is_managed_hook_command(command: str) -> bool:
     if not executable.startswith("python") or tokens[1] != "-c":
         return False
     inline_code = tokens[2]
+    if "bounded_cli_hook_bridge" in inline_code and len(tokens) == 4:
+        try:
+            raw_config: object = json.loads(tokens[3])
+        except json.JSONDecodeError:
+            return False
+        if not isinstance(raw_config, dict):
+            return False
+        config: dict[str, object] = {key: value for key, value in raw_config.items() if isinstance(key, str)}
+        if config.get("harness") != "copilot":
+            return False
+        cli_args = config.get("cli_args")
+        if not isinstance(cli_args, list):
+            return False
+        normalized_args = tuple(item.lower() for item in cli_args if isinstance(item, str))
+        return len(normalized_args) == len(cli_args) and _argv_targets_copilot(normalized_args)
     inline_args = _inline_guard_args(inline_code)
     return "codex_plugin_scanner.cli" in inline_code and _argv_targets_copilot(inline_args)
-
-
-def _trusted_pythonpath_entries() -> list[str]:
-    launcher_env = merge_guard_launcher_env()
-    path_entries = [entry for entry in launcher_env.get("PYTHONPATH", "").split(os.pathsep) if entry.strip()]
-    package_root = _trusted_package_root()
-    cli_entrypoint = package_root / "codex_plugin_scanner" / "cli.py"
-    if not cli_entrypoint.is_file():
-        raise RuntimeError(f"Guard could not locate the trusted CLI entrypoint at {cli_entrypoint}")
-    package_root_str = str(package_root)
-    if package_root_str not in path_entries:
-        path_entries.insert(0, package_root_str)
-    return path_entries
-
-
-def _trusted_package_root() -> Path:
-    spec = importlib.util.find_spec("codex_plugin_scanner")
-    if spec is None:
-        raise RuntimeError("Guard could not locate the codex_plugin_scanner package")
-    if spec.submodule_search_locations:
-        return Path(next(iter(spec.submodule_search_locations))).resolve().parent
-    if spec.origin is None:
-        raise RuntimeError("Guard could not determine the codex_plugin_scanner package root")
-    return Path(spec.origin).resolve().parent.parent
 
 
 def _inline_guard_args(inline_code: str) -> tuple[str, ...]:

@@ -29,6 +29,19 @@ from codex_plugin_scanner.guard.adapters.opencode_pretool import (
 from codex_plugin_scanner.guard.cli import install_commands as install_commands_module
 
 
+def _bun_executable() -> str | None:
+    path_without_guard_shims = os.pathsep.join(
+        entry for entry in os.environ.get("PATH", "").split(os.pathsep) if "package-shims" not in entry
+    )
+    unwrapped = shutil.which("bun", path=path_without_guard_shims)
+    if unwrapped is not None:
+        return unwrapped
+    user_install = Path.home() / ".bun" / "bin" / "bun"
+    if user_install.is_file():
+        return str(user_install)
+    return shutil.which("bun")
+
+
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
     home = tmp_path / "home"
     workspace_dir = tmp_path / "workspace" if workspace else None
@@ -42,7 +55,7 @@ def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
 
 
 def _run_generated_guard_block_message(tmp_path: Path, *, stdout: str, stderr: str = "") -> str:
-    bun = shutil.which("bun")
+    bun = _bun_executable()
     if bun is None:
         pytest.skip("bun not installed")
     source = pretool_plugin_source(_ctx(tmp_path))
@@ -66,6 +79,26 @@ def _run_generated_guard_block_message(tmp_path: Path, *, stdout: str, stderr: s
     )
     assert completed.returncode == 0, completed.stderr
     return completed.stdout.strip()
+
+
+def _run_generated_spawn_script(tmp_path: Path, body: str) -> subprocess.CompletedProcess[str]:
+    bun = _bun_executable()
+    if bun is None:
+        pytest.skip("bun not installed")
+    plugin_path = tmp_path / "guard-spawn-plugin.ts"
+    plugin_path.write_text(pretool_plugin_source(_ctx(tmp_path)), encoding="utf-8")
+    script_path = tmp_path / "guard-spawn-runner.ts"
+    script_path.write_text(
+        "import { spawnGuardProcess } from './guard-spawn-plugin';\n" + body,
+        encoding="utf-8",
+    )
+    return subprocess.run(
+        [bun, str(script_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
 
 
 def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
@@ -163,6 +196,8 @@ def test_pretool_hook_launcher_ignores_workspace_package_hijack(
     guard_python = resolve_guard_hook_python(ctx)
     package_root = package_root_from_python(guard_python, ctx)
     launcher = _pretool_hook_launcher_code(package_root=package_root)
+    assert "run_bounded_cli_hook" in launcher
+    assert "'timeout_seconds':25" in launcher
     inherit_env = {key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ}
     env = {**inherit_env, **_pretool_hook_env(package_root=package_root), _HOOK_ARGV_ENV: '["guard","hook","--json"]'}
     completed = subprocess.run(
@@ -215,6 +250,83 @@ def test_pretool_plugin_source_includes_node_spawn_fallback(tmp_path: Path) -> N
     assert 'proc.stdout?.setEncoding("utf8")' in spawn_block
     assert 'proc.stdin?.on("error", () => {})' in spawn_block
     assert "proc.stdin?.end(options.stdin)" in spawn_block
+
+
+def test_pretool_plugin_source_bounds_and_serializes_fallback(tmp_path: Path) -> None:
+    source = pretool_plugin_source(_ctx(tmp_path))
+
+    assert "const GUARD_HOOK_TIMEOUT_MS = 30_000;" in source
+    assert "const deadlineMs = Date.now() + GUARD_HOOK_TIMEOUT_MS;" in source
+    assert "const remainingMs = options.deadlineMs - Date.now();" in source
+    assert "if (fallbackInFlight)" in source
+    assert 'detached: process.platform !== "win32"' in source
+    assert 'process.kill(-processGroupId, "SIGTERM")' in source
+    assert 'process.kill(-processGroupId, "SIGKILL")' in source
+    assert 'taskkill.once("close", (status) => {' in source
+    assert "resolve(status === 0)" in source
+    assert 'taskkill.kill("SIGKILL")' in source
+    assert "void terminateGuardProcessGroup(proc).then((terminated) => {" in source
+    assert "if (!terminated)" in source
+    assert "fallback containment could not be confirmed" in source
+    assert 'process.kill(-processGroupId, "SIGKILL")' in source
+    assert "return false;" in source
+
+
+def test_pretool_plugin_rejects_overlapping_fallback_in_process(tmp_path: Path) -> None:
+    completed = _run_generated_spawn_script(
+        tmp_path,
+        """
+const options = {
+  args: ["-c", "import time;time.sleep(0.3)"],
+  cwd: process.cwd(),
+  deadlineMs: Date.now() + 2_000,
+  env: {},
+  stdin: "",
+};
+const first = spawnGuardProcess(options);
+let overlap = "";
+try {
+  await spawnGuardProcess(options);
+} catch (error) {
+  overlap = error instanceof Error ? error.message : String(error);
+}
+await first;
+console.log(overlap);
+""",
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == "HOL Guard fallback review is already in progress"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process-group descendant assertion requires POSIX")
+def test_pretool_plugin_timeout_kills_fallback_descendants(tmp_path: Path) -> None:
+    marker = tmp_path / "opencode-descendant-ran"
+    descendant = f"import time;time.sleep(0.8);open({str(marker)!r},'w',encoding='utf-8').write('ran')"
+    parent = f"import subprocess,sys,time;subprocess.Popen([sys.executable,'-c',{descendant!r}]);time.sleep(10)"
+    completed = _run_generated_spawn_script(
+        tmp_path,
+        f"""
+let message = "";
+try {{
+  await spawnGuardProcess({{
+    args: ["-c", {json.dumps(parent)}],
+    cwd: process.cwd(),
+    deadlineMs: Date.now() + 100,
+    env: {{}},
+    stdin: "",
+  }});
+}} catch (error) {{
+  message = error instanceof Error ? error.message : String(error);
+}}
+await new Promise((resolve) => setTimeout(resolve, 1_000));
+console.log(message);
+""",
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == "HOL Guard fallback review timed out"
+    assert not marker.exists()
 
 
 def test_pretool_plugin_source_has_no_bun_identifier(tmp_path: Path) -> None:

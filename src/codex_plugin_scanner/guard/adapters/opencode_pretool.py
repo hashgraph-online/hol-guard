@@ -28,6 +28,8 @@ const GUARD_HOOK_LAUNCHER = __GUARD_HOOK_LAUNCHER__;
 const GUARD_HOOK_ENV = __GUARD_HOOK_ENV__;
 const GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__;
 const INTERCEPT_TOOLS = new Set(__INTERCEPT_TOOLS__);
+const GUARD_HOOK_TIMEOUT_MS = 30_000;
+let fallbackInFlight = false;
 
 type GuardFileMetadata = {
   device: string;
@@ -114,24 +116,150 @@ function normalizeCommand(command: unknown): string | null {
   return null;
 }
 
-async function spawnGuardProcess(options: {
+function waitForGuardProcessExit(
+  proc: ReturnType<typeof nodeSpawn>,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (exited: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      resolve(exited);
+    };
+    const watchdog = setTimeout(
+      () => finish(proc.exitCode !== null || proc.signalCode !== null),
+      timeoutMs,
+    );
+    proc.once("exit", () => finish(true));
+  });
+}
+
+async function terminateGuardProcessGroup(proc: ReturnType<typeof nodeSpawn>): Promise<boolean> {
+  const processGroupId = proc.pid;
+  if (process.platform === "win32" && (proc.exitCode !== null || proc.signalCode !== null)) {
+    return false;
+  }
+  if (process.platform === "win32" && typeof processGroupId === "number") {
+    const systemRoot = process.env.SystemRoot ?? process.env.SYSTEMROOT;
+    if (systemRoot) {
+      const treeKilled = await new Promise<boolean>((resolve) => {
+        const taskkill = nodeSpawn(
+          `${systemRoot}\\System32\\taskkill.exe`,
+          ["/PID", String(processGroupId), "/T", "/F"],
+          { stdio: "ignore", windowsHide: true },
+        );
+        const watchdog = setTimeout(() => {
+          taskkill.kill("SIGKILL");
+          resolve(false);
+        }, 200);
+        taskkill.once("error", () => {
+          clearTimeout(watchdog);
+          resolve(false);
+        });
+        taskkill.once("close", (status) => {
+          clearTimeout(watchdog);
+          resolve(status === 0);
+        });
+      });
+      if (!treeKilled) {
+        proc.kill("SIGKILL");
+        await waitForGuardProcessExit(proc, 200);
+        return false;
+      }
+      return waitForGuardProcessExit(proc, 200);
+    }
+    proc.kill("SIGKILL");
+    await waitForGuardProcessExit(proc, 200);
+    return false;
+  }
+  let groupSignaled = false;
+  try {
+    if (process.platform === "win32") {
+      proc.kill("SIGTERM");
+    } else if (typeof processGroupId === "number") {
+      process.kill(-processGroupId, "SIGTERM");
+      groupSignaled = true;
+    }
+  } catch {}
+  await waitForGuardProcessExit(proc, 100);
+  try {
+    if (process.platform === "win32") {
+      proc.kill("SIGKILL");
+    } else if (typeof processGroupId === "number") {
+      // The direct parent may have exited while descendants still hold hook pipes.
+      process.kill(-processGroupId, "SIGKILL");
+      groupSignaled = true;
+    }
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ESRCH") {
+      groupSignaled = false;
+    }
+  }
+  const parentExited = await waitForGuardProcessExit(proc, 200);
+  return parentExited && (process.platform === "win32" || groupSignaled);
+}
+
+export async function spawnGuardProcess(options: {
   args: string[];
   cwd: string;
+  deadlineMs: number;
   env: Record<string, string>;
   stdin: string;
 }): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
+    if (fallbackInFlight) {
+      reject(new Error("HOL Guard fallback review is already in progress"));
+      return;
+    }
+    const remainingMs = options.deadlineMs - Date.now();
+    if (remainingMs <= 0) {
+      reject(new Error("HOL Guard fallback review deadline expired"));
+      return;
+    }
+    fallbackInFlight = true;
+    let settled = false;
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (
+      outcome:
+        | { kind: "resolve"; value: { exitCode: number; stdout: string; stderr: string } }
+        | { kind: "reject"; error: unknown },
+    ) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+      fallbackInFlight = false;
+      if (outcome.kind === "resolve") {
+        resolve(outcome.value);
+      } else {
+        reject(outcome.error);
+      }
+    };
     try {
       verifyGuardPythonIdentity();
     } catch (error) {
-      reject(error);
+      finish({ kind: "reject", error });
       return;
     }
-    const proc = nodeSpawn(GUARD_PYTHON.targetPath, options.args, {
-      cwd: options.cwd,
-      env: options.env,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    let proc: ReturnType<typeof nodeSpawn>;
+    try {
+      proc = nodeSpawn(GUARD_PYTHON.targetPath, options.args, {
+        cwd: options.cwd,
+        detached: process.platform !== "win32",
+        env: options.env,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (error) {
+      finish({ kind: "reject", error });
+      return;
+    }
     let stdout = "";
     let stderr = "";
     proc.stdout?.setEncoding("utf8");
@@ -142,16 +270,38 @@ async function spawnGuardProcess(options: {
     proc.stderr?.on("data", (chunk: string) => {
       stderr += chunk;
     });
-    proc.on("error", reject);
-    proc.on("close", (code: number | null) => {
-      resolve({ exitCode: code ?? 1, stdout, stderr });
+    proc.on("error", (error) => {
+      if (timedOut) return;
+      finish({ kind: "reject", error });
     });
+    proc.on("close", (code: number | null) => {
+      if (timedOut) return;
+      finish({ kind: "resolve", value: { exitCode: code ?? 1, stdout, stderr } });
+    });
+    timer = setTimeout(() => {
+      timedOut = true;
+      void terminateGuardProcessGroup(proc).then((terminated) => {
+        if (!terminated) {
+          if (settled) return;
+          settled = true;
+          if (timer !== undefined) clearTimeout(timer);
+          reject(new Error("HOL Guard fallback containment could not be confirmed"));
+          return;
+        }
+        finish({ kind: "reject", error: new Error("HOL Guard fallback review timed out") });
+      });
+    }, remainingMs);
+    timer.unref();
     proc.stdin?.on("error", () => {});
     proc.stdin?.end(options.stdin);
   });
 }
 
-async function runGuardHook(directory: string, payload: Record<string, unknown>) {
+async function runGuardHook(
+  directory: string,
+  payload: Record<string, unknown>,
+  deadlineMs: number,
+) {
   const workspace = directory?.trim() || process.cwd();
   const guardArgv = [
     "guard",
@@ -167,6 +317,7 @@ async function runGuardHook(directory: string, payload: Record<string, unknown>)
   return spawnGuardProcess({
     args: ["-I", "-S", "-s", "-c", GUARD_HOOK_LAUNCHER],
     cwd: GUARD_HOME,
+    deadlineMs,
     env: hookProcessEnv(guardArgv),
     stdin: JSON.stringify(payload),
   });
@@ -278,16 +429,21 @@ export const HolGuardPretoolPlugin = async ({
         return;
       }
       const workspace = directory?.trim() || process.cwd();
+      const deadlineMs = Date.now() + GUARD_HOOK_TIMEOUT_MS;
       let result;
       try {
-        result = await runGuardHook(directory, {
-          hook_event_name: "PreToolUse",
-          event: "PreToolUse",
-          tool_name: input.tool,
-          tool_input: { command },
-          cwd: workspace,
-          source_scope: directory?.trim() ? "project" : "global",
-        });
+        result = await runGuardHook(
+          directory,
+          {
+            hook_event_name: "PreToolUse",
+            event: "PreToolUse",
+            tool_name: input.tool,
+            tool_input: { command },
+            cwd: workspace,
+            source_scope: directory?.trim() ? "project" : "global",
+          },
+          deadlineMs,
+        );
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         throw new Error(
@@ -328,8 +484,16 @@ def _pretool_hook_launcher_code(
         "import json,os,sys;"
         f"trusted={json.dumps(trusted_entries)};"
         "sys.path[:0]=trusted;"
-        "from codex_plugin_scanner.cli import main;"
-        f"raise SystemExit(main(json.loads(os.environ[{_HOOK_ARGV_ENV!r}])))"
+        "from pathlib import Path;"
+        "import codex_plugin_scanner;"
+        "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import run_bounded_cli_hook;"
+        f"argv=json.loads(os.environ[{_HOOK_ARGV_ENV!r}]);"
+        "guard_index=argv.index('--guard-home');"
+        "guard_home=argv[guard_index+1];"
+        "package_root=Path(codex_plugin_scanner.__file__).resolve().parent.parent;"
+        "config={'python_executable':sys.executable,'package_root':str(package_root),"
+        "'guard_home':guard_home,'cli_args':argv,'harness':'opencode','timeout_seconds':25};"
+        "raise SystemExit(run_bounded_cli_hook(config,input_text=sys.stdin.read(1000001)))"
     )
 
 

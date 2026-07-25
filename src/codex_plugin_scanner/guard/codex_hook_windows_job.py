@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _CREATE_SUSPENDED = 0x00000004
+_JOB_OBJECT_LIMIT_BREAKAWAY_OK = 0x00000800
 _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
 _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS = 9
 _TH32CS_SNAPTHREAD = 0x00000004
@@ -100,10 +101,11 @@ def spawn_windows_hook_process(
     *,
     cwd: Path,
     environment: dict[str, str],
+    allow_breakaway: bool = False,
 ) -> tuple[subprocess.Popen[bytes], WindowsHookJob]:
     """Start suspended, assign to a kill-on-close job, then resume."""
 
-    job = _create_job()
+    job = _create_job(allow_breakaway=allow_breakaway)
     process: subprocess.Popen[bytes] | None = None
     try:
         process = subprocess.Popen(
@@ -140,7 +142,7 @@ def _kernel32():  # type: ignore[no-untyped-def]
     return win_dll("kernel32", use_last_error=True)
 
 
-def _create_job() -> WindowsHookJob:
+def _create_job(*, allow_breakaway: bool = False) -> WindowsHookJob:
     kernel32 = _kernel32()
     create_job = kernel32.CreateJobObjectW
     create_job.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
@@ -154,7 +156,7 @@ def _create_job() -> WindowsHookJob:
     job = WindowsHookJob(handle=int(raw_handle))
     try:
         limits = _ExtendedLimitInformation()
-        limits.basic_limit_information.limit_flags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        limits.basic_limit_information.limit_flags = _job_limit_flags(allow_breakaway=allow_breakaway)
         if not set_information(
             wintypes.HANDLE(job.handle),
             _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
@@ -167,6 +169,13 @@ def _create_job() -> WindowsHookJob:
         with contextlib.suppress(OSError):
             job.close()
         raise
+
+
+def _job_limit_flags(*, allow_breakaway: bool) -> int:
+    flags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    if allow_breakaway:
+        flags |= _JOB_OBJECT_LIMIT_BREAKAWAY_OK
+    return flags
 
 
 def _assign_and_resume(process: subprocess.Popen[bytes], job: WindowsHookJob) -> None:

@@ -155,6 +155,15 @@ def _run_guard_hook_command(
         return 0
     if args.harness == "copilot":
         runtime_workspace = _resolve_copilot_workspace_root(runtime_workspace)
+    post_tool_result = _try_resident_post_tool_review(
+        args,
+        context=context,
+        payload=payload,
+        runtime_workspace=runtime_workspace,
+        store=store,
+    )
+    if post_tool_result is not None:
+        return post_tool_result
     # Fast path: if the payload contains guard_source_ref, try the hook
     # review engine before the full runtime artifact path. This avoids
     # CLI command layering cost for safe source-file reads.
@@ -436,6 +445,32 @@ def _run_guard_hook_command(
         store=store,
         post_claim_revalidator=revalidate_generic_after_claim,
     )
+
+
+def _try_resident_post_tool_review(
+    args: argparse.Namespace,
+    *,
+    context: HarnessContext,
+    payload: dict[str, object],
+    runtime_workspace: Path | None,
+    store: GuardStore,
+) -> int | None:
+    """Use the deterministic review engine for every completed tool action."""
+
+    if _hook_event_name(payload) != "PostToolUse":
+        return None
+    from ..daemon.hook_worker import HookWorker
+
+    result = HookWorker(store=store).review_http_payload(
+        payload=payload,
+        params={"runtime-harness": [args.harness]},
+        default_harness=args.harness,
+        home_dir=context.home_dir,
+        guard_home=context.guard_home,
+        workspace=runtime_workspace,
+    )
+    _emit("hook", result, getattr(args, "json", False))
+    return 0
 
 
 def _try_source_ref_fast_path(

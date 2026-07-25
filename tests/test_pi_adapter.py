@@ -256,7 +256,8 @@ class TestPiInstall:
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
         assert "    return undefined;\n  });\n}" in text
-        assert 'const GUARD_COMMAND_CANDIDATES = ["plugin-guard", "hol-guard"]' in text
+        assert "const GUARD_CLI_WRAPPER_COMMAND =" in text
+        assert "const GUARD_CLI_WRAPPER_ARGS =" in text
         assert "const GUARD_HOME =" in text
         assert "daemon-state.json" in text
         assert "daemon-auth-token" in text
@@ -282,7 +283,28 @@ class TestPiInstall:
         assert '"--harness", "pi"' in text
         assert '"--home"' in text
         assert "ctx.cwd" in text
+<<<<<<< HEAD
         assert "timeout: GUARD_TIMEOUT_MS" in text
+=======
+        assert "const timeoutHandle = setTimeout(() => {" in text
+        assert "}, timeoutMs);" in text
+        assert "taskkill.exe" in text
+        assert "['/PID', String(child.pid), '/T', '/F']" in text
+        assert "taskkill.once('close', (status) => {" in text
+        assert "resolve(status === 0)" in text
+        assert "taskkill.kill('SIGKILL')" in text
+        assert "return waitForGuardCliChildExit(child, 200)" in text
+        assert "guardCliContainmentFailed = true" in text
+        assert 'reason_code: "guard_cli_containment_failed"' in text
+        assert "{ code: 'ECONTAINMENT' }" in text
+        recovery_block = text.split("async function recoverGuardDaemon(", 1)[1].split(
+            "async function daemonGuardResponse(",
+            1,
+        )[0]
+        assert recovery_block.index("if (guardCliContainmentFailed) return false;") < recovery_block.index(
+            "runGuardCliCommand("
+        )
+>>>>>>> 9f67abb61 (fix(guard): harden daemon hook resilience (#1878))
         assert str(extension_path) in json.loads(settings_path.read_text(encoding="utf-8"))["extensions"]
         assert omp_extension_path.is_file()
         assert str(omp_extension_path) in json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"]
@@ -299,18 +321,21 @@ class TestPiInstall:
         text = Path(str(manifest["config_path"])).read_text(encoding="utf-8")
         assert "serializedPayload = JSON.stringify(payloadToSend);" in text
         assert "serializedPayload.length > GUARD_MAX_SERIALIZED_PAYLOAD_CHARS" in text
-        assert "for (const command of GUARD_COMMAND_CANDIDATES)" in text
-        assert "resultError?.code === 'ENOENT'" in text
+        assert "[...GUARD_CLI_WRAPPER_ARGS, JSON.stringify(args)]" in text
         assert "async function daemonGuardResponse(" in text
         assert "await fetch(`http://127.0.0.1:${connection.port}/v1/hooks/pi?" in text
-        assert "const daemonResponse = await daemonGuardResponse(serializedPayload, cwd);" in text
+        assert "let daemonAttempt = await daemonGuardResponse(serializedPayload, cwd);" in text
         assert "const response = await runGuard(" in text
         assert "if (result.error) {" in text
-        assert "const resultError =" in text
+        assert "const errorMessage = result.error.message;" in text
         assert "const errorCode =" in text
         assert 'decision: "deny"' in text
         assert "errorCode === 'ETIMEDOUT'" in text
+<<<<<<< HEAD
         assert "HOL Guard Pi hook timed out after" in text
+=======
+        assert "could not complete fallback review before the Pi deadline" in text
+>>>>>>> 9f67abb61 (fix(guard): harden daemon hook resilience (#1878))
         assert "HOL Guard Pi hook failed before completing review" in text
 
     def test_install_writes_managed_extension_that_truncates_post_tool_payloads(

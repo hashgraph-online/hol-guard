@@ -20,7 +20,13 @@ class BridgeConfig(TypedDict):
 
 
 class TrustedHookLaunch(Protocol):
-    def run_start(self, command: Sequence[str], *, timeout_seconds: float) -> bool: ...
+    def run_start(
+        self,
+        command: Sequence[str],
+        *,
+        timeout_seconds: float,
+        failure_kind: str = "transport-failure",
+    ) -> bool: ...
 
     def run_fallback(
         self,

@@ -46,13 +46,28 @@ class TrustedCodexHookLaunch:
     cwd: Path
     environment: Mapping[str, str]
 
-    def run_start(self, command: Sequence[str], *, timeout_seconds: float) -> bool:
+    def run_start(
+        self,
+        command: Sequence[str],
+        *,
+        timeout_seconds: float,
+        failure_kind: str = "transport-failure",
+    ) -> bool:
+        if failure_kind not in {
+            "authenticated-control-plane-failure",
+            "overload",
+            "transport-failure",
+        }:
+            failure_kind = "transport-failure"
+        environment = dict(self.environment)
+        environment["HOL_GUARD_HOOK_FAILURE_KIND"] = failure_kind
         result = run_isolated_hook_process(
             command,
             input_text="",
             cwd=self.cwd,
-            environment=self.environment,
+            environment=environment,
             timeout_seconds=timeout_seconds,
+            allow_windows_breakaway=True,
         )
         return result.returncode == 0 and not result.output_limit_exceeded and not result.timed_out
 

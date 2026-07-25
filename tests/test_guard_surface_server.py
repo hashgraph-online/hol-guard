@@ -687,18 +687,19 @@ class TestGuardSurfaceServer:
         workspace_dir.mkdir(parents=True, exist_ok=True)
         captured: dict[str, str | None] = {}
 
-        def fake_run_guard_command(args, *, input_text, output_stream):
-            del input_text
-            captured["binding"] = os.environ.get("HOL_GUARD_CURSOR_APPROVAL_BINDING")
-            captured["proof"] = os.environ.get("HOL_GUARD_CURSOR_AFTER_SHELL_PROOF")
-            captured["managed"] = os.environ.get("HOL_GUARD_MANAGED_CURSOR_HOOK")
-            captured["session"] = os.environ.get("CURSOR_SESSION_ID")
-            output_stream.write("{}")
-            return 0
+        def fake_review(**kwargs):
+            hook_env = kwargs["hook_env"]
+            captured["binding"] = hook_env.get("HOL_GUARD_CURSOR_APPROVAL_BINDING")
+            captured["proof"] = hook_env.get("HOL_GUARD_CURSOR_AFTER_SHELL_PROOF")
+            captured["managed"] = hook_env.get("HOL_GUARD_MANAGED_CURSOR_HOOK")
+            captured["session"] = hook_env.get("CURSOR_SESSION_ID")
+            from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessReview
 
-        monkeypatch.setattr(guard_commands_module, "run_guard_command", fake_run_guard_command)
+            return HookProcessReview({}, None)
+
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
+        monkeypatch.setattr(daemon._server.hook_process_runner, "review", fake_review)
 
         try:
             request = urllib.request.Request(
@@ -901,15 +902,15 @@ class TestGuardSurfaceServer:
         workspace_dir.mkdir(parents=True, exist_ok=True)
         captured: dict[str, str | None] = {}
 
-        def fake_run_guard_command(args, *, input_text, output_stream):
-            del input_text
-            captured["workspace"] = args.workspace
-            output_stream.write("{}")
-            return 0
+        def fake_review(**kwargs):
+            captured["workspace"] = str(kwargs["workspace"])
+            from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessReview
 
-        monkeypatch.setattr(guard_commands_module, "run_guard_command", fake_run_guard_command)
+            return HookProcessReview({}, None)
+
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
+        monkeypatch.setattr(daemon._server.hook_process_runner, "review", fake_review)
 
         try:
             trailing_none = workspace_dir / "None"
@@ -3319,11 +3320,14 @@ class TestGuardDaemonFastHookPath:
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
 
-        def broken_review_http_payload(**kwargs):
-            raise RuntimeError("boom")
-
         try:
-            monkeypatch.setattr(daemon._server.hook_worker, "review_http_payload", broken_review_http_payload)
+            from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessReview
+
+            monkeypatch.setattr(
+                daemon._server.hook_process_runner,
+                "review",
+                lambda **_kwargs: HookProcessReview(None, "daemon_worker_exception"),
+            )
             payload = {
                 "hook_event_name": "PostToolUse",
                 "tool_name": "Read",

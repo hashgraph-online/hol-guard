@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import argparse
 import base64
 import hashlib
 import hmac
 import inspect
-import io
 import json
 import logging
 import mimetypes
 import os
 import platform
 import secrets
+import socket
+import sqlite3
 import tempfile
 import threading
 import time
@@ -226,6 +226,7 @@ from .discovery import (
     load_daemon_discovery_key,
 )
 from .extension_control_api import ExtensionControlApiError, ExtensionControlApiService
+from .hook_process_runner import HookProcessRunner
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     acquire_guard_daemon_owner_lock,
@@ -236,6 +237,7 @@ from .manager import (
     repair_approval_center_locator,
     write_guard_daemon_state,
 )
+from .runtime_heartbeat import RuntimeHeartbeatWriter
 
 _LOGGER = logging.getLogger(__name__)
 _HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
@@ -306,6 +308,32 @@ class _CursorReceiptContext(TypedDict):
     summary: dict[str, object]
 
 
+_MAX_CONCURRENT_DAEMON_REQUESTS = 64
+_MAX_CONCURRENT_DAEMON_CONTROL_REQUESTS = 8
+_MAX_CONCURRENT_DAEMON_CRITICAL_REQUESTS = 4
+_MAX_CONCURRENT_DAEMON_CONNECTIONS = (
+    _MAX_CONCURRENT_DAEMON_REQUESTS + _MAX_CONCURRENT_DAEMON_CONTROL_REQUESTS + _MAX_CONCURRENT_DAEMON_CRITICAL_REQUESTS
+)
+_MAX_CONCURRENT_RUNTIME_HOOKS = 32
+_MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS = 24
+_DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 0.25
+_DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS = 0.05
+_DAEMON_UNCLASSIFIED_WATCHDOG_POLL_SECONDS = 0.025
+_DAEMON_CONTROL_PATHS = frozenset(
+    {
+        "/v1/healthz/details",
+        "/v1/healthz/verify",
+    }
+)
+_DAEMON_CRITICAL_PATHS = frozenset(
+    {
+        "/healthz",
+        "/v1/daemon/identity-challenge",
+    }
+)
+_PEER_DISCONNECT_ERRORS = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
+
+
 class _GuardDaemonHttpServer(ThreadingHTTPServer):
     store: GuardStore
     runtime: GuardSurfaceRuntime
@@ -335,6 +363,41 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     containment_health_cache: dict[str, object] | None
     containment_health_cache_monotonic: float
     containment_health_cache_lock: threading.Lock
+    hook_capacity: threading.BoundedSemaphore
+    hook_capacity_limit: int
+    active_hook_requests: int
+    rejected_hook_requests: int
+    hook_harness_capacity: dict[str, threading.BoundedSemaphore]
+    hook_harness_active: dict[str, int]
+    hook_harness_rejected: dict[str, int]
+    hook_capacity_lock: threading.Lock
+    request_capacity: threading.BoundedSemaphore
+    request_capacity_limit: int
+    connection_capacity: threading.BoundedSemaphore
+    connection_capacity_limit: int
+    control_request_capacity: threading.BoundedSemaphore
+    control_request_capacity_limit: int
+    critical_request_capacity: threading.BoundedSemaphore
+    critical_request_capacity_limit: int
+    active_requests: int
+    rejected_requests: int
+    request_capacity_kinds: dict[int, str]
+    request_capacity_lock: threading.Lock
+    unclassified_connections: dict[int, tuple[socket.socket, float]]
+    unclassified_connections_lock: threading.Lock
+    unclassified_watchdog_stop: threading.Event
+    unclassified_watchdog_thread: threading.Thread | None
+    hook_process_runner: HookProcessRunner
+    runtime_heartbeat: RuntimeHeartbeatWriter
+
+    def handle_error(self, request: socket.socket, client_address: tuple[str, int]) -> None:
+        """Suppress expected peer disconnects without hiding server defects."""
+
+        import sys
+
+        if isinstance(sys.exc_info()[1], _PEER_DISCONNECT_ERRORS):
+            return
+        super().handle_error(request, client_address)
 
     def __init__(
         self,
@@ -377,6 +440,37 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.containment_health_cache = None
         self.containment_health_cache_monotonic = 0.0
         self.containment_health_cache_lock = threading.Lock()
+        self.hook_capacity_limit = _MAX_CONCURRENT_RUNTIME_HOOKS
+        self.hook_capacity = threading.BoundedSemaphore(self.hook_capacity_limit)
+        self.active_hook_requests = 0
+        self.rejected_hook_requests = 0
+        self.hook_harness_capacity = {}
+        self.hook_harness_active = {}
+        self.hook_harness_rejected = {}
+        self.hook_capacity_lock = threading.Lock()
+        self.request_capacity_limit = _MAX_CONCURRENT_DAEMON_REQUESTS
+        self.request_capacity = threading.BoundedSemaphore(self.request_capacity_limit)
+        self.connection_capacity_limit = _MAX_CONCURRENT_DAEMON_CONNECTIONS
+        self.connection_capacity = threading.BoundedSemaphore(self.connection_capacity_limit)
+        self.control_request_capacity_limit = _MAX_CONCURRENT_DAEMON_CONTROL_REQUESTS
+        self.control_request_capacity = threading.BoundedSemaphore(self.control_request_capacity_limit)
+        self.critical_request_capacity_limit = _MAX_CONCURRENT_DAEMON_CRITICAL_REQUESTS
+        self.critical_request_capacity = threading.BoundedSemaphore(self.critical_request_capacity_limit)
+        self.active_requests = 0
+        self.rejected_requests = 0
+        self.request_capacity_kinds = {}
+        self.request_capacity_lock = threading.Lock()
+        self.unclassified_connections = {}
+        self.unclassified_connections_lock = threading.Lock()
+        self.unclassified_watchdog_stop = threading.Event()
+        self.unclassified_watchdog_thread = None
+        self.hook_process_runner = HookProcessRunner(guard_home=store.guard_home)
+        self.runtime_heartbeat = RuntimeHeartbeatWriter(
+            store=store,
+            session_id=runtime_session_id,
+            write_timeout_seconds=0.05,
+            retry_interval_seconds=0.05,
+        )
         self.store.set_policy_integrity_state_listener(self.publish_trust_state)
         from .hook_worker import HookWorker
 
@@ -402,6 +496,135 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
             catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
         )
         return self.extension_control_runtime.refresh(view)
+    def process_request(self, request: socket.socket, client_address: tuple[str, int]) -> None:
+        admitted = self.connection_capacity.acquire(blocking=False)
+        if not admitted:
+            self._evict_oldest_unclassified_connection()
+            admitted = self.connection_capacity.acquire(
+                blocking=True,
+                timeout=_DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS,
+            )
+        if not admitted:
+            with self.request_capacity_lock:
+                self.rejected_requests += 1
+            self.shutdown_request(request)
+            return
+        with suppress(OSError):
+            request.settimeout(_DAEMON_REQUEST_READ_TIMEOUT_SECONDS)
+        self._register_unclassified_connection(request)
+        with self.request_capacity_lock:
+            self.active_requests += 1
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._release_request_capacity(request)
+            raise
+
+    def process_request_thread(self, request: socket.socket, client_address: tuple[str, int]) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._release_request_capacity(request)
+
+    def _release_request_capacity(self, request: socket.socket) -> None:
+        self.classify_connection(request)
+        with self.request_capacity_lock:
+            self.active_requests -= 1
+            capacity_kind = self.request_capacity_kinds.pop(id(request), None)
+        if capacity_kind is not None:
+            self._request_capacity_for_kind(capacity_kind).release()
+        self.connection_capacity.release()
+
+    def _register_unclassified_connection(self, request: socket.socket) -> None:
+        deadline = time.monotonic() + _DAEMON_REQUEST_READ_TIMEOUT_SECONDS
+        with self.unclassified_connections_lock:
+            self.unclassified_connections[id(request)] = (request, deadline)
+
+    def classify_connection(self, request: socket.socket) -> None:
+        with self.unclassified_connections_lock:
+            self.unclassified_connections.pop(id(request), None)
+
+    def _evict_oldest_unclassified_connection(self) -> None:
+        with self.unclassified_connections_lock:
+            oldest = next(iter(self.unclassified_connections.values()), None)
+        if oldest is not None:
+            self._close_unclassified_socket(oldest[0])
+
+    @staticmethod
+    def _close_unclassified_socket(request: socket.socket) -> None:
+        with suppress(OSError):
+            request.shutdown(socket.SHUT_RDWR)
+        with suppress(OSError):
+            request.close()
+
+    def start_unclassified_watchdog(self) -> None:
+        if self.unclassified_watchdog_thread is not None and self.unclassified_watchdog_thread.is_alive():
+            return
+        self.unclassified_watchdog_stop.clear()
+        self.unclassified_watchdog_thread = threading.Thread(
+            target=self._watch_unclassified_connections,
+            daemon=True,
+            name="guard-unclassified-connection-watchdog",
+        )
+        self.unclassified_watchdog_thread.start()
+
+    def stop_unclassified_watchdog(self) -> None:
+        self.unclassified_watchdog_stop.set()
+        thread = self.unclassified_watchdog_thread
+        if thread is not None:
+            thread.join(timeout=1.0)
+        self.unclassified_watchdog_thread = None
+
+    def _watch_unclassified_connections(self) -> None:
+        while not self.unclassified_watchdog_stop.wait(_DAEMON_UNCLASSIFIED_WATCHDOG_POLL_SECONDS):
+            now = time.monotonic()
+            with self.unclassified_connections_lock:
+                expired = [request for request, deadline in self.unclassified_connections.values() if deadline <= now]
+            for request in expired:
+                self._close_unclassified_socket(request)
+
+    def claim_request_capacity(self, request: socket.socket, path: str) -> bool:
+        capacity_kind = self._request_capacity_kind(path)
+        capacity = self._request_capacity_for_kind(capacity_kind)
+        if not capacity.acquire(blocking=False):
+            with self.request_capacity_lock:
+                self.rejected_requests += 1
+            return False
+        with self.request_capacity_lock:
+            self.request_capacity_kinds[id(request)] = capacity_kind
+        return True
+
+    def _request_capacity_for_kind(self, capacity_kind: str) -> threading.BoundedSemaphore:
+        if capacity_kind == "critical":
+            return self.critical_request_capacity
+        if capacity_kind == "control":
+            return self.control_request_capacity
+        return self.request_capacity
+
+    @staticmethod
+    def _request_capacity_kind(path: str) -> str:
+        path = path.split("?", 1)[0]
+        if path in _DAEMON_CRITICAL_PATHS:
+            return "critical"
+        if path in _DAEMON_CONTROL_PATHS:
+            return "control"
+        return "general"
+
+    def hook_harness_semaphore(self, harness: str) -> threading.BoundedSemaphore:
+        capacity_harness = self.canonical_hook_capacity_harness(harness)
+        with self.hook_capacity_lock:
+            capacity = self.hook_harness_capacity.get(capacity_harness)
+            if capacity is None:
+                capacity = threading.BoundedSemaphore(_MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS)
+                self.hook_harness_capacity[capacity_harness] = capacity
+            return capacity
+
+    @staticmethod
+    def canonical_hook_capacity_harness(harness: str) -> str:
+        try:
+            return get_adapter(harness).harness
+        except ValueError:
+            return "other"
 
     def daemon_host(self) -> str:
         return str(self.server_address[0])
@@ -444,7 +667,7 @@ _ROOT_STATIC_FILES = {
     "/favicon-16x16.png",
     "/favicon-32x32.png",
 }
-_CLAUDE_HOOK_EXECUTION_LOCK = threading.Lock()
+
 _RUNTIME_HOOK_ENV_ALLOWLIST = frozenset(
     {
         "HOL_GUARD_MANAGED_CURSOR_HOOK",
@@ -1407,6 +1630,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     _MAX_BODY_BYTES = 1_000_000
     server: _GuardDaemonHttpServer  # pyright: ignore[reportIncompatibleVariableOverride]
 
+    def parse_request(self) -> bool:
+        parsed = super().parse_request()
+        self._daemon_server().classify_connection(self.request)
+        if not parsed:
+            return False
+        if self._daemon_server().claim_request_capacity(self.request, self.path):
+            return True
+        self.send_error(503, "Guard daemon request capacity reached")
+        return False
+
     def do_OPTIONS(self) -> None:
         origin = self._normalize_origin(self.headers.get("Origin"))
         if origin is None:
@@ -1894,7 +2127,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return
         payload, body_error = self._load_request_body()
         if body_error is not None:
-            self._write_json({"error": body_error}, status=400)
+            status = {
+                "request_body_timeout": 408,
+                "request_body_too_large": 413,
+            }.get(body_error, 400)
+            self._write_json({"error": body_error}, status=status)
             return
         if parsed.path == "/v1/healthz/verify":
             nonce = self._optional_string(payload.get("nonce")) if payload else None
@@ -2422,22 +2659,59 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return _build_local_url(host, port, "/#/inbox")
 
     def _load_request_body(self) -> tuple[dict[str, object], str | None]:
-        length = int(self.headers.get("Content-Length", "0"))
-        if length <= 0 or length > self._MAX_BODY_BYTES:
-            return {}, None
+        if self.headers.get("Transfer-Encoding") is not None:
+            return {}, "unsupported_transfer_encoding"
+        content_lengths = self.headers.get_all("Content-Length", [])
+        if len(content_lengths) > 1:
+            return {}, "invalid_content_length"
         try:
-            raw_body = self.rfile.read(length).decode("utf-8")
+            length = int(content_lengths[0]) if content_lengths else 0
+        except ValueError:
+            return {}, "invalid_content_length"
+        if length < 0:
+            return {}, "invalid_content_length"
+        if length == 0:
+            return {}, None
+        if length > self._MAX_BODY_BYTES:
+            return {}, "request_body_too_large"
+        raw_body, body_error = self._read_request_body(length)
+        if body_error is not None:
+            return {}, body_error
+        try:
+            decoded_body = raw_body.decode("utf-8")
         except UnicodeDecodeError:
             return {}, "invalid_request_body"
         content_type = self.headers.get("Content-Type", "")
         if "application/json" in content_type:
             try:
-                payload = json.loads(raw_body)
+                payload = json.loads(decoded_body)
             except json.JSONDecodeError:
                 return {}, "invalid_request_body"
             return (payload if isinstance(payload, dict) else {}), None
-        form_payload = parse_qs(raw_body)
+        form_payload = parse_qs(decoded_body)
         return {key: values[-1] for key, values in form_payload.items() if values}, None
+
+    def _read_request_body(self, length: int) -> tuple[bytes, str | None]:
+        deadline = time.monotonic() + _DAEMON_REQUEST_READ_TIMEOUT_SECONDS
+        chunks: list[bytes] = []
+        remaining = length
+        while remaining > 0:
+            timeout = deadline - time.monotonic()
+            if timeout <= 0:
+                return b"", "request_body_timeout"
+            with suppress(OSError):
+                self.connection.settimeout(timeout)
+            try:
+                chunk = self.rfile.read1(min(remaining, 64 * 1024))
+            except TimeoutError:
+                return b"", "request_body_timeout"
+            except OSError:
+                return b"", "incomplete_request_body"
+            if not chunk:
+                return b"", "incomplete_request_body"
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks), None
 
     def _handle_capabilities(self) -> None:
         context = self._harness_context({})
@@ -5099,21 +5373,139 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": error.code}, status=400)
             return
 
-        # Fast path: use the resident hook worker for supported hooks.
-        if self._hook_fast_path_enabled():
-            result = self._handle_runtime_hook_fast(
+        daemon_server = self._daemon_server()
+        runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
+        capacity_harness = daemon_server.canonical_hook_capacity_harness(
+            (runtime_harness or default_harness).strip().lower().replace("_", "-")
+        )
+        harness_capacity = daemon_server.hook_harness_semaphore(capacity_harness)
+        if not harness_capacity.acquire(blocking=False):
+            self._record_hook_capacity_rejection(daemon_server, capacity_harness)
+            self._write_json(
+                self._runtime_hook_capacity_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                )
+            )
+            return
+        if not daemon_server.hook_capacity.acquire(blocking=False):
+            harness_capacity.release()
+            self._record_hook_capacity_rejection(daemon_server, capacity_harness)
+            self._write_json(
+                self._runtime_hook_capacity_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                )
+            )
+            return
+        with daemon_server.hook_capacity_lock:
+            daemon_server.active_hook_requests += 1
+            daemon_server.hook_harness_active[capacity_harness] = (
+                daemon_server.hook_harness_active.get(capacity_harness, 0) + 1
+            )
+        try:
+            self._execute_runtime_hook(
                 payload,
                 params,
+                hook_env=hook_env,
                 default_harness=default_harness,
                 home_dir=home_dir,
                 guard_home=guard_home,
                 workspace=workspace,
             )
-            if result is not None:
-                self._write_json(result)
-                return
+        finally:
+            with daemon_server.hook_capacity_lock:
+                daemon_server.active_hook_requests -= 1
+                daemon_server.hook_harness_active[capacity_harness] -= 1
+            daemon_server.hook_capacity.release()
+            harness_capacity.release()
 
-        # Legacy CLI path.
+    @staticmethod
+    def _record_hook_capacity_rejection(
+        daemon_server: _GuardDaemonHttpServer,
+        capacity_harness: str,
+    ) -> None:
+        with daemon_server.hook_capacity_lock:
+            daemon_server.rejected_hook_requests += 1
+            daemon_server.hook_harness_rejected[capacity_harness] = (
+                daemon_server.hook_harness_rejected.get(capacity_harness, 0) + 1
+            )
+
+    def _runtime_hook_capacity_response(
+        self,
+        payload: Mapping[str, object],
+        params: Mapping[str, list[str]],
+        *,
+        default_harness: str,
+    ) -> dict[str, object]:
+        return self._runtime_hook_fail_safe_response(
+            payload,
+            params,
+            default_harness=default_harness,
+            reason="HOL Guard is at local review capacity. Retry this action after the active reviews complete.",
+            reason_code="daemon_hook_capacity",
+        )
+
+    def _runtime_hook_fail_safe_response(
+        self,
+        payload: Mapping[str, object],
+        params: Mapping[str, list[str]],
+        *,
+        default_harness: str,
+        reason: str,
+        reason_code: str,
+    ) -> dict[str, object]:
+        runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
+        harness = (runtime_harness or default_harness).strip().lower().replace("_", "-")
+        event = self._optional_string(payload.get("hook_event_name", payload.get("event"))) or "PreToolUse"
+        if harness == "pi":
+            return {
+                "decision": "deny",
+                "reason": reason,
+                "model_output_action": "block",
+                "notice": "warning",
+                "reason_code": reason_code,
+            }
+        if event == "PermissionRequest":
+            return {
+                "reason_code": reason_code,
+                "hookSpecificOutput": {
+                    "hookEventName": event,
+                    "decision": {
+                        "behavior": "deny",
+                        "message": reason,
+                    },
+                },
+            }
+        if event == "PreToolUse":
+            return {
+                "reason_code": reason_code,
+                "hookSpecificOutput": {
+                    "hookEventName": event,
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                },
+            }
+        return {
+            "continue": False,
+            "stopReason": reason,
+            "systemMessage": reason,
+            "reason_code": reason_code,
+        }
+
+    def _execute_runtime_hook(
+        self,
+        payload: dict[str, object],
+        params: Mapping[str, list[str]],
+        *,
+        hook_env: dict[str, str],
+        default_harness: str,
+        home_dir: str | None,
+        guard_home: str | None,
+        workspace: str | None,
+    ) -> None:
         self._handle_runtime_hook_legacy_cli(
             payload,
             params,
@@ -5197,50 +5589,27 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     ) -> None:
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
         harness = runtime_harness or default_harness
-        args = argparse.Namespace(
-            guard_command="hook",
-            home=home_dir,
-            guard_home=guard_home,
-            workspace=workspace,
-            runtime_harness=runtime_harness,
+        review = self._daemon_server().hook_process_runner.review(
+            payload=payload,
             harness=harness,
-            artifact_id=None,
-            artifact_name=None,
-            policy_action=None,
-            event_file=None,
-            json=True,
+            home_dir=Path(home_dir) if home_dir is not None else Path.home(),
+            guard_home=(Path(guard_home) if guard_home is not None else self._daemon_server().store.guard_home),
+            workspace=Path(workspace) if workspace is not None else None,
+            hook_env=hook_env,
         )
-        buffer = io.StringIO()
-        with _CLAUDE_HOOK_EXECUTION_LOCK:
-            from ..cli.commands import run_guard_command
-
-            original_env: dict[str, str | None] = {key: os.environ.get(key) for key in hook_env}
-            try:
-                os.environ.update(hook_env)
-                with use_extension_control_snapshot(self.server.extension_control_runtime.current()):
-                    exit_code = run_guard_command(args, input_text=json.dumps(payload), output_stream=buffer)
-            finally:
-                for key, original in original_env.items():
-                    if original is None:
-                        os.environ.pop(key, None)
-                    else:
-                        os.environ[key] = original
-        raw_response = buffer.getvalue().strip()
-        if not raw_response:
-            if exit_code == 0:
-                self._write_json({})
-                return
-            self._write_json({"error": "empty_hook_response", "exit_code": exit_code}, status=502)
+        if review.payload is not None:
+            self._write_json(review.payload)
             return
-        try:
-            hook_payload = json.loads(raw_response)
-        except json.JSONDecodeError:
-            self._write_json(
-                {"error": "invalid_hook_response", "raw": raw_response, "exit_code": exit_code},
-                status=502,
+        reason_code = review.reason_code or "daemon_hook_process_failed"
+        self._write_json(
+            self._runtime_hook_fail_safe_response(
+                payload,
+                params,
+                default_harness=default_harness,
+                reason="HOL Guard could not complete isolated local hook review safely.",
+                reason_code=reason_code,
             )
-            return
-        self._write_json(hook_payload)
+        )
 
     def _query_has_guard_token(self, query: str) -> bool:
         return any(key == "token" for key, _value in parse_qsl(query, keep_blank_values=True))
@@ -5934,10 +6303,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if path != "/healthz" and not path.startswith("/v1/"):
             return
         self.server.last_activity_monotonic = time.monotonic()  # type: ignore[attr-defined]
-        self.server.store.touch_runtime_state(  # type: ignore[attr-defined]
-            session_id=self.server.runtime_session_id,  # type: ignore[attr-defined]
-            last_heartbeat_at=_now(),
-        )
+        self._daemon_server().runtime_heartbeat.touch(_now())
 
     def _increment_active_stream_clients(self) -> None:
         with self.server.active_stream_clients_lock:  # type: ignore[attr-defined]
@@ -6113,9 +6479,27 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _detailed_healthz_payload(self) -> dict[str, object]:
         uptime = round(time.monotonic() - self.server.start_monotonic, 1)  # type: ignore[attr-defined]
-        store = self.server.store  # type: ignore[attr-defined]
+        daemon_server = self._daemon_server()
+        store = daemon_server.store
         pending_approvals = store.count_approval_requests()
         activity_health = store.get_command_activity_persistence_health()
+        with daemon_server.hook_capacity_lock:
+            hook_capacity = {
+                "active": daemon_server.active_hook_requests,
+                "limit": daemon_server.hook_capacity_limit,
+                "per_harness_active": dict(daemon_server.hook_harness_active),
+                "per_harness_rejected": dict(daemon_server.hook_harness_rejected),
+                "rejected": daemon_server.rejected_hook_requests,
+            }
+        with daemon_server.request_capacity_lock:
+            request_capacity = {
+                "active": daemon_server.active_requests,
+                "connection_limit": daemon_server.connection_capacity_limit,
+                "control_limit": daemon_server.control_request_capacity_limit,
+                "critical_limit": daemon_server.critical_request_capacity_limit,
+                "limit": daemon_server.request_capacity_limit,
+                "rejected": daemon_server.rejected_requests,
+            }
         return {
             "ok": True,
             "receipts": len(store.list_receipts(limit=500)),
@@ -6137,6 +6521,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 ),
                 "schema_version": activity_health.schema_version,
             },
+            "hook_capacity": hook_capacity,
+            "hook_workers": daemon_server.hook_process_runner.stats(),
+            "request_capacity": request_capacity,
         }
 
     @staticmethod
@@ -6526,13 +6913,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         cors_headers = self._cors_headers_for_request(allow_methods="GET, POST, OPTIONS")
         if cors_headers is not None:
             headers = {**cors_headers, **headers}
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        for key, value in self._validated_headers(headers).items():
-            self.send_header(key, value)
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            for key, value in self._validated_headers(headers).items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(body)
+        except _PEER_DISCONNECT_ERRORS:
+            self.close_connection = True
 
     def _write_empty(
         self,
@@ -6540,10 +6930,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         status: int,
         extra_headers: dict[str, str] | None = None,
     ) -> None:
-        self.send_response(status)
-        for key, value in self._validated_headers(extra_headers).items():
-            self.send_header(key, value)
-        self.end_headers()
+        try:
+            self.send_response(status)
+            for key, value in self._validated_headers(extra_headers).items():
+                self.send_header(key, value)
+            self.end_headers()
+        except _PEER_DISCONNECT_ERRORS:
+            self.close_connection = True
 
     @staticmethod
     def _validated_headers(extra_headers: dict[str, str] | None) -> dict[str, str]:
@@ -6743,6 +7136,7 @@ class GuardDaemonServer:
             self._aibom_refresh_thread = None
         self._require_command_activity_maintenance_stopped()
         self._shutdown_started.clear()
+        self._server.hook_process_runner.start()
         self._maintain_command_activity_best_effort()
         self._persist_aibom_inventory_context()
         self._server.last_activity_monotonic = time.monotonic()
@@ -6754,6 +7148,8 @@ class GuardDaemonServer:
             started_at=self._server.runtime_started_at,
             last_heartbeat_at=_now(),
         )
+        self._server.start_unclassified_watchdog()
+        self._server.runtime_heartbeat.start()
         approval_attention = getattr(self._server, "approval_attention", None)
         if approval_attention is not None:
             approval_attention.start()
@@ -6860,11 +7256,14 @@ class GuardDaemonServer:
     def _finish_service(self) -> None:
         try:
             self._shutdown_started.set()
+            self._server.stop_unclassified_watchdog()
             approval_attention = getattr(self._server, "approval_attention", None)
             if approval_attention is not None:
                 approval_attention.stop()
             self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
             self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
+            self._server.runtime_heartbeat.stop(timeout_seconds=1.0)
+            self._server.hook_process_runner.close()
             clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
             self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
         finally:

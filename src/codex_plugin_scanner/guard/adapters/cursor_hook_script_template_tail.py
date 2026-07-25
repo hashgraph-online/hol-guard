@@ -245,11 +245,25 @@ def main() -> int:
         if proof:
             guard_env["HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"] = proof
     payload_json = json.dumps(prepared)
-    daemon_result = _daemon_hook_result(
+    deadline_monotonic = time.monotonic() + GUARD_HOOK_TIMEOUT_SECONDS
+    daemon_result, daemon_failure_kind = _daemon_hook_result(
         payload_json,
+        deadline_monotonic=deadline_monotonic,
         workspace=workspace,
         hook_env_overlay=_daemon_hook_env_overlay(guard_env),
     )
+    if daemon_result is None and daemon_failure_kind not in {None, "overload"}:
+        _run_guard_recovery(
+            daemon_failure_kind,
+            guard_env=guard_env,
+            deadline_monotonic=deadline_monotonic,
+        )
+        daemon_result, _retry_failure_kind = _daemon_hook_result(
+            payload_json,
+            deadline_monotonic=deadline_monotonic,
+            workspace=workspace,
+            hook_env_overlay=_daemon_hook_env_overlay(guard_env),
+        )
     try:
         if daemon_result is not None:
             proc = subprocess.CompletedProcess(
@@ -259,14 +273,11 @@ def main() -> int:
                 stderr=daemon_result[2],
             )
         else:
-            proc = subprocess.run(
-                [*GUARD_CLI, *guard_argv],
-                input=payload_json,
-                capture_output=True,
-                text=True,
-                cwd=GUARD_HOME,
-                env=guard_env,
-                timeout=GUARD_HOOK_TIMEOUT_SECONDS,
+            proc = _run_guard_fallback(
+                guard_argv,
+                payload_json=payload_json,
+                guard_env=guard_env,
+                deadline_monotonic=deadline_monotonic,
             )
     except subprocess.TimeoutExpired:
         print(

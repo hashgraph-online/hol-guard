@@ -13,18 +13,35 @@ import os
 import shlex
 import subprocess
 import sys
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
 
+from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
+
 GUARD_HOME = __GUARD_HOME__
 GUARD_CLI = __GUARD_CLI__
+GUARD_RECOVERY_COMMAND = __GUARD_RECOVERY_COMMAND__
 GUARD_HOOK_ARGV = __GUARD_HOOK_ARGV__
 GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__
 GUARD_HOOK_TIMEOUT_SECONDS = __GUARD_HOOK_TIMEOUT_SECONDS__
 GUARD_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
+_FALLBACK_LOCK = threading.Lock()
+
+
+def _remaining_seconds(deadline_monotonic: float) -> float:
+    return max(deadline_monotonic - time.monotonic(), 0.0)
+
+
+def _request_timeout(deadline_monotonic: float, preferred_seconds: float) -> float | None:
+    remaining = _remaining_seconds(deadline_monotonic)
+    if remaining <= 0:
+        return None
+    return min(preferred_seconds, remaining)
 
 
 def _hook_process_env() -> dict[str, str]:
@@ -82,52 +99,56 @@ def _daemon_hook_env_overlay(guard_env: Mapping[str, str]) -> dict[str, str]:
 def _daemon_hook_result(
     payload_json: str,
     *,
+    deadline_monotonic: float,
     workspace: str | None,
     hook_env_overlay: Mapping[str, str] | None = None,
-) -> tuple[int, str, str] | None:
+) -> tuple[tuple[int, str, str] | None, str | None]:
     state_path = Path(GUARD_HOME) / "daemon-state.json"
     token_path = Path(GUARD_HOME) / "daemon-auth-token"
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
         auth_token = token_path.read_text(encoding="utf-8").strip()
     except (OSError, ValueError):
-        return None
+        return (None, None)
     if not isinstance(state, dict):
-        return None
+        return (None, None)
     port = state.get("port")
     if not isinstance(port, int) or port <= 0 or not auth_token:
-        return None
+        return (None, None)
     # Validate the recorded PID is still alive before trusting the state file.
     # A stale state file after a crash could point at an attacker-controlled listener.
     pid = state.get("pid")
     if not isinstance(pid, int) or pid <= 0:
-        return None
+        return (None, None)
     try:
         os.kill(pid, 0)
     except OSError:
-        return None
+        return (None, "transport-failure")
     # Probe /healthz before sending the hook payload and auth token.
     # Ensures the listener is actually the Guard daemon, not a spoofed process.
     # Validate the response body — not just HTTP 200 — so an attacker listener
     # that returns 200 but doesn't know the daemon's compatibility version is rejected.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
+        timeout = _request_timeout(deadline_monotonic, 2)
+        if timeout is None:
+            return (None, "transport-failure")
         health_req = urllib.request.Request(f"http://127.0.0.1:{port}/healthz", method="GET")
-        with opener.open(health_req, timeout=2) as health_response:
+        with opener.open(health_req, timeout=timeout) as health_response:
             if health_response.status != 200:
-                return None
+                return (None, None)
             health_body = health_response.read().decode("utf-8", errors="replace")
     except (OSError, urllib.error.URLError):
-        return None
+        return (None, "transport-failure")
     try:
         health_json = json.loads(health_body)
     except ValueError:
-        return None
+        return (None, None)
     if not isinstance(health_json, dict) or health_json.get("ok") is not True:
-        return None
+        return (None, None)
     state_compat = state.get("compatibility_version")
     if isinstance(state_compat, str) and health_json.get("compatibility_version") != state_compat:
-        return None
+        return (None, None)
     # Challenge-response: prove the listener knows the auth_token before sending it.
     # A spoofed listener can return public healthz values but cannot forge the HMAC.
     # The proof is bound to the daemon's listening port so a relay attacker cannot
@@ -137,29 +158,34 @@ def _daemon_hook_result(
     nonce = os.urandom(16).hex()
     proof_message = f"{port}:{nonce}"
     try:
+        timeout = _request_timeout(deadline_monotonic, 2)
+        if timeout is None:
+            return (None, "transport-failure")
         verify_req = urllib.request.Request(
             f"http://127.0.0.1:{port}/v1/healthz/verify",
             data=json.dumps({"nonce": nonce}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with opener.open(verify_req, timeout=2) as verify_response:
+        with opener.open(verify_req, timeout=timeout) as verify_response:
             verify_body = verify_response.read().decode("utf-8", errors="replace")
             try:
                 verify_json = json.loads(verify_body)
             except ValueError:
-                return None
+                return (None, "authenticated-control-plane-failure")
             if not isinstance(verify_json, dict) or not isinstance(verify_json.get("proof"), str):
-                return None
+                return (None, "authenticated-control-plane-failure")
             expected_proof = hmac.new(
                 auth_token.encode("utf-8"),
                 proof_message.encode("utf-8"),
                 hashlib.sha256,
             ).hexdigest()
             if not hmac.compare_digest(verify_json["proof"], expected_proof):
-                return None
-    except (urllib.error.HTTPError, OSError, urllib.error.URLError):
-        return None
+                return (None, None)
+    except urllib.error.HTTPError:
+        return (None, "authenticated-control-plane-failure")
+    except (OSError, urllib.error.URLError):
+        return (None, "transport-failure")
     params = [("guard-home", GUARD_HOME)]
     if workspace:
         params.append(("workspace", workspace))
@@ -169,9 +195,9 @@ def _daemon_hook_result(
     try:
         request_payload = json.loads(payload_json)
     except ValueError:
-        return None
+        return (None, "authenticated-control-plane-failure")
     if not isinstance(request_payload, dict):
-        return None
+        return (None, "authenticated-control-plane-failure")
     if hook_env_overlay:
         request_payload["hook_env"] = dict(hook_env_overlay)
     query = urllib.parse.urlencode(params)
@@ -185,27 +211,98 @@ def _daemon_hook_result(
         method="POST",
     )
     try:
-        with opener.open(request, timeout=max(GUARD_HOOK_TIMEOUT_SECONDS - 2, 1)) as response:
+        timeout = _request_timeout(deadline_monotonic, GUARD_HOOK_TIMEOUT_SECONDS)
+        if timeout is None:
+            return (None, "transport-failure")
+        with opener.open(request, timeout=timeout) as response:
             body = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as error:
+        try:
+            detail = error.read().decode("utf-8", errors="replace").lower()
+        except OSError:
+            detail = ""
+        if error.code in {429, 503} or any(
+            marker in detail for marker in ("capacity", "overload", "too_many", "too many", "busy")
+        ):
+            return (None, "overload")
+        return (None, "authenticated-control-plane-failure")
     except (OSError, urllib.error.URLError):
-        return None
+        return (None, "transport-failure")
     # Reject empty or non-dict responses — they default policy_action to "allow".
     # Fall through to the CLI subprocess path instead of trusting a malformed response.
     body_stripped = body.strip()
     if not body_stripped:
-        return None
+        return (None, "authenticated-control-plane-failure")
     try:
         parsed_body = json.loads(body_stripped)
     except ValueError:
-        return None
+        return (None, "authenticated-control-plane-failure")
     if not isinstance(parsed_body, dict):
-        return None
+        return (None, "authenticated-control-plane-failure")
     raw_event_name = _raw_hook_event_name(request_payload)
     if raw_event_name not in {"aftershellexecution", "aftermcpexecution"}:
         policy_action = parsed_body.get("policy_action")
         if not isinstance(policy_action, str) or policy_action not in GUARD_ACTIONS:
-            return None
-    return (0, body_stripped, "")
+            return (None, "authenticated-control-plane-failure")
+    return ((0, body_stripped, ""), None)
+
+
+def _run_guard_fallback(
+    guard_argv: list[str],
+    *,
+    payload_json: str,
+    guard_env: Mapping[str, str],
+    deadline_monotonic: float,
+) -> subprocess.CompletedProcess[str]:
+    if not _FALLBACK_LOCK.acquire(blocking=False):
+        raise RuntimeError("HOL Guard fallback review is already in progress")
+    try:
+        remaining = _remaining_seconds(deadline_monotonic)
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired([*GUARD_CLI, *guard_argv], GUARD_HOOK_TIMEOUT_SECONDS)
+        result = run_isolated_hook_process(
+            [*GUARD_CLI, *guard_argv],
+            cwd=GUARD_HOME,
+            environment=dict(guard_env),
+            input_text=payload_json,
+            timeout_seconds=remaining,
+        )
+        if result.timed_out:
+            raise subprocess.TimeoutExpired([*GUARD_CLI, *guard_argv], remaining)
+        return subprocess.CompletedProcess(
+            [*GUARD_CLI, *guard_argv],
+            result.returncode if result.returncode is not None else 1,
+            stdout=result.stdout,
+            stderr="",
+        )
+    finally:
+        _FALLBACK_LOCK.release()
+
+
+def _run_guard_recovery(
+    failure_kind: str,
+    *,
+    guard_env: Mapping[str, str],
+    deadline_monotonic: float,
+) -> None:
+    if failure_kind == "overload" or not _FALLBACK_LOCK.acquire(blocking=False):
+        return
+    try:
+        remaining = min(_remaining_seconds(deadline_monotonic), 5.0)
+        if remaining <= 0:
+            return
+        _ = run_isolated_hook_process(
+            [*GUARD_RECOVERY_COMMAND, failure_kind],
+            cwd=GUARD_HOME,
+            environment=dict(guard_env),
+            input_text="",
+            timeout_seconds=remaining,
+            allow_windows_breakaway=True,
+        )
+    except (OSError, ValueError):
+        return
+    finally:
+        _FALLBACK_LOCK.release()
 
 
 def _validated_hol_guard_src_path(path_str: str) -> str | None:

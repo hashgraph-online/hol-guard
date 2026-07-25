@@ -294,7 +294,7 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         resume_support=False,
         known_blind_spots=(
             "Tool output post-processing and inline edits applied without a tool call are not visible to Guard. "
-            "Hooks run in parallel and fail open on crash or timeout."
+            "Hooks run in parallel, so separate requests may be reviewed concurrently."
         ),
         smoke_command="hol-guard install kimi --dry-run",
     ),
@@ -311,8 +311,8 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         browser_fallback=True,
         resume_support=False,
         known_blind_spots=(
-            "Grok hooks fail open on crash or timeout. --always-approve and bypassPermissions weaken "
-            "prompt policy but PreToolUse hooks still run when installed."
+            "--always-approve and bypassPermissions weaken prompt policy, but the bounded Guard hook still "
+            "returns a native deny when its local review cannot finish."
         ),
         smoke_command="hol-guard install grok --dry-run",
     ),

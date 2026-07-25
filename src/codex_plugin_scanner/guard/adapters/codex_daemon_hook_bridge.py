@@ -9,7 +9,6 @@ import json
 import os
 import secrets
 import stat
-import subprocess
 import sys
 import time
 import urllib.error
@@ -23,6 +22,8 @@ if __package__:
     from ..codex_hook_bridge_runtime import bounded_hook_input as _hook_input
     from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
     from ..codex_hook_bridge_runtime import trusted_hook_launch as _trusted_hook_launch
+    from ..codex_hook_launch_runtime import isolated_hook_environment as _isolated_hook_environment
+    from ..codex_hook_launch_runtime import run_isolated_hook_process as _run_isolated_hook_process
 else:  # pragma: no cover - exercised by subprocess integration tests
     _package_root = str(Path(__file__).resolve().parents[3])
     if _package_root not in sys.path:
@@ -42,6 +43,12 @@ else:  # pragma: no cover - exercised by subprocess integration tests
     from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
         trusted_hook_launch as _trusted_hook_launch,
     )
+    from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
+        isolated_hook_environment as _isolated_hook_environment,
+    )
+    from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
+        run_isolated_hook_process as _run_isolated_hook_process,
+    )
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _HOOK_TIMEOUT_GRACE_SECONDS = 2
@@ -54,6 +61,15 @@ _FAIL_CLOSED_REASON = "HOL Guard could not authenticate the local daemon. Run `h
 _LAUNCH_INTEGRITY_REASON = (
     "HOL Guard could not authenticate its managed Codex hook launcher. Run `hol-guard install codex`, then retry."
 )
+_MINIMUM_OPERATION_SECONDS = 0.01
+
+
+class _DaemonResponseError(ValueError):
+    def __init__(self, status: int, detail: str, *, authenticated: bool) -> None:
+        super().__init__(f"daemon returned HTTP {status}")
+        self.status = status
+        self.detail = detail
+        self.authenticated = authenticated
 
 
 def _assert_loopback_http_url(url: str) -> None:
@@ -188,13 +204,34 @@ def _daemon_auth_token(state_path: str | Path, state: Mapping[str, object]) -> s
     return token
 
 
-def _http_json_response(response: http.client.HTTPResponse, *, label: str) -> dict[str, object]:
-    body = response.read(_MAX_DAEMON_RESPONSE_BYTES + 1)
+def _http_json_response(
+    response: http.client.HTTPResponse,
+    *,
+    label: str,
+    connection: http.client.HTTPConnection,
+    deadline: float,
+    authenticated: bool,
+) -> dict[str, object]:
+    body = bytearray()
+    while len(body) <= _MAX_DAEMON_RESPONSE_BYTES:
+        remaining = _remaining_seconds(deadline)
+        if remaining < _MINIMUM_OPERATION_SECONDS:
+            raise TimeoutError(f"{label} exceeded the hook deadline")
+        if connection.sock is not None:
+            connection.sock.settimeout(remaining)
+        chunk = response.read1(min(64 * 1024, _MAX_DAEMON_RESPONSE_BYTES + 1 - len(body)))
+        if not chunk:
+            break
+        body.extend(chunk)
     if len(body) > _MAX_DAEMON_RESPONSE_BYTES:
         raise ValueError(f"{label} response is too large")
     if response.status != 200:
-        raise ValueError(f"{label} returned HTTP {response.status}")
-    payload = _json_object(body.decode("utf-8", errors="replace").strip())
+        raise _DaemonResponseError(
+            response.status,
+            body.decode("utf-8", errors="replace").strip(),
+            authenticated=authenticated,
+        )
+    payload = _json_object(bytes(body).decode("utf-8", errors="replace").strip())
     if payload is None:
         raise ValueError(f"{label} returned malformed JSON")
     return payload
@@ -253,6 +290,11 @@ def _request_timeout(event_name: str, hook_timeouts: Mapping[str, int]) -> float
     return float(max(1, timeout - _HOOK_TIMEOUT_GRACE_SECONDS))
 
 
+def _remaining_seconds(deadline: float, *, cap: float | None = None) -> float:
+    remaining = max(0.0, deadline - time.monotonic())
+    return remaining if cap is None else min(remaining, cap)
+
+
 def _fail_closed(event_name: str, reason: str = _FAIL_CLOSED_REASON) -> dict[str, object]:
     if event_name == "PermissionRequest":
         return {
@@ -285,19 +327,26 @@ def _fail_closed(event_name: str, reason: str = _FAIL_CLOSED_REASON) -> dict[str
     }
 
 
-def _run_daemon_start(start_command: Sequence[str], *, timeout_seconds: float) -> bool:
-    try:
-        result = subprocess.run(
-            list(start_command),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=min(timeout_seconds, _DAEMON_START_TIMEOUT_SECONDS),
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
+def _run_daemon_start(
+    start_command: Sequence[str],
+    *,
+    timeout_seconds: float,
+    failure_kind: str = "transport-failure",
+) -> bool:
+    timeout = min(timeout_seconds, _DAEMON_START_TIMEOUT_SECONDS)
+    if timeout < _MINIMUM_OPERATION_SECONDS:
         return False
-    return result.returncode == 0
+    environment = _isolated_hook_environment()
+    environment["HOL_GUARD_HOOK_FAILURE_KIND"] = failure_kind
+    result = _run_isolated_hook_process(
+        start_command,
+        input_text="",
+        cwd=Path.home(),
+        environment=environment,
+        timeout_seconds=timeout,
+        allow_windows_breakaway=True,
+    )
+    return result.returncode == 0 and not result.timed_out and not result.output_limit_exceeded
 
 
 def _run_local_fallback(
@@ -306,19 +355,16 @@ def _run_local_fallback(
     data: str,
     timeout_seconds: float,
 ) -> dict[str, object] | None:
-    try:
-        result = subprocess.run(
-            list(fallback_command),
-            input=data,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=timeout_seconds,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
+    if timeout_seconds < _MINIMUM_OPERATION_SECONDS:
         return None
-    if result.returncode != 0:
+    result = _run_isolated_hook_process(
+        fallback_command,
+        input_text=data,
+        cwd=Path.home(),
+        environment=_isolated_hook_environment(),
+        timeout_seconds=timeout_seconds,
+    )
+    if result.returncode != 0 or result.timed_out or result.output_limit_exceeded:
         return None
     if not result.stdout.strip():
         return {}
@@ -332,6 +378,7 @@ def _daemon_response(
     data: str,
     timeout_seconds: float,
 ) -> dict[str, object] | None:
+    deadline = time.monotonic() + max(0.0, timeout_seconds)
     state, discovery_key = _authenticated_state(state_path)
     host = str(state["host"])
     port_value = state["port"]
@@ -360,7 +407,13 @@ def _daemon_response(
             body=challenge_body.encode("utf-8"),
             headers={"Content-Type": "application/json", "Connection": "keep-alive"},
         )
-        challenge = _http_json_response(connection.getresponse(), label="daemon identity challenge")
+        challenge = _http_json_response(
+            connection.getresponse(),
+            label="daemon identity challenge",
+            connection=connection,
+            deadline=deadline,
+            authenticated=False,
+        )
         proof = _verify_challenge_response(
             challenge,
             state=state,
@@ -372,6 +425,12 @@ def _daemon_response(
         if current_state != state or not secrets.compare_digest(current_key, discovery_key):
             raise ValueError("daemon state changed during identity verification")
         auth_token = _daemon_auth_token(state_path, state)
+        remaining = _remaining_seconds(deadline)
+        if remaining < _MINIMUM_OPERATION_SECONDS:
+            raise TimeoutError("daemon identity challenge exhausted the hook deadline")
+        connection.timeout = remaining
+        if connection.sock is not None:
+            connection.sock.settimeout(remaining)
         hook_path = f"/v1/hooks/codex?{query}"
         connection.request(
             "POST",
@@ -385,7 +444,13 @@ def _daemon_response(
                 "X-Guard-Daemon-Proof": proof,
             },
         )
-        return _http_json_response(connection.getresponse(), label="daemon hook")
+        return _http_json_response(
+            connection.getresponse(),
+            label="daemon hook",
+            connection=connection,
+            deadline=deadline,
+            authenticated=True,
+        )
     finally:
         connection.close()
 
@@ -408,17 +473,22 @@ def main(
         return 0
     event_name = _event_name(data)
     timeout_seconds = _request_timeout(event_name, hook_timeouts)
+    deadline = time.monotonic() + timeout_seconds
     response: dict[str, object] | None = None
     trusted_launch: _TrustedHookLaunch | None = None
     launch_integrity_failed = False
+    daemon_overloaded = False
+    failure_kind = "transport-failure"
     try:
         response = _daemon_response(
             state_path=state_path,
             query=query,
             data=data,
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=_remaining_seconds(deadline),
         )
-    except (OSError, ValueError, http.client.HTTPException, urllib.error.URLError):
+    except (OSError, ValueError, http.client.HTTPException, urllib.error.URLError) as error:
+        daemon_overloaded = _authenticated_daemon_overload(error)
+        failure_kind = _daemon_failure_kind(error)
         if manifest_path is not None or config_json is not None:
             try:
                 if manifest_path is None or config_json is None:
@@ -433,12 +503,22 @@ def main(
             except (ImportError, OSError, RuntimeError, ValueError):
                 launch_integrity_failed = True
         start_succeeded = (
-            trusted_launch.run_start(
-                start_command,
-                timeout_seconds=min(timeout_seconds, _DAEMON_START_TIMEOUT_SECONDS),
+            False
+            if daemon_overloaded
+            else (
+                trusted_launch.run_start(
+                    start_command,
+                    timeout_seconds=_remaining_seconds(deadline, cap=_DAEMON_START_TIMEOUT_SECONDS),
+                    failure_kind=failure_kind,
+                )
+                if trusted_launch is not None
+                else not launch_integrity_failed
+                and _run_daemon_start(
+                    start_command,
+                    timeout_seconds=_remaining_seconds(deadline, cap=_DAEMON_START_TIMEOUT_SECONDS),
+                    failure_kind=failure_kind,
+                )
             )
-            if trusted_launch is not None
-            else not launch_integrity_failed and _run_daemon_start(start_command, timeout_seconds=timeout_seconds)
         )
         if start_succeeded:
             try:
@@ -446,7 +526,7 @@ def main(
                     state_path=state_path,
                     query=query,
                     data=data,
-                    timeout_seconds=timeout_seconds,
+                    timeout_seconds=_remaining_seconds(deadline),
                 )
             except (OSError, ValueError, http.client.HTTPException, urllib.error.URLError):
                 response = None
@@ -455,7 +535,7 @@ def main(
             fallback_stdout = trusted_launch.run_fallback(
                 fallback_command,
                 data=data,
-                timeout_seconds=timeout_seconds,
+                timeout_seconds=_remaining_seconds(deadline),
             )
             if fallback_stdout is not None:
                 response = _json_object(fallback_stdout.strip()) if fallback_stdout.strip() else {}
@@ -463,13 +543,34 @@ def main(
             response = _run_local_fallback(
                 fallback_command,
                 data=data,
-                timeout_seconds=timeout_seconds,
+                timeout_seconds=_remaining_seconds(deadline),
             )
     if response is None:
         failure_reason = _LAUNCH_INTEGRITY_REASON if launch_integrity_failed else _FAIL_CLOSED_REASON
         response = _fail_closed(event_name, failure_reason)
     sys.stdout.write(json.dumps(response, separators=(",", ":")))
     return 0
+
+
+def _authenticated_daemon_overload(error: BaseException) -> bool:
+    if not isinstance(error, _DaemonResponseError) or not error.authenticated:
+        return False
+    detail = error.detail.lower()
+    return error.status == 429 or any(
+        marker in detail for marker in ("capacity", "overload", "too_many", "too many", "busy")
+    )
+
+
+def _daemon_failure_kind(error: BaseException) -> str:
+    if _authenticated_daemon_overload(error):
+        return "overload"
+    if isinstance(error, _DaemonResponseError):
+        if error.authenticated and error.status in {401, 403}:
+            return "authenticated-control-plane-failure"
+        return "transport-failure"
+    if isinstance(error, ValueError):
+        return "authenticated-control-plane-failure"
+    return "transport-failure"
 
 
 def _bridge_config_from_argv(argv: Sequence[str]) -> BridgeConfig:
@@ -488,4 +589,10 @@ if __name__ == "__main__":
             hook_timeouts=_config["hook_timeouts"],
             config_json=_config["config_json"],
         )
+    )
+    from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
+        isolated_hook_environment as _isolated_hook_environment,
+    )
+    from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
+        run_isolated_hook_process as _run_isolated_hook_process,
     )

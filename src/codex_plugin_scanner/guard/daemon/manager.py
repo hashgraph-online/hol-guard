@@ -24,7 +24,7 @@ import urllib.request
 from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import BinaryIO, TypedDict
+from typing import BinaryIO, Literal, TypedDict
 
 from ...version import __version__
 from ..windows_paths import (
@@ -51,7 +51,7 @@ GUARD_DAEMON_COMPATIBILITY_VERSION = 2
 GUARD_DAEMON_START_TIMEOUT_SECONDS = 5.0
 GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS = 30.0
 GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
-GUARD_DAEMON_HOOK_RECOVERY_COOLDOWN_SECONDS = 5.0
+GUARD_DAEMON_HOOK_RECOVERY_COOLDOWN_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_REAP_INTERVAL_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_MAX_STATES = 512
@@ -60,6 +60,7 @@ _GUARD_DAEMON_PRIVATE_DIR_MODE = 0o700
 _APPROVAL_CENTER_LOCATOR_FILE = "approval-center-locator.json"
 _GUARD_DAEMON_PENDING_LAUNCH_FILE = "daemon-launch-pending.json"
 _GUARD_DAEMON_OWNER_LOCK_FILE = "daemon-owner.lock"
+_GUARD_DAEMON_RECOVERY_LOCK_FILE = "daemon-recovery.lock"
 _GUARD_DAEMON_STATE_MAX_BYTES = 64 * 1024
 _GUARD_DAEMON_PENDING_LAUNCH_MAX_BYTES = 4096
 _GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS = 5.0
@@ -113,10 +114,18 @@ _GUARD_DAEMON_ENV_KEYS = frozenset(
 
 _START_LOCKS: dict[str, threading.Lock] = {}
 _START_LOCKS_GUARD = threading.Lock()
+_RECOVERY_LOCKS: dict[str, threading.Lock] = {}
+_RECOVERY_LOCKS_GUARD = threading.Lock()
 _STATE_WRITE_LOCKS: dict[str, threading.Lock] = {}
 _STATE_WRITE_LOCKS_GUARD = threading.Lock()
 _LAST_EPHEMERAL_REAP_AT = 0.0
 _runtime_fingerprint_cache: str | None = None
+
+GuardDaemonHookFailureKind = Literal[
+    "authenticated-control-plane-failure",
+    "overload",
+    "transport-failure",
+]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -150,7 +159,11 @@ def _trusted_daemon_home(home_dir: Path | None) -> Path:
     return resolved
 
 
-def _daemon_launcher_env(*, home_dir: Path | None = None) -> dict[str, str]:
+def _daemon_launcher_env(
+    *,
+    home_dir: Path | None = None,
+    guard_home: Path | None = None,
+) -> dict[str, str]:
     """Build a minimal detached-daemon environment without Python startup hooks."""
 
     env = {key: value for key, value in os.environ.items() if key.upper() in _GUARD_DAEMON_ENV_KEYS}
@@ -164,6 +177,8 @@ def _daemon_launcher_env(*, home_dir: Path | None = None) -> dict[str, str]:
     )
     if os.name == "nt":
         env["USERPROFILE"] = str(trusted_home)
+    if guard_home is not None and not _guard_home_is_ephemeral(guard_home):
+        env["GUARD_DAEMON_IDLE_TIMEOUT_SECONDS"] = "0"
     return env
 
 
@@ -360,7 +375,7 @@ def ensure_guard_daemon(
                     stdin=subprocess.PIPE,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    env=_daemon_launcher_env(home_dir=home_dir),
+                    env=_daemon_launcher_env(home_dir=home_dir, guard_home=guard_home),
                     creationflags=_windows_daemon_creation_flags(
                         allow_job_breakaway=allow_windows_job_breakaway,
                     ),
@@ -371,7 +386,7 @@ def ensure_guard_daemon(
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    env=_daemon_launcher_env(home_dir=home_dir),
+                    env=_daemon_launcher_env(home_dir=home_dir, guard_home=guard_home),
                     start_new_session=True,
                 )
             pending_creation_time: int | None = None
@@ -441,24 +456,69 @@ def recover_guard_daemon_after_hook_failure(
     guard_home: Path,
     *,
     home_dir: Path | None = None,
+    failure_kind: GuardDaemonHookFailureKind = "authenticated-control-plane-failure",
 ) -> str:
-    """Restart an older daemon after its authenticated hook endpoint fails.
+    """Recover daemon service after a classified hook endpoint failure.
 
-    The normal health endpoint can remain responsive while hook workers or the
-    identity challenge are wedged. The managed bridge invokes this only after
-    an authenticated hook request fails. A short generation cooldown prevents
-    concurrent failed hooks from repeatedly retiring the replacement daemon.
+    Recovery is single-flight across threads and processes for one Guard home.
+    Capacity rejection preserves an authenticated current process even when
+    its health endpoint is saturated. Transport and authenticated control-plane
+    failures replace a process only when health cannot prove it responsive,
+    while the cooldown preserves a replacement long enough for concurrent and
+    immediately repeated callers to converge.
     """
 
-    with _guard_daemon_start_lock(guard_home):
-        state = load_authenticated_daemon_state(guard_home)
-        current_url = load_guard_daemon_url(guard_home)
-        if current_url is not None and _daemon_generation_is_recent(state):
-            return current_url
-        retire_all_guard_daemons_for_home(guard_home)
-        if not guard_daemon_retirement_is_complete(guard_home):
-            raise RuntimeError("Unresponsive Guard daemon could not be retired safely.")
-    return ensure_guard_daemon(guard_home, home_dir=home_dir)
+    if failure_kind not in {
+        "authenticated-control-plane-failure",
+        "overload",
+        "transport-failure",
+    }:
+        raise ValueError(f"Unsupported Guard daemon hook failure kind: {failure_kind}")
+
+    with _guard_daemon_recovery_lock(guard_home):
+        with _guard_daemon_start_lock(guard_home):
+            state = load_authenticated_daemon_state(guard_home)
+            current_url = load_guard_daemon_url(guard_home)
+            live_process_url = _authenticated_live_current_daemon_url(guard_home, state)
+            if current_url is not None:
+                if failure_kind != "authenticated-control-plane-failure" or _daemon_generation_is_recent(state):
+                    return current_url
+            elif live_process_url is not None and failure_kind == "overload":
+                return live_process_url
+            live_generation_url = current_url or live_process_url
+            if live_generation_url is not None:
+                retire_all_guard_daemons_for_home(guard_home)
+                if not guard_daemon_retirement_is_complete(guard_home):
+                    raise RuntimeError("Unresponsive Guard daemon could not be retired safely.")
+        if os.name == "nt":
+            return ensure_guard_daemon(
+                guard_home,
+                home_dir=home_dir,
+                allow_windows_job_breakaway=True,
+            )
+        return ensure_guard_daemon(guard_home, home_dir=home_dir)
+
+
+def _authenticated_live_current_daemon_url(
+    guard_home: Path,
+    state: dict[str, object] | None,
+) -> str | None:
+    """Locate an authenticated current process for overload preservation."""
+
+    if not isinstance(state, dict) or not _guard_daemon_state_matches_current_runtime(state):
+        return None
+    pid = state.get("pid")
+    port = state.get("port")
+    if (
+        not isinstance(pid, int)
+        or pid <= 0
+        or not isinstance(port, int)
+        or not 1 <= port <= 65_535
+        or not _guard_daemon_pid_is_running(pid)
+        or not _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
+    ):
+        return None
+    return f"http://127.0.0.1:{port}"
 
 
 def _daemon_generation_is_recent(state: dict[str, object] | None) -> bool:
@@ -1959,7 +2019,9 @@ def _guard_daemon_process_inventory_for_guard_home(guard_home: Path) -> list[tup
         parts = _split_process_command(command_line)
         if parts is None:
             lowered = command_line.lower()
-            if "codex_plugin_scanner" in lowered or "guard" in lowered:
+            if ("codex_plugin_scanner" in lowered or "guard" in lowered) and _malformed_command_may_launch_guard(
+                command_line
+            ):
                 return None
             continue
         if not _guard_daemon_command_parts_match(parts):
@@ -1975,6 +2037,20 @@ def _guard_daemon_process_inventory_for_guard_home(guard_home: Path) -> list[tup
         if matches_home:
             processes.append((pid, port))
     return sorted(processes, key=lambda item: item[1])
+
+
+def _malformed_command_may_launch_guard(command_line: str) -> bool:
+    first_token = command_line.lstrip().split(maxsplit=1)[0].strip("\"'")
+    launcher = ntpath.basename(first_token).lower()
+    return launcher.startswith("python") or launcher in {
+        "env",
+        "hol-guard",
+        "hol-guard.exe",
+        "plugin-guard",
+        "plugin-guard.exe",
+        "uv",
+        "uv.exe",
+    }
 
 
 def _running_guard_daemon_processes_for_guard_home(guard_home: Path) -> list[tuple[int, int]]:
@@ -2231,6 +2307,24 @@ def _guard_daemon_start_lock(guard_home: Path):
         thread_lock = _START_LOCKS.setdefault(lock_key, threading.Lock())
     with thread_lock:
         lock_path = guard_home / "daemon-start.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+b") as handle:
+            _lock_daemon_start_file(handle)
+            try:
+                yield
+            finally:
+                _unlock_daemon_start_file(handle)
+
+
+@contextmanager
+def _guard_daemon_recovery_lock(guard_home: Path):
+    """Serialize a complete daemon recovery transaction for one Guard home."""
+
+    lock_key = str(guard_home.resolve())
+    with _RECOVERY_LOCKS_GUARD:
+        thread_lock = _RECOVERY_LOCKS.setdefault(lock_key, threading.Lock())
+    with thread_lock:
+        lock_path = guard_home / _GUARD_DAEMON_RECOVERY_LOCK_FILE
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         with lock_path.open("a+b") as handle:
             _lock_daemon_start_file(handle)

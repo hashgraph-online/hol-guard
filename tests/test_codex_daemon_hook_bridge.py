@@ -579,9 +579,15 @@ def test_main_starts_daemon_once_then_retries_hook(
             raise urllib.error.URLError("daemon cold")
         return {}
 
-    def start_daemon(command: tuple[str, ...], *, timeout_seconds: float) -> bool:
+    def start_daemon(
+        command: tuple[str, ...],
+        *,
+        timeout_seconds: float,
+        failure_kind: str,
+    ) -> bool:
         starts.append(tuple(command))
-        assert timeout_seconds == 8
+        assert 7.9 < timeout_seconds <= 8
+        assert failure_kind == "transport-failure"
         return True
 
     config = _bridge_config(guard_home, 1)
@@ -595,6 +601,69 @@ def test_main_starts_daemon_once_then_retries_hook(
     assert len(responses) == 2
     assert starts == [tuple(config["start_command"])]
     assert json.loads(capsys.readouterr().out) == {}
+
+
+def test_authenticated_overload_uses_fallback_without_restarting(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    starts: list[tuple[str, ...]] = []
+
+    def overloaded_daemon(**kwargs: object) -> dict[str, object]:
+        del kwargs
+        raise bridge._DaemonResponseError(429, '{"error":"hook_capacity_exhausted"}', authenticated=True)
+
+    def start_daemon(
+        command: tuple[str, ...],
+        *,
+        timeout_seconds: float,
+        failure_kind: str,
+    ) -> bool:
+        del timeout_seconds, failure_kind
+        starts.append(command)
+        return True
+
+    config = _bridge_config(guard_home, 1)
+    monkeypatch.setattr(bridge, "_daemon_response", overloaded_daemon)
+    monkeypatch.setattr(bridge, "_run_daemon_start", start_daemon)
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
+
+    assert bridge.main(**config) == 0
+    assert starts == []
+    assert json.loads(capsys.readouterr().out) == {}
+
+
+def test_daemon_failure_kind_separates_overload_transport_and_control_plane() -> None:
+    assert (
+        bridge._daemon_failure_kind(
+            bridge._DaemonResponseError(429, '{"error":"hook_capacity_exhausted"}', authenticated=True)
+        )
+        == "overload"
+    )
+    assert bridge._daemon_failure_kind(TimeoutError("deadline")) == "transport-failure"
+    assert bridge._daemon_failure_kind(ValueError("state authentication failed")) == (
+        "authenticated-control-plane-failure"
+    )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-group assertion")
+def test_untrusted_fallback_timeout_kills_descendants(tmp_path: Path) -> None:
+    marker = tmp_path / "escaped-child.marker"
+    child = f"import time;from pathlib import Path;time.sleep(.3);Path({str(marker)!r}).write_text('escaped')"
+    parent = f"import subprocess,sys,time;subprocess.Popen([sys.executable,'-c',{child!r}]);time.sleep(10)"
+
+    response = bridge._run_local_fallback(
+        (sys.executable, "-c", parent),
+        data="{}",
+        timeout_seconds=0.05,
+    )
+    time.sleep(0.4)
+
+    assert response is None
+    assert not marker.exists()
 
 
 def test_bridge_script_cold_start_stays_below_hook_budget(tmp_path: Path) -> None:

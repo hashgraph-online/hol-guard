@@ -392,7 +392,11 @@ def test_install_exports_guard_managed_openclaw_overlay(tmp_path: Path) -> None:
     assert manifest["install_state"] == "installed"
     assert overlay_path.exists() is True
     assert pretool_path.exists() is True
-    assert pretool["command"][pretool["command"].index("--home") + 1] == str(context.home_dir)
+    bridge_config = json.loads(pretool["command"][-1])
+    assert bridge_config["cli_args"][bridge_config["cli_args"].index("--home") + 1] == str(context.home_dir)
+    assert bridge_config["timeout_seconds"] == 3
+    assert pretool["timeout_seconds"] == 5
+    assert pretool["fail_open"] is False
     assert env["OPENCLAW_GUARD_OVERLAY_PATH"] == str(overlay_path)
     assert env["OPENCLAW_GUARD_PRETOOL_PATH"] == str(pretool_path)
     assert env["OPENCLAW_GUARD_CHANNEL_POSTURE"] == "enabled"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import sys
 import threading
 import time
 import urllib.request
@@ -252,6 +253,24 @@ def test_daemon_response_body_is_size_bounded() -> None:
         bridge._read_bounded_response(OversizedResponse())
 
 
+def test_oversized_hook_input_fails_safe_without_daemon_contact(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr("sys.stdin", io.StringIO("x" * (bridge._MAX_HOOK_INPUT_BYTES + 1)))
+
+    result = bridge.main(
+        state_path="/missing/state.json",
+        fallback_daemon_url="http://127.0.0.1:5474",
+        fallback_command=(sys.executable, "-c", "raise SystemExit(99)"),
+        query="",
+    )
+
+    assert result == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
 def test_bridge_timeouts_stay_under_harness_budget() -> None:
     assert bridge._HARNESS_TIMEOUT_BUDGET_SECONDS == 10
     assert (
@@ -267,8 +286,14 @@ def test_main_recovers_missing_daemon_and_retries_hook(
     attempts = 0
     recovery_commands: list[tuple[str, ...]] = []
 
-    def fake_post(endpoint: str, data: str, *, state_path: str | Path) -> str:
-        del endpoint, data, state_path
+    def fake_post(
+        endpoint: str,
+        data: str,
+        *,
+        state_path: str | Path,
+        deadline: float | None = None,
+    ) -> str:
+        del endpoint, data, state_path, deadline
         nonlocal attempts
         attempts += 1
         if attempts == 1:
@@ -282,7 +307,14 @@ def test_main_recovers_missing_daemon_and_retries_hook(
             }
         )
 
-    def fake_recover(command: tuple[str, ...]) -> bool:
+    def fake_recover(
+        command: tuple[str, ...],
+        *,
+        deadline: float | None = None,
+        failure_kind: str,
+    ) -> bool:
+        del deadline
+        assert failure_kind == "transport-failure"
         recovery_commands.append(command)
         return True
 
@@ -317,6 +349,32 @@ def test_recovery_only_restarts_for_transport_auth_and_server_failures() -> None
     bounded_http_error = bridge._DaemonHTTPError(503, "worker-captured detail")
     assert bridge._daemon_failure_is_recoverable(bounded_http_error)
     assert bridge._daemon_failure_reason(bounded_http_error).endswith("worker-captured detail")
+    assert not bridge._daemon_failure_is_recoverable(
+        bridge._DaemonHTTPError(429, '{"error":"hook_capacity_exhausted"}')
+    )
+    assert not bridge._daemon_failure_is_recoverable(bridge._DaemonHTTPError(503, '{"error":"daemon_overloaded"}'))
+    assert bridge._daemon_failure_kind(bridge._DaemonHTTPError(429, "busy")) == "overload"
+    assert bridge._daemon_failure_kind(TimeoutError("deadline")) == "transport-failure"
+    assert bridge._daemon_failure_kind(ValueError("bad state")) == "authenticated-control-plane-failure"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-group assertion")
+def test_fallback_timeout_kills_descendants(tmp_path: Path) -> None:
+    marker = tmp_path / "escaped-child.marker"
+    child = f"import time;from pathlib import Path;time.sleep(.3);Path({str(marker)!r}).write_text('escaped')"
+    parent = f"import subprocess,sys,time;subprocess.Popen([sys.executable,'-c',{child!r}]);time.sleep(10)"
+    data = json.dumps({"hook_event_name": "PreToolUse"})
+
+    response = bridge._run_local_fallback(
+        "daemon unavailable",
+        data,
+        (sys.executable, "-c", parent),
+        deadline=time.monotonic() + 0.05,
+    )
+    time.sleep(0.4)
+
+    assert json.loads(response)["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert not marker.exists()
 
 
 def test_recovery_command_preserves_custom_home_and_guard_home(tmp_path: Path) -> None:

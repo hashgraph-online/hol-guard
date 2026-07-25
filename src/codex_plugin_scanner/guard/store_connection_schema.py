@@ -141,12 +141,13 @@ class StoreConnectionSchemaMixin:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.path, timeout=SQLITE_CONNECT_TIMEOUT_SECONDS)
+        connect_timeout_seconds = sqlite_connect_timeout_seconds()
+        connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
         connection.row_factory = sqlite3.Row
         start = time.monotonic()
         notification: dict[str, object] | None = None
         try:
-            connection.execute(f"pragma busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+            connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
             yield connection
             connection.commit()
             notification = self._take_policy_integrity_state_notification(connection)

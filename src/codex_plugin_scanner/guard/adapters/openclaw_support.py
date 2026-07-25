@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..models import GuardArtifact, HarnessDetection
 from .base import HarnessContext
+from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .openclaw_mcp_inventory import (
     OpenClawMcpInventory,
     OpenClawMcpServer,
@@ -20,6 +21,8 @@ _MAX_FILE_READ = 64 * 1024
 _SKILL_SUBDIRS = ("references", "templates", "scripts", "assets")
 _SCANNABLE_EXTENSIONS = {".md", ".txt", ".py", ".sh", ".bash", ".js", ".ts", ".yaml", ".yml", ".json", ".toml"}
 _SCANNABLE_NAMES = {".env", "Dockerfile", "Makefile", "Procfile"}
+_GUARD_PRETOOL_INTERNAL_TIMEOUT_SECONDS = 3
+_GUARD_PRETOOL_HOST_TIMEOUT_SECONDS = 5
 
 
 def config_path(context: HarnessContext) -> Path:
@@ -67,10 +70,7 @@ def overlay_payload(detection: HarnessDetection) -> dict[str, object]:
 
 
 def pretool_payload(*, context: HarnessContext) -> dict[str, object]:
-    command = [
-        str(Path(sys.executable)),
-        "-m",
-        "codex_plugin_scanner.cli",
+    cli_args = [
         "hook",
         "--harness",
         "openclaw",
@@ -81,8 +81,21 @@ def pretool_payload(*, context: HarnessContext) -> dict[str, object]:
         "--json",
     ]
     if context.workspace_dir is not None:
-        command.extend(["--workspace", str(context.workspace_dir)])
-    return {"command": command, "harness": "openclaw"}
+        cli_args.extend(["--workspace", str(context.workspace_dir)])
+    command = bounded_cli_hook_command(
+        python_executable=sys.executable,
+        package_root=Path(__file__).resolve().parents[3],
+        guard_home=context.guard_home,
+        cli_args=cli_args,
+        harness="openclaw",
+        timeout_seconds=_GUARD_PRETOOL_INTERNAL_TIMEOUT_SECONDS,
+    )
+    return {
+        "command": list(command),
+        "harness": "openclaw",
+        "timeout_seconds": _GUARD_PRETOOL_HOST_TIMEOUT_SECONDS,
+        "fail_open": False,
+    }
 
 
 def install_state(

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import sqlite3
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -227,6 +230,325 @@ def test_cursor_hook_script_source_includes_daemon_fast_path(tmp_path: Path) -> 
     assert "/v1/hooks/cursor?" in source
     assert '"hook_env"' in source
     assert "subprocess.CompletedProcess(" in source
+
+
+def test_cursor_hook_script_uses_one_deadline_and_isolated_process_tree(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
+    source = cursor_hook_script_source(context)
+
+    assert "deadline_monotonic = time.monotonic() + GUARD_HOOK_TIMEOUT_SECONDS" in source
+    assert "timeout = _request_timeout(deadline_monotonic" in source
+    assert "run_isolated_hook_process(" in source
+    assert "allow_windows_breakaway=True" in source
+    assert "_FALLBACK_LOCK.acquire(blocking=False)" in source
+    assert 'daemon_failure_kind not in {None, "overload"}' in source
+    assert "[*GUARD_RECOVERY_COMMAND, failure_kind]" in source
+
+
+def test_cursor_hook_recovers_dead_daemon_once_then_retries(
+    tmp_path: Path,
+) -> None:
+    import http.server
+    import threading
+
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace_dir = tmp_path / "workspace"
+    recovery_marker = tmp_path / "recovery-kind"
+    fallback_marker = tmp_path / "fallback-ran"
+    token = "cursor-recovery-token"
+    guard_home.mkdir()
+    workspace_dir.mkdir()
+
+    class _RecoveredDaemonHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": True, "compatibility_version": "v1"}).encode())
+
+        def do_POST(self) -> None:
+            if self.path == "/v1/healthz/verify":
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                proof = hmac.new(
+                    token.encode(),
+                    f"{self.server.server_address[1]}:{body['nonce']}".encode(),
+                    hashlib.sha256,
+                ).hexdigest()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"proof": proof}).encode())
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"policy_action": "allow"}).encode())
+
+        def log_message(self, *_args: object) -> None:
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), _RecoveredDaemonHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+    recovery = tmp_path / "recover.py"
+    recovery.write_text(
+        "import json,sys\n"
+        "from pathlib import Path\n"
+        f"Path({str(recovery_marker)!r}).write_text(sys.argv[1], encoding='utf-8')\n"
+        f"Path({str(guard_home / 'daemon-state.json')!r}).write_text("
+        f"json.dumps({{'port': {port}, 'pid': {os.getpid()}, 'compatibility_version': 'v1'}}), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fallback = tmp_path / "fallback.py"
+    fallback.write_text(
+        f"from pathlib import Path;Path({str(fallback_marker)!r}).write_text('ran');"
+        'print(\'{"policy_action":"block"}\')\n',
+        encoding="utf-8",
+    )
+    (guard_home / "daemon-state.json").write_text(
+        json.dumps({"port": 59999, "pid": 999999, "compatibility_version": "v1"}),
+        encoding="utf-8",
+    )
+    (guard_home / "daemon-auth-token").write_text(token, encoding="utf-8")
+    context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
+    script_path = tmp_path / "cursor-hook.py"
+    script_path.write_text(
+        cursor_hook_script_source(
+            context,
+            guard_cli=[sys.executable, str(fallback)],
+            recovery_command=[sys.executable, str(recovery)],
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script_path)],
+            input=json.dumps(
+                {
+                    "hook_event_name": "beforeShellExecution",
+                    "tool_name": "Bash",
+                    "command": "echo hi",
+                    "cwd": str(workspace_dir),
+                }
+            ),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    finally:
+        server.shutdown()
+
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout) == {"permission": "allow"}
+    assert recovery_marker.read_text(encoding="utf-8") == "transport-failure"
+    assert not fallback_marker.exists()
+
+
+def test_cursor_hook_authenticated_overload_skips_recovery(
+    tmp_path: Path,
+) -> None:
+    import http.server
+    import threading
+
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace_dir = tmp_path / "workspace"
+    recovery_marker = tmp_path / "recovery-ran"
+    token = "cursor-overload-token"
+    guard_home.mkdir()
+    workspace_dir.mkdir()
+
+    class _OverloadedDaemonHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": True, "compatibility_version": "v1"}).encode())
+
+        def do_POST(self) -> None:
+            if self.path == "/v1/healthz/verify":
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                proof = hmac.new(
+                    token.encode(),
+                    f"{self.server.server_address[1]}:{body['nonce']}".encode(),
+                    hashlib.sha256,
+                ).hexdigest()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"proof": proof}).encode())
+                return
+            self.send_response(503)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "daemon_hook_capacity_exceeded"}).encode())
+
+        def log_message(self, *_args: object) -> None:
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), _OverloadedDaemonHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+    recovery = tmp_path / "recover.py"
+    recovery.write_text(
+        f"from pathlib import Path;Path({str(recovery_marker)!r}).write_text('ran')\n",
+        encoding="utf-8",
+    )
+    fallback = tmp_path / "fallback.py"
+    fallback.write_text('print(\'{"policy_action":"block"}\')\n', encoding="utf-8")
+    (guard_home / "daemon-state.json").write_text(
+        json.dumps({"port": port, "pid": os.getpid(), "compatibility_version": "v1"}),
+        encoding="utf-8",
+    )
+    (guard_home / "daemon-auth-token").write_text(token, encoding="utf-8")
+    context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
+    script_path = tmp_path / "cursor-hook.py"
+    script_path.write_text(
+        cursor_hook_script_source(
+            context,
+            guard_cli=[sys.executable, str(fallback)],
+            recovery_command=[sys.executable, str(recovery)],
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script_path)],
+            input=json.dumps(
+                {
+                    "hook_event_name": "beforeShellExecution",
+                    "tool_name": "Bash",
+                    "command": "echo hi",
+                    "cwd": str(workspace_dir),
+                }
+            ),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    finally:
+        server.shutdown()
+
+    assert proc.returncode == 2
+    assert json.loads(proc.stdout)["permission"] == "deny"
+    assert not recovery_marker.exists()
+
+
+def test_cursor_hook_recovery_honors_total_deadline(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace_dir = tmp_path / "workspace"
+    guard_home.mkdir()
+    workspace_dir.mkdir()
+    recovery = tmp_path / "slow-recovery.py"
+    recovery.write_text("import time;time.sleep(10)\n", encoding="utf-8")
+    fallback = tmp_path / "fallback.py"
+    fallback.write_text('print(\'{"policy_action":"allow"}\')\n', encoding="utf-8")
+    (guard_home / "daemon-state.json").write_text(
+        json.dumps({"port": 59999, "pid": 999999, "compatibility_version": "v1"}),
+        encoding="utf-8",
+    )
+    (guard_home / "daemon-auth-token").write_text("stale-token", encoding="utf-8")
+    context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
+    source = cursor_hook_script_source(
+        context,
+        guard_cli=[sys.executable, str(fallback)],
+        recovery_command=[sys.executable, str(recovery)],
+    ).replace(
+        f"GUARD_HOOK_TIMEOUT_SECONDS = {_MANAGED_HOOK_TIMEOUT_SECONDS - 3}",
+        "GUARD_HOOK_TIMEOUT_SECONDS = 0.2",
+        1,
+    )
+    script_path = tmp_path / "cursor-hook.py"
+    script_path.write_text(source, encoding="utf-8")
+    started = time.monotonic()
+
+    proc = subprocess.run(
+        [sys.executable, str(script_path)],
+        input=json.dumps(
+            {
+                "hook_event_name": "beforeShellExecution",
+                "tool_name": "Bash",
+                "command": "echo hi",
+                "cwd": str(workspace_dir),
+            }
+        ),
+        capture_output=True,
+        text=True,
+        timeout=3,
+    )
+
+    assert time.monotonic() - started < 1
+    assert proc.returncode == 2
+    assert json.loads(proc.stdout)["permission"] == "deny"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process-group descendant assertion requires POSIX")
+def test_cursor_hook_timeout_kills_fallback_descendants(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace_dir = tmp_path / "workspace"
+    marker = tmp_path / "descendant-ran"
+    guard_home.mkdir()
+    workspace_dir.mkdir()
+    fake_guard = tmp_path / "slow-guard.py"
+    descendant = f"import time;time.sleep(0.8);open({str(marker)!r},'w',encoding='utf-8').write('ran')"
+    fake_guard.write_text(
+        f"import subprocess,sys,time\nsubprocess.Popen([sys.executable, '-c', {descendant!r}])\ntime.sleep(10)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+        lambda _context: [sys.executable, str(fake_guard)],
+    )
+    context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
+    source = cursor_hook_script_source(context)
+    source = source.replace(
+        f"GUARD_HOOK_TIMEOUT_SECONDS = {_MANAGED_HOOK_TIMEOUT_SECONDS - 3}",
+        "GUARD_HOOK_TIMEOUT_SECONDS = 0.2",
+        1,
+    )
+    script_path = tmp_path / "cursor-hook.py"
+    script_path.write_text(source, encoding="utf-8")
+
+    proc = subprocess.run(
+        [sys.executable, str(script_path)],
+        input=json.dumps(
+            {
+                "hook_event_name": "beforeShellExecution",
+                "tool_name": "Bash",
+                "command": "echo hi",
+                "cwd": str(workspace_dir),
+            }
+        ),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "CURSOR_PROJECT_DIR": str(workspace_dir)},
+        timeout=3,
+    )
+    time.sleep(1)
+
+    assert proc.returncode == 2
+    assert json.loads(proc.stdout)["permission"] == "deny"
+    assert not marker.exists()
 
 
 def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

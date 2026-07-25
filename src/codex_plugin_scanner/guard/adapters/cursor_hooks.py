@@ -38,6 +38,7 @@ from .cursor_hook_script_template_head import HOOK_SCRIPT_TEMPLATE_HEAD
 from .cursor_hook_script_template_tail import HOOK_SCRIPT_TEMPLATE_TAIL
 from .cursor_native_approval import ensure_cursor_hook_attestation_secret
 from .guard_cli_attestation import resolve_attested_guard_cli
+from .hook_python import HookPythonAttestation
 
 _HOOK_SCRIPT_TEMPLATE = HOOK_SCRIPT_TEMPLATE_HEAD + HOOK_SCRIPT_TEMPLATE_TAIL
 _INHERIT_ENV_KEYS = (
@@ -89,7 +90,11 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
     script_path = cursor_hook_script_path(context)
     managed_script_path = managed_hook_script_path(context)
     managed_script_path.parent.mkdir(parents=True, exist_ok=True)
-    script_source = cursor_hook_script_source(context, guard_cli=list(guard_cli.command))
+    script_source = cursor_hook_script_source(
+        context,
+        guard_cli=list(guard_cli.command),
+        recovery_command=_cursor_recovery_command(context, guard_cli.python),
+    )
     managed_script_path.write_text(script_source, encoding="utf-8")
     _make_executable(managed_script_path)
     script_path.parent.mkdir(parents=True, exist_ok=True)
@@ -349,18 +354,47 @@ def _embedded_guard_hook_argv(context: HarnessContext) -> list[str]:
     return guard_argv
 
 
+def _cursor_recovery_command(
+    context: HarnessContext,
+    attestation: HookPythonAttestation,
+) -> list[str]:
+    trusted_roots = [str(root) for root in attestation.import_roots]
+    bootstrap = (
+        "import json,sys;"
+        f"sys.path[:0]={json.dumps(trusted_roots)};"
+        "from pathlib import Path;"
+        "from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure;"
+        f"recover_guard_daemon_after_hook_failure(Path({str(context.guard_home.resolve())!r}),"
+        f"home_dir=Path({str(context.home_dir.resolve())!r}),failure_kind=sys.argv[1])"
+    )
+    return [
+        str(attestation.identity.target_path),
+        "-I",
+        "-S",
+        "-s",
+        "-c",
+        bootstrap,
+    ]
+
+
 def cursor_hook_script_source(
     context: HarnessContext,
     *,
     guard_cli: list[str] | None = None,
+    recovery_command: list[str] | None = None,
 ) -> str:
-    guard_cli = list(guard_cli) if guard_cli is not None else _resolve_guard_cli_command(context)
+    if guard_cli is None:
+        guard_cli = _resolve_guard_cli_command(context)
+    if recovery_command is None:
+        recovery_command = _cursor_recovery_command(context, resolve_attested_guard_cli(context).python)
+    guard_cli = list(guard_cli)
     guard_argv = _embedded_guard_hook_argv(context)
     if not _uses_top_level_hook_command(guard_cli):
         guard_argv = ["guard", *guard_argv]
     return (
         _HOOK_SCRIPT_TEMPLATE.replace("__GUARD_HOME__", json.dumps(str(context.guard_home.resolve())))
         .replace("__GUARD_CLI__", json.dumps(guard_cli))
+        .replace("__GUARD_RECOVERY_COMMAND__", json.dumps(recovery_command))
         .replace(
             "__GUARD_HOOK_ARGV__",
             json.dumps(guard_argv),

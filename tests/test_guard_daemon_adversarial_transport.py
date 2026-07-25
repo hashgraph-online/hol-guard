@@ -1,0 +1,372 @@
+# pyright: reportAny=false, reportImplicitStringConcatenation=false, reportPrivateUsage=false
+# pyright: reportUnknownArgumentType=false, reportUnknownLambdaType=false
+
+from __future__ import annotations
+
+import json
+import socket
+import threading
+import time
+import urllib.parse
+import urllib.request
+from collections.abc import Generator
+from contextlib import contextmanager, suppress
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.daemon import manager as daemon_manager
+from codex_plugin_scanner.guard.daemon import server as daemon_server
+from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.store import GuardStore
+
+
+@contextmanager
+def _running_daemon(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[GuardDaemonServer]:
+    monkeypatch.setattr(
+        daemon_manager,
+        "_guard_daemon_process_inventory_for_guard_home",
+        lambda _guard_home: [],
+    )
+    daemon = GuardDaemonServer(
+        GuardStore(tmp_path / "guard-home"),
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=0,
+    )
+    daemon.start()
+    try:
+        yield daemon
+    finally:
+        daemon.stop()
+
+
+def _raw_request(port: int, request: bytes) -> bytes:
+    client = socket.create_connection(("127.0.0.1", port), timeout=1)
+    client.settimeout(2)
+    try:
+        client.sendall(request)
+        client.shutdown(socket.SHUT_WR)
+        return _recv_all(client)
+    finally:
+        client.close()
+
+
+def _recv_all(client: socket.socket) -> bytes:
+    chunks: list[bytes] = []
+    while True:
+        chunk = client.recv(4096)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
+
+
+def _status_code(response: bytes) -> int:
+    status_line = response.split(b"\r\n", 1)[0]
+    return int(status_line.split()[1])
+
+
+@pytest.mark.parametrize(
+    ("headers", "body", "expected_status"),
+    [
+        (b"Content-Length: nope\r\n", b"{}", 400),
+        (b"Content-Length: -1\r\n", b"", 400),
+        (b"Content-Length: 1000001\r\n", b"", 413),
+        (b"Content-Length: 2\r\nContent-Length: 2\r\n", b"{}", 400),
+        (b"Transfer-Encoding: chunked\r\n", b"2\r\n{}\r\n0\r\n\r\n", 400),
+        (b"Content-Type: application/json\r\nContent-Length: 1\r\n", b"\xff", 400),
+        (b"Content-Type: application/json\r\nContent-Length: 1\r\n", b"{", 400),
+    ],
+)
+def test_malformed_request_framing_returns_bounded_error_without_handler_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    headers: bytes,
+    body: bytes,
+    expected_status: int,
+) -> None:
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        handler_errors: list[object] = []
+        monkeypatch.setattr(
+            daemon._server,
+            "handle_error",
+            lambda _request, address: handler_errors.append(address),
+        )
+        request = (
+            b"POST /v1/hooks/pi HTTP/1.1\r\n"
+            b"Host: 127.0.0.1\r\n"
+            + headers
+            + f"X-Guard-Token: {daemon._server.auth_token}\r\n".encode()
+            + b"\r\n"
+            + body
+        )
+
+        response = _raw_request(daemon.port, request)
+
+    assert _status_code(response) == expected_status
+    assert handler_errors == []
+
+
+def test_truncated_request_body_returns_400_without_handler_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        handler_errors: list[object] = []
+        monkeypatch.setattr(
+            daemon._server,
+            "handle_error",
+            lambda _request, address: handler_errors.append(address),
+        )
+        response = _raw_request(
+            daemon.port,
+            (
+                b"POST /v1/hooks/pi HTTP/1.1\r\n"
+                b"Host: 127.0.0.1\r\n"
+                b"Content-Type: application/json\r\n"
+                b"Content-Length: 10\r\n" + f"X-Guard-Token: {daemon._server.auth_token}\r\n".encode() + b"\r\n{}"
+            ),
+        )
+
+    assert _status_code(response) == 400
+    assert b"incomplete_request_body" in response
+    assert handler_errors == []
+
+
+def test_slow_request_body_expires_and_releases_handler_capacity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(daemon_server, "_DAEMON_REQUEST_READ_TIMEOUT_SECONDS", 0.05)
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        client = socket.create_connection(("127.0.0.1", daemon.port), timeout=1)
+        client.settimeout(1)
+        try:
+            client.sendall(
+                b"POST /v1/hooks/pi HTTP/1.1\r\n"
+                b"Host: 127.0.0.1\r\n"
+                b"Content-Type: application/json\r\n"
+                b"Content-Length: 10\r\n" + f"X-Guard-Token: {daemon._server.auth_token}\r\n".encode() + b"\r\n{"
+            )
+            response = _recv_all(client)
+        finally:
+            client.close()
+        deadline = time.monotonic() + 1
+        while daemon._server.active_requests and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        assert _status_code(response) == 408
+        assert b"request_body_timeout" in response
+        assert daemon._server.active_requests == 0
+
+
+def test_disconnected_slow_clients_do_not_emit_handler_exception_storm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(daemon_server, "_DAEMON_REQUEST_READ_TIMEOUT_SECONDS", 0.05)
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        handler_errors: list[object] = []
+        monkeypatch.setattr(
+            daemon._server,
+            "handle_error",
+            lambda _request, address: handler_errors.append(address),
+        )
+        clients: list[socket.socket] = []
+        for _ in range(64):
+            client = socket.create_connection(("127.0.0.1", daemon.port), timeout=1)
+            client.sendall(
+                b"POST /v1/hooks/pi HTTP/1.1\r\n"
+                b"Host: 127.0.0.1\r\n"
+                b"Content-Type: application/json\r\n"
+                b"Content-Length: 9999\r\n" + f"X-Guard-Token: {daemon._server.auth_token}\r\n".encode() + b"\r\n{"
+            )
+            clients.append(client)
+        for client in clients:
+            client.close()
+        deadline = time.monotonic() + 2
+        while daemon._server.active_requests and time.monotonic() < deadline:
+            time.sleep(0.01)
+        with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=0.5) as response:
+            assert json.loads(response.read())["ok"] is True
+
+    assert handler_errors == []
+    assert daemon._server.active_requests == 0
+
+
+def test_partial_connections_are_bounded_before_handler_threads_start(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(daemon_server, "_DAEMON_REQUEST_READ_TIMEOUT_SECONDS", 1.0)
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        daemon._server.connection_capacity_limit = 2
+        daemon._server.connection_capacity = threading.BoundedSemaphore(2)
+        clients = [socket.create_connection(("127.0.0.1", daemon.port), timeout=1) for _ in range(3)]
+        try:
+            deadline = time.monotonic() + 0.2
+            while time.monotonic() < deadline:
+                with daemon._server.request_capacity_lock:
+                    if daemon._server.active_requests == 2:
+                        break
+                time.sleep(0.01)
+            with daemon._server.request_capacity_lock:
+                assert daemon._server.active_requests == 2
+            with daemon._server.unclassified_connections_lock:
+                assert len(daemon._server.unclassified_connections) == 2
+            clients[0].settimeout(0.2)
+            with suppress(ConnectionResetError):
+                assert clients[0].recv(1) == b""
+        finally:
+            for client in clients:
+                client.close()
+
+
+def test_absolute_header_deadline_closes_trickle_client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        client = socket.create_connection(("127.0.0.1", daemon.port), timeout=1)
+        client.settimeout(1)
+        started = time.monotonic()
+        try:
+            for byte in b"GET /healthz HTTP/1.1\r\n":
+                try:
+                    client.sendall(bytes((byte,)))
+                except OSError:
+                    break
+                time.sleep(0.04)
+            with suppress(ConnectionResetError):
+                assert client.recv(1) == b""
+        finally:
+            client.close()
+        elapsed = time.monotonic() - started
+        deadline = time.monotonic() + 1
+        while daemon._server.active_requests and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+    assert elapsed < 0.6
+    assert daemon._server.active_requests == 0
+
+
+def test_liveness_progresses_during_continuous_slow_client_replenishment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        daemon._server.connection_capacity_limit = 4
+        daemon._server.connection_capacity = threading.BoundedSemaphore(4)
+        slow_clients = [socket.create_connection(("127.0.0.1", daemon.port), timeout=1) for _ in range(4)]
+        health_latencies: list[float] = []
+        try:
+            for _ in range(12):
+                started = time.monotonic()
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{daemon.port}/healthz",
+                    timeout=0.5,
+                ) as response:
+                    assert json.loads(response.read())["ok"] is True
+                health_latencies.append(time.monotonic() - started)
+                slow_clients.append(socket.create_connection(("127.0.0.1", daemon.port), timeout=1))
+        finally:
+            for client in slow_clients:
+                client.close()
+
+    assert max(health_latencies) < 0.25
+
+
+def test_liveness_uses_reserved_capacity_when_general_requests_are_saturated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        acquired = [
+            daemon._server.request_capacity.acquire(blocking=False)
+            for _ in range(daemon._server.request_capacity_limit)
+        ]
+        try:
+            started = time.monotonic()
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=1) as response:
+                health = json.loads(response.read())
+            elapsed = time.monotonic() - started
+        finally:
+            for held in acquired:
+                if held:
+                    daemon._server.request_capacity.release()
+
+    assert health["ok"] is True
+    assert elapsed < 0.5
+
+
+@pytest.mark.parametrize(
+    ("path", "payload", "assertion"),
+    [
+        (
+            "/v1/hooks/pi",
+            {"hook_event_name": "PreToolUse", "tool_name": "read", "tool_input": {}},
+            ("decision", "deny"),
+        ),
+        (
+            "/v1/hooks/claude-code",
+            {"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {}},
+            ("permissionDecision", "deny"),
+        ),
+        (
+            "/v1/hooks/claude-code",
+            {"hook_event_name": "PermissionRequest", "tool_name": "Read", "tool_input": {}},
+            ("behavior", "deny"),
+        ),
+    ],
+)
+def test_hook_overload_returns_native_fail_safe_response(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    payload: dict[str, object],
+    assertion: tuple[str, str],
+) -> None:
+    monkeypatch.setattr(daemon_server, "_MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS", 1)
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        harness = "pi" if path.endswith("/pi") else "claude-code"
+        harness_capacity = daemon._server.hook_harness_semaphore(harness)
+        assert harness_capacity.acquire(blocking=False)
+        query = urllib.parse.urlencode(
+            {
+                "guard-home": str(daemon._server.store.guard_home),
+                "workspace": str(tmp_path),
+            }
+        )
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}{path}?{query}",
+            data=json.dumps(payload).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "X-Guard-Token": daemon._server.auth_token,
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=1) as response:
+                result = json.loads(response.read())
+        finally:
+            harness_capacity.release()
+
+    assert result["reason_code"] == "daemon_hook_capacity"
+    if assertion[0] == "decision":
+        assert result["decision"] == assertion[1]
+    elif assertion[0] == "permissionDecision":
+        assert result["hookSpecificOutput"]["permissionDecision"] == assertion[1]
+    else:
+        assert result["hookSpecificOutput"]["decision"]["behavior"] == assertion[1]
+
+
+def test_unknown_harnesses_share_one_bounded_capacity_bucket(tmp_path: Path) -> None:
+    daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
+    try:
+        capacities = {id(daemon._server.hook_harness_semaphore(f"unknown-{index}")) for index in range(1_000)}
+    finally:
+        daemon._server.server_close()
+
+    assert len(capacities) == 1
+    assert set(daemon._server.hook_harness_capacity) == {"other"}
