@@ -178,7 +178,11 @@ def test_current_schema_store_opens_during_concurrent_writer(tmp_path: Path) -> 
     writer.execute("pragma journal_mode=wal")
     writer.execute("begin immediate")
     try:
-        reopened = GuardStore(guard_home, prime_policy_integrity=False)
+        reopened = GuardStore(
+            guard_home,
+            prime_policy_integrity=False,
+            daemon_managed_schema=True,
+        )
         assert reopened.path == store.path
     finally:
         writer.rollback()

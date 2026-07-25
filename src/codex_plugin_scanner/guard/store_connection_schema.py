@@ -262,7 +262,7 @@ class StoreConnectionSchemaMixin:
                     _release_advisory_file_lock(handle)
 
     def _initialize_serialized(self) -> None:
-        if self._schema_is_current():
+        if getattr(self, "_daemon_managed_schema", False) and self._schema_is_current():
             self._initialize_policy_integrity()
             return
         timeout_seconds = sqlite_connect_timeout_seconds()
@@ -275,9 +275,6 @@ class StoreConnectionSchemaMixin:
             self._initialize()
 
     def _initialize(self) -> None:
-        if self._schema_is_current():
-            self._initialize_policy_integrity()
-            return
         initialize_incremental_vacuum = not self.path.exists()
         statements = (
             """

@@ -79,6 +79,7 @@ class StoreSecretPolicyIntegrityMixin:
         guard_event_queue_limit: int = 1000,
         prime_policy_integrity: bool = True,
         allow_system_keyring: bool = False,
+        daemon_managed_schema: bool = False,
         source: str = "default",
     ) -> None:
         self.guard_home = guard_home
@@ -112,6 +113,7 @@ class StoreSecretPolicyIntegrityMixin:
         self._guard_event_queue_limit = max(1, guard_event_queue_limit)
         self._prime_policy_integrity_on_initialize = prime_policy_integrity
         self._allow_system_keyring = allow_system_keyring
+        self._daemon_managed_schema = daemon_managed_schema
         self.path = self.guard_home / "guard.db"
         self._initialize_serialized()
 
