@@ -2213,6 +2213,9 @@ def _shell_tokens_preserving_quote_context(command_text: str) -> list[_ShellToke
                 quote = char
                 index += 1
                 continue
+            if char == "&" and _is_fd_duplication_ampersand(command_text, index=index, token_start=start):
+                index += 1
+                continue
             if char.isspace() or char in {";", "&", "|"}:
                 break
             index += 1
@@ -2220,6 +2223,24 @@ def _shell_tokens_preserving_quote_context(command_text: str) -> list[_ShellToke
         if raw_token:
             tokens.append(_ShellTokenWithQuoteContext(raw=raw_token, plain=_plain_shell_token(raw_token)))
     return tokens
+
+
+def _is_fd_duplication_ampersand(command_text: str, *, index: int, token_start: int) -> bool:
+    if index <= token_start or command_text[index - 1] not in {"<", ">"}:
+        return False
+    descriptor_index = index + 1
+    if descriptor_index >= len(command_text):
+        return False
+    if command_text[descriptor_index] == "-":
+        descriptor_index += 1
+    else:
+        if not command_text[descriptor_index].isdigit():
+            return False
+        while descriptor_index < len(command_text) and command_text[descriptor_index].isdigit():
+            descriptor_index += 1
+    return descriptor_index >= len(command_text) or (
+        command_text[descriptor_index].isspace() or command_text[descriptor_index] in {";", "&", "|"}
+    )
 
 
 def _plain_shell_token(raw_token: str) -> str:

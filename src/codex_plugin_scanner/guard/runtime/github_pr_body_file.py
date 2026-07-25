@@ -31,7 +31,7 @@ def github_pr_body_file_is_safe(
         return False
     if _path_looks_sensitive(candidate):
         return False
-    if not candidate.name.casefold().endswith(("-pr-body.md", "-pr-body.markdown")):
+    if not _is_pr_body_markdown_name(candidate.name):
         return False
     authored_root = _authored_location_root(candidate, cwd=cwd)
     if authored_root is None or not _ancestor_chain_is_controlled(candidate, root=authored_root):
@@ -170,3 +170,8 @@ def _path_looks_sensitive(candidate: Path) -> bool:
         return True
     name = candidate.name.casefold()
     return name.startswith((".env", "credentials", "id_rsa", "id_ed25519", "secrets", "token"))
+
+
+def _is_pr_body_markdown_name(name: str) -> bool:
+    normalized = name.casefold()
+    return normalized in {"pr-body.md", "pr-body.markdown"} or normalized.endswith(("-pr-body.md", "-pr-body.markdown"))
