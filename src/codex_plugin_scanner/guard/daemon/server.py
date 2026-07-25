@@ -6892,6 +6892,19 @@ class GuardDaemonServer:
                     occurred_at=now,
                 )
 
+    def _maintain_storage_best_effort(self) -> bool:
+        try:
+            config = load_guard_config(
+                self._server.store.guard_home,
+            )
+            result = self._server.store.maintain_storage(
+                now=datetime.now(timezone.utc),
+                detail_retain_days=config.evidence_retain_days,
+            )
+        except Exception:
+            return True
+        return result.completed
+
     def _start_command_activity_maintenance(self) -> None:
         if (
             self._command_activity_maintenance_thread is not None
@@ -6922,8 +6935,10 @@ class GuardDaemonServer:
         if self._shutdown_started.is_set():
             return
         self._maintain_command_activity_best_effort()
-        while not self._shutdown_started.wait(3_600):
+        storage_complete = self._maintain_storage_best_effort()
+        while not self._shutdown_started.wait(3_600 if storage_complete else 1):
             self._maintain_command_activity_best_effort()
+            storage_complete = self._maintain_storage_best_effort()
 
     def _persist_aibom_inventory_context(self) -> None:
         workspace_id = self._server.store.get_cloud_workspace_id()

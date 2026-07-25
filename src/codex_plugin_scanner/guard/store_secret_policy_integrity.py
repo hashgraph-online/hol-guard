@@ -113,7 +113,7 @@ class StoreSecretPolicyIntegrityMixin:
         self._prime_policy_integrity_on_initialize = prime_policy_integrity
         self._allow_system_keyring = allow_system_keyring
         self.path = self.guard_home / "guard.db"
-        self._initialize()
+        self._initialize_serialized()
 
     def set_policy_integrity_state_listener(
         self,

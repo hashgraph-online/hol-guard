@@ -768,7 +768,19 @@ def receipt_rollups_need_backfill(connection: sqlite3.Connection) -> bool:
     receipt_row = connection.execute("select count(*) as total from runtime_receipts").fetchone()
     receipt_total = int(receipt_row["total"]) if receipt_row is not None else 0
     rollup_total = int(rollup_row["total"])
-    if rollup_total != receipt_total:
+    maintenance_table = connection.execute(
+        """
+        select 1 from sqlite_master
+        where type = 'table' and name = 'guard_storage_maintenance'
+        """
+    ).fetchone()
+    archived_total = 0
+    if maintenance_table is not None:
+        archived_row = connection.execute(
+            "select archived_receipts from guard_storage_maintenance where singleton = 1"
+        ).fetchone()
+        archived_total = int(archived_row["archived_receipts"]) if archived_row is not None else 0
+    if rollup_total != receipt_total + archived_total:
         return True
     state_row = connection.execute("select count(*) as total from receipt_rollup_actions").fetchone()
     state_total = int(state_row["total"]) if state_row is not None else 0

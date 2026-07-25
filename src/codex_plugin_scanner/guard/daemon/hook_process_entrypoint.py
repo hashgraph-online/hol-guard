@@ -102,7 +102,7 @@ def _run_resident_hook_request(
     store_key = str(guard_home)
     store = stores.get(store_key)
     if store is None:
-        store = GuardStore(guard_home)
+        store = GuardStore(guard_home, prime_policy_integrity=False)
         stores[store_key] = store
     home_dir = Path(home_value)
     workspace = Path(workspace_value) if isinstance(workspace_value, str) else None
