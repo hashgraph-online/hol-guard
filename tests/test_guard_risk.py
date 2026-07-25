@@ -1308,6 +1308,42 @@ def test_tool_action_request_classifier_reviews_background_command_after_canonic
     assert request.action_class == "GitHub content mutation command"
 
 
+def test_tool_action_request_classifier_reviews_padded_gh_pr_create_body_file(tmp_path: Path) -> None:
+    safe_body = tmp_path / "pr-body.md"
+    safe_body.write_text("## Summary\n- Safe text.\n", encoding="utf-8")
+    padded_body = tmp_path / " pr-body.md"
+    padded_body.write_text("Unreviewed content.\n", encoding="utf-8")
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "gh pr create --title 'Static title' --body-file ' pr-body.md'"},
+        cwd=tmp_path,
+        home_dir=tmp_path.parent,
+    )
+
+    assert request is not None
+    assert request.action_class == "GitHub content mutation command"
+
+
+@pytest.mark.parametrize(
+    "substitution",
+    ("<(touch marker)", ">(cat)", "$(touch marker)", "`touch marker`"),
+)
+def test_tool_action_request_classifier_reviews_substitution_outside_gh_pr_create_body_file(
+    tmp_path: Path,
+    substitution: str,
+) -> None:
+    body_file = tmp_path / "pr-body.md"
+    body_file.write_text("## Summary\n- Safe text.\n", encoding="utf-8")
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": (f"gh pr create --title 'Static title' --body-file pr-body.md {substitution}")},
+        cwd=tmp_path,
+        home_dir=tmp_path.parent,
+    )
+
+    assert request is not None
+
+
 def test_tool_action_request_classifier_reviews_globbed_gh_pr_create_body_file(tmp_path):
     literal_body = tmp_path / "[a]-pr-body.md"
     literal_body.write_text("## Summary\n- Safe text.\n", encoding="utf-8")

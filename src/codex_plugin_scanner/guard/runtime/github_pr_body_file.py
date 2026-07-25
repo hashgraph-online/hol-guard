@@ -75,15 +75,14 @@ def github_pr_body_file_is_safe(
 
 
 def _resolve_operand(operand: str, *, cwd: Path, home_dir: Path) -> Path | None:
-    stripped = operand.strip().strip("'\"")
-    if not stripped:
+    if not operand or operand != operand.strip():
         return None
-    if stripped == "~":
+    if operand == "~":
         candidate = home_dir
-    elif stripped.startswith("~/"):
-        candidate = home_dir / stripped[2:]
+    elif operand.startswith("~/"):
+        candidate = home_dir / operand[2:]
     else:
-        candidate = Path(stripped)
+        candidate = Path(operand)
         if not candidate.is_absolute():
             candidate = cwd / candidate
     if candidate.is_symlink():

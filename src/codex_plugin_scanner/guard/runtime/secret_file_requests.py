@@ -2151,6 +2151,8 @@ def _gh_pr_create_uses_safe_static_body_file(
     cwd: Path | None,
     home_dir: Path | None,
 ) -> bool:
+    if _shell_command_substitution_payloads(command_text):
+        return False
     segments = _shell_token_segments(_shell_tokens_preserving_quote_context(command_text))
     if len(segments) != 1:
         return False

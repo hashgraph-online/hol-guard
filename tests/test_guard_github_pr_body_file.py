@@ -67,6 +67,18 @@ def test_github_pr_body_file_rejects_arbitrary_markdown_name(tmp_path: Path) -> 
     )
 
 
+@pytest.mark.parametrize("padding", (" ", "\t", "\n"))
+def test_github_pr_body_file_rejects_padded_operand(tmp_path: Path, padding: str) -> None:
+    body_file = tmp_path / "pr-body.md"
+    _ = body_file.write_text("## Summary\n- Focused change.\n", encoding="utf-8")
+
+    assert not github_pr_body_file_is_safe(
+        f"{padding}{body_file}",
+        cwd=tmp_path,
+        home_dir=tmp_path.parent,
+    )
+
+
 @pytest.mark.skipif(not hasattr(os, "getuid"), reason="POSIX permissions required")
 def test_github_pr_body_file_rejects_group_or_world_writable_file(tmp_path: Path) -> None:
     body_file = tmp_path / "pr-body.md"
