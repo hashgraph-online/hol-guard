@@ -6811,13 +6811,26 @@ class GuardDaemonServer:
             return
         self._thread = None
         self._begin_service()
+        serve_thread_started = False
         try:
             self._thread = threading.Thread(target=self._serve_forever, daemon=True)
             self._thread.start()
+            serve_thread_started = True
             self._server.hook_process_runner.enable_full_capacity()
         except BaseException as error:
-            self._thread = None
-            if not self._finish_service():
+            serve_thread_contained = True
+            if serve_thread_started and self._thread is not None:
+                self._server.shutdown()
+                self._thread.join(timeout=5)
+                serve_thread_contained = not self._thread.is_alive()
+            else:
+                try:
+                    self._server.server_close()
+                except Exception:
+                    serve_thread_contained = False
+            if serve_thread_contained:
+                self._thread = None
+            if not self._finish_service() or not serve_thread_contained:
                 add_note = getattr(error, "add_note", None)
                 if callable(add_note):
                     add_note("Guard retained daemon ownership because startup containment was unconfirmed.")
