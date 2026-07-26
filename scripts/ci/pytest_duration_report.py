@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.ci.pytest_duration_manifest import DURATION_REPORT_SCHEMA_VERSION
+from scripts.ci.pytest_duration_manifest import load_duration_report as _load_duration_report
 
 OUTPUT_ENV = "GUARD_PYTEST_DURATION_OUTPUT"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = DURATION_REPORT_SCHEMA_VERSION
 
 
 class _Report(Protocol):
@@ -23,6 +30,12 @@ class _Config(Protocol):
 
 
 _DURATIONS: dict[str, float] = {}
+
+
+def load_duration_report(path: Path) -> dict[str, float]:
+    """Validate one report before it becomes duration-manifest input."""
+
+    return _load_duration_report(path)
 
 
 def pytest_runtest_logreport(report: _Report) -> None:
@@ -51,22 +64,3 @@ def pytest_sessionfinish(session: object, exitstatus: int) -> None:
         "node_durations_seconds": dict(sorted(_DURATIONS.items())),
     }
     output.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-
-
-def load_duration_report(path: Path) -> dict[str, float]:
-    """Validate a report before it is used as future shard input."""
-
-    payload = cast(object, json.loads(path.read_text(encoding="utf-8")))
-    if not isinstance(payload, dict) or payload.get("schema_version") != SCHEMA_VERSION:
-        raise ValueError("unsupported pytest duration report")
-    values = payload.get("node_durations_seconds")
-    if not isinstance(values, dict):
-        raise ValueError("pytest duration report requires node_durations_seconds")
-    durations: dict[str, float] = {}
-    for node_id, value in values.items():
-        if not isinstance(node_id, str) or not node_id:
-            raise ValueError("pytest duration report has an invalid node id")
-        if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
-            raise ValueError(f"pytest duration report has an invalid duration for {node_id!r}")
-        durations[node_id] = float(value)
-    return durations

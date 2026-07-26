@@ -21,6 +21,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
@@ -108,7 +110,9 @@ jobs:
           uv run --no-sync python scripts/ci/pytest_shard.py \
             --shard-index "${{ matrix.shard-index }}" \
             --shard-count 16 \
-            --granularity node > pytest-nodes.txt
+            --granularity node \
+            --duration-manifest ci/pytest-duration-manifest.json.gz \
+            --max-manifest-age-days 28 > pytest-nodes.txt
           test -s pytest-nodes.txt
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json \
             uv run --no-sync pytest -p pytest_duration_report @pytest-nodes.txt --tb=short
@@ -119,6 +123,45 @@ jobs:
           name: pytest-durations-${{ matrix.shard-index }}
           path: pytest-durations.json
           if-no-files-found: warn
+
+  duration-manifest-candidate:
+    if: needs.tests.result == 'success'
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Download pytest duration reports
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: pytest-durations-*
+          path: duration-reports
+      - name: Build duration manifest candidate
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          reports=(duration-reports/**/pytest-durations.json)
+          test "${#reports[@]}" -eq 16
+          uv run --no-sync python scripts/ci/build_pytest_duration_manifest.py \
+            --output pytest-duration-manifest-candidate.json.gz \
+            --observed-at "$(date --utc +%Y-%m-%dT%H:%M:%SZ)" \
+            "${reports[@]}"
+      - name: Upload pytest duration manifest candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pytest-duration-manifest-candidate
+          path: pytest-duration-manifest-candidate.json.gz
+          if-no-files-found: error
 
   compatibility:
     runs-on: ubuntu-latest

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "ci" / "pytest_shard.py"
 CODEQL_WORKFLOW = ROOT / ".github" / "workflows" / "codeql.yml"
 FUZZ_WORKFLOW = ROOT / ".github" / "workflows" / "fuzz.yml"
+sys.path.insert(0, str(SCRIPT_PATH.parent))
 SPEC = importlib.util.spec_from_file_location("pytest_shard", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 pytest_shard = importlib.util.module_from_spec(SPEC)
@@ -35,6 +38,38 @@ def test_node_shards_split_large_files_without_overlap() -> None:
     assert max(map(len, shards)) - min(map(len, shards)) <= 1
 
 
+def test_duration_aware_node_shards_balance_known_and_unknown_nodes() -> None:
+    nodes = [f"tests/test_duration.py::test_case_{index}" for index in range(5)]
+    durations = {
+        pytest_shard.node_id_digest(nodes[0]): 10.0,
+        pytest_shard.node_id_digest(nodes[1]): 9.0,
+        pytest_shard.node_id_digest(nodes[2]): 1.0,
+        pytest_shard.node_id_digest(nodes[3]): 1.0,
+    }
+
+    shards = pytest_shard.build_node_shards(nodes, 2, durations)
+    estimates = pytest_shard._estimate_node_durations(nodes, durations)
+    loads = [sum(estimates[node] for node in shard) for shard in shards]
+
+    assert shards == pytest_shard.build_node_shards(list(reversed(nodes)), 2, durations)
+    assert sorted(node for shard in shards for node in shard) == sorted(nodes)
+    assert max(loads) - min(loads) <= 1.0
+
+
+def test_node_shards_reject_duplicate_node_ids() -> None:
+    with pytest.raises(ValueError, match="unique"):
+        pytest_shard.build_node_shards(["tests/test_a.py::test_case"] * 2, 1)
+
+
+def test_stale_duration_manifest_falls_back_without_blocking_sharding(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    missing_manifest = tmp_path / "missing.json.gz"
+
+    assert pytest_shard._load_current_durations(missing_manifest, 28) is None
+    assert "equal-weight fallback" in capsys.readouterr().err
+
+
 def test_ci_workflow_cancels_stale_runs_and_executes_each_shard() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     tests_job = workflow.split("  tests:\n", maxsplit=1)[1].split("\n  ci-python-312:", maxsplit=1)[0]
@@ -54,9 +89,13 @@ def test_ci_workflow_cancels_stale_runs_and_executes_each_shard() -> None:
     assert "--shard-count 16" in tests_job
     assert "--granularity node" in tests_job
     assert "PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json" in tests_job
+    assert "--duration-manifest ci/pytest-duration-manifest.json.gz" in tests_job
     assert "-p pytest_duration_report @pytest-nodes.txt" in tests_job
     assert "Upload pytest duration artifact" in tests_job
     assert "pytest-durations-${{ matrix.shard-index }}" in tests_job
+    assert "duration-manifest-candidate:" in workflow
+    assert "pytest-duration-manifest-candidate" in workflow
+    assert "persist-credentials: false" in workflow
     assert "mapfile -t files" not in workflow
     assert "name: ci (3.12)" in workflow
     assert "needs: [quality, tests, compatibility]" in workflow
