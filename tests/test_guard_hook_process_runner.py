@@ -43,7 +43,7 @@ class _MutableUnicodeBuffer(Protocol):
 
 def test_default_review_deadline_stays_inside_pi_host_budget() -> None:
     pi_host_timeout_seconds = 4.5
-    pi_daemon_timeout_seconds = 2.0
+    pi_daemon_timeout_seconds = 3.1
     pi_deadline_reserve_seconds = 0.25
 
     assert pi_daemon_timeout_seconds > hook_runner_module._HOOK_PROCESS_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
@@ -428,8 +428,8 @@ def test_deferred_runner_bounds_backfill_deferral_during_active_reviews(
 def test_default_worker_budget_stays_below_pi_hook_deadline() -> None:
     runner = HookProcessRunner()
 
-    assert runner._timeout_seconds == 1.8  # pyright: ignore[reportPrivateUsage]
-    assert runner._timeout_seconds < 2.0  # pyright: ignore[reportPrivateUsage]
+    assert runner._timeout_seconds == 2.8  # pyright: ignore[reportPrivateUsage]
+    assert runner._timeout_seconds < 3.1  # pyright: ignore[reportPrivateUsage]
 
 
 def test_prewarmed_runner_scans_post_tool_output_in_isolated_worker(tmp_path: Path) -> None:

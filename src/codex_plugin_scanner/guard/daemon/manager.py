@@ -992,7 +992,7 @@ def _retire_duplicate_guard_daemons(
 def _schedule_duplicate_guard_daemon_retirement(guard_home: Path) -> None:
     lock_key = str(guard_home.resolve())
     with _DUPLICATE_RETIRE_SCHEDULE_LOCK:
-        if lock_key in _DUPLICATE_RETIRE_IN_FLIGHT:
+        if _DUPLICATE_RETIRE_IN_FLIGHT:
             return
         _DUPLICATE_RETIRE_IN_FLIGHT.add(lock_key)
     retirement = _retire_current_duplicate_guard_daemons

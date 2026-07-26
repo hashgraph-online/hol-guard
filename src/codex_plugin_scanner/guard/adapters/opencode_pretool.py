@@ -33,7 +33,6 @@ const GUARD_TASKKILL_PATH = __GUARD_TASKKILL_PATH__;
 const INTERCEPT_TOOLS = new Set(__INTERCEPT_TOOLS__);
 const GUARD_HOOK_TIMEOUT_MS = 30_000;
 const GUARD_WINDOWS_JOB_MARKER = "HOL_GUARD_WINDOWS_JOB_CONTAINED\\n";
-
 type GuardStderrMarkerState = {
   pending: string;
   contained: boolean;

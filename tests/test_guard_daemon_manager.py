@@ -115,15 +115,12 @@ def test_duplicate_retirement_is_nonblocking_and_single_flight(tmp_path, monkeyp
     started = time.monotonic()
     daemon_manager_module._schedule_duplicate_guard_daemon_retirement(guard_home)
     daemon_manager_module._schedule_duplicate_guard_daemon_retirement(guard_home)
-    other_guard_home = tmp_path / "other-guard-home"
-    daemon_manager_module._schedule_duplicate_guard_daemon_retirement(other_guard_home)
+    for index in range(64):
+        daemon_manager_module._schedule_duplicate_guard_daemon_retirement(tmp_path / f"other-guard-home-{index}")
 
     assert time.monotonic() - started < 1.0
     assert entered.wait(timeout=1.0)
-    deadline = time.monotonic() + 1.0
-    while len(calls) < 2 and time.monotonic() < deadline:
-        time.sleep(0.01)
-    assert set(calls) == {guard_home, other_guard_home}
+    assert calls == [guard_home]
     release.set()
     assert finished.wait(timeout=1.0)
 
@@ -1599,6 +1596,7 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monke
 def test_ensure_guard_daemon_skips_runtime_probe_for_dead_ephemeral_state_pid(tmp_path, monkeypatch):
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
+    _run_ephemeral_reap_synchronously(monkeypatch)
     guard_home = tmp_path / "guard-home"
     stale_guard_home = tmp_path / "pytest-of-user" / "pytest-11" / "test-stale" / "home"
     stale_guard_home.mkdir(parents=True)

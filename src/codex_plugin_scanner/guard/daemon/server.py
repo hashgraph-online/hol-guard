@@ -5220,6 +5220,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         guard_home: str | None,
         workspace: str | None,
     ) -> None:
+        if self._hook_fast_path_enabled():
+            result = self._handle_runtime_hook_fast(
+                payload,
+                params,
+                default_harness=default_harness,
+                home_dir=home_dir,
+                guard_home=guard_home,
+                workspace=workspace,
+            )
+            if result is not None:
+                self._write_json(result)
+                return
+
         self._handle_runtime_hook_legacy_cli(
             payload,
             params,
