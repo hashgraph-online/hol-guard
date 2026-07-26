@@ -21,9 +21,9 @@ def _read_repo_file(relative_path: str) -> str:
     return (REPO_ROOT / relative_path).read_text(encoding="utf-8")
 
 
-def test_explain_install_connect_shares_canonical_command_catalog(capsys) -> None:
+def test_explain_install_connect_shares_canonical_command_catalog(capfd) -> None:
     rc = main(["guard", "explain", "install-connect", "--json"])
-    output = json.loads(capsys.readouterr().out)
+    output = json.loads(capfd.readouterr().out)
 
     assert rc == 0
     assert output["target"] == "install-connect"

@@ -571,7 +571,21 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
             with self.unclassified_connections_lock:
                 expired = [request for request, deadline in self.unclassified_connections.values() if deadline <= now]
             for request in expired:
-                self._close_unclassified_socket(request)
+                if self._buffered_request_headers_complete(request):
+                    self.classify_connection(request)
+                else:
+                    self._close_unclassified_socket(request)
+
+    @staticmethod
+    def _buffered_request_headers_complete(request: socket.socket) -> bool:
+        nonblocking_flag = getattr(socket, "MSG_DONTWAIT", None)
+        if nonblocking_flag is None:
+            return False
+        try:
+            buffered = request.recv(65_536, socket.MSG_PEEK | nonblocking_flag)
+        except (BlockingIOError, InterruptedError, OSError):
+            return False
+        return b"\r\n\r\n" in buffered or b"\n\n" in buffered
 
     def claim_request_capacity(self, request: socket.socket, path: str) -> bool:
         capacity_kind = self._request_capacity_kind(path)
