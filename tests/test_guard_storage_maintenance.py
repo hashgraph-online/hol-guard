@@ -160,6 +160,15 @@ def test_storage_maintenance_bounds_detail_and_preserves_rollups(tmp_path: Path)
         ).fetchone()
         assert tuple(totals) == (6, 6, 0, 0)
 
+        connection.execute("delete from receipt_aggregate_totals where totals_key = 'global'")
+        assert receipt_rollups_need_backfill(connection) is True
+        backfill_receipt_rollups(connection)
+        assert receipt_rollups_need_backfill(connection) is False
+        assert (
+            connection.execute("select total from receipt_aggregate_totals where totals_key = 'global'").fetchone()[0]
+            == 6
+        )
+
 
 def test_storage_maintenance_uses_bounded_batches(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)

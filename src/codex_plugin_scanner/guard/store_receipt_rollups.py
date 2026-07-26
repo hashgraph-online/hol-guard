@@ -638,11 +638,11 @@ def backfill_receipt_rollups(connection: sqlite3.Connection) -> None:
             )
         connection.execute(
             """
-            update receipt_aggregate_totals
-            set total = ?
-            where totals_key = ?
+            insert into receipt_aggregate_totals (totals_key, total)
+            values (?, ?)
+            on conflict(totals_key) do update set total = excluded.total
             """,
-            (len(receipt_rows) + archived_total, _RECEIPT_TOTALS_KEY),
+            (_RECEIPT_TOTALS_KEY, len(receipt_rows) + archived_total),
         )
         return
 
