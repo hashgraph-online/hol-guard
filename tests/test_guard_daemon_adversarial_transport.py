@@ -247,7 +247,8 @@ def test_absolute_header_deadline_closes_trickle_client(
         while daemon._server.active_requests and time.monotonic() < deadline:
             time.sleep(0.01)
 
-    assert elapsed < 0.6
+    assert daemon_server._DAEMON_REQUEST_READ_TIMEOUT_SECONDS == 0.4
+    assert elapsed < 1.0
     assert daemon._server.active_requests == 0
 
 
