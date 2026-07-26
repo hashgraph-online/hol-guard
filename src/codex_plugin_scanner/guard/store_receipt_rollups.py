@@ -605,6 +605,47 @@ def record_receipt_policy_decision_change(
 
 
 def backfill_receipt_rollups(connection: sqlite3.Connection) -> None:
+    maintenance_table = connection.execute(
+        """
+        select 1 from sqlite_master
+        where type = 'table' and name = 'guard_storage_maintenance'
+        """
+    ).fetchone()
+    archived_total = 0
+    if maintenance_table is not None:
+        archived_row = connection.execute(
+            "select archived_receipts from guard_storage_maintenance where singleton = 1"
+        ).fetchone()
+        archived_total = int(archived_row["archived_receipts"]) if archived_row is not None else 0
+    if archived_total > 0:
+        receipt_rows = connection.execute(_receipt_action_query()).fetchall()
+        receipt_actions: list[tuple[str, GuardAction]] = [
+            (str(row["receipt_id"]), _canonical_action_from_row(row)) for row in receipt_rows
+        ]
+        connection.execute("delete from receipt_rollup_actions")
+        connection.executemany(
+            """
+            insert into receipt_rollup_actions (receipt_id, policy_decision, dirty)
+            values (?, ?, 0)
+            """,
+            receipt_actions,
+        )
+        for receipt_id, policy_decision in receipt_actions:
+            _reconcile_pending_receipt_event_action(
+                connection,
+                receipt_id=receipt_id,
+                policy_decision=policy_decision,
+            )
+        connection.execute(
+            """
+            update receipt_aggregate_totals
+            set total = ?
+            where totals_key = ?
+            """,
+            (len(receipt_rows) + archived_total, _RECEIPT_TOTALS_KEY),
+        )
+        return
+
     connection.execute("delete from receipt_aggregate_totals")
     connection.execute("delete from receipt_daily_rollups")
     connection.execute("delete from receipt_harness_rollups")

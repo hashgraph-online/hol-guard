@@ -9,7 +9,10 @@ import pytest
 
 from codex_plugin_scanner.guard import store_connection_schema
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_receipt_rollups import receipt_rollups_need_backfill
+from codex_plugin_scanner.guard.store_receipt_rollups import (
+    backfill_receipt_rollups,
+    receipt_rollups_need_backfill,
+)
 
 
 def _insert_receipt(
@@ -136,6 +139,26 @@ def test_storage_maintenance_bounds_detail_and_preserves_rollups(tmp_path: Path)
             connection.execute("select total from receipt_aggregate_totals where totals_key = 'global'").fetchone()[0]
             == 6
         )
+
+        connection.execute(
+            """
+            update guard_cloud_events
+            set payload_json = '{"payload":{"policyDecision":"allow"}}'
+            where idempotency_key = 'receipt.created:receipt-0'
+            """
+        )
+        connection.execute("delete from receipt_rollup_actions where receipt_id = 'receipt-4'")
+        assert receipt_rollups_need_backfill(connection) is True
+        backfill_receipt_rollups(connection)
+        assert receipt_rollups_need_backfill(connection) is False
+        totals = connection.execute(
+            """
+            select total, allowed, blocked, reviewed
+            from receipt_aggregate_totals
+            where totals_key = 'global'
+            """
+        ).fetchone()
+        assert tuple(totals) == (6, 6, 0, 0)
 
 
 def test_storage_maintenance_uses_bounded_batches(tmp_path: Path) -> None:
