@@ -471,6 +471,41 @@ class TestScannerBudgetExhaustion:
         assert response.decision == "allow"
         assert response.reason_code == "output_scan_allow"
 
+    def test_source_scanner_receives_its_budget_after_slow_config_load(
+        self,
+        store: GuardStore,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        workspace: Path,
+        home_dir: Path,
+        guard_home: Path,
+    ) -> None:
+        content = "Routine local documentation.\n"
+        source_path = workspace / "docs" / "routine.md"
+        source_path.write_text(content)
+
+        def slow_config_loader(guard_home: Path, workspace: Path | None) -> GuardConfig:
+            time.sleep(0.3)
+            return _config_loader(guard_home, workspace)
+
+        engine = HookReviewEngine(
+            store=store,
+            scanner=scanner,
+            cache=cache,
+            config_loader=slow_config_loader,
+        )
+        response = engine.review(
+            _request(
+                source_ref=_source_ref(path="docs/routine.md", text=content),
+                cwd=workspace,
+                home_dir=home_dir,
+                guard_home=guard_home,
+            )
+        )
+
+        assert response.decision == "allow"
+        assert response.reason_code == "source_full_scan_allow"
+
 
 class TestMetricsExcludesRawContent:
     def test_metrics_payload_excludes_raw_content(

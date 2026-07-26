@@ -122,10 +122,10 @@ class HookReviewEngine:
         return response
 
     @staticmethod
-    def _scan_deadline(start: float) -> float:
+    def _scan_deadline(start: float, budget_ms: int = HOOK_SCANNER_DEFAULT_BUDGET_MS) -> float:
         return min(
             start + (HOOK_ENGINE_TOTAL_BUDGET_MS / 1000.0),
-            time.monotonic() + (HOOK_SCANNER_DEFAULT_BUDGET_MS / 1000.0),
+            time.monotonic() + (budget_ms / 1000.0),
         )
 
     def _review_inner(self, request: HookReviewRequest, *, start: float) -> HookReviewResponse:
@@ -143,7 +143,7 @@ class HookReviewEngine:
 
         # Source-read fast path for PostToolUse with guard_source_ref.
         if request.event_name == "PostToolUse" and request.source_ref is not None:
-            deadline = start + (HOOK_SOURCE_FAST_PATH_BUDGET_MS / 1000.0)
+            deadline = self._scan_deadline(start, HOOK_SOURCE_FAST_PATH_BUDGET_MS)
             source_result = evaluate_source_file_ref(
                 request=request,
                 envelope=envelope,
