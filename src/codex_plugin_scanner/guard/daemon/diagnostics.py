@@ -22,6 +22,7 @@ _DAEMON_LOG_DIRECTORY: Final = "logs"
 _DAEMON_LOG_FILENAME: Final = "daemon.log"
 _DAEMON_LOG_RETENTION_SECONDS: Final = 7 * 24 * 60 * 60
 _DEFAULT_QUEUE_CAPACITY: Final = 256
+_OWNER_ONLY_DIRECTORY_MODE: Final = 0o700
 
 
 @final
@@ -44,9 +45,9 @@ class _DaemonLogFormatter(logging.Formatter):
 def _secure_directory(path: Path) -> None:
     if path.is_symlink():
         raise OSError("daemon diagnostic directory cannot be a symbolic link")
-    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.mkdir(mode=_OWNER_ONLY_DIRECTORY_MODE, parents=True, exist_ok=True)
     with suppress(OSError):
-        os.chmod(path, 0o700)
+        os.chmod(path, _OWNER_ONLY_DIRECTORY_MODE)
 
 
 def cleanup_expired_daemon_logs(log_directory: Path, *, now: float | None = None) -> None:
