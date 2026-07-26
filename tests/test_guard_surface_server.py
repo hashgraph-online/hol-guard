@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import socket
 import sqlite3
+import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from base64 import urlsafe_b64encode
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -3830,6 +3834,94 @@ class TestGuardDaemonFastHookPath:
         assert result["model_output_action"] == "allow_original"
         assert result["reviewed_output_sha256"] == output_sha256
         assert result["notice"] == "none"
+
+    @pytest.mark.parametrize("source_kind", ["relative", "virtual", "absolute"])
+    def test_fast_path_hydrates_large_pi_payload_reference(
+        self,
+        tmp_path,
+        monkeypatch,
+        source_kind: str,
+    ) -> None:
+        """Pi transport references retain clean large-read review semantics."""
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+        output = "routine documentation\n" * 1_000
+        tool_path = "docs/large.md"
+        payload: dict[str, object] = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"path": tool_path},
+            "stdout": output,
+            "tool_response": [{"type": "text", "text": output}],
+        }
+        if source_kind == "relative":
+            source_file = workspace_dir / tool_path
+            source_file.parent.mkdir(parents=True)
+            source_file.write_text(output)
+            payload["guard_source_ref"] = {
+                "version": 1,
+                "kind": "source_file",
+                "path": tool_path,
+                "tool_input_path": tool_path,
+                "output_sha256": hashlib.sha256(output.encode()).hexdigest(),
+                "output_chars": len(output),
+            }
+        elif source_kind == "virtual":
+            tool_path = "skill://large-instructions"
+            payload["tool_input"] = {"path": tool_path}
+        else:
+            tool_path = str(tmp_path / "large-instructions.md")
+            payload["tool_input"] = {"path": tool_path}
+
+        raw_payload = json.dumps(payload).encode()
+        key = os.urandom(32)
+        nonce = os.urandom(12)
+        ciphertext = AESGCM(key).encrypt(nonce, raw_payload, None)
+        store = GuardStore(home_dir)
+        monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "1")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with tempfile.TemporaryDirectory(prefix="hol-guard-hook-payload-") as reference_dir:
+                reference_path = Path(reference_dir) / "payload.json"
+                reference_path.write_bytes(ciphertext)
+                reference_payload = {
+                    "hook_event_name": "PostToolUse",
+                    "tool_name": "Read",
+                    "guard_payload_ref": {
+                        "version": 1,
+                        "path": str(reference_path),
+                        "sha256": hashlib.sha256(ciphertext).hexdigest(),
+                        "encoding": "json",
+                        "encryption": "aes-256-gcm",
+                        "key": urlsafe_b64encode(key).decode().rstrip("="),
+                        "nonce": urlsafe_b64encode(nonce).decode().rstrip("="),
+                    },
+                }
+                request = urllib.request.Request(
+                    (
+                        f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?"
+                        f"guard-home={urllib.parse.quote(str(home_dir))}&"
+                        f"home={urllib.parse.quote(str(home_dir))}&"
+                        f"workspace={urllib.parse.quote(str(workspace_dir))}"
+                    ),
+                    data=json.dumps(reference_payload).encode(),
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Guard-Token": daemon._server.auth_token,
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    result = json.loads(response.read().decode())
+        finally:
+            daemon.stop()
+            monkeypatch.delenv("HOL_GUARD_HOOK_FAST_PATH", raising=False)
+
+        assert result["decision"] == "allow"
+        assert result["model_output_action"] == "allow_original"
 
     def test_fast_path_pre_tool_use_falls_back_to_legacy(self, tmp_path, monkeypatch) -> None:
         """PreToolUse must NOT be handled by the fast worker.

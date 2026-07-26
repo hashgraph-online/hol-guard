@@ -5220,6 +5220,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         guard_home: str | None,
         workspace: str | None,
     ) -> None:
+        from ..runtime.hook_payload_reference import (
+            HookPayloadReferenceError,
+            hydrate_hook_payload_reference,
+        )
+
+        try:
+            payload = hydrate_hook_payload_reference(payload)
+        except HookPayloadReferenceError as error:
+            self._daemon_server().hook_worker.metrics.record_failure(
+                stage="server",
+                exception_type=type(error).__name__,
+            )
+            self._write_json(
+                self._runtime_hook_fail_safe_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                    reason="HOL Guard could not authenticate the local hook payload.",
+                    reason_code="invalid_hook_payload_reference",
+                )
+            )
+            return
+
         if self._hook_fast_path_enabled():
             result = self._handle_runtime_hook_fast(
                 payload,
