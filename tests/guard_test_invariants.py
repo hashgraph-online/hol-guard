@@ -177,6 +177,20 @@ TEST_INVARIANTS: Final[tuple[TestInvariant, ...]] = (
         "GitHub mutation and dynamically resolved command forms keep their exact confirmation floors.",
         ("security_critical", "regression", "parser", "policy", "release"),
     ),
+    TestInvariant(
+        "GUARD-INV-023",
+        "tests/test_guard_data_flow.py::test_data_flow_exfiltration_detector_flags_malicious_shell_patterns",
+        "data-flow-corpus",
+        "Known secret-source to external-sink patterns keep their required data-flow signal.",
+        ("security_critical", "regression", "policy", "release"),
+    ),
+    TestInvariant(
+        "GUARD-INV-024",
+        "tests/test_guard_data_flow.py::test_data_flow_exfiltration_detector_ignores_benign_shell_patterns",
+        "data-flow-corpus",
+        "Known benign shell patterns do not create false-positive data-flow signals.",
+        ("security_critical", "regression", "policy", "release"),
+    ),
 )
 
 
