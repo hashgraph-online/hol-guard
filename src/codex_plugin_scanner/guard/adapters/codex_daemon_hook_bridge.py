@@ -223,6 +223,9 @@ def _http_json_response(
         if not chunk:
             break
         body.extend(chunk)
+        if response.length == 0:
+            response.close()
+            break
     if len(body) > _MAX_DAEMON_RESPONSE_BYTES:
         raise ValueError(f"{label} response is too large")
     if response.status != 200:

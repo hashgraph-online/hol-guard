@@ -25,6 +25,7 @@ _HOOK_PROCESS_ACQUIRE_TIMEOUT_SECONDS = 0.2
 _HOOK_PROCESS_BACKFILL_DELAY_SECONDS = 2.0
 _HOOK_PROCESS_BACKFILL_MAX_DEFERRAL_SECONDS = 5.0
 _HOOK_PROCESS_RETRY_MAX_SECONDS = 5.0
+_HOOK_PROCESS_CLOSE_REVIEW_TIMEOUT_SECONDS = 1.0
 
 
 @final
@@ -243,6 +244,16 @@ class HookProcessRunner:
         for spawn_thread in spawn_threads:
             if spawn_thread is not threading.current_thread():
                 spawn_thread.join(timeout=0.2)
+        active_review_deadline = time.monotonic() + _HOOK_PROCESS_CLOSE_REVIEW_TIMEOUT_SECONDS
+        while True:
+            with self._state_lock:
+                if not self._active_reviews:
+                    break
+            remaining = active_review_deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            _ = self._recovery_event.wait(timeout=min(0.05, remaining))
+            self._recovery_event.clear()
         with self._state_lock:
             if supervisor is not None and not supervisor.is_alive():
                 self._supervisor_thread = None

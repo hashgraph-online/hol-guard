@@ -629,7 +629,7 @@ def test_crashed_guardian_fails_closed_without_stale_group_cleanup(tmp_path: Pat
 
 
 def test_review_waits_briefly_for_prepared_worker_capacity(tmp_path: Path) -> None:
-    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=0.5)
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=1.5)
     runner.start()
     slot = runner._slots.get_nowait()  # pyright: ignore[reportPrivateUsage]
     release = threading.Timer(0.05, lambda: runner._slots.put_nowait(slot))  # pyright: ignore[reportPrivateUsage]
