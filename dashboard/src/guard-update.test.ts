@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { buildGuardDaemonCandidatePorts, normalizeGuardUpdateStatus, updateReconnectSucceeded } from "./guard-api";
-import { GuardUpdatePanel } from "./guard-update-panel";
+import { AlphaChannelDialog, GuardUpdatePanel } from "./guard-update-panel";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -50,15 +50,41 @@ const alphaMarkup = renderToStaticMarkup(
     onSetUpdateChannel: () => undefined,
   }),
 );
-assert(alphaMarkup.includes("Use alpha updates"), "sidebar should expose the alpha opt-in");
-assert(alphaMarkup.includes("Alpha releases may be unstable"), "alpha opt-in should include a risk disclaimer");
+assert(alphaMarkup.includes("Alpha updates enabled"), "sidebar should show the active alpha channel");
+assert(!alphaMarkup.includes('type="checkbox"'), "sidebar should open alpha confirmation instead of toggling immediately");
 
 const loadingMarkup = renderToStaticMarkup(
   createElement(GuardUpdatePanel, {
     onSetUpdateChannel: () => undefined,
   }),
 );
-assert(loadingMarkup.includes("Use alpha updates"), "sidebar should expose the alpha opt-in while version status loads");
+assert(loadingMarkup.includes("Try alpha updates"), "sidebar should expose the alpha confirmation while version status loads");
+
+const alphaDialogMarkup = renderToStaticMarkup(
+  createElement(AlphaChannelDialog, {
+    useAlpha: false,
+    pending: false,
+    error: "Guard could not change the update channel. Try again.",
+    onClose: () => undefined,
+    onConfirm: () => undefined,
+  }),
+);
+assert(alphaDialogMarkup.includes("Try alpha updates"), "alpha dialog should explain the selected release channel");
+assert(alphaDialogMarkup.includes("This does not install an update immediately."), "alpha dialog should separate enrollment from updating");
+assert(alphaDialogMarkup.includes("Enable alpha updates"), "alpha dialog should require explicit confirmation");
+assert(alphaDialogMarkup.includes("Guard could not change the update channel"), "channel errors should remain inside the dialog");
+
+const stableDialogMarkup = renderToStaticMarkup(
+  createElement(AlphaChannelDialog, {
+    useAlpha: true,
+    pending: false,
+    error: null,
+    onClose: () => undefined,
+    onConfirm: () => undefined,
+  }),
+);
+assert(stableDialogMarkup.includes("Return to stable updates"), "alpha users should be able to return to stable updates");
+assert(stableDialogMarkup.includes("Use stable updates"), "stable fallback should require explicit confirmation");
 
 const blocked = normalizeGuardUpdateStatus({
   auto_updatable: false,

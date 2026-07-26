@@ -18531,6 +18531,133 @@ function ShellFooter() {
     )) })
   ] }) });
 }
+var reactDomExports = requireReactDom();
+function getFocusableElements(container2) {
+  const selector = [
+    "button:not([disabled])",
+    "a[href]",
+    "input:not([disabled])",
+    "select:not([disabled])",
+    "textarea:not([disabled])",
+    '[tabindex]:not([tabindex="-1"])',
+    "[contenteditable]"
+  ].join(",");
+  return Array.from(container2.querySelectorAll(selector)).filter(
+    (el) => el instanceof HTMLElement && el.offsetParent !== null
+  );
+}
+function useFocusTrap(active, containerRef) {
+  const previouslyFocusedRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (!active) return;
+    const container2 = containerRef.current;
+    if (!container2) return;
+    previouslyFocusedRef.current = document.activeElement;
+    const focusable = getFocusableElements(container2);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (first) {
+      first.focus();
+    }
+    function handleKeyDown(event) {
+      if (event.key !== "Tab") return;
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      if (event.shiftKey) {
+        if (document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    }
+    container2.addEventListener("keydown", handleKeyDown);
+    return () => {
+      container2.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocusedRef.current && previouslyFocusedRef.current.isConnected) {
+        previouslyFocusedRef.current.focus();
+      }
+    };
+  }, [active, containerRef]);
+}
+function GuardModalLayer({
+  ariaLabel,
+  children,
+  onClose,
+  panelClassName = "w-full max-w-2xl"
+}) {
+  const [mounted, setMounted] = reactExports.useState(false);
+  const panelRef = reactExports.useRef(null);
+  const onCloseRef = reactExports.useRef(onClose);
+  onCloseRef.current = onClose;
+  useFocusTrap(mounted, panelRef);
+  reactExports.useEffect(() => {
+    setMounted(true);
+  }, []);
+  reactExports.useEffect(() => {
+    if (!mounted) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const previousCount = Number(document.documentElement.dataset.guardModalOpen ?? 0);
+    document.documentElement.dataset.guardModalOpen = String(previousCount + 1);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      const nextCount = Number(document.documentElement.dataset.guardModalOpen ?? 1) - 1;
+      if (nextCount <= 0) {
+        delete document.documentElement.dataset.guardModalOpen;
+      } else {
+        document.documentElement.dataset.guardModalOpen = String(nextCount);
+      }
+    };
+  }, [mounted]);
+  reactExports.useEffect(() => {
+    if (!mounted) return;
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [mounted]);
+  const handleBackdropClick = (event) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  };
+  if (!mounted) {
+    return null;
+  }
+  return reactDomExports.createPortal(
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/45 p-4 backdrop-blur-[2px] sm:items-center",
+        onClick: handleBackdropClick,
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": ariaLabel,
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "div",
+          {
+            ref: panelRef,
+            className: `relative ${panelClassName}`,
+            onClick: (event) => event.stopPropagation(),
+            children
+          }
+        )
+      }
+    ),
+    document.body
+  );
+}
 const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
 const RECONNECT_TIMEOUT_MS = 18e4;
@@ -18589,6 +18716,56 @@ function updateHelpCopy(status, phase) {
   }
   return null;
 }
+function AlphaChannelDialog({ useAlpha, pending, error, onClose, onConfirm }) {
+  const title = useAlpha ? "Return to stable updates" : "Try alpha updates";
+  const description = useAlpha ? "Stable updates receive the most thoroughly tested Guard releases. You can enable alpha updates again whenever you need early access." : "Alpha releases arrive before stable builds. They can include unfinished changes and may require a restart.";
+  const confirmLabel = useAlpha ? "Use stable updates" : "Enable alpha updates";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-white shadow-xl", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/70", children: description })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          disabled: pending,
+          "aria-label": "Close update channel dialog",
+          className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-brand-dark/55 transition-colors hover:bg-slate-100 hover:text-brand-dark disabled:cursor-not-allowed disabled:opacity-50",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" })
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 px-5 py-4 text-sm leading-relaxed text-brand-dark/75", children: [
+      !useAlpha ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Guard will keep stable updates until you confirm this change. This does not install an update immediately." }) : null,
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-md bg-red-50 px-3 py-2 text-sm text-red-700", children: error }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          disabled: pending,
+          className: "min-h-10 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50",
+          children: "Cancel"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: onConfirm,
+          disabled: pending,
+          className: "min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60",
+          children: pending ? "Saving…" : confirmLabel
+        }
+      )
+    ] })
+  ] });
+}
 function GuardUpdatePanel(props) {
   const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
@@ -18597,12 +18774,37 @@ function GuardUpdatePanel(props) {
   const showReinstallButton = shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
   const useAlpha = props.updateStatus?.release_channel === "alpha";
-  const handleAlphaChange = reactExports.useCallback(
-    (event) => {
-      props.onSetUpdateChannel?.(event.target.checked ? "alpha" : "stable");
-    },
-    [props.onSetUpdateChannel]
-  );
+  const [alphaModalOpen, setAlphaModalOpen] = reactExports.useState(false);
+  const [alphaSavePending, setAlphaSavePending] = reactExports.useState(false);
+  const [alphaSaveError, setAlphaSaveError] = reactExports.useState(null);
+  const targetChannel = useAlpha ? "stable" : "alpha";
+  const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
+  const handleOpenAlphaModal = reactExports.useCallback(() => {
+    setAlphaSaveError(null);
+    setAlphaModalOpen(true);
+  }, []);
+  const handleCloseAlphaModal = reactExports.useCallback(() => {
+    if (alphaSavePending) {
+      return;
+    }
+    setAlphaModalOpen(false);
+    setAlphaSaveError(null);
+  }, [alphaSavePending]);
+  const handleConfirmAlphaChannel = reactExports.useCallback(async () => {
+    if (!props.onSetUpdateChannel) {
+      return;
+    }
+    setAlphaSavePending(true);
+    setAlphaSaveError(null);
+    try {
+      await props.onSetUpdateChannel(targetChannel);
+      setAlphaModalOpen(false);
+    } catch {
+      setAlphaSaveError("Guard could not change the update channel. Try again.");
+    } finally {
+      setAlphaSavePending(false);
+    }
+  }, [props.onSetUpdateChannel, targetChannel]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
     version ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/60", "aria-label": `Guard version ${version}`, children: [
       "v",
@@ -18610,22 +18812,16 @@ function GuardUpdatePanel(props) {
     ] }) : null,
     props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/75", children: updateStatusLabel(props.updateStatus) }) : null,
     helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: helpCopy }) : null,
-    props.onSetUpdateChannel ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-brand-dark/70", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          type: "checkbox",
-          checked: useAlpha,
-          disabled: busy,
-          onChange: handleAlphaChange,
-          className: "mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-brand-blue focus:ring-brand-blue"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-        "Use alpha updates",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-brand-dark/55", children: "Alpha releases may be unstable and can include unfinished changes." })
-      ] })
-    ] }) : null,
+    props.onSetUpdateChannel ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: handleOpenAlphaModal,
+        disabled: busy,
+        className: "inline-flex min-h-9 w-full items-center justify-center rounded-lg border border-brand-blue/25 bg-white px-3 py-2 text-xs font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
+        children: useAlpha ? "Alpha updates enabled" : "Try alpha updates"
+      }
+    ) : null,
     showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
@@ -18653,7 +18849,17 @@ function GuardUpdatePanel(props) {
     busy && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex min-h-11 items-center gap-2 text-[11px] font-medium text-brand-blue", role: "status", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
       phase === "updating" ? "Updating Guard…" : "Reconnecting…"
-    ] })
+    ] }),
+    alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: modalTitle, onClose: handleCloseAlphaModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      AlphaChannelDialog,
+      {
+        useAlpha,
+        pending: alphaSavePending,
+        error: alphaSaveError,
+        onClose: handleCloseAlphaModal,
+        onConfirm: handleConfirmAlphaChannel
+      }
+    ) }) : null
   ] });
 }
 function useGuardUpdate(options) {
@@ -18803,11 +19009,7 @@ function useGuardUpdate(options) {
     });
   }, [scheduleAndWait, updateStatus]);
   const onSetUpdateChannel = reactExports.useCallback(async (channel) => {
-    try {
-      setUpdateStatus(await setGuardUpdateChannel(channel));
-    } catch {
-      setUpdatePhase("error");
-    }
+    setUpdateStatus(await setGuardUpdateChannel(channel));
   }, []);
   return {
     guardVersion: updateStatus?.current_version ?? null,
@@ -20883,7 +21085,6 @@ function EvidenceInsightStrip({ metrics }) {
     }
   );
 }
-var reactDomExports = requireReactDom();
 function intensityClass(total, peak) {
   if (total <= 0) return "evidence-heatmap-0";
   const ratio = peak > 0 ? total / peak : 0;
@@ -21331,132 +21532,6 @@ function EvidenceInsightsHeadlineBento({
 function HomeInsightsMetrics({ analytics }) {
   const items = buildInsightMetrics(analytics, "compact");
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-4", children: items.map((item, index) => renderInsightMetric(item, index, true)) });
-}
-function getFocusableElements(container2) {
-  const selector = [
-    "button:not([disabled])",
-    "a[href]",
-    "input:not([disabled])",
-    "select:not([disabled])",
-    "textarea:not([disabled])",
-    '[tabindex]:not([tabindex="-1"])',
-    "[contenteditable]"
-  ].join(",");
-  return Array.from(container2.querySelectorAll(selector)).filter(
-    (el) => el instanceof HTMLElement && el.offsetParent !== null
-  );
-}
-function useFocusTrap(active, containerRef) {
-  const previouslyFocusedRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
-    if (!active) return;
-    const container2 = containerRef.current;
-    if (!container2) return;
-    previouslyFocusedRef.current = document.activeElement;
-    const focusable = getFocusableElements(container2);
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (first) {
-      first.focus();
-    }
-    function handleKeyDown(event) {
-      if (event.key !== "Tab") return;
-      if (focusable.length === 0) {
-        event.preventDefault();
-        return;
-      }
-      if (event.shiftKey) {
-        if (document.activeElement === first) {
-          event.preventDefault();
-          last?.focus();
-        }
-      } else {
-        if (document.activeElement === last) {
-          event.preventDefault();
-          first?.focus();
-        }
-      }
-    }
-    container2.addEventListener("keydown", handleKeyDown);
-    return () => {
-      container2.removeEventListener("keydown", handleKeyDown);
-      if (previouslyFocusedRef.current && previouslyFocusedRef.current.isConnected) {
-        previouslyFocusedRef.current.focus();
-      }
-    };
-  }, [active, containerRef]);
-}
-function GuardModalLayer({
-  ariaLabel,
-  children,
-  onClose,
-  panelClassName = "w-full max-w-2xl"
-}) {
-  const [mounted, setMounted] = reactExports.useState(false);
-  const panelRef = reactExports.useRef(null);
-  const onCloseRef = reactExports.useRef(onClose);
-  onCloseRef.current = onClose;
-  useFocusTrap(mounted, panelRef);
-  reactExports.useEffect(() => {
-    setMounted(true);
-  }, []);
-  reactExports.useEffect(() => {
-    if (!mounted) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const previousCount = Number(document.documentElement.dataset.guardModalOpen ?? 0);
-    document.documentElement.dataset.guardModalOpen = String(previousCount + 1);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      const nextCount = Number(document.documentElement.dataset.guardModalOpen ?? 1) - 1;
-      if (nextCount <= 0) {
-        delete document.documentElement.dataset.guardModalOpen;
-      } else {
-        document.documentElement.dataset.guardModalOpen = String(nextCount);
-      }
-    };
-  }, [mounted]);
-  reactExports.useEffect(() => {
-    if (!mounted) return;
-    function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [mounted]);
-  const handleBackdropClick = (event) => {
-    if (event.target === event.currentTarget) {
-      onClose();
-    }
-  };
-  if (!mounted) {
-    return null;
-  }
-  return reactDomExports.createPortal(
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
-      {
-        className: "fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/45 p-4 backdrop-blur-[2px] sm:items-center",
-        onClick: handleBackdropClick,
-        role: "dialog",
-        "aria-modal": "true",
-        "aria-label": ariaLabel,
-        children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "div",
-          {
-            ref: panelRef,
-            className: `relative ${panelClassName}`,
-            onClick: (event) => event.stopPropagation(),
-            children
-          }
-        )
-      }
-    ),
-    document.body
-  );
 }
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);

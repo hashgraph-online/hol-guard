@@ -3042,6 +3042,10 @@
     background-color: var(--color-purple-500);
   }
 
+  .bg-red-50 {
+    background-color: var(--color-red-50);
+  }
+
   .bg-red-50\/40 {
     background-color: #fef2f266;
   }
@@ -5328,7 +5332,7 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
-  .focus\:ring-brand-blue:focus, .focus\:ring-brand-blue\/15:focus {
+  .focus\:ring-brand-blue\/15:focus {
     --tw-ring-color: var(--brand-blue);
   }
 

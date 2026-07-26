@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChangeEvent } from "react";
-import { HiMiniArrowPath } from "react-icons/hi2";
+import { HiMiniArrowPath, HiMiniXMark } from "react-icons/hi2";
 
 import {
   fetchGuardUpdateStatus,
@@ -16,6 +15,7 @@ import type {
   GuardUpdatePhase,
   GuardUpdateStatus,
 } from "./guard-types";
+import { GuardModalLayer } from "./guard-modal-layer";
 
 const UPDATE_STATUS_POLL_MS = 60_000;
 const RECONNECT_POLL_MS = 1_500;
@@ -27,8 +27,16 @@ export type GuardUpdatePanelProps = {
   updatePhase?: GuardUpdatePhase;
   onUpdateGuard?: () => void;
   onReinstallGuard?: () => void;
-  onSetUpdateChannel?: (channel: "stable" | "alpha") => void;
+  onSetUpdateChannel?: (channel: "stable" | "alpha") => void | Promise<void>;
   compact?: boolean;
+};
+
+type AlphaChannelDialogProps = {
+  useAlpha: boolean;
+  pending: boolean;
+  error: string | null;
+  onClose: () => void;
+  onConfirm: () => void;
 };
 
 function updateStatusLabel(status: GuardUpdateStatus | null | undefined): string {
@@ -94,6 +102,58 @@ function updateHelpCopy(status: GuardUpdateStatus | null | undefined, phase: Gua
   return null;
 }
 
+export function AlphaChannelDialog({ useAlpha, pending, error, onClose, onConfirm }: AlphaChannelDialogProps) {
+  const title = useAlpha ? "Return to stable updates" : "Try alpha updates";
+  const description = useAlpha
+    ? "Stable updates receive the most thoroughly tested Guard releases. You can enable alpha updates again whenever you need early access."
+    : "Alpha releases arrive before stable builds. They can include unfinished changes and may require a restart.";
+  const confirmLabel = useAlpha ? "Use stable updates" : "Enable alpha updates";
+
+  return (
+    <div className="rounded-lg bg-white shadow-xl">
+      <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+        <div>
+          <h2 className="text-base font-semibold text-brand-dark">{title}</h2>
+          <p className="mt-1 text-sm leading-relaxed text-brand-dark/70">{description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={pending}
+          aria-label="Close update channel dialog"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-brand-dark/55 transition-colors hover:bg-slate-100 hover:text-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <HiMiniXMark className="h-5 w-5" aria-hidden="true" />
+        </button>
+      </div>
+      <div className="space-y-3 px-5 py-4 text-sm leading-relaxed text-brand-dark/75">
+        {!useAlpha ? (
+          <p>Guard will keep stable updates until you confirm this change. This does not install an update immediately.</p>
+        ) : null}
+        {error ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      </div>
+      <div className="flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={pending}
+          className="min-h-10 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={pending}
+          className="min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {pending ? "Saving…" : confirmLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
@@ -107,12 +167,38 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   const showReinstallButton = shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
   const useAlpha = props.updateStatus?.release_channel === "alpha";
-  const handleAlphaChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      props.onSetUpdateChannel?.(event.target.checked ? "alpha" : "stable");
-    },
-    [props.onSetUpdateChannel],
-  );
+  const [alphaModalOpen, setAlphaModalOpen] = useState(false);
+  const [alphaSavePending, setAlphaSavePending] = useState(false);
+  const [alphaSaveError, setAlphaSaveError] = useState<string | null>(null);
+  const targetChannel = useAlpha ? "stable" : "alpha";
+  const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
+
+  const handleOpenAlphaModal = useCallback(() => {
+    setAlphaSaveError(null);
+    setAlphaModalOpen(true);
+  }, []);
+  const handleCloseAlphaModal = useCallback(() => {
+    if (alphaSavePending) {
+      return;
+    }
+    setAlphaModalOpen(false);
+    setAlphaSaveError(null);
+  }, [alphaSavePending]);
+  const handleConfirmAlphaChannel = useCallback(async () => {
+    if (!props.onSetUpdateChannel) {
+      return;
+    }
+    setAlphaSavePending(true);
+    setAlphaSaveError(null);
+    try {
+      await props.onSetUpdateChannel(targetChannel);
+      setAlphaModalOpen(false);
+    } catch {
+      setAlphaSaveError("Guard could not change the update channel. Try again.");
+    } finally {
+      setAlphaSavePending(false);
+    }
+  }, [props.onSetUpdateChannel, targetChannel]);
 
   return (
     <div className={props.compact ? "space-y-1" : "space-y-2"}>
@@ -128,19 +214,14 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
         <p className="text-[11px] leading-relaxed text-brand-dark/70">{helpCopy}</p>
       ) : null}
       {props.onSetUpdateChannel ? (
-        <label className="flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-brand-dark/70">
-          <input
-            type="checkbox"
-            checked={useAlpha}
-            disabled={busy}
-            onChange={handleAlphaChange}
-            className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-brand-blue focus:ring-brand-blue"
-          />
-          <span>
-            Use alpha updates
-            <span className="block text-brand-dark/55">Alpha releases may be unstable and can include unfinished changes.</span>
-          </span>
-        </label>
+        <button
+          type="button"
+          onClick={handleOpenAlphaModal}
+          disabled={busy}
+          className="inline-flex min-h-9 w-full items-center justify-center rounded-lg border border-brand-blue/25 bg-white px-3 py-2 text-xs font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {useAlpha ? "Alpha updates enabled" : "Try alpha updates"}
+        </button>
       ) : null}
       {showUpdateButton && props.onUpdateGuard ? (
         <button
@@ -168,6 +249,17 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
           {phase === "updating" ? "Updating Guard…" : "Reconnecting…"}
         </p>
       )}
+      {alphaModalOpen ? (
+        <GuardModalLayer ariaLabel={modalTitle} onClose={handleCloseAlphaModal} panelClassName="w-full max-w-md">
+          <AlphaChannelDialog
+            useAlpha={useAlpha}
+            pending={alphaSavePending}
+            error={alphaSaveError}
+            onClose={handleCloseAlphaModal}
+            onConfirm={handleConfirmAlphaChannel}
+          />
+        </GuardModalLayer>
+      ) : null}
     </div>
   );
 }
@@ -339,11 +431,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
   }, [scheduleAndWait, updateStatus]);
 
   const onSetUpdateChannel = useCallback(async (channel: "stable" | "alpha") => {
-    try {
-      setUpdateStatus(await setGuardUpdateChannel(channel));
-    } catch {
-      setUpdatePhase("error");
-    }
+    setUpdateStatus(await setGuardUpdateChannel(channel));
   }, []);
 
   return {
