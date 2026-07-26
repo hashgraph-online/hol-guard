@@ -163,6 +163,13 @@ TEST_INVARIANTS: Final[tuple[TestInvariant, ...]] = (
         "Curated parser security faults remain rejected or observable through canonical parsing.",
         ("security_critical", "regression", "parser", "release"),
     ),
+    TestInvariant(
+        "GUARD-INV-021",
+        "tests/test_guard_command_critical_floors.py::test_security_critical_commands_retain_exact_floors",
+        "command-floor-corpus",
+        "Critical destructive, secret, managed-service, and self-protection command floors remain exact.",
+        ("security_critical", "regression", "parser", "policy", "release"),
+    ),
 )
 
 
