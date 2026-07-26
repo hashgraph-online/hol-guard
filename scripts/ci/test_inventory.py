@@ -144,7 +144,10 @@ def corpus_record_count() -> int:
         COPILOT_NODE_DELETE_DENY_CASES,
     )
     from tests.guard_seeded_faults import PARSER_SEEDED_FAULTS
-    from tests.test_guard_command_critical_floors import CRITICAL_COMMAND_FLOORS
+    from tests.test_guard_command_critical_floors import (
+        CRITICAL_COMMAND_FLOORS,
+        CRITICAL_NEAR_MISS_COMMANDS,
+    )
     from tests.test_guard_data_flow import BENIGN_DATA_FLOW_CASES, MALICIOUS_DATA_FLOW_CASES
     from tests.test_guard_github_command_capabilities import GITHUB_REVIEW_FLOORS
 
@@ -155,6 +158,7 @@ def corpus_record_count() -> int:
         + len(COPILOT_NODE_DELETE_DENY_CASES)
         + len(PARSER_SEEDED_FAULTS)
         + len(CRITICAL_COMMAND_FLOORS)
+        + len(CRITICAL_NEAR_MISS_COMMANDS)
         + len(GITHUB_REVIEW_FLOORS)
         + len(BENIGN_DATA_FLOW_CASES)
         + len(MALICIOUS_DATA_FLOW_CASES)

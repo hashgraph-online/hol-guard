@@ -4,8 +4,6 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Final
 
-import pytest
-
 from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 
@@ -156,8 +154,6 @@ CRITICAL_COMMAND_FLOORS: Final[tuple[tuple[str, GuardAction], ...]] = (
 
 
 def _critical_floor_case_id(command: str) -> str:
-    """Provide a stable opaque ID alongside the exact command retained in failure diagnostics."""
-
     return f"critical-floor-{sha256(command.encode('utf-8')).hexdigest()[:16]}"
 
 
@@ -184,46 +180,49 @@ def test_launcher_ambiguity_fanout_fails_closed() -> None:
     assert evaluation.decision_plane.action == "block"
 
 
-@pytest.mark.parametrize(
-    "command",
-    (
-        "gh pr view 17 --repo example/repo",
-        "rm -r workspace/cache",
-        "rm -rf ./build",
-        "rm --recursive --force ./dist ./coverage",
-        "printf '%s' workspace/sensitive",
-        "git diff --name-only | jq -R .",
-        "npm view",
-        "docker compose version",
-        "rm -- -rf",
-        "rm -f -- -r",
-        "rm -r -- -f",
-        "timeout 5 bash --norc 'rm -rf workspace/target'",
-        "timeout 5 env -S '/bin/bash -c' 'printf safe'",
-        "timeout 5 env -s '/bin/bash -c' 'rm -rf workspace/target'",
-        "timeout 5 env --split-string '/bin/bash -c",
-        "timeout 5 env -u -S '/bin/bash -c' 'rm -rf workspace/target'",
-        "timeout 5 env -xS'/bin/bash -c' 'rm -rf workspace/target'",
-        "timeout 5 env --debugging -S '/bin/bash -c' 'rm -rf workspace/target'",
-        "timeout 5 env --debug=1 -S '/bin/bash -c' 'rm -rf workspace/target'",
-        "timeout 5 env --chdir= -S '/bin/bash -c' 'rm -rf workspace/target'",
-        "timeout 5 env --unset-name TOKEN -S '/bin/bash -c' 'rm -rf workspace/target'",
-        "timeout 5 env -C -S '/bin/bash -c' 'rm -rf workspace/target'",
-        "timeout 5 env -Something 'bash -c' 'rm -rf /'",
-        "timeout 5 env --split-strings='bash -c \"rm -rf /\"'",
-        "gh api graphql -f query='mutation{updateIssue(input:{title:\"do not delete\"}){issue{id}}}'",
-        "gh api graphql -f query='mutation($removeLabel:String!){updateIssue(input:{title:$removeLabel}){issue{id}}}'",
-        "aws --profile route53 sts get-caller-identity --output delete-hosted-zone",
-        "aws route53 --cli value delete-hosted-zone --id zone",
-        "stripe --api-key products customers list delete",
-        "xargs echo hol-guard uninstall --all",
-        "find workspace -exec echo hol-guard uninstall --all {} ';'",
-        "xargs sh -c 'printf safe'",
-        "find workspace -exec sh -c 'printf safe' ';'",
-        "parallel sh -c 'printf safe'",
-        "not-gh.exe pr merge 17 --repo example/repo --squash",
-    ),
+CRITICAL_NEAR_MISS_COMMANDS: Final[tuple[str, ...]] = (
+    "gh pr view 17 --repo example/repo",
+    "rm -r workspace/cache",
+    "rm -rf ./build",
+    "rm --recursive --force ./dist ./coverage",
+    "printf '%s' workspace/sensitive",
+    "git diff --name-only | jq -R .",
+    "npm view",
+    "docker compose version",
+    "rm -- -rf",
+    "rm -f -- -r",
+    "rm -r -- -f",
+    "timeout 5 bash --norc 'rm -rf workspace/target'",
+    "timeout 5 env -S '/bin/bash -c' 'printf safe'",
+    "timeout 5 env -s '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env --split-string '/bin/bash -c",
+    "timeout 5 env -u -S '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env -xS'/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env --debugging -S '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env --debug=1 -S '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env --chdir= -S '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env --unset-name TOKEN -S '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env -C -S '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env -Something 'bash -c' 'rm -rf /'",
+    "timeout 5 env --split-strings='bash -c \"rm -rf /\"'",
+    "gh api graphql -f query='mutation{updateIssue(input:{title:\"do not delete\"}){issue{id}}}'",
+    "gh api graphql -f query='mutation($removeLabel:String!){updateIssue(input:{title:$removeLabel}){issue{id}}}'",
+    "aws --profile route53 sts get-caller-identity --output delete-hosted-zone",
+    "aws route53 --cli value delete-hosted-zone --id zone",
+    "stripe --api-key products customers list delete",
+    "xargs echo hol-guard uninstall --all",
+    "find workspace -exec echo hol-guard uninstall --all {} ';'",
+    "xargs sh -c 'printf safe'",
+    "find workspace -exec sh -c 'printf safe' ';'",
+    "parallel sh -c 'printf safe'",
+    "not-gh.exe pr merge 17 --repo example/repo --squash",
 )
-def test_security_floors_do_not_widen_near_misses_to_block(command: str) -> None:
-    evaluation = evaluate_command(command, cwd=Path("workspace"), home_dir=Path("home"))
-    assert evaluation.decision_plane.action != "block"
+
+
+def test_security_floors_do_not_widen_near_misses_to_block() -> None:
+    failures: list[str] = []
+    for command in CRITICAL_NEAR_MISS_COMMANDS:
+        actual = evaluate_command(command, cwd=Path("workspace"), home_dir=Path("home")).decision_plane.action
+        if actual == "block":
+            failures.append(f"{_critical_floor_case_id(command)}: expected non-blocking action; command={command!r}")
+    assert not failures, "\n".join(failures)
