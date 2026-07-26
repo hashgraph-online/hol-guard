@@ -12470,7 +12470,7 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
 def test_guard_run_headless_redetects_before_persisted_resume(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 1\n")
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 5\n")
 
     store = GuardStore(home_dir)
     baseline = GuardArtifact(
@@ -12535,6 +12535,16 @@ def test_guard_run_headless_redetects_before_persisted_resume(tmp_path, monkeypa
     call_count = {"detect": 0}
     monkeypatch.setattr(
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
+    )
+
+    class FailingDaemonClient:
+        def start_session(self, **_kwargs):
+            raise RuntimeError("Guard daemon request failed: timed out")
+
+    monkeypatch.setattr(
+        guard_commands_module,
+        "load_guard_surface_daemon_client",
+        lambda _guard_home: FailingDaemonClient(),
     )
     monkeypatch.setattr(
         guard_runner_module.subprocess,
