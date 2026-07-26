@@ -38,6 +38,10 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
+      - name: Validate protected test invariants
+        run: uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
+      - name: Publish test inventory
+        run: cat test-inventory.json
       - run: uv run --no-sync python -m ruff check src/
       - run: uv run --no-sync python -m ruff format --check src/
       - run: uv run --no-sync basedpyright --level error

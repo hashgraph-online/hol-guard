@@ -14,259 +14,229 @@ from codex_plugin_scanner.guard.runtime.command_option_parsing import (
     matches_subcommands_conservatively,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
 
-
-@pytest.mark.parametrize(
-    ("command", "action_class", "rule_id"),
-    [
-        ("rclone sync source: destination:", "Rclone destructive command", "command.backup.rclone.mutation"),
-        ("rclone.exe move source: destination:", "Rclone destructive command", "command.backup.rclone.mutation"),
-        (
-            "rclone --config --dry-run purge remote:archive",
-            "Rclone destructive command",
-            "command.backup.rclone.mutation",
-        ),
-        (
-            "rclone --log-level DEBUG purge remote:archive",
-            "Rclone destructive command",
-            "command.backup.rclone.mutation",
-        ),
-        (
-            "rclone --log-level=DEBUG purge remote:archive",
-            "Rclone destructive command",
-            "command.backup.rclone.mutation",
-        ),
-        (
-            "rclone --future-global-option --dry-run purge remote:archive",
-            "Rclone destructive command",
-            "command.backup.rclone.mutation",
-        ),
-        (
-            "rclone purge remote:archive --dry-run=false",
-            "Rclone destructive command",
-            "command.backup.rclone.mutation",
-        ),
-        (
-            "rclone purge remote:archive --dry-run=0",
-            "Rclone destructive command",
-            "command.backup.rclone.mutation",
-        ),
-        (
-            "rclone purge remote:archive --dry-run --dry-run=false",
-            "Rclone destructive command",
-            "command.backup.rclone.mutation",
-        ),
-        (
-            "rclone purge remote:archive --dry-run=true --dry-run=false",
-            "Rclone destructive command",
-            "command.backup.rclone.mutation",
-        ),
-        (
-            "rclone -ab value purge remote:archive",
-            "Rclone destructive command",
-            "command.backup.rclone.mutation",
-        ),
-        (
-            "rclone -ab --dry-run purge remote:archive",
-            "Rclone destructive command",
-            "command.backup.rclone.mutation",
-        ),
-        ("restic -r s3:archive forget latest --prune", "Restic destructive command", "command.backup.restic.mutation"),
-        (
-            "restic --compression max forget latest --prune",
-            "Restic destructive command",
-            "command.backup.restic.mutation",
-        ),
-        (
-            "restic --compression=max forget latest --prune",
-            "Restic destructive command",
-            "command.backup.restic.mutation",
-        ),
-        (
-            "restic --future-global-option --dry-run forget latest --prune",
-            "Restic destructive command",
-            "command.backup.restic.mutation",
-        ),
-        (
-            "restic -qr repository forget latest --prune",
-            "Restic destructive command",
-            "command.backup.restic.mutation",
-        ),
-        (
-            "restic -qrs3:archive forget latest --prune",
-            "Restic destructive command",
-            "command.backup.restic.mutation",
-        ),
-        (
-            "restic forget latest --dry-run --dry-run=false",
-            "Restic destructive command",
-            "command.backup.restic.mutation",
-        ),
-        ("restic rewrite --forget latest", "Restic destructive command", "command.backup.restic.mutation"),
-        ("borg.cmd prune --keep-daily 7 /archive", "Borg destructive command", "command.backup.borg.mutation"),
-        ("borg delete /archive::old", "Borg destructive command", "command.backup.borg.mutation"),
-        ("borg --repo /archive prune --keep-daily 7", "Borg destructive command", "command.backup.borg.mutation"),
-        ("borg -r/archive delete old", "Borg destructive command", "command.backup.borg.mutation"),
-        (
-            "borg --remote-ratelimit 1000 delete /archive::old",
-            "Borg destructive command",
-            "command.backup.borg.mutation",
-        ),
-        (
-            "borg --remote-ratelimit=1000 delete /archive::old",
-            "Borg destructive command",
-            "command.backup.borg.mutation",
-        ),
-        (
-            "borg --future-global-option --dry-run delete /archive::old",
-            "Borg destructive command",
-            "command.backup.borg.mutation",
-        ),
-        (
-            "borg -Pfoo-n prune --keep-daily 7 /archive",
-            "Borg destructive command",
-            "command.backup.borg.mutation",
-        ),
-        (
-            "borg -afoo-n prune --keep-daily 7 /archive",
-            "Borg destructive command",
-            "command.backup.borg.mutation",
-        ),
-        (
-            "borg -efoo-n recreate /archive",
-            "Borg destructive command",
-            "command.backup.borg.mutation",
-        ),
-        (
-            "borg -vr /archive prune --keep-daily 7",
-            "Borg destructive command",
-            "command.backup.borg.mutation",
-        ),
-        (
-            "borg -vr/archive prune --keep-daily 7",
-            "Borg destructive command",
-            "command.backup.borg.mutation",
-        ),
-        (
-            "borg prune --keep-daily 7 /archive --dry-run --dry-run=false",
-            "Borg destructive command",
-            "command.backup.borg.mutation",
-        ),
-        ("velero backup delete release-1", "Velero destructive command", "command.backup.velero.deletion"),
-        (
-            "velero --namespace prod backup delete release-1",
-            "Velero destructive command",
-            "command.backup.velero.deletion",
-        ),
-        (
-            "velero --kubeconfig=config-file restore delete release-1",
-            "Velero destructive command",
-            "command.backup.velero.deletion",
-        ),
-        ("velero -nprod schedule delete nightly", "Velero destructive command", "command.backup.velero.deletion"),
-        (
-            "velero -vnprod backup delete release-1",
-            "Velero destructive command",
-            "command.backup.velero.deletion",
-        ),
-        (
-            "velero backup delete release-1 --help --help=false",
-            "Velero destructive command",
-            "command.backup.velero.deletion",
-        ),
-        (
-            "velero --future-global-option cluster backup delete release-1",
-            "Velero destructive command",
-            "command.backup.velero.deletion",
-        ),
-        (
-            "velero --future-global-option=cluster backup delete release-1",
-            "Velero destructive command",
-            "command.backup.velero.deletion",
-        ),
-        (
-            "velero --future-global-option --help backup delete release-1",
-            "Velero destructive command",
-            "command.backup.velero.deletion",
-        ),
-    ],
+BACKUP_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
+    ("rclone sync source: destination:", "Rclone destructive command", "command.backup.rclone.mutation"),
+    ("rclone.exe move source: destination:", "Rclone destructive command", "command.backup.rclone.mutation"),
+    (
+        "rclone --config --dry-run purge remote:archive",
+        "Rclone destructive command",
+        "command.backup.rclone.mutation",
+    ),
+    (
+        "rclone --log-level DEBUG purge remote:archive",
+        "Rclone destructive command",
+        "command.backup.rclone.mutation",
+    ),
+    (
+        "rclone --log-level=DEBUG purge remote:archive",
+        "Rclone destructive command",
+        "command.backup.rclone.mutation",
+    ),
+    (
+        "rclone --future-global-option --dry-run purge remote:archive",
+        "Rclone destructive command",
+        "command.backup.rclone.mutation",
+    ),
+    (
+        "rclone purge remote:archive --dry-run=false",
+        "Rclone destructive command",
+        "command.backup.rclone.mutation",
+    ),
+    (
+        "rclone purge remote:archive --dry-run=0",
+        "Rclone destructive command",
+        "command.backup.rclone.mutation",
+    ),
+    (
+        "rclone purge remote:archive --dry-run --dry-run=false",
+        "Rclone destructive command",
+        "command.backup.rclone.mutation",
+    ),
+    (
+        "rclone purge remote:archive --dry-run=true --dry-run=false",
+        "Rclone destructive command",
+        "command.backup.rclone.mutation",
+    ),
+    (
+        "rclone -ab value purge remote:archive",
+        "Rclone destructive command",
+        "command.backup.rclone.mutation",
+    ),
+    (
+        "rclone -ab --dry-run purge remote:archive",
+        "Rclone destructive command",
+        "command.backup.rclone.mutation",
+    ),
+    ("restic -r s3:archive forget latest --prune", "Restic destructive command", "command.backup.restic.mutation"),
+    (
+        "restic --compression max forget latest --prune",
+        "Restic destructive command",
+        "command.backup.restic.mutation",
+    ),
+    (
+        "restic --compression=max forget latest --prune",
+        "Restic destructive command",
+        "command.backup.restic.mutation",
+    ),
+    (
+        "restic --future-global-option --dry-run forget latest --prune",
+        "Restic destructive command",
+        "command.backup.restic.mutation",
+    ),
+    (
+        "restic -qr repository forget latest --prune",
+        "Restic destructive command",
+        "command.backup.restic.mutation",
+    ),
+    (
+        "restic -qrs3:archive forget latest --prune",
+        "Restic destructive command",
+        "command.backup.restic.mutation",
+    ),
+    (
+        "restic forget latest --dry-run --dry-run=false",
+        "Restic destructive command",
+        "command.backup.restic.mutation",
+    ),
+    ("restic rewrite --forget latest", "Restic destructive command", "command.backup.restic.mutation"),
+    ("borg.cmd prune --keep-daily 7 /archive", "Borg destructive command", "command.backup.borg.mutation"),
+    ("borg delete /archive::old", "Borg destructive command", "command.backup.borg.mutation"),
+    ("borg --repo /archive prune --keep-daily 7", "Borg destructive command", "command.backup.borg.mutation"),
+    ("borg -r/archive delete old", "Borg destructive command", "command.backup.borg.mutation"),
+    (
+        "borg --remote-ratelimit 1000 delete /archive::old",
+        "Borg destructive command",
+        "command.backup.borg.mutation",
+    ),
+    (
+        "borg --remote-ratelimit=1000 delete /archive::old",
+        "Borg destructive command",
+        "command.backup.borg.mutation",
+    ),
+    (
+        "borg --future-global-option --dry-run delete /archive::old",
+        "Borg destructive command",
+        "command.backup.borg.mutation",
+    ),
+    (
+        "borg -Pfoo-n prune --keep-daily 7 /archive",
+        "Borg destructive command",
+        "command.backup.borg.mutation",
+    ),
+    (
+        "borg -afoo-n prune --keep-daily 7 /archive",
+        "Borg destructive command",
+        "command.backup.borg.mutation",
+    ),
+    (
+        "borg -efoo-n recreate /archive",
+        "Borg destructive command",
+        "command.backup.borg.mutation",
+    ),
+    (
+        "borg -vr /archive prune --keep-daily 7",
+        "Borg destructive command",
+        "command.backup.borg.mutation",
+    ),
+    (
+        "borg -vr/archive prune --keep-daily 7",
+        "Borg destructive command",
+        "command.backup.borg.mutation",
+    ),
+    (
+        "borg prune --keep-daily 7 /archive --dry-run --dry-run=false",
+        "Borg destructive command",
+        "command.backup.borg.mutation",
+    ),
+    ("velero backup delete release-1", "Velero destructive command", "command.backup.velero.deletion"),
+    (
+        "velero --namespace prod backup delete release-1",
+        "Velero destructive command",
+        "command.backup.velero.deletion",
+    ),
+    (
+        "velero --kubeconfig=config-file restore delete release-1",
+        "Velero destructive command",
+        "command.backup.velero.deletion",
+    ),
+    ("velero -nprod schedule delete nightly", "Velero destructive command", "command.backup.velero.deletion"),
+    (
+        "velero -vnprod backup delete release-1",
+        "Velero destructive command",
+        "command.backup.velero.deletion",
+    ),
+    (
+        "velero backup delete release-1 --help --help=false",
+        "Velero destructive command",
+        "command.backup.velero.deletion",
+    ),
+    (
+        "velero --future-global-option cluster backup delete release-1",
+        "Velero destructive command",
+        "command.backup.velero.deletion",
+    ),
+    (
+        "velero --future-global-option=cluster backup delete release-1",
+        "Velero destructive command",
+        "command.backup.velero.deletion",
+    ),
+    (
+        "velero --future-global-option --help backup delete release-1",
+        "Velero destructive command",
+        "command.backup.velero.deletion",
+    ),
 )
-def test_backup_rules_feed_runtime_hooks(
-    command: str,
-    action_class: str,
-    rule_id: str,
-    tmp_path: Path,
-) -> None:
-    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
-
-    assert payload["status"] == "review"
-    assert payload["classification"]["action_class"] == action_class
-    assert payload["controlling_rule_id"] == rule_id
-    runtime_match = extract_sensitive_tool_action_request(
-        "Shell",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
-    assert runtime_match is not None
-    assert runtime_match.action_class == action_class
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        "rclone sync source: destination: --dry-run",
-        "rclone purge remote:archive --dry-run=true",
-        "rclone purge remote:archive --dry-run=1",
-        "rclone purge remote:archive --dry-run=false --dry-run",
-        "rclone purge remote:archive --dry-run=false --dry-run=true",
-        "rclone -n purge remote:archive",
-        "restic -r s3:archive forget latest --dry-run",
-        "restic rewrite --forget latest --dry-run",
-        "borg prune --keep-daily 7 /archive --dry-run",
-        "borg recreate /archive --dry-run",
-        "borg --repo /archive prune --keep-daily 7 --dry-run",
-        "velero backup delete --help",
-        "rclone --log-level DEBUG purge remote:archive --dry-run",
-        "restic --compression max forget latest --dry-run",
-        "borg --remote-ratelimit 1000 prune --keep-daily 7 /archive --dry-run",
-        "velero --future-global-option cluster backup delete release-1 --help",
-        "rclone lsl remote:archive",
-        "rclone --log-level DEBUG lsl remote:archive",
-        "rclone -ab value lsl remote:archive",
-        "rclone -vn purge remote:archive",
-        "restic snapshots",
-        "restic --compression max snapshots",
-        "restic -qr forget snapshots",
-        "restic -qrforget snapshots",
-        "restic forget latest --dry-run=false --dry-run",
-        "borg list /archive",
-        "borg --remote-ratelimit 1000 list /archive",
-        "borg prune -Pfoo -n --keep-daily 7 /archive",
-        "borg prune -afoo -n --keep-daily 7 /archive",
-        "borg recreate -efoo -n /archive",
-        "borg -vr prune list",
-        "borg prune --keep-daily 7 /archive --dry-run=false --dry-run",
-        "velero backup describe release-1",
-        "velero --future-global-option cluster backup describe release-1",
-        "velero -vnprod backup describe release-1",
-        "velero backup delete release-1 --help=false --help",
-        "grep 'rclone sync|restic forget|borg prune|velero backup delete' docs",
-    ],
+def test_backup_rules_feed_runtime_hooks(tmp_path: Path) -> None:
+    assert_reviewed_command_cases(BACKUP_REVIEW_CASES, tmp_path)
+
+
+BACKUP_SAFE_COMMANDS: tuple[str, ...] = (
+    "rclone sync source: destination: --dry-run",
+    "rclone purge remote:archive --dry-run=true",
+    "rclone purge remote:archive --dry-run=1",
+    "rclone purge remote:archive --dry-run=false --dry-run",
+    "rclone purge remote:archive --dry-run=false --dry-run=true",
+    "rclone -n purge remote:archive",
+    "restic -r s3:archive forget latest --dry-run",
+    "restic rewrite --forget latest --dry-run",
+    "borg prune --keep-daily 7 /archive --dry-run",
+    "borg recreate /archive --dry-run",
+    "borg --repo /archive prune --keep-daily 7 --dry-run",
+    "velero backup delete --help",
+    "rclone --log-level DEBUG purge remote:archive --dry-run",
+    "restic --compression max forget latest --dry-run",
+    "borg --remote-ratelimit 1000 prune --keep-daily 7 /archive --dry-run",
+    "velero --future-global-option cluster backup delete release-1 --help",
+    "rclone lsl remote:archive",
+    "rclone --log-level DEBUG lsl remote:archive",
+    "rclone -ab value lsl remote:archive",
+    "rclone -vn purge remote:archive",
+    "restic snapshots",
+    "restic --compression max snapshots",
+    "restic -qr forget snapshots",
+    "restic -qrforget snapshots",
+    "restic forget latest --dry-run=false --dry-run",
+    "borg list /archive",
+    "borg --remote-ratelimit 1000 list /archive",
+    "borg prune -Pfoo -n --keep-daily 7 /archive",
+    "borg prune -afoo -n --keep-daily 7 /archive",
+    "borg recreate -efoo -n /archive",
+    "borg -vr prune list",
+    "borg prune --keep-daily 7 /archive --dry-run=false --dry-run",
+    "velero backup describe release-1",
+    "velero --future-global-option cluster backup describe release-1",
+    "velero -vnprod backup describe release-1",
+    "velero backup delete release-1 --help=false --help",
+    "grep 'rclone sync|restic forget|borg prune|velero backup delete' docs",
 )
-def test_backup_preview_and_read_commands_remain_safe(command: str, tmp_path: Path) -> None:
-    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
 
-    assert payload["status"] == "no_match"
-    assert (
-        extract_sensitive_tool_action_request(
-            "Shell",
-            {"command": command},
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        is None
-    )
+
+def test_backup_preview_and_read_commands_remain_safe(tmp_path: Path) -> None:
+    assert_safe_command_cases(BACKUP_SAFE_COMMANDS, tmp_path)
 
 
 def test_backup_interactive_mode_remains_reviewable(tmp_path: Path) -> None:

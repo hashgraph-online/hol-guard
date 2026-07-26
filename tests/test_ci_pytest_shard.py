@@ -57,6 +57,14 @@ def test_ci_workflow_cancels_stale_runs_and_executes_each_shard() -> None:
     assert "pnpm" not in workflow
 
 
+def test_ci_validates_and_publishes_test_inventory_before_quality_checks() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "Validate protected test invariants" in workflow
+    assert "scripts/ci/test_inventory.py --output test-inventory.json" in workflow
+    assert "Publish test inventory" in workflow
+
+
 def test_expensive_security_workflows_fit_the_pr_feedback_budget() -> None:
     codeql = CODEQL_WORKFLOW.read_text(encoding="utf-8")
     fuzz = FUZZ_WORKFLOW.read_text(encoding="utf-8")
