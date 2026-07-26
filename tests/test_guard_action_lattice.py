@@ -40,6 +40,8 @@ EXPECTED_LATTICE: tuple[GuardAction, ...] = (
     "sandbox-required",
     "block",
 )
+ACTION_LATTICE_PAIR_CASES = tuple(product(EXPECTED_LATTICE, repeat=2))
+ACTION_LATTICE_COMPOSERS = (most_restrictive_guard_action, _merge_strongest_actions, _strongest_security_value)
 
 
 def test_lattice_is_exhaustive_ordered_and_contiguous() -> None:
@@ -49,17 +51,16 @@ def test_lattice_is_exhaustive_ordered_and_contiguous() -> None:
     assert tuple(GUARD_ACTION_SEVERITY.values()) == tuple(range(len(EXPECTED_LATTICE)))
 
 
-@pytest.mark.parametrize(("left", "right"), product(EXPECTED_LATTICE, repeat=2))
-def test_most_restrictive_composition_is_commutative_for_every_valid_pair(
-    left: GuardAction,
-    right: GuardAction,
-) -> None:
-    expected = max((left, right), key=EXPECTED_LATTICE.index)
+def test_most_restrictive_composition_is_commutative_for_every_valid_pair() -> None:
+    failures: list[str] = []
+    for left, right in ACTION_LATTICE_PAIR_CASES:
+        expected = max((left, right), key=EXPECTED_LATTICE.index)
+        actuals = tuple(compose(left, right) for compose in ACTION_LATTICE_COMPOSERS)
+        actuals += (most_restrictive_guard_action(right, left),)
+        if any(actual != expected for actual in actuals):
+            failures.append(f"action-lattice-{left}-{right}: expected={expected!r}, actuals={actuals!r}")
 
-    assert most_restrictive_guard_action(left, right) == expected
-    assert most_restrictive_guard_action(right, left) == expected
-    assert _merge_strongest_actions(left, right) == expected
-    assert _strongest_security_value(left, right) == expected
+    assert not failures, "\n".join(failures)
 
 
 def test_most_restrictive_composition_is_idempotent_and_associative() -> None:
