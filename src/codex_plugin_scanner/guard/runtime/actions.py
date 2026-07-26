@@ -499,6 +499,27 @@ def normalize_pi_payload(
     )
 
 
+def normalize_kimi_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize a Kimi Code native-hook payload into a typed action envelope."""
+
+    from ..adapters.kimi_hooks import normalize_kimi_prompt
+
+    normalized_payload = dict(payload)
+    normalized_payload["prompt"] = normalize_kimi_prompt(normalized_payload.get("prompt"))
+    return _normalize_action_payload(
+        normalized_payload,
+        harness="kimi",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
 def normalize_harness_payload(
     harness: str,
     event_name: str,
@@ -521,6 +542,7 @@ def normalize_harness_payload(
         "openclaw": normalize_openclaw_payload,
         "cursor": normalize_cursor_hook_payload,
         "grok": normalize_grok_hook_payload,
+        "kimi": normalize_kimi_payload,
         "pi": normalize_pi_payload,
         "zcode": normalize_zcode_hook_payload,
         "zai": normalize_zcode_hook_payload,

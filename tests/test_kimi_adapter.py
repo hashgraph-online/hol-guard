@@ -358,6 +358,20 @@ class TestKimiNativeHookBlocking:
         normalized = _normalize_hook_payload(payload, harness="kimi")
         assert normalized["prompt"] == "Hello\nWorld"
 
+    def test_kimi_hook_payload_creates_action_envelope(self, tmp_path: Path) -> None:
+        from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _hook_action_envelope
+
+        envelope = _hook_action_envelope(
+            harness="kimi",
+            payload={"event": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "cat ~/.npmrc"}},
+            home_dir=tmp_path,
+            workspace=tmp_path / "workspace",
+        )
+
+        assert envelope is not None
+        assert envelope.harness == "kimi"
+        assert envelope.action_type == "shell_command"
+
     def test_normalize_hook_payload_leaves_other_harnesses_untouched(self) -> None:
         from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
             _normalize_hook_payload,

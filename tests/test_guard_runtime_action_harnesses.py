@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.runtime.actions import (
     normalize_copilot_payload,
     normalize_gemini_payload,
     normalize_harness_payload,
+    normalize_kimi_payload,
     normalize_opencode_payload,
 )
 
@@ -285,6 +286,23 @@ def test_normalize_gemini_prompt_payload(tmp_path: Path) -> None:
     assert envelope.event_name == "UserPromptSubmit"
     assert envelope.action_type == "prompt"
     assert envelope.prompt_excerpt == "Inspect ~/.npmrc, then explain risk."
+    assert envelope.target_paths == ("~/.npmrc",)
+
+
+def test_normalize_kimi_prompt_payload_flattens_content_parts(tmp_path: Path) -> None:
+    envelope = normalize_kimi_payload(
+        {
+            "event": "UserPromptSubmit",
+            "prompt": [{"text": "Inspect ~/.npmrc"}, {"text": "then explain the risk."}],
+        },
+        workspace=tmp_path / "workspace",
+        home_dir=tmp_path,
+    )
+
+    assert envelope.harness == "kimi"
+    assert envelope.event_name == "UserPromptSubmit"
+    assert envelope.action_type == "prompt"
+    assert envelope.prompt_excerpt == "Inspect ~/.npmrc then explain the risk."
     assert envelope.target_paths == ("~/.npmrc",)
 
 

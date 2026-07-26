@@ -1,10 +1,20 @@
 """Guard CLI generic hook fallback flow."""
 
-# ruff: noqa: F403, F405
+# ruff: noqa: E402, F403, F405
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
+
+
+def _coalesce_string(*values: object | None) -> str:
+    """Return a display-safe fallback while CLI helper modules are importing."""
+
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "unknown-artifact"
+
 
 if TYPE_CHECKING:
     from ._commands_shared import (

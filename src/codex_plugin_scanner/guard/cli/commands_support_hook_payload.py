@@ -3,19 +3,51 @@
 # pyright: reportImportCycles=false
 
 # fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: E402, F403, F405, I001
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+
+def _coalesce_string(*values: object | None) -> str:
+    """Return the first non-empty display value during circular CLI imports."""
+
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "unknown-artifact"
+
+
+def _canonical_harness_name(value: str) -> str:
+    """Resolve harness aliases lazily to avoid the CLI support import cycle."""
+
+    from .commands_support_runtime_resolution import _canonical_harness_name as resolve
+
+    return resolve(value)
+
+
+def _managed_install_for(store: GuardStore, harness: str) -> dict[str, object] | None:
+    """Resolve managed-install state lazily to avoid the CLI support import cycle."""
+
+    from .commands_support_runtime_resolution import _managed_install_for as resolve
+
+    return resolve(store, harness)
+
+
+def _hook_event_name(payload: dict[str, object]) -> str | None:
+    """Read hook event names lazily to avoid the CLI support import cycle."""
+
+    from .commands_support_runtime_artifacts import _hook_event_name as resolve
+
+    return resolve(payload)
+
 if TYPE_CHECKING:
+    from ..store import GuardStore
     from ._commands_shared import _GUARD_CLIENT_VERSION, _HOOK_DAEMON_UNREACHABLE_REASON_MARKER, _now
     from .commands_support_interaction import _attach_primary_approval_link, _preferred_approval_review_url
     from .commands_support_prompts import _write_json_line
-    from .commands_support_runtime_artifacts import _hook_event_name
     from .commands_support_runtime_policy import _approval_delivery_payload, _localize_pending_approval_copy
-    from .commands_support_runtime_resolution import _canonical_harness_name, _managed_install_for
 
 
 from ._commands_shared import *
@@ -422,7 +454,20 @@ def _load_hook_payload(
     return _normalize_hook_payload(payload, harness=harness) if isinstance(payload, dict) else {}
 
 _ACTION_ENVELOPE_HARNESSES = frozenset(
-    {"codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw", "cursor", "grok", "pi", "zcode"}
+    {
+        "codex",
+        "claude-code",
+        "opencode",
+        "copilot",
+        "gemini",
+        "hermes",
+        "openclaw",
+        "cursor",
+        "grok",
+        "kimi",
+        "pi",
+        "zcode",
+    }
 )
 
 def _hook_action_envelope(
@@ -537,12 +582,6 @@ def _first_hook_tool_call(
     if fallback_tool_call is not None:
         return fallback_tool_call
     return None, None
-
-def _coalesce_string(*values: object | None) -> str:
-    for value in values:
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return "unknown-artifact"
 
 __all__ = [
     "_ACTION_ENVELOPE_HARNESSES", "_action_envelope_json", "_approval_center_browser_url",
