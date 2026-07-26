@@ -110,7 +110,15 @@ jobs:
             --shard-count 16 \
             --granularity node > pytest-nodes.txt
           test -s pytest-nodes.txt
-          uv run --no-sync pytest @pytest-nodes.txt --tb=short
+          PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json \
+            uv run --no-sync pytest -p pytest_duration_report @pytest-nodes.txt --tb=short
+      - name: Upload pytest duration artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pytest-durations-${{ matrix.shard-index }}
+          path: pytest-durations.json
+          if-no-files-found: warn
 
   compatibility:
     runs-on: ubuntu-latest
