@@ -72,6 +72,7 @@ class HookReviewRequest:
     home_dir: Path
     guard_home: Path
     source_scope: str
+    source_ref_external_allowed: bool = False
     output_summary: HookOutputSummary | None = None
     source_ref: HookSourceFileRef | None = None
     received_at_monotonic: float = 0.0

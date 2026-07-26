@@ -206,6 +206,11 @@ def evaluate_source_file_ref(
         candidate_path_str,
         cwd=request.cwd,
         home_dir=request.home_dir,
+        # Pi Read calls commonly use absolute paths for source files in a
+        # sibling checkout. The path classifier keeps this narrowly bounded
+        # to source-like files below the user's home directory, in an
+        # immediate Git sibling, without symlinks or sensitive path parts.
+        allow_external_source=request.harness == "pi" and request.source_ref_external_allowed,
     )
     if not path_decision.allowed:
         return SourceReadFastPathResult(status="inconclusive", reason_code=path_decision.reason_code)

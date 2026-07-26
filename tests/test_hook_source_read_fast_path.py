@@ -57,6 +57,7 @@ def _request(
     event_name: str = "PostToolUse",
     cwd: Path | None = None,
     home_dir: Path | None = None,
+    source_ref_external_allowed: bool = False,
 ) -> HookReviewRequest:
     return HookReviewRequest(
         harness="pi",
@@ -68,6 +69,7 @@ def _request(
         home_dir=home_dir or Path("/home"),
         guard_home=Path("/guard"),
         source_scope="project",
+        source_ref_external_allowed=source_ref_external_allowed,
         source_ref=source_ref,
     )
 
@@ -311,6 +313,56 @@ class TestSecretDetection:
 
         # process.env.NOTION_API_KEY is a code reference, not a concrete secret.
         assert result.status == "allow_original"
+
+
+class TestExternalSourceAuthorization:
+    def test_external_source_requires_trusted_pi_adapter(
+        self,
+        home_dir: Path,
+        store: GuardStore,
+        config: GuardConfig,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        deadline: float,
+    ) -> None:
+        workspace = home_dir / "workspace"
+        workspace.mkdir()
+        source_path = home_dir / "sibling-source" / "tests" / "test_source.py"
+        source_path.parent.mkdir(parents=True)
+        (source_path.parents[1] / ".git").mkdir()
+        content = "assert result.model_output_action == 'allow_original'\n"
+        source_path.write_text(content, encoding="utf-8")
+        path = str(source_path)
+        ref = _source_ref(path=path, output_sha256=sha256_text(content), output_chars=len(content))
+        envelope = _envelope(target_paths=(path,))
+
+        untrusted_result = evaluate_source_file_ref(
+            request=_request(source_ref=ref, cwd=workspace, home_dir=home_dir),
+            envelope=envelope,
+            scanner=scanner,
+            cache=cache,
+            config=config,
+            store=store,
+            deadline_monotonic=deadline,
+        )
+        assert untrusted_result.status == "inconclusive"
+        assert untrusted_result.reason_code == "absolute_path_outside_workspace"
+
+        trusted_result = evaluate_source_file_ref(
+            request=_request(
+                source_ref=ref,
+                cwd=workspace,
+                home_dir=home_dir,
+                source_ref_external_allowed=True,
+            ),
+            envelope=envelope,
+            scanner=scanner,
+            cache=cache,
+            config=config,
+            store=store,
+            deadline_monotonic=deadline,
+        )
+        assert trusted_result.status == "allow_original"
 
 
 class TestOutputMismatch:

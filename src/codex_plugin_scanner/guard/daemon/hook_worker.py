@@ -126,6 +126,7 @@ class HookWorker:
         request = self._request_from_payload(
             payload,
             harness=harness,
+            source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") == "pi",
             home_dir=home_dir,
             guard_home=guard_home,
             workspace=workspace,
@@ -162,6 +163,7 @@ class HookWorker:
         payload: dict[str, object],
         *,
         harness: str,
+        source_ref_external_allowed: bool,
         home_dir: Path,
         guard_home: Path,
         workspace: Path | None,
@@ -187,6 +189,7 @@ class HookWorker:
             home_dir=home_dir,
             guard_home=guard_home,
             source_scope=source_scope,
+            source_ref_external_allowed=source_ref_external_allowed,
             output_summary=output_summary,
             source_ref=source_ref,
             deadline_monotonic=deadline,
