@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
+
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
 SUPPORT_PATH = Path(__file__).resolve().parent / "support"
 
@@ -22,6 +24,33 @@ pythonpath_entries = [entry for entry in existing_pythonpath.split(os.pathsep) i
 pythonpath_prefix = [str(path) for path in (SUPPORT_PATH, SRC_PATH) if str(path) not in pythonpath_entries]
 if pythonpath_prefix:
     os.environ["PYTHONPATH"] = os.pathsep.join([*pythonpath_prefix, *pythonpath_entries])
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--validate-test-invariants",
+        action="store_true",
+        default=False,
+        help="fail collection when a protected invariant no longer resolves to a concrete test",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    for item in items:
+        for marker in invariant_markers_for_nodeid(item.nodeid):
+            item.add_marker(marker)
+
+    if not config.getoption("--validate-test-invariants"):
+        return
+    collected = {item.nodeid for item in items}
+    missing = [
+        invariant
+        for invariant in TEST_INVARIANTS
+        if not any(nodeid == invariant.selector or nodeid.startswith(f"{invariant.selector}[") for nodeid in collected)
+    ]
+    if missing:
+        details = ", ".join(f"{invariant.invariant_id} ({invariant.selector})" for invariant in missing)
+        raise pytest.UsageError(f"Protected test invariants are missing from collection: {details}")
 
 
 def _test_guard_homes_with_daemon_state(root: Path) -> set[Path]:
