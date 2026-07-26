@@ -157,6 +157,13 @@ def corpus_record_count() -> int:
         UNRELATED_DYNAMIC_COMMAND_CASES,
     )
     from tests.test_guard_package_shims import PACKAGE_SHIM_GUARD_CASES
+    from tests.test_guard_js_semver_phase11 import (
+        SEMVER_OR_CLAUSE_CASES,
+        SEMVER_ORDINARY_RANGE_CASES,
+        SEMVER_PRERELEASE_BASE_CASES,
+        SEMVER_SUPPORTED_RANGE_CASES,
+        SEMVER_ZERO_MAJOR_CASES,
+    )
     from tests.test_guard_risk import (
         ENCODED_EXEC_PIPELINE_CASES,
         LOCAL_COMPOSE_SAFE_CASES,
@@ -181,6 +188,11 @@ def corpus_record_count() -> int:
         + len(SPECIALIZED_SAFE_VARIANT_CASES)
         + len(PACKAGE_SHIM_GUARD_CASES)
         + len(ENCODED_EXEC_PIPELINE_CASES)
+        + len(SEMVER_ORDINARY_RANGE_CASES)
+        + len(SEMVER_OR_CLAUSE_CASES)
+        + len(SEMVER_PRERELEASE_BASE_CASES)
+        + len(SEMVER_SUPPORTED_RANGE_CASES)
+        + len(SEMVER_ZERO_MAJOR_CASES)
         + len(BENIGN_DATA_FLOW_CASES)
         + len(MALICIOUS_DATA_FLOW_CASES)
         + len(LOCAL_COMPOSE_SAFE_CASES)
