@@ -30,7 +30,7 @@ class DuplicateCandidate:
 
 
 def iter_test_bodies(path: Path, *, root: Path) -> Iterator[TestBody]:
-    """Yield test functions, retaining class context while ignoring decorators."""
+    """Yield test functions with their decorators and class context."""
 
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     relative_path = path.relative_to(root).as_posix()
