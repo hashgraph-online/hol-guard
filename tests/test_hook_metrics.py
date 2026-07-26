@@ -8,13 +8,12 @@ These tests exercise the public contract of ``HookMetricsRecorder``:
 * ``maybe_flush_to_store(force=True)`` writes one rollup ``guard_events``
   row containing no raw content and leaves the store usable.
 
-``reason_code`` is a short code (the production caller hardcodes
-``"unknown"``; every other codebase value is short snake_case such as
-``secret_match`` or ``scanner_budget_exhausted``). The recorder
-interpolates it verbatim into a composite counter key *by design*, so
-these tests probe the real boundary — no raw-output *field names* leak
-and every snapshot *value* is numeric — rather than asserting the
-caller-controlled reason string is absent from keys.
+``reason_code`` is a short code such as ``secret_match`` or
+``scanner_budget_exhausted``. The recorder interpolates it verbatim into
+a composite counter key *by design*, so these tests probe the real
+boundary — no raw-output *field names* leak and every snapshot *value*
+is numeric — rather than asserting the caller-controlled reason string
+is absent from keys.
 """
 
 from __future__ import annotations
