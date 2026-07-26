@@ -142,6 +142,20 @@ TEST_INVARIANTS: Final[tuple[TestInvariant, ...]] = (
         "Database mutation variants remain reviewable through inspection and runtime enforcement.",
         ("security_critical", "regression", "parser", "release"),
     ),
+    TestInvariant(
+        "GUARD-INV-018",
+        "tests/test_guard_command_remote_extensions.py::test_remote_rules_feed_runtime_hooks",
+        "command-extension",
+        "Remote execution and overwrite variants remain reviewable through inspection and runtime enforcement.",
+        ("security_critical", "regression", "parser", "release"),
+    ),
+    TestInvariant(
+        "GUARD-INV-019",
+        "tests/test_guard_command_storage_extensions.py::test_storage_rules_feed_runtime_hooks",
+        "command-extension",
+        "Object-storage deletion variants remain reviewable through inspection and runtime enforcement.",
+        ("security_critical", "regression", "parser", "release"),
+    ),
 )
 
 
