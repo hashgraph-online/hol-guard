@@ -48,7 +48,13 @@ def _hook_signals(
             continue
         if install.get("active") is not True:
             continue
-        candidate = _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
+        verified = hook_verification.get(harness) if hook_verification is not None else None
+        if verified is True:
+            candidate = _signal(ProtectionCheckStatus.PASS, "hooks_verified")
+        elif verified is False:
+            candidate = _signal(ProtectionCheckStatus.FAIL, "hook_verification_failed")
+        else:
+            candidate = _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
         existing = result.get(harness)
         result[harness] = (
             _signal(ProtectionCheckStatus.FAIL, "hooks_inactive")
@@ -66,7 +72,7 @@ def _global_hook_signal(harness_signals: Mapping[str, ProtectionSignal]) -> Prot
         return _signal(ProtectionCheckStatus.FAIL, "one_or_more_hooks_inactive")
     if all(signal.status is ProtectionCheckStatus.PASS for signal in harness_signals.values()):
         return _signal(ProtectionCheckStatus.PASS, "hooks_verified")
-    return _signal(ProtectionCheckStatus.UNKNOWN, "hook_verification_unavailable")
+    return _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
 
 
 def _rule_pack_signal() -> ProtectionSignal:

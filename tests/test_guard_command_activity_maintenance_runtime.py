@@ -24,7 +24,10 @@ class _SequencedEvent:
     def wait(self, timeout: float) -> bool:
         assert timeout == 3_600
         self.calls += 1
-        return self.calls > 2
+        return self.calls > 1
+
+    def is_set(self) -> bool:
+        return self.calls > 1
 
 
 @dataclass(frozen=True, slots=True)

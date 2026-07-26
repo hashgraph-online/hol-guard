@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import HOOK_MANIFEST_SCHEMA_VERSION
-from codex_plugin_scanner.guard.codex_hook_package_identity import assert_package_reauthentication_is_safe
+from codex_plugin_scanner.guard.codex_hook_manifest import assert_package_reauthentication_is_safe
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX executable fixtures are required")
@@ -86,7 +86,6 @@ def test_guard_install_codex_ignores_proxy_with_scalar_args(
 
     assert installed["migrated_proxy_servers"] == []
     assert installed["runtime_restart_required"] is False
-
 
 def test_reauthentication_rejects_incomplete_package_identity() -> None:
     manifest = {

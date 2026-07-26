@@ -29,7 +29,7 @@ GUARD_HOOK_MAX_SERIALIZED_PAYLOAD_CHARS = 24_000
 
 
 def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path: Path) -> str:
-    guard_args = ["hook", "--guard-home", str(guard_home), "--harness", "pi"]
+    guard_args = ["hook", "--json", "--guard-home", str(guard_home), "--harness", "pi"]
     if home_dir.resolve() != Path.home().resolve():
         guard_args.extend(["--home", str(home_dir)])
     guard_args_json = json.dumps(guard_args)
@@ -96,6 +96,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         f"const GUARD_HOME_DIR = {home_dir_json};\n"
         f"const GUARD_HOME_DIR_IS_DEFAULT = {home_dir_is_default_json};\n"
         f"const GUARD_CONFIG_PATH = {config_path_json};\n"
+        f"const GUARD_COMPATIBILITY_VERSION = {compatibility_version_json};\n"
         f"const GUARD_TIMEOUT_MS = {GUARD_HOOK_TIMEOUT_MS};\n"
         f"const GUARD_DEADLINE_RESERVE_MS = {GUARD_HOOK_DEADLINE_RESERVE_MS};\n"
         f"const GUARD_DAEMON_TIMEOUT_MS = {GUARD_DAEMON_HOOK_TIMEOUT_MS};\n"
@@ -141,7 +142,10 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  try {\n"
         "    const daemonState = JSON.parse(\n"
         "      readFileSync(join(GUARD_HOME, 'daemon-state.json'), 'utf8'),\n"
-        "    ) as { port?: unknown };\n"
+        "    ) as { compatibility_version?: unknown; package_version?: unknown; port?: unknown };\n"
+        "    // Prefer protocol compatibility over exact package version. Exact package pins\n"
+        "    // go stale after hol-guard update and force a cold CLI fallback that times out.\n"
+        "    if (daemonState.compatibility_version !== GUARD_COMPATIBILITY_VERSION) return null;\n"
         "    port = typeof daemonState.port === 'number' ? daemonState.port : 0;\n"
         "    authToken = readFileSync(join(GUARD_HOME, 'daemon-auth-token'), 'utf8').trim();\n"
         "  } catch {\n"
@@ -234,6 +238,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  cwd?: string,\n"
         "  options?: { enforceSizeCap?: boolean },\n"
         "): Promise<GuardResponse> {\n"
+        "  const deadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS;\n"
         "  const args = [...GUARD_ARGS];\n"
         '  const workspace = typeof cwd === "string" && cwd ? cwd : process.cwd();\n'
         '  if (workspace) args.push("--workspace", workspace);\n'

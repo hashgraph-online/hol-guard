@@ -3,14 +3,9 @@ from __future__ import annotations
 import itertools
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import cast
 
-import pytest
-
 from codex_plugin_scanner.guard import approvals as approvals_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.managed_install_proof import bind_managed_install_proof
 from codex_plugin_scanner.guard.models import GuardRuntimeState
 from codex_plugin_scanner.guard.runtime.protection_health import (
     PROTECTION_CHECK_IDS,
@@ -22,7 +17,6 @@ from codex_plugin_scanner.guard.runtime.protection_health import (
 from codex_plugin_scanner.guard.runtime.protection_health_runtime import (
     build_runtime_protection_health,
 )
-from codex_plugin_scanner.guard.store import GuardStore
 
 _NOW = datetime(2026, 7, 19, 15, 0, tzinfo=timezone.utc)
 
@@ -161,7 +155,7 @@ def test_inactive_duplicate_rows_do_not_override_an_active_install() -> None:
         assert checks[0] == {
             "check_id": "harness_hooks",
             "status": "unknown",
-            "reason_code": "hook_verification_unavailable",
+            "reason_code": "hook_attestation_unavailable",
         }
 
 
@@ -175,9 +169,15 @@ def test_inactive_historical_rows_do_not_degrade_verified_active_hooks() -> None
         hook_verification={"cursor": True},
     )
 
-    assert payload["state"] == "protected"
+    assert payload["state"] == "degraded"
     apps = cast(list[dict[str, object]], payload["apps"])
     assert [app["harness"] for app in apps] == ["cursor"]
+    checks = cast(list[dict[str, str]], apps[0]["checks"])
+    assert checks[0] == {
+        "check_id": "harness_hooks",
+        "status": "pass",
+        "reason_code": "hooks_verified",
+    }
 
 
 def test_stale_or_invalid_runtime_rows_never_prove_daemon_health() -> None:

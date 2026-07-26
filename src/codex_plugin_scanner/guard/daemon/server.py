@@ -13,7 +13,6 @@ import os
 import platform
 import secrets
 import socket
-import sqlite3
 import tempfile
 import threading
 import time
@@ -156,7 +155,6 @@ from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_runtime import (
     ExtensionControlRuntime,
     ExtensionControlRuntimeSnapshot,
-    use_extension_control_snapshot,
 )
 from ..runtime.live_request_sync import LiveRequestSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.runner import (
