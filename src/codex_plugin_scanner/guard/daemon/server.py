@@ -4587,6 +4587,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
         try:
             update_guard_update_channel(guard_home, payload.get("update_channel"))
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
         except ValueError as error:
             self._write_json({"error": "invalid_update_channel", "message": str(error)}, status=400)
             return
