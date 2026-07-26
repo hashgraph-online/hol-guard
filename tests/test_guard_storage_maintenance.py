@@ -5,6 +5,9 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
+from codex_plugin_scanner.guard import store_connection_schema
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_receipt_rollups import receipt_rollups_need_backfill
 
@@ -187,6 +190,20 @@ def test_current_schema_store_opens_during_concurrent_writer(tmp_path: Path) -> 
     finally:
         writer.rollback()
         writer.close()
+
+
+def test_current_schema_probe_treats_lock_contention_as_unknown(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+
+    def locked_connect(*_args: object, **_kwargs: object) -> sqlite3.Connection:
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(store_connection_schema.sqlite3, "connect", locked_connect)
+
+    assert store._schema_is_current() is False  # pyright: ignore[reportPrivateUsage]
 
 
 def test_schema_upgrade_is_serialized_across_store_processes(tmp_path: Path) -> None:

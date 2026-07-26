@@ -846,7 +846,7 @@ class StoreConnectionSchemaMixin:
                 connection.close()
         except sqlite3.OperationalError as error:
             if "locked" in str(error).lower() or "busy" in str(error).lower():
-                raise TimeoutError("Guard store is busy; retry the action.") from None
+                return False
             return False
 
     @staticmethod

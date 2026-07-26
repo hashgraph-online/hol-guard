@@ -9,11 +9,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from http.client import HTTPResponse
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TypeGuard, cast, final
 
 import pytest
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.discovery import (
     DAEMON_DISCOVERY_PROTOCOL_VERSION,
     load_authenticated_daemon_state,
@@ -270,3 +272,25 @@ def test_unclassified_watchdog_distinguishes_complete_headers_from_trickle() -> 
     finally:
         server_socket.close()
         client_socket.close()
+
+
+def test_storage_maintenance_failure_requests_immediate_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingStore:
+        guard_home = tmp_path
+
+        @staticmethod
+        def maintain_storage(**_kwargs: object) -> None:
+            raise sqlite3.OperationalError("database is locked")
+
+    daemon = object.__new__(GuardDaemonServer)
+    object.__setattr__(daemon, "_server", SimpleNamespace(store=FailingStore()))
+    monkeypatch.setattr(
+        daemon_server_module,
+        "load_guard_config",
+        lambda _guard_home: SimpleNamespace(evidence_retain_days=30),
+    )
+
+    assert daemon._maintain_storage_best_effort() is False  # pyright: ignore[reportPrivateUsage]

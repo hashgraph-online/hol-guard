@@ -6929,7 +6929,7 @@ class GuardDaemonServer:
                 detail_retain_days=config.evidence_retain_days,
             )
         except Exception:
-            return True
+            return False
         return result.completed
 
     def _start_command_activity_maintenance(self) -> None:
