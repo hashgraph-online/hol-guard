@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -25,6 +26,32 @@ class TestInventory:
     test_files: int
     parameterized_cases: int
     marker_counts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class DurationSummary:
+    """The privacy-preserving duration evidence available to the inventory job."""
+
+    known_node_count: int
+    predicted_runtime_seconds: float
+    observed_at: str
+
+
+@dataclass(frozen=True)
+class TestSuiteMetrics:
+    """Reviewable test-suite health data that cannot hide corpus work in node counts."""
+
+    inventory: TestInventory
+    test_source_lines: int
+    product_source_lines: int
+    test_to_product_loc_ratio: float
+    protected_invariant_count: int
+    corpus_records: int
+    property_examples: int
+    duration: DurationSummary | None
+    mutation_score: None = None
+    branch_coverage: None = None
+    flake_rate: None = None
 
 
 class _NodeCollector:
@@ -71,12 +98,85 @@ def collect_inventory(root: Path) -> TestInventory:
     return build_inventory(node_ids, markers)
 
 
+def count_python_source_lines(root: Path) -> int:
+    """Count source lines deterministically without including generated environments."""
+
+    return sum(
+        len(path.read_text(encoding="utf-8").splitlines())
+        for path in sorted(root.rglob("*.py"))
+        if "__pycache__" not in path.parts
+    )
+
+
+def load_duration_summary(path: Path) -> DurationSummary | None:
+    """Read manifest aggregates while preserving hashed per-node identities."""
+
+    if not path.is_file():
+        return None
+    raw = gzip.decompress(path.read_bytes()) if path.suffix == ".gz" else path.read_bytes()
+    payload = cast(object, json.loads(raw))
+    if not isinstance(payload, dict):
+        raise ValueError("pytest duration manifest must be an object")
+    observed_at = payload.get("observed_at")
+    durations = payload.get("node_durations_seconds")
+    if not isinstance(observed_at, str) or not isinstance(durations, dict):
+        raise ValueError("pytest duration manifest is missing summary fields")
+    values = tuple(durations.values())
+    if not all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in values):
+        raise ValueError("pytest duration manifest contains an invalid duration")
+    return DurationSummary(
+        known_node_count=len(values),
+        predicted_runtime_seconds=round(sum(float(value) for value in values), 3),
+        observed_at=observed_at,
+    )
+
+
+def corpus_record_count() -> int:
+    """Count corpus work outside pytest parametrization so node reductions stay reviewable."""
+
+    from tests.guard_command_corpus import iter_adversarial_corpus, iter_benign_corpus
+    from tests.guard_copilot_hook_command_corpus import (
+        COPILOT_ENCODED_EXEC_DENY_CASES,
+        COPILOT_NODE_DELETE_DENY_CASES,
+    )
+    from tests.guard_seeded_faults import PARSER_SEEDED_FAULTS
+
+    return (
+        sum(1 for _ in iter_benign_corpus())
+        + sum(1 for _ in iter_adversarial_corpus())
+        + len(COPILOT_ENCODED_EXEC_DENY_CASES)
+        + len(COPILOT_NODE_DELETE_DENY_CASES)
+        + len(PARSER_SEEDED_FAULTS)
+    )
+
+
+def build_suite_metrics(root: Path, inventory: TestInventory) -> TestSuiteMetrics:
+    """Build the single CI report used to review count, LOC, corpus, and runtime evidence."""
+
+    test_source_lines = count_python_source_lines(root / "tests")
+    product_source_lines = count_python_source_lines(root / "src")
+    if product_source_lines == 0:
+        raise ValueError("product source line count must be positive")
+    from tests.guard_test_invariants import TEST_INVARIANTS
+
+    return TestSuiteMetrics(
+        inventory=inventory,
+        test_source_lines=test_source_lines,
+        product_source_lines=product_source_lines,
+        test_to_product_loc_ratio=round(test_source_lines / product_source_lines, 4),
+        protected_invariant_count=len(TEST_INVARIANTS),
+        corpus_records=corpus_record_count(),
+        property_examples=0,
+        duration=load_duration_summary(root / "ci" / "pytest-duration-manifest.json.gz"),
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     _ = parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
-    payload = json.dumps(asdict(collect_inventory(root)), indent=2, sort_keys=True) + "\n"
+    payload = json.dumps(asdict(build_suite_metrics(root, collect_inventory(root))), indent=2, sort_keys=True) + "\n"
     output = cast(Path | None, args.output)
     if output is None:
         print(payload, end="")
