@@ -18,6 +18,10 @@ from .store_command_shadow_schema import ensure_command_shadow_schema
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
 from .store_live_request_outbox import ensure_live_request_outbox_schema, seed_live_request_outbox
 from .store_secret_policy_integrity import _POLICY_INTEGRITY_LOOKUP_UNSET
+from .store_storage_maintenance import (
+    STORAGE_MAINTENANCE_MIGRATION_VERSION,
+    storage_maintenance_schema_statements,
+)
 from .store_workflow_capabilities_schema import ensure_workflow_capability_schema
 
 
@@ -128,6 +132,7 @@ _POLICY_INDEX_STATEMENTS = (
 )
 
 _RECEIPT_WARN_ROLLUP_MIGRATION_VERSION = 16
+_REQUIRED_SCHEMA_MIGRATION_VERSIONS = tuple(range(2, STORAGE_MAINTENANCE_MIGRATION_VERSION + 1))
 
 
 class StoreConnectionSchemaMixin:
@@ -258,7 +263,21 @@ class StoreConnectionSchemaMixin:
                 with suppress(OSError):
                     _release_advisory_file_lock(handle)
 
+    def _initialize_serialized(self) -> None:
+        if getattr(self, "_daemon_managed_schema", False) and self._schema_is_current():
+            self._initialize_policy_integrity()
+            return
+        timeout_seconds = sqlite_connect_timeout_seconds()
+        with self._hold_advisory_file_lock(
+            path=self.guard_home / "schema-migration.lock",
+            timeout_seconds=timeout_seconds,
+            poll_seconds=min(0.05, max(timeout_seconds, 0.001)),
+            timeout_message="Timed out waiting for the Guard schema migration lock.",
+        ):
+            self._initialize()
+
     def _initialize(self) -> None:
+        initialize_incremental_vacuum = not self.path.exists()
         statements = (
             """
             create table if not exists harness_installations (
@@ -654,6 +673,8 @@ class StoreConnectionSchemaMixin:
             threat_intel_matches_schema_statement(),
         )
         with self._connect() as connection:
+            if initialize_incremental_vacuum:
+                connection.execute("pragma auto_vacuum=incremental")
             for statement in statements:
                 connection.execute(statement)
             ensure_command_activity_schema(connection, applied_at=_now())
@@ -769,6 +790,12 @@ class StoreConnectionSchemaMixin:
             self._ensure_attachment_column(connection, "lease_id", "text not null default ''")
             self._ensure_attachment_column(connection, "lease_expires_at", "text")
             self._ensure_local_device(connection)
+            for statement in storage_maintenance_schema_statements():
+                connection.execute(statement)
+            self._record_schema_version(
+                connection,
+                version=STORAGE_MAINTENANCE_MIGRATION_VERSION,
+            )
             if not self._schema_version_applied(connection, version=2):
                 self._record_schema_version(connection, version=2)
             self._enable_wal_mode(connection)
@@ -780,6 +807,9 @@ class StoreConnectionSchemaMixin:
                 """
             )
             self._repair_store_permissions()
+        self._initialize_policy_integrity()
+
+    def _initialize_policy_integrity(self) -> None:
         if getattr(self, "_prime_policy_integrity_on_initialize", True):
             # Prime policy-integrity secrets outside the SQLite transaction. Some
             # credential-store lookups can block long enough to stall other Guard
@@ -799,6 +829,37 @@ class StoreConnectionSchemaMixin:
                 self._startup_prefetched_policy_integrity_secret_material = _POLICY_INTEGRITY_LOOKUP_UNSET
                 self._startup_prefetched_policy_integrity_trusted_state = _POLICY_INTEGRITY_LOOKUP_UNSET
                 self._startup_prefetched_policy_integrity_repair_failed = False
+
+    def _schema_is_current(self) -> bool:
+        if not self.path.is_file():
+            return False
+        timeout_seconds = min(sqlite_connect_timeout_seconds(), 0.1)
+        try:
+            connection = sqlite3.connect(self.path, timeout=timeout_seconds)
+            try:
+                connection.execute(f"pragma busy_timeout={int(timeout_seconds * 1000)}")
+                placeholders = ", ".join("?" for _ in _REQUIRED_SCHEMA_MIGRATION_VERSIONS)
+                row = connection.execute(
+                    f"select count(*) from schema_migrations where version in ({placeholders})",
+                    _REQUIRED_SCHEMA_MIGRATION_VERSIONS,
+                ).fetchone()
+                storage_row = connection.execute(
+                    """
+                    select 1 from sqlite_master
+                    where type = 'table' and name = 'guard_storage_maintenance'
+                    """
+                ).fetchone()
+                return (
+                    row is not None
+                    and int(row[0]) == len(_REQUIRED_SCHEMA_MIGRATION_VERSIONS)
+                    and storage_row is not None
+                )
+            finally:
+                connection.close()
+        except sqlite3.OperationalError as error:
+            if "locked" in str(error).lower() or "busy" in str(error).lower():
+                return False
+            return False
 
     @staticmethod
     def _enable_wal_mode(connection: sqlite3.Connection) -> None:

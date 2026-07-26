@@ -6,6 +6,7 @@ import signal
 import socket
 import stat
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -184,28 +185,29 @@ def test_guarded_codex_launch_preserves_explicit_remote_target(
 
 
 def test_wait_for_socket_rejects_trusted_stale_socket(
-    tmp_path: Path,
     monkeypatch,
 ) -> None:
-    socket_path = tmp_path / "app-server.sock"
-    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    listener.bind(str(socket_path))
-    listener.close()
-    monkeypatch.setattr(codex_remote_control, "_REMOTE_CONTROL_READY_TIMEOUT_SECONDS", 0.01)
-
-    assert codex_remote_control._socket_is_trusted(socket_path) is True
-    assert codex_remote_control._wait_for_socket(socket_path) is False
-
-
-def test_wait_for_socket_accepts_trusted_live_socket(tmp_path: Path) -> None:
-    socket_path = tmp_path / "app-server.sock"
-    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    listener.bind(str(socket_path))
-    listener.listen(1)
-    try:
-        assert codex_remote_control._wait_for_socket(socket_path) is True
-    finally:
+    with tempfile.TemporaryDirectory(prefix="guard-codex-", dir="/tmp") as directory:
+        socket_path = Path(directory) / "app-server.sock"
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listener.bind(str(socket_path))
         listener.close()
+        monkeypatch.setattr(codex_remote_control, "_REMOTE_CONTROL_READY_TIMEOUT_SECONDS", 0.01)
+
+        assert codex_remote_control._socket_is_trusted(socket_path) is True
+        assert codex_remote_control._wait_for_socket(socket_path) is False
+
+
+def test_wait_for_socket_accepts_trusted_live_socket() -> None:
+    with tempfile.TemporaryDirectory(prefix="guard-codex-", dir="/tmp") as directory:
+        socket_path = Path(directory) / "app-server.sock"
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listener.bind(str(socket_path))
+        listener.listen(1)
+        try:
+            assert codex_remote_control._wait_for_socket(socket_path) is True
+        finally:
+            listener.close()
 
 
 def test_wait_for_socket_retries_transient_os_error(

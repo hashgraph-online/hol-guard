@@ -79,7 +79,7 @@ def resolve_trusted_grok_executable(context: HarnessContext) -> GrokExecutableRe
         )
 
     registered = _registered_executable(context)
-    if registered.executable is not None:
+    if registered.executable is not None or registered.error is not None:
         return registered
     if registered.error is not None:
         return registered

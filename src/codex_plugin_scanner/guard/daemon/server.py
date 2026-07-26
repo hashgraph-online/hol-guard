@@ -315,7 +315,7 @@ _MAX_CONCURRENT_DAEMON_CONNECTIONS = (
 )
 _MAX_CONCURRENT_RUNTIME_HOOKS = 32
 _MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS = 24
-_DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 0.25
+_DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 0.4
 _DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS = 0.05
 _DAEMON_UNCLASSIFIED_WATCHDOG_POLL_SECONDS = 0.025
 _AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS = 5.0
@@ -588,7 +588,21 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
             with self.unclassified_connections_lock:
                 expired = [request for request, deadline in self.unclassified_connections.values() if deadline <= now]
             for request in expired:
-                self._close_unclassified_socket(request)
+                if self._buffered_request_headers_complete(request):
+                    self.classify_connection(request)
+                else:
+                    self._close_unclassified_socket(request)
+
+    @staticmethod
+    def _buffered_request_headers_complete(request: socket.socket) -> bool:
+        nonblocking_flag = getattr(socket, "MSG_DONTWAIT", None)
+        if nonblocking_flag is None:
+            return False
+        try:
+            buffered = request.recv(65_536, socket.MSG_PEEK | nonblocking_flag)
+        except (BlockingIOError, InterruptedError, OSError):
+            return False
+        return b"\r\n\r\n" in buffered or b"\n\n" in buffered
 
     def claim_request_capacity(self, request: socket.socket, path: str) -> bool:
         capacity_kind = self._request_capacity_kind(path)
@@ -7275,6 +7289,19 @@ class GuardDaemonServer:
                     occurred_at=now,
                 )
 
+    def _maintain_storage_best_effort(self) -> bool:
+        try:
+            config = load_guard_config(
+                self._server.store.guard_home,
+            )
+            result = self._server.store.maintain_storage(
+                now=datetime.now(timezone.utc),
+                detail_retain_days=config.evidence_retain_days,
+            )
+        except Exception:
+            return False
+        return result.completed
+
     def _start_command_activity_maintenance(self) -> None:
         if (
             self._command_activity_maintenance_thread is not None
@@ -7302,8 +7329,13 @@ class GuardDaemonServer:
             self._command_activity_maintenance_thread = None
 
     def _command_activity_maintenance_loop(self) -> None:
-        while not self._shutdown_started.wait(3_600):
+        if self._shutdown_started.is_set():
+            return
+        self._maintain_command_activity_best_effort()
+        storage_complete = self._maintain_storage_best_effort()
+        while not self._shutdown_started.wait(3_600 if storage_complete else 1):
             self._maintain_command_activity_best_effort()
+            storage_complete = self._maintain_storage_best_effort()
 
     def _persist_aibom_inventory_context(self) -> None:
         workspace_id = self._server.store.get_cloud_workspace_id()

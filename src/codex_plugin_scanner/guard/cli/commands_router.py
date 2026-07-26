@@ -26,6 +26,7 @@ _EARLY_HANDLERS = {
 }
 
 _PRESTORE_HANDLERS = {
+    "daemon": "_run_guard_daemon_command",
     "update": "_run_guard_update_command",
     "trust": "_run_guard_trust_command",
 }
@@ -158,7 +159,7 @@ def run_guard_command(
             prime_policy_integrity=_should_prime_policy_integrity(args),
             allow_system_keyring=_should_allow_system_keyring(args),
         )
-    except ValueError as error:
+    except (TimeoutError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
     config = load_guard_config(guard_home, workspace=workspace)

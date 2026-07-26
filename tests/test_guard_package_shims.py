@@ -670,7 +670,7 @@ def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path
             manager="npm",
             capsys=capsys,
         )
-        env = dict(os.environ)
+        env = _with_subprocess_sync_auth(dict(os.environ), sync_url)
         env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"
 
         result = subprocess.run(

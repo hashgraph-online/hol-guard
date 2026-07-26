@@ -7,18 +7,26 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import subprocess
+import time
 from pathlib import Path
+from typing import cast
 
 
-def _run(args: list[str], guard_home: Path) -> tuple[int, dict]:
+def _run(args: list[str], guard_home: Path) -> tuple[int, dict[str, object]]:
     result = subprocess.run(
         ["hol-guard", *args, f"--guard-home={guard_home}", "--json"],
         capture_output=True,
         text=True,
     )
     try:
-        payload = json.loads(result.stdout or result.stderr or "{}")
+        parsed: object = json.loads(result.stdout or result.stderr or "{}")
+        payload: dict[str, object]
+        if isinstance(parsed, dict):
+            payload = {str(key): value for key, value in cast(dict[object, object], parsed).items()}
+        else:
+            payload = {"raw": result.stdout or result.stderr}
     except json.JSONDecodeError:
         payload = {"raw": result.stdout or result.stderr}
     return result.returncode, payload
@@ -47,6 +55,24 @@ class TestDaemonStatusCommand:
         code, payload = _run(["daemon", "status"], tmp_path)
         assert code == 0
         assert "version" in payload
+
+    def test_status_does_not_wait_for_guard_database_writer(self, tmp_path: Path) -> None:
+        from codex_plugin_scanner.guard.store import GuardStore
+
+        store = GuardStore(tmp_path, prime_policy_integrity=False)
+        writer = sqlite3.connect(store.path)
+        writer.execute("pragma journal_mode=delete")
+        writer.execute("begin exclusive")
+        started = time.monotonic()
+        try:
+            code, payload = _run(["daemon", "status"], tmp_path)
+        finally:
+            writer.rollback()
+            writer.close()
+
+        assert code == 0
+        assert payload.get("running") is False
+        assert time.monotonic() - started < 1.5
 
     def test_status_running_true_when_live_state(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.daemon.manager import write_guard_daemon_state
@@ -89,6 +115,7 @@ class TestDaemonRepairCommand:
         code, payload = _run(["daemon", "repair"], tmp_path)
         assert code == 0
         cleared = payload.get("cleared", [])
+        assert isinstance(cleared, list)
         assert "locator" in cleared
 
     def test_repair_is_idempotent(self, tmp_path: Path) -> None:
@@ -105,7 +132,9 @@ class TestDaemonRepairCommand:
         code, payload = _run(["daemon", "repair"], tmp_path)
 
         assert code == 0
-        assert "daemon_discovery_key" in payload.get("cleared", [])
+        cleared = payload.get("cleared", [])
+        assert isinstance(cleared, list)
+        assert "daemon_discovery_key" in cleared
         assert key_path.exists() is False
 
 

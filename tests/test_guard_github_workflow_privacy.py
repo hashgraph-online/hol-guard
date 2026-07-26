@@ -85,6 +85,7 @@ def _descriptor(executable: Path, *, command: str | None = None) -> GitHubWorkfl
 
 
 def test_persisted_approval_receipt_and_events_expose_only_sanitized_record(tmp_path: Path) -> None:
+    now = datetime.now(timezone.utc)
     executable = Path(sys.executable).resolve()
     record = GitHubWorkflowApprovalRecord.from_descriptor(_descriptor(executable))
     evidence: tuple[dict[str, object], ...] = (
@@ -139,7 +140,7 @@ def test_persisted_approval_receipt_and_events_expose_only_sanitized_record(tmp_
         subject_id="session-privacy",
         issued_at=format_utc_timestamp(_NOW),
         not_before=format_utc_timestamp(_NOW),
-        expires_at=format_utc_timestamp(_NOW + timedelta(minutes=10)),
+        expires_at=format_utc_timestamp(now + timedelta(hours=1)),
         max_uses=1,
         key=key,
         key_id=key_id,
@@ -289,6 +290,7 @@ def test_symlinked_gh_is_ineligible(tmp_path: Path) -> None:
 
 
 def test_executable_byte_drift_does_not_consume_capability(tmp_path: Path) -> None:
+    now = datetime.now(timezone.utc)
     executable = tmp_path / "gh"
     original = b"#!/bin/sh\nexit 0\n"
     executable.write_bytes(original)
@@ -309,7 +311,7 @@ def test_executable_byte_drift_does_not_consume_capability(tmp_path: Path) -> No
         subject_id="session-drift",
         issued_at=format_utc_timestamp(_NOW),
         not_before=format_utc_timestamp(_NOW),
-        expires_at=format_utc_timestamp(_NOW + timedelta(minutes=10)),
+        expires_at=format_utc_timestamp(now + timedelta(hours=1)),
         max_uses=1,
         key=key,
         key_id=key_id,

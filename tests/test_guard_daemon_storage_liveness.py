@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import sqlite3
 import time
 import urllib.request
@@ -8,17 +9,22 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from http.client import HTTPResponse
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TypeGuard, cast, final
 
 import pytest
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.discovery import (
     DAEMON_DISCOVERY_PROTOCOL_VERSION,
     load_authenticated_daemon_state,
 )
 from codex_plugin_scanner.guard.daemon.runtime_heartbeat import RuntimeHeartbeatWriter
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon.server import (
+    GuardDaemonServer,
+    _GuardDaemonHttpServer,
+)
 from codex_plugin_scanner.guard.sqlite_tuning import sqlite_connect_timeout_seconds
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -251,3 +257,40 @@ def test_internal_hook_sqlite_timeout_is_bounded_without_changing_default() -> N
     assert sqlite_connect_timeout_seconds({"HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS": "10000"}) == 0.25
     assert sqlite_connect_timeout_seconds({"HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS": "invalid"}) == 30.0
     assert sqlite_connect_timeout_seconds({"HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS": "0"}) == 30.0
+
+
+def test_unclassified_watchdog_distinguishes_complete_headers_from_trickle() -> None:
+    if not hasattr(socket, "MSG_DONTWAIT"):
+        pytest.skip("nonblocking socket peeking is unavailable")
+    server_socket, client_socket = socket.socketpair()
+    try:
+        client_socket.sendall(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        assert _GuardDaemonHttpServer._buffered_request_headers_complete(server_socket) is True
+        _ = server_socket.recv(65_536)
+        client_socket.sendall(b"GET /healthz HTTP/1.1\r\nHost:")
+        assert _GuardDaemonHttpServer._buffered_request_headers_complete(server_socket) is False
+    finally:
+        server_socket.close()
+        client_socket.close()
+
+
+def test_storage_maintenance_failure_requests_immediate_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingStore:
+        guard_home = tmp_path
+
+        @staticmethod
+        def maintain_storage(**_kwargs: object) -> None:
+            raise sqlite3.OperationalError("database is locked")
+
+    daemon = object.__new__(GuardDaemonServer)
+    object.__setattr__(daemon, "_server", SimpleNamespace(store=FailingStore()))
+    monkeypatch.setattr(
+        daemon_server_module,
+        "load_guard_config",
+        lambda _guard_home: SimpleNamespace(evidence_retain_days=30),
+    )
+
+    assert daemon._maintain_storage_best_effort() is False  # pyright: ignore[reportPrivateUsage]
