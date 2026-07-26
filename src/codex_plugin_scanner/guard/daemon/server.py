@@ -106,8 +106,8 @@ from ..config import (
     editable_guard_settings,
     load_guard_config,
     reset_guard_settings,
-    update_guard_update_channel,
     update_guard_settings,
+    update_guard_update_channel,
 )
 from ..desktop_notifications import (
     desktop_notification_setup_payload,
