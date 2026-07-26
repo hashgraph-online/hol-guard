@@ -43,15 +43,6 @@ def hook_worker_main(connection: Connection, configured_guard_home: str | None) 
         _ = importlib.import_module(module_name)
     stores: dict[str, GuardStore] = {}
     hook_workers: dict[str, HookWorker] = {}
-    if configured_guard_home is not None:
-        from ..store import GuardStore
-
-        guard_home = Path(configured_guard_home).resolve(strict=False)
-        stores[str(guard_home)] = GuardStore(
-            guard_home,
-            prime_policy_integrity=False,
-            daemon_managed_schema=True,
-        )
     connection.send(("ready", None))
     _ = windows_job
     while True:
