@@ -151,6 +151,12 @@ def corpus_record_count() -> int:
         PR_MERGE_ADMIN_CAPABILITY_CASES,
         UNRELATED_DYNAMIC_COMMAND_CASES,
     )
+    from tests.test_guard_risk import (
+        LOCAL_COMPOSE_SAFE_CASES,
+        LOCAL_SHELL_RISK_CASES,
+        MUTATING_PYTHON_MODULE_DENY_CASES,
+        SENSITIVE_DOCKER_DENY_CASES,
+    )
 
     return (
         sum(1 for _ in iter_benign_corpus())
@@ -164,6 +170,10 @@ def corpus_record_count() -> int:
         + len(UNRELATED_DYNAMIC_COMMAND_CASES)
         + len(BENIGN_DATA_FLOW_CASES)
         + len(MALICIOUS_DATA_FLOW_CASES)
+        + len(LOCAL_COMPOSE_SAFE_CASES)
+        + len(LOCAL_SHELL_RISK_CASES)
+        + len(MUTATING_PYTHON_MODULE_DENY_CASES)
+        + len(SENSITIVE_DOCKER_DENY_CASES)
     )
 
 

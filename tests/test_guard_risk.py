@@ -866,55 +866,57 @@ def test_tool_action_request_classifier_blocks_docker_push():
     assert buildx_push_request.action_class == "docker-sensitive command"
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        "docker compose up -d postgres",
-        "docker compose logs -f api",
-        "docker compose ps",
-        "docker compose down",
-        "docker compose build",
-        "docker compose build --platform linux/amd64 -t app:v1 .",
-        "docker compose -f docker-compose.yml up -d postgres",
-        "docker compose --file=docker-compose.yml up",
-        "docker compose -f docker-compose.yml ps",
-        "docker compose --profile dev up -d",
-        "docker compose --profile=dev logs -f api",
-        "docker --debug compose --profile dev logs -f api",
-        "docker compose --project-name=app ps",
-        "docker compose -p app ls",
-        "docker compose --project-directory . up -d",
-        "docker compose --project-directory=. up -d",
-        "docker compose --parallel 4 pull",
-        "docker compose --parallel=4 pull",
-        "docker compose --ansi never ps",
-        "docker compose --ansi=never ps",
-        "docker compose version",
-        "docker compose create web",
-        "docker compose stop redis",
-        "docker compose restart web",
-        "docker compose pull",
-        "docker compose images",
-        "docker compose top",
-        "docker compose events",
-        "docker compose port web 8080",
-        "docker compose rm -f web",
-        "docker compose pause web",
-        "docker compose unpause web",
-        "docker compose wait web",
-        "docker compose config",
-        "docker compose up --build",
-        "docker --context default compose up",
-        "docker --context=default compose ps",
-        "DOCKER_CONTEXT=default docker compose ps",
-        "env DOCKER_CONTEXT=default docker compose up -d",
-        "DOCKER_HOST=unix:///var/run/docker.sock docker compose ps",
-    ],
+LOCAL_COMPOSE_SAFE_CASES = (
+    "docker compose up -d postgres",
+    "docker compose logs -f api",
+    "docker compose ps",
+    "docker compose down",
+    "docker compose build",
+    "docker compose build --platform linux/amd64 -t app:v1 .",
+    "docker compose -f docker-compose.yml up -d postgres",
+    "docker compose --file=docker-compose.yml up",
+    "docker compose -f docker-compose.yml ps",
+    "docker compose --profile dev up -d",
+    "docker compose --profile=dev logs -f api",
+    "docker --debug compose --profile dev logs -f api",
+    "docker compose --project-name=app ps",
+    "docker compose -p app ls",
+    "docker compose --project-directory . up -d",
+    "docker compose --project-directory=. up -d",
+    "docker compose --parallel 4 pull",
+    "docker compose --parallel=4 pull",
+    "docker compose --ansi never ps",
+    "docker compose --ansi=never ps",
+    "docker compose version",
+    "docker compose create web",
+    "docker compose stop redis",
+    "docker compose restart web",
+    "docker compose pull",
+    "docker compose images",
+    "docker compose top",
+    "docker compose events",
+    "docker compose port web 8080",
+    "docker compose rm -f web",
+    "docker compose pause web",
+    "docker compose unpause web",
+    "docker compose wait web",
+    "docker compose config",
+    "docker compose up --build",
+    "docker --context default compose up",
+    "docker --context=default compose ps",
+    "DOCKER_CONTEXT=default docker compose ps",
+    "env DOCKER_CONTEXT=default docker compose up -d",
+    "DOCKER_HOST=unix:///var/run/docker.sock docker compose ps",
 )
-def test_tool_action_request_classifier_allows_local_compose_workflows(command):
-    request = extract_sensitive_tool_action_request("bash", {"command": command})
 
-    assert request is None
+
+def test_tool_action_request_classifier_allows_local_compose_workflows():
+    failures: list[str] = []
+    for case_id, command in enumerate(LOCAL_COMPOSE_SAFE_CASES, start=1):
+        request = extract_sensitive_tool_action_request("bash", {"command": command})
+        if request is not None:
+            failures.append(f"compose-safe-{case_id:03}: expected no match; command={command!r}")
+    assert not failures, "\n".join(failures)
 
 
 def test_tool_action_request_classifier_blocks_python_test_module_invocation():
@@ -943,119 +945,129 @@ def test_tool_action_request_classifier_blocks_python_test_module_with_read_only
     assert request.action_class == "destructive shell command"
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        "docker build --build-arg FOO .",
-        "docker build --build-arg FOO=$(cat ~/.npmrc) .",
-        "docker build --build-arg FOO=`cat ~/.aws/credentials` .",
-        "docker build --label leak=$(cat ~/.aws/credentials) .",
-        "docker build --annotation leak=$(cat ~/.aws/credentials) .",
-        "docker build --label $NPM_TOKEN=1 .",
-        "docker build --annotation $(cat ~/.aws/credentials)=x .",
-        "docker buildx --debug build --secret id=npm,src=.npmrc .",
-        "docker buildx --debug=false build --secret id=npm,src=.npmrc .",
-        "docker buildx build --allow security.insecure .",
-        "docker buildx b --secret id=npm,src=.npmrc .",
-        "docker buildx build --cache-to type=local,dest=/tmp/cache .",
-        "docker buildx build --load .",
-        "docker buildx build -otype=local,dest=/tmp/out .",
-        "docker buildx build --output type=local,dest=/tmp/out .",
-        "docker build --iidfile /tmp/image-id .",
-        "docker build --metadata-file=/tmp/metadata.json .",
-        "docker --debug login registry.example.com",
-        "docker --tlsverify run alpine",
-        "docker --debug=true login registry.example.com",
-        "docker --tlsverify=false run alpine",
-        "docker login registry.example.com",
-        "docker --context prod login registry.example.com",
-        "docker run -v ~/.ssh:/root/.ssh ubuntu:latest",
-        "docker compose run --rm app",
-        "docker compose exec web sh",
-        "docker compose cp file web:/tmp",
-        "docker compose push",
-        "docker compose publish",
-        "docker compose watch",
-        "docker compose frobnicate up",
-        "docker compose --env-file .env up",
-        "docker compose --env-file=.env up",
-        "docker compose up --env-file .env",
-        "docker compose up --env-file=.env",
-        "docker compose build --secret id=npm,src=.npmrc",
-        "docker compose build --ssh default",
-        "docker compose build --build-arg NPM_TOKEN=$NPM_TOKEN",
-        "docker compose build --build-arg FOO=sk-test",
-        "docker compose build --allow security.insecure",
-        "docker compose build --push",
-        "docker --context prod compose up",
-        "docker --context=prod compose ps",
-        "docker -H tcp://docker.example compose up",
-        "docker -Htcp://docker.example compose ps",
-        "docker --host=tcp://docker.example compose ps",
-        "docker --config /custom/docker compose up",
-        "docker --tlsverify compose up",
-        "docker --tls compose up",
-        "docker --tlsverify=false compose ps",
-        "docker --tlscacert /ca.pem compose up",
-        "docker --tlscert /cert.pem compose up",
-        "docker --tlskey /key.pem compose up",
-        "docker -c prod compose up",
-        "docker -cprod compose up",
-        "DOCKER_HOST=tcp://prod-docker.example docker compose up -d",
-        "env DOCKER_CONTEXT=prod docker compose ps",
-        "DOCKER_CONFIG=/custom/docker docker compose up",
-        "DOCKER_TLS_VERIFY=1 docker compose ps",
-        "DOCKER_CERT_PATH=/certs docker compose up",
-        "COMPOSE_ENV_FILES=.env docker compose up -d",
-        "env COMPOSE_ENV_FILES=.env docker compose ps",
-        "export DOCKER_CONTEXT=prod && docker compose ps",
-        "export DOCKER_HOST=tcp://prod-docker.example; docker compose up -d",
-        "env --split-string=DOCKER_CONTEXT=prod docker compose ps",
-        "env -S DOCKER_HOST=tcp://prod-docker.example docker compose up -d",
-        "docker build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
-        "docker --context prod build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
-        "docker -H tcp://docker.example build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
-        "docker buildx build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
-        "docker buildx --builder ci build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
-        "docker build --ssh default -t registry.example.com/app:v1 .",
-        "docker build --build-arg NPM_TOKEN=$NPM_TOKEN -t registry.example.com/app:v1 .",
-        "docker build --build-arg FOO=$NPM_TOKEN -t registry.example.com/app:v1 .",
-        "docker build --build-arg FOO=$SECRETTOKEN -t registry.example.com/app:v1 .",
-        "docker build --build-arg FOO=${NPM_TOKEN:-fallback} -t registry.example.com/app:v1 .",
-        "docker build --build-arg FOO=sk-test -t registry.example.com/app:v1 .",
-    ],
+SENSITIVE_DOCKER_DENY_CASES = (
+    "docker build --build-arg FOO .",
+    "docker build --build-arg FOO=$(cat ~/.npmrc) .",
+    "docker build --build-arg FOO=`cat ~/.aws/credentials` .",
+    "docker build --label leak=$(cat ~/.aws/credentials) .",
+    "docker build --annotation leak=$(cat ~/.aws/credentials) .",
+    "docker build --label $NPM_TOKEN=1 .",
+    "docker build --annotation $(cat ~/.aws/credentials)=x .",
+    "docker buildx --debug build --secret id=npm,src=.npmrc .",
+    "docker buildx --debug=false build --secret id=npm,src=.npmrc .",
+    "docker buildx build --allow security.insecure .",
+    "docker buildx b --secret id=npm,src=.npmrc .",
+    "docker buildx build --cache-to type=local,dest=/tmp/cache .",
+    "docker buildx build --load .",
+    "docker buildx build -otype=local,dest=/tmp/out .",
+    "docker buildx build --output type=local,dest=/tmp/out .",
+    "docker build --iidfile /tmp/image-id .",
+    "docker build --metadata-file=/tmp/metadata.json .",
+    "docker --debug login registry.example.com",
+    "docker --tlsverify run alpine",
+    "docker --debug=true login registry.example.com",
+    "docker --tlsverify=false run alpine",
+    "docker login registry.example.com",
+    "docker --context prod login registry.example.com",
+    "docker run -v ~/.ssh:/root/.ssh ubuntu:latest",
+    "docker compose run --rm app",
+    "docker compose exec web sh",
+    "docker compose cp file web:/tmp",
+    "docker compose push",
+    "docker compose publish",
+    "docker compose watch",
+    "docker compose frobnicate up",
+    "docker compose --env-file .env up",
+    "docker compose --env-file=.env up",
+    "docker compose up --env-file .env",
+    "docker compose up --env-file=.env",
+    "docker compose build --secret id=npm,src=.npmrc",
+    "docker compose build --ssh default",
+    "docker compose build --build-arg NPM_TOKEN=$NPM_TOKEN",
+    "docker compose build --build-arg FOO=sk-test",
+    "docker compose build --allow security.insecure",
+    "docker compose build --push",
+    "docker --context prod compose up",
+    "docker --context=prod compose ps",
+    "docker -H tcp://docker.example compose up",
+    "docker -Htcp://docker.example compose ps",
+    "docker --host=tcp://docker.example compose ps",
+    "docker --config /custom/docker compose up",
+    "docker --tlsverify compose up",
+    "docker --tls compose up",
+    "docker --tlsverify=false compose ps",
+    "docker --tlscacert /ca.pem compose up",
+    "docker --tlscert /cert.pem compose up",
+    "docker --tlskey /key.pem compose up",
+    "docker -c prod compose up",
+    "docker -cprod compose up",
+    "DOCKER_HOST=tcp://prod-docker.example docker compose up -d",
+    "env DOCKER_CONTEXT=prod docker compose ps",
+    "DOCKER_CONFIG=/custom/docker docker compose up",
+    "DOCKER_TLS_VERIFY=1 docker compose ps",
+    "DOCKER_CERT_PATH=/certs docker compose up",
+    "COMPOSE_ENV_FILES=.env docker compose up -d",
+    "env COMPOSE_ENV_FILES=.env docker compose ps",
+    "export DOCKER_CONTEXT=prod && docker compose ps",
+    "export DOCKER_HOST=tcp://prod-docker.example; docker compose up -d",
+    "env --split-string=DOCKER_CONTEXT=prod docker compose ps",
+    "env -S DOCKER_HOST=tcp://prod-docker.example docker compose up -d",
+    "docker build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+    "docker --context prod build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+    "docker -H tcp://docker.example build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+    "docker buildx build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+    "docker buildx --builder ci build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+    "docker build --ssh default -t registry.example.com/app:v1 .",
+    "docker build --build-arg NPM_TOKEN=$NPM_TOKEN -t registry.example.com/app:v1 .",
+    "docker build --build-arg FOO=$NPM_TOKEN -t registry.example.com/app:v1 .",
+    "docker build --build-arg FOO=$SECRETTOKEN -t registry.example.com/app:v1 .",
+    "docker build --build-arg FOO=${NPM_TOKEN:-fallback} -t registry.example.com/app:v1 .",
+    "docker build --build-arg FOO=sk-test -t registry.example.com/app:v1 .",
 )
-def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(command):
-    request = extract_sensitive_tool_action_request("bash", {"command": command})
-
-    assert request is not None
-    assert request.action_class == "docker-sensitive command"
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        "python -m ruff check --add-noqa .",
-        "python -m ruff format .",
-        "python -m ruff --config ruff.toml format .",
-        "python -m ruff --color always format .",
-        "python -m mypy --install-types package",
-        "python -m pytest --basetemp=/tmp/guard-pytest",
-        "python -m pytest --junitxml=/tmp/guard-pytest.xml",
-        "python -m pytest --junit-xml=/tmp/guard-pytest.xml",
-        "python -m pytest --debug=/tmp/guard-pytest.log",
-        "python -m pytest --log-file=/tmp/guard-pytest.log",
-        "python -m pytest -c attacker.ini",
-        "PYTEST_ADDOPTS=--basetemp=/tmp/guard-pytest python -m pytest -q",
-        "python dangerous.py -m pytest",
-        "python -m unittest discover",
-    ],
+def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked():
+    failures: list[str] = []
+    for case_id, command in enumerate(SENSITIVE_DOCKER_DENY_CASES, start=1):
+        request = extract_sensitive_tool_action_request("bash", {"command": command})
+        actual_action_class = request.action_class if request is not None else None
+        if actual_action_class != "docker-sensitive command":
+            failures.append(
+                f"docker-sensitive-{case_id:03}: expected 'docker-sensitive command', "
+                f"got {actual_action_class!r}; command={command!r}"
+            )
+    assert not failures, "\n".join(failures)
+
+
+MUTATING_PYTHON_MODULE_DENY_CASES = (
+    "python -m ruff check --add-noqa .",
+    "python -m ruff format .",
+    "python -m ruff --config ruff.toml format .",
+    "python -m ruff --color always format .",
+    "python -m mypy --install-types package",
+    "python -m pytest --basetemp=/tmp/guard-pytest",
+    "python -m pytest --junitxml=/tmp/guard-pytest.xml",
+    "python -m pytest --junit-xml=/tmp/guard-pytest.xml",
+    "python -m pytest --debug=/tmp/guard-pytest.log",
+    "python -m pytest --log-file=/tmp/guard-pytest.log",
+    "python -m pytest -c attacker.ini",
+    "PYTEST_ADDOPTS=--basetemp=/tmp/guard-pytest python -m pytest -q",
+    "python dangerous.py -m pytest",
+    "python -m unittest discover",
 )
-def test_tool_action_request_classifier_blocks_mutating_python_module_invocations(command):
-    request = extract_sensitive_tool_action_request("bash", {"command": command})
 
-    assert request is not None
-    assert request.action_class == "destructive shell command"
+
+def test_tool_action_request_classifier_blocks_mutating_python_module_invocations():
+    failures: list[str] = []
+    for case_id, command in enumerate(MUTATING_PYTHON_MODULE_DENY_CASES, start=1):
+        request = extract_sensitive_tool_action_request("bash", {"command": command})
+        actual_action_class = request.action_class if request is not None else None
+        if actual_action_class != "destructive shell command":
+            failures.append(
+                f"python-module-{case_id:03}: expected 'destructive shell command', "
+                f"got {actual_action_class!r}; command={command!r}"
+            )
+    assert not failures, "\n".join(failures)
 
 
 def test_tool_action_request_classifier_allows_safe_ruff_fix_invocations(tmp_path, monkeypatch):
@@ -1071,24 +1083,13 @@ def test_tool_action_request_classifier_allows_safe_ruff_fix_invocations(tmp_pat
         assert request is None, command
 
 
-def test_tool_action_request_classifier_detects_read_only_filter_redirection_write():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "sed -n '1,20p' src/file.ts | grep foo > out.txt"},
-    )
-
-    assert request is not None
-    assert request.action_class == "destructive shell command"
-
-
-def test_tool_action_request_classifier_detects_attached_redirection_in_read_only_lookup_option():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "grep -h>~/.bashrc '^' src/payload.sh"},
-    )
-
-    assert request is not None
-    assert request.action_class == "destructive shell command"
+LOCAL_SHELL_RISK_CASES = (
+    ("shell-write-001", "sed -n '1,20p' src/file.ts | grep foo > out.txt", "destructive shell command"),
+    ("shell-write-002", "grep -h>~/.bashrc '^' src/payload.sh", "destructive shell command"),
+    ("shell-safe-001", 'ls missing 2>"/dev/null" | head -40', None),
+    ("shell-safe-002", 'ls missing 2>"/DEV/NULL" | head -40', None),
+    ("shell-safe-003", "ls missing 2>|/dev/null | head -40", None),
+)
 
 
 @pytest.mark.parametrize(
@@ -1116,31 +1117,20 @@ def test_tool_action_request_classifier_rejects_lookup_tools_that_write_or_exec(
     assert request.action_class == "destructive shell command"
 
 
-def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_quoted_dev_null():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": 'ls missing 2>"/dev/null" | head -40'},
-    )
-
-    assert request is None
-
-
-def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_uppercase_dev_null():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": 'ls missing 2>"/DEV/NULL" | head -40'},
-    )
-
-    assert request is None
-
-
-def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_noclobber_dev_null():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "ls missing 2>|/dev/null | head -40"},
-    )
-
-    assert request is None
+def test_tool_action_request_classifier_keeps_local_shell_risk_floors():
+    failures: list[str] = []
+    for case_id, command, expected_action_class in LOCAL_SHELL_RISK_CASES:
+        request = extract_sensitive_tool_action_request("bash", {"command": command})
+        if expected_action_class is None:
+            if request is not None:
+                failures.append(f"{case_id}: expected no match; command={command!r}")
+            continue
+        actual_action_class = request.action_class if request is not None else None
+        if actual_action_class != expected_action_class:
+            failures.append(
+                f"{case_id}: expected {expected_action_class!r}, got {actual_action_class!r}; command={command!r}"
+            )
+    assert not failures, "\n".join(failures)
 
 
 def test_tool_action_request_classifier_skips_perl_sleep_wait():
