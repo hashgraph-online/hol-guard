@@ -171,6 +171,7 @@ def corpus_record_count() -> int:
         MUTATING_PYTHON_MODULE_DENY_CASES,
         SENSITIVE_DOCKER_DENY_CASES,
     )
+    from tests.test_guard_runtime import COPILOT_NATIVE_DENY_COMMANDS
 
     return (
         sum(1 for _ in iter_benign_corpus())
@@ -193,6 +194,7 @@ def corpus_record_count() -> int:
         + len(SEMVER_PRERELEASE_BASE_CASES)
         + len(SEMVER_SUPPORTED_RANGE_CASES)
         + len(SEMVER_ZERO_MAJOR_CASES)
+        + len(COPILOT_NATIVE_DENY_COMMANDS)
         + len(BENIGN_DATA_FLOW_CASES)
         + len(MALICIOUS_DATA_FLOW_CASES)
         + len(LOCAL_COMPOSE_SAFE_CASES)
