@@ -5,11 +5,14 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import multiprocessing
 import os
+import signal
+import time
 from contextlib import suppress
 from multiprocessing.connection import Connection
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NoReturn, cast
 
 from ..codex_hook_windows_job import assign_current_process_to_windows_hook_job
 from .hook_process_protocol import (
@@ -27,10 +30,83 @@ _HOOK_SQLITE_TIMEOUT_ENV = "HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS"
 
 
 def hook_worker_main(connection: Connection, configured_guard_home: str | None) -> None:
+    windows_job = None
+    if os.name == "nt":
+        windows_job = assign_current_process_to_windows_hook_job()
+        if windows_job is None:
+            connection.send(("isolation_failed", None))
+            return
+    else:
+        try:
+            os.setsid()
+        except OSError:
+            connection.send(("isolation_failed", None))
+            return
+    connection.send(
+        (
+            "isolated",
+            {
+                "process_group_id": os.getpid() if os.name != "nt" else None,
+                "windows_job_contained": windows_job is not None,
+            },
+        )
+    )
+    context = multiprocessing.get_context("spawn")
+    guardian_connection, evaluator_connection = context.Pipe(duplex=True)
+    evaluator = context.Process(
+        target=_hook_evaluator_main,
+        args=(evaluator_connection, configured_guard_home),
+        name="hol-guard-hook-evaluator",
+        daemon=True,
+    )
+    try:
+        evaluator.start()
+    except BaseException:
+        guardian_connection.close()
+        evaluator_connection.close()
+        connection.send(("worker_failed", None))
+        _hold_containment_anchor()
+    evaluator_connection.close()
+    try:
+        if not guardian_connection.poll(10.0) or guardian_connection.recv() != ("ready", None):
+            connection.send(("worker_failed", None))
+            _hold_containment_anchor()
+        connection.send(("ready", None))
+        while True:
+            try:
+                raw_message = cast(object, connection.recv())
+            except EOFError:
+                _terminate_guardian_group()
+                return
+            if is_pair(raw_message) and raw_message[0] == "stop":
+                with suppress(BrokenPipeError, OSError):
+                    guardian_connection.send(("stop", None))
+                evaluator.join(timeout=0.2)
+                _hold_containment_anchor()
+            try:
+                guardian_connection.send(raw_message)
+                response = guardian_connection.recv()
+            except (BrokenPipeError, EOFError, OSError):
+                connection.send(("worker_failed", None))
+                _hold_containment_anchor()
+            connection.send(response)
+    finally:
+        guardian_connection.close()
+        _ = windows_job
+
+
+def _hold_containment_anchor() -> NoReturn:
+    while True:
+        time.sleep(60)
+
+
+def _terminate_guardian_group() -> None:
     if os.name != "nt":
         with suppress(OSError):
-            os.setsid()
-    windows_job = assign_current_process_to_windows_hook_job() if os.name == "nt" else None
+            os.killpg(os.getpid(), getattr(signal, "SIGKILL", 9))
+
+
+def _hook_evaluator_main(connection: Connection, configured_guard_home: str | None) -> None:
     os.environ[_HOOK_SQLITE_TIMEOUT_ENV] = "250"
     for module_name in (
         "codex_plugin_scanner.guard.adapters.base",
@@ -44,7 +120,6 @@ def hook_worker_main(connection: Connection, configured_guard_home: str | None) 
     stores: dict[str, GuardStore] = {}
     hook_workers: dict[str, HookWorker] = {}
     connection.send(("ready", None))
-    _ = windows_job
     while True:
         try:
             raw_message = cast(object, connection.recv())

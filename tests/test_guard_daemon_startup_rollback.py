@@ -28,6 +28,7 @@ def test_serve_thread_start_failure_rolls_back_initialized_service(
     )
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
+    port = daemon.port
     real_thread = threading.Thread
     begin_service = daemon._begin_service
     started_threads: list[threading.Thread] = []
@@ -81,12 +82,18 @@ def test_serve_thread_start_failure_rolls_back_initialized_service(
 
     monkeypatch.setattr(threading, "Thread", real_thread)
     monkeypatch.setattr(daemon, "_begin_service", begin_service)
+    replacement = GuardDaemonServer(
+        store,
+        host="127.0.0.1",
+        port=port,
+        idle_timeout_seconds=0,
+    )
     try:
-        daemon.start()
-        assert daemon._thread is not None
-        assert daemon._thread.is_alive()
+        replacement.start()
+        assert replacement._thread is not None
+        assert replacement._thread.is_alive()
     finally:
-        daemon.stop()
+        replacement.stop()
 
 
 def test_uncontained_service_blocks_replacement_until_retry_succeeds(
