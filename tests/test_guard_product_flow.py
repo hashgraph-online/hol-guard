@@ -457,7 +457,7 @@ args = ["workspace-skill.js", "--changed"]
         monkeypatch.setattr(sys, "argv", ["hol-guard"])
 
         with pytest.raises(SystemExit) as excinfo:
-            main(["guard", "--help"])
+            main(["--help"])
 
         output = capsys.readouterr().out
 
