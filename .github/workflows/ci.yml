@@ -42,6 +42,11 @@ jobs:
         run: uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
       - name: Publish test inventory
         run: cat test-inventory.json
+      - name: Publish exact test-body duplicate candidates
+        run: |
+          uv run --no-sync python scripts/ci/test_duplicate_candidates.py \
+            --output test-duplicate-candidates.json
+          cat test-duplicate-candidates.json
       - run: uv run --no-sync python -m ruff check src/
       - run: uv run --no-sync python -m ruff format --check src/
       - run: uv run --no-sync basedpyright --level error
