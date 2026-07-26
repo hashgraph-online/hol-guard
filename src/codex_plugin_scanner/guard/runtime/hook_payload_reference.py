@@ -9,6 +9,7 @@ from base64 import urlsafe_b64decode
 from collections.abc import Mapping
 from pathlib import Path
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 HOOK_PAYLOAD_REFERENCE_KEY = "guard_payload_ref"
@@ -61,7 +62,7 @@ def _decrypt_payload_reference(raw: bytes, ref: Mapping[str, object]) -> bytes:
     nonce = _base64url_bytes(ref.get("nonce"), expected_length=12, label="nonce")
     try:
         return AESGCM(key).decrypt(nonce, raw, None)
-    except ValueError as error:
+    except (InvalidTag, ValueError) as error:
         raise HookPayloadReferenceError("HOL Guard hook payload reference could not be decrypted.") from error
 
 

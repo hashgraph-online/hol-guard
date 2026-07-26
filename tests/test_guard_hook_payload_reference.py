@@ -91,6 +91,18 @@ def test_hook_payload_reference_rejects_digest_mismatch() -> None:
         )
 
 
+def test_hook_payload_reference_rejects_authentication_failure() -> None:
+    payload = {"hook_event_name": "PostToolUse", "tool_name": "Read", "tool_response": []}
+
+    with (
+        pytest.raises(HookPayloadReferenceError, match="could not be decrypted"),
+        tempfile.TemporaryDirectory(prefix="hol-guard-hook-payload-") as reference_dir,
+    ):
+        referenced = json.loads(_referenced_input(payload, Path(reference_dir)))
+        referenced["guard_payload_ref"]["key"] = _b64url(os.urandom(32))
+        _load_hook_payload(None, input_text=json.dumps(referenced), harness="pi")
+
+
 def test_reject_path_outside_temp_root(tmp_path: Path) -> None:
     payload = {"hook_event_name": "PostToolUse", "tool_name": "Read", "tool_response": []}
     with pytest.raises(HookPayloadReferenceError, match="Guard-owned temp directory"):
