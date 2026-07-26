@@ -33,9 +33,12 @@ def hook_worker_main(connection: Connection, configured_guard_home: str | None) 
     windows_job = assign_current_process_to_windows_hook_job() if os.name == "nt" else None
     os.environ[_HOOK_SQLITE_TIMEOUT_ENV] = "250"
     for module_name in (
+        "codex_plugin_scanner.guard.adapters.base",
         "codex_plugin_scanner.guard.cli.commands_hook",
         "codex_plugin_scanner.guard.cli.commands_support_connect",
         "codex_plugin_scanner.guard.config",
+        "codex_plugin_scanner.guard.daemon.hook_worker",
+        "codex_plugin_scanner.guard.store",
     ):
         _ = importlib.import_module(module_name)
     stores: dict[str, GuardStore] = {}
