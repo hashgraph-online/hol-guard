@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 from collections.abc import Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from pathlib import Path
 from typing import ClassVar, Protocol, TextIO, cast, final
@@ -31,7 +32,7 @@ from codex_plugin_scanner.guard.daemon import hook_process_worker as hook_worker
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon.hook_process_protocol import capture_hook_command
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
-from codex_plugin_scanner.guard.daemon.hook_process_worker import HookWorkerSlot
+from codex_plugin_scanner.guard.daemon.hook_process_worker import HookProcessReview, HookWorkerSlot
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -339,6 +340,40 @@ def test_prewarmed_runner_handles_real_hook_and_closes(tmp_path: Path) -> None:
 
     assert result.reason_code is None
     assert result.payload is not None
+
+
+def test_prewarmed_runner_queues_multi_pi_burst_inside_deadline(tmp_path: Path) -> None:
+    runner = HookProcessRunner(process_limit=4, timeout_seconds=1.8)
+    barrier = threading.Barrier(24)
+
+    def review(index: int) -> HookProcessReview:
+        barrier.wait(timeout=2)
+        return runner.review(
+            payload={
+                "hook_event_name": "PreToolUse",
+                "tool_call_id": f"multi-pi-{index}",
+                "tool_name": "Bash",
+                "tool_input": {"command": "git status --short"},
+            },
+            harness="pi",
+            home_dir=tmp_path,
+            guard_home=tmp_path,
+            workspace=tmp_path,
+            hook_env={},
+        )
+
+    try:
+        runner.start()
+        started_at = time.monotonic()
+        with ThreadPoolExecutor(max_workers=24) as executor:
+            results = list(executor.map(review, range(24)))
+        elapsed = time.monotonic() - started_at
+    finally:
+        runner.close()
+
+    assert all(result.reason_code is None for result in results)
+    assert all(result.payload is not None for result in results)
+    assert elapsed < 2.0
 
 
 def test_deferred_runner_serves_first_worker_before_backfilling(tmp_path: Path) -> None:

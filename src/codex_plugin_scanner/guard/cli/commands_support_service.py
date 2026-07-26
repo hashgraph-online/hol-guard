@@ -192,6 +192,7 @@ def _matching_advisories(store: GuardStore, publisher: object) -> list[dict[str,
 
 def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
     from codex_plugin_scanner.version import __version__
+    from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
     from codex_plugin_scanner.guard.daemon.lifecycle_journal import load_daemon_lifecycle_events
 
     url = load_guard_daemon_url(guard_home)
@@ -215,10 +216,19 @@ def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
                 running = True
         except Exception:
             pass
+    authenticated_state = load_authenticated_daemon_state(guard_home) if running else None
+    daemon_version = (
+        authenticated_state.get("package_version")
+        if authenticated_state is not None
+        and isinstance(authenticated_state.get("package_version"), str)
+        else None
+    )
     payload: dict[str, object] = {
         "running": running,
         "guard_home": str(guard_home),
-        "version": __version__,
+        "version": daemon_version or ("unknown" if running else __version__),
+        "cli_version": __version__,
+        "daemon_version": daemon_version,
     }
     if port is not None:
         payload["port"] = port
