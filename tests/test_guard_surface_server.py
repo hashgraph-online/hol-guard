@@ -893,6 +893,10 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
+            assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
+                minimum_workers=1,
+                timeout_seconds=15,
+            ), daemon._server.hook_process_runner.stats()  # pyright: ignore[reportPrivateUsage]
             hook_request = urllib.request.Request(
                 (
                     f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
