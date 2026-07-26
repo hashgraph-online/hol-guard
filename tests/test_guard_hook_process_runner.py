@@ -334,12 +334,15 @@ def test_prewarmed_runner_handles_real_hook_and_closes(tmp_path: Path) -> None:
             workspace=tmp_path,
             hook_env={},
         )
+        stats = runner.stats()
     finally:
         runner.close()
         runner.close()
 
     assert result.reason_code is None
     assert result.payload is not None
+    assert sum(stats["decisions"].values()) == 1
+    assert sum(stats["reason_codes"].values()) == 1
 
 
 def test_prewarmed_runner_queues_multi_pi_burst_inside_deadline(tmp_path: Path) -> None:

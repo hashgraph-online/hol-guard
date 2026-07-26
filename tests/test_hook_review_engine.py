@@ -8,14 +8,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
+from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
 from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
 from codex_plugin_scanner.guard.runtime.hook_review_engine import HookFailSafe, HookReviewEngine
 from codex_plugin_scanner.guard.runtime.hook_review_types import (
     HookOutputSummary,
     HookReviewRequest,
-    HookReviewResponse,
     HookSourceFileRef,
 )
 from codex_plugin_scanner.guard.runtime.hook_source_read import sha256_text
@@ -173,6 +172,109 @@ class TestSourceRefMismatch:
         response = engine.review(request)
         assert response.model_output_action != "allow_original"
 
+    @pytest.mark.parametrize("path", ["skill://routine-workflow", "/external/docs/release.md"])
+    def test_inconclusive_source_ref_scans_available_pi_stdout(
+        self,
+        engine: HookReviewEngine,
+        workspace: Path,
+        home_dir: Path,
+        guard_home: Path,
+        path: str,
+    ) -> None:
+        text = "Routine local instructions with no sensitive values."
+        request = _request(
+            source_ref=_source_ref(path=path, text=text),
+            cwd=workspace,
+            home_dir=home_dir,
+            guard_home=guard_home,
+            payload={
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Read",
+                "tool_input": {"path": path},
+                "stdout": text,
+            },
+            output_summary=HookOutputSummary(
+                text_excerpt="",
+                excerpt_truncated=False,
+                output_sha256=sha256_text(text),
+                output_chars=len(text),
+            ),
+        )
+
+        response = engine.review(request)
+
+        assert response.decision == "allow"
+        assert response.model_output_action == "allow_original"
+        assert response.reason_code == "output_scan_allow"
+
+    def test_inconclusive_source_ref_still_blocks_secret_in_pi_stdout(
+        self,
+        engine: HookReviewEngine,
+        workspace: Path,
+        home_dir: Path,
+        guard_home: Path,
+    ) -> None:
+        text = "token=ghp_1234567890abcdefghijklmnopqrstuvwxyz"
+        path = "skill://private-instructions"
+        request = _request(
+            source_ref=_source_ref(path=path, text=text),
+            cwd=workspace,
+            home_dir=home_dir,
+            guard_home=guard_home,
+            payload={
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Read",
+                "tool_input": {"path": path},
+                "stdout": text,
+            },
+            output_summary=HookOutputSummary(
+                text_excerpt="",
+                excerpt_truncated=False,
+                output_sha256=sha256_text(text),
+                output_chars=len(text),
+            ),
+        )
+
+        response = engine.review(request)
+
+        assert response.decision == "deny"
+        assert response.model_output_action == "block"
+        assert response.reason_code == "output_secret_match"
+
+    def test_inconclusive_truncated_source_ref_never_allows_original(
+        self,
+        engine: HookReviewEngine,
+        workspace: Path,
+        home_dir: Path,
+        guard_home: Path,
+    ) -> None:
+        text = "Reviewed safe excerpt"
+        path = "skill://large-instructions"
+        request = _request(
+            source_ref=_source_ref(path=path, text=text),
+            cwd=workspace,
+            home_dir=home_dir,
+            guard_home=guard_home,
+            payload={
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Read",
+                "tool_input": {"path": path},
+                "stdout": text,
+            },
+            output_summary=HookOutputSummary(
+                text_excerpt=text,
+                excerpt_truncated=True,
+                output_sha256=None,
+                output_chars=len(text) + 1,
+            ),
+        )
+
+        response = engine.review(request)
+
+        assert response.decision == "allow"
+        assert response.model_output_action == "replace_with_reviewed_excerpt"
+        assert response.reviewed_excerpt == text
+
 
 class TestSecretSourceFile:
     def test_secret_source_file_returns_deny_block(
@@ -244,7 +346,13 @@ class TestNonPostToolEvents:
 
 class TestEngineException:
     def test_engine_exception_returns_deny_block(
-        self, store: GuardStore, scanner: ContentScanner, cache: HookDecisionCache, workspace: Path, home_dir: Path, guard_home: Path
+        self,
+        store: GuardStore,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        workspace: Path,
+        home_dir: Path,
+        guard_home: Path,
     ) -> None:
         def broken_config_loader(guard_home: Path, workspace: Path | None) -> GuardConfig:
             raise RuntimeError("config loading failed")
@@ -266,6 +374,33 @@ class TestEngineException:
         assert response.decision == "deny"
         assert response.model_output_action == "block"
         assert response.reason_code == "engine_exception"
+
+    def test_engine_exception_records_sanitized_failure(
+        self,
+        store: GuardStore,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        workspace: Path,
+        home_dir: Path,
+        guard_home: Path,
+    ) -> None:
+        metrics = MagicMock()
+
+        def broken_config_loader(_guard_home: Path, _workspace: Path | None) -> GuardConfig:
+            raise RuntimeError("sensitive details")
+
+        engine = HookReviewEngine(
+            store=store,
+            scanner=scanner,
+            cache=cache,
+            config_loader=broken_config_loader,
+            metrics=metrics,
+        )
+
+        engine.review(_request(cwd=workspace, home_dir=home_dir, guard_home=guard_home))
+
+        metrics.record_failure.assert_called_once_with(stage="engine", exception_type="RuntimeError")
+        assert "sensitive details" not in str(metrics.mock_calls)
 
 
 class TestScannerBudgetExhaustion:
@@ -304,10 +439,51 @@ class TestScannerBudgetExhaustion:
         # Standard path scans excerpt, which is safe, but can't prove full
         assert response.model_output_action != "allow_original"
 
+    def test_scanner_receives_its_budget_after_slow_config_load(
+        self,
+        store: GuardStore,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        workspace: Path,
+        home_dir: Path,
+        guard_home: Path,
+    ) -> None:
+        def slow_config_loader(guard_home: Path, workspace: Path | None) -> GuardConfig:
+            time.sleep(0.8)
+            return _config_loader(guard_home, workspace)
+
+        engine = HookReviewEngine(
+            store=store,
+            scanner=scanner,
+            cache=cache,
+            config_loader=slow_config_loader,
+        )
+        request = _request(
+            cwd=workspace,
+            home_dir=home_dir,
+            guard_home=guard_home,
+            payload={
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Read",
+                "tool_output": "routine documentation",
+            },
+        )
+
+        response = engine.review(request)
+
+        assert response.decision == "allow"
+        assert response.reason_code == "output_scan_allow"
+
 
 class TestMetricsExcludesRawContent:
     def test_metrics_payload_excludes_raw_content(
-        self, store: GuardStore, scanner: ContentScanner, cache: HookDecisionCache, workspace: Path, home_dir: Path, guard_home: Path
+        self,
+        store: GuardStore,
+        scanner: ContentScanner,
+        cache: HookDecisionCache,
+        workspace: Path,
+        home_dir: Path,
+        guard_home: Path,
     ) -> None:
         metrics = MagicMock()
         engine = HookReviewEngine(
@@ -335,6 +511,9 @@ class TestMetricsExcludesRawContent:
         # Verify metrics.record was called
         metrics.record.assert_called_once()
         call_kwargs = metrics.record.call_args.kwargs
+        assert call_kwargs["decision"] == "allow"
+        assert call_kwargs["reason_code"] == "source_full_scan_allow"
+        assert call_kwargs["model_output_action"] == "allow_original"
         # Verify no raw content fields
         for key in call_kwargs:
             assert "raw" not in key.lower()

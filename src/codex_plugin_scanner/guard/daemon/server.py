@@ -5289,9 +5289,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             # PreToolUse/PermissionRequest/PostToolUse-without-source-ref
             # still get full policy/permission/approval checks.
             return None
-        except Exception:
+        except Exception as error:
             # Fail safe: deny/block. Do not fall back to legacy CLI for
             # requests that omitted full output and supplied only guard_source_ref.
+            self._daemon_server().hook_worker.metrics.record_failure(
+                stage="server",
+                exception_type=type(error).__name__,
+            )
             rt_values = params.get("runtime-harness", [])
             actual_harness = (
                 rt_values[-1].strip()

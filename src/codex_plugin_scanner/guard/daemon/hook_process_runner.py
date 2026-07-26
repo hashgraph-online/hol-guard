@@ -8,7 +8,7 @@ import time
 from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
-from typing import final
+from typing import TypedDict, final
 
 from .hook_process_entrypoint import hook_worker_main
 from .hook_process_protocol import (
@@ -25,6 +25,17 @@ _HOOK_PROCESS_ACQUIRE_TIMEOUT_SECONDS = 1.0
 _HOOK_PROCESS_BACKFILL_DELAY_SECONDS = 2.0
 _HOOK_PROCESS_BACKFILL_MAX_DEFERRAL_SECONDS = 5.0
 _HOOK_PROCESS_RETRY_MAX_SECONDS = 5.0
+
+
+class HookProcessStats(TypedDict):
+    configured: int
+    workers: int
+    ready: int
+    timeouts: int
+    failures: int
+    restarts: int
+    decisions: dict[str, int]
+    reason_codes: dict[str, int]
 
 
 @final
@@ -61,6 +72,8 @@ class HookProcessRunner:
         self._timeouts: int = 0
         self._failures: int = 0
         self._restarts: int = 0
+        self._decisions: dict[str, int] = {}
+        self._reason_codes: dict[str, int] = {}
 
     def start(self, *, defer_backfill: bool = False) -> None:
         with self._state_lock:
@@ -188,6 +201,7 @@ class HookProcessRunner:
         typed_response = as_string_object_dict(response)
         if typed_response is None:
             return HookProcessReview(None, "daemon_hook_process_invalid_json")
+        self._record_response_metrics(typed_response)
         return HookProcessReview(typed_response, None)
 
     def wait_for_capacity(self, *, minimum_workers: int, timeout_seconds: float) -> bool:
@@ -207,7 +221,7 @@ class HookProcessRunner:
                 return False
             time.sleep(min(0.02, remaining))
 
-    def stats(self) -> dict[str, int]:
+    def stats(self) -> HookProcessStats:
         with self._state_lock:
             worker_count = len(self._all_slots)
         with self._metrics_lock:
@@ -218,6 +232,8 @@ class HookProcessRunner:
                 "timeouts": self._timeouts,
                 "failures": self._failures,
                 "restarts": self._restarts,
+                "decisions": dict(self._decisions),
+                "reason_codes": dict(self._reason_codes),
             }
 
     def close(self) -> None:
@@ -452,6 +468,15 @@ class HookProcessRunner:
                 self._failures += 1
             elif metric == "restarts":
                 self._restarts += 1
+
+    def _record_response_metrics(self, response: Mapping[str, object]) -> None:
+        decision = response.get("decision")
+        reason_code = response.get("reason_code")
+        safe_decision = decision if isinstance(decision, str) and decision.isidentifier() else "unknown"
+        safe_reason = reason_code if isinstance(reason_code, str) and reason_code.isidentifier() else "unknown"
+        with self._metrics_lock:
+            self._decisions[safe_decision] = self._decisions.get(safe_decision, 0) + 1
+            self._reason_codes[safe_reason] = self._reason_codes.get(safe_reason, 0) + 1
 
     def _retire_slot(self, slot: HookWorkerSlot, *, graceful: bool = False) -> bool:
         contained = retire_worker_slot(slot, graceful=graceful)

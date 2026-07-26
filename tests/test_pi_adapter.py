@@ -419,6 +419,9 @@ class TestPiInstall:
         assert "guard_source_ref" in text
         assert "digestOutputText" in text
         assert "sourceFileRefForPostToolUse" in text
+        assert "isVirtualSourcePath" in text
+        assert "if (!path || isVirtualSourcePath(path)) return null;" in text
+        assert "text_excerpt: toolOutput" in text
         assert "GUARD_SOURCE_REF_MAX_OUTPUT_CHARS" in text
         assert "GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES" in text
         assert "reviewed_output_sha256" in text

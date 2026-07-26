@@ -89,6 +89,11 @@ function sourcePathFromToolInput(toolInput: Record<string, unknown>): string | n
   return null;
 }
 
+function isVirtualSourcePath(path: string): boolean {
+  if (/^[A-Za-z]:[\\/]/.test(path)) return false;
+  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(path);
+}
+
 function sourceFileRefForPostToolUse(
   event: Record<string, unknown>,
   toolInput: Record<string, unknown>,
@@ -99,7 +104,7 @@ function sourceFileRefForPostToolUse(
   if (!digest.sha256 || digest.traversalTruncated) return null;
   if (digest.chars > GUARD_SOURCE_REF_MAX_OUTPUT_CHARS) return null;
   const path = sourcePathFromToolInput(toolInput);
-  if (!path) return null;
+  if (!path || isVirtualSourcePath(path)) return null;
   return {
     version: 1,
     kind: 'source_file',

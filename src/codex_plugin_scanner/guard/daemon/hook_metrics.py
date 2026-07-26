@@ -97,6 +97,13 @@ class HookMetricsRecorder:
                 "total_decisions": len(self._latencies),
             }
 
+    def record_failure(self, *, stage: str, exception_type: str) -> None:
+        """Record only a bounded failure stage and exception class."""
+        safe_stage = stage if stage in {"engine", "metrics", "server"} else "unknown"
+        safe_exception = exception_type if exception_type.isidentifier() else "UnknownError"
+        with self._lock:
+            self._counters[f"failure:{safe_stage}:{safe_exception[:80]}"] += 1
+
     def maybe_flush_to_store(self, store: GuardStore, *, force: bool = False) -> None:
         """Flush metrics to store as a rollup event.
 

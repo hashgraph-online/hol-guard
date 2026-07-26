@@ -1323,6 +1323,7 @@ class TestGuardSurfaceServer:
         assert health["hook_capacity"]["limit"] == 1
         assert health["hook_capacity"]["rejected"] == 1
         assert health["hook_capacity"]["per_harness_rejected"]["pi"] == 1
+        assert health["hook_workers"]["decisions"] == {}
         assert health["request_capacity"]["limit"] == 64
         assert health["request_capacity"]["critical_limit"] == 4
 

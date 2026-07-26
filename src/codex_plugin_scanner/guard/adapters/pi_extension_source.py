@@ -531,6 +531,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      guardPayload.guard_source_ref = sourceRef;\n"
         "      guardPayload.tool_response_summary = {\n"
         "        kind: 'text',\n"
+        "        text_excerpt: toolOutput,\n"
         "        excerpt_chars: toolOutput.length,\n"
         "        output_chars: digest.chars,\n"
         "        output_sha256: digest.sha256,\n"
