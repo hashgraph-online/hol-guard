@@ -560,10 +560,15 @@ def update_guard_settings(
     return load_guard_config(guard_home)
 
 
-def update_guard_update_channel(guard_home: Path, update_channel: object) -> GuardConfig:
+def update_guard_update_channel(
+    guard_home: Path,
+    update_channel: object,
+    *,
+    approval_gate_grant: ApprovalGateGrant | None = None,
+) -> GuardConfig:
     """Persist the local release channel selected from the update surface."""
 
-    require_settings_write(guard_home)
+    require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
     if not isinstance(update_channel, str) or update_channel not in VALID_UPDATE_CHANNELS:
         raise ValueError("Update channel must be stable or alpha.")
     current_config = load_guard_config(guard_home)

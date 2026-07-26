@@ -3137,7 +3137,15 @@ export async function scheduleGuardUpdate(
   };
 }
 
-export async function setGuardUpdateChannel(channel: "stable" | "alpha"): Promise<GuardUpdateStatus> {
+export type GuardUpdateChannelProof = {
+  approval_password?: string;
+  approval_totp_code?: string;
+};
+
+export async function setGuardUpdateChannel(
+  channel: "stable" | "alpha",
+  proof?: GuardUpdateChannelProof,
+): Promise<GuardUpdateStatus> {
   if (isGuardDemoMode()) {
     return normalizeGuardUpdateStatus({
       ...(await fetchGuardUpdateStatus()),
@@ -3147,7 +3155,7 @@ export async function setGuardUpdateChannel(channel: "stable" | "alpha"): Promis
   const response = await fetchWithGuardAuth("/v1/update/channel", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ update_channel: channel }),
+    body: JSON.stringify({ update_channel: channel, ...proof }),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {

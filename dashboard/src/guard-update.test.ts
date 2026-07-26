@@ -2,7 +2,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { buildGuardDaemonCandidatePorts, normalizeGuardUpdateStatus, updateReconnectSucceeded } from "./guard-api";
-import { AlphaChannelDialog, GuardUpdatePanel } from "./guard-update-panel";
+import { AlphaChannelDialog } from "./alpha-update-channel-dialog";
+import { GuardUpdatePanel } from "./guard-update-panel";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -65,8 +66,13 @@ const alphaDialogMarkup = renderToStaticMarkup(
     useAlpha: false,
     pending: false,
     error: "Guard could not change the update channel. Try again.",
+    approvalGate: null,
+    approvalPassword: "",
+    approvalTotpCode: "",
     onClose: () => undefined,
     onConfirm: () => undefined,
+    onApprovalPasswordChange: () => undefined,
+    onApprovalTotpCodeChange: () => undefined,
   }),
 );
 assert(alphaDialogMarkup.includes("Try alpha updates"), "alpha dialog should explain the selected release channel");
@@ -79,12 +85,43 @@ const stableDialogMarkup = renderToStaticMarkup(
     useAlpha: true,
     pending: false,
     error: null,
+    approvalGate: null,
+    approvalPassword: "",
+    approvalTotpCode: "",
     onClose: () => undefined,
     onConfirm: () => undefined,
+    onApprovalPasswordChange: () => undefined,
+    onApprovalTotpCodeChange: () => undefined,
   }),
 );
 assert(stableDialogMarkup.includes("Return to stable updates"), "alpha users should be able to return to stable updates");
 assert(stableDialogMarkup.includes("Use stable updates"), "stable fallback should require explicit confirmation");
+
+const protectedAlphaDialogMarkup = renderToStaticMarkup(
+  createElement(AlphaChannelDialog, {
+    useAlpha: false,
+    pending: false,
+    error: null,
+    approvalGate: {
+      enabled: true,
+      configured: true,
+      cooldown_seconds: 0,
+      cooldown_active: false,
+      cooldown_expires_at: null,
+      locked_until: null,
+      fail_closed: false,
+      strict_all_decisions: false,
+      totp_enabled: true,
+    },
+    approvalPassword: "",
+    approvalTotpCode: "",
+    onClose: () => undefined,
+    onConfirm: () => undefined,
+    onApprovalPasswordChange: () => undefined,
+    onApprovalTotpCodeChange: () => undefined,
+  }),
+);
+assert(protectedAlphaDialogMarkup.includes("Authenticator code"), "protected alpha enrollment should collect a TOTP proof");
 
 const blocked = normalizeGuardUpdateStatus({
   auto_updatable: false,

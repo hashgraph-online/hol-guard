@@ -17963,7 +17963,7 @@ async function scheduleGuardUpdate(options) {
     error: stringValue$1(payload.error) ?? void 0
   };
 }
-async function setGuardUpdateChannel(channel) {
+async function setGuardUpdateChannel(channel, proof) {
   if (isGuardDemoMode()) {
     return normalizeGuardUpdateStatus({
       ...await fetchGuardUpdateStatus(),
@@ -17973,7 +17973,7 @@ async function setGuardUpdateChannel(channel) {
   const response = await fetchWithGuardAuth("/v1/update/channel", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ update_channel: channel })
+    body: JSON.stringify({ update_channel: channel, ...proof })
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -18531,6 +18531,181 @@ function ShellFooter() {
     )) })
   ] }) });
 }
+function approvalProofRequiresPassword(gate) {
+  return gate?.totp_enabled !== true;
+}
+function isApprovalProofSubmitDisabled(gate, credentials, busy) {
+  if (busy) {
+    return true;
+  }
+  if (approvalProofRequiresPassword(gate)) {
+    return credentials.approvalPassword.trim() === "";
+  }
+  return credentials.approvalTotpCode.trim() === "";
+}
+function buildApprovalProofCredentials(gate, credentials) {
+  if (approvalProofRequiresPassword(gate)) {
+    return { approval_password: credentials.approvalPassword };
+  }
+  return { approval_totp_code: credentials.approvalTotpCode };
+}
+function ApprovalProofFieldInputs(props) {
+  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        ref: props.passwordRef,
+        type: "password",
+        autoComplete: "current-password",
+        value: props.approvalPassword,
+        onChange: props.onApprovalPasswordChange,
+        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      }
+    )
+  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        type: "text",
+        inputMode: "numeric",
+        pattern: "[0-9]*",
+        autoComplete: "one-time-code",
+        value: props.approvalTotpCode,
+        onChange: props.onApprovalTotpCodeChange,
+        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      }
+    )
+  ] }) });
+}
+function ApprovalProofInline(props) {
+  const passwordRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    const timer = window.setTimeout(() => {
+      passwordRef.current?.focus();
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const submitDisabled = isApprovalProofSubmitDisabled(
+    props.approvalGate,
+    {
+      approvalPassword: props.approvalPassword,
+      approvalTotpCode: props.approvalTotpCode
+    },
+    props.submitBusy
+  );
+  const handleKeyDown = reactExports.useCallback(
+    (event) => {
+      if (event.key === "Enter" && !submitDisabled) {
+        event.preventDefault();
+        props.onSubmit();
+      }
+    },
+    [props.onSubmit, submitDisabled]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", onKeyDown: handleKeyDown, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Approval proof required" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-600", children: "Enter your local approval proof before Guard syncs supply-chain intel on this device." })
+      ] })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalProofFieldInputs,
+      {
+        approvalGate: props.approvalGate,
+        approvalPassword: props.approvalPassword,
+        approvalTotpCode: props.approvalTotpCode,
+        passwordRef,
+        onApprovalPasswordChange: props.onApprovalPasswordChange,
+        onApprovalTotpCodeChange: props.onApprovalTotpCodeChange
+      }
+    ),
+    props.error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "alert", children: props.error }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row sm:items-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: props.onSubmit, disabled: submitDisabled, children: props.submitLabel }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onBack, disabled: props.submitBusy, children: "Go back" })
+    ] })
+  ] });
+}
+function AlphaChannelDialog({
+  useAlpha,
+  pending,
+  error,
+  approvalGate,
+  approvalPassword,
+  approvalTotpCode,
+  onClose,
+  onConfirm,
+  onApprovalPasswordChange,
+  onApprovalTotpCodeChange
+}) {
+  const title = useAlpha ? "Return to stable updates" : "Try alpha updates";
+  const description = useAlpha ? "Stable updates receive the most thoroughly tested Guard releases. You can enable alpha updates again whenever you need early access." : "Alpha releases arrive before stable builds. They can include unfinished changes and may require a restart.";
+  const confirmLabel = useAlpha ? "Use stable updates" : "Enable alpha updates";
+  const confirmDisabled = pending || approvalGate?.enabled === true && isApprovalProofSubmitDisabled(approvalGate, { approvalPassword, approvalTotpCode }, false);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-white shadow-xl", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/70", children: description })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          disabled: pending,
+          "aria-label": "Close update channel dialog",
+          className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-brand-dark/55 transition-colors hover:bg-slate-100 hover:text-brand-dark disabled:cursor-not-allowed disabled:opacity-50",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" })
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 px-5 py-4 text-sm leading-relaxed text-brand-dark/75", children: [
+      !useAlpha ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Guard will keep stable updates until you confirm this change. This does not install an update immediately." }) : null,
+      approvalGate?.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-brand-blue/20 bg-brand-blue/[0.04] p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-3 text-sm font-semibold text-brand-dark", children: "Confirm this channel change" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ApprovalProofFieldInputs,
+          {
+            approvalGate,
+            approvalPassword,
+            approvalTotpCode,
+            onApprovalPasswordChange,
+            onApprovalTotpCodeChange
+          }
+        )
+      ] }) : null,
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-md bg-red-50 px-3 py-2 text-sm text-red-700", children: error }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          disabled: pending,
+          className: "min-h-10 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50",
+          children: "Cancel"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: onConfirm,
+          disabled: confirmDisabled,
+          className: "min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60",
+          children: pending ? "Saving…" : confirmLabel
+        }
+      )
+    ] })
+  ] });
+}
 var reactDomExports = requireReactDom();
 function getFocusableElements(container2) {
   const selector = [
@@ -18716,56 +18891,6 @@ function updateHelpCopy(status, phase) {
   }
   return null;
 }
-function AlphaChannelDialog({ useAlpha, pending, error, onClose, onConfirm }) {
-  const title = useAlpha ? "Return to stable updates" : "Try alpha updates";
-  const description = useAlpha ? "Stable updates receive the most thoroughly tested Guard releases. You can enable alpha updates again whenever you need early access." : "Alpha releases arrive before stable builds. They can include unfinished changes and may require a restart.";
-  const confirmLabel = useAlpha ? "Use stable updates" : "Enable alpha updates";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-white shadow-xl", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: title }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/70", children: description })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: onClose,
-          disabled: pending,
-          "aria-label": "Close update channel dialog",
-          className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-brand-dark/55 transition-colors hover:bg-slate-100 hover:text-brand-dark disabled:cursor-not-allowed disabled:opacity-50",
-          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" })
-        }
-      )
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 px-5 py-4 text-sm leading-relaxed text-brand-dark/75", children: [
-      !useAlpha ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Guard will keep stable updates until you confirm this change. This does not install an update immediately." }) : null,
-      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-md bg-red-50 px-3 py-2 text-sm text-red-700", children: error }) : null
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: onClose,
-          disabled: pending,
-          className: "min-h-10 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50",
-          children: "Cancel"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: onConfirm,
-          disabled: pending,
-          className: "min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60",
-          children: pending ? "Saving…" : confirmLabel
-        }
-      )
-    ] })
-  ] });
-}
 function GuardUpdatePanel(props) {
   const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
@@ -18777,10 +18902,14 @@ function GuardUpdatePanel(props) {
   const [alphaModalOpen, setAlphaModalOpen] = reactExports.useState(false);
   const [alphaSavePending, setAlphaSavePending] = reactExports.useState(false);
   const [alphaSaveError, setAlphaSaveError] = reactExports.useState(null);
+  const [alphaApprovalPassword, setAlphaApprovalPassword] = reactExports.useState("");
+  const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = reactExports.useState("");
   const targetChannel = useAlpha ? "stable" : "alpha";
   const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
   const handleOpenAlphaModal = reactExports.useCallback(() => {
     setAlphaSaveError(null);
+    setAlphaApprovalPassword("");
+    setAlphaApprovalTotpCode("");
     setAlphaModalOpen(true);
   }, []);
   const handleCloseAlphaModal = reactExports.useCallback(() => {
@@ -18789,6 +18918,8 @@ function GuardUpdatePanel(props) {
     }
     setAlphaModalOpen(false);
     setAlphaSaveError(null);
+    setAlphaApprovalPassword("");
+    setAlphaApprovalTotpCode("");
   }, [alphaSavePending]);
   const handleConfirmAlphaChannel = reactExports.useCallback(async () => {
     if (!props.onSetUpdateChannel) {
@@ -18797,14 +18928,24 @@ function GuardUpdatePanel(props) {
     setAlphaSavePending(true);
     setAlphaSaveError(null);
     try {
-      await props.onSetUpdateChannel(targetChannel);
+      const proof = props.approvalGate?.enabled ? buildApprovalProofCredentials(props.approvalGate, {
+        approvalPassword: alphaApprovalPassword,
+        approvalTotpCode: alphaApprovalTotpCode
+      }) : void 0;
+      await props.onSetUpdateChannel(targetChannel, proof);
       setAlphaModalOpen(false);
-    } catch {
-      setAlphaSaveError("Guard could not change the update channel. Try again.");
+    } catch (error) {
+      setAlphaSaveError(error instanceof Error ? error.message : "Guard could not change the update channel. Try again.");
     } finally {
       setAlphaSavePending(false);
     }
-  }, [props.onSetUpdateChannel, targetChannel]);
+  }, [alphaApprovalPassword, alphaApprovalTotpCode, props.approvalGate, props.onSetUpdateChannel, targetChannel]);
+  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
+    setAlphaApprovalPassword(event.target.value);
+  }, []);
+  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
+    setAlphaApprovalTotpCode(event.target.value);
+  }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
     version ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/60", "aria-label": `Guard version ${version}`, children: [
       "v",
@@ -18856,8 +18997,13 @@ function GuardUpdatePanel(props) {
         useAlpha,
         pending: alphaSavePending,
         error: alphaSaveError,
+        approvalGate: props.approvalGate ?? null,
+        approvalPassword: alphaApprovalPassword,
+        approvalTotpCode: alphaApprovalTotpCode,
         onClose: handleCloseAlphaModal,
-        onConfirm: handleConfirmAlphaChannel
+        onConfirm: handleConfirmAlphaChannel,
+        onApprovalPasswordChange: handleApprovalPasswordChange,
+        onApprovalTotpCodeChange: handleApprovalTotpCodeChange
       }
     ) }) : null
   ] });
@@ -19008,8 +19154,8 @@ function useGuardUpdate(options) {
       expectedLatestVersion: null
     });
   }, [scheduleAndWait, updateStatus]);
-  const onSetUpdateChannel = reactExports.useCallback(async (channel) => {
-    setUpdateStatus(await setGuardUpdateChannel(channel));
+  const onSetUpdateChannel = reactExports.useCallback(async (channel, proof) => {
+    setUpdateStatus(await setGuardUpdateChannel(channel, proof));
   }, []);
   return {
     guardVersion: updateStatus?.current_version ?? null,
@@ -19378,7 +19524,8 @@ function ShellSidebar(props) {
               updatePhase: props.updatePhase,
               onUpdateGuard: props.onUpdateGuard,
               onReinstallGuard: props.onReinstallGuard,
-              onSetUpdateChannel: props.onSetUpdateChannel
+              onSetUpdateChannel: props.onSetUpdateChannel,
+              approvalGate: props.approvalGate
             }
           )
         ] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-2", children: [
@@ -26995,106 +27142,6 @@ function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, sele
   }
   return strictAllDecisions;
 }
-function approvalProofRequiresPassword(gate) {
-  return gate?.totp_enabled !== true;
-}
-function isApprovalProofSubmitDisabled(gate, credentials, busy) {
-  if (busy) {
-    return true;
-  }
-  if (approvalProofRequiresPassword(gate)) {
-    return credentials.approvalPassword.trim() === "";
-  }
-  return credentials.approvalTotpCode.trim() === "";
-}
-function buildApprovalProofCredentials(gate, credentials) {
-  if (approvalProofRequiresPassword(gate)) {
-    return { approval_password: credentials.approvalPassword };
-  }
-  return { approval_totp_code: credentials.approvalTotpCode };
-}
-function ApprovalProofFieldInputs(props) {
-  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "input",
-      {
-        ref: props.passwordRef,
-        type: "password",
-        autoComplete: "current-password",
-        value: props.approvalPassword,
-        onChange: props.onApprovalPasswordChange,
-        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-      }
-    )
-  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "input",
-      {
-        type: "text",
-        inputMode: "numeric",
-        pattern: "[0-9]*",
-        autoComplete: "one-time-code",
-        value: props.approvalTotpCode,
-        onChange: props.onApprovalTotpCodeChange,
-        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-      }
-    )
-  ] }) });
-}
-function ApprovalProofInline(props) {
-  const passwordRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
-    const timer = window.setTimeout(() => {
-      passwordRef.current?.focus();
-    }, 50);
-    return () => window.clearTimeout(timer);
-  }, []);
-  const submitDisabled = isApprovalProofSubmitDisabled(
-    props.approvalGate,
-    {
-      approvalPassword: props.approvalPassword,
-      approvalTotpCode: props.approvalTotpCode
-    },
-    props.submitBusy
-  );
-  const handleKeyDown = reactExports.useCallback(
-    (event) => {
-      if (event.key === "Enter" && !submitDisabled) {
-        event.preventDefault();
-        props.onSubmit();
-      }
-    },
-    [props.onSubmit, submitDisabled]
-  );
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", onKeyDown: handleKeyDown, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Approval proof required" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-600", children: "Enter your local approval proof before Guard syncs supply-chain intel on this device." })
-      ] })
-    ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ApprovalProofFieldInputs,
-      {
-        approvalGate: props.approvalGate,
-        approvalPassword: props.approvalPassword,
-        approvalTotpCode: props.approvalTotpCode,
-        passwordRef,
-        onApprovalPasswordChange: props.onApprovalPasswordChange,
-        onApprovalTotpCodeChange: props.onApprovalTotpCodeChange
-      }
-    ),
-    props.error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "alert", children: props.error }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row sm:items-center", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: props.onSubmit, disabled: submitDisabled, children: props.submitLabel }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onBack, disabled: props.submitBusy, children: "Go back" })
-    ] })
-  ] });
-}
 function ApprovalPasswordModal(props) {
   const passwordRef = reactExports.useRef(null);
   const totpRef = reactExports.useRef(null);
@@ -29255,6 +29302,7 @@ function ApprovalCenterLayout(props) {
         onUpdateGuard,
         onReinstallGuard,
         onSetUpdateChannel,
+        approvalGate: props.approvalGate ?? null,
         cloudUserProfile: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_user_profile : null,
         workspaceId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null : null,
         planId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.plan_id ?? null : null

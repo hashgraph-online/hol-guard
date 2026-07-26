@@ -4595,7 +4595,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_update_channel(self, payload: dict[str, object]) -> None:
         guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
         try:
-            update_guard_update_channel(guard_home, payload.get("update_channel"))
+            approval_gate_grant = require_high_risk(
+                guard_home,
+                purpose="settings_write",
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+            update_guard_update_channel(
+                guard_home,
+                payload.get("update_channel"),
+                approval_gate_grant=approval_gate_grant,
+            )
         except ApprovalGateError as error:
             self._write_approval_gate_error(error)
             return

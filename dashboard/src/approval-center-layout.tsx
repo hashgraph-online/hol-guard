@@ -233,6 +233,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         onUpdateGuard={onUpdateGuard}
         onReinstallGuard={onReinstallGuard}
         onSetUpdateChannel={onSetUpdateChannel}
+        approvalGate={props.approvalGate ?? null}
         cloudUserProfile={
           props.runtime.kind === "ready"
             ? props.runtime.snapshot.cloud_user_profile

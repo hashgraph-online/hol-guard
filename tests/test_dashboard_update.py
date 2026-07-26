@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.cli.update_commands import build_guard_update_status_payload
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -135,15 +136,17 @@ def test_update_status_uses_persisted_alpha_channel(tmp_path: Path, monkeypatch:
     seen: dict[str, object] = {}
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_commands._version_check_payload",
-        lambda current_version, **kwargs: seen.update(kwargs)
-        or {
-            "source": "pypi",
-            "release_channel": "alpha",
-            "status": "stale",
-            "current_version": current_version,
-            "latest_version": "1.2.4a1",
-            "update_available": True,
-        },
+        lambda current_version, **kwargs: (
+            seen.update(kwargs)
+            or {
+                "source": "pypi",
+                "release_channel": "alpha",
+                "status": "stale",
+                "current_version": current_version,
+                "latest_version": "1.2.4a1",
+                "update_available": True,
+            }
+        ),
     )
 
     payload = build_guard_update_status_payload(guard_home=guard_home)
@@ -272,6 +275,43 @@ def test_alpha_update_channel_persists_and_schedules_alpha(tmp_path: Path, monke
     assert payload["scheduled"] is True
     assert load_guard_config(store.guard_home).update_channel == "alpha"
     assert scheduled["include_alpha"] is True
+
+
+def test_alpha_update_channel_requires_and_accepts_approval_proof(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    update_approval_gate_settings(
+        store.guard_home,
+        {
+            "enabled": True,
+            "new_password": "test-approval-password",
+            "confirm_password": "test-approval-password",
+            "cooldown_seconds": 0,
+        },
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        missing_proof_status, missing_proof_payload = _post_json_body(
+            daemon,
+            "/v1/update/channel",
+            {"update_channel": "alpha"},
+        )
+        verified_status, verified_payload = _post_json_body(
+            daemon,
+            "/v1/update/channel",
+            {
+                "update_channel": "alpha",
+                "approval_password": "test-approval-password",
+            },
+        )
+    finally:
+        daemon.stop()
+
+    assert missing_proof_status == 403
+    assert missing_proof_payload["error"] == "approval_gate_required"
+    assert verified_status == 200
+    assert verified_payload["release_channel"] == "alpha"
+    assert load_guard_config(store.guard_home).update_channel == "alpha"
 
 
 def test_daemon_update_schedule_rejects_non_updatable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
