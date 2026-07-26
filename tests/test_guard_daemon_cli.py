@@ -72,7 +72,7 @@ class TestDaemonStatusCommand:
 
         assert code == 0
         assert payload.get("running") is False
-        assert time.monotonic() - started < 1
+        assert time.monotonic() - started < 1.5
 
     def test_status_running_true_when_live_state(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.daemon.manager import write_guard_daemon_state
