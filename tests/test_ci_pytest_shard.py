@@ -38,6 +38,7 @@ def test_node_shards_split_large_files_without_overlap() -> None:
 def test_ci_workflow_cancels_stale_runs_and_executes_each_shard() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     tests_job = workflow.split("  tests:\n", maxsplit=1)[1].split("\n  ci-python-312:", maxsplit=1)[0]
+    mutation_job = workflow.split("  mutation-baseline:\n", maxsplit=1)[1].split("\n  ci-python-312:", maxsplit=1)[0]
 
     assert "cancel-in-progress: true" in workflow
     assert "timeout-minutes: 25" in tests_job
@@ -45,7 +46,10 @@ def test_ci_workflow_cancels_stale_runs_and_executes_each_shard() -> None:
     assert workflow.count("id: setup-uv-primary") == 5
     assert workflow.count("continue-on-error: true") == 5
     assert workflow.count("if: steps.setup-uv-primary.outcome == 'failure'") == 5
-    assert workflow.count("astral-sh/setup-uv@") == 12
+    assert "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'" in mutation_job
+    assert "timeout-minutes: 8" in mutation_job
+    assert "mutmut run --max-children 4" in mutation_job
+    assert "mutation_gate.py --target command-model" in mutation_job
     assert workflow.count("uv run --no-sync python scripts/ci/pytest_shard.py") == 2
     assert "--shard-count 16" in tests_job
     assert "--granularity node" in tests_job
