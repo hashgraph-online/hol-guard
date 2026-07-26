@@ -156,6 +156,7 @@ def corpus_record_count() -> int:
         UNRELATED_DYNAMIC_COMMAND_CASES,
     )
     from tests.test_guard_risk import (
+        ENCODED_EXEC_PIPELINE_CASES,
         LOCAL_COMPOSE_SAFE_CASES,
         LOCAL_SHELL_RISK_CASES,
         MUTATING_PYTHON_MODULE_DENY_CASES,
@@ -176,6 +177,7 @@ def corpus_record_count() -> int:
         + len(UNRELATED_DYNAMIC_COMMAND_CASES)
         + len(SPECIALIZED_SAFE_VARIANT_CASES)
         + len(PACKAGE_SHIM_GUARD_CASES)
+        + len(ENCODED_EXEC_PIPELINE_CASES)
         + len(BENIGN_DATA_FLOW_CASES)
         + len(MALICIOUS_DATA_FLOW_CASES)
         + len(LOCAL_COMPOSE_SAFE_CASES)

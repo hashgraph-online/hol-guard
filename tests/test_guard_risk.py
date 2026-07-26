@@ -7,6 +7,7 @@ import os
 import shlex
 import subprocess
 import sys
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -3764,124 +3765,31 @@ def test_tool_action_request_classifier_keeps_clustered_shell_read_only_lookup_u
     assert request is None
 
 
-def test_tool_action_request_classifier_detects_base64_decode_and_exec_command():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash"},
-    )
-
-    assert request is not None
-    assert request.action_class == "encoded or encrypted shell command"
-
-
-def test_tool_action_request_classifier_detects_bsd_base64_decode_and_exec_command():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -D | bash"},
-    )
-
-    assert request is not None
-    assert request.action_class == "encoded or encrypted shell command"
+ENCODED_EXEC_PIPELINE_CASES = (
+    "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash",
+    "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -D | bash",
+    "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | /bin/bash",
+    "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -di | bash",
+    "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | dash",
+    "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env bash",
+    "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env -i bash",
+    "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | /usr/bin/env -i bash",
+    "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env -u FOO bash",
+    "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env --unset=FOO bash",
+    "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -i -d | bash",
+    "printf 726d202d662064616e6765726f75732d6d61726b65722e6a736f6e0a | xxd -rp | bash",
+)
 
 
-def test_tool_action_request_classifier_detects_path_qualified_base64_decode_and_exec_command():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | /bin/bash"},
-    )
+def test_tool_action_request_classifier_detects_encoded_exec_pipeline_corpus():
+    failures: list[str] = []
+    for command in ENCODED_EXEC_PIPELINE_CASES:
+        request = extract_sensitive_tool_action_request("bash", {"command": command})
+        case_id = sha256(command.encode()).hexdigest()[:12]
+        if request is None or request.action_class != "encoded or encrypted shell command":
+            failures.append(f"encoded-exec-pipeline-{case_id}: command={command!r}, request={request!r}")
 
-    assert request is not None
-    assert request.action_class == "encoded or encrypted shell command"
-
-
-def test_tool_action_request_classifier_detects_clustered_base64_decode_and_exec_command():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -di | bash"},
-    )
-
-    assert request is not None
-    assert request.action_class == "encoded or encrypted shell command"
-
-
-def test_tool_action_request_classifier_detects_base64_decode_and_dash_exec_command():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | dash"},
-    )
-
-    assert request is not None
-    assert request.action_class == "encoded or encrypted shell command"
-
-
-def test_tool_action_request_classifier_detects_base64_decode_and_env_wrapped_exec_command():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env bash"},
-    )
-
-    assert request is not None
-    assert request.action_class == "encoded or encrypted shell command"
-
-
-def test_tool_action_request_classifier_detects_base64_decode_and_env_option_wrapped_exec_command():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env -i bash"},
-    )
-
-    assert request is not None
-    assert request.action_class == "encoded or encrypted shell command"
-
-
-def test_tool_action_request_classifier_detects_base64_decode_and_path_qualified_env_wrapped_exec_command():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | /usr/bin/env -i bash"},
-    )
-
-    assert request is not None
-    assert request.action_class == "encoded or encrypted shell command"
-
-
-def test_tool_action_request_classifier_detects_base64_decode_and_env_unset_wrapped_exec_command():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env -u FOO bash"},
-    )
-
-    assert request is not None
-    assert request.action_class == "encoded or encrypted shell command"
-
-
-def test_tool_action_request_classifier_detects_base64_decode_and_env_unset_equals_wrapped_exec_command():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env --unset=FOO bash"},
-    )
-
-    assert request is not None
-    assert request.action_class == "encoded or encrypted shell command"
-
-
-def test_tool_action_request_classifier_detects_base64_decode_when_flag_not_first():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -i -d | bash"},
-    )
-
-    assert request is not None
-    assert request.action_class == "encoded or encrypted shell command"
-
-
-def test_tool_action_request_classifier_detects_xxd_compact_reverse_hex_exec_command():
-    request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "printf 726d202d662064616e6765726f75732d6d61726b65722e6a736f6e0a | xxd -rp | bash"},
-    )
-
-    assert request is not None
-    assert request.action_class == "encoded or encrypted shell command"
+    assert not failures, "\n".join(failures)
 
 
 def test_tool_action_request_classifier_ignores_non_path_command_name_with_same_named_local_file(tmp_path):
