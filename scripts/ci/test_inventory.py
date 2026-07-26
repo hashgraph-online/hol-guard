@@ -147,6 +147,10 @@ def corpus_record_count() -> int:
     from tests.test_guard_command_critical_floors import CRITICAL_COMMAND_FLOORS
     from tests.test_guard_data_flow import BENIGN_DATA_FLOW_CASES, MALICIOUS_DATA_FLOW_CASES
     from tests.test_guard_github_command_capabilities import GITHUB_REVIEW_FLOORS
+    from tests.test_guard_github_command_capability_edges import (
+        PR_MERGE_ADMIN_CAPABILITY_CASES,
+        UNRELATED_DYNAMIC_COMMAND_CASES,
+    )
 
     return (
         sum(1 for _ in iter_benign_corpus())
@@ -156,6 +160,8 @@ def corpus_record_count() -> int:
         + len(PARSER_SEEDED_FAULTS)
         + len(CRITICAL_COMMAND_FLOORS)
         + len(GITHUB_REVIEW_FLOORS)
+        + len(PR_MERGE_ADMIN_CAPABILITY_CASES)
+        + len(UNRELATED_DYNAMIC_COMMAND_CASES)
         + len(BENIGN_DATA_FLOW_CASES)
         + len(MALICIOUS_DATA_FLOW_CASES)
     )
