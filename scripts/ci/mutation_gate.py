@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, cast
 
+from scripts.ci.mutation_targets import TARGETS
+
 
 @dataclass(frozen=True)
 class MutationBaseline:
@@ -24,7 +26,7 @@ class MutationBaseline:
 BASELINES: Final[dict[str, MutationBaseline]] = {
     "command-model": MutationBaseline(
         target="command-model",
-        source_path="src/codex_plugin_scanner/guard/runtime/command_model.py",
+        source_path=TARGETS["command-model"].source_path,
         minimum_score=64.0,
         expected_total=610,
     ),
