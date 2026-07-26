@@ -18953,14 +18953,39 @@ function GuardUpdatePanel(props) {
     ] }) : null,
     props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/75", children: updateStatusLabel(props.updateStatus) }) : null,
     helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: helpCopy }) : null,
-    props.onSetUpdateChannel ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    props.onSetUpdateChannel && useAlpha ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "flex items-center justify-between gap-2 rounded-md border border-brand-blue/20 bg-brand-blue/[0.06] px-2 py-1.5",
+        role: "status",
+        "aria-label": "Alpha updates enabled",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-brand-blue", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3.5 w-3.5 shrink-0", "aria-hidden": "true" }),
+            "Alpha updates"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: handleOpenAlphaModal,
+              disabled: busy,
+              "aria-label": "Manage alpha updates",
+              title: "Manage alpha updates",
+              className: "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-brand-blue transition-colors hover:bg-brand-blue/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "h-4 w-4", "aria-hidden": "true" })
+            }
+          )
+        ]
+      }
+    ) : props.onSetUpdateChannel ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       "button",
       {
         type: "button",
         onClick: handleOpenAlphaModal,
         disabled: busy,
         className: "inline-flex min-h-9 w-full items-center justify-center rounded-lg border border-brand-blue/25 bg-white px-3 py-2 text-xs font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
-        children: useAlpha ? "Alpha updates enabled" : "Try alpha updates"
+        children: "Try alpha updates"
       }
     ) : null,
     showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(

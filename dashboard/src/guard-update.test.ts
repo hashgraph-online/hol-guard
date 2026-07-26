@@ -51,7 +51,9 @@ const alphaMarkup = renderToStaticMarkup(
     onSetUpdateChannel: () => undefined,
   }),
 );
-assert(alphaMarkup.includes("Alpha updates enabled"), "sidebar should show the active alpha channel");
+assert(alphaMarkup.includes('aria-label="Alpha updates enabled"'), "sidebar should show the active alpha channel");
+assert(alphaMarkup.includes('aria-label="Manage alpha updates"'), "sidebar should expose a compact alpha settings control");
+assert(!alphaMarkup.includes("Alpha updates enabled</button>"), "active alpha status should not render as a wide text button");
 assert(!alphaMarkup.includes('type="checkbox"'), "sidebar should open alpha confirmation instead of toggling immediately");
 
 const loadingMarkup = renderToStaticMarkup(

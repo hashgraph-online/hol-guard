@@ -4980,6 +4980,16 @@
       }
     }
 
+    .hover\:bg-brand-blue\/10:hover {
+      background-color: var(--brand-blue);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-brand-blue\/10:hover {
+        background-color: color-mix(in oklab, var(--brand-blue) 10%, transparent);
+      }
+    }
+
     .hover\:bg-brand-blue\/20:hover {
       background-color: var(--brand-blue);
     }
