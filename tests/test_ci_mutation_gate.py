@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from scripts.ci.mutation_targets import TARGETS, render_mutmut_config
+from scripts.ci.run_mutation_target import prepare_workspace
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "ci" / "mutation_gate.py"
@@ -70,6 +71,20 @@ def test_mutation_gate_accepts_measured_parser_baseline_and_target_contracts(tmp
     )
     assert result.returncode == 0, result.stderr
     assert output.read_text(encoding="utf-8") == render_mutmut_config(TARGETS["secret-flow"])
+    workspace = tmp_path / "workspace"
+    config_path = prepare_workspace(ROOT, TARGETS["secret-flow"], workspace)
+    assert (workspace / "src").is_symlink()
+    assert (workspace / "tests").is_symlink()
+    assert config_path.read_text(encoding="utf-8") == render_mutmut_config(TARGETS["secret-flow"])
+    runner_result = subprocess.run(
+        [sys.executable, "scripts/ci/run_mutation_target.py", "--target", "secret-flow", "--dry-run"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert runner_result.returncode == 0, runner_result.stderr
+    assert '"target": "secret-flow"' in runner_result.stdout
 
 
 def test_mutation_gate_reports_every_failed_constraint() -> None:
