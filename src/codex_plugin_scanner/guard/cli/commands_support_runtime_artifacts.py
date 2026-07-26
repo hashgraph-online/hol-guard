@@ -30,6 +30,9 @@ from .commands_support_codex_commands import (
 )
 from .commands_support_codex_git import _codex_git_diff_selection_identity
 from .commands_support_codex_paths import (
+    _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH,
+    _CODEX_TOOL_RESPONSE_MAX_DEPTH,
+    _CODEX_TOOL_RESPONSE_TEXT_LIMIT,
     _codex_prompt_credential_file_artifact,
     _collect_codex_tool_response_text,
     _with_codex_prompt_display_metadata,
@@ -743,12 +746,6 @@ def _runtime_data_flow_artifact(
 
 
 _CODEX_PROMPT_SECRET_KEY_MARKERS = ("TOKEN", "SECRET", "PASSWORD", "PASS", "API_KEY", "API-KEY", "AUTH", "CREDENTIAL")
-
-_CODEX_TOOL_RESPONSE_MAX_DEPTH = 5
-
-_CODEX_TOOL_RESPONSE_TEXT_LIMIT = 5 * 1024 * 1024
-
-_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH = 24
 
 
 def _direct_codex_git_pathspec_identity(command_text: str, *, cwd: Path | None) -> str | None:

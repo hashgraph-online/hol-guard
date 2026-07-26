@@ -16,6 +16,36 @@ def _coalesce_string(*values: object | None) -> str:
     return "unknown-artifact"
 
 
+def _artifact_id_from_event(harness: str, payload: dict[str, object]) -> str:
+    """Resolve runtime-artifact identity after the CLI support graph is loaded."""
+
+    from .commands_support_runtime_artifacts import _artifact_id_from_event as resolve
+
+    return resolve(harness, payload)
+
+
+def _hook_event_name(payload: dict[str, object]) -> str | None:
+    """Resolve event names lazily to keep hook startup independent of import order."""
+
+    from .commands_support_runtime_artifacts import _hook_event_name as resolve
+
+    return resolve(payload)
+
+
+def _optional_string(value: object | None) -> str | None:
+    """Return a non-empty string value without depending on aggregator imports."""
+
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _string_list(value: object | None) -> list[str]:
+    """Normalize a payload list without depending on aggregator imports."""
+
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str) and item.strip()]
+
+
 if TYPE_CHECKING:
     from ._commands_shared import (
         _HOOK_DAEMON_FAIL_MODES,
@@ -44,12 +74,6 @@ if TYPE_CHECKING:
         _copilot_hook_reason,
         _decision_v2_harness_message,
         _emit_copilot_hook_response,
-    )
-    from .commands_support_runtime_artifacts import (
-        _artifact_id_from_event,
-        _hook_event_name,
-        _optional_string,
-        _string_list,
     )
     from .commands_support_runtime_policy import (
         _ensure_terminal_punctuation,

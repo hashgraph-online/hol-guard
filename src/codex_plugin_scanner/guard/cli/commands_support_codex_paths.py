@@ -1,10 +1,42 @@
 """Guard CLI helper definitions."""
 
-# ruff: noqa: F403, F405
+# pyright: reportImportCycles=false
+
+# ruff: noqa: E402, F403, F405, I001
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
+
+_CODEX_TOOL_RESPONSE_MAX_DEPTH = 5
+_CODEX_TOOL_RESPONSE_TEXT_LIMIT = 5 * 1024 * 1024
+_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH = 24
+
+
+def _redact_codex_prompt_secret_assignments(value: str) -> str:
+    """Resolve redaction lazily so Codex output handling has no import-order gap."""
+
+    from .commands_support_runtime_resolution import _redact_codex_prompt_secret_assignments as resolve
+
+    return resolve(value)
+
+
+def _resolve_prompt_scan_path(requested_path: str, *, cwd: Path | None) -> Path | None:
+    """Resolve prompt paths lazily so output inspection remains available at startup."""
+
+    from .commands_support_runtime_resolution import _resolve_prompt_scan_path as resolve
+
+    return resolve(requested_path, cwd=cwd)
+
+
+def _truncate_codex_display_text(value: str, *, limit: int) -> str:
+    """Resolve display truncation lazily so output inspection remains available at startup."""
+
+    from .commands_support_runtime_resolution import _truncate_codex_display_text as resolve
+
+    return resolve(value, limit=limit)
+
 
 if TYPE_CHECKING:
     from .commands_support_codex_commands import (
@@ -15,16 +47,6 @@ if TYPE_CHECKING:
         _CODEX_SEARCH_UNSAFE_SHORT_FLAGS_BY_EXECUTABLE,
     )
     from .commands_support_codex_reads import _codex_sed_args_are_bounded_filter
-    from .commands_support_runtime_artifacts import (
-        _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH,
-        _CODEX_TOOL_RESPONSE_MAX_DEPTH,
-        _CODEX_TOOL_RESPONSE_TEXT_LIMIT,
-    )
-    from .commands_support_runtime_resolution import (
-        _redact_codex_prompt_secret_assignments,
-        _resolve_prompt_scan_path,
-        _truncate_codex_display_text,
-    )
 
 
 from ._commands_shared import *
