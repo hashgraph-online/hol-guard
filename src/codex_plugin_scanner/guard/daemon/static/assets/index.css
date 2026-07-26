@@ -4142,6 +4142,16 @@
     }
   }
 
+  .text-brand-dark\/55 {
+    color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-brand-dark\/55 {
+      color: color-mix(in oklab, var(--brand-dark) 55%, transparent);
+    }
+  }
+
   .text-brand-dark\/60 {
     color: var(--brand-dark);
   }
@@ -5318,7 +5328,7 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
-  .focus\:ring-brand-blue\/15:focus {
+  .focus\:ring-brand-blue:focus, .focus\:ring-brand-blue\/15:focus {
     --tw-ring-color: var(--brand-blue);
   }
 

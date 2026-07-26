@@ -274,6 +274,7 @@ jobs:
       - name: Dashboard build and bundle-size report (L331)
         run: |
           cd dashboard && bun run build
+          git diff --exit-code -- ../src/codex_plugin_scanner/guard/daemon/static
           js_size=$(du -sh dist/assets/*.js 2>/dev/null | awk '{print $1}' | head -1)
           css_size=$(du -sh dist/assets/*.css 2>/dev/null | awk '{print $1}' | head -1)
           echo "Bundle JS: ${js_size:-unknown}, CSS: ${css_size:-unknown}"

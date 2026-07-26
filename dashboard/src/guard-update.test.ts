@@ -53,6 +53,13 @@ const alphaMarkup = renderToStaticMarkup(
 assert(alphaMarkup.includes("Use alpha updates"), "sidebar should expose the alpha opt-in");
 assert(alphaMarkup.includes("Alpha releases may be unstable"), "alpha opt-in should include a risk disclaimer");
 
+const loadingMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    onSetUpdateChannel: () => undefined,
+  }),
+);
+assert(loadingMarkup.includes("Use alpha updates"), "sidebar should expose the alpha opt-in while version status loads");
+
 const blocked = normalizeGuardUpdateStatus({
   auto_updatable: false,
   update_available: false,

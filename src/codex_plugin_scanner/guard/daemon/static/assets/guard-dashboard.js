@@ -17914,7 +17914,8 @@ function normalizeGuardUpdateStatus(raw) {
     update_in_progress: typeof value.update_in_progress === "boolean" ? value.update_in_progress : void 0,
     update_suppressed: value.update_suppressed === true ? true : void 0,
     retry_command: typeof value.retry_command === "string" ? value.retry_command : void 0,
-    update_attempt_message: typeof value.update_attempt_message === "string" ? value.update_attempt_message : void 0
+    update_attempt_message: typeof value.update_attempt_message === "string" ? value.update_attempt_message : void 0,
+    release_channel: value.release_channel === "alpha" ? "alpha" : "stable"
   };
 }
 async function fetchGuardUpdateStatus() {
@@ -17961,6 +17962,25 @@ async function scheduleGuardUpdate(options) {
     message: stringValue$1(payload.message) ?? void 0,
     error: stringValue$1(payload.error) ?? void 0
   };
+}
+async function setGuardUpdateChannel(channel) {
+  if (isGuardDemoMode()) {
+    return normalizeGuardUpdateStatus({
+      ...await fetchGuardUpdateStatus(),
+      release_channel: channel
+    });
+  }
+  const response = await fetchWithGuardAuth("/v1/update/channel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ update_channel: channel })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const value = isRecord$1(payload) ? payload : {};
+    throw new Error(stringValue$1(value.message) ?? `Update channel failed with ${response.status}`);
+  }
+  return normalizeGuardUpdateStatus(payload);
 }
 async function setupDesktopNotifications() {
   if (isGuardDemoMode()) {
@@ -18576,6 +18596,13 @@ function GuardUpdatePanel(props) {
   const showUpdateButton = props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
   const showReinstallButton = shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
+  const useAlpha = props.updateStatus?.release_channel === "alpha";
+  const handleAlphaChange = reactExports.useCallback(
+    (event) => {
+      props.onSetUpdateChannel?.(event.target.checked ? "alpha" : "stable");
+    },
+    [props.onSetUpdateChannel]
+  );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
     version ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/60", "aria-label": `Guard version ${version}`, children: [
       "v",
@@ -18583,6 +18610,22 @@ function GuardUpdatePanel(props) {
     ] }) : null,
     props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/75", children: updateStatusLabel(props.updateStatus) }) : null,
     helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: helpCopy }) : null,
+    props.onSetUpdateChannel ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-brand-dark/70", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "checkbox",
+          checked: useAlpha,
+          disabled: busy,
+          onChange: handleAlphaChange,
+          className: "mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-brand-blue focus:ring-brand-blue"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        "Use alpha updates",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-brand-dark/55", children: "Alpha releases may be unstable and can include unfinished changes." })
+      ] })
+    ] }) : null,
     showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
@@ -18759,12 +18802,20 @@ function useGuardUpdate(options) {
       expectedLatestVersion: null
     });
   }, [scheduleAndWait, updateStatus]);
+  const onSetUpdateChannel = reactExports.useCallback(async (channel) => {
+    try {
+      setUpdateStatus(await setGuardUpdateChannel(channel));
+    } catch {
+      setUpdatePhase("error");
+    }
+  }, []);
   return {
     guardVersion: updateStatus?.current_version ?? null,
     updateStatus,
     updatePhase,
     onUpdateGuard,
     onReinstallGuard,
+    onSetUpdateChannel,
     refreshUpdateStatus
   };
 }
@@ -19124,7 +19175,8 @@ function ShellSidebar(props) {
               updateStatus: props.updateStatus,
               updatePhase: props.updatePhase,
               onUpdateGuard: props.onUpdateGuard,
-              onReinstallGuard: props.onReinstallGuard
+              onReinstallGuard: props.onReinstallGuard,
+              onSetUpdateChannel: props.onSetUpdateChannel
             }
           )
         ] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-2", children: [
@@ -29098,7 +29150,8 @@ function ApprovalCenterLayout(props) {
     updateStatus,
     updatePhase,
     onUpdateGuard,
-    onReinstallGuard
+    onReinstallGuard,
+    onSetUpdateChannel
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen bg-white text-brand-dark", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -29126,6 +29179,7 @@ function ApprovalCenterLayout(props) {
         updatePhase,
         onUpdateGuard,
         onReinstallGuard,
+        onSetUpdateChannel,
         cloudUserProfile: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_user_profile : null,
         workspaceId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null : null,
         planId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.plan_id ?? null : null

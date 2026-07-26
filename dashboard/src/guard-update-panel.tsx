@@ -127,7 +127,7 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
       {helpCopy ? (
         <p className="text-[11px] leading-relaxed text-brand-dark/70">{helpCopy}</p>
       ) : null}
-      {props.updateStatus && props.onSetUpdateChannel ? (
+      {props.onSetUpdateChannel ? (
         <label className="flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-brand-dark/70">
           <input
             type="checkbox"
