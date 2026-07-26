@@ -94,6 +94,10 @@ function isVirtualSourcePath(path: string): boolean {
   return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(path);
 }
 
+function isAbsoluteSourcePath(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path);
+}
+
 function sourceFileRefForPostToolUse(
   event: Record<string, unknown>,
   toolInput: Record<string, unknown>,
@@ -104,7 +108,7 @@ function sourceFileRefForPostToolUse(
   if (!digest.sha256 || digest.traversalTruncated) return null;
   if (digest.chars > GUARD_SOURCE_REF_MAX_OUTPUT_CHARS) return null;
   const path = sourcePathFromToolInput(toolInput);
-  if (!path || isVirtualSourcePath(path)) return null;
+  if (!path || isVirtualSourcePath(path) || isAbsoluteSourcePath(path)) return null;
   return {
     version: 1,
     kind: 'source_file',

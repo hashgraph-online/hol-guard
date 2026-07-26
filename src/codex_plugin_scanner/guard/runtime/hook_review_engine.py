@@ -33,6 +33,7 @@ from .hook_source_read import (
     SOURCE_READ_MAX_SCAN_BYTES,
     evaluate_source_file_ref,
 )
+from .skill_paths import is_safe_pi_inline_resource_uri
 
 if TYPE_CHECKING:
     from ..config import GuardConfig
@@ -175,10 +176,21 @@ class HookReviewEngine:
                     reason_code=source_result.reason_code,
                 )
 
-            # A source reference is an optimization hint, not the only review
-            # path. Pi still supplies bounded inline output for virtual,
-            # external, changed, or otherwise inconclusive reads.
-            return self._review_output_scan(request, envelope, config, start)
+            source_path = request.source_ref.tool_input_path or request.source_ref.path
+            target_paths = _target_paths(envelope)
+            if (
+                request.harness == "pi"
+                and len(target_paths) == 1
+                and source_path == target_paths[0]
+                and is_safe_pi_inline_resource_uri(source_path)
+            ):
+                # Pi local:// resources are opaque in-memory values with no
+                # filesystem path Guard can independently re-read.
+                return self._review_output_scan(request, envelope, config, start)
+
+            # Preserve the provenance boundary for ordinary paths, malformed
+            # virtual URIs, and failed source proofs.
+            return self._review_standard(request, envelope, config, start)
 
         # Server-side output scanning for PostToolUse without guard_source_ref.
         # This handles all harnesses that don't generate guard_source_ref
@@ -214,11 +226,12 @@ class HookReviewEngine:
         from .hook_output_text import PAYLOAD_OUTPUT_KEYS, extract_payload_output
 
         extracted = extract_payload_output(request.payload)
-        summary_truncated = request.output_summary is not None and request.output_summary.excerpt_truncated
-        output_truncated = extracted.truncated or summary_truncated
+        output_was_truncated = extracted.truncated or bool(
+            request.output_summary is not None and request.output_summary.excerpt_truncated
+        )
 
         if not extracted.text:
-            if output_truncated:
+            if output_was_truncated:
                 return HookReviewResponse(
                     decision="deny",
                     reason=(
@@ -245,7 +258,7 @@ class HookReviewEngine:
         target_paths = _target_paths(envelope)
         scan_local_samples = should_unsuppress_local_sample_secrets_for_paths(target_paths, cwd=request.cwd)
 
-        if output_truncated:
+        if output_was_truncated:
             # Output too large to scan in full — scan the excerpt before returning.
             excerpt = extracted.text[:SOURCE_READ_FULL_MODEL_BYTES_P95_TARGET]
             deadline = self._scan_deadline(start)
@@ -324,8 +337,7 @@ class HookReviewEngine:
 
         For MVP:
         - PreToolUse, UserPromptSubmit, PermissionRequest: return not_applicable.
-        - PostToolUse without source ref or inconclusive source ref:
-          return replace_with_reviewed_excerpt (conservative).
+        - PostToolUse reaching this path returns a reviewed excerpt.
         - Any scanner finding: deny/block.
         """
         if request.event_name != "PostToolUse":

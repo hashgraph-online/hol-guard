@@ -173,7 +173,7 @@ class TestSourceRefMismatch:
         assert response.model_output_action != "allow_original"
 
     @pytest.mark.parametrize("path", ["skill://routine-workflow", "/external/docs/release.md"])
-    def test_inconclusive_source_ref_scans_available_pi_stdout(
+    def test_unverifiable_read_scans_available_pi_stdout(
         self,
         engine: HookReviewEngine,
         workspace: Path,
@@ -183,7 +183,6 @@ class TestSourceRefMismatch:
     ) -> None:
         text = "Routine local instructions with no sensitive values."
         request = _request(
-            source_ref=_source_ref(path=path, text=text),
             cwd=workspace,
             home_dir=home_dir,
             guard_home=guard_home,
@@ -217,7 +216,6 @@ class TestSourceRefMismatch:
         text = "token=ghp_1234567890abcdefghijklmnopqrstuvwxyz"
         path = "skill://private-instructions"
         request = _request(
-            source_ref=_source_ref(path=path, text=text),
             cwd=workspace,
             home_dir=home_dir,
             guard_home=guard_home,
@@ -251,7 +249,6 @@ class TestSourceRefMismatch:
         text = "Reviewed safe excerpt"
         path = "skill://large-instructions"
         request = _request(
-            source_ref=_source_ref(path=path, text=text),
             cwd=workspace,
             home_dir=home_dir,
             guard_home=guard_home,
