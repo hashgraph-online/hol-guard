@@ -174,8 +174,8 @@ class HookReviewEngine:
                 and source_path == target_paths[0]
                 and is_safe_pi_inline_resource_uri(source_path)
             ):
-                # Pi local:// resources are opaque in-memory values with no
-                # filesystem path Guard can independently re-read.
+                # OMP virtual resources have no filesystem path Guard can
+                # independently re-read after the tool has resolved them.
                 return self._review_output_scan(request, envelope, config, start)
 
             # Preserve the provenance boundary for ordinary paths, malformed

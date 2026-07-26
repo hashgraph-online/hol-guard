@@ -8,6 +8,10 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.runtime.hook_source_read import sha256_text
+from codex_plugin_scanner.guard.runtime.skill_paths import (
+    PI_INLINE_RESOURCE_SCHEMES,
+    is_safe_pi_inline_resource_uri,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 
 SKILL_URI = "skill://test-skill"
@@ -132,35 +136,132 @@ def test_ordinary_file_target_mismatch_is_not_allowed(context: Context) -> None:
     assert result["model_output_action"] != "allow_original"
 
 
-def test_local_virtual_resource_uses_bounded_output_scan(context: Context) -> None:
-    result = _review(context, output="# Pasted objective", uri="local://paste-1.md")
+@pytest.mark.parametrize(
+    "uri",
+    (
+        "agent://output-1",
+        "artifact://1",
+        "history://agent-1",
+        "issue://123",
+        "local://paste-1.md",
+        "mcp://resource://server/item",
+        "memory://root",
+        "omp://docs/index.md",
+        "pr://123/diff",
+        "rule://default",
+        "ssh://host/path",
+        "vault://note.md",
+        "xd://generate_image",
+    ),
+)
+def test_omp_virtual_resource_uses_bounded_output_scan(context: Context, uri: str) -> None:
+    result = _review(context, output="# Virtual resource", uri=uri)
 
     assert result["decision"] == "allow"
     assert result["model_output_action"] == "allow_original"
     assert result["reason_code"] == "output_scan_allow"
 
 
-def test_local_virtual_resource_with_secret_is_blocked(context: Context) -> None:
+def test_supported_omp_scheme_matrix_is_complete() -> None:
+    assert {
+        "agent",
+        "artifact",
+        "history",
+        "issue",
+        "local",
+        "mcp",
+        "memory",
+        "omp",
+        "pr",
+        "rule",
+        "ssh",
+        "vault",
+        "xd",
+    } == PI_INLINE_RESOURCE_SCHEMES
+
+
+def test_omp_virtual_resource_allows_uri_query_syntax() -> None:
+    assert is_safe_pi_inline_resource_uri("MCP://https://server/resource?one=1&two=2#section")
+
+
+def test_oversized_omp_virtual_resource_is_rejected() -> None:
+    assert not is_safe_pi_inline_resource_uri(f"local://{'a' * 8193}")
+
+
+def test_deeply_encoded_omp_virtual_resource_is_rejected() -> None:
+    resource = ".."
+    for _ in range(9):
+        resource = resource.replace("%", "%25").replace(".", "%2e")
+
+    assert not is_safe_pi_inline_resource_uri(f"memory://{resource}/secret")
+
+
+def test_omp_virtual_resource_with_secret_is_blocked(context: Context) -> None:
     result = _review(
         context,
         output="token: ghp_1234567890abcdefghijklmnopqrstuvwxyz",
-        uri="local://paste-1.md",
+        uri="mcp://resource://server/item",
     )
 
     assert result["decision"] == "deny"
     assert result["reason_code"] == "output_secret_match"
 
 
-def test_truncated_local_virtual_resource_is_not_returned_in_full(context: Context) -> None:
+def test_truncated_omp_virtual_resource_is_not_returned_in_full(context: Context) -> None:
     result = _review(
         context,
-        output="# Partial pasted objective",
-        uri="local://paste-1.md",
+        output="# Partial virtual output",
+        uri="xd://generate_image",
         output_truncated=True,
     )
 
     assert result["model_output_action"] != "allow_original"
     assert result["reason_code"] == "output_too_large"
+
+
+@pytest.mark.parametrize(
+    "uri",
+    (
+        "local://../secret",
+        "memory://%2e%2e/secret",
+        "omp://%252e%252e/secret",
+        "omp://%25252525252e%25252525252e/secret",
+        "vault://folder/../secret",
+        "vault://folder%5c..%5csecret",
+        "xd://device/../../secret",
+    ),
+)
+def test_traversing_omp_virtual_resource_is_not_allowed(context: Context, uri: str) -> None:
+    result = _review(context, output="safe", uri=uri)
+
+    assert result["model_output_action"] != "allow_original"
+
+
+@pytest.mark.parametrize(
+    "uri",
+    (
+        "unknown://resource",
+        "docs://removed-protocol",
+        "pi://removed-protocol",
+        "jobs://removed-protocol",
+        "plan://removed-protocol",
+    ),
+)
+def test_unknown_or_removed_virtual_scheme_is_not_allowed(context: Context, uri: str) -> None:
+    result = _review(context, output="safe", uri=uri)
+
+    assert result["model_output_action"] != "allow_original"
+
+
+def test_omp_virtual_target_mismatch_is_not_allowed(context: Context) -> None:
+    result = _review(
+        context,
+        output="safe",
+        uri="memory://root",
+        source_ref_uri="memory://other",
+    )
+
+    assert result["model_output_action"] != "allow_original"
 
 
 def test_skill_with_secret_is_blocked(context: Context) -> None:
