@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from .hook_worker import HookWorker
 
 _HOOK_SQLITE_TIMEOUT_ENV = "HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS"
+_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS = 12.0
 
 
 def hook_worker_main(connection: Connection, configured_guard_home: str | None) -> None:
@@ -68,7 +69,10 @@ def hook_worker_main(connection: Connection, configured_guard_home: str | None) 
         _hold_containment_anchor()
     evaluator_connection.close()
     try:
-        if not guardian_connection.poll(10.0) or guardian_connection.recv() != ("ready", None):
+        if not guardian_connection.poll(_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS) or guardian_connection.recv() != (
+            "ready",
+            None,
+        ):
             connection.send(("worker_failed", None))
             _hold_containment_anchor()
         connection.send(("ready", None))

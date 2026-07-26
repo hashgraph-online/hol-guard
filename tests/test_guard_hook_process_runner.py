@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.codex_hook_windows_job import (
     _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,  # pyright: ignore[reportPrivateUsage]
     _job_limit_flags,  # pyright: ignore[reportPrivateUsage]
 )
+from codex_plugin_scanner.guard.daemon import hook_process_entrypoint as hook_entrypoint_module
 from codex_plugin_scanner.guard.daemon import hook_process_runner as hook_runner_module
 from codex_plugin_scanner.guard.daemon import hook_process_worker as hook_worker_module
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
@@ -56,6 +57,10 @@ def test_daemon_start_budget_contains_initial_worker_readiness() -> None:
     assert (
         daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_SECONDS
         > hook_runner_module._HOOK_PROCESS_READY_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
+    )
+    assert (
+        hook_runner_module._HOOK_PROCESS_READY_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
+        > hook_entrypoint_module._HOOK_EVALUATOR_READY_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
     )
 
 
