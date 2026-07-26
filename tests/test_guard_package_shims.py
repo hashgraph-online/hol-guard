@@ -46,12 +46,7 @@ from tests.test_guard_supply_chain_evaluator import _cloud_response, _EvaluateHa
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
-    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
-
-    Also installs a test-only resolver override so sync-path exercises stay hermetic
-    (no OAuth token refresh against the network). Tests that need real sync against a
-    local server pass sync_url=<url>.
-    """
+    """Seed OAuth credentials and a hermetic test-only sync resolver override."""
     from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
     from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 
@@ -767,45 +762,47 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
     assert "database is locked" not in result.stderr
 
 
-@pytest.mark.parametrize(
-    ("manager", "argv", "expected"),
-    [
-        ("bun", ("add", "minimist@1.2.9"), True),
-        ("bun", ("run", "build"), True),
-        ("bun", ("run", "build", "--watch"), True),
-        ("bun", ("run", "dev"), True),
-        ("bun", ("pm", "ls", "--all"), True),
-        ("bun", ("script.ts",), True),
-        ("bun", ("--version",), False),
-        ("brew", ("install", "jq"), True),
-        ("brew", ("install", "--cask", "firefox"), True),
-        ("brew", ("tap", "user/repository"), True),
-        ("brew", ("bundle", "install"), True),
-        ("brew", ("info", "jq"), False),
-        ("pip", ("install", "requests==2.32.3"), True),
-        ("pip", ("--isolated", "install", "requests==2.32.3"), True),
-        ("npm", ("install", "minimist@1.2.9"), True),
-        ("npm", ("--registry=https://registry.example.com", "install", "minimist@1.2.9"), True),
-        ("npm", ("run", "dev"), False),
-        ("pnpm", ("add", "minimist@1.2.9"), True),
-        ("pnpm", ("--dir", ".", "add", "minimist@1.2.9"), True),
-        ("pnpm", ("install",), True),
-        ("pnpm", ("--dir", ".", "run", "dev"), False),
-        ("pnpm", ("run", "dev"), False),
-        ("yarn", ("add", "minimist@1.2.9"), True),
-        ("yarn", ("--cwd", ".", "add", "minimist@1.2.9"), True),
-    ],
+PACKAGE_SHIM_GUARD_CASES = (
+    ("bun", ("add", "minimist@1.2.9"), True),
+    ("bun", ("run", "build"), True),
+    ("bun", ("run", "build", "--watch"), True),
+    ("bun", ("run", "dev"), True),
+    ("bun", ("pm", "ls", "--all"), True),
+    ("bun", ("script.ts",), True),
+    ("bun", ("--version",), False),
+    ("brew", ("install", "jq"), True),
+    ("brew", ("install", "--cask", "firefox"), True),
+    ("brew", ("tap", "user/repository"), True),
+    ("brew", ("bundle", "install"), True),
+    ("brew", ("info", "jq"), False),
+    ("pip", ("install", "requests==2.32.3"), True),
+    ("pip", ("--isolated", "install", "requests==2.32.3"), True),
+    ("npm", ("install", "minimist@1.2.9"), True),
+    ("npm", ("--registry=https://registry.example.com", "install", "minimist@1.2.9"), True),
+    ("npm", ("run", "dev"), False),
+    ("pnpm", ("add", "minimist@1.2.9"), True),
+    ("pnpm", ("--dir", ".", "add", "minimist@1.2.9"), True),
+    ("pnpm", ("install",), True),
+    ("pnpm", ("--dir", ".", "run", "dev"), False),
+    ("pnpm", ("run", "dev"), False),
+    ("yarn", ("add", "minimist@1.2.9"), True),
+    ("yarn", ("--cwd", ".", "add", "minimist@1.2.9"), True),
 )
+
+
 def test_package_shim_command_requires_guard_for_supply_chain_or_bun_execution(
     tmp_path: Path,
-    manager: str,
-    argv: tuple[str, ...],
-    expected: bool,
 ) -> None:
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
-
-    assert package_shim_command_requires_guard(manager, argv, workspace=workspace_dir) is expected
+    failures: list[str] = []
+    for case_id, (manager, argv, expected) in enumerate(PACKAGE_SHIM_GUARD_CASES, start=1):
+        actual = package_shim_command_requires_guard(manager, argv, workspace=workspace_dir)
+        if actual is not expected:
+            failures.append(
+                f"package-shim-{case_id:03}: manager={manager!r}, argv={argv!r}; expected {expected!r}, got {actual!r}"
+            )
+    assert not failures, "\n".join(failures)
 
 
 @pytest.mark.parametrize(

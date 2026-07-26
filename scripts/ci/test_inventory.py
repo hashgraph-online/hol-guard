@@ -161,6 +161,7 @@ def corpus_record_count() -> int:
         MUTATING_PYTHON_MODULE_DENY_CASES,
         SENSITIVE_DOCKER_DENY_CASES,
     )
+    from tests.test_guard_package_shims import PACKAGE_SHIM_GUARD_CASES
 
     return (
         sum(1 for _ in iter_benign_corpus())
@@ -174,6 +175,7 @@ def corpus_record_count() -> int:
         + len(PR_MERGE_ADMIN_CAPABILITY_CASES)
         + len(UNRELATED_DYNAMIC_COMMAND_CASES)
         + len(SPECIALIZED_SAFE_VARIANT_CASES)
+        + len(PACKAGE_SHIM_GUARD_CASES)
         + len(BENIGN_DATA_FLOW_CASES)
         + len(MALICIOUS_DATA_FLOW_CASES)
         + len(LOCAL_COMPOSE_SAFE_CASES)
