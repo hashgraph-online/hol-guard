@@ -407,7 +407,7 @@ def test_hook_failure_restarts_an_older_unresponsive_daemon(tmp_path, monkeypatc
     monkeypatch.setattr(
         daemon_manager_module,
         "ensure_guard_daemon",
-        lambda _home, *, home_dir=None: "http://127.0.0.1:5475",
+        lambda _home, *, home_dir=None, **_kwargs: "http://127.0.0.1:5475",
     )
 
     recovered = daemon_manager_module.recover_guard_daemon_after_hook_failure(guard_home)
@@ -2765,6 +2765,7 @@ def test_windows_daemon_inventory_is_bounded_strict_and_guard_home_scoped(tmp_pa
     assert "ConvertTo-Json" in query_commands[0][-1]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
 def test_daemon_inventory_ignores_malformed_unrelated_process_with_guard_text(tmp_path, monkeypatch) -> None:
     command_line = '/Applications/Host UI.app/Contents/MacOS/Host turn-ended {"prompt":"guard daemon --serve'
     monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
@@ -2777,6 +2778,7 @@ def test_daemon_inventory_ignores_malformed_unrelated_process_with_guard_text(tm
     assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == []
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
 def test_daemon_inventory_fails_closed_for_malformed_python_guard_process(tmp_path, monkeypatch) -> None:
     command_line = '/usr/bin/python3 -m codex_plugin_scanner.cli guard daemon --serve "'
     monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")

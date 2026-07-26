@@ -750,6 +750,7 @@ def schedule_guard_daemon_ensure(
                 stderr=subprocess.DEVNULL,
                 env=launcher_env,
                 creationflags=_windows_daemon_creation_flags(allow_job_breakaway=False),
+                start_new_session=False,
             )
         else:
             subprocess.Popen(

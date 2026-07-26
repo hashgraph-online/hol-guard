@@ -39,6 +39,10 @@ def _use_legacy_status_distribution(monkeypatch: pytest.MonkeyPatch) -> None:
         "codex_plugin_scanner.guard.cli.update_commands._status_installed_distribution",
         build_legacy_status_distribution,
     )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.manager._guard_daemon_process_inventory_for_guard_home",
+        lambda _guard_home: [],
+    )
 
 
 def _store(tmp_path: Path) -> GuardStore:
