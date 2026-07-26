@@ -12,9 +12,9 @@ from codex_plugin_scanner.guard.runtime.hook_source_read import sha256_text
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def test_resident_hook_worker_is_enabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resident_hook_worker_is_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(HOOK_FAST_PATH_ENV, raising=False)
-    assert hook_fast_path_enabled() is True
+    assert hook_fast_path_enabled() is False
 
 
 def test_resident_hook_worker_supports_emergency_disable(monkeypatch: pytest.MonkeyPatch) -> None:

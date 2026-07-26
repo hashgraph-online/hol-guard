@@ -55,6 +55,15 @@ The stable `2.1` release snapshot is not copied into `release/3.1`. Compatible p
 - Preserve the 3.1 command corpus during conflict resolution, then regenerate its source-bound decision-diff report from the integrated runtime.
 - Do not broaden containment eligibility or reinterpret isolation as approval.
 - Treat Pi and other fail-open harnesses as degraded; the bounded fallback work improves liveness but does not make them authoritative mandatory-assurance coverage.
+- Keep the resident hook fast path default-off for the 3.1 alpha; explicit opt-in remains the rollback boundary.
+
+## Open compatibility blockers
+
+- No evidence currently proves 2.1/2.2 policy, receipt, runtime-session, protection, or approval payload compatibility with 3.1. The stable snapshot exclusion is not a compatibility adapter.
+- The surface schema method list and runtime method list require an explicit negotiated contract before the compatibility gate can pass.
+- Archived receipt-rollup reconstruction requires migration evidence before old receipt compatibility can pass.
+- Harnesses that cannot enforce authenticated local decisions remain degraded or unsupported for mandatory assurance.
+- This branch is not mergeable until these blockers have focused evidence and independent approval.
 
 ## Verification gates
 

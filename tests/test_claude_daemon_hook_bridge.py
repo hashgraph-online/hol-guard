@@ -337,10 +337,41 @@ def test_main_recovers_missing_daemon_and_retries_hook(
     assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
-def test_recovery_only_restarts_for_transport_auth_and_server_failures() -> None:
+def test_authenticated_daemon_failure_denies_without_local_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def reject_request(*args: object, **kwargs: object) -> str:
+        raise bridge._DaemonHTTPError(401, "invalid daemon token")
+
+    def reject_fallback(*args: object, **kwargs: object) -> str:
+        raise AssertionError("authenticated failures must not use the local fallback")
+
+    monkeypatch.setattr(bridge, "_post_to_loopback_daemon", reject_request)
+    monkeypatch.setattr(bridge, "_run_local_fallback", reject_fallback)
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
+
+    result = bridge.main(
+        state_path=tmp_path / "daemon-state.json",
+        fallback_daemon_url="http://127.0.0.1:5474",
+        fallback_command=("python3", "-c", "print('{}')"),
+        query="guard-home=%2Ftmp",
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert result == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "authentication failed" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_recovery_only_restarts_for_transport_and_server_failures() -> None:
     assert not bridge._daemon_failure_is_recoverable(ValueError("invalid loopback URL"))
     assert not bridge._daemon_failure_is_recoverable(
         urllib.error.HTTPError("http://127.0.0.1", 400, "Bad Request", {}, None)
+    )
+    assert not bridge._daemon_failure_is_recoverable(
+        urllib.error.HTTPError("http://127.0.0.1", 401, "Unauthorized", {}, None)
     )
     assert bridge._daemon_failure_is_recoverable(
         urllib.error.HTTPError("http://127.0.0.1", 503, "Unavailable", {}, None)

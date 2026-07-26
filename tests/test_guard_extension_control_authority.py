@@ -38,7 +38,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_proof import (
     issue_extension_control_proof,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_base import SystemKeyringSecretStore
+from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore, SystemKeyringSecretStore
 
 _PASSWORD = "correct horse battery staple"
 
@@ -347,6 +347,19 @@ def test_unavailable_system_keyring_never_silently_falls_back(tmp_path: Path, mo
     assert view.layers_for(ControlSurface.COMMAND_EVALUATION)[0].global_lockdown is True
 
 
+def test_macos_extension_authority_default_never_probes_keychain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def forbid_keychain_probe(self: SystemKeyringSecretStore) -> bool:
+        raise AssertionError("keychain probe")
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(SystemKeyringSecretStore, "_is_available", forbid_keychain_probe)
+
+    store = GuardStore(tmp_path, prime_policy_integrity=False)
+
+    assert isinstance(store._secret_store(), EncryptedFileSecretStore)
 
 
 def test_explicit_macos_extension_authority_migration_enables_passive_vault_reads(

@@ -419,16 +419,19 @@ class StoreLiveRequestOutboxMixin:
                 select request_id
                 from approval_requests as requests
                 where requests.oauth_source is null
+                  and requests.workspace = ?
                   and not exists (
                     select 1
                     from guard_live_request_outbox as outbox
                     where outbox.local_request_id = requests.request_id
                   )
                 union
-                select local_request_id
-                from guard_live_request_outbox
-                where oauth_source is null
-                  and (workspace_id is null or workspace_id = ?)
+                select outbox.local_request_id
+                from guard_live_request_outbox as outbox
+                join approval_requests as requests on requests.request_id = outbox.local_request_id
+                where outbox.oauth_source is null
+                  and requests.workspace = ?
+                  and (outbox.workspace_id is null or outbox.workspace_id = ?)
                 union
                 select local_request_id
                 from guard_live_request_outbox
@@ -441,6 +444,8 @@ class StoreLiveRequestOutboxMixin:
                   )
                 """,
                 (
+                    binding["workspace_id"],
+                    binding["workspace_id"],
                     binding["workspace_id"],
                     self._guard_source,
                     binding["workspace_id"],

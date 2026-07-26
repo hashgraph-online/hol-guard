@@ -89,7 +89,9 @@ def main(
     except Exception as error:
         reason = _daemon_failure_reason(error)
         failure_kind = _daemon_failure_kind(error)
-        if _daemon_failure_is_recoverable(error):
+        if failure_kind == "authenticated-control-plane-failure":
+            response_body = _authenticated_control_plane_failure(reason, data)
+        elif _daemon_failure_is_recoverable(error):
             response_body = _recover_retry_or_fallback(
                 reason,
                 data,
@@ -305,6 +307,23 @@ def _degraded(reason: str, data: str) -> str:
     return "{}"
 
 
+def _authenticated_control_plane_failure(reason: str, data: str) -> str:
+    message = f"HOL Guard denied the action because daemon authentication failed: {reason}"
+    if _event_name(data) == "PreToolUse":
+        return json.dumps(
+            {
+                "systemMessage": message,
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": message,
+                },
+            },
+            separators=(",", ":"),
+        )
+    return json.dumps({"continue": False, "stopReason": message}, separators=(",", ":"))
+
+
 def _should_suppress_output(data: str, response_body: str) -> bool:
     if _event_name(data) != "UserPromptSubmit":
         return False
@@ -374,7 +393,7 @@ def _daemon_failure_is_recoverable(error: Exception) -> bool:
     if isinstance(error, (urllib.error.HTTPError, _DaemonHTTPError)):
         if _daemon_failure_is_authenticated_overload(error):
             return False
-        return error.code in {401, 403, 408, 500, 502, 503, 504}
+        return error.code in {408, 500, 502, 503, 504}
     return True
 
 
