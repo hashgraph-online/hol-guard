@@ -170,6 +170,13 @@ TEST_INVARIANTS: Final[tuple[TestInvariant, ...]] = (
         "Critical destructive, secret, managed-service, and self-protection command floors remain exact.",
         ("security_critical", "regression", "parser", "policy", "release"),
     ),
+    TestInvariant(
+        "GUARD-INV-022",
+        "tests/test_guard_github_command_capabilities.py::test_guard_requires_confirmation_for_github_mutations_and_unverified_compositions",
+        "github-command-corpus",
+        "GitHub mutation and dynamically resolved command forms keep their exact confirmation floors.",
+        ("security_critical", "regression", "parser", "policy", "release"),
+    ),
 )
 
 

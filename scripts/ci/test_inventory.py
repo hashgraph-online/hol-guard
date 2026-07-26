@@ -145,6 +145,7 @@ def corpus_record_count() -> int:
     )
     from tests.guard_seeded_faults import PARSER_SEEDED_FAULTS
     from tests.test_guard_command_critical_floors import CRITICAL_COMMAND_FLOORS
+    from tests.test_guard_github_command_capabilities import GITHUB_REVIEW_FLOORS
 
     return (
         sum(1 for _ in iter_benign_corpus())
@@ -153,6 +154,7 @@ def corpus_record_count() -> int:
         + len(COPILOT_NODE_DELETE_DENY_CASES)
         + len(PARSER_SEEDED_FAULTS)
         + len(CRITICAL_COMMAND_FLOORS)
+        + len(GITHUB_REVIEW_FLOORS)
     )
 
 
