@@ -43,45 +43,6 @@ def test_install_lifecycle_script_risk_blocks_local_package(tmp_path: Path) -> N
     assert result.packages[0]["reasons"][0]["code"] == "install_script_risk"
 
 
-def test_dependency_confusion_policy_blocks_reserved_internal_name(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-    store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        _bundle_response(
-            packages=[],
-            policy_rules=[
-                {
-                    "action": "block",
-                    "ruleId": "reserve-internal-tool",
-                    "ecosystemSelector": "npm",
-                    "enabled": True,
-                    "expiresAt": None,
-                    "harnessSelector": None,
-                    "packageSelector": "@hashgraph/internal-tool",
-                    "priority": 1,
-                    "severityThreshold": None,
-                    "versionRangeSelector": None,
-                }
-            ],
-        ),
-        "2026-05-19T00:00:00Z",
-    )
-
-    artifact = _artifact_from_command("npm install internal-tool@1.0.0", workspace=workspace_dir)
-    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
-
-    assert result.decision == "block"
-    assert result.packages[0]["reasons"][0]["code"] == "dependency_confusion_risk"
-
-
 def test_maintainer_compromise_reason_blocks_high_risk_package(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -60,9 +60,13 @@ def _test_fingerprint(
     test_node.name = ""
     parts = [ast.dump(test_node, include_attributes=False)]
     if class_node is not None:
-        class_context = copy.deepcopy(class_node)
-        class_context.name = ""
-        class_context.body = []
+        class_context = ast.ClassDef(
+            name="",
+            bases=copy.deepcopy(class_node.bases),
+            keywords=copy.deepcopy(class_node.keywords),
+            body=[],
+            decorator_list=copy.deepcopy(class_node.decorator_list),
+        )
         parts.append(ast.dump(class_context, include_attributes=False))
     return "\n".join(parts)
 
