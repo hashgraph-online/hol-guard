@@ -273,9 +273,10 @@ def test_oversized_hook_input_fails_safe_without_daemon_contact(
 
 def test_bridge_timeouts_stay_under_harness_budget() -> None:
     assert bridge._HARNESS_TIMEOUT_BUDGET_SECONDS == 10
-    assert (
-        2 * bridge._DAEMON_IO_TIMEOUT_SECONDS
-    ) + bridge._RECOVERY_TIMEOUT_SECONDS + bridge._FALLBACK_TIMEOUT_SECONDS < bridge._HARNESS_TIMEOUT_BUDGET_SECONDS
+    assert 0 < bridge._HOOK_DEADLINE_SECONDS < bridge._HARNESS_TIMEOUT_BUDGET_SECONDS
+    assert bridge._DAEMON_IO_TIMEOUT_SECONDS <= bridge._HOOK_DEADLINE_SECONDS
+    assert bridge._RECOVERY_TIMEOUT_SECONDS <= bridge._HOOK_DEADLINE_SECONDS
+    assert bridge._FALLBACK_TIMEOUT_SECONDS <= bridge._HOOK_DEADLINE_SECONDS
 
 
 def test_main_recovers_missing_daemon_and_retries_hook(
@@ -285,6 +286,7 @@ def test_main_recovers_missing_daemon_and_retries_hook(
 ) -> None:
     attempts = 0
     recovery_commands: list[tuple[str, ...]] = []
+    phase_deadlines: list[float] = []
 
     def fake_post(
         endpoint: str,
@@ -293,7 +295,9 @@ def test_main_recovers_missing_daemon_and_retries_hook(
         state_path: str | Path,
         deadline: float | None = None,
     ) -> str:
-        del endpoint, data, state_path, deadline
+        assert deadline is not None
+        phase_deadlines.append(deadline)
+        del endpoint, data, state_path
         nonlocal attempts
         attempts += 1
         if attempts == 1:
@@ -313,7 +317,8 @@ def test_main_recovers_missing_daemon_and_retries_hook(
         deadline: float | None = None,
         failure_kind: str,
     ) -> bool:
-        del deadline
+        assert deadline is not None
+        phase_deadlines.append(deadline)
         assert failure_kind == "transport-failure"
         recovery_commands.append(command)
         return True
@@ -331,6 +336,8 @@ def test_main_recovers_missing_daemon_and_retries_hook(
 
     assert result == 0
     assert attempts == 2
+    assert len(phase_deadlines) == 3
+    assert len(set(phase_deadlines)) == 1
     assert len(recovery_commands) == 1
     assert recovery_commands[0][1:3] == ("-I", "-c")
     assert "recover_guard_daemon_after_hook_failure" in recovery_commands[0][3]

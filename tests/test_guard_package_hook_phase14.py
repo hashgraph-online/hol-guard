@@ -464,8 +464,8 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
     assert "guard/inbox" not in decision["harness_message"]
 
 
-def test_phase14_claude_daemon_hook_bridge_queues_package_install_without_node(tmp_path: Path) -> None:
-    """Claude hooks must not depend on a Node binary for supply-chain enforcement."""
+def test_phase14_claude_compatibility_hook_queues_package_install_without_node(tmp_path: Path) -> None:
+    """Claude compatibility hooks must not depend on Node for supply-chain enforcement."""
     from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 
     home_dir = tmp_path / "home"
@@ -479,10 +479,13 @@ def test_phase14_claude_daemon_hook_bridge_queues_package_install_without_node(t
     )
     _seed_review_bundle(guard_home, harness_selector="claude-code")
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
-    (guard_home / "daemon-state.json").write_text('{"port":59998}', encoding="utf-8")
 
     adapter = ClaudeCodeHarnessAdapter()
-    command = adapter._daemon_hook_command(context)
+    command = adapter._daemon_hook_command_parts(context)
+    bridge_config = json.loads(command[-1])
+    fallback_command = bridge_config["fallback_command"]
+    assert isinstance(fallback_command, list)
+    assert all(isinstance(part, str) for part in fallback_command)
     event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
@@ -490,7 +493,7 @@ def test_phase14_claude_daemon_hook_bridge_queues_package_install_without_node(t
         "cwd": str(workspace_dir),
     }
     result = subprocess.run(
-        ["/bin/sh", "-c", command],
+        fallback_command,
         input=json.dumps(event),
         text=True,
         capture_output=True,
@@ -500,7 +503,7 @@ def test_phase14_claude_daemon_hook_bridge_queues_package_install_without_node(t
     payload = json.loads(result.stdout)
 
     assert result.returncode == 0
-    assert result.stderr == ""
+    assert "minimist@1.2.8" in result.stderr
     assert "minimist@1.2.8" in result.stdout
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
