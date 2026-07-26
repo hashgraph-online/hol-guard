@@ -878,7 +878,26 @@ class TestGuardCli:
             main([])
 
         assert exc_info.value.code == 2
-        assert "Run `hol-guard guard --help` to inspect available Guard commands." in capsys.readouterr().err
+        assert "Run `hol-guard --help` to inspect available Guard commands." in capsys.readouterr().err
+
+    def test_hol_guard_routes_flat_commands_without_nested_guard_alias(self, monkeypatch, capsys) -> None:
+        called: dict[str, object] = {}
+
+        def _fake_run_guard_command(args):
+            called["guard_command"] = args.guard_command
+            return 7
+
+        monkeypatch.setattr(sys, "argv", ["hol-guard"])
+        monkeypatch.setattr("codex_plugin_scanner.cli.run_guard_command", _fake_run_guard_command)
+
+        assert main(["status"]) == 7
+        assert called == {"guard_command": "status"}
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["guard", "status"])
+
+        assert exc_info.value.code == 2
+        assert "invalid choice: 'guard'" in capsys.readouterr().err
 
     def test_plugin_guard_program_routes_directly_to_guard_mode(self, monkeypatch) -> None:
         called: dict[str, object] = {}

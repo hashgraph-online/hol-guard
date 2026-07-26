@@ -59,7 +59,7 @@ def _is_scanner_program(program_name: str) -> bool:
 
 
 def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentParser:
-    if program_mode == "guard":
+    if program_mode in {"guard", "hol-guard"}:
         parser = FriendlyArgumentParser(
             prog=program_name,
             description="Protect local harnesses before tools run.",
@@ -173,8 +173,6 @@ def _resolve_legacy_args(
     program_name: str = "",
 ) -> list[str] | None:
     if not argv:
-        if program_mode == "combined" and _is_hol_guard_program(program_name):
-            return ["guard"]
         return argv
     if program_mode == "guard":
         if argv[0] == "guard":
@@ -188,6 +186,8 @@ def _resolve_legacy_args(
                 return ["hook", "--harness", "hermes", *argv[2:]]
             if argv[1] == "mcp-proxy":
                 return ["hermes-mcp-proxy", *argv[2:]]
+        return argv
+    if program_mode == "hol-guard":
         return argv
     if program_mode == "combined" and argv[0] == "hook":
         return ["guard", *argv]
@@ -296,6 +296,8 @@ def main(argv: list[str] | None = None) -> int:
     program_name = Path(sys.argv[0]).name or "plugin-scanner"
     if _is_guard_program(program_name):
         program_mode = "guard"
+    elif _is_hol_guard_program(program_name):
+        program_mode = "hol-guard"
     elif _is_scanner_program(program_name):
         program_mode = "scanner"
     else:
@@ -311,7 +313,7 @@ def main(argv: list[str] | None = None) -> int:
     from .install_integrity import warn_if_shadowed
 
     warn_if_shadowed()
-    if program_mode == "guard":
+    if program_mode in {"guard", "hol-guard"}:
         try:
             return run_guard_command(args)
         except ValueError as exc:

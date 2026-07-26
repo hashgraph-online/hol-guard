@@ -2943,7 +2943,7 @@ def sync_receipts(
             "reason": "background_deferred",
             "message": (
                 "AIBOM inventory refresh is deferred to the Guard daemon background lane; "
-                "run hol-guard guard sync --deep to refresh now."
+                "run hol-guard sync --deep to refresh now."
             ),
         }
     if persist_sync_summary:

@@ -332,11 +332,11 @@ def build_trust_doctor_payload_from_status(
         [
             "Use one-time approvals for local-only work.",
             "Use Guard Cloud policies for durable team exceptions.",
-            "Run `hol-guard guard trust test --no-ui --json` to verify passive checks stay prompt-free.",
+            "Run `hol-guard trust test --no-ui --json` to verify passive checks stay prompt-free.",
         ]
         if remembered_rules != "enforced"
         else [
-            "Run `hol-guard guard trust test --no-ui --json` after Guard updates.",
+            "Run `hol-guard trust test --no-ui --json` after Guard updates.",
             "Use Guard Cloud policies for team-wide exceptions.",
         ]
     )
@@ -499,7 +499,7 @@ def _run_guard_trust_command(
                 {
                     "generated_at": _now(),
                     "command": "explain",
-                    "error": "Use `hol-guard guard trust explain --rule <decision_id>`.",
+                    "error": "Use `hol-guard trust explain --rule <decision_id>`.",
                 },
                 getattr(args, "json", False),
             )
@@ -582,13 +582,13 @@ def _run_guard_trust_command(
                 "and broad remembered local rules are limited."
             )
             payload["next_action"] = (
-                "Run `hol-guard guard trust setup --backend macos-native --json` to protect local rules again."
+                "Run `hol-guard trust setup --backend macos-native --json` to protect local rules again."
             )
         _emit_trust_payload(f"trust.{trust_command}", payload, getattr(args, "json", False))
         return 0
     _emit_trust_payload(
         "trust",
-        {"error": "Use: hol-guard guard trust status|doctor|test|setup|reset"},
+        {"error": "Use: hol-guard trust status|doctor|test|setup|reset"},
         getattr(args, "json", False),
     )
     return 2
