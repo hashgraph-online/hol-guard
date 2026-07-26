@@ -19,7 +19,7 @@ from .hook_process_protocol import (
 from .hook_process_worker import HookProcessReview, HookWorkerSlot, retire_worker_slot
 
 _HOOK_PROCESS_LIMIT = 4
-_HOOK_PROCESS_TIMEOUT_SECONDS = 1.8
+_HOOK_PROCESS_TIMEOUT_SECONDS = 2.8
 _HOOK_PROCESS_READY_TIMEOUT_SECONDS = 14.0
 _HOOK_PROCESS_ACQUIRE_TIMEOUT_SECONDS = 0.2
 _HOOK_PROCESS_BACKFILL_DELAY_SECONDS = 2.0

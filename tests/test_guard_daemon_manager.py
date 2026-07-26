@@ -1531,6 +1531,7 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monke
 def test_ensure_guard_daemon_skips_runtime_probe_for_dead_ephemeral_state_pid(tmp_path, monkeypatch):
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
+    _run_ephemeral_reap_synchronously(monkeypatch)
     guard_home = tmp_path / "guard-home"
     stale_guard_home = tmp_path / "pytest-of-user" / "pytest-11" / "test-stale" / "home"
     stale_guard_home.mkdir(parents=True)

@@ -3324,15 +3324,14 @@ class TestGuardDaemonFastHookPath:
         daemon.start()
 
         try:
-            from codex_plugin_scanner.guard.daemon.hook_process_runner import (
-                HookProcessReview,
-                HookProcessRunner,
-            )
+
+            def fail_review(**_kwargs: object) -> dict[str, object]:
+                raise RuntimeError("resident worker failed")
 
             monkeypatch.setattr(
-                HookProcessRunner,
-                "review",
-                lambda _self, **_kwargs: HookProcessReview(None, "daemon_worker_exception"),
+                daemon._server.hook_worker,
+                "review_http_payload",
+                fail_review,
             )
             payload = {
                 "hook_event_name": "PostToolUse",
