@@ -156,7 +156,7 @@ CRITICAL_COMMAND_FLOORS: Final[tuple[tuple[str, GuardAction], ...]] = (
 
 
 def _critical_floor_case_id(command: str) -> str:
-    """Provide a stable, opaque diagnostic identity without leaking the command in metric keys."""
+    """Provide a stable opaque ID alongside the exact command retained in failure diagnostics."""
 
     return f"critical-floor-{sha256(command.encode('utf-8')).hexdigest()[:16]}"
 
