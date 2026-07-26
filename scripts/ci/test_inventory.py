@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -13,6 +14,9 @@ from pathlib import Path
 from typing import Protocol, cast
 
 import pytest
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 
 class _CollectionSession(Protocol):
