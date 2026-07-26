@@ -20,6 +20,7 @@ def test_parse_shell_command_preserves_compound_suffix_and_path_override() -> No
     assert parsed.path_overridden is True
     assert parsed.segments[1].arguments == ("reset", "--hard", "HEAD~1")
     assert parsed.confidence == "exact"
+    assert parsed.extraction_provenance == "guard-shell"
 
 
 def test_parse_shell_command_tracks_env_wrapper_path_override() -> None:

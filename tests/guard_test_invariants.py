@@ -156,6 +156,13 @@ TEST_INVARIANTS: Final[tuple[TestInvariant, ...]] = (
         "Object-storage deletion variants remain reviewable through inspection and runtime enforcement.",
         ("security_critical", "regression", "parser", "release"),
     ),
+    TestInvariant(
+        "GUARD-INV-020",
+        "tests/test_guard_seeded_faults.py::test_seeded_command_parser_faults_remain_rejected_or_visible",
+        "seeded-faults",
+        "Curated parser security faults remain rejected or observable through canonical parsing.",
+        ("security_critical", "regression", "parser", "release"),
+    ),
 )
 
 

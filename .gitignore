@@ -22,6 +22,7 @@ env/
 .coverage
 htmlcov/
 coverage/
+mutants/
 
 # Tooling
 .ruff_cache/

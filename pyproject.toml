@@ -78,6 +78,9 @@ publish = [
 cisco-mcp = [
     "cisco-ai-mcp-scanner==4.8.1; python_full_version >= '3.11.4'",
 ]
+dev = [
+    "mutmut>=3.4,<4",
+]
 
 [tool.uv]
 override-dependencies = [
@@ -157,6 +160,15 @@ markers = [
   "security_critical: protects a Guard security boundary that cannot be removed without an equivalent replacement",
   "slow: marks tests as slow (deselected by default; run with -m slow to include)",
   "compat: verifies a supported Python or platform compatibility contract",
+]
+
+[tool.mutmut]
+source_paths = ["src/codex_plugin_scanner/guard/runtime/command_model.py"]
+also_copy = ["src/codex_plugin_scanner"]
+pytest_add_cli_args_test_selection = [
+  "tests/test_guard_command_model.py",
+  "tests/test_guard_command_critical_floors.py",
+  "tests/test_guard_command_corpus.py",
 ]
 
 [tool.basedpyright]
