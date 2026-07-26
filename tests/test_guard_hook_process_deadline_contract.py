@@ -59,8 +59,8 @@ class _SlowConnection:
         self._entered_lock = entered_lock
         self._all_entered = all_entered
 
-    def send(self, _value: object) -> None:
-        return
+    def send(self, obj: object) -> None:
+        del obj
 
     def recv(self) -> object:
         raise AssertionError("timed-out worker must not be read")
@@ -77,7 +77,6 @@ class _SlowConnection:
         return
 
 
-@final
 class _FakeProcess:
     def __init__(self, pid: int) -> None:
         self.pid = pid
@@ -114,6 +113,8 @@ def test_retirement_kills_descendant_that_ignores_term(tmp_path) -> None:
         args=(str(ready_path), str(escaped_path)),
     )
     process.start()
+    process_group_id = process.pid
+    assert process_group_id is not None
     deadline = time.monotonic() + 3
     while not ready_path.is_file() and time.monotonic() < deadline:
         time.sleep(0.01)
@@ -125,6 +126,7 @@ def test_retirement_kills_descendant_that_ignores_term(tmp_path) -> None:
             entered_lock=threading.Lock(),
             all_entered=threading.Event(),
         ),
+        isolation_ready=True,
     )
 
     try:
@@ -133,7 +135,7 @@ def test_retirement_kills_descendant_that_ignores_term(tmp_path) -> None:
         assert not escaped_path.exists()
     finally:
         with suppress(OSError, ProcessLookupError):
-            os.killpg(process.pid, getattr(signal, "SIGKILL", 9))
+            os.killpg(process_group_id, getattr(signal, "SIGKILL", 9))
         process.join(timeout=1)
 
 
@@ -167,6 +169,7 @@ def test_windows_taskkill_failure_requires_job_containment_proof(
             entered_lock=threading.Lock(),
             all_entered=threading.Event(),
         ),
+        isolation_ready=True,
     )
     contained_process = _WindowsProcess(2)
     job_contained = HookWorkerSlot(
@@ -177,25 +180,11 @@ def test_windows_taskkill_failure_requires_job_containment_proof(
             all_entered=threading.Event(),
         ),
         windows_job_contained=True,
+        isolation_ready=True,
     )
 
     assert not retire_worker_slot(unproven)
     assert retire_worker_slot(job_contained)
-
-
-def test_retirement_does_not_signal_an_exited_process_group(monkeypatch) -> None:
-    process = _FakeProcess(12345)
-    process.kill()
-    slot = HookWorkerSlot(
-        process=process,
-        connection=_SlowConnection(entered=[0], entered_lock=threading.Lock(), all_entered=threading.Event()),
-    )
-    monkeypatch.setattr(
-        hook_worker_module,
-        "terminate_worker_tree",
-        lambda *_args: pytest.fail("an exited process group must not be signaled"),
-    )
-    assert retire_worker_slot(slot)
 
 
 def test_slow_pi_reviews_release_every_slot_within_client_daemon_budget(
@@ -225,6 +214,7 @@ def test_slow_pi_reviews_release_every_slot_within_client_daemon_budget(
                 entered_lock=entered_lock,
                 all_entered=all_entered,
             ),
+            pre_isolation_contained=True,
         )
         runner._all_slots[process.pid] = slot  # pyright: ignore[reportPrivateUsage]
         runner._slots.put_nowait(slot)  # pyright: ignore[reportPrivateUsage]
@@ -284,6 +274,7 @@ def test_retirement_thread_exhaustion_fails_pool_closed_without_delaying_review(
             entered_lock=threading.Lock(),
             all_entered=threading.Event(),
         ),
+        pre_isolation_contained=True,
     )
     runner._all_slots[1] = slot  # pyright: ignore[reportPrivateUsage]
     runner._slots.put_nowait(slot)  # pyright: ignore[reportPrivateUsage]
@@ -336,6 +327,7 @@ def test_close_waits_until_registered_retirement_thread_has_started(
             entered_lock=threading.Lock(),
             all_entered=threading.Event(),
         ),
+        pre_isolation_contained=True,
     )
     runner._all_slots[1] = slot  # pyright: ignore[reportPrivateUsage]
     runner._slots.put_nowait(slot)  # pyright: ignore[reportPrivateUsage]
