@@ -62,3 +62,18 @@ def test_duplicate_candidates_include_test_methods_with_class_context(tmp_path: 
         "tests/test_methods.py::First::test_one",
         "tests/test_methods.py::Second::test_two",
     )
+
+
+def test_duplicate_candidates_discover_nested_test_files(tmp_path: Path) -> None:
+    tests = tmp_path / "tests"
+    nested = tests / "adapter"
+    nested.mkdir(parents=True)
+    (tests / "test_root.py").write_text("def test_one():\n    assert True\n", encoding="utf-8")
+    (nested / "test_nested.py").write_text("def test_two():\n    assert True\n", encoding="utf-8")
+
+    candidates = duplicate_candidates.duplicate_candidates(tests.rglob("test_*.py"), root=tmp_path)
+
+    assert candidates[0].node_ids == (
+        "tests/adapter/test_nested.py::test_two",
+        "tests/test_root.py::test_one",
+    )

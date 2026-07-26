@@ -90,7 +90,7 @@ def main() -> int:
     _ = parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
-    candidates = duplicate_candidates((root / "tests").glob("test_*.py"), root=root)
+    candidates = duplicate_candidates((root / "tests").rglob("test_*.py"), root=root)
     payload = json.dumps([asdict(candidate) for candidate in candidates], indent=2, sort_keys=True) + "\n"
     if args.output is None:
         print(payload, end="")
