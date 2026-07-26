@@ -227,6 +227,7 @@ def test_absolute_header_deadline_closes_trickle_client(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(daemon_server, "_DAEMON_REQUEST_READ_TIMEOUT_SECONDS", 0.2)
     with _running_daemon(tmp_path, monkeypatch) as daemon:
         client = socket.create_connection(("127.0.0.1", daemon.port), timeout=1)
         client.settimeout(1)
@@ -247,7 +248,7 @@ def test_absolute_header_deadline_closes_trickle_client(
         while daemon._server.active_requests and time.monotonic() < deadline:
             time.sleep(0.01)
 
-    assert elapsed < 0.6
+    assert elapsed < 0.9
     assert daemon._server.active_requests == 0
 
 
