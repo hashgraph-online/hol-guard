@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 import tempfile
 from base64 import urlsafe_b64encode
 from pathlib import Path
@@ -75,6 +76,20 @@ def test_hook_payload_reference_hydrates_full_payload_for_runtime_review(tmp_pat
     )
     assert artifact is not None
     assert artifact.harness == "pi"
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Darwin user temp root contract")
+def test_hook_payload_reference_survives_sanitized_daemon_temp_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload: dict[str, object] = {"hook_event_name": "PostToolUse", "tool_name": "Read", "tool_response": []}
+    with tempfile.TemporaryDirectory(prefix="hol-guard-hook-payload-") as reference_dir:
+        referenced = _referenced_input(payload, Path(reference_dir))
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: "/tmp")
+
+        loaded_payload = _load_hook_payload(None, input_text=referenced, harness="pi")
+
+    assert loaded_payload == payload
 
 
 def test_hook_payload_reference_rejects_digest_mismatch() -> None:

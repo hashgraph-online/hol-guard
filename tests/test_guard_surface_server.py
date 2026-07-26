@@ -8,6 +8,7 @@ import json
 import os
 import socket
 import sqlite3
+import sys
 import tempfile
 import time
 import urllib.error
@@ -1273,6 +1274,17 @@ class TestGuardSurfaceServer:
         assert handler._is_owned_temporary_hook_workspace(str(workspace))
         monkeypatch.setattr(daemon_server_module.tempfile, "gettempdir", lambda: str(tmp_path))
         assert not handler._is_owned_temporary_hook_workspace(str(tmp_path))
+
+    @pytest.mark.skipif(sys.platform != "darwin", reason="Darwin user temp root contract")
+    def test_guard_daemon_accepts_darwin_workspace_after_sanitized_restart(
+        self,
+        monkeypatch,
+    ) -> None:
+        handler = object.__new__(daemon_server_module._GuardDaemonHandler)
+        with daemon_server_module.tempfile.TemporaryDirectory(prefix="hol-guard-owned-workspace-") as workspace:
+            monkeypatch.setattr(tempfile, "gettempdir", lambda: "/tmp")
+
+            assert handler._is_owned_temporary_hook_workspace(os.path.realpath(workspace))
 
     def test_guard_daemon_hook_capacity_rejects_immediately_and_reports_health(
         self,

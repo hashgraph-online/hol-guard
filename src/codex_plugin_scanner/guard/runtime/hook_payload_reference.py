@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-import tempfile
 from base64 import urlsafe_b64decode
 from collections.abc import Mapping
 from pathlib import Path
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+from .local_temp_paths import trusted_temporary_root_for_path
 
 HOOK_PAYLOAD_REFERENCE_KEY = "guard_payload_ref"
 MAX_HOOK_PAYLOAD_REFERENCE_BYTES = 5 * 1024 * 1024
@@ -82,11 +83,11 @@ def _base64url_bytes(value: object, *, expected_length: int, label: str) -> byte
 def _safe_reference_path(path_value: str) -> Path:
     try:
         path = Path(path_value).resolve(strict=True)
-        temp_root = Path(tempfile.gettempdir()).resolve(strict=True)
+        temp_root = trusted_temporary_root_for_path(path)
     except OSError as error:
         raise HookPayloadReferenceError("HOL Guard hook payload reference path is invalid.") from error
     parent = path.parent
-    if parent.parent != temp_root or not parent.name.startswith(_REFERENCE_DIR_PREFIX):
+    if temp_root is None or parent.parent != temp_root or not parent.name.startswith(_REFERENCE_DIR_PREFIX):
         raise HookPayloadReferenceError("HOL Guard hook payload reference must be in a Guard-owned temp directory.")
     if not path.is_file():
         raise HookPayloadReferenceError("HOL Guard hook payload reference must be a file.")

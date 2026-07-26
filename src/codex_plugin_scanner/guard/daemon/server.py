@@ -161,6 +161,7 @@ from ..runtime.command_shadow_evaluation import (
 )
 from ..runtime.containment_health import containment_health_signals
 from ..runtime.live_request_sync import LiveRequestSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
+from ..runtime.local_temp_paths import trusted_temporary_root_for_path
 from ..runtime.protection_health import ProtectionCheckStatus
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -6504,14 +6505,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _is_owned_temporary_hook_workspace(candidate: str) -> bool:
         candidate_path = Path(candidate)
-        primary_temporary_root = Path(os.path.realpath(tempfile.gettempdir()))
-        temporary_roots = [primary_temporary_root]
-        if os.name == "posix":
-            temporary_roots.extend(Path(os.path.realpath(root)) for root in ("/tmp", "/var/tmp"))
-        if not any(_GuardDaemonHandler._path_is_within_root(candidate_path, root) for root in temporary_roots):
+        try:
+            temporary_root = trusted_temporary_root_for_path(candidate_path)
+        except OSError:
+            return False
+        if temporary_root is None:
             return False
         try:
-            # codeql[py/path-injection] candidate is a canonical absolute path contained by a fixed trusted temp root.
+            # codeql[py/path-injection] candidate is canonical and contained by a trusted temp root.
             candidate_stat = candidate_path.stat()
         except OSError:
             return False
@@ -6521,11 +6522,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not callable(getuid):
             current_home = Path.home().resolve()
             return _GuardDaemonHandler._path_is_within_root(
-                primary_temporary_root,
+                temporary_root,
                 current_home,
             ) and _GuardDaemonHandler._path_is_within_root(
                 candidate_path,
-                primary_temporary_root,
+                temporary_root,
             )
         return candidate_stat.st_uid == getuid()
 
