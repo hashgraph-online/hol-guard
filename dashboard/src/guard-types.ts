@@ -860,6 +860,7 @@ export type GuardSettings = {
   telemetry: boolean;
   sync: boolean;
   billing: boolean;
+  update_channel?: "stable" | "alpha";
   approval_gate?: GuardApprovalGatePublicConfig;
 };
 
@@ -1054,6 +1055,7 @@ export type GuardUpdateStatus = {
   update_suppressed?: boolean;
   retry_command?: string;
   update_attempt_message?: string;
+  release_channel: "stable" | "alpha";
 };
 
 export type GuardUpdateReconnectOptions = {

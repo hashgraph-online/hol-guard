@@ -3076,6 +3076,7 @@ export function normalizeGuardUpdateStatus(raw: unknown): GuardUpdateStatus {
     retry_command: typeof value.retry_command === "string" ? value.retry_command : undefined,
     update_attempt_message:
       typeof value.update_attempt_message === "string" ? value.update_attempt_message : undefined,
+    release_channel: value.release_channel === "alpha" ? "alpha" : "stable",
   };
 }
 
@@ -3134,6 +3135,26 @@ export async function scheduleGuardUpdate(
     message: stringValue(payload.message) ?? undefined,
     error: stringValue(payload.error) ?? undefined,
   };
+}
+
+export async function setGuardUpdateChannel(channel: "stable" | "alpha"): Promise<GuardUpdateStatus> {
+  if (isGuardDemoMode()) {
+    return normalizeGuardUpdateStatus({
+      ...(await fetchGuardUpdateStatus()),
+      release_channel: channel,
+    });
+  }
+  const response = await fetchWithGuardAuth("/v1/update/channel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ update_channel: channel }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const value = isRecord(payload) ? payload : {};
+    throw new Error(stringValue(value.message) ?? `Update channel failed with ${response.status}`);
+  }
+  return normalizeGuardUpdateStatus(payload);
 }
 
 export async function setupDesktopNotifications(): Promise<GuardNotificationSetupResult> {

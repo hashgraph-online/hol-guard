@@ -65,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
             update_payload, exit_code = update_commands.run_guard_update(
                 dry_run=False,
                 force_pypi_reinstall=args.force_pypi_reinstall,
+                include_alpha=args.alpha,
                 guard_home=guard_home,
                 context=context,
                 store=store,
@@ -150,6 +151,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Reinstall hol-guard from PyPI to repair a local folder install.",
     )
+    parser.add_argument("--alpha", action="store_true", help="Install the selected alpha release channel.")
     return parser.parse_args(argv)
 
 

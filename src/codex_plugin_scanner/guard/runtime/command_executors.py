@@ -242,7 +242,7 @@ def _execute_app_operation(
         )
     if operation == "guard.app.updateCheck":
         return _result(
-            _execute_app_update_check(generated_at=generated_at),
+            _execute_app_update_check(context=context, generated_at=generated_at),
             generated_at=generated_at,
         )
     if harness is None:
@@ -283,12 +283,14 @@ def _execute_app_update(
     store: GuardStore,
     generated_at: str,
 ) -> dict[str, object]:
+    status = build_guard_update_status_payload(guard_home=context.guard_home)
     update_payload, exit_code = run_guard_update(
         dry_run=False,
         context=context,
         store=store,
         workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
         now=generated_at,
+        include_alpha=status.get("release_channel") == "alpha",
     )
     return {
         "update": update_payload,
@@ -297,8 +299,9 @@ def _execute_app_update(
     }
 
 
-def _execute_app_update_check(generated_at: str) -> dict[str, object]:
-    return build_guard_update_status_payload()
+def _execute_app_update_check(*, context: HarnessContext, generated_at: str) -> dict[str, object]:
+    del generated_at
+    return build_guard_update_status_payload(guard_home=context.guard_home)
 
 
 def _execute_approval_operation(

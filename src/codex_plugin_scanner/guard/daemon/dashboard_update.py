@@ -227,6 +227,7 @@ def build_dashboard_update_runner_command(
     daemon_port: int,
     update_token: str,
     force_pypi_reinstall: bool = False,
+    include_alpha: bool = False,
 ) -> list[str]:
     if not update_token:
         raise ValueError("Guard dashboard update requires a non-empty reservation token.")
@@ -260,6 +261,8 @@ def build_dashboard_update_runner_command(
     )
     if force_pypi_reinstall:
         command.append("--force-pypi-reinstall")
+    if include_alpha:
+        command.append("--alpha")
     return command
 
 
@@ -347,6 +350,8 @@ def schedule_guard_dashboard_update(
     daemon_port: int,
     *,
     force_pypi_reinstall: bool = False,
+    include_alpha: bool = False,
+    status_payload: dict[str, object] | None = None,
 ) -> dict[str, object]:
     guard_home = guard_home.expanduser().resolve()
     if dashboard_update_in_progress(guard_home):
@@ -357,7 +362,7 @@ def schedule_guard_dashboard_update(
         }
     lock_path = dashboard_update_lock_path(guard_home)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    status_payload = build_guard_update_status_payload()
+    status_payload = status_payload or build_guard_update_status_payload()
     update_token = secrets.token_hex(32)
     reservation = {
         "token": update_token,
@@ -393,6 +398,7 @@ def schedule_guard_dashboard_update(
             daemon_port=daemon_port,
             update_token=update_token,
             force_pypi_reinstall=force_pypi_reinstall,
+            include_alpha=include_alpha,
         )
         popen_kwargs = build_dashboard_update_runner_popen_kwargs(guard_home)
         working_directory = popen_kwargs["cwd"]

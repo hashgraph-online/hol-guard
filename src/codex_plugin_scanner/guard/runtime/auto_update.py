@@ -40,7 +40,7 @@ def maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
             pass
     now_str = datetime.now(timezone.utc).isoformat()
     try:
-        status = build_guard_update_status_payload()
+        status = build_guard_update_status_payload(guard_home=context.guard_home)
     except Exception:
         _LOGGER.debug("Auto-update version check failed", exc_info=True)
         state["last_check_at"] = now_str
@@ -67,6 +67,7 @@ def maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
             store=store,
             workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
             now=now_str,
+            include_alpha=status.get("release_channel") == "alpha",
         )
         state["last_update_result"] = update_payload
         state["last_update_exit_code"] = exit_code

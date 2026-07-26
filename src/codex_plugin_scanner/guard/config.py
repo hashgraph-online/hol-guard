@@ -27,6 +27,7 @@ from .mdm.policy import apply_managed_policy, fail_closed_managed_policy, load_m
 from .models import GUARD_ACTION_VALUES, GuardAction, GuardMode
 
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
+VALID_UPDATE_CHANNELS = frozenset({"stable", "alpha"})
 LEGACY_GUARD_DIRNAMES = (".config/.ai-plugin-scanner-guard", ".ai-plugin-scanner-guard", ".holguard")
 NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset(
     {
@@ -212,6 +213,7 @@ EDITABLE_GUARD_SETTING_KEYS = frozenset(
         "approval_browser_delay_seconds",
         "approval_browser_immediate_severity",
         "desktop_notifications",
+        "update_channel",
         "telemetry",
         "sync",
         "billing",
@@ -312,6 +314,7 @@ class GuardConfig:
     approval_browser_delay_seconds: int = 20
     approval_browser_immediate_severity: str = "critical"
     desktop_notifications: bool = True
+    update_channel: str = "stable"
     telemetry: bool = False
     sync: bool = False
     receipt_redaction_level: str = "full"
@@ -451,6 +454,7 @@ def load_guard_config(
             merged.get("approval_browser_immediate_severity")
         ),
         desktop_notifications=_coerce_loaded_bool(merged.get("desktop_notifications", True)),
+        update_channel=_coerce_loaded_update_channel(merged.get("update_channel")),
         telemetry=bool(merged.get("telemetry", False)),
         sync=bool(merged.get("sync", False)),
         billing=bool(merged.get("billing", False)),
@@ -502,6 +506,7 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "approval_browser_delay_seconds": config.approval_browser_delay_seconds,
         "approval_browser_immediate_severity": config.approval_browser_immediate_severity,
         "desktop_notifications": config.desktop_notifications,
+        "update_channel": config.update_channel,
         "telemetry": config.telemetry,
         "sync": config.sync,
         "receipt_redaction_level": config.receipt_redaction_level,
@@ -555,6 +560,20 @@ def update_guard_settings(
     return load_guard_config(guard_home)
 
 
+def update_guard_update_channel(guard_home: Path, update_channel: object) -> GuardConfig:
+    """Persist the local release channel selected from the update surface."""
+
+    if not isinstance(update_channel, str) or update_channel not in VALID_UPDATE_CHANNELS:
+        raise ValueError("Update channel must be stable or alpha.")
+    current_config = load_guard_config(guard_home)
+    if "update_channel" in current_config.managed_locked_settings:
+        raise ValueError("Managed policy locks the update channel.")
+    current = _read_toml(guard_home / "config.toml")
+    current["update_channel"] = update_channel
+    _write_guard_config(guard_home / "config.toml", current)
+    return load_guard_config(guard_home)
+
+
 def reset_guard_settings(
     guard_home: Path,
     *,
@@ -604,6 +623,10 @@ def _coerce_editable_setting(key: str, value: object) -> object:
         if isinstance(value, bool):
             return value
         raise ValueError(f"{key} must be true or false.")
+    if key == "update_channel":
+        if isinstance(value, str) and value in VALID_UPDATE_CHANNELS:
+            return value
+        raise ValueError("Update channel must be stable or alpha.")
     if key == "receipt_redaction_level":
         if isinstance(value, str) and value in VALID_RECEIPT_REDACTION_LEVELS:
             return value
@@ -621,6 +644,10 @@ def _coerce_loaded_security_level(value: object) -> str:
     if isinstance(value, str) and value in VALID_SECURITY_LEVELS:
         return value
     return DEFAULT_SECURITY_LEVEL
+
+
+def _coerce_loaded_update_channel(value: object) -> str:
+    return value if isinstance(value, str) and value in VALID_UPDATE_CHANNELS else "stable"
 
 
 def _coerce_loaded_guard_mode(value: object, fallback: GuardMode) -> GuardMode:

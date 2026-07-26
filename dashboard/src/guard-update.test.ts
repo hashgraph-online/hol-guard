@@ -33,6 +33,25 @@ assert(normalized.installer === "pipx", "installer should normalize");
 assert(normalized.update_available === true, "update_available should normalize");
 assert(normalized.version_check.update_available === true, "version_check should normalize");
 assert(normalized.update_in_progress === true, "update_in_progress should normalize");
+assert(normalized.release_channel === "stable", "missing update channel should default to stable");
+
+const alphaMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: normalizeGuardUpdateStatus({
+      current_version: "1.2.3",
+      latest_version: "1.2.4a1",
+      installer: "pip",
+      version_check: { source: "pypi", status: "stale", current_version: "1.2.3", latest_version: "1.2.4a1", update_available: true },
+      auto_updatable: true,
+      update_available: true,
+      blocked_reason: null,
+      release_channel: "alpha",
+    }),
+    onSetUpdateChannel: () => undefined,
+  }),
+);
+assert(alphaMarkup.includes("Use alpha updates"), "sidebar should expose the alpha opt-in");
+assert(alphaMarkup.includes("Alpha releases may be unstable"), "alpha opt-in should include a risk disclaimer");
 
 const blocked = normalizeGuardUpdateStatus({
   auto_updatable: false,

@@ -176,6 +176,7 @@ export function ShellSidebar(props: {
   updateStatus?: GuardUpdateStatus | null;
   onUpdateGuard?: () => void;
   onReinstallGuard?: () => void;
+  onSetUpdateChannel?: (channel: "stable" | "alpha") => void;
   updatePhase?: GuardUpdatePhase;
   cloudUserProfile?: GuardCloudUserProfile | null;
   workspaceId?: string | null;
@@ -287,6 +288,7 @@ export function ShellSidebar(props: {
                   updatePhase={props.updatePhase}
                   onUpdateGuard={props.onUpdateGuard}
                   onReinstallGuard={props.onReinstallGuard}
+                  onSetUpdateChannel={props.onSetUpdateChannel}
                 />
               </div>
             </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import { HiMiniArrowPath } from "react-icons/hi2";
 
 import {
@@ -8,6 +9,7 @@ import {
   readGuardToken,
   redirectToGuardDaemonOrigin,
   scheduleGuardUpdate,
+  setGuardUpdateChannel,
 } from "./guard-api";
 import type {
   GuardDaemonReconnectAuthorization,
@@ -25,6 +27,7 @@ export type GuardUpdatePanelProps = {
   updatePhase?: GuardUpdatePhase;
   onUpdateGuard?: () => void;
   onReinstallGuard?: () => void;
+  onSetUpdateChannel?: (channel: "stable" | "alpha") => void;
   compact?: boolean;
 };
 
@@ -103,6 +106,13 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
     phase !== "reconnecting";
   const showReinstallButton = shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
+  const useAlpha = props.updateStatus?.release_channel === "alpha";
+  const handleAlphaChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      props.onSetUpdateChannel?.(event.target.checked ? "alpha" : "stable");
+    },
+    [props.onSetUpdateChannel],
+  );
 
   return (
     <div className={props.compact ? "space-y-1" : "space-y-2"}>
@@ -116,6 +126,21 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
       ) : null}
       {helpCopy ? (
         <p className="text-[11px] leading-relaxed text-brand-dark/70">{helpCopy}</p>
+      ) : null}
+      {props.updateStatus && props.onSetUpdateChannel ? (
+        <label className="flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-brand-dark/70">
+          <input
+            type="checkbox"
+            checked={useAlpha}
+            disabled={busy}
+            onChange={handleAlphaChange}
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-brand-blue focus:ring-brand-blue"
+          />
+          <span>
+            Use alpha updates
+            <span className="block text-brand-dark/55">Alpha releases may be unstable and can include unfinished changes.</span>
+          </span>
+        </label>
       ) : null}
       {showUpdateButton && props.onUpdateGuard ? (
         <button
@@ -313,12 +338,21 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
     });
   }, [scheduleAndWait, updateStatus]);
 
+  const onSetUpdateChannel = useCallback(async (channel: "stable" | "alpha") => {
+    try {
+      setUpdateStatus(await setGuardUpdateChannel(channel));
+    } catch {
+      setUpdatePhase("error");
+    }
+  }, []);
+
   return {
     guardVersion: updateStatus?.current_version ?? null,
     updateStatus,
     updatePhase,
     onUpdateGuard,
     onReinstallGuard,
+    onSetUpdateChannel,
     refreshUpdateStatus,
   };
 }

@@ -207,6 +207,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     updatePhase,
     onUpdateGuard,
     onReinstallGuard,
+    onSetUpdateChannel,
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
 
   return (
@@ -231,6 +232,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         updatePhase={updatePhase}
         onUpdateGuard={onUpdateGuard}
         onReinstallGuard={onReinstallGuard}
+        onSetUpdateChannel={onSetUpdateChannel}
         cloudUserProfile={
           props.runtime.kind === "ready"
             ? props.runtime.snapshot.cloud_user_profile

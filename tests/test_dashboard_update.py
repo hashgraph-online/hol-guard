@@ -18,6 +18,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.update_commands import build_guard_update_status_payload
+from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import dashboard_update as dashboard_update_module
 from codex_plugin_scanner.guard.daemon.dashboard_update import (
@@ -127,11 +128,35 @@ def test_build_guard_update_status_payload_shape(monkeypatch: pytest.MonkeyPatch
     assert payload["update_available"] is True
 
 
+def test_update_status_uses_persisted_alpha_channel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text('update_channel = "alpha"\n', encoding="utf-8")
+    seen: dict[str, object] = {}
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._version_check_payload",
+        lambda current_version, **kwargs: seen.update(kwargs)
+        or {
+            "source": "pypi",
+            "release_channel": "alpha",
+            "status": "stale",
+            "current_version": current_version,
+            "latest_version": "1.2.4a1",
+            "update_available": True,
+        },
+    )
+
+    payload = build_guard_update_status_payload(guard_home=guard_home)
+
+    assert payload["release_channel"] == "alpha"
+    assert seen["include_alpha"] is True
+
+
 def test_daemon_update_status_route(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
-        lambda: {
+        lambda **_kwargs: {
             "current_version": "9.9.9",
             "latest_version": "9.9.9",
             "installer": "pip",
@@ -175,7 +200,7 @@ def test_daemon_update_schedule_route(tmp_path: Path, monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
-        lambda: {
+        lambda **_kwargs: {
             "current_version": "1.0.0",
             "latest_version": "1.0.1",
             "installer": "pip",
@@ -210,11 +235,50 @@ def test_daemon_update_schedule_route(tmp_path: Path, monkeypatch: pytest.Monkey
     assert isinstance(scheduled["daemon_port"], int)
 
 
+def test_alpha_update_channel_persists_and_schedules_alpha(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _store(tmp_path)
+    scheduled: dict[str, object] = {}
+
+    def fake_status(*, guard_home: Path | None = None) -> dict[str, object]:
+        assert guard_home == store.guard_home
+        return {
+            "current_version": "1.0.0",
+            "latest_version": "1.1.0a1",
+            "installer": "pip",
+            "version_check": {"source": "pypi", "status": "stale", "update_available": True},
+            "auto_updatable": True,
+            "update_available": True,
+            "blocked_reason": None,
+            "release_channel": load_guard_config(store.guard_home).update_channel,
+        }
+
+    def fake_schedule(*_args: object, **kwargs: object) -> dict[str, object]:
+        scheduled.update(kwargs)
+        return {"scheduled": True, "message": "scheduled"}
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload", fake_status)
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update", fake_schedule)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _post_json_body(daemon, "/v1/update/channel", {"update_channel": "alpha"})
+        assert status == 200
+        assert payload["release_channel"] == "alpha"
+        status, payload = _post_json(daemon, "/v1/update")
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["scheduled"] is True
+    assert load_guard_config(store.guard_home).update_channel == "alpha"
+    assert scheduled["include_alpha"] is True
+
+
 def test_daemon_update_schedule_rejects_non_updatable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
-        lambda: {
+        lambda **_kwargs: {
             "current_version": "1.0.0",
             "latest_version": "1.0.0",
             "installer": "pip",
@@ -733,7 +797,7 @@ def test_merge_dashboard_update_progress_includes_lock_metadata(
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.dashboard_update.build_guard_update_status_payload",
-        lambda: {
+        lambda **_kwargs: {
             "current_version": "2.0.508",
             "latest_version": "2.0.509",
             "installer": "pipx",
@@ -1357,7 +1421,7 @@ def test_daemon_update_schedules_recovery_reinstall_for_local_folder(
 
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
-        lambda: {
+        lambda **_kwargs: {
             "current_version": "1.0.0",
             "latest_version": "1.0.0",
             "installer": "pipx",
@@ -1399,7 +1463,7 @@ def test_daemon_update_recovery_reinstall_rejected_for_editable(
     store = _store(tmp_path)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
-        lambda: {
+        lambda **_kwargs: {
             "current_version": "1.0.0",
             "latest_version": "1.0.0",
             "installer": "pipx",
@@ -1442,7 +1506,7 @@ def test_daemon_update_recovery_reinstall_rejected_when_python_incompatible(
     store = _store(tmp_path)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
-        lambda: {
+        lambda **_kwargs: {
             "current_version": "2.0.789",
             "latest_version": "2.0.807",
             "installer": "pipx",
@@ -1501,6 +1565,15 @@ def test_runner_command_appends_force_pypi_reinstall_flag(tmp_path: Path) -> Non
         update_token="a" * 64,
     )
     assert "--force-pypi-reinstall" not in command_without
+
+    alpha_command = build_dashboard_update_runner_command(
+        guard_home.resolve(),
+        daemon_pid=99,
+        daemon_port=1234,
+        update_token="a" * 64,
+        include_alpha=True,
+    )
+    assert "--alpha" in alpha_command
 
 
 def test_merge_dashboard_update_outcome_suppresses_repeat_update_button(tmp_path: Path) -> None:
