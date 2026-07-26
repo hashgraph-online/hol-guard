@@ -33,6 +33,7 @@ from .hook_content_scanner import ContentScanMatch, ContentScanner, should_unsup
 from .hook_decision_cache import HookDecisionCache, SourceReadCacheMaterial, hook_config_fingerprint
 from .hook_review_types import HookReviewRequest
 from .secret_sensitivity import classify_secret_path
+from .skill_paths import resolve_known_skill_doc_path
 from .source_paths import SOURCE_CLASSIFIER_VERSION, resolve_source_candidate_path, source_path_is_allowed
 
 if TYPE_CHECKING:
@@ -150,22 +151,26 @@ def evaluate_source_file_ref(
     #    a malformed source ref from pointing at a benign file while the
     #    actual tool read targeted a different file.
     candidate_path_str = source_ref.tool_input_path or source_ref.path or envelope.target_paths[0]
-    resolved_path = resolve_source_candidate_path(
-        candidate_path_str,
-        cwd=request.cwd,
-        home_dir=request.home_dir,
-    )
+    resolved_path = resolve_known_skill_doc_path(candidate_path_str, home_dir=request.home_dir)
+    if resolved_path is None:
+        resolved_path = resolve_source_candidate_path(
+            candidate_path_str,
+            cwd=request.cwd,
+            home_dir=request.home_dir,
+        )
     if resolved_path is None:
         return SourceReadFastPathResult(status="inconclusive", reason_code="unresolved_path")
 
     # Verify the source ref path matches the normalized envelope target.
     # Both must resolve to the same real path after symlink resolution.
     envelope_target_str = envelope.target_paths[0]
-    envelope_resolved = resolve_source_candidate_path(
-        envelope_target_str,
-        cwd=request.cwd,
-        home_dir=request.home_dir,
-    )
+    envelope_resolved = resolve_known_skill_doc_path(envelope_target_str, home_dir=request.home_dir)
+    if envelope_resolved is None:
+        envelope_resolved = resolve_source_candidate_path(
+            envelope_target_str,
+            cwd=request.cwd,
+            home_dir=request.home_dir,
+        )
     if envelope_resolved is None:
         return SourceReadFastPathResult(status="inconclusive", reason_code="unresolved_envelope_target")
 

@@ -21,6 +21,7 @@ from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_SENSITIVE_PARTS,
     target_is_known_skill_doc_path,
 )
+from .skill_paths import resolve_known_skill_doc_path
 
 SOURCE_CLASSIFIER_VERSION = "source-paths-v1"
 
@@ -199,7 +200,9 @@ def source_path_is_allowed(
         return SourcePathDecision(allowed=False, reason_code="empty_path")
 
     if target_is_known_skill_doc_path(stripped, home_dir=home_dir):
-        resolved = resolve_source_candidate_path(stripped, cwd=cwd, home_dir=home_dir)
+        resolved = resolve_known_skill_doc_path(stripped, home_dir=home_dir)
+        if resolved is None:
+            resolved = resolve_source_candidate_path(stripped, cwd=cwd, home_dir=home_dir)
         return SourcePathDecision(
             allowed=True,
             reason_code="known_skill_doc_path",
@@ -225,7 +228,7 @@ def source_path_is_allowed(
         # Check for symlinks BEFORE resolving — resolve() follows symlinks
         # and would hide them, making path_contains_symlink a no-op.
         try:
-            target_path.relative_to(base_dir)
+            _ = target_path.relative_to(base_dir)
         except ValueError:
             if not allow_external_source or not external_path_requested:
                 return SourcePathDecision(allowed=False, reason_code="absolute_path_outside_workspace")
@@ -252,7 +255,7 @@ def source_path_is_allowed(
             if not resolved_home_dir.is_dir():
                 return SourcePathDecision(allowed=False, reason_code="external_home_unavailable")
             try:
-                candidate.relative_to(resolved_home_dir)
+                _ = candidate.relative_to(resolved_home_dir)
             except ValueError:
                 return SourcePathDecision(allowed=False, reason_code="external_target_outside_home")
             if not _is_immediate_sibling_git_checkout_path(candidate, workspace_dir=base_dir):
