@@ -267,6 +267,24 @@ def test_normalize_codex_apply_patch_as_file_write(tmp_path: Path) -> None:
     assert envelope.target_paths == (patch_path,)
 
 
+def test_normalize_codex_apply_patch_command_extracts_patch_target_paths(tmp_path: Path) -> None:
+    patch = """*** Begin Patch
+*** Add File: docs/patch-notes.md
++Routine patch content.
+*** End Patch"""
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "apply_patch",
+        "tool_input": {"command": patch},
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "file_write"
+    assert envelope.command == patch
+    assert envelope.target_paths == ("docs/patch-notes.md",)
+
+
 def test_normalize_codex_prompt_payload_extracts_prompt_excerpt(tmp_path: Path) -> None:
     payload = {
         "hook_event_name": "UserPromptSubmit",

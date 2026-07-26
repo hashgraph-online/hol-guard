@@ -77,7 +77,7 @@ _COMMAND_KEYS = (
 )
 _EXPLICIT_COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
 _SEARCH_PATTERN_KEYS = ("pattern", "query", "search", "regex")
-_PATCH_INPUT_KEYS = ("patch", "input")
+_PATCH_INPUT_KEYS = ("patch", "input", "command")
 _PATCH_FILE_HEADER_PATTERN = re.compile(r"^\*\*\* (?:Add|Delete|Update) File: (?P<path>.+)$", re.MULTILINE)
 _SENSITIVE_RAW_KEYS = frozenset(
     {

@@ -8670,6 +8670,78 @@ def test_hook_runtime_artifact_prefers_raw_file_read_path_over_redacted_action_p
     assert artifact.metadata["normalized_path"] == str(outside_secret)
 
 
+def test_hook_runtime_artifact_allows_codex_apply_patch_command_for_source_file(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    patch = """*** Begin Patch
+*** Update File: src/example.py
+@@
++value = 1
+*** End Patch"""
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "apply_patch",
+        "tool_input": {"command": patch},
+        "source_scope": "project",
+    }
+    action = guard_commands_module._hook_action_envelope(
+        harness="codex",
+        payload=payload,
+        home_dir=home_dir,
+        workspace=workspace_dir,
+    )
+
+    artifact = guard_commands_module._hook_runtime_artifact(
+        harness="codex",
+        payload=payload,
+        action_envelope=action,
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+    )
+
+    assert action is not None
+    assert action.action_type == "file_write"
+    assert action.target_paths == ("src/example.py",)
+    assert artifact is None
+
+
+def test_hook_runtime_artifact_reviews_codex_apply_patch_command_for_protected_file(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    protected_path = home_dir / ("." + "codex") / "config.toml"
+    patch = f"""*** Begin Patch
+*** Update File: {protected_path}
+@@
++notify = true
+*** End Patch"""
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "apply_patch",
+        "tool_input": {"command": patch},
+        "source_scope": "project",
+    }
+    action = guard_commands_module._hook_action_envelope(
+        harness="codex",
+        payload=payload,
+        home_dir=home_dir,
+        workspace=workspace_dir,
+    )
+
+    artifact = guard_commands_module._hook_runtime_artifact(
+        harness="codex",
+        payload=payload,
+        action_envelope=action,
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+    )
+
+    assert artifact is not None
+    assert artifact.artifact_type == "tool_action_request"
+    assert artifact.metadata["path_class"] == "Codex config"
+
+
 def test_hook_runtime_artifact_routes_package_installs_to_package_request(tmp_path):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

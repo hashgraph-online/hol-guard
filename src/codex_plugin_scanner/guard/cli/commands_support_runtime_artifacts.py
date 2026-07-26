@@ -658,7 +658,7 @@ def _hook_runtime_artifact(
                 source_scope=source_scope,
             )
         )
-    if raw_command_text is not None:
+    if raw_command_text is not None and (action_envelope is None or action_envelope.action_type == "shell_command"):
         unmodeled_artifact = _unmodeled_shell_runtime_artifact(
             harness=harness,
             command_text=raw_command_text,

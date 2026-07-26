@@ -181,6 +181,26 @@ assert(
   "T481: resolveTerminalLabel returns 'File path' for file_read action type"
 );
 
+const applyPatchEnvelope: GuardActionEnvelope = {
+  ...BASE_ENVELOPE,
+  action_type: "file_write",
+  tool_name: "apply_patch",
+  command: "*** Begin Patch\n*** Update File: src/guard.py\n@@\n+value = 1\n*** End Patch",
+  target_paths: ["src/guard.py"]
+};
+const applyPatchRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  action_envelope_json: applyPatchEnvelope
+};
+assert(
+  resolveTerminalLabel(applyPatchRequest) === "Patch",
+  "T481: resolveTerminalLabel identifies native apply_patch actions as patches"
+);
+assert(
+  resolveEnvelopeDisplayText(applyPatchEnvelope) === applyPatchEnvelope.command,
+  "T481: resolveEnvelopeDisplayText preserves the redacted patch for native apply_patch actions"
+);
+
 const mcpRequest: GuardApprovalRequest = {
   ...BASE_REQUEST,
   action_envelope_json: { ...BASE_ENVELOPE, action_type: "mcp_tool", mcp_server: "my-server", mcp_tool: "fetch" }

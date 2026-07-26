@@ -14581,7 +14581,13 @@ function buildRetryAfterApprovalCopy(item, action) {
   }
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }
+function isApplyPatchEnvelope(envelope) {
+  return envelope.action_type === "file_write" && envelope.tool_name?.trim().toLowerCase() === "apply_patch" && envelope.command?.trim().startsWith("*** Begin Patch") === true;
+}
 function resolveEnvelopeDisplayText(envelope) {
+  if (isApplyPatchEnvelope(envelope) && envelope.command !== null && envelope.command.length > 0) {
+    return envelope.command;
+  }
   if (envelope.action_type === "shell_command" && envelope.command !== null && envelope.command.length > 0) {
     return envelope.command;
   }
@@ -14601,6 +14607,9 @@ function resolveEnvelopeDisplayText(envelope) {
   return envelope.action_type === "harness_start" ? null : envelope.action_type;
 }
 function resolveActionEnvelopeDetailText(envelope, options = {}) {
+  if (isApplyPatchEnvelope(envelope) && envelope.command !== null && envelope.command.length > 0) {
+    return envelope.command;
+  }
   if (envelope.action_type === "shell_command") {
     return envelope.command !== null && envelope.command.length > 0 ? envelope.command : null;
   }
@@ -14966,7 +14975,9 @@ function resolveFileReadPath(item) {
   return item.launch_target ?? null;
 }
 function resolveTerminalLabel(item) {
-  const actionType = item.action_envelope_json?.action_type;
+  const envelope = item.action_envelope_json;
+  if (envelope && isApplyPatchEnvelope(envelope)) return "Patch";
+  const actionType = envelope?.action_type;
   if (actionType === "shell_command") return "Command";
   if (actionType === "prompt") return "Prompt excerpt";
   if (actionType === "file_read" || actionType === "file_write") return "File path";

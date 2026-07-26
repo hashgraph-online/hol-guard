@@ -774,6 +774,26 @@ assert(
   "GR211-15: primary review card exposes shell command without opening technical details"
 );
 
+const PRIMARY_APPLY_PATCH_ACTION = buildPrimaryReviewAction({
+  ...BASE_REQUEST,
+  request_id: "ph09-primary-apply-patch",
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "file_write",
+    tool_name: "apply_patch",
+    command: "*** Begin Patch\n*** Update File: src/guard.py\n@@\n+value = 1\n*** End Patch",
+    target_paths: ["src/guard.py"],
+  },
+});
+assert(
+  PRIMARY_APPLY_PATCH_ACTION.label === "Patch",
+  "GR211-15: primary review card identifies native apply_patch actions as patches"
+);
+assert(
+  PRIMARY_APPLY_PATCH_ACTION.text.includes("*** Update File: src/guard.py"),
+  "GR211-15: primary review card exposes the redacted patch instead of only the tool name"
+);
+
 const EMPTY_COMMAND_WITH_LAUNCH_TARGET = {
   ...BASE_REQUEST,
   request_id: "ph09-empty-command",
