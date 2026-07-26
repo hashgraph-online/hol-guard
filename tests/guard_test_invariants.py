@@ -121,6 +121,27 @@ TEST_INVARIANTS: Final[tuple[TestInvariant, ...]] = (
         "Managed policy rejects an insecure machine-policy source.",
         ("security_critical", "regression", "policy", "release"),
     ),
+    TestInvariant(
+        "GUARD-INV-015",
+        "tests/test_guard_command_backup_extensions.py::test_backup_rules_feed_runtime_hooks",
+        "command-extension",
+        "Backup mutation variants remain reviewable through inspection and runtime enforcement.",
+        ("security_critical", "regression", "parser", "release"),
+    ),
+    TestInvariant(
+        "GUARD-INV-016",
+        "tests/test_guard_command_domain_extensions.py::test_domain_rules_feed_inspection_and_runtime_hooks",
+        "command-extension",
+        "Container, Kubernetes, and infrastructure mutation variants remain reviewable through both enforcement paths.",
+        ("security_critical", "regression", "parser", "release"),
+    ),
+    TestInvariant(
+        "GUARD-INV-017",
+        "tests/test_guard_command_database_extensions.py::test_database_rules_feed_runtime_hooks",
+        "command-extension",
+        "Database mutation variants remain reviewable through inspection and runtime enforcement.",
+        ("security_critical", "regression", "parser", "release"),
+    ),
 )
 
 
