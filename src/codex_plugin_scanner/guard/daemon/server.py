@@ -2647,7 +2647,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 workspace=self._optional_string(payload.get("workspace")),
                 reason=self._optional_string(payload.get("reason")),
                 return_queue_result=True,
-                resolve_scope_matches=False,
+                resolve_scope_matches=True,
                 approval_gate_input=approval_gate_input_from_mapping(payload),
                 persist_policy=persist_policy,
                 scope_contract_version=scope_contract_version,

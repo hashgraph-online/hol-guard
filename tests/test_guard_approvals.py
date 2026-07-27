@@ -2438,9 +2438,7 @@ class TestGuardApprovals:
 
     @pytest.mark.parametrize("action", ["approve", "block"])
     @pytest.mark.parametrize("scope", ["artifact", "workspace", "publisher", "harness", "global"])
-    def test_guard_daemon_resolution_route_accepts_all_scope_kinds_without_clearing_queue(
-        self, tmp_path, action, scope
-    ):
+    def test_guard_daemon_resolution_route_resolves_only_scope_covered_reviews(self, tmp_path, action, scope):
         store = GuardStore(tmp_path / "guard-home")
         workspace = tmp_path / "workspace"
         request_id = f"req-{action}-{scope}"
@@ -2514,9 +2512,13 @@ class TestGuardApprovals:
         assert payload["applied_scope"] == expected_scope
         assert payload["resolved_request"]["approval_url"] == "http://127.0.0.1/pending"
         assert payload["resolved_request"]["review_command"] == f"hol-guard approvals {action} {request_id}"
-        assert payload["remaining_pending_count"] == 1
-        assert payload["next_selectable_request_id"] == f"{request_id}-other"
-        assert store.get_approval_request(f"{request_id}-other")["status"] == "pending"
+        other_request_id = f"{request_id}-other"
+        resolves_publisher_match = action == "block" and scope == "publisher"
+        assert payload["remaining_pending_count"] == (0 if resolves_publisher_match else 1)
+        assert payload["next_selectable_request_id"] == (None if resolves_publisher_match else other_request_id)
+        assert store.get_approval_request(other_request_id)["status"] == (
+            "resolved" if resolves_publisher_match else "pending"
+        )
 
     def test_guard_daemon_approve_route_requires_auth_token(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

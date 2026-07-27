@@ -690,7 +690,7 @@ def test_broad_scope_resolution_keeps_other_reviews_pending(tmp_path: Path) -> N
     assert decisions == []
 
 
-def test_artifact_scope_resolution_keeps_same_artifact_review_pending(tmp_path: Path) -> None:
+def test_artifact_scope_resolution_removes_same_artifact_review_from_queue(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     shared_artifact = "codex:project:shared-tool"
     _populate(
@@ -714,10 +714,12 @@ def test_artifact_scope_resolution_keeps_same_artifact_review_pending(tmp_path: 
     finally:
         daemon.stop()
 
-    assert payload["remaining_pending_count"] == 2
+    assert payload["resolved_scope_ids"] == ["req-covered"]
+    assert payload["remaining_pending_count"] == 1
     assert payload["next_selectable_request_id"] == "req-unrelated"
-    assert payload.get("resolved_scope_ids") in (None, [])
-    assert store.get_approval_request("req-covered")["status"] == "pending"
+    assert store.get_approval_request("req-covered")["status"] == "resolved"
+    assert store.get_approval_request("req-covered")["resolution_action"] == "allow"
+    assert store.get_approval_request("req-unrelated")["status"] == "pending"
 
 
 def test_same_resolution_is_idempotent_and_different_resolution_conflicts(tmp_path: Path) -> None:
