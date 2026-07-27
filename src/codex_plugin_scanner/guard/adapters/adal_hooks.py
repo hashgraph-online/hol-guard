@@ -106,6 +106,18 @@ def adal_hook_should_block(*, policy_action: str, event_name: str) -> bool:
     return policy_action in _BLOCKING_ACTIONS and event_name in _BLOCKING_EVENTS
 
 
+def adal_hook_event_is_observation_only(event_name: str) -> bool:
+    """Return True when AdaL cannot prevent the action at this lifecycle event.
+
+    AdaL fires ``PostToolUse``, ``PostToolUseFailure``, ``PermissionRequest``, and
+    ``Stop`` after the action has already run, so Guard can record evidence there
+    but cannot reverse it. Only ``PreToolUse`` and ``UserPromptSubmit`` are
+    enforcement points.
+    """
+
+    return _canonical_adal_event_name(event_name) not in _BLOCKING_EVENTS
+
+
 def adal_hook_response_from_guard(
     *,
     policy_action: str,
@@ -159,6 +171,7 @@ def emit_adal_hook_response(
 
 
 __all__ = [
+    "adal_hook_event_is_observation_only",
     "adal_hook_response_from_guard",
     "adal_hook_should_block",
     "emit_adal_hook_response",

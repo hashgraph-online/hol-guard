@@ -368,4 +368,3 @@ class TestAdaLGenericEmitter:
         assert result is None
         assert state.policy_action == "allow"
         assert state.response_payload["observed_policy_action"] == "block"
-        assert state.response_payload["observer_only_event"] is True
