@@ -16,6 +16,7 @@ GitHubCommandCapability = Literal[
     "read_local",
     "read_remote",
     "propose_remote",
+    "routine_merge_remote",
     "write_local",
     "maintain_remote",
     "content_remote",
@@ -54,6 +55,7 @@ _CAPABILITY_ORDER: Final[tuple[GitHubCommandCapability, ...]] = (
     "read_local",
     "read_remote",
     "propose_remote",
+    "routine_merge_remote",
     "write_local",
     "maintain_remote",
     "content_remote",
@@ -74,6 +76,7 @@ _CAPABILITY_FLOOR: Final[MappingProxyType[GitHubCommandCapability, GuardAction]]
         "read_local": "allow",
         "read_remote": "allow",
         "propose_remote": "allow",
+        "routine_merge_remote": "allow",
         "write_local": "review",
         "maintain_remote": "review",
         "content_remote": "review",
@@ -103,6 +106,10 @@ def _contract(
     prompt_free = rule_suffix is None
     if capability == "propose_remote":
         description = "Creates a pull-request proposal without merging it or changing repository controls."
+    elif capability == "routine_merge_remote":
+        description = (
+            "Completes a statically bounded squash pull-request merge without privileged or destructive options."
+        )
     else:
         description = (
             f"Reads {title.lower()} without changing state."
@@ -139,6 +146,13 @@ _CONTRACTS: Final = MappingProxyType(
             _contract("read_local", "read-local", None, None, "local GitHub state"),
             _contract("read_remote", "read-remote", None, None, "remote GitHub state"),
             _contract("propose_remote", "propose-remote", None, None, "pull-request proposal"),
+            _contract(
+                "routine_merge_remote",
+                "routine-merge-remote",
+                None,
+                None,
+                "routine squash pull-request merge",
+            ),
             _contract(
                 "write_local",
                 "write-local",

@@ -7,7 +7,7 @@ from codex_plugin_scanner.guard.runtime.github_command_capabilities import class
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
 PR_MERGE_ADMIN_CAPABILITY_CASES: tuple[tuple[str, tuple[str, ...], tuple[GitHubCommandCapability, ...]], ...] = (
-    ("admin-001", ("pr", "merge", "123", "--squash"), ("merge_remote",)),
+    ("admin-001", ("pr", "merge", "123", "--squash"), ("routine_merge_remote",)),
     ("admin-002", ("pr", "merge", "123", "--admin"), ("admin_merge_remote",)),
     ("admin-003", ("pr", "merge", "123", "--admin", "--delete-branch"), ("admin_merge_remote", "delete_remote")),
     ("admin-004", ("pr", "merge", "123", "--admin=true"), ("admin_merge_remote",)),
@@ -17,6 +17,10 @@ PR_MERGE_ADMIN_CAPABILITY_CASES: tuple[tuple[str, tuple[str, ...], tuple[GitHubC
     ("admin-008", ("pr", "merge", "123", "--admin=maybe"), ("unknown",)),
     ("admin-009", ("pr", "merge", "123", "--adminx"), ("merge_remote",)),
     ("admin-010", ("pr", "merge", "123", "--", "--admin"), ("merge_remote",)),
+    ("routine-001", ("pr", "merge", "0", "--squash"), ("merge_remote",)),
+    ("routine-002", ("pr", "merge", "123", "--squash", "--auto"), ("merge_remote",)),
+    ("routine-003", ("pr", "merge", "123", "--squash", "--delete-branch"), ("merge_remote", "delete_remote")),
+    ("routine-004", ("pr", "merge", "$PR", "--squash"), ("merge_remote",)),
 )
 
 
