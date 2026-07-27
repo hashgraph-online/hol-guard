@@ -2514,6 +2514,7 @@ class TestGuardApprovals:
         assert payload["resolved_request"]["review_command"] == f"hol-guard approvals {action} {request_id}"
         other_request_id = f"{request_id}-other"
         resolves_publisher_match = action == "block" and scope == "publisher"
+        assert payload.get("resolved_scope_ids", []) == ([other_request_id] if resolves_publisher_match else [])
         assert payload["remaining_pending_count"] == (0 if resolves_publisher_match else 1)
         assert payload["next_selectable_request_id"] == (None if resolves_publisher_match else other_request_id)
         assert store.get_approval_request(other_request_id)["status"] == (
