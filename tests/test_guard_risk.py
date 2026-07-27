@@ -1504,6 +1504,21 @@ def test_tool_action_request_classifier_allows_static_inline_gh_pr_create_compou
     assert request is None
 
 
+def test_tool_action_request_classifier_allows_literal_markdown_pr_body_with_code_spans() -> None:
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "gh pr create --title 'fix(guard): preserve static PR metadata' "
+                "--body '## Verification\n- `uv run --no-sync pytest -q`\n```typescript\nconst ready = true;\n```' "
+                "--base main"
+            )
+        },
+    )
+
+    assert request is None
+
+
 @pytest.mark.parametrize(
     "command",
     (
