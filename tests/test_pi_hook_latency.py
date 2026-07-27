@@ -238,10 +238,10 @@ def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path)
 
     assert "const GUARD_TIMEOUT_MS = 4250;" in source
     assert "const GUARD_DEADLINE_RESERVE_MS = 250;" in source
-    assert "const GUARD_DAEMON_TIMEOUT_MS = 3100;" in source
+    assert "const GUARD_DAEMON_TIMEOUT_MS = 2500;" in source
     assert "const GUARD_DAEMON_RECOVERY_TIMEOUT_MS = 250;" in source
     assert "const GUARD_DAEMON_RETRY_TIMEOUT_MS = 150;" in source
-    assert "const GUARD_CLI_TIMEOUT_MS = 300;" in source
+    assert "const GUARD_CLI_TIMEOUT_MS = 900;" in source
     assert 'const GUARD_ARGS = ["hook", "--json"' in source
     assert "compatibility_version !== GUARD_COMPATIBILITY_VERSION" in source
     assert "error.name === 'AbortError'" in source
@@ -283,6 +283,7 @@ def test_pi_hook_deadline_stays_inside_host_timeout() -> None:
     )
 
     assert pi_hook_host_timeout_ms > GUARD_HOOK_TIMEOUT_MS
+    assert GUARD_CLI_HOOK_TIMEOUT_MS > 750
     assert (
         GUARD_DAEMON_HOOK_TIMEOUT_MS
         + GUARD_DAEMON_RECOVERY_TIMEOUT_MS
