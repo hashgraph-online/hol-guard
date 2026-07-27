@@ -1,0 +1,11 @@
+{
+  "hook_event_name": "PreToolUse",
+  "session_id": "session-redacted-001",
+  "cwd": "<workspace>",
+  "workspace_root": "<workspace>",
+  "tool_name": "bash",
+  "tool_input": {
+    "command": "npm install left-pad"
+  },
+  "timestamp": "2026-07-24T12:00:00Z"
+}

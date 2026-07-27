@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.adal_hooks import (
+    adal_hook_event_is_observation_only,
     adal_hook_response_from_guard,
     adal_hook_should_block,
     emit_adal_hook_response,
@@ -148,3 +149,42 @@ class TestAdaLHookResponses:
         )
         assert stream.getvalue().endswith("\n")
         assert json.loads(stream.getvalue()) == {"hookSpecificOutput": {"hookEventName": "Stop"}}
+
+
+def _fixture(name: str) -> dict[str, object]:
+    payload = json.loads((Path(__file__).parent / "fixtures" / "adal" / name).read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+class TestAdaLHookFixtures:
+    """Recorded AdaL stdin payloads normalize into Guard's shared hook shape."""
+
+    def test_pretooluse_bash_fixture_normalizes_shell_action(self) -> None:
+        normalized = prepare_adal_hook_payload(_fixture("pretooluse_bash.json"))
+
+        assert normalized["hook_event_name"] == "PreToolUse"
+        assert normalized["tool_name"] == "Bash"
+        assert normalized["tool_input"] == {"command": "npm install left-pad"}
+        assert normalized["session_id"] == "session-redacted-001"
+
+    def test_pretooluse_mcp_fixture_preserves_mcp_tool_identity(self) -> None:
+        normalized = prepare_adal_hook_payload(_fixture("pretooluse_mcp.json"))
+
+        assert normalized["hook_event_name"] == "PreToolUse"
+        assert normalized["tool_name"] == "mcp__my-server__exec"
+        assert adal_hook_should_block(policy_action="block", event_name="PreToolUse") is True
+
+    def test_user_prompt_submit_fixture_is_an_enforcement_event(self) -> None:
+        normalized = prepare_adal_hook_payload(_fixture("user_prompt_submit.json"))
+
+        assert normalized["hook_event_name"] == "UserPromptSubmit"
+        assert adal_hook_event_is_observation_only(str(normalized["hook_event_name"])) is False
+
+    def test_posttooluse_fixture_is_observation_only(self) -> None:
+        normalized = prepare_adal_hook_payload(_fixture("posttooluse_observation.json"))
+
+        assert normalized["hook_event_name"] == "PostToolUse"
+        assert normalized["tool_name"] == "Read"
+        assert adal_hook_event_is_observation_only(str(normalized["hook_event_name"])) is True
+        assert adal_hook_should_block(policy_action="block", event_name="PostToolUse") is False

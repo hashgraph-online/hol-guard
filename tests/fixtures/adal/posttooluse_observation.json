@@ -1,0 +1,14 @@
+{
+  "hook_event_name": "PostToolUse",
+  "session_id": "session-redacted-004",
+  "cwd": "<workspace>",
+  "workspace_root": "<workspace>",
+  "tool_name": "read_file",
+  "tool_input": {
+    "file_path": "README.md"
+  },
+  "tool_response": {
+    "output": "# Example project\n"
+  },
+  "timestamp": "2026-07-24T12:00:03Z"
+}
