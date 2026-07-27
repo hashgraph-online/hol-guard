@@ -45,7 +45,7 @@ def test_omp_post_tool_read_burst_uses_resident_scanner(
     source_refs: list[dict[str, object]] = []
     for index in range(24):
         source_path = workspace / f"routine-{index}.md"
-        source_path.write_text(safe_output, encoding="utf-8")
+        _ = source_path.write_text(safe_output, encoding="utf-8")
         source_refs.append(
             {
                 "version": 1,
@@ -92,3 +92,71 @@ def test_omp_post_tool_read_burst_uses_resident_scanner(
     assert all(result.get("reason_code") == "source_full_scan_allow" for result in results)
     assert worker_stats["timeouts"] == 0
     assert worker_stats["restarts"] == 0
+
+
+def test_omp_source_search_identifiers_do_not_trigger_output_secret_review(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(parents=True)
+    store = GuardStore(home_dir)
+    monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "1")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    query = urllib.parse.urlencode(
+        {
+            "guard-home": str(home_dir),
+            "home": str(home_dir),
+            "workspace": str(workspace),
+        }
+    )
+    endpoint = f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?{query}"
+
+    def review(output: str) -> dict[str, object]:
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(
+                {
+                    "hook_event_name": "PostToolUse",
+                    "tool_call_id": "omp-source-search",
+                    "tool_name": "Grep",
+                    "tool_input": {
+                        "pattern": "rawCommand|redactedCommand|token",
+                        "path": "src",
+                    },
+                    "tool_response": output,
+                }
+            ).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "X-Guard-Token": daemon._server.auth_token,  # pyright: ignore[reportPrivateUsage]
+            },
+            method="POST",
+        )
+        with cast(HTTPResponse, urllib.request.urlopen(request, timeout=3)) as response:
+            result = cast(object, json.loads(response.read()))
+        assert _is_string_object_dict(result)
+        return result
+
+    try:
+        clean = review(
+            "\n".join(
+                (
+                    "src/command.ts: const candidates = [row.redactedCommand, row.rawCommand];",
+                    "src/types.ts: readonly redactionState: string;",
+                    "",
+                )
+            )
+        )
+        secret = review("src/config.ts: auth_token = 'live-secret-value-1234567890'\n")
+    finally:
+        daemon.stop()
+
+    assert clean["decision"] == "allow"
+    assert clean["model_output_action"] == "allow_original"
+    assert clean["reason_code"] == "output_scan_allow"
+    assert secret["decision"] == "deny"
+    assert secret["model_output_action"] == "block"
+    assert secret["reason_code"] == "output_secret_match"
