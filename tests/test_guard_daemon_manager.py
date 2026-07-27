@@ -176,6 +176,7 @@ def test_schedule_guard_daemon_ensure_is_reserved_and_nonblocking(
     assert kwargs["stdin"] == daemon_manager_module.subprocess.DEVNULL
     assert kwargs["stdout"] == daemon_manager_module.subprocess.DEVNULL
     assert kwargs["stderr"] == daemon_manager_module.subprocess.DEVNULL
+    assert kwargs["cwd"] == tmp_path
     assert kwargs.get("start_new_session") is (os.name != "nt")
 
 
@@ -1316,6 +1317,7 @@ def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, m
     responses = iter((None, None, "http://127.0.0.1:5412"))
     captured_command: list[str] = []
     captured_env: dict[str, str] = {}
+    captured_cwd: list[Path] = []
 
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
@@ -1326,6 +1328,7 @@ def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, m
     def fake_popen(command, **kwargs):
         captured_command.extend(command)
         captured_env.update(kwargs.get("env", {}))
+        captured_cwd.append(kwargs["cwd"])
         return SimpleNamespace(poll=lambda: None)
 
     monkeypatch.setenv("PYTHONPATH", str(tmp_path / "poisoned-pythonpath"))
@@ -1351,6 +1354,7 @@ def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, m
     assert captured_command[bootstrap_index + 4] == "codex_plugin_scanner.cli"
     assert captured_command[captured_command.index("--home") + 1] == str(home_dir.resolve())
     assert captured_env["HOME"] == str(home_dir.resolve())
+    assert captured_cwd == [home_dir.resolve()]
     if os.name == "nt":
         assert captured_env["USERPROFILE"] == str(home_dir.resolve())
     rendered_command = daemon_manager_module.shlex.join(captured_command)

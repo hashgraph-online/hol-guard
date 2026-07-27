@@ -224,7 +224,9 @@ def test_main_posts_to_authenticated_daemon(
     proxy_thread.start()
     port = daemon.server_address[1]
     _write_authenticated_daemon_files(guard_home, port)
-    _DaemonHandler.response_body = b'{"hookSpecificOutput":{"hookEventName":"PreToolUse"}}'
+    _DaemonHandler.response_body = (
+        b'{"hookSpecificOutput":{"hookEventName":"PreToolUse"},"reason_code":"daemon_hook_queue_capacity"}'
+    )
     _ProxyHandler.captured_paths = []
     monkeypatch.setenv("HTTP_PROXY", f"http://127.0.0.1:{proxy.server_address[1]}")
     monkeypatch.setenv("http_proxy", f"http://127.0.0.1:{proxy.server_address[1]}")
@@ -603,6 +605,34 @@ def test_main_starts_daemon_once_then_retries_hook(
     assert len(responses) == 2
     assert starts == [tuple(config["start_command"])]
     assert json.loads(capsys.readouterr().out) == {}
+
+    fallback_calls: list[str] = []
+    monkeypatch.setattr(
+        bridge,
+        "_daemon_response",
+        lambda **_kwargs: {
+            "continue": False,
+            "stopReason": "isolated review failed",
+            "systemMessage": "isolated review failed",
+            "reason_code": "daemon_hook_process_failed",
+        },
+    )
+    monkeypatch.setattr(
+        bridge,
+        "_run_local_fallback",
+        lambda _command, *, data, timeout_seconds: (
+            fallback_calls.append(data) or {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
+        ),
+    )
+    prompt = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Reassess the current implementation.",
+    }
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(prompt)))
+
+    assert bridge.main(**config) == 0
+    assert fallback_calls == [json.dumps(prompt)]
+    assert json.loads(capsys.readouterr().out) == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
 
 
 def test_authenticated_overload_fails_closed_without_fallback_or_restart(

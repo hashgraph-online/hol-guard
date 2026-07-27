@@ -501,6 +501,15 @@ def _daemon_response(
         connection.close()
 
 
+def _daemon_process_failed(response: Mapping[str, object]) -> bool:
+    reason_code = response.get("reason_code")
+    return isinstance(reason_code, str) and reason_code.startswith("daemon_hook_process_")
+
+
+def _codex_hook_response(response: Mapping[str, object]) -> dict[str, object]:
+    return {key: value for key, value in response.items() if key != "reason_code"}
+
+
 def main(
     *,
     state_path: str | Path,
@@ -587,6 +596,8 @@ def main(
                 )
             except (OSError, ValueError, http.client.HTTPException, urllib.error.URLError):
                 response = None
+    if response is not None and _daemon_process_failed(response):
+        response = None
     if response is None and not daemon_overloaded:
         if trusted_launch is not None:
             fallback_stdout = trusted_launch.run_fallback(
@@ -611,7 +622,7 @@ def main(
             else _FAIL_CLOSED_REASON
         )
         response = _fail_closed(event_name, failure_reason)
-    sys.stdout.write(json.dumps(response, separators=(",", ":")))
+    sys.stdout.write(json.dumps(_codex_hook_response(response), separators=(",", ":")))
     return 0
 
 

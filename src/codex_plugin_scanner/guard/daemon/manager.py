@@ -310,6 +310,7 @@ def ensure_guard_daemon(
 ) -> str:
     timeout = GUARD_DAEMON_START_TIMEOUT_SECONDS if start_timeout is None else start_timeout
     start_deadline = time.monotonic() + max(0.0, timeout)
+    launch_cwd = _trusted_daemon_home(home_dir)
     _schedule_stale_ephemeral_guard_daemon_reap(exclude_guard_home=guard_home)
     state_path = _state_path(guard_home)
     existing_url = load_guard_daemon_url(guard_home)
@@ -382,6 +383,7 @@ def ensure_guard_daemon(
                     stdin=subprocess.PIPE,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    cwd=launch_cwd,
                     env=_daemon_launcher_env(home_dir=home_dir, guard_home=guard_home),
                     creationflags=_windows_daemon_creation_flags(
                         allow_job_breakaway=allow_windows_job_breakaway,
@@ -393,6 +395,7 @@ def ensure_guard_daemon(
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    cwd=launch_cwd,
                     env=_daemon_launcher_env(home_dir=home_dir, guard_home=guard_home),
                     start_new_session=True,
                 )
@@ -783,6 +786,7 @@ def schedule_guard_daemon_ensure(
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                cwd=trusted_home,
                 env=launcher_env,
                 creationflags=_windows_daemon_creation_flags(allow_job_breakaway=False),
             )
@@ -792,6 +796,7 @@ def schedule_guard_daemon_ensure(
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                cwd=trusted_home,
                 env=launcher_env,
                 start_new_session=True,
             )
