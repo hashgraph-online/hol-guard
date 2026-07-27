@@ -2031,7 +2031,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 merge_dashboard_update_progress(
                     store.guard_home,
                     build_guard_update_status_payload(guard_home=store.guard_home),
-                )
+                ),
+                extra_headers={"Cache-Control": "no-store, max-age=0"},
             )
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
@@ -4790,7 +4791,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"error": "invalid_update_channel", "message": str(error)}, status=400)
             return
-        self._write_json(build_guard_update_status_payload(guard_home=guard_home))
+        self._write_json(
+            build_guard_update_status_payload(guard_home=guard_home),
+            extra_headers={"Cache-Control": "no-store, max-age=0"},
+        )
 
     def _handle_settings_import(self, payload: dict[str, object]) -> None:
         settings = payload.get("settings")

@@ -61,6 +61,19 @@ def _get_json(daemon: GuardDaemonServer, path: str) -> dict[str, object]:
     return payload
 
 
+def _get_json_with_headers(daemon: GuardDaemonServer, path: str) -> tuple[dict[str, object], dict[str, str]]:
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{daemon.port}{path}",
+        headers={"X-Guard-Token": daemon._server.auth_token},
+        method="GET",
+    )
+    with urllib.request.urlopen(request, timeout=5) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+        headers = dict(response.headers.items())
+    assert isinstance(payload, dict)
+    return payload, headers
+
+
 def _post_json(daemon: GuardDaemonServer, path: str) -> tuple[int, dict[str, object]]:
     request = urllib.request.Request(
         f"http://127.0.0.1:{daemon.port}{path}",
@@ -267,6 +280,7 @@ def test_alpha_update_channel_persists_and_schedules_alpha(tmp_path: Path, monke
         status, payload = _post_json_body(daemon, "/v1/update/channel", {"update_channel": "alpha"})
         assert status == 200
         assert payload["release_channel"] == "alpha"
+        refreshed_payload, refreshed_headers = _get_json_with_headers(daemon, "/v1/update/status")
         status, payload = _post_json(daemon, "/v1/update")
     finally:
         daemon.stop()
@@ -274,6 +288,8 @@ def test_alpha_update_channel_persists_and_schedules_alpha(tmp_path: Path, monke
     assert status == 200
     assert payload["scheduled"] is True
     assert load_guard_config(store.guard_home).update_channel == "alpha"
+    assert refreshed_payload["release_channel"] == "alpha"
+    assert refreshed_headers["Cache-Control"] == "no-store, max-age=0"
     assert scheduled["include_alpha"] is True
 
 

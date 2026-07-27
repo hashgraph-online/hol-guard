@@ -762,6 +762,7 @@ export async function fetchGuardUpdateStatusAtOrigin(
   }
   const { response, payload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/v1/update/status`, {
     headers: guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {},
+    cache: "no-store",
     redirect: "error",
   });
   if (!response.ok) {
@@ -3145,7 +3146,7 @@ export async function fetchGuardUpdateStatus(): Promise<GuardUpdateStatus> {
       blocked_reason: null,
     });
   }
-  const payload = await readJson<unknown>("/v1/update/status");
+  const payload = await readJson<unknown>("/v1/update/status", { cache: "no-store" });
   return normalizeGuardUpdateStatus(payload);
 }
 
