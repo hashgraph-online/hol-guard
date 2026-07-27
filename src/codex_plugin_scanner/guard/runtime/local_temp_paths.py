@@ -15,6 +15,8 @@ def trusted_temporary_root_for_path(candidate: Path) -> Path | None:
     roots = [Path(tempfile.gettempdir())]
     if os.name == "posix":
         roots.extend((Path("/tmp"), Path("/var/tmp")))
+    if sys.platform == "darwin":
+        roots.extend((Path("/private/tmp"), Path("/private/var/tmp")))
     for root in roots:
         try:
             resolved_root = root.resolve(strict=True)
@@ -36,6 +38,8 @@ def _is_lexically_temporary_path(candidate: Path) -> bool:
     roots = [Path(tempfile.gettempdir())]
     if os.name == "posix":
         roots.extend((Path("/tmp"), Path("/var/tmp")))
+    if sys.platform == "darwin":
+        roots.extend((Path("/private/tmp"), Path("/private/var/tmp")))
     if any(candidate.is_relative_to(root) for root in roots if root.is_absolute()):
         return True
     return _darwin_user_temporary_root(candidate) is not None
