@@ -1367,7 +1367,14 @@ class TestGuardSurfaceServer:
             "transaction_ms",
             "commit_ms",
         }
-        assert health["sqlite_migration_gate"]["conclusion"] == "insufficient_end_to_end_profile"
+        migration_gate = health["sqlite_migration_gate"]
+        assert migration_gate["store_wait_gate_tripped"] is None
+        expected_conclusion = (
+            "sqlite_migration_evaluation_required"
+            if migration_gate["busy_locked_gate_tripped"]
+            else "insufficient_end_to_end_profile"
+        )
+        assert migration_gate["conclusion"] == expected_conclusion
         assert health["hook_evidence_writer"]["degraded"] is False
 
     def test_guard_daemon_queues_hook_burst_until_active_review_completes(
