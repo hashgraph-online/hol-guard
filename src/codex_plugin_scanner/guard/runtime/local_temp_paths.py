@@ -7,6 +7,10 @@ from pathlib import Path
 
 
 def trusted_temporary_root_for_path(candidate: Path) -> Path | None:
+    if not _is_lexically_temporary_path(candidate):
+        return None
+    # codeql[py/path-injection] The candidate is absolute, traversal-free, and lexically
+    # contained by an OS temporary root; resolution below also prevents symlink escapes.
     resolved_candidate = candidate.resolve(strict=True)
     roots = [Path(tempfile.gettempdir())]
     if os.name == "posix":
@@ -23,6 +27,18 @@ def trusted_temporary_root_for_path(candidate: Path) -> Path | None:
     if darwin_root is None or not _owned_by_current_user(darwin_root):
         return None
     return darwin_root
+
+
+def _is_lexically_temporary_path(candidate: Path) -> bool:
+    if not candidate.is_absolute() or ".." in candidate.parts:
+        return False
+
+    roots = [Path(tempfile.gettempdir())]
+    if os.name == "posix":
+        roots.extend((Path("/tmp"), Path("/var/tmp")))
+    if any(candidate.is_relative_to(root) for root in roots if root.is_absolute()):
+        return True
+    return _darwin_user_temporary_root(candidate) is not None
 
 
 def _darwin_user_temporary_root(candidate: Path) -> Path | None:
