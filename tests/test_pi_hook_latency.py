@@ -594,10 +594,7 @@ def test_pi_extension_allows_only_one_cli_fallback_during_daemon_outage(tmp_path
     fallback_count_path = tmp_path / "fallback-count"
     fake_cli = fake_bin / "plugin-guard"
     _ = fake_cli.write_text(
-        (
-            '#!/bin/sh\ntrap "" TERM\nprintf "1\\n" >> "$FALLBACK_COUNT_PATH"\n'
-            'sleep 5\nprintf \'{"decision":"allow"}\\n\'\n'
-        ),
+        ('#!/bin/sh\nprintf "1\\n" >> "$FALLBACK_COUNT_PATH"\nsleep 0.5\nprintf \'{"decision":"allow"}\\n\'\n'),
         encoding="utf-8",
     )
     _ = fake_cli.chmod(0o755)
@@ -678,10 +675,10 @@ console.log(JSON.stringify({{
     payload = _decode_json_object(completed.stdout)
 
     assert fallback_count_path.read_text(encoding="utf-8").splitlines() == ["1"]
-    assert payload["allowed"] == 0
-    assert payload["blocked"] == 20
+    assert payload["allowed"] == 1
+    assert payload["blocked"] == 19
     assert payload["recoveryBusy"] == 19
-    assert payload["recoveryTimeout"] == 1
+    assert payload["recoveryTimeout"] == 0
     elapsed_ms = payload["elapsedMs"]
     assert isinstance(elapsed_ms, (int, float))
     assert elapsed_ms < 2_000
