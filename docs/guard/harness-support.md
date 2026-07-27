@@ -77,12 +77,6 @@ Current Guard support in this repo:
   - blocks newly introduced OpenCode MCP, plugin, and skill artifacts before launch when local Guard policy requires
     approval
   - native shell and managed MCP package-manager calls now share the same package-request evaluator, evidence fields, and approval-center copy
-- `adal`
-  - detects `~/.adal/settings.json` and inventories configured command hooks
-  - installs Guard-managed hooks for AdaL's six lifecycle events without replacing user settings or pre-existing hooks
-  - uses the exact AdaL hook contract: command handlers with inline arguments, `matcher: "*"` for tool-scoped events, and a 30-second timeout
-  - blocks `PreToolUse` with `hookSpecificOutput.permissionDecision: "deny"` and blocks `UserPromptSubmit` with a top-level `decision: "block"` response
-  - treats `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, and `Stop` as observational because AdaL cannot reverse the completed action at those stages
 - `kimi`
   - detects `~/.kimi-code/config.toml` and workspace `.kimi-code/config.toml`
   - detects `~/.kimi-code/mcp.json` MCP server registrations
@@ -111,6 +105,12 @@ Current Guard support in this repo:
   - installs Guard-managed `PreToolUse` and `UserPromptSubmit` hooks in the `hooks` section of `~/.zcode/cli/config.json` without touching user `mcp`, `plugins`, or pre-existing hooks
   - blocks by returning exit code `2` and ZCode-native stdout JSON `hookSpecificOutput.permissionDecision: "deny"` with approval-center copy in stderr
   - fails open if a hook crashes or times out, so ZCode keeps working when Guard is unreachable
+- `adal`
+  - detects `~/.adal/settings.json` and inventories configured command hooks
+  - installs Guard-managed hooks for AdaL's six lifecycle events without replacing user settings or pre-existing hooks
+  - uses the exact AdaL hook contract: command handlers with inline arguments, `matcher: "*"` for tool-scoped events, and a 30-second timeout
+  - blocks `PreToolUse` with `hookSpecificOutput.permissionDecision: "deny"` and blocks `UserPromptSubmit` with a top-level `decision: "block"` response
+  - treats `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, and `Stop` as observational because AdaL cannot reverse the completed action at those stages
 
 Gemini, Antigravity, and shared Codex/AIBOM skill discovery bind approval and
 inventory identity to the complete accepted skill directory rather than only
@@ -166,7 +166,6 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 
 | Harness | Install Aliases | Native Approval | Browser Fallback | Resume | Event Surfaces |
 |---------|-----------------|-----------------|------------------|--------|----------------|
-| `adal` | `adal`, `adal-cli` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read, tool_result |
 | `codex` | `codex` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `claude-code` | `claude-code`, `claude` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `opencode` | `opencode` | ❌ | ✅ | ❌ | shell, mcp_tool |
@@ -180,3 +179,4 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `grok` | `grok`, `grok-build`, `grok-build-cli`, `xai-grok` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |
 | `pi` | `pi`, `pi-agent`, `pi-coding-agent`, `omp`, `oh-my-pi` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `zcode` | `zcode`, `zai`, `z-code`, `zai-zcode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |
+| `adal` | `adal`, `adal-cli` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read, tool_result |

@@ -63,7 +63,6 @@ InventoryConfidence = Literal["high", "medium", "low", "unknown"]
 InventoryDriftState = Literal["new", "changed", "removed", "unchanged"]
 DockerProofStatus = Literal["passed", "failed", "skipped", "stale"]
 AgentInventoryType = Literal[
-    "adal",
     "hermes",
     "openclaw",
     "codex",
@@ -76,9 +75,9 @@ AgentInventoryType = Literal[
     "grok",
     "pi",
     "zcode",
+    "adal",
 ]
 _AGENT_INVENTORY_TYPES: tuple[AgentInventoryType, ...] = (
-    "adal",
     "hermes",
     "openclaw",
     "codex",
@@ -91,6 +90,7 @@ _AGENT_INVENTORY_TYPES: tuple[AgentInventoryType, ...] = (
     "grok",
     "pi",
     "zcode",
+    "adal",
 )
 
 _SENSITIVE_KEY_RE = re.compile(
