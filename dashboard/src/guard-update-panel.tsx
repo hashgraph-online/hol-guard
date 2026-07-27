@@ -262,13 +262,21 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
   const updateStatusEpoch = useRef(0);
   const channelMutationId = useRef(0);
   const channelMutationPending = useRef(false);
+  const isMounted = useRef(false);
 
   useEffect(() => {
     updatePhaseRef.current = updatePhase;
   }, [updatePhase]);
 
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
   const refreshUpdateStatus = useCallback(async () => {
-    if (!enabled) {
+    if (!enabled || !isMounted.current || channelMutationPending.current) {
       return;
     }
     const epoch = updateStatusEpoch.current;
@@ -276,6 +284,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
     try {
       const status = await fetchGuardUpdateStatus();
       if (
+        !isMounted.current ||
         epoch !== updateStatusEpoch.current ||
         mutationId !== channelMutationId.current ||
         channelMutationPending.current
@@ -287,7 +296,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
         setUpdatePhase("idle");
       }
     } catch {
-      if (updatePhaseRef.current === "checking") {
+      if (isMounted.current && updatePhaseRef.current === "checking") {
         setUpdatePhase("idle");
       }
     }

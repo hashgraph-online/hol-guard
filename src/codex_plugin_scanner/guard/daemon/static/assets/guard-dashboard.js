@@ -19093,18 +19093,25 @@ function useGuardUpdate(options) {
   const updateStatusEpoch = reactExports.useRef(0);
   const channelMutationId = reactExports.useRef(0);
   const channelMutationPending = reactExports.useRef(false);
+  const isMounted = reactExports.useRef(false);
   reactExports.useEffect(() => {
     updatePhaseRef.current = updatePhase;
   }, [updatePhase]);
+  reactExports.useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
   const refreshUpdateStatus = reactExports.useCallback(async () => {
-    if (!enabled) {
+    if (!enabled || !isMounted.current || channelMutationPending.current) {
       return;
     }
     const epoch = updateStatusEpoch.current;
     const mutationId = channelMutationId.current;
     try {
       const status = await fetchGuardUpdateStatus();
-      if (epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current) {
+      if (!isMounted.current || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current) {
         return;
       }
       setUpdateStatus(status);
@@ -19112,7 +19119,7 @@ function useGuardUpdate(options) {
         setUpdatePhase("idle");
       }
     } catch {
-      if (updatePhaseRef.current === "checking") {
+      if (isMounted.current && updatePhaseRef.current === "checking") {
         setUpdatePhase("idle");
       }
     }
