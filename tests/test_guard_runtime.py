@@ -8706,6 +8706,70 @@ def test_hook_runtime_artifact_allows_codex_apply_patch_command_for_source_file(
     assert artifact is None
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git status --short --branch",
+        "git worktree list --porcelain",
+        "git branch --list '*alpha*'",
+        "git --no-pager status",
+        "git -C/workspace status",
+        "git --git-dir=/workspace/.git status",
+    ],
+)
+def test_hook_runtime_artifact_does_not_reclassify_safe_codex_post_tool_command(tmp_path: Path, command: str) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    payload = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+        "tool_response": {"output": "## main"},
+        "source_scope": "project",
+    }
+    action = guard_commands_module._hook_action_envelope(
+        harness="codex",
+        payload=payload,
+        home_dir=tmp_path,
+        workspace=workspace_dir,
+    )
+
+    artifact = guard_commands_module._hook_runtime_artifact(
+        harness="codex",
+        payload=payload,
+        action_envelope=action,
+        home_dir=tmp_path,
+        guard_home=tmp_path / "guard",
+        workspace=workspace_dir,
+    )
+
+    assert artifact is None
+
+
+def test_hook_runtime_artifact_reclassifies_compound_codex_post_tool_command(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status && npm install react@18.3.0"},
+        "source_scope": "project",
+    }
+    action = guard_commands_module._hook_action_envelope(
+        harness="codex", payload=payload, home_dir=tmp_path, workspace=tmp_path
+    )
+
+    artifact = guard_commands_module._hook_runtime_artifact(
+        harness="codex",
+        payload=payload,
+        action_envelope=action,
+        home_dir=tmp_path,
+        guard_home=tmp_path / "guard",
+        workspace=tmp_path,
+    )
+
+    assert artifact is not None
+    assert artifact.artifact_type == "package_request"
+
+
 def test_hook_runtime_artifact_reviews_codex_apply_patch_command_for_protected_file(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

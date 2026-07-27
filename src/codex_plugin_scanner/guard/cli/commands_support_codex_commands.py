@@ -164,8 +164,44 @@ def _codex_post_tool_command_is_read_only_source_inspection(
     command_texts = _codex_post_tool_command_texts(payload)
     return bool(command_texts) and all(
         _codex_command_is_read_only_source_inspection(command_text, cwd=cwd, home_dir=home_dir)
+        or _codex_command_is_read_only_git_metadata(command_text)
         for command_text in command_texts
     )
+
+
+def _codex_command_is_read_only_git_metadata(command_text: str) -> bool:
+    if any(marker in command_text for marker in ("\n", "\r", ";", "&", "|", "<", ">", "`", "$(")):
+        return False
+    try:
+        parts = shlex.split(command_text)
+    except ValueError:
+        return False
+    if not parts or Path(parts[0]).name.lower() != "git":
+        return False
+    args = parts[1:]
+    while args:
+        arg = args[0]
+        if arg in _CODEX_GIT_GLOBAL_VALUE_FLAGS:
+            if len(args) < 2:
+                return False
+            args = args[2:]
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in _CODEX_GIT_GLOBAL_VALUE_FLAGS) or (
+            arg.startswith("-C") and len(arg) > 2
+        ):
+            args = args[1:]
+            continue
+        if arg in _CODEX_SAFE_GIT_GLOBAL_BOOLEAN_FLAGS:
+            args = args[1:]
+            continue
+        break
+    if not args:
+        return False
+    if args[0] == "status":
+        return True
+    if args[0:2] == ["worktree", "list"]:
+        return True
+    return args[0:2] == ["branch", "--list"]
 
 
 def _codex_post_tool_command_text(payload: dict[str, object]) -> str:
