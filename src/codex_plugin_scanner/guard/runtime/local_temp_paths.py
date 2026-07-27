@@ -9,8 +9,7 @@ from pathlib import Path
 def trusted_temporary_root_for_path(candidate: Path) -> Path | None:
     if not _is_lexically_temporary_path(candidate):
         return None
-    # codeql[py/path-injection] The candidate is absolute, traversal-free, and lexically
-    # contained by an OS temporary root; resolution below also prevents symlink escapes.
+    # codeql[py/path-injection] Candidate is absolute, traversal-free, and temp-contained.
     resolved_candidate = candidate.resolve(strict=True)
     roots = [Path(tempfile.gettempdir())]
     if os.name == "posix":
