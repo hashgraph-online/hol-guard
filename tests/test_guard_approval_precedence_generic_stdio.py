@@ -14,6 +14,7 @@ import pytest
 from codex_plugin_scanner.guard.cli import commands_support as guard_commands_module
 from codex_plugin_scanner.guard.cli.commands_hook_generic import (
     _generic_hook_approval_reuse,
+    _generic_hook_memory_command,
     _generic_hook_payload_digest,
 )
 from codex_plugin_scanner.guard.config import GuardConfig
@@ -92,6 +93,16 @@ def test_generic_hook_payload_digest_ignores_delivery_ids_but_keeps_nested_actio
 
     assert _generic_hook_payload_digest(first) == _generic_hook_payload_digest(retried)
     assert _generic_hook_payload_digest(retried) != _generic_hook_payload_digest(changed_argument)
+
+
+def test_generic_shell_memory_uses_exact_nested_command() -> None:
+    command = "ln -s /workspace-a/node_modules ./node_modules"
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+    }
+
+    assert _generic_hook_memory_command(payload) == command
 
 
 def _run_generic_hook(

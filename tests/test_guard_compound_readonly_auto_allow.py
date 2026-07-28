@@ -112,6 +112,80 @@ def test_static_marker_and_trusted_git_version_are_explicitly_benign(tmp_path: P
     )
 
 
+def test_workspace_dependency_symlink_is_explicitly_benign(tmp_path: Path) -> None:
+    home_dir, repository = _repository(tmp_path)
+    dependency_project = home_dir / "projects" / "dependency-source"
+    dependency_modules = dependency_project / "node_modules"
+    dependency_modules.mkdir(parents=True)
+    (dependency_project / "package.json").write_text("{}\n", encoding="utf-8")
+    command = f'cd {repository} && ln -s {dependency_modules} ./node_modules 2>/dev/null; echo "linked"'
+
+    assert _is_benign(command, home_dir=home_dir, repository=repository)
+
+
+@pytest.mark.parametrize(
+    "source_kind",
+    ("arbitrary-directory", "secret-file", "symlinked-modules"),
+)
+def test_workspace_dependency_symlink_rejects_untrusted_sources(
+    tmp_path: Path,
+    source_kind: str,
+) -> None:
+    home_dir, repository = _repository(tmp_path)
+    dependency_project = home_dir / "projects" / "dependency-source"
+    dependency_project.mkdir(parents=True)
+    (dependency_project / "package.json").write_text("{}\n", encoding="utf-8")
+    source = dependency_project / "node_modules"
+    if source_kind == "arbitrary-directory":
+        source = dependency_project / "build"
+        source.mkdir()
+    elif source_kind == "secret-file":
+        source = dependency_project / ".env"
+        source.write_text("TOKEN=fixture\n", encoding="utf-8")
+    else:
+        real_modules = dependency_project / "real-modules"
+        real_modules.mkdir()
+        source.symlink_to(real_modules, target_is_directory=True)
+    command = f"cd {repository} && ln -s {source} ./node_modules 2>/dev/null; echo linked"
+
+    assert not _is_benign(command, home_dir=home_dir, repository=repository)
+
+
+@pytest.mark.parametrize(
+    "command_template",
+    (
+        "cd {repository} && ln -sf {source} ./node_modules 2>/dev/null; echo linked",
+        "cd {repository} && ln -s {source} ./vendor 2>/dev/null; echo linked",
+        "cd {repository} && ln -s {source} ./node_modules 2>/dev/null; echo done",
+        "cd {repository} && ln -s {source} ./node_modules && echo payload > node_modules/changed.txt",
+    ),
+)
+def test_workspace_dependency_symlink_rejects_widened_effects(
+    tmp_path: Path,
+    command_template: str,
+) -> None:
+    home_dir, repository = _repository(tmp_path)
+    dependency_project = home_dir / "projects" / "dependency-source"
+    source = dependency_project / "node_modules"
+    source.mkdir(parents=True)
+    (dependency_project / "package.json").write_text("{}\n", encoding="utf-8")
+    command = command_template.format(repository=repository, source=source)
+
+    assert not _is_benign(command, home_dir=home_dir, repository=repository)
+
+
+def test_workspace_dependency_symlink_rejects_existing_destination(tmp_path: Path) -> None:
+    home_dir, repository = _repository(tmp_path)
+    dependency_project = home_dir / "projects" / "dependency-source"
+    source = dependency_project / "node_modules"
+    source.mkdir(parents=True)
+    (dependency_project / "package.json").write_text("{}\n", encoding="utf-8")
+    (repository / "node_modules").mkdir()
+    command = f"cd {repository} && ln -s {source} ./node_modules 2>/dev/null; echo linked"
+
+    assert not _is_benign(command, home_dir=home_dir, repository=repository)
+
+
 def test_existing_local_branch_switch_without_execution_hooks_is_explicitly_benign(tmp_path: Path) -> None:
     home_dir, repository = _repository(tmp_path)
     _create_local_branch(repository, "main")

@@ -1270,6 +1270,17 @@ def is_explicitly_benign_tool_action_request(
         if _looks_like_safe_git_status_command(stripped_command, parts, cwd=cwd):
             found_benign_candidate = True
             continue
+        if (
+            home_dir is not None
+            and _safe_dependency_symlink_execution_context(
+                stripped_command,
+                cwd=cwd,
+                home_dir=home_dir,
+            )
+            is not None
+        ):
+            found_benign_candidate = True
+            continue
         if home_dir is not None and _looks_like_safe_compound_developer_inspection(
             stripped_command,
             cwd=cwd,
@@ -2714,6 +2725,80 @@ def literal_cd_execution_context(
         count = filter_args[0]
         if not count.startswith("-") or not count[1:].isdigit() or not 1 <= int(count[1:]) <= 1000:
             return None
+    return context
+
+
+def _safe_dependency_symlink_execution_context(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path,
+) -> ShellExecutionContext | None:
+    """Recognize one non-overwriting workspace dependency link."""
+
+    initial_root = cwd or home_dir
+    context = model_shell_execution_context(
+        command_text,
+        cwd=initial_root,
+        workspace_root=initial_root,
+        home_dir=home_dir,
+    )
+    workspace_root = _leading_literal_cd_workspace_root(context, home_dir=home_dir)
+    if workspace_root is not None and workspace_root != initial_root.resolve():
+        context = model_shell_execution_context(
+            command_text,
+            cwd=workspace_root,
+            workspace_root=workspace_root,
+            home_dir=home_dir,
+        )
+    if _shell_execution_context_validation_reason(context) is not None or len(context.segments) != 3:
+        return None
+    directory, link, marker = context.segments
+    if (
+        directory.directory_operation != "cd"
+        or directory.control_before
+        or link.control_before != ("&&",)
+        or marker.control_before not in {(";",), ("&&",)}
+    ):
+        return None
+    link_name, link_index = _shell_segment_primary_command(list(link.tokens))
+    marker_name, marker_index = _shell_segment_primary_command(list(marker.tokens))
+    if link_name != "ln" or link_index is None or marker_name != "echo" or marker_index is None:
+        return None
+    link_args = _without_safe_inspection_redirections(list(link.tokens[link_index + 1 :]))
+    marker_args = _without_safe_inspection_redirections(list(marker.tokens[marker_index + 1 :]))
+    if link_args is None or link_args[:1] != ["-s"] or len(link_args) != 3 or marker_args != ["linked"]:
+        return None
+    source_text, destination_text = link_args[1:]
+    if any(marker in source_text for marker in ("$", "`", "\x00")):
+        return None
+    if destination_text not in {"node_modules", "./node_modules"}:
+        return None
+    source = Path(source_text).expanduser()
+    if not source.is_absolute():
+        source = (link.effective_cwd or workspace_root or initial_root) / source
+    destination_root = link.effective_cwd
+    if destination_root is None:
+        return None
+    destination = destination_root / destination_text
+    try:
+        resolved_home = home_dir.resolve(strict=True)
+        resolved_workspace = (workspace_root or initial_root).resolve(strict=True)
+        resolved_source = source.resolve(strict=True)
+        _ = resolved_source.relative_to(resolved_home)
+        _ = destination.parent.resolve(strict=True).relative_to(resolved_workspace)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if (
+        resolved_source.name != "node_modules"
+        or source.is_symlink()
+        or not resolved_source.is_dir()
+        or not (resolved_source.parent / "package.json").is_file()
+        or destination.exists()
+        or destination.is_symlink()
+        or destination.parent.resolve(strict=True) != resolved_workspace
+    ):
+        return None
     return context
 
 

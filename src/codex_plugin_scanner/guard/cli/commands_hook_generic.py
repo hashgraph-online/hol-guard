@@ -118,7 +118,7 @@ from .commands_support_command_activity import (
 from .commands_support_runtime_policy import _runtime_hook_effective_policy_config
 
 # Bump when generic-hook classification or action-composition semantics change.
-_GENERIC_HOOK_EVALUATOR_POLICY_VERSION = "generic-hook-evaluation-v1"
+_GENERIC_HOOK_EVALUATOR_POLICY_VERSION = "generic-hook-evaluation-v2"
 
 _GENERIC_HOOK_EXPLICIT_POSIX_SHELL_TOOLS = frozenset({"ash", "bash", "dash", "sh", "zsh"})
 
@@ -238,6 +238,14 @@ def _generic_hook_workspace_identity(runtime_workspace: Path | None) -> str:
         return str(workspace.expanduser().resolve(strict=False))
     except (OSError, RuntimeError):
         return str(workspace.expanduser().absolute())
+
+
+def _generic_hook_memory_command(payload: Mapping[str, object]) -> str:
+    command = command_text_from_tool_payload(
+        payload.get("tool_name"),
+        payload.get("tool_input", payload.get("arguments")),
+    )
+    return _coalesce_string(command, payload.get("command"), payload.get("tool_name"))
 
 
 def _generic_hook_action_capabilities(
@@ -417,7 +425,7 @@ def _generic_hook_saved_decision(
         artifact_hash=artifact_hash,
         workspace=workspace,
         publisher=publisher,
-        memory_command=_coalesce_string(payload.get("command"), payload.get("tool_name")),
+        memory_command=_generic_hook_memory_command(payload),
         memory_artifact_type=_coalesce_string(payload.get("artifact_type"), payload.get("tool_type")),
         memory_artifact_name=artifact_name,
         consume_one_shot=False,
@@ -431,7 +439,7 @@ def _generic_hook_saved_decision(
             artifact_hash=legacy_artifact_hash,
             workspace=workspace,
             publisher=publisher,
-            memory_command=_coalesce_string(payload.get("command"), payload.get("tool_name")),
+            memory_command=_generic_hook_memory_command(payload),
             memory_artifact_type=_coalesce_string(payload.get("artifact_type"), payload.get("tool_type")),
             memory_artifact_name=artifact_name,
             consume_one_shot=False,
