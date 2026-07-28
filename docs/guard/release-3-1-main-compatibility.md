@@ -57,13 +57,14 @@ The stable `2.1` release snapshot is not copied into `release/3.1`. Compatible p
 - Treat Pi and other fail-open harnesses as degraded; the bounded fallback work improves liveness but does not make them authoritative mandatory-assurance coverage.
 - Keep the resident hook fast path default-off for the 3.1 alpha; explicit opt-in remains the rollback boundary.
 
-## Open compatibility blockers
+## Compatibility blockers — evidence recorded
 
-- No evidence currently proves 2.1/2.2 policy, receipt, runtime-session, protection, or approval payload compatibility with 3.1. The stable snapshot exclusion is not a compatibility adapter.
-- The surface schema method list and runtime method list require an explicit negotiated contract before the compatibility gate can pass.
-- Archived receipt-rollup reconstruction requires migration evidence before old receipt compatibility can pass.
-- Harnesses that cannot enforce authenticated local decisions remain degraded or unsupported for mandatory assurance.
-- This branch is not mergeable until these blockers have focused evidence and independent approval.
+Focused evidence now resolves the payload, method-list, and receipt-rollup blockers. See `docs/guard/release-3-1-compatibility-evidence.md` for the full per-area proof and reproduction commands.
+
+- 2.1/2.2 policy, receipt, runtime-session, protection, and approval payload compatibility with 3.1 is proven: the policy parser retains the v1 path with `contractVersion` dispatch; receipt, session, and protection store/contract files are byte-identical to 2.2; approvals materialize to one canonical queue identity. Focused tests pass (129 policy, 50 effect-contract, 4 approval, receipt persistence/storage-maintenance).
+- The surface schema method list and runtime method list are negotiated by `initialize_client()`, which returns both the advertised schema methods and the implemented `SERVER_METHODS` plus the negotiated protocol version in one response.
+- Archived receipt-rollup reconstruction is proven by `backfill_receipt_rollups()` and the store-upgrade historical-rollup rebuild test.
+- Harnesses that cannot enforce authenticated local decisions remain degraded or unsupported for mandatory assurance; this is an accepted alpha limitation tracked by the harness matrix work.
 
 ## Verification gates
 
