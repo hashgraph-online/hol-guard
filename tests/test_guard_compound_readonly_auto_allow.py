@@ -145,6 +145,28 @@ def test_git_branch_switch_with_custom_filter_is_not_explicitly_benign(tmp_path:
     assert not _is_benign("git checkout main", home_dir=home_dir, repository=repository)
 
 
+def test_git_branch_switch_with_fsmonitor_program_is_not_explicitly_benign(tmp_path: Path) -> None:
+    home_dir, repository = _repository(tmp_path)
+    _create_local_branch(repository, "main")
+    subprocess.run(
+        ["git", "-C", str(repository), "config", "core.fsmonitor", "sh payload.sh"],
+        check=True,
+    )
+
+    assert not _is_benign("git checkout main", home_dir=home_dir, repository=repository)
+
+
+def test_git_branch_switch_with_tracked_hook_directory_is_not_explicitly_benign(tmp_path: Path) -> None:
+    home_dir, repository = _repository(tmp_path)
+    _create_local_branch(repository, "main")
+    subprocess.run(
+        ["git", "-C", str(repository), "config", "core.hooksPath", ".githooks"],
+        check=True,
+    )
+
+    assert not _is_benign("git checkout main", home_dir=home_dir, repository=repository)
+
+
 def test_git_path_checkout_is_not_explicitly_benign(tmp_path: Path) -> None:
     home_dir, repository = _repository(tmp_path)
 
@@ -176,9 +198,25 @@ def test_shadowed_guard_version_is_not_explicitly_benign(
     assert not _is_benign("hol-guard --version", home_dir=home_dir, repository=repository)
 
 
+def test_relative_path_entry_resolves_from_segment_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir, repository = _repository(tmp_path)
+    shadow_dir = repository / "shadow"
+    shadow_dir.mkdir()
+    shadow_git = shadow_dir / "git"
+    shadow_git.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    shadow_git.chmod(0o755)
+    monkeypatch.setenv("PATH", f".:{os.environ.get('PATH', '')}")
+
+    assert not _is_benign(f"cd {shadow_dir} && git --version", home_dir=home_dir, repository=repository)
+
+
 @pytest.mark.parametrize(
     "command",
     (
+        "git checkout main &",
         "pwd; git status --short --branch; rm -rf build",
         "pwd; git status --short --branch; cat .env",
         "pwd; git status --short --branch; ls $(printf ui.tsx)",

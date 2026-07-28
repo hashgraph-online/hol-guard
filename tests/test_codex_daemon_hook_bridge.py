@@ -230,6 +230,13 @@ def test_codex_post_tool_response_excludes_daemon_metadata() -> None:
             "additionalContext": "safe context",
         }
     }
+    assert (
+        bridge._codex_hook_response(
+            {"hookSpecificOutput": "unexpected"},
+            event_name="PostToolUse",
+        )
+        == {}
+    )
 
 
 def test_main_posts_to_authenticated_daemon(

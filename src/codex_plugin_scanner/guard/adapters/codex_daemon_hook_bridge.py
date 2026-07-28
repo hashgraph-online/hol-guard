@@ -516,9 +516,12 @@ def _codex_hook_response(response: Mapping[str, object], *, event_name: str) -> 
     allowed_keys = universal_keys | event_keys | {"hookSpecificOutput"}
     filtered = {key: value for key, value in response.items() if key in allowed_keys}
     hook_output = filtered.get("hookSpecificOutput")
-    if event_name == "PostToolUse" and isinstance(hook_output, Mapping):
-        post_tool_keys = {"hookEventName", "additionalContext", "updatedMCPToolOutput"}
-        filtered["hookSpecificOutput"] = {key: value for key, value in hook_output.items() if key in post_tool_keys}
+    if event_name == "PostToolUse":
+        if not isinstance(hook_output, Mapping):
+            filtered.pop("hookSpecificOutput", None)
+        else:
+            post_tool_keys = {"hookEventName", "additionalContext", "updatedMCPToolOutput"}
+            filtered["hookSpecificOutput"] = {key: value for key, value in hook_output.items() if key in post_tool_keys}
     return filtered
 
 

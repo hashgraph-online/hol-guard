@@ -1364,6 +1364,8 @@ def _looks_like_safe_git_branch_switch_command(
 ) -> bool:
     if any(marker in command_text for marker in ("$(", "`", "<(", ">(", ";", "|", "<", ">")):
         return False
+    if "&" in command_text.replace("&&", ""):
+        return False
     segments = _iter_shell_command_segments(parts)
     if not segments:
         return False
@@ -1421,7 +1423,7 @@ def _git_local_branch_switch_is_safe(args: list[str], *, cwd: Path) -> bool:
                 "config",
                 "--null",
                 "--get-regexp",
-                r"^(filter\..*\.(clean|smudge|process)|submodule\..*\.update|submodule\.recurse)$",
+                r"^(core\.fsmonitor|filter\..*\.(clean|smudge|process)|submodule\..*\.update|submodule\.recurse)$",
             ],
             cwd=execution_cwd,
             check=False,
@@ -1431,6 +1433,14 @@ def _git_local_branch_switch_is_safe(args: list[str], *, cwd: Path) -> bool:
         )
         hook_result = subprocess.run(
             [str(resolved_git), "rev-parse", "--git-path", "hooks/post-checkout"],
+            cwd=execution_cwd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+        git_dir_result = subprocess.run(
+            [str(resolved_git), "rev-parse", "--absolute-git-dir"],
             cwd=execution_cwd,
             check=False,
             capture_output=True,
@@ -1448,14 +1458,18 @@ def _git_local_branch_switch_is_safe(args: list[str], *, cwd: Path) -> bool:
         return False
     if execution_config.returncode == 1 and execution_config.stdout:
         return False
-    if hook_result.returncode != 0:
+    if hook_result.returncode != 0 or git_dir_result.returncode != 0:
         return False
     hook_path = Path(hook_result.stdout.strip())
     if not hook_path.is_absolute():
         hook_path = execution_cwd / hook_path
     try:
+        hook_path = hook_path.resolve()
+        git_dir = Path(git_dir_result.stdout.strip()).resolve(strict=True)
+        if hook_path.is_relative_to(execution_cwd) and not hook_path.is_relative_to(git_dir):
+            return False
         return not hook_path.exists() or (os.name != "nt" and not os.access(hook_path, os.X_OK))
-    except OSError:
+    except (OSError, RuntimeError):
         return False
 
 
@@ -1468,6 +1482,11 @@ def _git_checkout_execution_config_is_safe(config_output: str, *, cwd: Path) -> 
         if not separator:
             return False
         entries[key.casefold()] = value
+    if not entries:
+        return True
+    fsmonitor = entries.pop("core.fsmonitor", None)
+    if fsmonitor is not None and fsmonitor.strip().casefold() not in {"0", "false", "no", "off"}:
+        return False
     if not entries:
         return True
     allowed_lfs_entries = {
@@ -1628,7 +1647,7 @@ def _looks_like_safe_cli_metadata_command(command_text: str, parts: list[str], *
 
 def _safe_cli_metadata_segment_is_safe(command_name: str, args: list[str], *, cwd: Path) -> bool:
     if command_name == "git" and args in (["--version"], ["version"]):
-        git_path = shutil.which("git")
+        git_path = _which_for_execution_cwd("git", cwd=cwd)
         if git_path is None:
             return False
         try:
@@ -1637,21 +1656,37 @@ def _safe_cli_metadata_segment_is_safe(command_name: str, args: list[str], *, cw
             return False
     if command_name != "hol-guard" or args != ["--version"]:
         return False
-    executable = shutil.which("hol-guard")
+    executable = _which_for_execution_cwd("hol-guard", cwd=cwd)
     if executable is None:
         return False
     try:
         actual = Path(executable).resolve(strict=True)
-        bin_name = "Scripts" if os.name == "nt" else "bin"
-        managed_candidates = {(Path(sys.prefix) / bin_name / "hol-guard").resolve(strict=True)}
-        site_packages = next(
-            (parent for parent in Path(__file__).resolve().parents if parent.name == "site-packages"), None
-        )
-        if site_packages is not None:
-            managed_candidates.add((site_packages.parent.parent.parent / bin_name / "hol-guard").resolve(strict=True))
     except (OSError, RuntimeError):
         return False
+    bin_name = "Scripts" if os.name == "nt" else "bin"
+    roots = [Path(sys.prefix)]
+    site_packages = next(
+        (parent for parent in Path(__file__).resolve().parents if parent.name == "site-packages"), None
+    )
+    if site_packages is not None:
+        roots.append(site_packages.parent.parent if os.name == "nt" else site_packages.parent.parent.parent)
+    managed_candidates: set[Path] = set()
+    for root in roots:
+        try:
+            managed_candidates.add((root / bin_name / "hol-guard").resolve(strict=True))
+        except (OSError, RuntimeError):
+            continue
     return actual in managed_candidates
+
+
+def _which_for_execution_cwd(command: str, *, cwd: Path) -> str | None:
+    path_entries: list[str] = []
+    for entry in os.environ.get("PATH", os.defpath).split(os.pathsep):
+        candidate = Path(entry or ".").expanduser()
+        if not candidate.is_absolute():
+            candidate = cwd / candidate
+        path_entries.append(str(candidate))
+    return shutil.which(command, path=os.pathsep.join(path_entries))
 
 
 def _git_log_has_execution_free_config(cwd: Path) -> bool:
