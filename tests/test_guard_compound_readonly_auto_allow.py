@@ -186,6 +186,26 @@ def test_workspace_dependency_symlink_rejects_existing_destination(tmp_path: Pat
     assert not _is_benign(command, home_dir=home_dir, repository=repository)
 
 
+def test_workspace_dependency_symlink_rejects_shadowed_ln(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir, repository = _repository(tmp_path)
+    dependency_project = home_dir / "projects" / "dependency-source"
+    source = dependency_project / "node_modules"
+    source.mkdir(parents=True)
+    (dependency_project / "package.json").write_text("{}\n", encoding="utf-8")
+    shadow_bin = home_dir / "bin"
+    shadow_bin.mkdir()
+    shadow_ln = shadow_bin / "ln"
+    shadow_ln.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    shadow_ln.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{shadow_bin}:{os.environ.get('PATH', '')}")
+    command = f"cd {repository} && ln -s {source} ./node_modules 2>/dev/null; echo linked"
+
+    assert not _is_benign(command, home_dir=home_dir, repository=repository)
+
+
 def test_existing_local_branch_switch_without_execution_hooks_is_explicitly_benign(tmp_path: Path) -> None:
     home_dir, repository = _repository(tmp_path)
     _create_local_branch(repository, "main")

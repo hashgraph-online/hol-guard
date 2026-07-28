@@ -2785,12 +2785,22 @@ def _safe_dependency_symlink_execution_context(
         resolved_home = home_dir.resolve(strict=True)
         resolved_workspace = (workspace_root or initial_root).resolve(strict=True)
         resolved_source = source.resolve(strict=True)
+        ln_path = _which_for_execution_cwd("ln", cwd=destination_root)
+        if ln_path is None:
+            return None
+        resolved_ln = Path(ln_path).resolve(strict=True)
         _ = resolved_source.relative_to(resolved_home)
         _ = destination.parent.resolve(strict=True).relative_to(resolved_workspace)
     except (OSError, RuntimeError, ValueError):
         return None
     if (
-        resolved_source.name != "node_modules"
+        not is_trusted_absolute_command_path(
+            resolved_ln,
+            cwd=resolved_workspace,
+            home_dir=home_dir,
+        )
+        or not any((resolved_workspace / marker).exists() for marker in (".git", "package.json", "pyproject.toml"))
+        or resolved_source.name != "node_modules"
         or source.is_symlink()
         or not resolved_source.is_dir()
         or not (resolved_source.parent / "package.json").is_file()
