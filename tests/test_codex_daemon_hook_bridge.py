@@ -421,6 +421,42 @@ def test_bridge_authenticates_real_daemon_before_hook_delivery(
     assert "could not authenticate the local daemon" not in json.dumps(response).lower()
 
 
+def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    daemon.start()
+    config = _bridge_config(guard_home, daemon.port)
+    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
+    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "shell",
+                    "tool_input": {"command": 'pwd; git status --short --branch; sed -n "1,5p" README.md'},
+                    "cwd": str(workspace),
+                }
+            )
+        ),
+    )
+
+    try:
+        exit_code = bridge.main(**config)
+    finally:
+        daemon.stop()
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == {}
+
+
 def test_real_daemon_rejects_consumed_challenge_replay(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
@@ -774,7 +810,9 @@ except SystemExit:
         daemon.shutdown()
         daemon_thread.join(timeout=5)
 
-    assert all(result.returncode == 0 for result in results)
+    assert all(result.returncode == 0 for result in results), [
+        (result.returncode, result.stdout, result.stderr) for result in results
+    ]
     assert all(json.loads(result.stdout) == {} for result in results)
     elapsed_samples = [float(result.stderr.rsplit("bridge-elapsed=", 1)[1]) for result in results]
     # The process timeout enforces the hard two-second wall-clock budget. The

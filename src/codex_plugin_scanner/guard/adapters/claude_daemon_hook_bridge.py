@@ -42,11 +42,11 @@ _RISKY_PROMPT_ADDITIONAL_CONTEXT = (
 _HARNESS_TIMEOUT_BUDGET_SECONDS = 10
 _DAEMON_IO_TIMEOUT_SECONDS = 2
 _RECOVERY_TIMEOUT_SECONDS = 3
+_RECOVERY_SCHEDULING_TIMEOUT_SECONDS = 0.25
 _FALLBACK_TIMEOUT_SECONDS = 2
 _MAX_DAEMON_RESPONSE_BYTES = 1_000_000
 _MAX_HOOK_INPUT_BYTES = 1_000_000
 _HOOK_DEADLINE_SECONDS = 8
-_FALLBACK_SCHEDULING_RESERVE_SECONDS = 0.5
 _MINIMUM_OPERATION_SECONDS = 0.01
 _OVERLOAD_RESERVE_MS = 100
 _OVERLOAD_REASON = (
@@ -128,11 +128,8 @@ def main(
             response_body = _recover_retry_or_fallback(
                 reason,
                 data,
-                state_path=state_path,
-                fallback_daemon_url=fallback_daemon_url,
                 fallback_command=fallback_command,
                 recovery_command=recovery_command,
-                query=query,
                 deadline=deadline,
                 failure_kind=failure_kind,
             )
@@ -174,14 +171,6 @@ def _remaining_seconds(deadline: float | None, *, cap: float) -> float:
     if deadline is None:
         return cap
     return min(cap, max(0.0, deadline - time.monotonic()))
-
-
-def _deadline_with_reserve(deadline: float | None, *, reserve_seconds: float) -> float | None:
-    """Keep time for a required later operation inside one absolute hook deadline."""
-
-    if deadline is None:
-        return None
-    return max(time.monotonic(), deadline - reserve_seconds)
 
 
 def _post_to_loopback_daemon(
@@ -487,43 +476,22 @@ def _recover_retry_or_fallback(
     reason: str,
     data: str,
     *,
-    state_path: str | Path,
-    fallback_daemon_url: str,
     fallback_command: tuple[str, ...],
     recovery_command: tuple[str, ...],
-    query: str,
     deadline: float | None = None,
     failure_kind: str = "transport-failure",
 ) -> str:
-    if recovery_command and _run_recovery_command(
-        recovery_command,
-        deadline=_deadline_with_reserve(
-            deadline,
-            reserve_seconds=(
-                _DAEMON_IO_TIMEOUT_SECONDS + _FALLBACK_TIMEOUT_SECONDS + _FALLBACK_SCHEDULING_RESERVE_SECONDS
-            ),
-        ),
-        failure_kind=failure_kind,
-    ):
-        try:
-            endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")
-            _assert_loopback_http_url(endpoint)
-            return _valid_hook_json_or_degraded(
-                _post_to_loopback_daemon(
-                    endpoint,
-                    data,
-                    state_path=state_path,
-                    deadline=_deadline_with_reserve(
-                        deadline,
-                        reserve_seconds=_FALLBACK_TIMEOUT_SECONDS + _FALLBACK_SCHEDULING_RESERVE_SECONDS,
-                    ),
-                ),
-                reason=f"{reason}; recovered daemon returned malformed hook JSON",
-                data=data,
-            )
-        except Exception as retry_error:
-            reason = f"{reason}; daemon recovery retry failed: {retry_error}"
-    return _run_local_fallback(reason, data, fallback_command, deadline=deadline)
+    fallback_response = _run_local_fallback(reason, data, fallback_command, deadline=deadline)
+    if recovery_command:
+        recovery_deadline = time.monotonic() + _RECOVERY_SCHEDULING_TIMEOUT_SECONDS
+        if deadline is not None:
+            recovery_deadline = min(deadline, recovery_deadline)
+        _ = _run_recovery_command(
+            recovery_command,
+            deadline=recovery_deadline,
+            failure_kind=failure_kind,
+        )
+    return fallback_response
 
 
 def _run_recovery_command(

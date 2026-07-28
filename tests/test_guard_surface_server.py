@@ -1795,6 +1795,54 @@ class TestGuardSurfaceServer:
         assert response.status == 200
         assert payload == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
 
+    def test_guard_daemon_runtime_hook_uses_validated_payload_cwd_when_query_omits_workspace(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+        captured: dict[str, str | None] = {}
+
+        def fake_review(**kwargs):
+            captured["workspace"] = str(kwargs["workspace"])
+            from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessReview
+
+            return HookProcessReview({}, None)
+
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        monkeypatch.setattr(daemon._server.hook_process_runner, "review", fake_review)
+
+        try:
+            request = urllib.request.Request(
+                (
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
+                    f"guard-home={urllib.parse.quote(str(store.guard_home))}&"
+                    f"home={urllib.parse.quote(str(tmp_path))}"
+                ),
+                data=json.dumps(
+                    {
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "shell",
+                        "tool_input": {"command": "pwd; git status --short --branch"},
+                        "cwd": str(workspace_dir),
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert response.status == 200
+        assert payload == {}
+        assert captured["workspace"] == str(workspace_dir)
+
     def test_guard_daemon_claude_hook_endpoint_preserves_workspace_trailing_none_sentinel(
         self, tmp_path, monkeypatch
     ) -> None:

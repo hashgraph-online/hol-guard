@@ -5316,9 +5316,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 roots=self._hook_safe_roots(),
             )
             guard_home = self._validated_hook_guard_home(self._optional_string(params.get("guard-home", [None])[-1]))
+            workspace_query = self._normalized_hook_workspace_string(params.get("workspace", [None])[-1])
+            workspace_candidate = (
+                workspace_query if "workspace" in params else self._optional_string(payload.get("cwd"))
+            )
             workspace = self._validated_hook_directory_string(
                 "workspace",
-                self._normalized_hook_workspace_string(params.get("workspace", [None])[-1]),
+                workspace_candidate,
                 roots=self._hook_safe_roots(),
             )
         except _HookPathValidationError as error:
