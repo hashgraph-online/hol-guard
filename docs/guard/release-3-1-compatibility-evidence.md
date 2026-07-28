@@ -72,6 +72,7 @@ Evidence:
 - `runtime/surface_server.py:60-114` — `initialize_client()` returns `schema`, `server_capabilities.methods`, and `negotiated_version`.
 - `schemas/surface_server.py:165-175` — advertised method list.
 - Both files byte-identical to 2.2.
+- Characterization tests `tests/test_guard_release_3_1_compatibility.py::TestSurfaceRuntimeNegotiationContract` pin the handshake contract: both method lists returned together, unimplemented advertised methods never routed, and same-major-version protocol negotiation (accepted and rejected).
 
 ## Archived receipt-rollup reconstruction
 
@@ -81,6 +82,7 @@ Evidence:
 
 - `store_receipt_rollups.py` — `backfill_receipt_rollups()`, byte-identical to 2.2.
 - Tests: `tests/test_guard_receipt_persistence.py::test_store_upgrade_rebuilds_historical_warn_rollup_bucket`, `tests/test_guard_storage_maintenance.py` — passed.
+- Characterization tests `tests/test_guard_release_3_1_compatibility.py::TestLegacyReceiptRollupReconstruction` simulate a 2.x-era store (migrations 10 and 16 applied, stale rollup bucket) and prove `backfill_receipt_rollups` reconstructs archived rollups idempotently.
 
 ## Harness coverage (degraded/unsupported)
 
@@ -93,6 +95,7 @@ git checkout 10348fd40fa53ef60d9363bb6c37591b8bb60a61
 uv run --no-sync pytest -q tests/test_policy_bundle_parser.py tests/test_policy_bundle_trust_regressions.py tests/test_policy_bundle_v2.py tests/test_policy_bundle_integrity.py
 uv run --no-sync pytest -q tests/test_guard_receipt_persistence.py tests/test_guard_storage_maintenance.py
 uv run --no-sync pytest -q tests/test_guard_effect_contract.py tests/test_guard_approval_policy_versions.py
+uv run --no-sync pytest -q tests/test_guard_release_3_1_compatibility.py
 ```
 
 No release, publication, deployment, or policy activation is authorized by this document.
