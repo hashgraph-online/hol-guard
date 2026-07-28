@@ -1261,6 +1261,12 @@ def is_explicitly_benign_tool_action_request(
         ):
             found_benign_candidate = True
             continue
+        if _looks_like_safe_cli_metadata_command(stripped_command, parts, cwd=cwd):
+            found_benign_candidate = True
+            continue
+        if _looks_like_safe_git_branch_switch_command(stripped_command, parts, cwd=cwd):
+            found_benign_candidate = True
+            continue
         if _looks_like_safe_git_status_command(stripped_command, parts, cwd=cwd):
             found_benign_candidate = True
             continue
@@ -1350,6 +1356,136 @@ def _looks_like_safe_git_status_command(
     return saw_status
 
 
+def _looks_like_safe_git_branch_switch_command(
+    command_text: str,
+    parts: list[str],
+    *,
+    cwd: Path | None,
+) -> bool:
+    if any(marker in command_text for marker in ("$(", "`", "<(", ">(", ";", "|", "<", ">")):
+        return False
+    segments = _iter_shell_command_segments(parts)
+    if not segments:
+        return False
+    try:
+        effective_cwd = (cwd or Path.cwd()).resolve()
+    except OSError:
+        return False
+    saw_switch = False
+    for segment in segments:
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index != 0:
+            return False
+        executable = segment[command_index]
+        if "/" in executable or "\\" in executable:
+            return False
+        args = segment[command_index + 1 :]
+        next_cwd = _safe_git_status_cd_target(command_name, args, cwd=effective_cwd)
+        if next_cwd is not None:
+            effective_cwd = next_cwd
+            continue
+        if command_name != "git" or saw_switch or not _git_local_branch_switch_is_safe(args, cwd=effective_cwd):
+            return False
+        saw_switch = True
+    return saw_switch
+
+
+def _git_local_branch_switch_is_safe(args: list[str], *, cwd: Path) -> bool:
+    if len(args) != 2 or args[0] not in {"checkout", "switch"}:
+        return False
+    branch = args[1]
+    if not branch or branch.startswith("-") or branch in {".", ".."}:
+        return False
+    git_path = shutil.which("git")
+    if git_path is None:
+        return False
+    try:
+        resolved_git = Path(git_path).resolve()
+        execution_cwd = cwd.resolve()
+    except (OSError, RuntimeError):
+        return False
+    if not git_binary_path_is_trusted(resolved_git, cwd=execution_cwd):
+        return False
+    try:
+        branch_result = subprocess.run(
+            [str(resolved_git), "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}^{{commit}}"],
+            cwd=execution_cwd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+        execution_config = subprocess.run(
+            [
+                str(resolved_git),
+                "config",
+                "--null",
+                "--get-regexp",
+                r"^(filter\..*\.(clean|smudge|process)|submodule\..*\.update|submodule\.recurse)$",
+            ],
+            cwd=execution_cwd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+        hook_result = subprocess.run(
+            [str(resolved_git), "rev-parse", "--git-path", "hooks/post-checkout"],
+            cwd=execution_cwd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if branch_result.returncode != 0 or execution_config.returncode not in {0, 1}:
+        return False
+    if execution_config.returncode == 0 and not _git_checkout_execution_config_is_safe(
+        execution_config.stdout,
+        cwd=execution_cwd,
+    ):
+        return False
+    if execution_config.returncode == 1 and execution_config.stdout:
+        return False
+    if hook_result.returncode != 0:
+        return False
+    hook_path = Path(hook_result.stdout.strip())
+    if not hook_path.is_absolute():
+        hook_path = execution_cwd / hook_path
+    try:
+        return not hook_path.exists() or (os.name != "nt" and not os.access(hook_path, os.X_OK))
+    except OSError:
+        return False
+
+
+def _git_checkout_execution_config_is_safe(config_output: str, *, cwd: Path) -> bool:
+    entries: dict[str, str] = {}
+    for entry in config_output.split("\0"):
+        if not entry:
+            continue
+        key, separator, value = entry.partition("\n")
+        if not separator:
+            return False
+        entries[key.casefold()] = value
+    if not entries:
+        return True
+    allowed_lfs_entries = {
+        "filter.lfs.clean": "git-lfs clean -- %f",
+        "filter.lfs.smudge": "git-lfs smudge -- %f",
+        "filter.lfs.process": "git-lfs filter-process",
+    }
+    if any(allowed_lfs_entries.get(key) != value for key, value in entries.items()):
+        return False
+    git_lfs_path = shutil.which("git-lfs")
+    if git_lfs_path is None:
+        return False
+    try:
+        return git_binary_path_is_trusted(Path(git_lfs_path).resolve(), cwd=cwd)
+    except (OSError, RuntimeError):
+        return False
+
+
 def _safe_git_status_cd_target(command_name: str, args: list[str], *, cwd: Path) -> Path | None:
     if command_name != "cd":
         return None
@@ -1430,6 +1566,9 @@ def _looks_like_safe_compound_developer_inspection(
         if args is None:
             return False
         segment_root = segment.effective_cwd or home_dir
+        if _safe_cli_metadata_segment_is_safe(command_name, args, cwd=segment_root):
+            saw_inspection = True
+            continue
         if command_name == "git":
             operation = _read_only_git_operation(args)
             if operation == "status":
@@ -1470,6 +1609,49 @@ def _read_only_git_operation(args: list[str]) -> str | None:
             return None
         operation_index = 2
     return args[operation_index].casefold()
+
+
+def _looks_like_safe_cli_metadata_command(command_text: str, parts: list[str], *, cwd: Path | None) -> bool:
+    if any(marker in command_text for marker in ("$(", "`", "<(", ">(", ";", "&", "|", "<", ">")):
+        return False
+    segments = _iter_shell_command_segments(parts)
+    if len(segments) != 1:
+        return False
+    command_name, command_index = _shell_segment_primary_command(segments[0])
+    if command_name is None or command_index != 0:
+        return False
+    executable = segments[0][0]
+    if "/" in executable or "\\" in executable:
+        return False
+    return _safe_cli_metadata_segment_is_safe(command_name, segments[0][1:], cwd=cwd or Path.cwd())
+
+
+def _safe_cli_metadata_segment_is_safe(command_name: str, args: list[str], *, cwd: Path) -> bool:
+    if command_name == "git" and args in (["--version"], ["version"]):
+        git_path = shutil.which("git")
+        if git_path is None:
+            return False
+        try:
+            return git_binary_path_is_trusted(Path(git_path).resolve(), cwd=cwd.resolve())
+        except (OSError, RuntimeError):
+            return False
+    if command_name != "hol-guard" or args != ["--version"]:
+        return False
+    executable = shutil.which("hol-guard")
+    if executable is None:
+        return False
+    try:
+        actual = Path(executable).resolve(strict=True)
+        bin_name = "Scripts" if os.name == "nt" else "bin"
+        managed_candidates = {(Path(sys.prefix) / bin_name / "hol-guard").resolve(strict=True)}
+        site_packages = next(
+            (parent for parent in Path(__file__).resolve().parents if parent.name == "site-packages"), None
+        )
+        if site_packages is not None:
+            managed_candidates.add((site_packages.parent.parent.parent / bin_name / "hol-guard").resolve(strict=True))
+    except (OSError, RuntimeError):
+        return False
+    return actual in managed_candidates
 
 
 def _git_log_has_execution_free_config(cwd: Path) -> bool:
@@ -2576,6 +2758,9 @@ def _low_risk_compound_developer_execution_context(
             saw_inspection = True
             continue
         if command_name == "gh" and github_is_low_risk:
+            saw_inspection = True
+            continue
+        if _safe_cli_metadata_segment_is_safe(command_name, args, cwd=segment_root):
             saw_inspection = True
             continue
         if command_name in _READ_ONLY_LOOKUP_COMMANDS and _read_only_lookup_primary_segment_is_safe(

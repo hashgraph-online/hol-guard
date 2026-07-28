@@ -506,8 +506,20 @@ def _daemon_process_failed(response: Mapping[str, object]) -> bool:
     return isinstance(reason_code, str) and reason_code.startswith("daemon_hook_process_")
 
 
-def _codex_hook_response(response: Mapping[str, object]) -> dict[str, object]:
-    return {key: value for key, value in response.items() if key != "reason_code"}
+def _codex_hook_response(response: Mapping[str, object], *, event_name: str) -> dict[str, object]:
+    """Keep daemon metadata out of Codex's strict hook response schemas."""
+
+    universal_keys = {"continue", "stopReason", "suppressOutput", "systemMessage"}
+    event_keys = {
+        "PostToolUse": {"decision", "reason"},
+    }.get(event_name, set())
+    allowed_keys = universal_keys | event_keys | {"hookSpecificOutput"}
+    filtered = {key: value for key, value in response.items() if key in allowed_keys}
+    hook_output = filtered.get("hookSpecificOutput")
+    if event_name == "PostToolUse" and isinstance(hook_output, Mapping):
+        post_tool_keys = {"hookEventName", "additionalContext", "updatedMCPToolOutput"}
+        filtered["hookSpecificOutput"] = {key: value for key, value in hook_output.items() if key in post_tool_keys}
+    return filtered
 
 
 def main(
@@ -622,7 +634,7 @@ def main(
             else _FAIL_CLOSED_REASON
         )
         response = _fail_closed(event_name, failure_reason)
-    sys.stdout.write(json.dumps(_codex_hook_response(response), separators=(",", ":")))
+    sys.stdout.write(json.dumps(_codex_hook_response(response, event_name=event_name), separators=(",", ":")))
     return 0
 
 

@@ -210,6 +210,28 @@ def test_fail_closed_uses_supported_codex_deny_shapes() -> None:
     assert prompt["continue"] is False
 
 
+def test_codex_post_tool_response_excludes_daemon_metadata() -> None:
+    response = bridge._codex_hook_response(
+        {
+            "policy_action": "allow",
+            "reason_code": "output_scan_allow",
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": "safe context",
+                "internal_reason_code": "output_scan_allow",
+            },
+        },
+        event_name="PostToolUse",
+    )
+
+    assert response == {
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": "safe context",
+        }
+    }
+
+
 def test_main_posts_to_authenticated_daemon(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -455,6 +477,43 @@ def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
 
     assert exit_code == 0
     assert json.loads(capsys.readouterr().out) == {}
+
+
+def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    daemon.start()
+    config = _bridge_config(guard_home, daemon.port)
+    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
+    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": "PostToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "pwd"},
+                    "tool_response": str(workspace),
+                    "cwd": str(workspace),
+                }
+            )
+        ),
+    )
+
+    try:
+        exit_code = bridge.main(**config)
+    finally:
+        daemon.stop()
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == {"hookSpecificOutput": {"hookEventName": "PostToolUse"}}
 
 
 def test_real_daemon_rejects_consumed_challenge_replay(tmp_path: Path) -> None:
