@@ -2790,7 +2790,8 @@ def _safe_dependency_symlink_execution_context(
             return None
         resolved_ln = Path(ln_path).resolve(strict=True)
         _ = resolved_source.relative_to(resolved_home)
-        _ = destination.parent.resolve(strict=True).relative_to(resolved_workspace)
+        resolved_destination_parent = destination.parent.resolve(strict=True)
+        _ = resolved_destination_parent.relative_to(resolved_workspace)
     except (OSError, RuntimeError, ValueError):
         return None
     if (
@@ -2806,7 +2807,7 @@ def _safe_dependency_symlink_execution_context(
         or not (resolved_source.parent / "package.json").is_file()
         or destination.exists()
         or destination.is_symlink()
-        or destination.parent.resolve(strict=True) != resolved_workspace
+        or resolved_destination_parent != resolved_workspace
     ):
         return None
     return context
