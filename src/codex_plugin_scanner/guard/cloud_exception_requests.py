@@ -127,10 +127,18 @@ def validate_command_policy_exception_payload(payload: dict[str, object]) -> dic
 
     # Reject forbidden keys — no command/graph/policy material crosses
     # the dashboard-to-Cloud boundary.
-    forbidden_keys = frozenset({
-        "rawCommand", "command", "commandExpression", "graph", "proposedGraph",
-        "expression", "regex", "pattern",
-    })
+    forbidden_keys = frozenset(
+        {
+            "rawCommand",
+            "command",
+            "commandExpression",
+            "graph",
+            "proposedGraph",
+            "expression",
+            "regex",
+            "pattern",
+        }
+    )
     for key in forbidden_keys:
         if key in payload:
             raise ValueError(f"Command-policy request must not include '{key}'.")
