@@ -4041,13 +4041,19 @@ def _local_read_operands_resolve_safely(
         candidate = Path(stripped)
         if not candidate.is_absolute():
             candidate = cwd / candidate
+        if has_glob_metacharacter:
+            if not _bounded_local_read_glob_is_safe(
+                candidate,
+                root=root,
+                allow_dirs=allow_dirs,
+            ):
+                return False
+            continue
         try:
             lexical = Path(os.path.abspath(os.fspath(candidate)))
             resolved = candidate.resolve(strict=True)
             relative = resolved.relative_to(root.resolve(strict=True))
         except FileNotFoundError:
-            if has_glob_metacharacter:
-                return False
             continue
         except (OSError, RuntimeError, ValueError):
             return False
@@ -4059,6 +4065,54 @@ def _local_read_operands_resolve_safely(
                 allow_dirs=allow_dirs and resolved.is_dir(),
                 home_dir=root,
             )
+        ):
+            return False
+    return True
+
+
+def _bounded_local_read_glob_is_safe(
+    candidate: Path,
+    *,
+    root: Path,
+    allow_dirs: bool,
+) -> bool:
+    """Accept one-level read globs only when every match is a safe in-root target."""
+
+    pattern = candidate.name
+    if "**" in pattern or any(character in os.fspath(candidate.parent) for character in "*?["):
+        return False
+    try:
+        root_resolved = root.resolve(strict=True)
+        lexical_parent = Path(os.path.abspath(os.fspath(candidate.parent)))
+        resolved_parent = candidate.parent.resolve(strict=True)
+        resolved_parent.relative_to(root_resolved)
+    except (FileNotFoundError, OSError, RuntimeError, ValueError):
+        return False
+    if resolved_parent != lexical_parent:
+        return False
+    matches: list[Path] = []
+    try:
+        for match in resolved_parent.glob(pattern):
+            matches.append(match)
+            if len(matches) > 128:
+                return False
+    except (OSError, RuntimeError, ValueError):
+        return False
+    for match in matches:
+        if match.name.startswith("-"):
+            return False
+        try:
+            if match.is_symlink():
+                return False
+            lexical = Path(os.path.abspath(os.fspath(match)))
+            resolved = match.resolve(strict=True)
+            relative = resolved.relative_to(root_resolved)
+        except (FileNotFoundError, OSError, RuntimeError, ValueError):
+            return False
+        if resolved != lexical or not _read_only_lookup_target_is_safe(
+            relative.as_posix(),
+            allow_dirs=allow_dirs and resolved.is_dir(),
+            home_dir=root,
         ):
             return False
     return True

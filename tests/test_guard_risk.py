@@ -4711,6 +4711,18 @@ def test_extract_network_hosts_tolerates_bracketed_regex_in_url():
     assert hosts == set()
 
 
+def test_extract_network_hosts_ignores_config_and_module_filenames():
+    hosts = extract_network_hosts("sed next.config next.config.mjs worker.config.cjs")
+
+    assert hosts == set()
+
+
+def test_extract_network_hosts_keeps_real_hosts_with_config_labels():
+    hosts = extract_network_hosts("fetch https://config.example.com/status and inspect vault.config")
+
+    assert hosts == {"config.example.com", "vault.config"}
+
+
 def test_normalized_url_indicator_tolerates_bracketed_regex():
     raw = r"https://[^:]*:\([^@]*\)@.*|\1|"
     result = _normalized_url_indicator(raw)

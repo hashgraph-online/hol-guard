@@ -15625,6 +15625,95 @@ def test_guard_runtime_allows_read_only_github_pipeline_after_literal_home_cd(tm
     assert match is None
 
 
+def test_guard_runtime_allows_bounded_config_inspection_after_external_cd(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    sibling_worktree = tmp_path / "sibling-worktree"
+    workspace.mkdir(parents=True)
+    sibling_worktree.mkdir()
+    _write_text(sibling_worktree / "next.config.ts", "export default {};\n")
+    _write_text(sibling_worktree / "next.config.mjs", "export default {};\n")
+    command = (
+        f"cd {sibling_worktree} && "
+        "sed -n '1,30p' next.config.ts next.config.mjs 2>/dev/null | head -30; "
+        'echo "---"; '
+        'grep -n "redirects\\\\|async redirects" next.config.* 2>/dev/null | head -5'
+    )
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert match is None
+
+
+def test_guard_runtime_reviews_config_inspection_glob_with_symlink_escape(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    sibling_worktree = tmp_path / "sibling-worktree"
+    outside = tmp_path / "outside.ts"
+    workspace.mkdir(parents=True)
+    sibling_worktree.mkdir()
+    _write_text(outside, "export default {};\n")
+    (sibling_worktree / "next.config.ts").symlink_to(outside)
+    command = f"cd {sibling_worktree} && grep -n redirects next.config.* 2>/dev/null | head -5"
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert match is not None
+    assert match.action_class == "unresolved shell execution context"
+    assert match.shell_execution_context_reason_code == "shell_cwd_workspace_escape"
+
+
+def test_guard_runtime_reviews_read_glob_with_option_shaped_match(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    sibling_worktree = tmp_path / "sibling-worktree"
+    workspace.mkdir(parents=True)
+    sibling_worktree.mkdir()
+    _write_text(sibling_worktree / "-i.ts", "backup suffix injection\n")
+    _write_text(sibling_worktree / "victim.ts", "preserve this\n")
+    command = f'cd {sibling_worktree} && sed -n "1p" *.ts'
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert match is not None
+    assert match.action_class == "unresolved shell execution context"
+    assert match.shell_execution_context_reason_code == "shell_cwd_workspace_escape"
+
+
+def test_guard_runtime_reviews_mutation_after_external_config_inspection(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    sibling_worktree = tmp_path / "sibling-worktree"
+    workspace.mkdir(parents=True)
+    sibling_worktree.mkdir()
+    _write_text(sibling_worktree / "next.config.ts", "export default {};\n")
+    command = f"cd {sibling_worktree} && grep -n redirects next.config.*; printf replacement > next.config.ts"
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert match is not None
+
+
 def test_guard_runtime_keeps_mutating_github_graphql_after_literal_home_cd_reviewable(tmp_path):
     home_dir = tmp_path / "home"
     workspace = home_dir / "workspace"

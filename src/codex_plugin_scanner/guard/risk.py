@@ -25,6 +25,10 @@ _NON_NETWORK_SUFFIXES = {
     "py",
     "js",
     "jsx",
+    "cjs",
+    "cts",
+    "mjs",
+    "mts",
     "ts",
     "tsx",
     "sh",
@@ -35,6 +39,7 @@ _NON_NETWORK_SUFFIXES = {
     "bak",
     "bin",
 }
+_NON_NETWORK_EXACT_FILENAMES = frozenset({"next.config"})
 _ENCODED_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"\bbase64(?:\s+--decode|\s+-d)\b", "base64 decode invocation"),
     (r"\bb64decode\b", "runtime base64 decode invocation"),
@@ -302,7 +307,7 @@ def extract_network_hosts(text: str) -> set[str]:
             continue
         lowered = value.lower()
         suffix = lowered.rsplit(".", 1)[-1]
-        if suffix in _NON_NETWORK_SUFFIXES:
+        if lowered in _NON_NETWORK_EXACT_FILENAMES or suffix in _NON_NETWORK_SUFFIXES:
             continue
         hosts.add(lowered)
     return hosts
