@@ -651,6 +651,10 @@ class TestGuardSurfaceServer:
         store = GuardStore(home_dir)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
+        assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
+            minimum_workers=1,
+            timeout_seconds=15,
+        )
 
         try:
             hook_request = urllib.request.Request(
