@@ -208,7 +208,14 @@ def _classify_benign_raw(command: str) -> tuple[bool, BenignReason]:
 
     # --- cat README* ---
     if executable == "cat":
-        if len(parts) == 2 and parts[1].startswith("README"):
+        operand = parts[1] if len(parts) == 2 else ""
+        if (
+            len(parts) == 2
+            and operand.startswith("README")
+            and "/" not in operand
+            and "\\" not in operand
+            and ".." not in operand
+        ):
             return True, BenignReason.BENIGN_READ_ONLY
         return False, BenignReason.NOT_BENIGN_NOT_ALLOWED
 

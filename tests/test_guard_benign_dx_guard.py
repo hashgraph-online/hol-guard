@@ -392,3 +392,8 @@ def test_classify_returns_str_tuple() -> None:
     assert isinstance(result[0], bool)
     assert isinstance(result[1], str)
     assert result == (True, BenignReason.BENIGN_READ_ONLY.value)
+
+
+def test_cat_readme_traversal_not_benign() -> None:
+    for payload in ("README/../../etc/passwd", "README/../../.env", "README.md/../../x", "README/.."):
+        assert classify_benign_command(f"cat {payload}")[0] is False
