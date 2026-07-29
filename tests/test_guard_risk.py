@@ -1202,6 +1202,57 @@ def test_tool_action_request_classifier_allows_canonical_pr_body_file_with_stand
     assert request is None
 
 
+@pytest.mark.parametrize("output_suffix", ("2>&1 | tail -1", "| head -n 3"))
+def test_tool_action_request_classifier_allows_static_pr_body_with_bounded_output(
+    tmp_path: Path,
+    output_suffix: str,
+) -> None:
+    body_file = tmp_path / "hol-guard-auth-pr-body.md"
+    body_file.write_text("## Summary\n- Coalesce audit activity.\n", encoding="utf-8")
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "gh pr create --base release/2.2 --head perf/auth-audit-coalescing "
+                '--title "fix(dashboard): coalesce audit activity" '
+                f"--body-file {body_file} {output_suffix}"
+            )
+        },
+        cwd=tmp_path,
+        home_dir=tmp_path.parent,
+    )
+
+    assert request is None
+
+
+@pytest.mark.parametrize(
+    "output_suffix",
+    (
+        "| tail -1 /etc/passwd",
+        "| tail --bytes 1",
+        "| tee result.txt",
+        "| tail -1; touch marker",
+        "| tail -1001",
+    ),
+)
+def test_tool_action_request_classifier_reviews_pr_create_with_unbounded_output(
+    tmp_path: Path,
+    output_suffix: str,
+) -> None:
+    body_file = tmp_path / "pr-body.md"
+    body_file.write_text("## Summary\n- Safe text.\n", encoding="utf-8")
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": (f"gh pr create --title 'Static title' --body-file {body_file} {output_suffix}")},
+        cwd=tmp_path,
+        home_dir=tmp_path.parent,
+    )
+
+    assert request is not None
+
+
 def test_tool_action_request_classifier_allows_bounded_gh_pr_edit_body_file(tmp_path: Path) -> None:
     home = tmp_path / "home"
     workspace = tmp_path / "workspace"

@@ -3481,10 +3481,9 @@ def _gh_pr_create_uses_safe_static_body_file(
 ) -> bool:
     if _shell_command_substitution_payloads(command_text):
         return False
-    segments = _shell_token_segments(_shell_tokens_preserving_quote_context(command_text))
-    if len(segments) != 1:
+    segment = _gh_pr_create_segment_with_bounded_output(command_text)
+    if segment is None:
         return False
-    segment = segments[0]
     args_start_index = _gh_pr_create_body_args_start_index(segment)
     if args_start_index is None:
         return False
@@ -3494,6 +3493,36 @@ def _gh_pr_create_uses_safe_static_body_file(
         cwd=cwd,
         home_dir=home_dir,
     )
+
+
+def _gh_pr_create_segment_with_bounded_output(
+    command_text: str,
+) -> list[_ShellTokenWithQuoteContext] | None:
+    tokens = _shell_tokens_preserving_quote_context(command_text)
+    separators = [index for index, token in enumerate(tokens) if token.plain in {"&&", "||", ";", "&", "|", "|&"}]
+    if not separators:
+        return tokens
+    if len(separators) != 1 or tokens[separators[0]].plain != "|":
+        return None
+    pipe_index = separators[0]
+    producer = tokens[:pipe_index]
+    if producer and producer[-1].plain == "2>&1":
+        producer = producer[:-1]
+    consumer = tuple(token.plain for token in tokens[pipe_index + 1 :])
+    if not _bounded_output_consumer(consumer):
+        return None
+    return producer
+
+
+def _bounded_output_consumer(tokens: tuple[str, ...]) -> bool:
+    if len(tokens) == 2 and tokens[0] in {"head", "tail"}:
+        count = tokens[1]
+    elif len(tokens) == 3 and tokens[:2] in {("head", "-n"), ("tail", "-n")}:
+        count = tokens[2]
+    else:
+        return False
+    normalized = count[1:] if count.startswith("-") else count
+    return normalized.isdigit() and 1 <= int(normalized) <= 1000
 
 
 def _gh_pr_edit_uses_safe_static_body_file(
