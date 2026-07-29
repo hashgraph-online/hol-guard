@@ -38,11 +38,10 @@ _VALID_GUARANTEE_KINDS: Final = frozenset(k.value for k in AtomicGuaranteeKind)
 # Validators (module-level free functions)
 # ---------------------------------------------------------------------------
 
+
 def _require_str(value: object, label: str, *, max_length: int = 256) -> str:
     if not isinstance(value, str) or not value or len(value) > max_length:
-        raise ValueError(
-            f"{label} must be a non-empty string of at most {max_length} characters"
-        )
+        raise ValueError(f"{label} must be a non-empty string of at most {max_length} characters")
     return value
 
 
@@ -62,24 +61,21 @@ def _require_guarantee_kind(value: object, label: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{label} must be a non-empty string")
     if value not in _VALID_GUARANTEE_KINDS:
-        raise ValueError(
-            f"{label} must be one of {sorted(_VALID_GUARANTEE_KINDS)}; got {value!r}"
-        )
+        raise ValueError(f"{label} must be one of {sorted(_VALID_GUARANTEE_KINDS)}; got {value!r}")
     return value
 
 
 def _require_proof_line(value: object, label: str, *, index: int) -> str:
     s = _require_str(value, label, max_length=_MAX_PROOF_LINE_LENGTH)
     if index < 0 or index >= _MAX_PROOF_LINES:
-        raise ValueError(
-            f"{label} index {index} out of range [0, {_MAX_PROOF_LINES})"
-        )
+        raise ValueError(f"{label} index {index} out of range [0, {_MAX_PROOF_LINES})")
     return s
 
 
 # ---------------------------------------------------------------------------
 # Receipt dataclass
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class ExecutionAssuranceReceipt:
@@ -114,42 +110,29 @@ class ExecutionAssuranceReceipt:
             _ = _require_guarantee_kind(kind, f"enforced_guarantee_kinds[{i}]")
         for i, kind in enumerate(self.absent_guarantee_kinds):
             _ = _require_guarantee_kind(kind, f"absent_guarantee_kinds[{i}]")
-        total_kinds = (
-            len(self.enforced_guarantee_kinds)
-            + len(self.absent_guarantee_kinds)
-        )
+        total_kinds = len(self.enforced_guarantee_kinds) + len(self.absent_guarantee_kinds)
         if total_kinds > _MAX_GUARANTEE_KINDS:
-            raise ValueError(
-                f"total guarantee kinds must be <= {_MAX_GUARANTEE_KINDS}"
-            )
+            raise ValueError(f"total guarantee kinds must be <= {_MAX_GUARANTEE_KINDS}")
         # Deduplicate and sort for stability
         enforced = tuple(sorted(set(self.enforced_guarantee_kinds)))
         absent = tuple(sorted(set(self.absent_guarantee_kinds)))
         object.__setattr__(self, "enforced_guarantee_kinds", enforced)
         object.__setattr__(self, "absent_guarantee_kinds", absent)
 
-        _ = _require_sha256(
-            self.execution_context_digest, "execution_context_digest"
-        )
+        _ = _require_sha256(self.execution_context_digest, "execution_context_digest")
 
         if self.terminal_statement_digest is not None:
-            _ = _require_sha256(
-                self.terminal_statement_digest, "terminal_statement_digest"
-            )
+            _ = _require_sha256(self.terminal_statement_digest, "terminal_statement_digest")
 
         # Proof lines validation
         if len(self.proof_lines) > _MAX_PROOF_LINES:
-            raise ValueError(
-                f"proof_lines must have <= {_MAX_PROOF_LINES} entries"
-            )
+            raise ValueError(f"proof_lines must have <= {_MAX_PROOF_LINES} entries")
         total_chars = 0
         for i, line in enumerate(self.proof_lines):
             _ = _require_proof_line(line, "proof_lines", index=i)
             total_chars += len(line)
         if total_chars > _MAX_TOTAL_PROOF_CHARS:
-            raise ValueError(
-                f"proof_lines total length must be <= {_MAX_TOTAL_PROOF_CHARS}"
-            )
+            raise ValueError(f"proof_lines total length must be <= {_MAX_TOTAL_PROOF_CHARS}")
 
     @property
     def schema_version(self) -> str:
@@ -180,6 +163,7 @@ class ExecutionAssuranceReceipt:
 # Store-facing helpers
 # ---------------------------------------------------------------------------
 
+
 def receipt_assurance_payload(receipt: ExecutionAssuranceReceipt) -> dict[str, object]:
     """Return a flat payload dict suitable for persistence / transmission.
 
@@ -202,23 +186,15 @@ def validate_assurance_receipt_schema_version(value: object) -> str:
         typed: dict[str, object] = cast("dict[str, object]", value)
         _raw = typed.get("_schema_version")
         if not isinstance(_raw, str):
-            raise ValueError(
-                "schema_version in dict must be a non-empty string"
-            )
+            raise ValueError("schema_version in dict must be a non-empty string")
         version = _require_str(_raw, "schema_version in dict")
     elif isinstance(value, str):
         version = value
     else:
-        msg = (
-            "schema_version must be a string or dict with '_schema_version'; "
-            + f"got {type(value).__name__}"
-        )
+        msg = "schema_version must be a string or dict with '_schema_version'; " + f"got {type(value).__name__}"
         raise ValueError(msg)
     if version != SCHEMA_VERSION:
-        raise ValueError(
-            "schema_version must be " + repr(SCHEMA_VERSION) + "; "
-            + f"got {version!r}"
-        )
+        raise ValueError("schema_version must be " + repr(SCHEMA_VERSION) + "; " + f"got {version!r}")
     return version
 
 
