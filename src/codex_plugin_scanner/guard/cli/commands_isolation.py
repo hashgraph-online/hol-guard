@@ -42,6 +42,15 @@ class IsolationStatusSnapshot:
 # ---------------------------------------------------------------------------
 
 
+_HEALTH_OK_STATES = ("healthy", "ok", "passing")
+
+
+def _health_is_ok(health: str) -> bool:
+    """Return whether a health state counts as healthy across status and verify."""
+
+    return health in _HEALTH_OK_STATES
+
+
 def isolation_status_payload(
     *,
     snapshot: IsolationStatusSnapshot | None = None,
@@ -71,7 +80,7 @@ def isolation_status_payload(
 
     payload: dict[str, object] = {
         "command": "isolation.status",
-        "status": "ok" if available and health == "healthy" else "degraded",
+        "status": "ok" if available and _health_is_ok(health) else "degraded",
         "provider": backend,
         "backend_available": available,
         "health_state": health,
@@ -245,12 +254,12 @@ def verify_isolation_payload(
     warnings: list[str] = []
     if not available:
         warnings.append("No isolation backend is available.")
-    if health not in ("healthy", "ok", "passing"):
+    if not _health_is_ok(health):
         warnings.append(f"Backend health is '{health}' (expected healthy).")
     if absent:
         warnings.append(f"Absent guarantees: {', '.join(absent)}.")
 
-    verified = available and health in ("healthy", "ok", "passing") and not absent
+    verified = available and _health_is_ok(health) and not absent
 
     payload: dict[str, object] = {
         "command": "isolation.verify",
