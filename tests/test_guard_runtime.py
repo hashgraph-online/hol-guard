@@ -15673,6 +15673,29 @@ def test_guard_runtime_reviews_config_inspection_glob_with_symlink_escape(tmp_pa
     assert match.shell_execution_context_reason_code == "shell_cwd_workspace_escape"
 
 
+def test_guard_runtime_reviews_case_variant_glob_symlink_escape(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
+    sibling_worktree = tmp_path / "sibling-worktree"
+    outside = tmp_path / "outside.ts"
+    workspace.mkdir(parents=True)
+    sibling_worktree.mkdir()
+    _write_text(outside, "export default {};\n")
+    (sibling_worktree / "NEXT.CONFIG.MJS").symlink_to(outside)
+    command = f"cd {sibling_worktree} && grep -n redirects next.config.* 2>/dev/null | head -5"
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert match is not None
+    assert match.action_class == "unresolved shell execution context"
+    assert match.shell_execution_context_reason_code == "shell_cwd_workspace_escape"
+
+
 def test_guard_runtime_reviews_read_glob_with_option_shaped_match(tmp_path):
     home_dir = tmp_path / "home"
     workspace = home_dir / "workspace"

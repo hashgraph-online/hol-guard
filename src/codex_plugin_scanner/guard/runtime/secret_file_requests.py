@@ -4079,8 +4079,10 @@ def _bounded_local_read_glob_is_safe(
     """Accept one-level read globs only when every match is a safe in-root target."""
 
     pattern = candidate.name
-    if "**" in pattern or any(character in os.fspath(candidate.parent) for character in "*?["):
+    pattern_match = re.fullmatch(r"([A-Za-z0-9_.-]+)\*", pattern)
+    if pattern_match is None or any(character in os.fspath(candidate.parent) for character in "*?["):
         return False
+    literal_prefix = pattern_match.group(1)
     try:
         root_resolved = root.resolve(strict=True)
         lexical_parent = Path(os.path.abspath(os.fspath(candidate.parent)))
@@ -4092,7 +4094,13 @@ def _bounded_local_read_glob_is_safe(
         return False
     matches: list[Path] = []
     try:
-        for match in resolved_parent.glob(pattern):
+        entries_seen = 0
+        for match in resolved_parent.iterdir():
+            entries_seen += 1
+            if entries_seen > 4096:
+                return False
+            if not match.name.casefold().startswith(literal_prefix.casefold()):
+                continue
             matches.append(match)
             if len(matches) > 128:
                 return False
