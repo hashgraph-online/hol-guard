@@ -165,7 +165,7 @@ def _check_gh_pr_view_fields(args: list[str]) -> tuple[bool, BenignReason]:
         idx = rest.index("--json")
         if idx + 1 >= len(rest):
             return False, BenignReason.NOT_BENIGN_NOT_ALLOWED
-        after = rest[idx + 1:]
+        after = rest[idx + 1 :]
         for f in after:
             if f.startswith("--"):
                 return False, BenignReason.NOT_BENIGN_NOT_ALLOWED
@@ -229,21 +229,11 @@ def _classify_benign_raw(command: str) -> tuple[bool, BenignReason]:
         return _check_git_log_flags(parts[2:])
 
     # --- gh pr view ---
-    if (
-        executable == "gh"
-        and len(parts) >= 3
-        and parts[1] == "pr"
-        and parts[2] == "view"
-    ):
+    if executable == "gh" and len(parts) >= 3 and parts[1] == "pr" and parts[2] == "view":
         return _check_gh_pr_view_fields(parts[3:])
 
     # --- gh pr diff ---
-    if (
-        executable == "gh"
-        and len(parts) >= 3
-        and parts[1] == "pr"
-        and parts[2] == "diff"
-    ):
+    if executable == "gh" and len(parts) >= 3 and parts[1] == "pr" and parts[2] == "diff":
         if len(parts) != 4:
             return False, BenignReason.NOT_BENIGN_NOT_ALLOWED
         pr_num = parts[3]
