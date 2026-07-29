@@ -48,7 +48,7 @@ from . import commands_hook_runtime_finish as _commands_hook_runtime_finish
 from . import commands_hook_generic as _commands_hook_generic
 from . import commands_hook as _commands_hook
 from . import commands_router as _commands_router
-
+from . import commands_isolation as _commands_isolation
 _SOURCE_MODULES: tuple[ModuleType, ...] = (
     __commands_shared,
     _commands_support_workspace,
@@ -88,6 +88,7 @@ _SOURCE_MODULES: tuple[ModuleType, ...] = (
     _commands_hook_generic,
     _commands_hook,
     _commands_router,
+    _commands_isolation,
 )
 
 
