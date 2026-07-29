@@ -148,10 +148,23 @@ def derive_child_link(
     if new_depth > _MAX_DEPTH:
         raise ValueError(f"child depth {new_depth} exceeds maximum {_MAX_DEPTH}")
 
+    # Default child IDs are opaque digests derived from the parent, so chained
+    # derivation never lets the ID length grow without bound across depth.
+    if child_correlation_id is None:
+        child_correlation_id = framed_digest(
+            _EXECUTION_CONTEXT_LINK_DOMAIN,
+            {"correlation_id": parent.correlation_id, "depth": new_depth, "kind": "child-correlation"},
+        )
+    if child_attempt_nonce is None:
+        child_attempt_nonce = framed_digest(
+            _EXECUTION_CONTEXT_LINK_DOMAIN,
+            {"attempt_nonce": parent.attempt_nonce, "depth": new_depth, "kind": "child-nonce"},
+        )
+
     return construct_execution_context_link(
-        correlation_id=child_correlation_id or f"{parent.correlation_id}:child:{new_depth}",
+        correlation_id=child_correlation_id,
         root_id=parent.root_id,
-        attempt_nonce=child_attempt_nonce or f"{parent.attempt_nonce}:child:{new_depth}",
+        attempt_nonce=child_attempt_nonce,
         parent_correlation_id=parent.correlation_id,
         retry_of_correlation_id=parent.correlation_id if retry else None,
         depth=new_depth,

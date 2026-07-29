@@ -387,3 +387,21 @@ class TestFrozenProperties:
         )
         s: set = {link}
         assert link in s
+
+
+def test_chained_child_ids_stay_bounded() -> None:
+    from codex_plugin_scanner.guard.runtime.execution_context_propagation import (
+        construct_execution_context_link,
+        derive_child_link,
+    )
+
+    link = construct_execution_context_link(
+        correlation_id="root",
+        root_id="root",
+        attempt_nonce="n0",
+        depth=0,
+    )
+    for _ in range(10):
+        link = derive_child_link(link)
+    assert len(link.correlation_id) <= 64
+    assert len(link.attempt_nonce) <= 64

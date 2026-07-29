@@ -69,6 +69,7 @@ def resolve_execution_ownership(
     grade: object,
     *,
     can_return_result: bool = True,
+    reroute_to_remote: bool = False,
 ) -> ExecutionOwnershipGrade:
     """Resolve the effective execution-ownership grade.
 
@@ -80,14 +81,19 @@ def resolve_execution_ownership(
        refuses to elevate weak grades silently.
     2. **Can-return-result constraint.** When ``can_return_result`` is
        ``False`` the grade MUST degrade to ``DECISION_ONLY``.
-    3. **Delegation constraint.** If the caller intends to reroute to a
-       provider/remote (signal by calling with a non-local expectation), the
-       effective grade must remain in ``_DELEGABLE_GRADES``.
+    3. **Delegation constraint.** When ``reroute_to_remote`` is ``True`` the
+       caller intends to delegate to a provider/remote, so the effective grade
+       must be in ``_DELEGABLE_GRADES``; otherwise it degrades to
+       ``DECISION_ONLY`` rather than claiming a delegation it cannot perform.
     """
     validated = _require_execution_ownership_grade(grade)
 
     # Rule 2: can't return result → force DECISION_ONLY.
     if not can_return_result:
+        return ExecutionOwnershipGrade.DECISION_ONLY
+
+    # Rule 3: an intent to reroute requires a delegable grade.
+    if reroute_to_remote and validated not in _DELEGABLE_GRADES:
         return ExecutionOwnershipGrade.DECISION_ONLY
 
     return validated

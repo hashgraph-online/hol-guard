@@ -214,3 +214,19 @@ class TestEdgeCases:
         )
         assert step2 == ExecutionOwnershipGrade.DECISION_ONLY
         assert step2 != ExecutionOwnershipGrade.GUARD_OWNED_LOCAL
+
+
+def test_reroute_intent_requires_delegable_grade() -> None:
+    from codex_plugin_scanner.guard.runtime.execution_ownership import (
+        ExecutionOwnershipGrade,
+        resolve_execution_ownership,
+    )
+
+    assert (
+        resolve_execution_ownership(ExecutionOwnershipGrade.DECISION_ONLY, reroute_to_remote=True)
+        is ExecutionOwnershipGrade.DECISION_ONLY
+    )
+    assert (
+        resolve_execution_ownership(ExecutionOwnershipGrade.GUARD_OWNED_LOCAL, reroute_to_remote=True)
+        is ExecutionOwnershipGrade.GUARD_OWNED_LOCAL
+    )
