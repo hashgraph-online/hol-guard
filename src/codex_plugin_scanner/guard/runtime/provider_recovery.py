@@ -50,6 +50,11 @@ _HEALTH_TO_RECOVERY: dict[ProviderHealthState, RecoveryPhase] = {
     ProviderHealthState.HEALTHY: RecoveryPhase.HEALTHY,
     ProviderHealthState.DEGRADED: RecoveryPhase.DEGRADED,
     ProviderHealthState.UNAVAILABLE: RecoveryPhase.UNAVAILABLE,
+    # Unresolved transient/terminal states map into active recovery handling.
+    ProviderHealthState.UNKNOWN: RecoveryPhase.RECOVERING,
+    ProviderHealthState.VERIFYING: RecoveryPhase.RECOVERING,
+    ProviderHealthState.REVOKED: RecoveryPhase.UNAVAILABLE,
+    ProviderHealthState.INCOMPATIBLE: RecoveryPhase.UNAVAILABLE,
 }
 
 

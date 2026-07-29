@@ -9,9 +9,11 @@ import re
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime.execution_assurance_contract import ProviderHealthState
 from codex_plugin_scanner.guard.runtime.provider_recovery import (
     RecoveryPhase,
     RecoveryState,
+    from_provider_health_state,
     next_recovery_state,
     recovery_notice,
 )
@@ -459,3 +461,9 @@ class TestPrivacyNoLeak:
         assert state.attempt == 0
         assert state.next_retry_seconds == 0.0
         assert state.last_error_digest is None
+
+
+def test_all_health_states_map_to_a_recovery_phase() -> None:
+    for state in ProviderHealthState:
+        phase = from_provider_health_state(state)
+        assert phase in set(RecoveryPhase)
