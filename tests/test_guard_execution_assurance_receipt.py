@@ -310,3 +310,14 @@ class TestImmutability:
         with pytest.raises(AttributeError):
             # tuples are immutable; this verifies we got a tuple, not a mutable list
             enforced.append("anything")
+
+
+def test_overlapping_enforced_and_absent_kinds_rejected() -> None:
+    with pytest.raises(ValueError, match="both enforced and absent"):
+        ExecutionAssuranceReceipt(
+            achieved_boundary=GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            attestation_trust=GuardExecutionAttestationTrust.SELF_ATTESTED,
+            execution_context_digest=DIGEST,
+            enforced_guarantee_kinds=("filesystem",),
+            absent_guarantee_kinds=("filesystem",),
+        )

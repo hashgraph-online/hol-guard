@@ -116,6 +116,8 @@ class ExecutionAssuranceReceipt:
         # Deduplicate and sort for stability
         enforced = tuple(sorted(set(self.enforced_guarantee_kinds)))
         absent = tuple(sorted(set(self.absent_guarantee_kinds)))
+        if set(enforced) & set(absent):
+            raise ValueError("a guarantee kind cannot be both enforced and absent")
         object.__setattr__(self, "enforced_guarantee_kinds", enforced)
         object.__setattr__(self, "absent_guarantee_kinds", absent)
 
