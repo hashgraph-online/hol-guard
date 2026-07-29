@@ -193,3 +193,25 @@ def test_boundedoutput_truncated_must_be_bool() -> None:
 def test_capture_requires_bytes() -> None:
     with pytest.raises(TypeError, match="data must be bytes"):
         capture_bounded_output("not bytes")  # type: ignore[arg-type]
+
+
+def test_digest_rejects_uppercase_hex() -> None:
+    import pytest
+
+    from codex_plugin_scanner.guard.runtime.local_output_review import BoundedOutput
+
+    with pytest.raises(ValueError, match="lowercase hex"):
+        BoundedOutput(
+            stream="stdout",
+            byte_count=0,
+            digest="A" * 64,
+            truncated=False,
+        )
+
+    with pytest.raises(ValueError, match="lowercase hex"):
+        BoundedOutput(
+            stream="stdout",
+            byte_count=0,
+            digest="g" * 64,
+            truncated=False,
+        )

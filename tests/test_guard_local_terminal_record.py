@@ -227,8 +227,6 @@ def test_local_terminal_record_is_immutable() -> None:
         record.outcome = ExecutionOutcome.FAILED
 
 
-
-
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------
@@ -246,3 +244,61 @@ def test_build_with_declared_output_digests() -> None:
     )
     # declared_output_digests is stored on LocalTerminalRecord
     assert record.declared_output_digests == ("a" * 64,)
+
+
+class TestReviewFixes:
+    def test_builder_requires_execution_instance(self) -> None:
+        from codex_plugin_scanner.guard.runtime.execution_assurance_contract import ExecutionOutcome
+        from codex_plugin_scanner.guard.runtime.local_output_review import capture_bounded_output
+        from codex_plugin_scanner.guard.runtime.local_terminal_record import build_local_terminal_record
+
+        try:
+            build_local_terminal_record(
+                outcome=ExecutionOutcome.SUCCEEDED,
+                exit_code=0,
+                outputs=(capture_bounded_output(b"x"),),
+                cleanup_complete=True,
+            )
+        except TypeError:
+            return
+        raise AssertionError("execution_instance must be required")
+
+    def test_duplicate_stream_keys_rejected(self) -> None:
+        from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
+            ExecutionOutcome,
+            GuardExecutionAttestationTrust,
+        )
+        from codex_plugin_scanner.guard.runtime.local_terminal_record import LocalTerminalRecord
+
+        with __import__("pytest").raises(ValueError, match="duplicate stream"):
+            LocalTerminalRecord(
+                outcome=ExecutionOutcome.SUCCEEDED,
+                exit_code=0,
+                stream_byte_counts=(("stdout", 1), ("stdout", 2)),
+                stream_digests=(("stdout", "a" * 64),),
+                truncated=False,
+                declared_output_digests=(),
+                cleanup_complete=True,
+                execution_instance="i1",
+                attestation_trust=GuardExecutionAttestationTrust.SELF_ATTESTED,
+            )
+
+    def test_non_self_attested_rejected(self) -> None:
+        from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
+            ExecutionOutcome,
+            GuardExecutionAttestationTrust,
+        )
+        from codex_plugin_scanner.guard.runtime.local_terminal_record import LocalTerminalRecord
+
+        with __import__("pytest").raises(ValueError, match="SELF_ATTESTED"):
+            LocalTerminalRecord(
+                outcome=ExecutionOutcome.SUCCEEDED,
+                exit_code=0,
+                stream_byte_counts=(),
+                stream_digests=(),
+                truncated=False,
+                declared_output_digests=(),
+                cleanup_complete=True,
+                execution_instance="i1",
+                attestation_trust=GuardExecutionAttestationTrust.VERIFIED,
+            )

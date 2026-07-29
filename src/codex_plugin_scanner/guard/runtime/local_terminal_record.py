@@ -23,6 +23,70 @@ __all__ = [
     "build_local_terminal_record",
 ]
 
+_HEX_DIGITS = frozenset("0123456789abcdef")
+_MAX_STREAMS = 8
+
+
+def _require_outcome(value: object) -> None:
+    if not isinstance(value, ExecutionOutcome):
+        raise ValueError("outcome must be an ExecutionOutcome")
+
+
+def _require_trust(value: object) -> None:
+    if not isinstance(value, GuardExecutionAttestationTrust):
+        raise ValueError("attestation_trust must be a GuardExecutionAttestationTrust")
+
+
+def _require_exit_code(value: object) -> None:
+    if value is None:
+        return
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError("exit_code must be an int or None")
+
+
+def _require_execution_instance(value: object) -> None:
+    if not isinstance(value, str) or not value:
+        raise ValueError("execution_instance must be a non-empty string")
+
+
+def _require_lowercase_sha256(value: object, label: str) -> None:
+    if not isinstance(value, str) or len(value) != 64 or any(character not in _HEX_DIGITS for character in value):
+        raise ValueError(f"{label} must be a 64-char lowercase SHA-256 hex digest")
+
+
+def _require_stream_table(
+    byte_counts: tuple[tuple[str, int], ...],
+    digests: tuple[tuple[str, str], ...],
+) -> None:
+    if type(byte_counts) is not tuple:
+        raise ValueError("stream_byte_counts must be a tuple")
+    if type(digests) is not tuple:
+        raise ValueError("stream_digests must be a tuple")
+    if len(byte_counts) > _MAX_STREAMS or len(digests) > _MAX_STREAMS:
+        raise ValueError(f"too many streams (max {_MAX_STREAMS})")
+    bc_keys = tuple(key for key, _ in byte_counts)
+    d_keys = tuple(key for key, _ in digests)
+    if len(set(bc_keys)) != len(bc_keys) or len(set(d_keys)) != len(d_keys):
+        raise ValueError("duplicate stream entries are not allowed")
+    if set(bc_keys) != set(d_keys):
+        raise ValueError("stream digests must cover every stream byte count")
+
+
+def _require_stream_entries(
+    byte_counts: tuple[tuple[str, int], ...],
+    digests: tuple[tuple[str, str], ...],
+) -> None:
+    for key, count in byte_counts:
+        if type(key) is not str or not key:
+            raise ValueError("stream_byte_counts entry key must be a non-empty string")
+        if type(count) is not int or isinstance(count, bool) or count < 0:
+            raise ValueError("stream_byte_counts entry count must be a non-negative integer")
+    for key, digest in digests:
+        if type(key) is not str or not key:
+            raise ValueError("stream_digests entry key must be a non-empty string")
+        _require_lowercase_sha256(digest, "stream_digests entry digest")
+
+
 # ---------------------------------------------------------------------------
 # LocalTerminalRecord — frozen/slots mirror of TerminalStatement fields
 # ---------------------------------------------------------------------------
@@ -50,53 +114,22 @@ class LocalTerminalRecord:
     attestation_trust: GuardExecutionAttestationTrust
 
     def __post_init__(self) -> None:
-        # Validation of typed fields uses `type()` to avoid basedpyright
-        # "unnecessary isinstance" warnings on already-typed attributes.
-        if type(self.stream_byte_counts) is not tuple:
-            raise ValueError("stream_byte_counts must be a tuple")
-        if type(self.stream_digests) is not tuple:
-            raise ValueError("stream_digests must be a tuple")
+        _require_outcome(self.outcome)
+        _require_trust(self.attestation_trust)
+        if self.attestation_trust is not GuardExecutionAttestationTrust.SELF_ATTESTED:
+            raise ValueError("local terminal records are always SELF_ATTESTED")
+        _require_exit_code(self.exit_code)
+        _require_stream_table(self.stream_byte_counts, self.stream_digests)
+        _require_stream_entries(self.stream_byte_counts, self.stream_digests)
         if type(self.declared_output_digests) is not tuple:
             raise ValueError("declared_output_digests must be a tuple")
         for digest in self.declared_output_digests:
-            if type(digest) is not str or len(digest) != 64:
-                raise ValueError(f"declared_output_digests entry must be a 64-char hex SHA-256 string, got {digest!r}")
-            try:
-                _ = int(digest, 16)
-            except ValueError:
-                raise ValueError(f"declared_output_digests entry must be hex, got {digest!r}") from None
+            _require_lowercase_sha256(digest, "declared_output_digests entry")
         if type(self.truncated) is not bool:
             raise ValueError("truncated must be a bool")
         if type(self.cleanup_complete) is not bool:
             raise ValueError("cleanup_complete must be a bool")
-        if type(self.execution_instance) is not str or not self.execution_instance:
-            raise ValueError("execution_instance must be a non-empty string")
-
-        # Cross-field invariant: byte_counts and digests share the same keys.
-        max_streams = 8
-        if len(self.stream_byte_counts) > max_streams or len(self.stream_digests) > max_streams:
-            raise ValueError(f"too many streams (max {max_streams})")
-        bc_keys = {k for k, _ in self.stream_byte_counts}
-        d_keys = {k for k, _ in self.stream_digests}
-        if bc_keys != d_keys:
-            raise ValueError(
-                f"stream keys mismatch: byte_counts={sorted(bc_keys)}, digests={sorted(d_keys)}"
-            )
-        # Individual validation
-        for key, count in self.stream_byte_counts:
-            if type(key) is not str or not key:
-                raise ValueError("stream_byte_counts entry key must be a non-empty string")
-            if type(count) is not int or isinstance(count, bool) or count < 0:
-                raise ValueError(f"stream_byte_counts entry count must be a non-negative int, got {count!r}")
-        for key, digest in self.stream_digests:
-            if type(key) is not str or not key:
-                raise ValueError("stream_digests entry key must be a non-empty string")
-            if type(digest) is not str or len(digest) != 64:
-                raise ValueError(f"stream_digests entry digest must be a 64-char hex SHA-256 string, got {digest!r}")
-            try:
-                _ = int(digest, 16)
-            except ValueError:
-                raise ValueError(f"stream_digests entry digest must be hex, got {digest!r}") from None
+        _require_execution_instance(self.execution_instance)
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +144,7 @@ def build_local_terminal_record(
     outputs: tuple[BoundedOutput, ...],
     declared_output_digests: tuple[str, ...] | None = None,
     cleanup_complete: bool = False,
-    execution_instance: str = "",
+    execution_instance: str,
 ) -> LocalTerminalRecord:
     """Build a ``LocalTerminalRecord`` from a tuple of ``BoundedOutput``.
 
@@ -136,12 +169,8 @@ def build_local_terminal_record(
     if type(outputs) is not tuple:
         raise TypeError(f"outputs must be a tuple, got {type(outputs).__name__}")
 
-    stream_byte_counts: tuple[tuple[str, int], ...] = tuple(
-        (output.stream, output.byte_count) for output in outputs
-    )
-    stream_digests: tuple[tuple[str, str], ...] = tuple(
-        (output.stream, output.digest) for output in outputs
-    )
+    stream_byte_counts: tuple[tuple[str, int], ...] = tuple((output.stream, output.byte_count) for output in outputs)
+    stream_digests: tuple[tuple[str, str], ...] = tuple((output.stream, output.digest) for output in outputs)
     truncated = any(output.truncated for output in outputs)
     if declared_output_digests is None:
         declared_output_digests = ()

@@ -67,7 +67,11 @@ class BoundedOutput:
             raise ValueError(f"stream must be 'stdout' or 'stderr', got {self.stream!r}")
         if type(self.byte_count) is not int or isinstance(self.byte_count, bool) or self.byte_count < 0:
             raise ValueError(f"byte_count must be a non-negative integer, got {self.byte_count!r}")
-        if type(self.digest) is not str or len(self.digest) != 64:
+        if (
+            type(self.digest) is not str
+            or len(self.digest) != 64
+            or any(character not in "0123456789abcdef" for character in self.digest)
+        ):
             raise ValueError(f"digest must be a 64-char lowercase hex SHA-256 string, got {self.digest!r}")
         if type(self.truncated) is not bool:
             raise ValueError(f"truncated must be a bool, got {type(self.truncated).__name__!r}")
