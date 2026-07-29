@@ -125,6 +125,8 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  resume_poll_path?: string;\n"
         '  model_output_action?: "allow_original" | "replace_with_reviewed_excerpt" | "block" | "not_applicable";\n'
         "  reviewed_output_sha256?: string;\n"
+        "  observed_policy_action?: string;\n"
+        "  observe_mode?: boolean;\n"
         '  notice?: "none" | "excerpt" | "warning";\n'
         "  reason_code?: string;\n"
         "};\n"
@@ -604,6 +606,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         '      ctx.ui.notify(reason, "warning");\n'
         "      return blockedToolResult(modelReason, event.details);\n"
         "    }\n"
+        "    if (response.observe_mode === true) return undefined;\n"
         "    if (outputTruncated) {\n"
         '      if (response.model_output_action === "allow_original" &&\n'
         "          typeof response.reviewed_output_sha256 === 'string' &&\n"

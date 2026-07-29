@@ -451,6 +451,11 @@ class TestPiInstall:
         assert "reviewed_output_sha256" in text
         assert 'response.model_output_action === "allow_original"' in text
         assert "response.reviewed_output_sha256 === digest.sha256" in text
+        assert "observe_mode?: boolean;" in text
+        assert "if (response.observe_mode === true) return undefined;" in text
+        assert text.index("if (response.observe_mode === true) return undefined;") < text.index(
+            "if (outputTruncated) {"
+        )
         # digestOutputText must only hash text-bearing fields, not metadata
         # like {type: "text"} — otherwise structured source reads never match
         assert "record.type === 'text'" in text

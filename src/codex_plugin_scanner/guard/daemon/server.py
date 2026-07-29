@@ -5731,7 +5731,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         fall back, because the request may have omitted full output and
         supplied only ``guard_source_ref``.
         """
-        from .hook_worker import HookWorkerUnsupported, post_tool_fail_safe_response
+        from .hook_worker import HookWorkerUnsupported
 
         if home_dir is None or guard_home is None:
             return None
@@ -5759,14 +5759,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 stage="server",
                 exception_type=type(error).__name__,
             )
-            rt_values = params.get("runtime-harness", [])
-            actual_harness = (
-                rt_values[-1].strip()
-                if rt_values and isinstance(rt_values[-1], str) and rt_values[-1].strip()
-                else default_harness
-            )
-            return post_tool_fail_safe_response(
-                actual_harness,
+            return self._runtime_hook_fail_safe_response(
+                payload,
+                params,
+                default_harness=default_harness,
                 reason="HOL Guard could not complete local hook review safely.",
                 reason_code="daemon_worker_exception",
             )

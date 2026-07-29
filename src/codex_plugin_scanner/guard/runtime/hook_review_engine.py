@@ -104,9 +104,11 @@ class HookReviewEngine:
         Never raises. Any unexpected exception returns deny/block.
         """
         start = time.monotonic()
+        config: GuardConfig | None = None
         response: HookReviewResponse
         try:
-            response = self._review_inner(request, start=start)
+            config = self.config_loader(request.guard_home, request.cwd)
+            response = self._review_inner(request, config=config, start=start)
         except HookFailSafe as error:
             response = error.to_response()
         except Exception as error:
@@ -118,8 +120,37 @@ class HookReviewEngine:
                 notice="warning",
                 reason_code="engine_exception",
             )
+        if config is not None and config.mode == "observe" and request.event_name == "PostToolUse":
+            response = self._observe_only_response(request, response)
         self._record_metrics(request, response, start)
         return response
+
+    @staticmethod
+    def _observe_only_response(
+        request: HookReviewRequest,
+        response: HookReviewResponse,
+    ) -> HookReviewResponse:
+        observed_policy_action = response.policy_action
+        if response.decision == "deny" and observed_policy_action is None:
+            observed_policy_action = "block"
+        output_sha256 = (
+            request.source_ref.output_sha256
+            if request.source_ref is not None
+            else request.output_summary.output_sha256
+            if request.output_summary is not None
+            else None
+        )
+        return HookReviewResponse(
+            decision="allow",
+            reason=None,
+            model_output_action="allow_original",
+            reviewed_output_sha256=output_sha256,
+            notice="none",
+            reason_code=(f"observe_{response.reason_code}" if response.decision == "deny" else response.reason_code),
+            policy_action="allow",
+            observed_policy_action=observed_policy_action,
+            observe_mode=True,
+        )
 
     @staticmethod
     def _scan_deadline(
@@ -133,10 +164,13 @@ class HookReviewEngine:
         )
         return min(deadline, deadline_monotonic) if deadline_monotonic is not None else deadline
 
-    def _review_inner(self, request: HookReviewRequest, *, start: float) -> HookReviewResponse:
-        # Load config.
-        config = self.config_loader(request.guard_home, request.cwd)
-
+    def _review_inner(
+        self,
+        request: HookReviewRequest,
+        *,
+        config: GuardConfig,
+        start: float,
+    ) -> HookReviewResponse:
         # Normalize payload into action envelope.
         envelope = normalize_harness_payload(
             request.harness,
@@ -436,7 +470,7 @@ class HookReviewEngine:
                     output_size=0,
                     latency_ms=latency_ms,
                     decision=response.decision,
-                    policy_action=response.policy_action,
+                    policy_action=response.observed_policy_action or response.policy_action,
                     model_output_action=response.model_output_action,
                     reason_code=response.reason_code,
                     cache_status="not_applicable",
