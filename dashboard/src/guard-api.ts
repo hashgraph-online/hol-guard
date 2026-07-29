@@ -1911,6 +1911,24 @@ function runtimeSnapshotSearchParams(
   return params;
 }
 
+export class GuardSessionUnavailableError extends Error {
+  constructor() {
+    super("Guard dashboard session is not available. Reopen the Guard dashboard from the authenticated URL.");
+    this.name = "GuardSessionUnavailableError";
+  }
+}
+
+/**
+ * Fail fast when the dashboard has no session token. Without this gate,
+ * auth-required polling loops keep issuing requests that the daemon rejects
+ * with 401s, generating a steady stream of unauthorized audit events.
+ */
+function requireGuardSessionToken(): void {
+  if (!readGuardToken()) {
+    throw new GuardSessionUnavailableError();
+  }
+}
+
 export async function fetchInboxState(input: { activeRequestId?: string } = {}): Promise<{
   snapshot: GuardRuntimeSnapshot;
   items: GuardApprovalRequest[];
@@ -1919,6 +1937,7 @@ export async function fetchInboxState(input: { activeRequestId?: string } = {}):
     const snapshot = buildDemoRuntimeSnapshot();
     return { snapshot, items: snapshot.items };
   }
+  requireGuardSessionToken();
   const [snapshotPayload, items] = await Promise.all([
     readJson<RuntimeSnapshotPayload>(
       queuePath("/v1/runtime", runtimeSnapshotSearchParams({ ...input, includeItems: false, includeReceipts: false })),
@@ -1946,6 +1965,7 @@ export async function fetchApprovalPage(input: GuardApprovalPageFilters = {}): P
       status: input.status ?? "pending"
     };
   }
+  requireGuardSessionToken();
   const payload = await readJson<ApprovalRequestListPayload>(queuePath("/v1/requests", queueSearchParams(input)));
   return normalizeApprovalPage(payload, input.status ?? "pending");
 }
@@ -1956,6 +1976,7 @@ export async function fetchRuntimeSnapshot(
   if (isGuardDemoMode()) {
     return buildDemoRuntimeSnapshot();
   }
+  requireGuardSessionToken();
   const params = runtimeSnapshotSearchParams(input);
   const query = params.toString();
   const path = query.length > 0 ? `/v1/runtime?${query}` : "/v1/runtime";
@@ -1967,6 +1988,7 @@ export async function fetchQueueSummary(input: { activeRequestId?: string } = {}
   if (isGuardDemoMode()) {
     return buildDemoRuntimeSnapshot().queue_summary ?? normalizeQueueSummary(null, getDemoRequests().length);
   }
+  requireGuardSessionToken();
   const params = new URLSearchParams();
   if (input.activeRequestId) {
     params.set("active_request_id", input.activeRequestId);

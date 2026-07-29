@@ -8,7 +8,9 @@ import {
   fetchApprovalPage,
   fetchGuardUpdateStatus,
   GuardHarnessActionError,
+  GuardSessionUnavailableError,
   fetchQueueSummary,
+  fetchRuntimeSnapshot,
 	  fetchResumeStatus,
 	  formatHarnessCommand,
 	  normalizeRuntimeSnapshot,
@@ -1215,6 +1217,31 @@ assert(
   headerValue(sessionOnlyCalls[0].init, "X-Guard-Dashboard-Session") === "token-session-only",
   "L078ad: fetchApprovalPage falls back to sessionStorage when localStorage is unavailable"
 );
+
+installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+{
+  const noTokenCalls = installFetchStub({});
+  const approvalPageError = await fetchApprovalPage().then(
+    () => null,
+    (error: unknown) => error
+  );
+  assert(
+    approvalPageError instanceof GuardSessionUnavailableError,
+    "L078ae-no-token: fetchApprovalPage rejects with GuardSessionUnavailableError when no session token is available"
+  );
+  const snapshotError = await fetchRuntimeSnapshot().then(
+    () => null,
+    (error: unknown) => error
+  );
+  assert(
+    snapshotError instanceof GuardSessionUnavailableError,
+    "L078af-no-token: fetchRuntimeSnapshot rejects with GuardSessionUnavailableError when no session token is available"
+  );
+  assert(
+    noTokenCalls.length === 0,
+    "L078ag-no-token: auth-required fetches issue no HTTP requests when the dashboard session token is missing"
+  );
+}
 
 const updateChannelStorage = new Map<string, string>();
 installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781", { localStorage: updateChannelStorage });
