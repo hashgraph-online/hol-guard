@@ -1231,9 +1231,16 @@ def test_tool_action_request_classifier_allows_static_pr_body_with_bounded_outpu
     (
         "| tail -1 /etc/passwd",
         "| tail --bytes 1",
+        "| tail 1",
+        "| head 1",
         "| tee result.txt",
         "| tail -1; touch marker",
         "| tail -1001",
+        "> result.txt | tail -1",
+        "2> errors.txt | tail -1",
+        "--label $PR_LABEL | tail -1",
+        "--label *.txt | tail -1",
+        "--label <(date) | tail -1",
     ),
 )
 def test_tool_action_request_classifier_reviews_pr_create_with_unbounded_output(
