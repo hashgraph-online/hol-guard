@@ -10,11 +10,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
-    resolve: {
-      alias: {
-        "react-qr-code": resolve(__dirname, "node_modules/react-qr-code/lib/index.mjs"),
-      },
-    },
+
     server: {
       host: "127.0.0.1",
       port: 4174,
