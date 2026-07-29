@@ -67,7 +67,8 @@ class TestCapabilities:
     def test_enforced_guarantees_reflect_backend_availability(self) -> None:
         provider = LocalOSContainmentProvider()
         capabilities = {g.kind: g for g in provider.capabilities()}
-        expected = sys.platform in ("darwin", "linux")
+        # Enforced tracks actual backend binary availability, not just the platform.
+        expected = provider.health_check().state is ProviderHealthState.HEALTHY
         assert capabilities[AtomicGuaranteeKind.FILESYSTEM].enforced is expected
         assert capabilities[AtomicGuaranteeKind.NETWORK].enforced is expected
 
