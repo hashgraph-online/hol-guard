@@ -90,8 +90,4 @@ def resolve_execution_ownership(
     if not can_return_result:
         return ExecutionOwnershipGrade.DECISION_ONLY
 
-    # Rule 1: never upgrade weak grades.
-    if validated in _WEAK_GRADES:
-        return validated
-
     return validated
