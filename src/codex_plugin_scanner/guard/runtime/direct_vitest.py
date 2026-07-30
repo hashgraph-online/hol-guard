@@ -22,6 +22,7 @@ else:  # pragma: no cover - runtime compatibility
 
 from ..adapters.base import HarnessContext
 from ..shims import package_shim_status
+from .direct_typescript_diagnostics import direct_typescript_diagnostic_filter_context
 from .git_execution_safety import git_binary_path_is_trusted
 from .jsonc import loads_jsonc
 from .shell_execution_context import ShellExecutionContext, model_shell_execution_context
@@ -138,6 +139,15 @@ def direct_local_typescript_execution_context(
         workspace_root=workspace,
         home_dir=home_dir,
     )
+    diagnostic_filter_context = direct_typescript_diagnostic_filter_context(
+        context,
+        workspace=workspace,
+        home_dir=home_dir,
+        trusted_path_command=_trusted_path_command,
+        workspace_typescript_is_bound=_workspace_typescript_is_bound,
+    )
+    if diagnostic_filter_context is not None:
+        return diagnostic_filter_context
     if not context.complete or len(context.segments) != 5:
         return None
     directory, compiler, grep, count, marker = context.segments
