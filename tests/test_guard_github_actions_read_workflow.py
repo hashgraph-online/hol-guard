@@ -52,11 +52,19 @@ def _clear_execution_injection_environment(monkeypatch: pytest.MonkeyPatch) -> N
             monkeypatch.delenv(key)
 
 
+def _trust_pipeline_executables_for_parser_test(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.github_actions_read_workflow._trusted_pipeline_executables",
+        lambda _names, *, cwd: bool(cwd),
+    )
+
+
 def test_typed_github_actions_read_workflow_is_explicitly_benign(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     _clear_execution_injection_environment(monkeypatch)
+    _trust_pipeline_executables_for_parser_test(monkeypatch)
     command = _workflow()
 
     assert is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
@@ -93,6 +101,7 @@ def test_bounded_github_actions_log_metadata_read_is_explicitly_benign(
     tmp_path: Path,
 ) -> None:
     _clear_execution_injection_environment(monkeypatch)
+    _trust_pipeline_executables_for_parser_test(monkeypatch)
     command = (
         "gh -R example/project run view 30542570393 --log 2>&1 "
         '| grep -iE "UV_PYTHON_INSTALL_DIR|toolcache|pythonLoc|hostedtoolcache" '
