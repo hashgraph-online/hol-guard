@@ -8,8 +8,9 @@ from typing import Protocol
 
 from .shell_execution_context import ShellExecutionContext
 
+_PATH_COMPONENT = r"(?:[A-Za-z0-9_-]|\\\.)+"
 _TYPESCRIPT_DIAGNOSTIC_PATH_FILTER = re.compile(
-    r"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*(?:\|[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)*$"
+    rf"^{_PATH_COMPONENT}(?:/{_PATH_COMPONENT})*(?:\|{_PATH_COMPONENT}(?:/{_PATH_COMPONENT})*)*$"
 )
 
 

@@ -107,6 +107,20 @@ def test_verified_typescript_diagnostic_filter_is_benign(
     )
 
 
+def test_typescript_diagnostic_filter_accepts_escaped_literal_dots(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, caller, command = _fixture(tmp_path, monkeypatch)
+
+    assert is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": command.replace("harnesses/page|enterprises/page", r"src/page\.tsx|app/route\.tsx")},
+        cwd=caller,
+        home_dir=home,
+    )
+
+
 @pytest.mark.parametrize(
     ("original", "replacement"),
     (
@@ -114,6 +128,10 @@ def test_verified_typescript_diagnostic_filter_is_benign(
         ("npx tsc --noEmit", "npx --package typescript tsc --noEmit"),
         ("2>&1", "> diagnostics.txt 2>&1"),
         ('grep -E "harnesses/page|enterprises/page"', 'grep -E ".*"'),
+        (
+            'grep -E "harnesses/page|enterprises/page"',
+            'grep -E "harnesses/.|enterprises/page"',
+        ),
         ('grep -E "harnesses/page|enterprises/page"', "grep harnesses/page"),
         ('echo "NO_ERRORS_IN_TOUCHED_FILES"', "touch marker"),
     ),
