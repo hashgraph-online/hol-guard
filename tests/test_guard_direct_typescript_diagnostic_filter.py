@@ -235,6 +235,65 @@ def test_typescript_diagnostic_filter_rejects_npm_configuration_files(
     )
 
 
+@pytest.mark.parametrize(
+    "setting",
+    (
+        "call=payload.js",
+        "foreground-scripts=true",
+        "global=true",
+        "ignore-scripts=false",
+        "include-workspace-root=true",
+        "location=global",
+        "package=attacker-package",
+        "prefix=/unverified",
+        "scripts-prepend-node-path=true",
+        "workspace=unverified",
+        "workspaces=true",
+    ),
+)
+def test_typescript_diagnostic_filter_rejects_npm_exec_controls(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    setting: str,
+) -> None:
+    home, caller, command = _fixture(tmp_path, monkeypatch)
+    workspace = Path(command.split(" && ", 1)[0].removeprefix("cd "))
+    _ = (workspace / ".npmrc").write_text(f"{setting}\n", encoding="utf-8")
+
+    assert not is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": command},
+        cwd=caller,
+        home_dir=home,
+    )
+
+
+@pytest.mark.parametrize(
+    "content",
+    (
+        "registry=https://registry.npmjs.org/\n",
+        "@example:registry=https://registry.example/\n",
+        "//registry.example/:_authToken=${TOKEN}\n",
+        "fund=false\n",
+    ),
+)
+def test_typescript_diagnostic_filter_accepts_benign_npm_configuration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    content: str,
+) -> None:
+    home, caller, command = _fixture(tmp_path, monkeypatch)
+    workspace = Path(command.split(" && ", 1)[0].removeprefix("cd "))
+    _ = (workspace / ".npmrc").write_text(content, encoding="utf-8")
+
+    assert is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": command},
+        cwd=caller,
+        home_dir=home,
+    )
+
+
 def test_typescript_diagnostic_filter_requires_trusted_node_interpreter(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

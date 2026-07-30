@@ -143,7 +143,7 @@ def _safe_github_read_pipeline(
     if not segments or not segments[0] or segments[0][0] != "gh":
         return None
     execution_cwd = cwd or Path.cwd()
-    if not _github_read_execution_environment_is_safe(cwd=execution_cwd):
+    if not shell_read_execution_environment_is_safe(cwd=execution_cwd):
         return None
     if _safe_actions_log_metadata_pipeline(segments, cwd=execution_cwd):
         return "text"
@@ -181,7 +181,7 @@ def _safe_actions_log_metadata_pipeline(segments: list[list[str]], *, cwd: Path 
     )
 
 
-def _github_read_execution_environment_is_safe(*, cwd: Path) -> bool:
+def shell_read_execution_environment_is_safe(*, cwd: Path) -> bool:
     if any(os.environ.get(key, "").strip() for key in _EXECUTION_ROUTING_ENVIRONMENT):
         return False
     for key, value in os.environ.items():

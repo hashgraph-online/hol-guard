@@ -12,8 +12,8 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
     _unmodeled_shell_runtime_artifact,
 )
 from codex_plugin_scanner.guard.runtime.github_actions_read_workflow import (
-    _github_read_execution_environment_is_safe,
     is_nonexecuting_github_actions_read_workflow,
+    shell_read_execution_environment_is_safe,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
@@ -284,7 +284,7 @@ def test_bounded_github_actions_log_metadata_read_accepts_trusted_loader_path(
     _clear_execution_injection_environment(monkeypatch)
     monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/lib")
 
-    assert _github_read_execution_environment_is_safe(cwd=tmp_path)
+    assert shell_read_execution_environment_is_safe(cwd=tmp_path)
 
 
 def test_bounded_github_actions_log_metadata_read_rejects_platform_temp_loader_path(
