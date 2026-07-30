@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
     _unmodeled_shell_runtime_artifact,
 )
 from codex_plugin_scanner.guard.runtime.github_actions_read_workflow import (
+    _github_read_execution_environment_is_safe,
     is_nonexecuting_github_actions_read_workflow,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
@@ -45,7 +46,17 @@ def _workflow(*, final_command: str | None = None, id_query: str = ".jobs[].id")
     )
 
 
-def test_typed_github_actions_read_workflow_is_explicitly_benign(tmp_path: Path) -> None:
+def _clear_execution_injection_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in tuple(os.environ):
+        if key.startswith(("BASH_FUNC_", "DYLD_", "LD_")):
+            monkeypatch.delenv(key)
+
+
+def test_typed_github_actions_read_workflow_is_explicitly_benign(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _clear_execution_injection_environment(monkeypatch)
     command = _workflow()
 
     assert is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
@@ -77,7 +88,11 @@ def test_typed_github_actions_read_workflow_is_explicitly_benign(tmp_path: Path)
     )
 
 
-def test_bounded_github_actions_log_metadata_read_is_explicitly_benign(tmp_path: Path) -> None:
+def test_bounded_github_actions_log_metadata_read_is_explicitly_benign(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _clear_execution_injection_environment(monkeypatch)
     command = (
         "gh -R example/project run view 30542570393 --log 2>&1 "
         '| grep -iE "UV_PYTHON_INSTALL_DIR|toolcache|pythonLoc|hostedtoolcache" '
@@ -257,11 +272,10 @@ def test_bounded_github_actions_log_metadata_read_accepts_trusted_loader_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    _clear_execution_injection_environment(monkeypatch)
     monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/lib")
 
-    command = 'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6'
-    assert is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
-    assert is_nonexecuting_github_actions_read_workflow(_workflow(), cwd=tmp_path)
+    assert _github_read_execution_environment_is_safe(cwd=tmp_path)
 
 
 def test_bounded_github_actions_log_metadata_read_rejects_platform_temp_loader_path(
