@@ -59,6 +59,16 @@ export function temporaryMcpApprovalOptions(item: GuardApprovalRequest): Tempora
   return options;
 }
 
+export function temporaryMcpApprovalNeedsIdentityRefresh(item: GuardApprovalRequest): boolean {
+  if (temporaryMcpApprovalOptions(item) !== null || item.artifact_type !== "tool_call") {
+    return false;
+  }
+  return (
+    /^[^:]+:runtime:(?:global|project):[^:]+:[^:]+$/.test(item.artifact_id)
+    && /^[^:]+:[^:]+$/.test(item.artifact_name)
+  );
+}
+
 export function defaultTemporaryMcpTarget(options: TemporaryMcpApprovalOptions): GuardTemporaryMcpGrantTarget {
   if (options.allowed_targets.includes("category")) return "category";
   return options.allowed_targets[0];

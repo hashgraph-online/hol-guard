@@ -5,8 +5,10 @@ from __future__ import annotations
 import os
 import re
 import shlex
+from pathlib import Path
 from typing import Final, Literal
 
+from .git_execution_safety import git_binary_path_is_trusted
 from .github_capability_interaction import github_capability_requires_confirmation
 from .github_command_capabilities import classify_github_cli
 
@@ -21,9 +23,37 @@ _ACTIONS_ENDPOINT: Final = re.compile(
 _JOB_ID_QUERY: Final = re.compile(r"\.jobs\[\]\.id")
 _FILTERED_JOB_ID_QUERY: Final = re.compile(r'\.jobs\[\]\|select\(\.name\|test\("(?:[^"\\]|\\.){1,200}"\)\)\|\.id')
 _MAX_FILTER_LINES: Final = 100
+_ACTIONS_LOG_METADATA_FIELDS: Final = frozenset(
+    {
+        "UV_PYTHON_INSTALL_DIR",
+        "toolcache",
+        "pythonLoc",
+        "hostedtoolcache",
+    }
+)
+_EXECUTION_ROUTING_ENVIRONMENT: Final = (
+    "BASH_ENV",
+    "CURL_CA_BUNDLE",
+    "ENV",
+    "GH_CONFIG_DIR",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_SYSTEM",
+    "ALL_PROXY",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "NODE_EXTRA_CA_CERTS",
+    "REQUESTS_CA_BUNDLE",
+    "SSL_CERT_DIR",
+    "SSL_CERT_FILE",
+    "ZDOTDIR",
+    "all_proxy",
+    "https_proxy",
+    "http_proxy",
+)
 
 
-def is_nonexecuting_github_actions_read_workflow(command_text: str) -> bool:
+def is_nonexecuting_github_actions_read_workflow(command_text: str, *, cwd: Path | None = None) -> bool:
     """Prove a small shell workflow reads Actions data without executable data flow.
 
     Fixed filters constrain emitted output and shell behavior. Network response
@@ -36,7 +66,11 @@ def is_nonexecuting_github_actions_read_workflow(command_text: str) -> bool:
         return False
     if any(os.environ.get(key, "").strip() not in {"", "cat"} for key in ("GH_PAGER", "PAGER")):
         return False
-    if os.environ.get("RIPGREP_CONFIG_PATH", "").strip():
+    if os.environ.get("RIPGREP_CONFIG_PATH", "").strip() or any(
+        os.environ.get(key, "").strip() for key in _EXECUTION_ROUTING_ENVIRONMENT
+    ):
+        return False
+    if any(key.startswith(("BASH_FUNC_", "DYLD_", "LD_")) for key in os.environ):
         return False
     values: dict[str, _ValueKind] = {}
     control_stack: list[str] = []
@@ -51,7 +85,7 @@ def is_nonexecuting_github_actions_read_workflow(command_text: str) -> bool:
             continue
         assignment = re.fullmatch(rf"(?P<name>{_NAME})=\$\((?P<body>.*)\)", line)
         if assignment is not None:
-            result_kind = _safe_github_read_pipeline(assignment.group("body"), values)
+            result_kind = _safe_github_read_pipeline(assignment.group("body"), values, cwd=cwd)
             if result_kind is None:
                 return False
             values[assignment.group("name")] = result_kind
@@ -59,7 +93,7 @@ def is_nonexecuting_github_actions_read_workflow(command_text: str) -> bool:
             continue
         loop = re.fullmatch(rf"for\s+(?P<name>{_NAME})\s+in\s+\$\((?P<body>.*)\);\s*do", line)
         if loop is not None:
-            if _safe_github_read_pipeline(loop.group("body"), values) != "number":
+            if _safe_github_read_pipeline(loop.group("body"), values, cwd=cwd) != "number":
                 return False
             values[loop.group("name")] = "number"
             control_stack.append("for")
@@ -83,17 +117,24 @@ def is_nonexecuting_github_actions_read_workflow(command_text: str) -> bool:
             if not _safe_echo(line, values):
                 return False
             continue
-        result_kind = _safe_github_read_pipeline(line, values)
+        result_kind = _safe_github_read_pipeline(line, values, cwd=cwd)
         if result_kind is None:
             return False
         saw_github_read = True
     return saw_github_read and not control_stack
 
 
-def _safe_github_read_pipeline(command_text: str, values: dict[str, _ValueKind]) -> _ValueKind | None:
+def _safe_github_read_pipeline(
+    command_text: str,
+    values: dict[str, _ValueKind],
+    *,
+    cwd: Path | None = None,
+) -> _ValueKind | None:
     segments = _pipeline_segments(command_text)
     if not segments or not segments[0] or segments[0][0] != "gh":
         return None
+    if _safe_actions_log_metadata_pipeline(segments, cwd=cwd):
+        return "text"
     substituted = _substitute_number_variables(segments[0], values)
     if substituted is None:
         return None
@@ -106,6 +147,72 @@ def _safe_github_read_pipeline(command_text: str, values: dict[str, _ValueKind])
     if segments[1:] and not _filters_bound_emitted_matches(segments[1:]):
         return None
     return _github_output_kind(github_tokens)
+
+
+def _safe_actions_log_metadata_pipeline(segments: list[list[str]], *, cwd: Path | None) -> bool:
+    if len(segments) != 4:
+        return False
+    execution_cwd = cwd or Path.cwd()
+    github_tokens = _without_safe_stderr_redirect(segments[0])
+    if github_tokens is None or not _safe_run_log_metadata_args(github_tokens):
+        return False
+    grep, sort, head = segments[1:]
+    return (
+        _trusted_pipeline_executables(("gh", "grep", "sort", "head"), cwd=execution_cwd)
+        and _safe_log_metadata_grep(grep)
+        and sort == ["sort", "-u"]
+        and len(head) == 2
+        and head[0] == "head"
+        and _bounded_count(head[1])
+    )
+
+
+def _trusted_pipeline_executables(names: tuple[str, ...], *, cwd: Path) -> bool:
+    for name in names:
+        executable = _path_command_for_cwd(name, cwd=cwd)
+        try:
+            resolved = Path(executable).resolve(strict=True) if executable is not None else None
+        except (OSError, RuntimeError):
+            return False
+        if resolved is None or not git_binary_path_is_trusted(resolved, cwd=cwd):
+            return False
+    return True
+
+
+def _path_command_for_cwd(name: str, *, cwd: Path) -> str | None:
+    for entry in os.environ.get("PATH", os.defpath).split(os.pathsep):
+        directory = Path(entry or ".")
+        if not directory.is_absolute():
+            directory = cwd / directory
+        candidate = directory / name
+        try:
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+        except OSError:
+            continue
+    return None
+
+
+def _safe_run_log_metadata_args(tokens: list[str]) -> bool:
+    if not tokens or tokens[0] != "gh":
+        return False
+    args = tokens[1:]
+    if len(args) < 2 or args[0] not in {"-R", "--repo"} or re.fullmatch(_REPOSITORY, args[1]) is None:
+        return False
+    args = args[2:]
+    return bool(
+        len(args) == 4
+        and args[:2] == ["run", "view"]
+        and re.fullmatch(r"[1-9][0-9]*", args[2]) is not None
+        and args[3] == "--log"
+    )
+
+
+def _safe_log_metadata_grep(tokens: list[str]) -> bool:
+    if len(tokens) != 3 or tokens[:2] != ["grep", "-iE"]:
+        return False
+    fields = tokens[2].split("|")
+    return bool(fields) and len(fields) == len(set(fields)) and set(fields).issubset(_ACTIONS_LOG_METADATA_FIELDS)
 
 
 def _pipeline_segments(command_text: str) -> list[list[str]]:

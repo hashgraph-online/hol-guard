@@ -15424,6 +15424,12 @@ function temporaryMcpApprovalOptions(item) {
   const { eligible: _, ...options } = value;
   return options;
 }
+function temporaryMcpApprovalNeedsIdentityRefresh(item) {
+  if (temporaryMcpApprovalOptions(item) !== null || item.artifact_type !== "tool_call") {
+    return false;
+  }
+  return /^[^:]+:runtime:(?:global|project):[^:]+:[^:]+$/.test(item.artifact_id) && /^[^:]+:[^:]+$/.test(item.artifact_name);
+}
 function defaultTemporaryMcpTarget(options) {
   if (options.allowed_targets.includes("category")) return "category";
   return options.allowed_targets[0];
@@ -28164,6 +28170,20 @@ function pastDecisionVerb(decision) {
   }
 }
 const EXCLUSION_COPY$1 = "Privileged browser access, file transfer, secrets, command execution, destructive actions, and shared-profile access still require review.";
+function TemporaryMcpIdentityRefreshNotice(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 border-l-2 border-brand-blue bg-brand-blue/[0.04] px-4 py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Timed tool access needs a current identity check." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: "Update Guard, then retry this action to choose capability or server access and an expiry." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "a",
+      {
+        href: props.settingsHref,
+        className: "mt-3 inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
+        children: "Open settings"
+      }
+    )
+  ] });
+}
 function TemporaryMcpApprovalControls(props) {
   const expiry = temporaryMcpExpiryLabel(props.duration);
   const descriptionId = "temporary-mcp-boundary";
@@ -28366,6 +28386,7 @@ function ReviewDecisionCard(props) {
     () => item ? temporaryMcpApprovalOptions(item) : null,
     [item]
   );
+  const temporaryMcpIdentityRefreshRequired = item !== null && temporaryMcpApprovalNeedsIdentityRefresh(item);
   const localToolOptions = reactExports.useMemo(
     () => item ? localToolApprovalOptions(item) : null,
     [item]
@@ -28670,6 +28691,7 @@ function ReviewDecisionCard(props) {
             onDurationChange: setMcpGrantDuration
           }
         ),
+        temporaryMcpIdentityRefreshRequired && /* @__PURE__ */ jsxRuntimeExports.jsx(TemporaryMcpIdentityRefreshNotice, { settingsHref: guardAwareHref("/settings") }),
         temporaryMcpOptions === null && localToolOptions !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
           LocalToolApprovalControls,
           {

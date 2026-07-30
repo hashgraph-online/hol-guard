@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -46,7 +47,7 @@ def _workflow(*, final_command: str | None = None, id_query: str = ".jobs[].id")
 def test_typed_github_actions_read_workflow_is_explicitly_benign(tmp_path: Path) -> None:
     command = _workflow()
 
-    assert is_nonexecuting_github_actions_read_workflow(command)
+    assert is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
     assert is_explicitly_benign_tool_action_request(
         "bash",
         {"command": command},
@@ -73,6 +74,39 @@ def test_typed_github_actions_read_workflow_is_explicitly_benign(tmp_path: Path)
         )
         is None
     )
+
+
+def test_bounded_github_actions_log_metadata_read_is_explicitly_benign(tmp_path: Path) -> None:
+    command = (
+        "gh -R example/project run view 30542570393 --log 2>&1 "
+        '| grep -iE "UV_PYTHON_INSTALL_DIR|toolcache|pythonLoc|hostedtoolcache" '
+        "| sort -u | head -6"
+    )
+
+    assert is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
+    assert is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        'gh -R example/project run view 30542570393 --log | grep -iE "TOKEN|toolcache" | sort -u | head -6',
+        'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -101',
+        'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort | head -6',
+        'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | sh',
+        'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | tee output.log | head -6',
+        'gh -R ../project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6',
+        'gh run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6',
+        'gh -R example/project run rerun 30542570393 --log | grep -iE "toolcache" | sort -u | head -6',
+    ),
+)
+def test_bounded_github_actions_log_metadata_read_rejects_widening(command: str) -> None:
+    assert not is_nonexecuting_github_actions_read_workflow(command)
 
 
 @pytest.mark.parametrize(
@@ -120,6 +154,17 @@ def test_typed_github_actions_read_workflow_rejects_unclosed_control_flow() -> N
         ("GH_PAGER", "./payload"),
         ("PAGER", "./payload"),
         ("RIPGREP_CONFIG_PATH", "./ripgreprc"),
+        ("BASH_ENV", "./payload"),
+        ("ENV", "./payload"),
+        ("GH_CONFIG_DIR", "./config"),
+        ("GIT_CONFIG_GLOBAL", "./gitconfig"),
+        ("HTTPS_PROXY", "https://attacker.invalid"),
+        ("https_proxy", "https://attacker.invalid"),
+        ("ALL_PROXY", "socks5://attacker.invalid"),
+        ("all_proxy", "socks5://attacker.invalid"),
+        ("NODE_EXTRA_CA_CERTS", "./attacker.pem"),
+        ("SSL_CERT_FILE", "./attacker.pem"),
+        ("ZDOTDIR", "./zdotdir"),
     ),
 )
 def test_typed_github_actions_read_workflow_rejects_executable_or_remote_environment(
@@ -130,3 +175,53 @@ def test_typed_github_actions_read_workflow_rejects_executable_or_remote_environ
     monkeypatch.setenv(key, value)
 
     assert not is_nonexecuting_github_actions_read_workflow(_workflow())
+
+
+def test_bounded_github_actions_log_metadata_read_rejects_path_shadowing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    for name in ("gh", "grep", "sort", "head"):
+        (tmp_path / name).touch(mode=0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    command = 'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6'
+    assert not is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
+
+
+def test_bounded_github_actions_log_metadata_read_resolves_relative_path_from_action_cwd(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for name in ("gh", "grep", "sort", "head"):
+        (bin_dir / name).touch(mode=0o755)
+    monkeypatch.setenv("PATH", f"bin{os.pathsep}{os.environ['PATH']}")
+
+    command = 'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6'
+    assert not is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
+    wrapped = f"output=$({command})"
+    assert not is_nonexecuting_github_actions_read_workflow(wrapped, cwd=tmp_path)
+
+
+def test_bounded_github_actions_log_metadata_read_rejects_exported_bash_function(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("BASH_FUNC_gh%%", "() { printf shadowed; }")
+
+    command = 'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6'
+    assert not is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
+
+
+@pytest.mark.parametrize("key", ("LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH"))
+def test_bounded_github_actions_log_metadata_read_rejects_dynamic_loader_injection(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    key: str,
+) -> None:
+    monkeypatch.setenv(key, "attacker-library")
+
+    command = 'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6'
+    assert not is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)

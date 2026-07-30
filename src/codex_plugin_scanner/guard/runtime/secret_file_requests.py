@@ -1226,7 +1226,7 @@ def is_explicitly_benign_tool_action_request(
         if not parts:
             return False
         parsed_command_names = list(_shell_command_names_from_parts(parts))
-        if is_nonexecuting_github_actions_read_workflow(stripped_command):
+        if is_nonexecuting_github_actions_read_workflow(stripped_command, cwd=cwd):
             found_benign_candidate = True
             continue
         if _looks_like_benign_interpreter_wait(stripped_command, parts, parsed_command_names):
@@ -1987,10 +1987,10 @@ def _destructive_shell_tool_action_request(
             canonical_command=canonical_command,
             interpreter_executable_identities=interpreter_executable_identities,
         )
-    if is_nonexecuting_github_actions_read_workflow(detection_command_text) and (
+    if is_nonexecuting_github_actions_read_workflow(detection_command_text, cwd=cwd) and (
         raw_command_text is None
         or raw_command_text == detection_command_text
-        or is_nonexecuting_github_actions_read_workflow(raw_command_text)
+        or is_nonexecuting_github_actions_read_workflow(raw_command_text, cwd=cwd)
     ):
         return None
     if not execution_context.complete and home_dir is not None:

@@ -1,12 +1,16 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { GuardApprovalRequest } from "./guard-types";
-import { TemporaryMcpApprovalControls } from "./temporary-mcp-approval-controls";
+import {
+  TemporaryMcpApprovalControls,
+  TemporaryMcpIdentityRefreshNotice,
+} from "./temporary-mcp-approval-controls";
 import {
   buildTemporaryMcpResolutionFields,
   defaultTemporaryMcpDuration,
   defaultTemporaryMcpTarget,
   temporaryMcpAllowButtonLabel,
   temporaryMcpApprovalOptions,
+  temporaryMcpApprovalNeedsIdentityRefresh,
   temporaryMcpExpiryLabel,
   temporaryMcpSummary,
   validTemporaryMcpSelection,
@@ -71,6 +75,26 @@ assert(
   temporaryMcpApprovalOptions({ ...request, temporary_mcp_approval: null }) === null,
   "legacy requests omit temporary controls",
 );
+assert(
+  temporaryMcpApprovalNeedsIdentityRefresh({
+    ...request,
+    artifact_id: "codex:runtime:global:chrome-devtools:take_snapshot",
+    artifact_name: "chrome-devtools:take_snapshot",
+    artifact_type: "tool_call",
+    temporary_mcp_approval: null,
+  }),
+  "legacy runtime MCP requests expose identity refresh recovery",
+);
+assert(
+  !temporaryMcpApprovalNeedsIdentityRefresh({
+    ...request,
+    artifact_id: "codex:project:tool-action:shell",
+    artifact_name: "shell",
+    artifact_type: "tool_call",
+    temporary_mcp_approval: null,
+  }),
+  "ordinary tool calls do not show MCP identity recovery",
+);
 
 const html = renderToStaticMarkup(
   <TemporaryMcpApprovalControls
@@ -88,5 +112,9 @@ assert(html.includes("What should it cover?"), "coverage question is explicit");
 assert(html.includes("Privileged browser access"), "hard-risk boundary stays visible");
 assert(html.includes("min-h-11"), "controls preserve 44px touch targets");
 assert(!html.includes("sha256-secret-binding"), "stable server fingerprint is never rendered");
+
+const recoveryHtml = renderToStaticMarkup(<TemporaryMcpIdentityRefreshNotice settingsHref="/settings" />);
+assert(recoveryHtml.includes("current identity check"), "legacy MCP requests explain why timed access is unavailable");
+assert(recoveryHtml.includes("Open settings"), "legacy MCP requests link to update controls");
 
 console.log("temporary-mcp-approval.test.tsx: all tests passed");
