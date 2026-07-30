@@ -20,6 +20,26 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _strip_venv_from_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolve bare `python3` against the system PATH, not the active venv.
+
+    Under `uv run` the venv's ``bin`` directory is prepended to ``PATH`` so a
+    bare ``python3`` resolves into ``$HOME/.venv`` and is classified as
+    ``user_controlled``. These tests assert the trusted-system-interpreter
+    contract, so resolve ``python3`` as it would resolve on a system PATH.
+    """
+
+    path = os.environ.get("PATH", "")
+    parts = path.split(os.pathsep) if path else []
+    venv = os.environ.get("VIRTUAL_ENV")
+    if not venv:
+        return
+    venv_bin = os.path.join(venv, "bin")
+    cleaned = [part for part in parts if os.path.normpath(part) != os.path.normpath(venv_bin)]
+    monkeypatch.setenv("PATH", os.pathsep.join(cleaned))
+
+
 def _write_interpreter(path: Path, body: bytes = b"#!/bin/sh\nexit 0\n", *, executable: bool = True) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(body)
