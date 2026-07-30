@@ -116,5 +116,6 @@ assert(!html.includes("sha256-secret-binding"), "stable server fingerprint is ne
 const recoveryHtml = renderToStaticMarkup(<TemporaryMcpIdentityRefreshNotice settingsHref="/settings" />);
 assert(recoveryHtml.includes("current identity check"), "legacy MCP requests explain why timed access is unavailable");
 assert(recoveryHtml.includes("Open settings"), "legacy MCP requests link to update controls");
+assert(recoveryHtml.includes('href="/settings"'), "legacy MCP requests link to Guard settings");
 
 console.log("temporary-mcp-approval.test.tsx: all tests passed");

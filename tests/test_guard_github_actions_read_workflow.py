@@ -148,6 +148,12 @@ def test_typed_github_actions_read_workflow_rejects_unclosed_control_flow() -> N
     assert not is_nonexecuting_github_actions_read_workflow(_workflow().removesuffix("done"))
 
 
+def test_typed_github_actions_read_workflow_requires_explicit_run_repository() -> None:
+    assert not is_nonexecuting_github_actions_read_workflow(
+        "gh run view 30542570393 --json jobs | head -5",
+    )
+
+
 @pytest.mark.parametrize(
     ("key", "value"),
     (
@@ -156,14 +162,21 @@ def test_typed_github_actions_read_workflow_rejects_unclosed_control_flow() -> N
         ("PAGER", "./payload"),
         ("RIPGREP_CONFIG_PATH", "./ripgreprc"),
         ("BASH_ENV", "./payload"),
+        ("CURL_CA_BUNDLE", "./attacker.pem"),
         ("ENV", "./payload"),
         ("GH_CONFIG_DIR", "./config"),
+        ("GIT_CONFIG_COUNT", "1"),
         ("GIT_CONFIG_GLOBAL", "./gitconfig"),
+        ("GIT_CONFIG_SYSTEM", "./gitconfig"),
+        ("HTTP_PROXY", "http://attacker.invalid"),
+        ("http_proxy", "http://attacker.invalid"),
         ("HTTPS_PROXY", "https://attacker.invalid"),
         ("https_proxy", "https://attacker.invalid"),
         ("ALL_PROXY", "socks5://attacker.invalid"),
         ("all_proxy", "socks5://attacker.invalid"),
         ("NODE_EXTRA_CA_CERTS", "./attacker.pem"),
+        ("REQUESTS_CA_BUNDLE", "./attacker.pem"),
+        ("SSL_CERT_DIR", "./certificates"),
         ("SSL_CERT_FILE", "./attacker.pem"),
         ("ZDOTDIR", "./zdotdir"),
     ),
@@ -175,12 +188,9 @@ def test_typed_github_actions_read_workflow_rejects_executable_or_remote_environ
 ) -> None:
     monkeypatch.setenv(key, value)
 
-    command = (
-        _workflow()
-        if key in {"GH_HOST", "GH_PAGER", "PAGER", "RIPGREP_CONFIG_PATH"}
-        else 'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6'
-    )
-    assert not is_nonexecuting_github_actions_read_workflow(command)
+    log_command = 'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6'
+    assert not is_nonexecuting_github_actions_read_workflow(_workflow())
+    assert not is_nonexecuting_github_actions_read_workflow(log_command)
 
 
 def test_bounded_github_actions_log_metadata_read_rejects_path_shadowing(
@@ -193,6 +203,16 @@ def test_bounded_github_actions_log_metadata_read_rejects_path_shadowing(
 
     command = 'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6'
     assert not is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
+
+
+def test_generic_github_actions_read_rejects_path_shadowing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "gh").touch(mode=0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+
+    assert not is_nonexecuting_github_actions_read_workflow(_workflow(), cwd=tmp_path)
 
 
 def test_bounded_github_actions_log_metadata_read_resolves_relative_path_from_action_cwd(
@@ -241,6 +261,7 @@ def test_bounded_github_actions_log_metadata_read_accepts_trusted_loader_path(
 
     command = 'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6'
     assert is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
+    assert is_nonexecuting_github_actions_read_workflow(_workflow(), cwd=tmp_path)
 
 
 def test_bounded_github_actions_log_metadata_read_rejects_platform_temp_loader_path(

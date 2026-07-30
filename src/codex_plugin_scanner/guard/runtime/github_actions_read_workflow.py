@@ -142,8 +142,13 @@ def _safe_github_read_pipeline(
     segments = _pipeline_segments(command_text)
     if not segments or not segments[0] or segments[0][0] != "gh":
         return None
-    if _safe_actions_log_metadata_pipeline(segments, cwd=cwd):
+    execution_cwd = cwd or Path.cwd()
+    if not _github_read_execution_environment_is_safe(cwd=execution_cwd):
+        return None
+    if _safe_actions_log_metadata_pipeline(segments, cwd=execution_cwd):
         return "text"
+    if not _trusted_pipeline_executables(tuple(segment[0] for segment in segments), cwd=execution_cwd):
+        return None
     substituted = _substitute_number_variables(segments[0], values)
     if substituted is None:
         return None
@@ -167,8 +172,7 @@ def _safe_actions_log_metadata_pipeline(segments: list[list[str]], *, cwd: Path 
         return False
     grep, sort, head = segments[1:]
     return (
-        _log_metadata_execution_environment_is_safe(cwd=execution_cwd)
-        and _trusted_pipeline_executables(("gh", "grep", "sort", "head"), cwd=execution_cwd)
+        _trusted_pipeline_executables(("gh", "grep", "sort", "head"), cwd=execution_cwd)
         and _safe_log_metadata_grep(grep)
         and sort == ["sort", "-u"]
         and len(head) == 2
@@ -177,7 +181,7 @@ def _safe_actions_log_metadata_pipeline(segments: list[list[str]], *, cwd: Path 
     )
 
 
-def _log_metadata_execution_environment_is_safe(*, cwd: Path) -> bool:
+def _github_read_execution_environment_is_safe(*, cwd: Path) -> bool:
     if any(os.environ.get(key, "").strip() for key in _EXECUTION_ROUTING_ENVIRONMENT):
         return False
     for key, value in os.environ.items():
@@ -344,17 +348,20 @@ def _safe_run_view_args(args: list[str]) -> bool:
     if not args or re.fullmatch(r"[1-9][0-9]*", args[0]) is None:
         return False
     index = 1
+    saw_repository = False
     while index < len(args):
         option = args[index]
         if option not in {"--repo", "--json", "--jq"} or index + 1 >= len(args):
             return False
         value = args[index + 1]
-        if option == "--repo" and re.fullmatch(_REPOSITORY, value) is None:
-            return False
+        if option == "--repo":
+            if saw_repository or re.fullmatch(_REPOSITORY, value) is None:
+                return False
+            saw_repository = True
         if option == "--json" and re.fullmatch(r"[A-Za-z][A-Za-z0-9_,]*", value) is None:
             return False
         index += 2
-    return True
+    return saw_repository
 
 
 def _safe_api_options(args: list[str]) -> bool:
