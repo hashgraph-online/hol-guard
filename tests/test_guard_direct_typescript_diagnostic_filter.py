@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,13 @@ def _trusted_command(_command: str, *, cwd: Path, home_dir: Path) -> bool:
 
 
 def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, str]:
+    for key in tuple(os.environ):
+        if key.startswith(("BASH_FUNC_", "DYLD_", "LD_")) or key in {
+            "BASH_ENV",
+            "ENV",
+            "ZDOTDIR",
+        }:
+            monkeypatch.delenv(key, raising=False)
     home = tmp_path / "home"
     caller = home / "caller"
     workspace = tmp_path / "subject"
