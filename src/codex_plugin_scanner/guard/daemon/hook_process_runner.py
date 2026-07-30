@@ -128,10 +128,26 @@ class HookProcessRunner:
             self._active_reviews[generation] = self._active_reviews.get(generation, 0) + 1
         started_at = time.monotonic()
         try:
-            try:
-                slot = self._slots.get(timeout=min(_HOOK_PROCESS_ACQUIRE_TIMEOUT_SECONDS, self._timeout_seconds))
-            except queue.Empty:
-                return HookProcessReview(None, "daemon_hook_process_overloaded")
+            slot: HookWorkerSlot | None = None
+            # Fail fast only when the pool is genuinely saturated. While the
+            # supervisor is building or replacing workers (spawn threads active
+            # or no worker yet ready after a transient failure), give a new
+            # worker a bounded window to become ready instead of declaring the
+            # pool overloaded 0.2s after an acquire attempt.
+            acquire_deadline = started_at + min(_HOOK_PROCESS_ACQUIRE_TIMEOUT_SECONDS, self._timeout_seconds)
+            bootstrap_deadline = started_at + min(_HOOK_PROCESS_READY_TIMEOUT_SECONDS, self._timeout_seconds)
+            while slot is None:
+                now = time.monotonic()
+                building = self._capacity_building()
+                deadline = bootstrap_deadline if building else acquire_deadline
+                remaining = deadline - now
+                if remaining <= 0:
+                    return HookProcessReview(None, "daemon_hook_process_overloaded")
+                try:
+                    slot = self._slots.get(timeout=min(0.05, remaining))
+                except queue.Empty:
+                    if not building and now >= acquire_deadline:
+                        return HookProcessReview(None, "daemon_hook_process_overloaded")
             try:
                 request = {
                     "payload": dict(payload),
@@ -454,6 +470,21 @@ class HookProcessRunner:
             self._generation += 1
         self._recovery_event.set()
         self._increment_metric("failures")
+
+    def _capacity_building(self) -> bool:
+        """Whether the supervisor is actively bringing a worker online.
+
+        True while a spawn replacement thread is alive or no worker is ready
+        yet despite a non-zero capacity target (a transient failure that has not
+        yet been backfilled), so the acquire path waits for a worker to become
+        ready rather than misclassifying bootstrap as overload.
+        """
+
+        with self._state_lock:
+            spawn_alive = any(thread.is_alive() for thread in self._spawn_threads)
+            capacity_target = self._capacity_target
+        ready = self._slots.qsize()
+        return spawn_alive or (capacity_target > 0 and ready == 0)
 
     def _increment_metric(self, metric: str) -> None:
         with self._metrics_lock:
