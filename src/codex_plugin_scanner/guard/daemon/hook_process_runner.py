@@ -483,8 +483,12 @@ class HookProcessRunner:
         with self._state_lock:
             spawn_alive = any(thread.is_alive() for thread in self._spawn_threads)
             capacity_target = self._capacity_target
+            total_workers = len(self._all_slots)
         ready = self._slots.qsize()
-        return spawn_alive or (capacity_target > 0 and ready == 0)
+        # Bootstrap is the absence of any spawned worker; under genuine
+        # saturation workers exist (checked out), so we must NOT extend the
+        # acquire window there — that would turn fail-fast into a long wait.
+        return spawn_alive or (capacity_target > 0 and total_workers == 0 and ready == 0)
 
     def _increment_metric(self, metric: str) -> None:
         with self._metrics_lock:

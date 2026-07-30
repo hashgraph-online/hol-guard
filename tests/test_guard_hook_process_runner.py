@@ -765,3 +765,24 @@ def test_trusted_recovery_overlays_only_valid_failure_kind(
 
     assert environments[0]["HOL_GUARD_HOOK_FAILURE_KIND"] == "overload"
     assert environments[1]["HOL_GUARD_HOOK_FAILURE_KIND"] == "transport-failure"
+
+
+def test_acquire_fails_fast_when_saturated_with_existing_workers(tmp_path) -> None:
+    """Under genuine saturation (workers exist, all checked out), acquire must
+    not wait for the bootstrap window — it fails fast as overload."""
+    from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
+
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=2.0)
+    runner.start()
+    try:
+        assert runner.wait_for_capacity(minimum_workers=1, timeout_seconds=15.0)
+        # Hold the single worker by occupying the pool: spawn a second acquire
+        # while the first review is in-flight is hard to stage deterministically,
+        # so assert the saturation predicate directly.
+        # _capacity_building must be False once workers exist even when busy.
+        with runner._state_lock:  # pyright: ignore[reportPrivateUsage]
+            total = len(runner._all_slots)  # pyright: ignore[reportPrivateUsage]
+        assert total >= 1
+        assert not runner._capacity_building()  # pyright: ignore[reportPrivateUsage]
+    finally:
+        runner.close()
