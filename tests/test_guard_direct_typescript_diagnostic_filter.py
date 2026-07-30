@@ -23,11 +23,12 @@ def _trusted_command(_command: str, *, cwd: Path, home_dir: Path) -> bool:
 
 def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, str]:
     for key in tuple(os.environ):
-        if key.startswith(("BASH_FUNC_", "DYLD_", "LD_")) or key in {
-            "BASH_ENV",
-            "ENV",
-            "ZDOTDIR",
-        }:
+        normalized_key = key.casefold()
+        if (
+            key.startswith(("BASH_FUNC_", "DYLD_", "LD_"))
+            or normalized_key.startswith("npm_config_")
+            or normalized_key in {"bash_env", "env", "node_options", "node_path", "zdotdir"}
+        ):
             monkeypatch.delenv(key, raising=False)
     home = tmp_path / "home"
     caller = home / "caller"
