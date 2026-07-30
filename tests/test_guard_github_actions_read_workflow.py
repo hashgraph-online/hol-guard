@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -174,7 +175,12 @@ def test_typed_github_actions_read_workflow_rejects_executable_or_remote_environ
 ) -> None:
     monkeypatch.setenv(key, value)
 
-    assert not is_nonexecuting_github_actions_read_workflow(_workflow())
+    command = (
+        _workflow()
+        if key in {"GH_HOST", "GH_PAGER", "PAGER", "RIPGREP_CONFIG_PATH"}
+        else 'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6'
+    )
+    assert not is_nonexecuting_github_actions_read_workflow(command)
 
 
 def test_bounded_github_actions_log_metadata_read_rejects_path_shadowing(
@@ -222,6 +228,26 @@ def test_bounded_github_actions_log_metadata_read_rejects_dynamic_loader_injecti
     key: str,
 ) -> None:
     monkeypatch.setenv(key, "attacker-library")
+
+    command = 'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6'
+    assert not is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
+
+
+def test_bounded_github_actions_log_metadata_read_accepts_trusted_loader_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/lib")
+
+    command = 'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6'
+    assert is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
+
+
+def test_bounded_github_actions_log_metadata_read_rejects_platform_temp_loader_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("LD_PRELOAD", tempfile.gettempdir())
 
     command = 'gh -R example/project run view 30542570393 --log | grep -iE "toolcache" | sort -u | head -6'
     assert not is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)

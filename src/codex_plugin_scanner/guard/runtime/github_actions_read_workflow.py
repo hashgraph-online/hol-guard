@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import tempfile
 from pathlib import Path
 from typing import Final, Literal
 
@@ -51,6 +52,18 @@ _EXECUTION_ROUTING_ENVIRONMENT: Final = (
     "https_proxy",
     "http_proxy",
 )
+_LOADER_PATH_ENVIRONMENT: Final = frozenset(
+    {
+        "DYLD_FALLBACK_FRAMEWORK_PATH",
+        "DYLD_FALLBACK_LIBRARY_PATH",
+        "DYLD_FRAMEWORK_PATH",
+        "DYLD_INSERT_LIBRARIES",
+        "DYLD_LIBRARY_PATH",
+        "LD_AUDIT",
+        "LD_LIBRARY_PATH",
+        "LD_PRELOAD",
+    }
+)
 
 
 def is_nonexecuting_github_actions_read_workflow(command_text: str, *, cwd: Path | None = None) -> bool:
@@ -66,11 +79,7 @@ def is_nonexecuting_github_actions_read_workflow(command_text: str, *, cwd: Path
         return False
     if any(os.environ.get(key, "").strip() not in {"", "cat"} for key in ("GH_PAGER", "PAGER")):
         return False
-    if os.environ.get("RIPGREP_CONFIG_PATH", "").strip() or any(
-        os.environ.get(key, "").strip() for key in _EXECUTION_ROUTING_ENVIRONMENT
-    ):
-        return False
-    if any(key.startswith(("BASH_FUNC_", "DYLD_", "LD_")) for key in os.environ):
+    if os.environ.get("RIPGREP_CONFIG_PATH", "").strip():
         return False
     values: dict[str, _ValueKind] = {}
     control_stack: list[str] = []
@@ -158,13 +167,53 @@ def _safe_actions_log_metadata_pipeline(segments: list[list[str]], *, cwd: Path 
         return False
     grep, sort, head = segments[1:]
     return (
-        _trusted_pipeline_executables(("gh", "grep", "sort", "head"), cwd=execution_cwd)
+        _log_metadata_execution_environment_is_safe(cwd=execution_cwd)
+        and _trusted_pipeline_executables(("gh", "grep", "sort", "head"), cwd=execution_cwd)
         and _safe_log_metadata_grep(grep)
         and sort == ["sort", "-u"]
         and len(head) == 2
         and head[0] == "head"
         and _bounded_count(head[1])
     )
+
+
+def _log_metadata_execution_environment_is_safe(*, cwd: Path) -> bool:
+    if any(os.environ.get(key, "").strip() for key in _EXECUTION_ROUTING_ENVIRONMENT):
+        return False
+    for key, value in os.environ.items():
+        if not value or not key.startswith(("BASH_FUNC_", "DYLD_", "LD_")):
+            continue
+        if key not in _LOADER_PATH_ENVIRONMENT or not _trusted_loader_paths(value, cwd=cwd):
+            return False
+    return True
+
+
+def _trusted_loader_paths(value: str, *, cwd: Path) -> bool:
+    paths = value.split(os.pathsep)
+    if not paths or any(not item for item in paths):
+        return False
+    for item in paths:
+        candidate = Path(item)
+        if not candidate.is_absolute():
+            candidate = cwd / candidate
+        try:
+            resolved = candidate.resolve(strict=True)
+        except (OSError, RuntimeError):
+            return False
+        if _path_is_within(resolved, Path(tempfile.gettempdir())) or not git_binary_path_is_trusted(
+            resolved,
+            cwd=cwd,
+        ):
+            return False
+    return True
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root.resolve(strict=True))
+    except (OSError, ValueError):
+        return False
+    return True
 
 
 def _trusted_pipeline_executables(names: tuple[str, ...], *, cwd: Path) -> bool:
