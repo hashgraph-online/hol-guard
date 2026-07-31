@@ -453,11 +453,7 @@ def validate_remote_approval_request_binding(
     expected_nonce = _non_empty_string(expected_claim.get("nonce"))
     receipt_id = _non_empty_string(envelope.get("receiptId"))
     envelope_nonce = _non_empty_string(envelope.get("nonce"))
-    if (
-        expected_nonce is None
-        or receipt_id is None
-        or envelope_nonce != f"{expected_nonce}:{receipt_id}"
-    ):
+    if expected_nonce is None or receipt_id is None or envelope_nonce != f"{expected_nonce}:{receipt_id}":
         raise GuardReviewContractError("remote_approval_nonce_mismatch")
     envelope_scope = _non_empty_string(envelope.get("scope"))
     action = normalize_remote_approval_decision(envelope.get("decision"))
