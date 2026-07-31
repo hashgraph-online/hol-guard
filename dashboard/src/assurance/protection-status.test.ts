@@ -25,6 +25,7 @@ import {
   type GuardLocalProtectionStatusViewModel,
   type GuardUiProtectionChannelState,
 } from "./protection-status-view-model";
+import { worstChannel } from "./protection-status-panel";
 
 // ---------------------------------------------------------------------------
 // Helper
@@ -429,3 +430,23 @@ assert.match(
   "SummaryCallout accepts onAction callback prop",
 );
 
+
+// worstChannel precedence: an inactive/unknown/degraded channel must win over
+// active channels so the panel header never overstates protection posture.
+{
+  const mixed = {
+    interception: "active",
+    policy: "active",
+    assurance: "active",
+    selfProtection: "active",
+    cloudSync: "inactive",
+    summary: { headline: "h", explanation: "e", actionLabel: null, tone: "warn" },
+  } as const;
+  assert.equal(worstChannel(mixed), "inactive", "inactive beats active");
+
+  const degraded = { ...mixed, cloudSync: "degraded" as const };
+  assert.equal(worstChannel(degraded), "degraded", "degraded beats active");
+
+  const allActive = { ...mixed, cloudSync: "active" as const };
+  assert.equal(worstChannel(allActive), "active", "all active resolves active");
+}

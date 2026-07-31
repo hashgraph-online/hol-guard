@@ -26,14 +26,16 @@ const CHANNEL_KEYS = [
 // Helpers
 // ---------------------------------------------------------------------------
 
-function worstChannel(
+export function worstChannel(
   vm: GuardLocalProtectionStatusViewModel,
 ): GuardUiProtectionChannelState {
+  // Scan worst→best so an inactive/unknown/degraded channel takes precedence
+  // over active channels and the header never overstates protection posture.
   const order: GuardUiProtectionChannelState[] = [
-    "active",
-    "degraded",
-    "unknown",
     "inactive",
+    "unknown",
+    "degraded",
+    "active",
   ];
   for (const level of order) {
     for (const key of CHANNEL_KEYS) {
