@@ -4,7 +4,13 @@
  * badge, drift indicator, and guided remediation callout.
  */
 
-import { useMemo, type ButtonHTMLAttributes } from "react";
+import { useMemo, type ButtonHTMLAttributes, type ComponentType } from "react";
+import {
+  HiMiniCheckCircle,
+  HiMiniExclamationTriangle,
+  HiMiniInformationCircle,
+  HiMiniXCircle,
+} from "react-icons/hi2";
 import type {
   GuardProviderDetailViewModel,
   GuardUiBoundary,
@@ -23,13 +29,6 @@ const BOUNDARY_LABELS: Record<GuardUiBoundary, string> = {
   hardware_isolated: "Hardware isolation",
 };
 
-const BOUNDARY_LEVEL_ORDER: Record<GuardUiBoundary, number> = {
-  observed_host: 1,
-  controlled_host: 2,
-  os_isolated: 3,
-  hardware_isolated: 4,
-};
-
 // ---------------------------------------------------------------------------
 // Health-state appearance
 // ---------------------------------------------------------------------------
@@ -38,7 +37,6 @@ type HealthAppearance = {
   statusLabel: string;
   statusColor: string;
   statusBg: string;
-  statusText: string;
   cardBorder: string;
   cardBg: string;
   icon: string;
@@ -49,7 +47,6 @@ const HEALTH_APPEARANCE: Record<GuardUiProviderHealth, HealthAppearance> = {
     statusLabel: "Healthy",
     statusColor: "text-brand-green-text",
     statusBg: "bg-brand-green-bg",
-    statusText: "text-brand-green-text",
     cardBorder: "border-brand-green/30",
     cardBg: "bg-white",
     icon: "ok",
@@ -58,7 +55,6 @@ const HEALTH_APPEARANCE: Record<GuardUiProviderHealth, HealthAppearance> = {
     statusLabel: "Verifying",
     statusColor: "text-brand-attention",
     statusBg: "bg-brand-attention-bg",
-    statusText: "text-brand-attention",
     cardBorder: "border-brand-attention/30",
     cardBg: "bg-white",
     icon: "info",
@@ -67,7 +63,6 @@ const HEALTH_APPEARANCE: Record<GuardUiProviderHealth, HealthAppearance> = {
     statusLabel: "Degraded",
     statusColor: "text-brand-blue",
     statusBg: "bg-blue-50",
-    statusText: "text-brand-blue",
     cardBorder: "border-brand-blue/30",
     cardBg: "bg-white",
     icon: "warn",
@@ -76,7 +71,6 @@ const HEALTH_APPEARANCE: Record<GuardUiProviderHealth, HealthAppearance> = {
     statusLabel: "Unavailable",
     statusColor: "text-red-700",
     statusBg: "bg-red-50",
-    statusText: "text-red-700",
     cardBorder: "border-red-400",
     cardBg: "bg-red-50/60",
     icon: "critical",
@@ -85,7 +79,6 @@ const HEALTH_APPEARANCE: Record<GuardUiProviderHealth, HealthAppearance> = {
     statusLabel: "Revoked",
     statusColor: "text-red-700",
     statusBg: "bg-red-50",
-    statusText: "text-red-700",
     cardBorder: "border-red-400",
     cardBg: "bg-red-50/60",
     icon: "critical",
@@ -94,7 +87,6 @@ const HEALTH_APPEARANCE: Record<GuardUiProviderHealth, HealthAppearance> = {
     statusLabel: "Incompatible",
     statusColor: "text-brand-blue",
     statusBg: "bg-blue-50",
-    statusText: "text-brand-blue",
     cardBorder: "border-brand-blue/30",
     cardBg: "bg-white",
     icon: "warn",
@@ -103,7 +95,6 @@ const HEALTH_APPEARANCE: Record<GuardUiProviderHealth, HealthAppearance> = {
     statusLabel: "Unknown",
     statusColor: "text-muted-foreground",
     statusBg: "bg-muted",
-    statusText: "text-muted-foreground",
     cardBorder: "border-muted-foreground/20",
     cardBg: "bg-white",
     icon: "info",
@@ -111,8 +102,15 @@ const HEALTH_APPEARANCE: Record<GuardUiProviderHealth, HealthAppearance> = {
 };
 
 // ---------------------------------------------------------------------------
-// Icon helper (SVG inline — no external icon lib dependency)
+// Icon map — react-icons/hi2 keyed by health/icon string
 // ---------------------------------------------------------------------------
+
+const ICON_MAP: Record<string, ComponentType<{ className?: string }>> = {
+  ok: HiMiniCheckCircle,
+  info: HiMiniInformationCircle,
+  warn: HiMiniExclamationTriangle,
+  critical: HiMiniXCircle,
+};
 
 interface StatusIconProps {
   kind: string;
@@ -120,70 +118,8 @@ interface StatusIconProps {
 }
 
 function StatusIcon({ kind, className = "h-4 w-4 shrink-0" }: StatusIconProps) {
-  switch (kind) {
-    case "ok":
-      return (
-        <svg
-          className={className}
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            fillRule="evenodd"
-            d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
-            clipRule="evenodd"
-          />
-        </svg>
-      );
-    case "info":
-      return (
-        <svg
-          className={className}
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            fillRule="evenodd"
-            d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.97 6.69a.75.75 0 0 1 .05 1.06L8.56 9.5h2.19a.75.75 0 0 1 0 1.5H7.75a.75.75 0 0 1-.75-.75V7.75a.75.75 0 0 1 1.3-.06Z"
-            clipRule="evenodd"
-          />
-        </svg>
-      );
-    case "warn":
-      return (
-        <svg
-          className={className}
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            fillRule="evenodd"
-            d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
-            clipRule="evenodd"
-          />
-        </svg>
-      );
-    case "critical":
-      return (
-        <svg
-          className={className}
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            fillRule="evenodd"
-            d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4a.75.75 0 0 1-1.5 0v-4A.75.75 0 0 1 10 5Zm0 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
-            clipRule="evenodd"
-          />
-        </svg>
-      );
-    default:
-      return null;
-  }
+  const Icon = ICON_MAP[kind];
+  return Icon ? <Icon className={className} /> : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -206,29 +142,33 @@ export function GuaranteeChip({ label }: GuaranteeChipProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Freshness badge
+// Freshness badge — Record maps instead of nested ternaries
 // ---------------------------------------------------------------------------
 
 interface FreshnessBadgeProps {
   freshness: "fresh" | "stale" | "unknown";
 }
 
-function FreshnessBadge({ freshness }: FreshnessBadgeProps) {
-  const label = freshness === "fresh" ? "Fresh" : freshness === "stale" ? "Stale" : "Unknown";
-  const base =
-    freshness === "fresh"
-      ? "text-brand-green-text bg-brand-green-bg"
-      : freshness === "stale"
-        ? "text-brand-blue bg-blue-50"
-        : "text-muted-foreground bg-muted";
+const FRESHNESS_LABEL: Record<FreshnessBadgeProps["freshness"], string> = {
+  fresh: "Fresh",
+  stale: "Stale",
+  unknown: "Unknown",
+};
 
+const FRESHNESS_STYLE: Record<FreshnessBadgeProps["freshness"], string> = {
+  fresh: "text-brand-green-text bg-brand-green-bg",
+  stale: "text-brand-blue bg-blue-50",
+  unknown: "text-muted-foreground bg-muted",
+};
+
+function FreshnessBadge({ freshness }: FreshnessBadgeProps) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${base}`}
-      aria-label={`Health freshness: ${label}`}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${FRESHNESS_STYLE[freshness]}`}
+      aria-label={`Health freshness: ${FRESHNESS_LABEL[freshness]}`}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      {label}
+      {FRESHNESS_LABEL[freshness]}
     </span>
   );
 }
@@ -243,25 +183,14 @@ function DriftIndicator() {
       className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
       role="alert"
     >
-      <svg
-        className="h-3.5 w-3.5 shrink-0"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-        aria-hidden="true"
-      >
-        <path
-          fillRule="evenodd"
-          d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 6a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 6Zm0 5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"
-          clipRule="evenodd"
-        />
-      </svg>
+      <HiMiniExclamationTriangle className="h-3.5 w-3.5 shrink-0" />
       Drift detected
     </span>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Remediation callout
+// Remediation callout — Record maps instead of nested ternaries
 // ---------------------------------------------------------------------------
 
 interface RemediationCalloutProps {
@@ -273,7 +202,11 @@ interface ActionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary";
 }
 
-function ActionButton({ variant = "primary", className = "", ...props }: ActionButtonProps) {
+function ActionButton({
+  variant = "primary",
+  className = "",
+  ...props
+}: ActionButtonProps) {
   const base =
     "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40";
   const style =
@@ -286,39 +219,53 @@ function ActionButton({ variant = "primary", className = "", ...props }: ActionB
   );
 }
 
+const TONE_BORDER: Record<GuardUiStateCallout["tone"], string> = {
+  critical: "border-l-red-400 bg-red-50/60",
+  warn: "border-l-amber-300 bg-amber-50/60",
+  info: "border-l-brand-attention bg-brand-attention-bg/60",
+  ok: "border-l-brand-green bg-brand-green-bg/60",
+};
+
+const TONE_TEXT: Record<GuardUiStateCallout["tone"], string> = {
+  critical: "text-red-800",
+  warn: "text-amber-800",
+  info: "text-brand-attention",
+  ok: "text-brand-green-text",
+};
+
+const TONE_ICON: Record<GuardUiStateCallout["tone"], string> = {
+  ok: "ok",
+  info: "info",
+  warn: "warn",
+  critical: "critical",
+};
+
 function RemediationCallout({ callout, onAction }: RemediationCalloutProps) {
-  const toneStyle =
-    callout.tone === "critical"
-      ? "border-l-red-400 bg-red-50/60"
-      : callout.tone === "warn"
-        ? "border-l-amber-300 bg-amber-50/60"
-        : callout.tone === "info"
-          ? "border-l-brand-attention bg-brand-attention-bg/60"
-          : "border-l-brand-green bg-brand-green-bg/60";
-
-  const textCol =
-    callout.tone === "critical"
-      ? "text-red-800"
-      : callout.tone === "warn"
-        ? "text-amber-800"
-        : callout.tone === "info"
-          ? "text-brand-attention"
-          : "text-brand-green-text";
-
   return (
     <div
-      className={`mt-3 rounded-r-lg border border-l-[3px] ${toneStyle} p-3`}
+      className={`mt-3 rounded-r-lg border border-l-[3px] ${TONE_BORDER[callout.tone]} p-3`}
       role="region"
       aria-label="Remediation"
     >
       <div className="flex items-start gap-2">
-        <StatusIcon kind={callout.tone === "ok" ? "ok" : callout.tone === "critical" ? "critical" : "info"} className="mt-0.5 h-4 w-4 shrink-0" />
+        <StatusIcon
+          kind={TONE_ICON[callout.tone]}
+          className="mt-0.5 h-4 w-4 shrink-0"
+        />
         <div className="min-w-0 flex-1">
-          <p className={`text-[13px] font-semibold ${textCol}`}>{callout.headline}</p>
-          <p className={`mt-0.5 text-[12px] leading-relaxed ${textCol} opacity-85`}>{callout.explanation}</p>
+          <p className={`text-[13px] font-semibold ${TONE_TEXT[callout.tone]}`}>
+            {callout.headline}
+          </p>
+          <p
+            className={`mt-0.5 text-[12px] leading-relaxed ${TONE_TEXT[callout.tone]} opacity-85`}
+          >
+            {callout.explanation}
+          </p>
           {callout.actionLabel && onAction ? (
             <div className="mt-2">
-              <ActionButton onClick={onAction}>{callout.actionLabel}</ActionButton>
+              <ActionButton onClick={onAction}>
+                {callout.actionLabel}
+              </ActionButton>
             </div>
           ) : null}
         </div>
@@ -336,14 +283,13 @@ export interface ProviderDetailCardProps {
   onRemediationAction?: () => void;
 }
 
-export function ProviderDetailCard({ model, onRemediationAction }: ProviderDetailCardProps) {
+export function ProviderDetailCard({
+  model,
+  onRemediationAction,
+}: ProviderDetailCardProps) {
   const appearance = useMemo(
     () => HEALTH_APPEARANCE[model.health],
     [model.health],
-  );
-  const boundaryLabel = useMemo(
-    () => BOUNDARY_LABELS[model.computedLevel],
-    [model.computedLevel],
   );
 
   return (
@@ -358,7 +304,7 @@ export function ProviderDetailCard({ model, onRemediationAction }: ProviderDetai
               {model.providerLabel}
             </h3>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              {boundaryLabel}
+              {BOUNDARY_LABELS[model.computedLevel]}
             </p>
           </div>
           <div className="shrink-0">

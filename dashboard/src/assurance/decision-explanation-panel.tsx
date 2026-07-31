@@ -18,7 +18,7 @@ import type {
 // Route display
 // ---------------------------------------------------------------------------
 
-function routeLabel(route: GuardUiExecutionRoute): string {
+export function routeLabel(route: GuardUiExecutionRoute): string {
   switch (route) {
     case "host_native":
       return "Host";
@@ -33,7 +33,7 @@ function routeLabel(route: GuardUiExecutionRoute): string {
   }
 }
 
-function routeIconClass(route: GuardUiExecutionRoute): string {
+export function routeIconClass(route: GuardUiExecutionRoute): string {
   if (route === "blocked") return "text-red-500";
   if (route === "degraded") return "text-amber-500";
   if (route === "host_native") return "text-slate-500";
@@ -51,7 +51,7 @@ function routeIcon(route: GuardUiExecutionRoute) {
 // Boundary display
 // ---------------------------------------------------------------------------
 
-const BOUNDARY_LABELS: Record<GuardUiBoundary, string> = {
+export const BOUNDARY_LABELS: Record<GuardUiBoundary, string> = {
   observed_host: "Observed on host",
   controlled_host: "Controlled host",
   os_isolated: "OS-isolated",
@@ -62,16 +62,33 @@ const BOUNDARY_LABELS: Record<GuardUiBoundary, string> = {
 // Attestation trust display
 // ---------------------------------------------------------------------------
 
-const TRUST_LABELS: Record<GuardDecisionExplanationViewModel["attestationTrust"], { label: string; tone: "blue" | "green" | "amber" }> = {
+export const TRUST_LABELS: Record<
+  GuardDecisionExplanationViewModel["attestationTrust"],
+  { label: string; tone: "blue" | "green" | "amber" }
+> = {
   unattested: { label: "Unattested", tone: "amber" },
   self_attested: { label: "Self-attested", tone: "blue" },
   verified: { label: "Verified", tone: "green" },
 };
 
-function trustToneClass(tone: "blue" | "green" | "amber"): string {
+export function trustToneClass(tone: "blue" | "green" | "amber"): string {
   if (tone === "green") return "bg-green-100 text-green-700 border-green-200";
   if (tone === "blue") return "bg-blue-100 text-blue-700 border-blue-200";
   return "bg-amber-100 text-amber-700 border-amber-200";
+}
+
+// ---------------------------------------------------------------------------
+// Callout styling — light-first, accent only for critical
+// ---------------------------------------------------------------------------
+
+export function calloutBodyClass(
+  tone: GuardDecisionExplanationViewModel["explanation"]["tone"],
+): string {
+  if (tone === "ok") return "border-green-200 bg-green-50/80";
+  if (tone === "info") return "border-blue-200 bg-blue-50/80";
+  if (tone === "warn") return "border-amber-200 bg-amber-50/80";
+  // critical — energetic accent
+  return "border-red-200 bg-red-50/80";
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +99,9 @@ export type DecisionExplanationPanelProps = {
   decision: GuardDecisionExplanationViewModel;
 };
 
-export function DecisionExplanationPanel({ decision }: DecisionExplanationPanelProps) {
+export function DecisionExplanationPanel({
+  decision,
+}: DecisionExplanationPanelProps) {
   const route = decision.route;
   const Icon = routeIcon(route);
   const trust = TRUST_LABELS[decision.attestationTrust];
@@ -94,7 +113,10 @@ export function DecisionExplanationPanel({ decision }: DecisionExplanationPanelP
     >
       {/* Route header */}
       <div className="mb-4 flex items-center gap-3">
-        <Icon className={`h-5 w-5 shrink-0 ${routeIconClass(route)}`} aria-hidden="true" />
+        <Icon
+          className={`h-5 w-5 shrink-0 ${routeIconClass(route)}`}
+          aria-hidden="true"
+        />
         <h3 className="text-lg font-semibold tracking-tight text-brand-dark">
           {routeLabel(route)}
         </h3>
@@ -102,7 +124,9 @@ export function DecisionExplanationPanel({ decision }: DecisionExplanationPanelP
 
       {/* Explanation callout */}
       <div
-        className={`mb-4 rounded-xl border px-4 py-3 ${calloutBodyClass(decision.explanation.tone)}`}
+        className={`mb-4 rounded-xl border px-4 py-3 ${calloutBodyClass(
+          decision.explanation.tone,
+        )}`}
         role="status"
       >
         <p className="text-sm font-semibold text-brand-dark">
@@ -135,7 +159,9 @@ export function DecisionExplanationPanel({ decision }: DecisionExplanationPanelP
             <dt className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               Boundary
             </dt>
-            <dd className="mt-1 text-sm text-slate-400">None — action blocked</dd>
+            <dd className="mt-1 text-sm text-slate-400">
+              None — action blocked
+            </dd>
           </div>
         )}
 
@@ -145,7 +171,11 @@ export function DecisionExplanationPanel({ decision }: DecisionExplanationPanelP
             Trust
           </dt>
           <dd className="mt-1">
-            <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${trustToneClass(trust.tone)}`}>
+            <span
+              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${trustToneClass(
+                trust.tone,
+              )}`}
+            >
               {trust.label}
             </span>
           </dd>
@@ -153,16 +183,4 @@ export function DecisionExplanationPanel({ decision }: DecisionExplanationPanelP
       </div>
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Callout styling — light-first, accent only for critical
-// ---------------------------------------------------------------------------
-
-function calloutBodyClass(tone: GuardDecisionExplanationViewModel["explanation"]["tone"]): string {
-  if (tone === "ok") return "border-green-200 bg-green-50/80";
-  if (tone === "info") return "border-blue-200 bg-blue-50/80";
-  if (tone === "warn") return "border-amber-200 bg-amber-50/80";
-  // critical — energetic accent
-  return "border-red-200 bg-red-50/80";
 }

@@ -55,7 +55,7 @@ const STATE_EXPECTATIONS: StateExpectation[] = [
     name: "verifying",
     model: PROVIDER_DETAIL_VERIFYING,
     healthLabel: "Verifying",
-    hasRemediation: false,
+    hasRemediation: true,
     hasDrift: false,
     freshness: "Fresh",
   },
@@ -146,7 +146,7 @@ for (const { name, model, healthLabel, hasRemediation, hasDrift, freshness } of 
     } else {
       assert.ok(
         !html.includes("Remediation"),
-        `Expected no remediation region for healthy/verifying state`,
+        `Expected no remediation region for healthy state`,
       );
     }
   });
@@ -173,9 +173,7 @@ test("healthy state has no remediation callout", () => {
 // 3. All non-healthy states have exactly ONE remediation
 // ---------------------------------------------------------------------------
 
-const NON_HEALTHY = STATE_EXPECTATIONS.filter(
-  (s) => s.name !== "healthy" && s.name !== "verifying",
-);
+const NON_HEALTHY = STATE_EXPECTATIONS.filter((s) => s.name !== "healthy");
 
 for (const { name, model } of NON_HEALTHY) {
   test(`[${name}] has remediation callout`, () => {

@@ -127,7 +127,13 @@ export const PROVIDER_DETAIL_VERIFYING: GuardProviderDetailViewModel = {
   health: "verifying",
   healthFreshness: "fresh",
   driftDetected: false,
-  remediation: null,
+  remediation: {
+    headline: "Verification in progress",
+    explanation:
+      "The provider is being verified. Isolation guarantees are pending attestation.",
+    actionLabel: "Wait for verification",
+    tone: "info",
+  },
 };
 
 export const PROVIDER_DETAIL_DEGRADED: GuardProviderDetailViewModel = {
