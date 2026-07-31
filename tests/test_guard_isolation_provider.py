@@ -155,3 +155,26 @@ class TestProviderHealth:
     def test_rejects_non_state(self) -> None:
         with pytest.raises(ValueError, match="ProviderHealthState"):
             ProviderHealth(state="healthy", guarantees=())  # type: ignore[arg-type]
+
+
+def test_registry_rejects_traversal_escape() -> None:
+    registry = ProviderRegistry()
+    with __import__("pytest").raises(ValueError, match="outside the Guard-owned provider root"):
+        registry.register(_FakeProvider(), configured_path="/usr/libexec/hol-guard/providers/../evil/bin")
+
+
+def test_plan_rejects_additional_vcs_names() -> None:
+    for vcs in (".hg", ".svn", ".bzr"):
+        with __import__("pytest").raises(ProviderPlanError):
+            validate_provider_plan_inputs((f"/repo/{vcs}/config",), ())
+
+
+def test_plan_rejects_symlink_to_forbidden_path(tmp_path) -> None:
+    from codex_plugin_scanner.guard.runtime.isolation_provider import validate_provider_plan_inputs
+
+    secret = tmp_path / ".ssh"
+    secret.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(secret)
+    with __import__("pytest").raises(ProviderPlanError):
+        validate_provider_plan_inputs((str(link / "id_rsa"),), (str(tmp_path / "out"),))

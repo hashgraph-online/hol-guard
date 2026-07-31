@@ -136,6 +136,13 @@ class ExecutionAssuranceReceipt:
         if total_chars > _MAX_TOTAL_PROOF_CHARS:
             raise ValueError(f"proof_lines total length must be <= {_MAX_TOTAL_PROOF_CHARS}")
 
+        # A VERIFIED receipt must bind to the attested terminal statement or a
+        # proof; unsigned output can never be labeled VERIFIED without evidence.
+        if self.attestation_trust is GuardExecutionAttestationTrust.VERIFIED and (
+            self.terminal_statement_digest is None and not self.proof_lines
+        ):
+            raise ValueError("a VERIFIED receipt requires a terminal_statement_digest or proof_lines")
+
     @property
     def schema_version(self) -> str:
         """Return the schema version for this receipt."""

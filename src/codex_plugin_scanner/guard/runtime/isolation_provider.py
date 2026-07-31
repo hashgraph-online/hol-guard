@@ -30,7 +30,7 @@ ISOLATION_PROVIDER_CONTRACT_VERSION: Final = "guard.isolation-provider.v1"
 
 _PROVIDER_PATH_ROOT: Final = "/usr/libexec/hol-guard/providers"
 # Path-name tokens that must never appear as a mounted input or declared output.
-_FORBIDDEN_PATH_NAMES: Final = frozenset({".env", ".ssh", ".git", ".gnupg"})
+_FORBIDDEN_PATH_NAMES: Final = frozenset({".env", ".ssh", ".git", ".gnupg", ".hg", ".svn", ".bzr"})
 # Exact host socket paths that must never be mounted.
 _FORBIDDEN_SOCKET_PATHS: Final = frozenset(
     {
@@ -114,12 +114,17 @@ def validate_provider_plan_inputs(
     """
 
     for raw in (*input_paths, *declared_outputs):
-        path = Path(raw)
+        # Resolve symlinks so an indirection to a forbidden path cannot pass the
+        # lexical check while mounting the real target.
+        try:
+            path = Path(raw).expanduser().resolve(strict=False)
+        except OSError:
+            path = Path(raw).expanduser().absolute()
         name = path.name.lower()
         parts = {part.lower() for part in path.parts}
         if name in _FORBIDDEN_PATH_NAMES or parts & _FORBIDDEN_PATH_NAMES:
             raise ProviderPlanError(f"provider plan targets a forbidden host path: {raw!r}")
-        if raw in _FORBIDDEN_SOCKET_PATHS:
+        if raw in _FORBIDDEN_SOCKET_PATHS or str(path) in _FORBIDDEN_SOCKET_PATHS:
             raise ProviderPlanError(f"provider plan targets a host control socket: {raw!r}")
         if parts & _GUARD_STATE_NAMES:
             raise ProviderPlanError(f"provider plan targets Guard state: {raw!r}")
@@ -146,7 +151,11 @@ class ProviderRegistry:
     def register(self, provider: IsolationProvider, *, configured_path: str) -> ProviderIdentity:
         """Register a provider only if its path and digest are pinned and trusted."""
 
-        if not configured_path.startswith(self._provider_root + "/"):
+        # Normalize so a `..` or `.` traversal cannot escape the provider root
+        # while still lexically starting with it.
+        root = str(Path(self._provider_root).expanduser().resolve(strict=False))
+        normalized = str(Path(configured_path).expanduser().resolve(strict=False))
+        if normalized != root and not normalized.startswith(root + "/"):
             raise ValueError("provider path is outside the Guard-owned provider root")
         identity = provider.identity()
         key = identity.thumbprint()

@@ -127,3 +127,15 @@ class TestExecuteStatement:
         lease = provider.plan(_context(), GuardExecutionAssuranceBoundary.OBSERVED_HOST)
         statement = provider.execute(lease)
         assert statement.outcome is ExecutionOutcome.FAILED
+
+
+def test_plan_rejects_hardware_isolation_unconditionally() -> None:
+    provider = LocalOSContainmentProvider()
+    with __import__("pytest").raises(ProviderPlanError):
+        provider.plan(_context(), GuardExecutionAssuranceBoundary.HARDWARE_ISOLATED)
+
+
+def test_plan_rejects_forbidden_input_paths() -> None:
+    provider = LocalOSContainmentProvider()
+    with __import__("pytest").raises(ProviderPlanError):
+        provider.plan(_context(), GuardExecutionAssuranceBoundary.OBSERVED_HOST, input_paths=("/app/.env",))

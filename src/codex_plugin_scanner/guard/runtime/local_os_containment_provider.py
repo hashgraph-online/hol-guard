@@ -35,6 +35,7 @@ from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
 from codex_plugin_scanner.guard.runtime.isolation_provider import (
     ProviderHealth,
     ProviderPlanError,
+    validate_provider_plan_inputs,
 )
 
 _PROVIDER_KIND: Final = "local-os-containment"
@@ -150,16 +151,26 @@ class LocalOSContainmentProvider:
             )
         return ProviderHealth(state=ProviderHealthState.HEALTHY, guarantees=self.capabilities())
 
-    def plan(self, context: DecisionContext, minimum_boundary: GuardExecutionAssuranceBoundary) -> ExecutionLease:
+    def plan(
+        self,
+        context: DecisionContext,
+        minimum_boundary: GuardExecutionAssuranceBoundary,
+        *,
+        input_paths: tuple[str, ...] = (),
+        declared_outputs: tuple[str, ...] = (),
+    ) -> ExecutionLease:
         _ = _require_decision_context(context)
-        if (
-            minimum_boundary
-            in (
-                GuardExecutionAssuranceBoundary.OS_ISOLATED,
-                GuardExecutionAssuranceBoundary.HARDWARE_ISOLATED,
-            )
-            and not self._available()
-        ):
+        # Trusted planning boundary: refuse any path-bearing input that targets
+        # the forbidden host set before a lease is issued. The digest-only
+        # reference plan carries no paths, so this is a no-op unless a caller
+        # supplies path inputs.
+        validate_provider_plan_inputs(input_paths, declared_outputs)
+        # The local OS backend (Seatbelt/Bubblewrap) can never provide hardware
+        # isolation; reject it unconditionally so the plan never overstates the
+        # achievable boundary. OS isolation additionally requires a present backend.
+        if minimum_boundary is GuardExecutionAssuranceBoundary.HARDWARE_ISOLATED:
+            raise ProviderPlanError("local OS containment cannot provide a hardware-isolated boundary")
+        if minimum_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED and not self._available():
             raise ProviderPlanError("required boundary is unavailable on this host")
         backend_name = self._backend.value if self._backend is not None else "none"
         plan_digest = framed_digest(

@@ -130,10 +130,10 @@ class TestTypedFields:
                 enforced_guarantee_kinds=("bogus_kind",),
             )
 
-    def test_terminal_digest_none_ok(self) -> None:
+    def test_terminal_digest_none_ok_for_unverified(self) -> None:
         rec = ExecutionAssuranceReceipt(
             achieved_boundary=GuardExecutionAssuranceBoundary.HARDWARE_ISOLATED,
-            attestation_trust=GuardExecutionAttestationTrust.VERIFIED,
+            attestation_trust=GuardExecutionAttestationTrust.SELF_ATTESTED,
             execution_context_digest=DIGEST,
         )
         assert rec.terminal_statement_digest is None
@@ -321,3 +321,19 @@ def test_overlapping_enforced_and_absent_kinds_rejected() -> None:
             enforced_guarantee_kinds=("filesystem",),
             absent_guarantee_kinds=("filesystem",),
         )
+
+
+def test_verified_receipt_requires_digest_or_proof() -> None:
+    with __import__("pytest").raises(ValueError, match="VERIFIED"):
+        ExecutionAssuranceReceipt(
+            achieved_boundary=GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            attestation_trust=GuardExecutionAttestationTrust.VERIFIED,
+            execution_context_digest=DIGEST,
+        )
+    # valid when bound
+    ExecutionAssuranceReceipt(
+        achieved_boundary=GuardExecutionAssuranceBoundary.OS_ISOLATED,
+        attestation_trust=GuardExecutionAttestationTrust.VERIFIED,
+        execution_context_digest=DIGEST,
+        terminal_statement_digest=DIGEST,
+    )
