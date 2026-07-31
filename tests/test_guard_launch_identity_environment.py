@@ -172,12 +172,14 @@ def test_normalized_multi_segment_shell_scope_is_nonreusable(tmp_path: Path, com
         ("/usr/bin/sh", "/usr/bin/echo"),
     ),
 )
+@pytest.mark.parametrize("operator", ("&&", "||", ";", "|", "&"))
 def test_script_scope_list_operators_are_nonreusable_across_path_spellings(
     tmp_path: Path,
     shell_path: str,
     echo_path: str,
+    operator: str,
 ) -> None:
-    """A -c payload with && must be scope-ambiguous regardless of how the
+    """A -c payload with a list operator must be scope-ambiguous regardless of how the
     parser segments it: /usr/bin/sh spellings previously yielded one segment
     and silently lost the ambiguity nonce (CI flake on Ubuntu runners)."""
 
@@ -187,7 +189,7 @@ def test_script_scope_list_operators_are_nonreusable_across_path_spellings(
     _ = executable.write_bytes(b"first")
     executable.chmod(0o755)
     command = parse_shell_command(
-        f"env -i {shell_path} -c '{echo_path} inside && tool'",
+        f"env -i {shell_path} -c '{echo_path} inside{operator}tool'",
         cwd=tmp_path,
         home_dir=tmp_path,
     )
@@ -220,11 +222,34 @@ def test_script_payload_scanner_ignores_non_list_operators() -> None:
         for payload in _script_command_payloads(("env", "-i", "/usr/bin/sh", "-c", "echo inside"))
     )
     assert _script_command_payloads(("python", "-c", "print(1)")) == ()
+    assert _script_command_payloads(("bash", "-lc", "echo one&&tool")) == ("echo one&&tool",)
     # Backward scan stops at list operators: the && belongs to the outer chain.
     assert _script_command_payloads(("sh", "-c", "echo one", "&&", "sh", "-c", "echo two")) == (
         "echo one",
         "echo two",
     )
+
+
+@pytest.mark.parametrize("operator", ("&&", "||", ";", "|", "&"))
+def test_script_payload_scanner_detects_adjacent_list_operators(operator: str) -> None:
+    assert _script_payload_has_list_operators(f"echo one{operator}tool")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        "echo 'one&&tool'",
+        'echo "one|tool"',
+        r"echo one\;tool",
+    ),
+)
+def test_script_payload_scanner_preserves_quoted_and_escaped_literals(payload: str) -> None:
+    assert not _script_payload_has_list_operators(payload)
+
+
+@pytest.mark.parametrize("payload", ('echo "$(echo one&&tool)"', "echo `echo one`"))
+def test_script_payload_scanner_rejects_dynamic_substitutions(payload: str) -> None:
+    assert _script_payload_has_list_operators(payload)
 
 
 def test_env_clear_command_remains_unproven(tmp_path: Path) -> None:

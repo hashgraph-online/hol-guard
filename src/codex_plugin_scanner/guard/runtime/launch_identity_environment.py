@@ -140,18 +140,49 @@ def launch_search_path(environment: Mapping[str, str]) -> str:
 
 
 _SHELL_LIST_OPERATORS = frozenset({"&&", "||", ";", "|", "&"})
-
-
-def _tokens_after_flag(tokens: tuple[str, ...], flag: str) -> tuple[str, ...]:
-    for index, token in enumerate(tokens[:-1]):
-        if token == flag:
-            return tokens[index + 1 :]
-    return ()
+_SHELL_LIST_OPERATOR_CHARS = frozenset({";", "|", "&"})
 
 
 def _script_payload_has_list_operators(script: str) -> bool:
-    tokens, _exact = shell_tokens(script)
-    return any(token in _SHELL_LIST_OPERATORS for token in tokens)
+    quote: str | None = None
+    escaped = False
+    index = 0
+    while index < len(script):
+        character = script[index]
+        if quote == "'":
+            if character == "'":
+                quote = None
+            index += 1
+            continue
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if character == "\\":
+            escaped = True
+            index += 1
+            continue
+        if quote == '"':
+            if character == '"':
+                quote = None
+            elif character == "`" or (character == "$" and index + 1 < len(script) and script[index + 1] == "("):
+                return True
+            index += 1
+            continue
+        if character in {"'", '"'}:
+            quote = character
+        elif (
+            character == "`"
+            or character in _SHELL_LIST_OPERATOR_CHARS
+            or (character == "$" and index + 1 < len(script) and script[index + 1] == "(")
+        ):
+            return True
+        index += 1
+    return quote is not None or escaped
+
+
+def _is_script_command_flag(token: str) -> bool:
+    return token.startswith("-") and not token.startswith("--") and "=" not in token and "c" in token[1:]
 
 
 def _script_command_payloads(tokens: tuple[str, ...]) -> tuple[str, ...]:
@@ -166,7 +197,7 @@ def _script_command_payloads(tokens: tuple[str, ...]) -> tuple[str, ...]:
 
     payloads: list[str] = []
     for index, token in enumerate(tokens[:-1]):
-        if token != "-c":
+        if not _is_script_command_flag(token):
             continue
         # Walk backwards to the nearest script-scope shell before this -c,
         # stopping at list operators that would end the wrapper chain.
