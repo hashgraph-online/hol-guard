@@ -18,11 +18,11 @@ from urllib.parse import urlsplit
 from .containment_executor import file_sha256
 from .package_intent_common import LocalPackageExecutionEvidence, PackageExecutionFileEvidence
 
-RunnerKind = Literal["vitest", "eslint"]
+RunnerKind = Literal["vitest", "eslint", "tsx"]
 EvidenceStatus = Literal["complete", "incomplete"]
 
 _VERSION_RE = re.compile(r"^(?:[~^])?(\d+)\.(\d+)\.(\d+)$")
-_RUNNER_OPERATION = {"vitest": "test", "eslint": "lint"}
+_RUNNER_OPERATION = {"vitest": "test", "eslint": "lint", "tsx": "diagnostic"}
 _SOURCE_PREFIXES = ("file:", "git+", "git://", "github:", "http://", "https://", "npm:", "workspace:")
 _TEST_SUFFIXES = (".test.js", ".test.jsx", ".test.ts", ".test.tsx", ".spec.js", ".spec.jsx", ".spec.ts", ".spec.tsx")
 _LINT_SUFFIXES = (".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx")
@@ -69,7 +69,7 @@ def build_local_node_runner_evidence(
     reasons = list(argument_reasons)
     _require(manager == "npx", "manager_mismatch", reasons)
     _require(execution.manager_name == manager, "manager_evidence_mismatch", reasons)
-    _require(execution.local_only_requested, "remote_install_not_disabled", reasons)
+    _require(execution.local_only_requested or runner == "tsx", "remote_install_not_disabled", reasons)
     _require(execution.package_name == runner, "package_mismatch", reasons)
     _require(execution.executable_name == runner, "executable_mismatch", reasons)
     _require(
@@ -202,10 +202,14 @@ def _runner_arguments(
             raw_files = ()
         else:
             raw_files = tail[1:]
-    else:
+    elif runner == "eslint":
         if tail.count("--no-cache") != 1 or any(token.startswith("-") and token != "--no-cache" for token in tail):
             reasons.append("runner_arguments_not_result_only")
         raw_files = tuple(token for token in tail if token != "--no-cache")
+    else:
+        if len(tail) != 1 or tail[0].startswith("-"):
+            reasons.append("runner_arguments_not_result_only")
+        raw_files = tail if len(tail) == 1 else ()
     input_files = _validated_input_files(workspace, runner, raw_files, reasons)
     return runner, tail, input_files, tuple(reasons)
 

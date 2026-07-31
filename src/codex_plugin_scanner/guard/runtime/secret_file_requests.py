@@ -6916,6 +6916,8 @@ def _looks_destructive_shell_command(
         if _looks_like_safe_node_generated_file_heredoc(normalized, node_heredoc_script):
             return False
         return _node_script_contains_sensitive_runtime_behavior(node_heredoc_script)
+    if _looks_like_contained_temporary_typescript_workflow(normalized):
+        return False
     if _looks_like_safe_graphql_query_file_workflow(normalized):
         return False
     parts = _split_shell_parts(normalized)
@@ -7464,6 +7466,26 @@ _SAFE_GRAPHQL_QUERY_FILE_WORKFLOW_PATTERN = re.compile(
     r"\s*\n(?P<body>.*?)\n(?P=label)\s*(?:\n|&&|;)\s*(?P<rest>.+)\Z",
     re.DOTALL,
 )
+
+_CONTAINED_TEMP_TYPESCRIPT_WORKFLOW_PATTERN = re.compile(
+    r"\A\s*cat\s*>\s*(?P<path>scripts/tmp-[A-Za-z0-9._-]+\.tsx?)\s*"
+    r"<<(?P<quote>['\"])(?P<label>[A-Za-z_][A-Za-z0-9_]*)(?P=quote)\s*\n"
+    r"(?P<body>.*?)\n(?P=label)\s*(?:\n|&&|;)\s*"
+    r"timeout\s+(?P<timeout>[1-9][0-9]{0,2})\s+npx\s+(?:--no-install\s+)?tsx\s+(?P=path)"
+    r"(?:\s+2>&1)?(?:\s*\|\s*(?:grep\s+-v\s+(?:'[^']*'|\"[^\"]*\")|head\s+-[1-9][0-9]*|tail\s+-[1-9][0-9]*))*"
+    r"\s*;\s*rm\s+-f\s+(?P=path)\s*\Z",
+    re.DOTALL,
+)
+
+
+def _looks_like_contained_temporary_typescript_workflow(command_text: str) -> bool:
+    match = _CONTAINED_TEMP_TYPESCRIPT_WORKFLOW_PATTERN.match(command_text)
+    if match is None or int(match.group("timeout")) > 300:
+        return False
+    body = match.group("body")
+    if len(body.encode("utf-8")) > 64 * 1024 or "\x00" in body:
+        return False
+    return not (_text_contains_credential_exfiltration(body) or _node_script_contains_sensitive_runtime_behavior(body))
 
 
 def _looks_like_safe_graphql_query_file_workflow(command_text: str) -> bool:
