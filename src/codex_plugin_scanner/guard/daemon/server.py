@@ -3351,6 +3351,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "remote_approval_action_hash_mismatch",
                 "remote_approval_claim_hash_mismatch",
                 "remote_approval_policy_version_mismatch",
+                "remote_approval_nonce_mismatch",
             }:
                 self._write_json({"error": "remote_once_request_stale"}, status=409)
                 return

@@ -450,6 +450,15 @@ def validate_remote_approval_request_binding(
     expected_claim = build_local_review_request_claim(request_row=request_row, oauth=oauth, store=store)
     if _non_empty_string(envelope.get("sourceClaimHash")) != _non_empty_string(expected_claim.get("claimHash")):
         raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
+    expected_nonce = _non_empty_string(expected_claim.get("nonce"))
+    receipt_id = _non_empty_string(envelope.get("receiptId"))
+    envelope_nonce = _non_empty_string(envelope.get("nonce"))
+    if (
+        expected_nonce is None
+        or receipt_id is None
+        or envelope_nonce != f"{expected_nonce}:{receipt_id}"
+    ):
+        raise GuardReviewContractError("remote_approval_nonce_mismatch")
     envelope_scope = _non_empty_string(envelope.get("scope"))
     action = normalize_remote_approval_decision(envelope.get("decision"))
     if action is None:
