@@ -2207,6 +2207,7 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
         approval_browser_immediate_severity: "critical",
         telemetry: false,
         sync: false,
+        receipt_redaction_level: "full",
         billing: false
       }
     };

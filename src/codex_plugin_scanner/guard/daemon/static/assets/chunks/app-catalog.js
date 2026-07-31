@@ -103,6 +103,7 @@ const SETTINGS_SEARCH_INDEX = [
   { key: "approval_wait_timeout", label: "Approval wait timeout", description: "How long Guard waits for you to respond before resuming.", section: "protection" },
   { key: "telemetry", label: "Telemetry", description: "Send anonymized usage data to improve Guard.", section: "protection" },
   { key: "sync", label: "Cloud sync", description: "Sync decisions and rules with Guard Cloud.", section: "protection" },
+  { key: "redaction", label: "Cloud receipt privacy", description: "Choose how much command detail Guard sends to Guard Cloud.", section: "protection" },
   { key: "billing", label: "Billing features", description: "Enable billing and subscription features.", section: "protection" },
   { key: "clear_approvals", label: "Clear saved approvals", description: "Remove all stored allow or block decisions. Guard will ask again.", section: "maintenance" },
   { key: "clear_evidence", label: "Clear evidence log", description: "Permanently remove all recorded evidence. Cannot be undone.", section: "maintenance" },

@@ -1483,6 +1483,24 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                   checked={draft.sync}
                   onChange={handleSyncToggle}
                 />
+                <div>
+                  <label htmlFor="receipt-redaction-level" className="guard-settings-body font-medium text-brand-dark">
+                    Cloud receipt privacy
+                  </label>
+                  <p className="guard-settings-caption text-slate-500">
+                    Choose how much command detail Guard includes when syncing receipts. Secrets are always removed.
+                  </p>
+                  <select
+                    id="receipt-redaction-level"
+                    value={draft.receipt_redaction_level}
+                    onChange={handleStringChange("receipt_redaction_level")}
+                    className="mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+                  >
+                    <option value="full">Fully redacted - metadata only</option>
+                    <option value="partial">Partially redacted - hide paths and package names</option>
+                    <option value="none">Detailed - include commands, paths, hosts, and packages</option>
+                  </select>
+                </div>
                 <SettingsToggleRow
                   label="Billing features"
                   description="Enable paid supply-chain and blocked-install analytics."

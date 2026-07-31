@@ -109,6 +109,8 @@ assert(resolveInitialSettingsTab("?section=unknown") === "protection", "settings
 const settingsWorkspaceSource = readFileSync(fileURLToPath(import.meta.url).replace(/\.test\.ts$/, ".tsx"), "utf8");
 assert(settingsWorkspaceSource.includes('window.addEventListener("popstate", handlePopState)'), "settings routing: browser history resyncs the visible section");
 assert(settingsWorkspaceSource.includes('window.removeEventListener("popstate", handlePopState)'), "settings routing: history listener is cleaned up");
+assert(settingsWorkspaceSource.includes('id="receipt-redaction-level"'), "receipt privacy: redaction control is visible in settings");
+assert(settingsWorkspaceSource.includes('handleStringChange("receipt_redaction_level")'), "receipt privacy: redaction changes persist through settings save");
 
 assert(resolveTotpSetupStep(null) === "confirm", "totp-setup: fresh setup starts at password confirmation");
 assert(

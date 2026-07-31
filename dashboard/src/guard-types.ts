@@ -892,6 +892,7 @@ export type GuardSettings = {
   approval_browser_immediate_severity: RiskSignalV2Severity;
   telemetry: boolean;
   sync: boolean;
+  receipt_redaction_level: "full" | "partial" | "none";
   billing: boolean;
   update_channel?: "stable" | "alpha";
   approval_gate?: GuardApprovalGatePublicConfig;
