@@ -3579,6 +3579,9 @@ def test_headless_remote_once_rejects_a_nonce_for_another_request(
     assert status == 409
     assert payload["error"] == "remote_once_request_stale"
     assert store.has_remote_once_receipt("cloud-receipt-nonce") is False
+    request_row = store.get_approval_request("req-remote-nonce")
+    assert isinstance(request_row, dict)
+    assert request_row["status"] == "pending"
 
 
 def test_headless_remote_once_rejects_a_wrong_device_id(
@@ -3615,6 +3618,9 @@ def test_headless_remote_once_rejects_a_wrong_device_id(
     assert status == 409
     assert payload["error"] == "remote_once_wrong_target"
     assert store.has_remote_once_receipt("cloud-receipt-device") is False
+    request_row = store.get_approval_request("req-remote-device")
+    assert isinstance(request_row, dict)
+    assert request_row["status"] == "pending"
 
 
 def test_headless_remote_once_rejects_a_replayed_receipt_after_daemon_restart(
