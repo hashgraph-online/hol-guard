@@ -238,16 +238,16 @@ def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path)
 
     assert "const GUARD_TIMEOUT_MS = 4250;" in source
     assert "const GUARD_DEADLINE_RESERVE_MS = 250;" in source
-    assert "const GUARD_DAEMON_TIMEOUT_MS = 2500;" in source
+    assert "const GUARD_DAEMON_TIMEOUT_MS = 1700;" in source
     assert "const GUARD_DAEMON_RECOVERY_TIMEOUT_MS = 250;" in source
     assert "const GUARD_DAEMON_RETRY_TIMEOUT_MS = 150;" in source
-    assert "const GUARD_CLI_TIMEOUT_MS = 900;" in source
+    assert "const GUARD_CLI_TIMEOUT_MS = 1400;" in source
     assert 'const GUARD_ARGS = ["hook", "--json"' in source
     assert "compatibility_version !== GUARD_COMPATIBILITY_VERSION" in source
     assert "error.name === 'AbortError'" in source
     assert source.index("error.name === 'AbortError'") > source.index("await fetch")
     timeout_branch = source[source.index("error.name === 'AbortError'") :]
-    assert 'recoveryKind: "transport-failure"' in timeout_branch
+    assert "return { response: null, recoveryKind: null }" in timeout_branch
     assert "response.status === 401 || response.status === 403" in source
     assert 'recoveryKind: "authenticated-control-plane-failure"' in source
     assert "schedule_guard_daemon_recovery" in source

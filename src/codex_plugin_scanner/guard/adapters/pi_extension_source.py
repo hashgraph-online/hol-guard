@@ -17,10 +17,10 @@ from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
 # recovery/fallback paths below that host deadline so a fail-safe result returns.
 GUARD_HOOK_TIMEOUT_MS = 4_250
 GUARD_HOOK_DEADLINE_RESERVE_MS = 250
-GUARD_DAEMON_HOOK_TIMEOUT_MS = 2_500
+GUARD_DAEMON_HOOK_TIMEOUT_MS = 1_700
 GUARD_DAEMON_RECOVERY_TIMEOUT_MS = 250
 GUARD_DAEMON_RETRY_TIMEOUT_MS = 150
-GUARD_CLI_HOOK_TIMEOUT_MS = 900
+GUARD_CLI_HOOK_TIMEOUT_MS = 1_400
 GUARD_HOOK_TEXT_LIMIT_CHARS = 12_000
 GUARD_HOOK_CONTENT_ITEM_LIMIT = 24
 GUARD_HOOK_OBJECT_KEY_LIMIT = 24
@@ -249,8 +249,9 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    };\n"
         "  } catch (error) {\n"
         "    if (error instanceof Error && error.name === 'AbortError') {\n"
-        "      // Classified transport recovery preserves a live overloaded daemon.\n"
-        '      return { response: null, recoveryKind: "transport-failure" };\n'
+        "      // A request timeout does not prove the live daemon is unhealthy. Preserve the\n"
+        "      // remaining host deadline for fail-safe review instead of restarting it.\n"
+        "      return { response: null, recoveryKind: null };\n"
         "    }\n"
         '    return { response: null, recoveryKind: "transport-failure" };\n'
         "  } finally {\n"
