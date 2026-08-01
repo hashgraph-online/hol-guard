@@ -1255,7 +1255,7 @@ class TestGuardApprovals:
         assert second_retry is None
         assert changed_request is None
         ignored = store.list_events(event_name="rule.ignored.local_integrity")
-        assert any(event["payload"].get("source") == "approval-gate-once" for event in ignored)
+        assert any(event["payload"].get("source") == "approval-gate" for event in ignored)
 
     def test_guard_saved_scope_repairs_integrity_before_policy_write(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")

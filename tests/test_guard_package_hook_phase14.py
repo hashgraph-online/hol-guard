@@ -501,9 +501,10 @@ def test_phase14_claude_daemon_hook_bridge_fails_safe_when_daemon_unreachable(tm
 
     assert result.returncode == 0
     assert result.stderr == ""
-    assert payload["systemMessage"] == (
-        "HOL Guard could not reach the local daemon, so it cannot render the full HOL Guard approval flow."
-    )
+    assert payload["systemMessage"].startswith("HOL Guard paused `minimist@1.2.8` for review before install.")
+    assert "Review this request in HOL Guard, then retry." in payload["systemMessage"]
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
-    assert "temporary safety fallback" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert (
+        "Local synced policy rule policy-review-1 matched" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    )
