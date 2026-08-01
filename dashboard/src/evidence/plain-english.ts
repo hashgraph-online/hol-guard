@@ -318,6 +318,25 @@ function isShellCommandRequest(request: GuardApprovalRequest): boolean {
   );
 }
 
+function isPackageDependencyMutationRequest(request: GuardApprovalRequest): boolean {
+  const envelope = request.action_envelope_json;
+  const intentKind = envelope?.package_intent_kind?.trim().toLowerCase();
+  if (intentKind === "install" || intentKind === "sync") {
+    return true;
+  }
+
+  const command = [envelope?.command, request.raw_command_text, request.launch_target]
+    .find((value) => value?.trim())
+    ?.trim();
+  if (!command) {
+    return false;
+  }
+
+  return /\b(?:npm|pnpm|yarn|bun|pip|pipx|uv|poetry|brew|cargo|gem|go)\s+(?:add|i|install|remove|uninstall|update|upgrade)\b/i.test(
+    command,
+  );
+}
+
 export function plainEnglishRequestTitle(request: GuardApprovalRequest): string {
   const category = detectCategory({
     ...request,
@@ -371,6 +390,9 @@ export function whyPaused(request: GuardApprovalRequest): string {
     case "tool-call":
       return "This uses an outside tool. Guard stops new tools by default.";
     default:
+      if (isPackageDependencyMutationRequest(request)) {
+        return "This package install mutates project dependencies and installed packages. Guard pauses dependency changes so you can review them before running.";
+      }
       if (isShellCommandRequest(request)) {
         return "This shell command has parts Guard could not fully inspect. Guard pauses these so you can review before running.";
       }

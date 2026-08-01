@@ -14473,6 +14473,20 @@ function isShellCommandRequest(request) {
   const actionType = (request.action_envelope_json?.action_type ?? "").toLowerCase();
   return actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command");
 }
+function isPackageDependencyMutationRequest(request) {
+  const envelope = request.action_envelope_json;
+  const intentKind = envelope?.package_intent_kind?.trim().toLowerCase();
+  if (intentKind === "install" || intentKind === "sync") {
+    return true;
+  }
+  const command = [envelope?.command, request.raw_command_text, request.launch_target].find((value) => value?.trim())?.trim();
+  if (!command) {
+    return false;
+  }
+  return /\b(?:npm|pnpm|yarn|bun|pip|pipx|uv|poetry|brew|cargo|gem|go)\s+(?:add|i|install|remove|uninstall|update|upgrade)\b/i.test(
+    command
+  );
+}
 function plainEnglishRequestTitle(request) {
   const category = detectCategory({
     ...request,
@@ -14523,6 +14537,9 @@ function whyPaused(request) {
     case "tool-call":
       return "This uses an outside tool. Guard stops new tools by default.";
     default:
+      if (isPackageDependencyMutationRequest(request)) {
+        return "This package install mutates project dependencies and installed packages. Guard pauses dependency changes so you can review them before running.";
+      }
       if (isShellCommandRequest(request)) {
         return "This shell command has parts Guard could not fully inspect. Guard pauses these so you can review before running.";
       }
@@ -27605,6 +27622,9 @@ function ConsolidatedEvidenceAlert({ items }) {
   const handleNext = reactExports.useCallback(() => {
     setIndex((prev) => (prev + 1) % items.length);
   }, [items.length]);
+  const handlePrevious = reactExports.useCallback(() => {
+    setIndex((prev) => (prev - 1 + items.length) % items.length);
+  }, [items.length]);
   if (items.length === 0) return null;
   const current = items[Math.min(index, items.length - 1)];
   const hasMultiple = items.length > 1;
@@ -27633,6 +27653,19 @@ function ConsolidatedEvidenceAlert({ items }) {
           " of ",
           items.length
         ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handlePrevious,
+            className: "flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-brand-dark transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+            "aria-label": "Previous insight",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronLeft, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+              "Previous"
+            ]
+          }
+        ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {

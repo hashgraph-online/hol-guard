@@ -81,27 +81,55 @@ function buildShellRequest(overrides: Partial<GuardApprovalRequest> = {}): Guard
   assert(!reason.includes("compound"), `T5: pause reason must not contain 'compound', got "${reason}"`);
 }
 
-// T6: whyPaused for non-shell unknowns should use generic reason
+// T6: package installs should explain the dependency mutation risk
+{
+  const request = buildShellRequest({
+    action_envelope_json: {
+      action_type: "shell_command",
+      command: "bun install --frozen-lockfile",
+      package_manager: "bun",
+      package_intent_kind: "install",
+    } as unknown as GuardActionEnvelope | null,
+  });
+  const reason = whyPaused(request);
+  assert(reason.includes("mutates project dependencies"), `T6: package reason should explain dependency mutation, got "${reason}"`);
+  assert(reason.includes("installed packages"), `T6: package reason should mention installed packages, got "${reason}"`);
+  assert(!reason.includes("could not fully inspect"), `T6: package reason must not claim incomplete inspection, got "${reason}"`);
+}
+
+// T7: command text still identifies a package install when envelope metadata is incomplete
+{
+  const request = buildShellRequest({
+    action_envelope_json: {
+      action_type: "shell_command",
+      command: "bun install --frozen-lockfile",
+    } as unknown as GuardActionEnvelope | null,
+  });
+  const reason = whyPaused(request);
+  assert(reason.includes("mutates project dependencies"), `T7: command fallback should explain dependency mutation, got "${reason}"`);
+}
+
+// T8: whyPaused for non-shell unknowns should use generic reason
 {
   const request = buildShellRequest({
     artifact_type: "unknown_type",
   });
   const reason = whyPaused(request);
-  assert(reason === "Guard paused this so you can review it first.", `T6: expected generic pause reason, got "${reason}"`);
+  assert(reason === "Guard paused this so you can review it first.", `T8: expected generic pause reason, got "${reason}"`);
 }
 
-// T7: humanFileName returns human-friendly names for known file types
+// T9: humanFileName returns human-friendly names for known file types
 {
-  assert(humanFileName(".env") === "your secrets file", "T7: .env should be 'your secrets file'");
-  assert(humanFileName("config.json") === "a settings file", "T7: config.json should be 'a settings file'");
-  assert(humanFileName("script.sh") === "a shell script", "T7: script.sh should be 'a shell script'");
+  assert(humanFileName(".env") === "your secrets file", "T9: .env should be 'your secrets file'");
+  assert(humanFileName("config.json") === "a settings file", "T9: config.json should be 'a settings file'");
+  assert(humanFileName("script.sh") === "a shell script", "T9: script.sh should be 'a shell script'");
 }
 
-// T8: humanFileName returns a file for empty input
+// T10: humanFileName returns a file for empty input
 {
-  assert(humanFileName(null) === "a file", "T8: null should be 'a file'");
-  assert(humanFileName(undefined) === "a file", "T8: undefined should be 'a file'");
-  assert(humanFileName("") === "a file", "T8: empty string should be 'a file'");
+  assert(humanFileName(null) === "a file", "T10: null should be 'a file'");
+  assert(humanFileName(undefined) === "a file", "T10: undefined should be 'a file'");
+  assert(humanFileName("") === "a file", "T10: empty string should be 'a file'");
 }
 
 console.log("plain-english.test.ts: all tests passed");

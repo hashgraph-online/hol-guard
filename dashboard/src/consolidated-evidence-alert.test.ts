@@ -25,6 +25,7 @@ describe("ConsolidatedEvidenceAlert", () => {
     assert.ok(html.includes("Scanner evidence"));
     assert.ok(html.includes("Found 2 signals"));
     assert.ok(!html.includes("Next"));
+    assert.ok(!html.includes("Previous"));
     assert.ok(!html.includes("1 of 1"));
   });
 
@@ -35,6 +36,7 @@ describe("ConsolidatedEvidenceAlert", () => {
     ];
     const html = renderToString(createElement(ConsolidatedEvidenceAlert, { items }));
     assert.ok(html.includes("Scanner evidence"));
+    assert.ok(html.includes("Previous"));
     assert.ok(html.includes("Next"));
     assert.ok(/1.*of.*2/.test(html));
   });

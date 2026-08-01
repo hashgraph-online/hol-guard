@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ComponentType, type ReactNode } from "react";
-import { HiMiniChevronRight, HiMiniInformationCircle } from "react-icons/hi2";
+import { HiMiniChevronLeft, HiMiniChevronRight, HiMiniInformationCircle } from "react-icons/hi2";
 
 export interface EvidenceItem {
   id: string;
@@ -25,6 +25,10 @@ export function ConsolidatedEvidenceAlert({ items }: { items: EvidenceItem[] }) 
 
   const handleNext = useCallback(() => {
     setIndex((prev) => (prev + 1) % items.length);
+  }, [items.length]);
+
+  const handlePrevious = useCallback(() => {
+    setIndex((prev) => (prev - 1 + items.length) % items.length);
   }, [items.length]);
 
   if (items.length === 0) return null;
@@ -60,6 +64,15 @@ export function ConsolidatedEvidenceAlert({ items }: { items: EvidenceItem[] }) 
             <span className="text-xs font-medium text-muted-foreground tabular-nums">
               {index + 1} of {items.length}
             </span>
+            <button
+              type="button"
+              onClick={handlePrevious}
+              className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-brand-dark transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              aria-label="Previous insight"
+            >
+              <HiMiniChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+              Previous
+            </button>
             <button
               type="button"
               onClick={handleNext}
