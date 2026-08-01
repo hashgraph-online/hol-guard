@@ -135,6 +135,7 @@ def _command_critical_floor_factors(
             segment,
             index,
             executable,
+            indirect=depth > 0 or str(segment.executable or "").lower().endswith(".exe"),
             authorized_action_class=authorized_action_class,
         )
         if github_factor is not None:
@@ -169,6 +170,7 @@ def _github_factor(
     index: int,
     executable: str,
     *,
+    indirect: bool,
     authorized_action_class: str | None,
 ) -> DecisionFactor | None:
     if executable != "gh":
@@ -180,12 +182,13 @@ def _github_factor(
         and github_capability_action_class(assessment) == authorized_action_class
     ):
         return None
-    if assessment.action_floor == "allow":
+    if assessment.action_floor == "allow" and not (indirect and "routine_merge_remote" in assessment.capabilities):
         return None
+    action_floor = "require-reapproval" if indirect else assessment.action_floor
     return _factor(
         command,
         index,
-        assessment.action_floor,
+        action_floor,
         f"github-capability.{assessment.capability.replace('_', '-')}",
     )
 

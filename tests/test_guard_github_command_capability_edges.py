@@ -22,6 +22,26 @@ PR_MERGE_ADMIN_CAPABILITY_CASES: tuple[tuple[str, tuple[str, ...], tuple[GitHubC
     ("routine-002", ("pr", "merge", "123", "--squash", "--auto"), ("merge_remote",)),
     ("routine-003", ("pr", "merge", "123", "--squash", "--delete-branch"), ("merge_remote", "delete_remote")),
     ("routine-004", ("pr", "merge", "$PR", "--squash"), ("merge_remote",)),
+    (
+        "routine-005",
+        ("pr", "merge", "4751", "--repo", "example/project", "--squash"),
+        ("routine_merge_remote",),
+    ),
+    (
+        "routine-006",
+        ("pr", "merge", "4751", "--repo", "$REPOSITORY", "--squash"),
+        ("merge_remote",),
+    ),
+    (
+        "routine-007",
+        ("pr", "merge", "4751", "--repo", "example/project", "--squash", "--admin"),
+        ("admin_merge_remote",),
+    ),
+    (
+        "routine-008",
+        ("pr", "merge", "4751", "--repo", "example/project", "--squash", "--delete-branch"),
+        ("merge_remote", "delete_remote"),
+    ),
 )
 
 

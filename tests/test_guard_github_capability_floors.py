@@ -149,6 +149,15 @@ def test_routine_squash_merge_is_prompt_free() -> None:
     assert match is None
 
 
+def test_routine_squash_merge_with_static_repository_is_prompt_free() -> None:
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": ("gh pr merge 4751 --repo example/project --squash")},
+    )
+
+    assert match is None
+
+
 @pytest.mark.parametrize(
     ("command", "capabilities"),
     (
