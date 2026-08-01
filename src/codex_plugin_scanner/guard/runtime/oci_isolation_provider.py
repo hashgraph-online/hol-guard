@@ -285,7 +285,10 @@ def _validate_bundle(evidence: OCIBundleEvidence) -> tuple[str, ...]:
     if not evidence.bundle_valid:
         violations.append("bundle invalid")
 
-    if evidence.seccomp and evidence.seccomp.profile_kind is OCISeccompProfile.NONE:
+    if evidence.seccomp.profile_kind in (
+        OCISeccompProfile.UNSET,
+        OCISeccompProfile.NONE,
+    ):
         violations.append("seccomp profile unset or none")
 
     if evidence.mounts:
@@ -461,17 +464,16 @@ def _compute_bundle_digest(spec: dict[str, object]) -> str:
 
 
 def _frame_scalar(value: object) -> object:
-    """Normalise a scalar item to a JSON-serialisable, stable form."""
-    if isinstance(value, str):
-        return value
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, int):
+    """Normalise nested input to a JSON-serialisable, stable form."""
+    if isinstance(value, (str, bool, int, float)) or value is None:
         return value
     if isinstance(value, (list, tuple)):
         values = cast(list[object] | tuple[object, ...], value)
         return [_frame_scalar(item) for item in values]
-    return repr(value)
+    mapping = _object_map(value)
+    if mapping is not None:
+        return {key: _frame_scalar(mapping[key]) for key in sorted(mapping)}
+    return f"<unsupported:{type(value).__name__}>"
 
 
 # ---------------------------------------------------------------------------
@@ -493,10 +495,9 @@ def _build_evidence(
     raw_version = bundle.get("ociVersion")
     version = raw_version if isinstance(raw_version, str) and raw_version else "0.0.0"
     bundle_valid = version != "0.0.0"
-
-    rootfs_spec = _object_map(bundle.get("root", rootfs)) or {}
+    rootfs_spec = _object_map(rootfs if rootfs is not None else bundle.get("root")) or {}
     rootfs_ev = _read_rootfs(rootfs_spec)
-    process_spec = _object_map(bundle.get("process", process)) or {}
+    process_spec = _object_map(process if process is not None else bundle.get("process")) or {}
     user_ev = _read_process(process_spec, rootfs_ev)
     raw_linux = linux if linux is not None else bundle.get("linux")
     linux_ev = _read_linux(_object_map(raw_linux) or {})
@@ -568,7 +569,7 @@ def _read_linux(spec: dict[str, object]) -> _OCILinuxEvidence:
         rule_type = raw_action.upper() if isinstance(raw_action, str) else ""
         if rule_type == "SCMP_ACT_ERRNO" or seccomp_spec.get("strict") is True:
             seccomp_profile = OCISeccompProfile.STRICT
-        elif raw_action == "SCMP_ACT_ALLOW":
+        elif rule_type == "SCMP_ACT_ALLOW":
             seccomp_profile = OCISeccompProfile.DEFAULT
         elif raw_action in ("", None):
             seccomp_profile = OCISeccompProfile.NONE
@@ -628,7 +629,8 @@ def _read_linux(spec: dict[str, object]) -> _OCILinuxEvidence:
         namespace_maps.append(namespace_map)
         raw_type = namespace_map.get("type")
         typ = raw_type.lower() if isinstance(raw_type, str) else ""
-        host = namespace_map.get("host") is True
+        raw_path = namespace_map.get("path")
+        host = namespace_map.get("host") is True or (isinstance(raw_path, str) and bool(raw_path))
         if typ == "pid" and not host:
             pid_isolated = True
         elif typ == "net" and not host:
@@ -640,8 +642,11 @@ def _read_linux(spec: dict[str, object]) -> _OCILinuxEvidence:
         elif typ == "user" and not host:
             user_isolated = True
 
-    # Check if ANY namespace is explicitly marked host=true → isolation broken
-    namespaces_host = any(namespace.get("host") is True for namespace in namespace_maps)
+    # OCI namespace ``path`` joins an existing namespace and is therefore shared.
+    namespaces_host = any(
+        namespace.get("host") is True or (isinstance((path := namespace.get("path")), str) and bool(path))
+        for namespace in namespace_maps
+    )
     if namespaces_host:
         pid_isolated = False
         net_isolated = False
@@ -693,7 +698,6 @@ def _read_mounts(spec_list: list[object]) -> OCIMountEvidence:
     world_writable: list[str] = []
 
     readonly_rootfs = False
-    rootfs_mount = False
 
     for raw_mount in spec_list:
         mount = _object_map(raw_mount)
@@ -711,7 +715,6 @@ def _read_mounts(spec_list: list[object]) -> OCIMountEvidence:
 
         # Rootfs mount (no source, destination=/)
         if (typ == "bind" or src == "") and dst == "/":
-            rootfs_mount = True
             if "readonly" in options or "ro" in options:
                 readonly_rootfs = True
             continue
@@ -730,7 +733,7 @@ def _read_mounts(spec_list: list[object]) -> OCIMountEvidence:
                         world_writable.append(dst)
                         break
             else:
-                forbidden_sources.append(dst)
+                forbidden_sources.append(src)
 
             # Classify as secret or output mount
             secret_keywords = frozenset({".env", ".ssh", "secret", "credential", "private", "token"})
@@ -743,7 +746,7 @@ def _read_mounts(spec_list: list[object]) -> OCIMountEvidence:
                 host_binds.append(dst)
 
     return OCIMountEvidence(
-        readonly_rootfs=readonly_rootfs or rootfs_mount,
+        readonly_rootfs=readonly_rootfs,
         host_bind_mounts=tuple(host_binds),
         secret_mounts=tuple(secret_mounts),
         output_mounts=tuple(output_mounts),
@@ -901,12 +904,14 @@ class OCIIsolationProvider:
         # Map evidence to guarantees (deny-by-default)
         guarantees = _map_guarantees(evidence, violations)
 
-        # If minimum boundary not satisfied by guarantees, raise
         if minimum_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED:
-            # All enforced guarantees must have OS_ISOLATED boundary
-            for g in guarantees:
-                if g.enforced and g.boundary is not GuardExecutionAssuranceBoundary.OS_ISOLATED:
-                    raise ProviderPlanError("required boundary is unavailable on this host")
+            required_kinds = {kind for kind, _ in _OCI_ENFORCED}
+            required = tuple(guarantee for guarantee in guarantees if guarantee.kind in required_kinds)
+            if any(
+                not guarantee.enforced or guarantee.boundary is not GuardExecutionAssuranceBoundary.OS_ISOLATED
+                for guarantee in required
+            ):
+                raise ProviderPlanError("required boundary is unavailable on this host")
 
         # Compute deterministic plan digest
         spec_fields: dict[str, object] = {

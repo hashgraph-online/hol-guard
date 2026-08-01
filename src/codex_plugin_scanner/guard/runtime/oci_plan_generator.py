@@ -76,10 +76,30 @@ _FORBIDDEN_SOCKETS: Final = frozenset(
 _GUARD_STATE_NAMES: Final = frozenset({".hol-guard", "guard-state"})
 
 # World-writable mount option tokens.
-_WORLD_WRITABLE_OPTIONS: Final = frozenset({"world-writable", "world_writable", "o+w", "noexec", "nosuid", "nodev"})
+_WORLD_WRITABLE_OPTIONS: Final = frozenset({"world-writable", "world_writable", "o+w", "rw-all"})
 
 # Network modes that defeat isolation.
 _HOST_NETWORK_MODES: Final = frozenset({"host", "host.network", "HostNetwork"})
+_KNOWN_LINUX_FIELDS: Final = frozenset(
+    {
+        "apparmor",
+        "capabilities",
+        "cgroupsPath",
+        "devices",
+        "gidMappings",
+        "maskedPaths",
+        "mountLabel",
+        "namespaces",
+        "network",
+        "readonlyPaths",
+        "resources",
+        "rootfsPropagation",
+        "seccomp",
+        "selinux",
+        "sysctl",
+        "uidMappings",
+    }
+)
 
 # Namespace types.
 _NAMESPACE_TYPES: Final = frozenset({"pid", "net", "ipc", "uts", "user", "mount", "cgroup", "time"})
@@ -308,7 +328,10 @@ def _parse_namespaces(ns_list: list[object]) -> OCIPlanNamespace:
         raw_type = namespace.get("type")
         typ = raw_type.lower() if isinstance(raw_type, str) else ""
         raw_host = namespace.get("host")
-        host = raw_host if isinstance(raw_host, bool) else False
+        namespace_path = namespace.get("path")
+        host = (raw_host if isinstance(raw_host, bool) else False) or (
+            isinstance(namespace_path, str) and bool(namespace_path)
+        )
         if typ == "pid":
             if not host:
                 pid_isolated = True
@@ -400,7 +423,7 @@ def _analyze_mounts(
                 OCIPlanMount(
                     container_path=dst,
                     mount_type=typ or "none",
-                    readonly=True,
+                    readonly=readonly,
                     source="",
                     options=tuple(options),
                     classification=classification,
@@ -411,7 +434,7 @@ def _analyze_mounts(
         # Host bind mount detection
         if typ == "bind" or (not typ and src and (src.startswith("/") or src.startswith("./"))):
             forbidden_match = _is_forbidden_path(src)
-            socket_match = _is_forbidden_socket(dst)
+            socket_match = _is_forbidden_socket(src)
             guard_match = _is_guard_state_path(dst)
 
             if forbidden_match:
@@ -500,9 +523,9 @@ def _analyze_lsm(spec: dict[str, object]) -> tuple[bool, str]:
 
 def _analyze_cgroup(spec: dict[str, object]) -> tuple[bool, str]:
     """Analyze cgroup configuration. Returns (v2, path)."""
-    cgroups_path = spec.get("cgroupsPath", "")
-    v2 = "unified" in str(cgroups_path)
-    path = str(cgroups_path) if isinstance(cgroups_path, str) else ""
+    cgroups_path = spec.get("cgroupsPath")
+    path = cgroups_path if isinstance(cgroups_path, str) else ""
+    v2 = path.startswith("/sys/fs/cgroup/unified")
     return v2, path
 
 
@@ -715,6 +738,9 @@ def _build_digest_fields(
     non_root: bool,
     violations_count: int,
     forbidden_capabilities_count: int,
+    mounts: tuple[OCIPlanMount, ...] = (),
+    capabilities: tuple[str, ...] = (),
+    rootfs_path: str = "",
 ) -> dict[str, object]:
     """Build deterministic field mapping for plan digest."""
     return {
@@ -736,6 +762,19 @@ def _build_digest_fields(
         "non_root": non_root,
         "violations_count": violations_count,
         "forbidden_capabilities_count": forbidden_capabilities_count,
+        "mounts": tuple(
+            (
+                mount.container_path,
+                mount.mount_type,
+                mount.readonly,
+                mount.source,
+                mount.options,
+                mount.classification,
+            )
+            for mount in mounts
+        ),
+        "capabilities": capabilities,
+        "rootfs_path": rootfs_path,
     }
 
 
@@ -852,12 +891,20 @@ class OCIPlanGenerator:
         if seccomp_profile == "none":
             all_violations_codes.append("seccomp-none")
 
+        if not seccomp_enforced:
+            all_violations_codes.append("seccomp-not-enforced")
+        all_violations_codes.extend(
+            f"unsupported-linux-field:{key}" for key in sorted(set(linux) - _KNOWN_LINUX_FIELDS)
+        )
         # --- Compute guaranteed boundary ---
         violations_present = len(all_violations_codes) > 0
 
-        boundary_lowered = violations_present or (
-            minimum_boundary is not GuardExecutionAssuranceBoundary.OBSERVED_HOST
-            and (not namespace.pid_isolated or not namespace.net_isolated or not rootfs_readonly or violations_present)
+        boundary_lowered = (
+            violations_present
+            or not namespace.pid_isolated
+            or not namespace.net_isolated
+            or not rootfs_readonly
+            or not seccomp_enforced
         )
 
         available_boundary = (
@@ -871,7 +918,11 @@ class OCIPlanGenerator:
             raise ProviderPlanError("OCI bundle isolation cannot provide hardware isolation")
 
         if minimum_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED and (
-            not namespace.pid_isolated or not namespace.net_isolated or not rootfs_readonly or violations_present
+            not namespace.pid_isolated
+            or not namespace.net_isolated
+            or not rootfs_readonly
+            or not seccomp_enforced
+            or violations_present
         ):
             raise ProviderPlanError(f"required boundary {minimum_boundary.value} not achievable")
 
@@ -912,6 +963,9 @@ class OCIPlanGenerator:
             non_root=non_root,
             violations_count=len(all_violations_codes),
             forbidden_capabilities_count=len(dangerous_caps),
+            mounts=tuple(plan_mounts),
+            capabilities=tuple(all_caps),
+            rootfs_path=rootfs_path,
         )
         plan_digest = _plan_digest(digest_fields)
 

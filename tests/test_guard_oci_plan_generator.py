@@ -258,6 +258,19 @@ class TestMountAnalysis:
         )
         assert any("world-writable-mount" in v for v in violations)
 
+    def test_hardening_options_are_not_world_writable(self):
+        _mounts, violations, _, _ = _analyze_mounts(
+            [
+                {
+                    "destination": "/data",
+                    "type": "bind",
+                    "source": "/data",
+                    "options": ["ro", "noexec", "nosuid", "nodev"],
+                },
+            ]
+        )
+        assert not any("world-writable-mount" in violation for violation in violations)
+
     def test_guard_state_mount(self):
         _mounts, violations, _, has_hostile = _analyze_mounts(
             [
@@ -477,8 +490,18 @@ class TestRootfsAnalysis:
         assert path == ""
         assert readonly is False
 
+    # === Guarantee mapping ===
 
-# === Guarantee mapping ===
+    def test_namespace_path_is_shared_not_isolated(self):
+        namespace = _parse_namespaces(
+            [
+                {"type": "pid", "path": "/proc/1/ns/pid"},
+                {"type": "net", "path": "/proc/1/ns/net"},
+            ]
+        )
+        assert namespace.pid_isolated is False
+        assert namespace.net_isolated is False
+        assert set(namespace.host_namespaces) == {"pid", "net"}
 
 
 class TestGuaranteeMapping:
@@ -702,6 +725,45 @@ class TestPlanDigest:
         )
         assert _plan_digest(fields1) != _plan_digest(fields2)
 
+    def test_digest_includes_mount_and_capability_detail(self):
+        ns = _parse_namespaces([{"type": "pid"}])
+        net = MagicMock()
+        net.mode = "default"
+        common = {
+            "bundle_version": "1.0.2",
+            "minimum_boundary": GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+            "available_boundary": GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+            "namespace": ns,
+            "network": net,
+            "seccomp_profile": "strict",
+            "seccomp_enforced": True,
+            "lsm_enabled": False,
+            "cgroup_v2": False,
+            "rootfs_readonly": True,
+            "non_root": True,
+            "violations_count": 0,
+            "forbidden_capabilities_count": 0,
+        }
+        mount_a, _, _, _ = _analyze_mounts([{"destination": "/a", "type": "tmpfs"}])
+        mount_b, _, _, _ = _analyze_mounts([{"destination": "/b", "type": "tmpfs"}])
+        digest_a = _plan_digest(
+            _build_digest_fields(
+                **common,
+                mounts=tuple(mount_a),
+                capabilities=("CAP_CHOWN",),
+                rootfs_path="rootfs-a",
+            )
+        )
+        digest_b = _plan_digest(
+            _build_digest_fields(
+                **common,
+                mounts=tuple(mount_b),
+                capabilities=("CAP_NET_BIND_SERVICE",),
+                rootfs_path="rootfs-b",
+            )
+        )
+        assert digest_a != digest_b
+
 
 # === Full plan generation ===
 
@@ -900,8 +962,8 @@ class TestUnknownFeaturesLowerAssurance:
             GuardExecutionAssuranceBoundary.OBSERVED_HOST,
             bundle=bundle,
         )
-        # No namespaces -> some guarantees still enforced via default path
-        assert plan.available_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED
+        # Missing namespace evidence fails closed.
+        assert plan.available_boundary is GuardExecutionAssuranceBoundary.OBSERVED_HOST
 
     def test_unmapped_linux_feature(self, decision_context):
         bundle = {
@@ -918,8 +980,8 @@ class TestUnknownFeaturesLowerAssurance:
             GuardExecutionAssuranceBoundary.OBSERVED_HOST,
             bundle=bundle,
         )
-        # No net namespace -> boundary still achievable
-        assert plan.available_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED
+        # Unknown fields and missing net isolation lower assurance.
+        assert plan.available_boundary is GuardExecutionAssuranceBoundary.OBSERVED_HOST
 
     def test_missing_seccomp_lowers(self, decision_context):
         bundle = {
@@ -936,8 +998,7 @@ class TestUnknownFeaturesLowerAssurance:
             bundle=bundle,
         )
         # Missing policy is distinct from an explicit allow-all policy.
-        assert plan.seccomp_profile == "unset"
-        assert plan.available_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED
+        assert plan.available_boundary is GuardExecutionAssuranceBoundary.OBSERVED_HOST
 
     def test_no_lsm_does_not_boost(self, decision_context):
         bundle = {
@@ -996,7 +1057,7 @@ class TestFailClosed:
             GuardExecutionAssuranceBoundary.OBSERVED_HOST,
             bundle=bundle,
         )
-        assert plan.available_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED
+        assert plan.available_boundary is GuardExecutionAssuranceBoundary.OBSERVED_HOST
 
     def test_os_isolated_boundary_unachievable(self, decision_context):
         bundle = {
