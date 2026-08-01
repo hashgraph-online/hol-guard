@@ -464,8 +464,8 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
     assert "guard/inbox" not in decision["harness_message"]
 
 
-def test_phase14_claude_daemon_hook_bridge_queues_package_install_without_node(tmp_path: Path) -> None:
-    """Claude hooks must not depend on a Node binary for supply-chain enforcement."""
+def test_phase14_claude_daemon_hook_bridge_fails_safe_without_node(tmp_path: Path) -> None:
+    """Claude hooks must return a native approval when bounded local review cannot finish."""
     from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 
     home_dir = tmp_path / "home"
@@ -501,7 +501,9 @@ def test_phase14_claude_daemon_hook_bridge_queues_package_install_without_node(t
 
     assert result.returncode == 0
     assert result.stderr == ""
-    assert "minimist@1.2.8" in result.stdout
+    assert payload["systemMessage"] == (
+        "HOL Guard could not reach the local daemon, so it cannot render the full HOL Guard approval flow."
+    )
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
-    assert "minimist@1.2.8" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "temporary safety fallback" in payload["hookSpecificOutput"]["permissionDecisionReason"]
