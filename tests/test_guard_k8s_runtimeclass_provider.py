@@ -7,14 +7,14 @@ missing runtime evidence, and fully-verified pod yielding mapped guarantees.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
     AtomicGuaranteeKind,
     DecisionContext,
-    ExecutionOutcome,
     GuardExecutionAssuranceBoundary,
-    GuardExecutionAttestationTrust,
     ProviderHealthState,
 )
 from codex_plugin_scanner.guard.runtime.isolation_provider import (
@@ -49,6 +49,10 @@ def _context() -> DecisionContext:
     )
 
 
+def _provider() -> K8sRuntimeClassProvider:
+    return K8sRuntimeClassProvider(trust_ca_digest=_SHA)
+
+
 # ---------------------------------------------------------------------------
 # Provider contract conformance
 # ---------------------------------------------------------------------------
@@ -56,12 +60,12 @@ def _context() -> DecisionContext:
 
 class TestProviderContractConformance:
     def test_satisfies_isolation_provider_protocol(self) -> None:
-        assert isinstance(K8sRuntimeClassProvider(), IsolationProvider)
+        assert isinstance(_provider(), IsolationProvider)
 
 
 class TestIdentity:
     def test_identity_fields(self) -> None:
-        provider = K8sRuntimeClassProvider()
+        provider = _provider()
         identity = provider.identity()
         assert identity.provider_kind == "k8s-runtimeclass"
         assert identity.signing_identity == "guard-k8s-runtimeclass"
@@ -70,8 +74,8 @@ class TestIdentity:
         assert len(identity.implementation_version) > 0
 
     def test_identity_thumbprint_stable(self) -> None:
-        p1 = K8sRuntimeClassProvider()
-        p2 = K8sRuntimeClassProvider()
+        p1 = _provider()
+        p2 = _provider()
         assert p1.identity().thumbprint() == p2.identity().thumbprint()
 
     def test_identity_different_ca_digest(self) -> None:
@@ -82,7 +86,7 @@ class TestIdentity:
 
 class TestCapabilities:
     def test_enforced_guarantees(self) -> None:
-        provider = K8sRuntimeClassProvider()
+        provider = _provider()
         caps = provider.capabilities()
         enforced = [g for g in caps if g.enforced]
         kinds = {g.kind for g in enforced}
@@ -101,7 +105,7 @@ class TestCapabilities:
 
 class TestHealthCheck:
     def test_health_is_derived(self) -> None:
-        provider = K8sRuntimeClassProvider()
+        provider = _provider()
         health = provider.health_check()
         assert health.state is ProviderHealthState.HEALTHY
         assert health.guarantees == provider.capabilities()
@@ -172,7 +176,7 @@ class TestHandlerNameAloneDenyByDefault:
         assert boundary is GuardExecutionAssuranceBoundary.OBSERVED_HOST
 
     def test_handler_name_alone_no_evidence_object(self) -> None:
-        provider = K8sRuntimeClassProvider()
+        provider = _provider()
         ctx = _context()
         with pytest.raises(ProviderPlanError, match="exceeds achievable"):
             provider.plan(ctx, GuardExecutionAssuranceBoundary.CONTROLLED_HOST)
@@ -222,7 +226,7 @@ class TestAdmissionDowngrade:
         assert _evidence_sufficient(evidence) is False
 
     def test_plan_refuses_when_admission_weaker(self) -> None:
-        provider = K8sRuntimeClassProvider()
+        provider = _provider()
         ctx = _context()
         evidence = build_k8s_evidence(admission_weaker=True)
         lease = provider.plan(ctx, GuardExecutionAssuranceBoundary.OBSERVED_HOST, evidence=evidence)
@@ -256,7 +260,7 @@ class TestSidecarInjection:
         enforced = [g for g in guaranteed if g.enforced]
         assert enforced == []
 
-    def test_expected_sidecars_ok(self) -> None:
+    def test_unconfigured_sidecars_fail_closed(self) -> None:
         evidence = build_k8s_evidence(
             sidecar_containers=("istio-proxy",),
             sidecar_unexpected=False,
@@ -270,7 +274,7 @@ class TestSidecarInjection:
             node_id_verified=True,
             runtime_handler_verified=True,
         )
-        assert _evidence_sufficient(evidence) is True
+        assert _evidence_sufficient(evidence) is False
 
 
 # ---------------------------------------------------------------------------
@@ -491,12 +495,59 @@ class TestMissingRuntimeEvidence:
         evidence = build_k8s_evidence(network_policy_enforced=False)
         assert _evidence_sufficient(evidence) is False
 
-    def test_missing_execution_instance_ok(self) -> None:
+    def test_missing_execution_instance_fails(self) -> None:
         evidence = build_k8s_evidence(
             execution_instance=None,
             runtime_handler_verified=True,
         )
-        assert _evidence_sufficient(evidence) is True
+        assert _evidence_sufficient(evidence) is False
+
+    def test_verified_image_without_digest_fails(self) -> None:
+        evidence = build_k8s_evidence(image_digest=None)
+        assert _evidence_sufficient(evidence) is False
+
+    def test_missing_rbac_identifiers_fail(self) -> None:
+        evidence = build_k8s_evidence()
+        invalid_values = (
+            replace(evidence.rbac_network, service_account=None),
+            replace(evidence.rbac_network, namespace=None),
+            replace(evidence.rbac_network, network_policy_name=None),
+        )
+        for invalid_rbac in invalid_values:
+            assert _evidence_sufficient(replace(evidence, rbac_network=invalid_rbac)) is False
+
+    def test_missing_node_identifiers_fail(self) -> None:
+        evidence = build_k8s_evidence()
+        invalid_values = (
+            replace(evidence.node, node_name=None),
+            replace(evidence.node, node_trust_domain=None),
+        )
+        for invalid_node in invalid_values:
+            assert _evidence_sufficient(replace(evidence, node=invalid_node)) is False
+
+    def test_mismatched_runtime_handler_refused(self) -> None:
+        provider = _provider()
+        evidence = build_k8s_evidence(runtime_handler="unexpected-runtime")
+        with pytest.raises(ProviderPlanError, match="exceeds achievable"):
+            provider.plan(
+                _context(),
+                GuardExecutionAssuranceBoundary.OS_ISOLATED,
+                evidence=evidence,
+            )
+
+    def test_mismatched_cluster_ca_refused(self) -> None:
+        provider = _provider()
+        evidence = build_k8s_evidence(cluster_ca_digest=_OTHER)
+        with pytest.raises(ProviderPlanError, match="exceeds achievable"):
+            provider.plan(
+                _context(),
+                GuardExecutionAssuranceBoundary.OS_ISOLATED,
+                evidence=evidence,
+            )
+
+    def test_zero_trust_anchor_rejected(self) -> None:
+        with pytest.raises(ValueError, match="nonzero"):
+            K8sRuntimeClassProvider(trust_ca_digest="0" * 64)
 
 
 # ---------------------------------------------------------------------------
@@ -506,19 +557,19 @@ class TestMissingRuntimeEvidence:
 
 class TestNoEvidenceDenyByDefault:
     def test_no_evidence_boundary(self) -> None:
-        provider = K8sRuntimeClassProvider()
+        provider = _provider()
         ctx = _context()
         lease = provider.plan(ctx, GuardExecutionAssuranceBoundary.OBSERVED_HOST)
         assert lease is not None
 
     def test_no_evidence_plan_refuses_controlled_host(self) -> None:
-        provider = K8sRuntimeClassProvider()
+        provider = _provider()
         ctx = _context()
         with pytest.raises(ProviderPlanError, match="exceeds achievable"):
             provider.plan(ctx, GuardExecutionAssuranceBoundary.CONTROLLED_HOST)
 
     def test_no_evidence_plan_refuses_hardware_isolated(self) -> None:
-        provider = K8sRuntimeClassProvider()
+        provider = _provider()
         ctx = _context()
         with pytest.raises(ProviderPlanError, match="hardware-isolated"):
             provider.plan(ctx, GuardExecutionAssuranceBoundary.HARDWARE_ISOLATED)
@@ -605,31 +656,31 @@ class TestFullyVerifiedPod:
         assert kinds[AtomicGuaranteeKind.OUTPUT].enforced is False
 
     def test_plan_succeeds_at_os_isolated(self) -> None:
-        provider = K8sRuntimeClassProvider()
+        provider = _provider()
         ctx = _context()
         evidence = self._valid_evidence()
         lease = provider.plan(ctx, GuardExecutionAssuranceBoundary.OS_ISOLATED, evidence=evidence)
         assert lease is not None
-        assert lease.attempt_nonce == ctx.context_digest[:16]
+        assert len(lease.attempt_nonce) == 32
 
     def test_plan_refuses_hardware_isolated(self) -> None:
-        provider = K8sRuntimeClassProvider()
+        provider = _provider()
         ctx = _context()
         evidence = self._valid_evidence()
         with pytest.raises(ProviderPlanError, match="hardware-isolated"):
             provider.plan(ctx, GuardExecutionAssuranceBoundary.HARDWARE_ISOLATED, evidence=evidence)
 
-    def test_execute_returns_terminal_statement(self) -> None:
-        provider = K8sRuntimeClassProvider()
+    def test_execute_refuses_without_authenticated_runner(self) -> None:
+        provider = _provider()
         ctx = _context()
         evidence = self._valid_evidence()
-        lease = provider.plan(ctx, GuardExecutionAssuranceBoundary.OS_ISOLATED, evidence=evidence)
-        statement = provider.execute(lease)
-        assert statement.outcome is ExecutionOutcome.SUCCEEDED
-        assert statement.exit_code == 0
-        assert statement.execution_instance == lease.attempt_nonce
-        assert statement.attestation_trust is GuardExecutionAttestationTrust.SELF_ATTESTED
-        assert statement.cleanup_complete is True
+        lease = provider.plan(
+            ctx,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            evidence=evidence,
+        )
+        with pytest.raises(ProviderPlanError, match="planning-only"):
+            provider.execute(lease)
 
 
 # ---------------------------------------------------------------------------
@@ -638,13 +689,17 @@ class TestFullyVerifiedPod:
 
 
 class TestProviderIntegration:
-    def test_plan_and_execute_lifecycle(self) -> None:
-        provider = K8sRuntimeClassProvider()
+    def test_planning_only_lifecycle(self) -> None:
+        provider = _provider()
         ctx = _context()
         evidence = build_k8s_evidence()
-        lease = provider.plan(ctx, GuardExecutionAssuranceBoundary.OS_ISOLATED, evidence=evidence)
-        statement = provider.execute(lease)
-        assert statement.outcome is ExecutionOutcome.SUCCEEDED
+        lease = provider.plan(
+            ctx,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            evidence=evidence,
+        )
+        with pytest.raises(ProviderPlanError, match="planning-only"):
+            provider.execute(lease)
         provider.cancel(lease.attempt_nonce)
         provider.cleanup(lease.attempt_nonce)
 

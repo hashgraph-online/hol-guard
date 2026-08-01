@@ -14,19 +14,16 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, NoReturn
 
 from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
     AtomicGuarantee,
     AtomicGuaranteeKind,
     DecisionContext,
     ExecutionLease,
-    ExecutionOutcome,
     GuardExecutionAssuranceBoundary,
-    GuardExecutionAttestationTrust,
     ProviderHealthState,
     ProviderIdentity,
-    TerminalStatement,
     framed_digest,
 )
 from codex_plugin_scanner.guard.runtime.isolation_provider import (
@@ -38,6 +35,12 @@ from codex_plugin_scanner.guard.runtime.isolation_provider import (
 _PROVIDER_KIND: Final = "k8s-runtimeclass"
 _SIGNING_IDENTITY: Final = "guard-k8s-runtimeclass"
 _TRUST_DOMAIN: Final = "guard.k8s"
+_BOUNDARY_ORDER: Final = (
+    GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+    GuardExecutionAssuranceBoundary.CONTROLLED_HOST,
+    GuardExecutionAssuranceBoundary.OS_ISOLATED,
+    GuardExecutionAssuranceBoundary.HARDWARE_ISOLATED,
+)
 
 # Guarantees this provider CAN enforce when all evidence is verified.
 _K8S_ENFORCED: Final = (
@@ -69,6 +72,7 @@ class ClusterTrustEvidence:
 
     ca_pinned: bool
     api_server_verified: bool
+    ca_digest: str | None = None
 
 
 @dataclass(frozen=True)
@@ -141,13 +145,12 @@ def _require_decision_context(value: object) -> DecisionContext:
     return value
 
 
-def _evidence_boundary(evidence: K8sRuntimeClassEvidence) -> GuardExecutionAssuranceBoundary:
+def _evidence_boundary(
+    evidence: K8sRuntimeClassEvidence,
+) -> GuardExecutionAssuranceBoundary:
     """Compute the boundary achievable given the evidence."""
     if not _evidence_sufficient(evidence):
         return GuardExecutionAssuranceBoundary.OBSERVED_HOST
-    if not evidence.runtime.runtime_handler_verified:
-        return GuardExecutionAssuranceBoundary.OBSERVED_HOST
-    # All evidence present and verified → OS_ISOLATED
     return GuardExecutionAssuranceBoundary.OS_ISOLATED
 
 
@@ -161,31 +164,35 @@ def _evidence_sufficient(evidence: K8sRuntimeClassEvidence) -> bool:
         return False
     if evidence.admission.admission_weaker:
         return False
-    # Pod spec must be immutable, digest verified, no mutable changes
-    if not evidence.pod_spec.pod_spec_immutable:
+    # Every asserted verification flag must have the corresponding immutable
+    # identifier. Boolean labels alone never grant assurance.
+    pod = evidence.pod_spec
+    if (
+        not pod.pod_spec_immutable
+        or not pod.image_digest_verified
+        or pod.image_digest is None
+        or len(pod.image_digest) != 64
+        or pod.image_digest_changed
+        or pod.sidecar_unexpected
+        or pod.sidecar_containers
+        or pod.host_network
+        or pod.host_pid
+        or pod.privileged_containers
+    ):
         return False
-    if not evidence.pod_spec.image_digest_verified:
+    rbac = evidence.rbac_network
+    if (
+        not rbac.service_account
+        or not rbac.namespace
+        or not rbac.network_policy_enforced
+        or not rbac.network_policy_name
+    ):
         return False
-    if evidence.pod_spec.image_digest_changed:
+    node = evidence.node
+    if not node.node_id_verified or not node.node_name or not node.node_trust_domain:
         return False
-    # Unexpected sidecars fail closed
-    if evidence.pod_spec.sidecar_unexpected:
-        return False
-    # Host-network, host-PID, privileged containers fail closed
-    if evidence.pod_spec.host_network:
-        return False
-    if evidence.pod_spec.host_pid:
-        return False
-    if evidence.pod_spec.privileged_containers:
-        return False
-    # Network policy must be enforced
-    if not evidence.rbac_network.network_policy_enforced:
-        return False
-    # Node identity must be verified
-    if not evidence.node.node_id_verified:
-        return False
-    # Runtime handler must be verified
-    return evidence.runtime.runtime_handler_verified
+    runtime = evidence.runtime
+    return bool(runtime.runtime_handler_verified and runtime.runtime_handler and runtime.execution_instance)
 
 
 def _map_guarantees(evidence: K8sRuntimeClassEvidence) -> tuple[AtomicGuarantee, ...]:
@@ -245,10 +252,14 @@ class K8sRuntimeClassProvider:
     def __init__(
         self,
         *,
-        trust_ca_digest: str | None = None,
-        expected_runtime_handler: str | None = None,
+        trust_ca_digest: str,
+        expected_runtime_handler: str = "guard-runtimeclass",
     ) -> None:
-        self._trust_ca_digest = trust_ca_digest or ("0" * 64)
+        if len(trust_ca_digest) != 64 or set(trust_ca_digest) == {"0"}:
+            raise ValueError("trust_ca_digest must be a nonzero 64-character digest")
+        if not expected_runtime_handler:
+            raise ValueError("expected_runtime_handler must be non-empty")
+        self._trust_ca_digest = trust_ca_digest
         self._expected_runtime_handler = expected_runtime_handler
 
     @staticmethod
@@ -303,7 +314,7 @@ class K8sRuntimeClassProvider:
 
     def plan(
         self,
-        context: DecisionContext,
+        context: object,
         minimum_boundary: GuardExecutionAssuranceBoundary,
         *,
         evidence: K8sRuntimeClassEvidence | None = None,
@@ -322,72 +333,68 @@ class K8sRuntimeClassProvider:
         if minimum_boundary is GuardExecutionAssuranceBoundary.HARDWARE_ISOLATED:
             raise ProviderPlanError("K8s RuntimeClass cannot provide hardware-isolated boundary")
 
-        # Determine achievable boundary from evidence.
         if evidence is not None:
-            if not _evidence_sufficient(evidence):
-                # Insufficient evidence → refuse to plan above OBSERVED_HOST.
-                achievable = GuardExecutionAssuranceBoundary.OBSERVED_HOST
-            else:
-                achievable = _evidence_boundary(evidence)
+            ca_matches = evidence.cluster.ca_digest == self._trust_ca_digest
+            handler_matches = evidence.runtime.runtime_handler == self._expected_runtime_handler
+            achievable = (
+                _evidence_boundary(evidence)
+                if _evidence_sufficient(evidence) and ca_matches and handler_matches
+                else GuardExecutionAssuranceBoundary.OBSERVED_HOST
+            )
         else:
-            # No evidence → deny-by-default to OBSERVED_HOST.
             achievable = GuardExecutionAssuranceBoundary.OBSERVED_HOST
 
         # If minimum boundary exceeds what evidence provides, refuse.
-        boundary_order = [
-            GuardExecutionAssuranceBoundary.OBSERVED_HOST,
-            GuardExecutionAssuranceBoundary.CONTROLLED_HOST,
-            GuardExecutionAssuranceBoundary.OS_ISOLATED,
-            GuardExecutionAssuranceBoundary.HARDWARE_ISOLATED,
-        ]
-        achievable_idx = boundary_order.index(achievable)
-        minimum_idx = boundary_order.index(minimum_boundary)
+        achievable_idx = _BOUNDARY_ORDER.index(achievable)
+        minimum_idx = _BOUNDARY_ORDER.index(minimum_boundary)
         if minimum_idx > achievable_idx:
             raise ProviderPlanError(
                 f"minimum boundary {minimum_boundary.value} exceeds achievable {achievable.value} from evidence"
             )
 
+        evidence_digest = framed_digest(
+            "guard.k8s-runtimeclass-evidence.v1",
+            {"evidence": repr(evidence) if evidence is not None else "absent"},
+        )
         plan_digest = framed_digest(
             "guard.k8s-runtimeclass-plan.v1",
             {
                 "context_digest": validated_context.context_digest,
                 "minimum_boundary": minimum_boundary.value,
                 "achievable_boundary": achievable.value,
-                "runtime_handler": self._expected_runtime_handler or "",
-                "evidence_present": evidence is not None,
+                "runtime_handler": self._expected_runtime_handler,
+                "evidence_digest": evidence_digest,
             },
         )
+        attempt_nonce = framed_digest(
+            "guard.k8s-runtimeclass-attempt.v1",
+            {
+                "plan_digest": plan_digest,
+                "execution_instance": (evidence.runtime.execution_instance if evidence is not None else "absent"),
+            },
+        )[:32]
         return ExecutionLease(
             plan_digest=plan_digest,
             provider_thumbprint=self.identity().thumbprint(),
-            fencing_generation=1,
+            fencing_generation=int(plan_digest[:8], 16),
             lease_expiry_epoch_seconds=int(time.time()) + self._lease_ttl_seconds(),
-            attempt_nonce=validated_context.context_digest[:16],
+            attempt_nonce=attempt_nonce,
             input_manifest_digest=validated_context.executable_digest,
         )
 
-    def execute(self, lease: ExecutionLease) -> TerminalStatement:
-        """Return a terminal statement with attestation trust.
-
-        No live cluster calls; returns self-attested from the validated plan.
-        """
-        return TerminalStatement(
-            outcome=ExecutionOutcome.SUCCEEDED,
-            exit_code=0,
-            stream_byte_counts=(),
-            stream_digests=(),
-            truncated=False,
-            declared_output_digests=(),
-            cleanup_complete=True,
-            execution_instance=lease.attempt_nonce,
-            attestation_trust=GuardExecutionAttestationTrust.SELF_ATTESTED,
+    def execute(self, _lease: ExecutionLease) -> NoReturn:
+        """Refuse execution: this adapter validates evidence but makes no live calls."""
+        raise ProviderPlanError(
+            "Kubernetes RuntimeClass adapter is planning-only; execution requires an authenticated runner"
         )
 
-    def cancel(self, _execution_instance: str) -> None:
-        return None
+    def cancel(self, execution_instance: str) -> None:
+        if not execution_instance:
+            raise ProviderPlanError("execution_instance must be non-empty")
 
-    def cleanup(self, _execution_instance: str) -> None:
-        return None
+    def cleanup(self, execution_instance: str) -> None:
+        if not execution_instance:
+            raise ProviderPlanError("execution_instance must be non-empty")
 
     @staticmethod
     def evidence_to_guarantees(evidence: K8sRuntimeClassEvidence) -> tuple[AtomicGuarantee, ...]:
@@ -398,12 +405,13 @@ class K8sRuntimeClassProvider:
 def build_k8s_evidence(
     *,
     cluster_ca_pinned: bool = True,
+    cluster_ca_digest: str | None = "a" * 64,
     cluster_api_server_verified: bool = True,
     admission_verified: bool = True,
     admission_policy_name: str = "guard-runtimeclass-policy",
     admission_weaker: bool = False,
     pod_spec_immutable: bool = True,
-    image_digest: str | None = None,
+    image_digest: str | None = "1" * 64,
     image_digest_verified: bool = True,
     image_digest_changed: bool = False,
     sidecar_containers: tuple[str, ...] = (),
@@ -426,6 +434,7 @@ def build_k8s_evidence(
     return K8sRuntimeClassEvidence(
         cluster=ClusterTrustEvidence(
             ca_pinned=cluster_ca_pinned,
+            ca_digest=cluster_ca_digest,
             api_server_verified=cluster_api_server_verified,
         ),
         admission=AdmissionEvidence(
@@ -435,7 +444,7 @@ def build_k8s_evidence(
         ),
         pod_spec=PodSpecEvidence(
             pod_spec_immutable=pod_spec_immutable,
-            image_digest=image_digest or ("1" * 64),
+            image_digest=image_digest,
             image_digest_verified=image_digest_verified,
             image_digest_changed=image_digest_changed,
             sidecar_containers=sidecar_containers,
