@@ -184,7 +184,9 @@ def _github_factor(
         return None
     if assessment.action_floor == "allow" and not (indirect and "routine_merge_remote" in assessment.capabilities):
         return None
-    action_floor = "require-reapproval" if indirect else assessment.action_floor
+    action_floor = assessment.action_floor
+    if indirect and action_floor != "block":
+        action_floor = "require-reapproval"
     return _factor(
         command,
         index,
