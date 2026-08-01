@@ -1,0 +1,8 @@
+{
+  "hook_event_name": "UserPromptSubmit",
+  "session_id": "session-redacted-003",
+  "cwd": "<workspace>",
+  "workspace_root": "<workspace>",
+  "prompt": "show me how to read a secret file",
+  "timestamp": "2026-07-24T12:00:02Z"
+}

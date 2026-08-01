@@ -32,7 +32,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-ALL_HARNESSES = ["pi", "claude-code", "codex", "grok", "zcode"]
+ALL_HARNESSES = ["pi", "claude-code", "codex", "grok", "zcode", "adal"]
 
 
 def build_image() -> str:

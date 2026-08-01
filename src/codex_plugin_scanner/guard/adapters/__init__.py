@@ -21,6 +21,7 @@ _ADAPTER_SPECS: tuple[tuple[str, str], ...] = (
     (".openclaw", "OpenClawHarnessAdapter"),
     (".opencode", "OpenCodeHarnessAdapter"),
     (".zcode", "ZCodeHarnessAdapter"),
+    (".adal", "AdaLHarnessAdapter"),
 )
 
 

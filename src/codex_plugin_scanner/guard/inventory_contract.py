@@ -75,6 +75,7 @@ AgentInventoryType = Literal[
     "grok",
     "pi",
     "zcode",
+    "adal",
 ]
 _AGENT_INVENTORY_TYPES: tuple[AgentInventoryType, ...] = (
     "hermes",
@@ -89,6 +90,7 @@ _AGENT_INVENTORY_TYPES: tuple[AgentInventoryType, ...] = (
     "grok",
     "pi",
     "zcode",
+    "adal",
 )
 
 _SENSITIVE_KEY_RE = re.compile(

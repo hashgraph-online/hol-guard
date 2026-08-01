@@ -1,0 +1,12 @@
+{
+  "hook_event_name": "PreToolUse",
+  "session_id": "session-redacted-002",
+  "cwd": "<workspace>",
+  "workspace_root": "<workspace>",
+  "tool_name": "mcp__my-server__exec",
+  "tool_input": {
+    "command": "ls",
+    "context": "list workspace files"
+  },
+  "timestamp": "2026-07-24T12:00:01Z"
+}

@@ -215,6 +215,8 @@ artifact and policy pipeline as existing command classifications.
   Guard installs a managed Hermes overlay bundle, routes MCP servers through Guard proxies, and prefers native-or-center delivery for blocked requests.
 - `gemini`
   Guard scans extensions and falls back to the local approval center for blocked changes.
+- `adal`
+  Guard preserves existing `~/.adal/settings.json` content while registering all six AdaL lifecycle events. `PreToolUse` and `UserPromptSubmit` enforce Guard decisions with AdaL-native deny/block responses; `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, and `Stop` provide observational evidence.
 
 </details>
 

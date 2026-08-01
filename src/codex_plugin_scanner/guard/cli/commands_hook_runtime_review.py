@@ -122,6 +122,17 @@ def _review_runtime_artifact_hook(
         policy_action=policy_action,
         guard_payload=response_payload,
     )
+    from ..adapters.adal_hooks import adal_hook_event_is_observation_only
+
+    if _canonical_harness_name(args.harness) == "adal" and adal_hook_event_is_observation_only(event_name):
+        # AdaL cannot reverse an action at these events, so record evidence
+        # without queueing an approval the harness could never enforce.
+        set_runtime_artifact_hook_final_action(
+            state,
+            _observe_mode_executable_action(state),
+            observed_policy_action=policy_action,
+        )
+        return None
     observe_mode = config.mode == "observe"
     terminal_action = policy_action in {
         "block",

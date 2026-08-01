@@ -141,6 +141,7 @@ _DISPLAY_NAMES = {
     "grok": "Grok",
     "pi": "Pi",
     "zcode": "ZCode",
+    "adal": "AdaL",
 }
 
 
@@ -355,6 +356,20 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
             "and background sessions that run without an active terminal do not surface hook events."
         ),
         smoke_command="hol-guard install zcode --dry-run",
+    ),
+    HarnessProtectionContract(
+        harness="adal",
+        install_aliases=("adal", "adal-cli"),
+        config_paths=("~/.adal/settings.json",),
+        event_surfaces=("shell", "prompt", "mcp_tool", "file_read", "tool_result"),
+        native_approval=False,
+        browser_fallback=True,
+        resume_support=False,
+        known_blind_spots=(
+            "PostToolUse, PostToolUseFailure, PermissionRequest, and Stop hooks are observational in AdaL. "
+            "Only PreToolUse and UserPromptSubmit can prevent an action."
+        ),
+        smoke_command="hol-guard install adal --dry-run",
     ),
 )
 
