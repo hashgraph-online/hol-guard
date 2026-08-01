@@ -320,14 +320,18 @@ function isShellCommandRequest(request: GuardApprovalRequest): boolean {
 
 function isPackageDependencyMutationRequest(request: GuardApprovalRequest): boolean {
   const envelope = request.action_envelope_json;
+  const command = [envelope?.command, request.raw_command_text, request.launch_target]
+    .find((value) => value?.trim())
+    ?.trim();
+  if (command && /(?:&&|[;|]|\r?\n)/.test(command)) {
+    return false;
+  }
+
   const intentKind = envelope?.package_intent_kind?.trim().toLowerCase();
   if (intentKind === "install" || intentKind === "sync") {
     return true;
   }
 
-  const command = [envelope?.command, request.raw_command_text, request.launch_target]
-    .find((value) => value?.trim())
-    ?.trim();
   if (!command) {
     return false;
   }

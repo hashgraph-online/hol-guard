@@ -109,27 +109,42 @@ function buildShellRequest(overrides: Partial<GuardApprovalRequest> = {}): Guard
   assert(reason.includes("mutates project dependencies"), `T7: command fallback should explain dependency mutation, got "${reason}"`);
 }
 
-// T8: whyPaused for non-shell unknowns should use generic reason
+// T8: compound commands retain the incomplete-inspection explanation
+{
+  const request = buildShellRequest({
+    action_envelope_json: {
+      action_type: "shell_command",
+      command: "cd project && bun install --frozen-lockfile",
+      package_manager: "bun",
+      package_intent_kind: "install",
+    } as unknown as GuardActionEnvelope | null,
+  });
+  const reason = whyPaused(request);
+  assert(reason.includes("could not fully inspect"), `T8: compound reason should explain incomplete inspection, got "${reason}"`);
+  assert(!reason.includes("mutates project dependencies"), `T8: compound reason must not hide incomplete inspection, got "${reason}"`);
+}
+
+// T9: whyPaused for non-shell unknowns should use generic reason
 {
   const request = buildShellRequest({
     artifact_type: "unknown_type",
   });
   const reason = whyPaused(request);
-  assert(reason === "Guard paused this so you can review it first.", `T8: expected generic pause reason, got "${reason}"`);
+  assert(reason === "Guard paused this so you can review it first.", `T9: expected generic pause reason, got "${reason}"`);
 }
 
-// T9: humanFileName returns human-friendly names for known file types
+// T10: humanFileName returns human-friendly names for known file types
 {
-  assert(humanFileName(".env") === "your secrets file", "T9: .env should be 'your secrets file'");
-  assert(humanFileName("config.json") === "a settings file", "T9: config.json should be 'a settings file'");
-  assert(humanFileName("script.sh") === "a shell script", "T9: script.sh should be 'a shell script'");
+  assert(humanFileName(".env") === "your secrets file", "T10: .env should be 'your secrets file'");
+  assert(humanFileName("config.json") === "a settings file", "T10: config.json should be 'a settings file'");
+  assert(humanFileName("script.sh") === "a shell script", "T10: script.sh should be 'a shell script'");
 }
 
-// T10: humanFileName returns a file for empty input
+// T11: humanFileName returns a file for empty input
 {
-  assert(humanFileName(null) === "a file", "T10: null should be 'a file'");
-  assert(humanFileName(undefined) === "a file", "T10: undefined should be 'a file'");
-  assert(humanFileName("") === "a file", "T10: empty string should be 'a file'");
+  assert(humanFileName(null) === "a file", "T11: null should be 'a file'");
+  assert(humanFileName(undefined) === "a file", "T11: undefined should be 'a file'");
+  assert(humanFileName("") === "a file", "T11: empty string should be 'a file'");
 }
 
 console.log("plain-english.test.ts: all tests passed");
