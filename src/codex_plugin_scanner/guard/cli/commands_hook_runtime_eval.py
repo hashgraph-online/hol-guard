@@ -245,9 +245,12 @@ def _evaluate_runtime_artifact_hook(
     runtime_workspace: Path | None,
     store: GuardStore,
     trusted_request_override_hash: str | None = None,
-    post_claim_revalidator: (Callable[[str, bool, str | None], int | RuntimeArtifactHookState | None] | None) = None,
+    post_claim_revalidator: (
+        Callable[[str, bool, str | None, bool], int | RuntimeArtifactHookState | None] | None
+    ) = None,
     _claimed_saved_allow_hash: str | None = None,
     _claimed_trusted_request_override: bool = False,
+    _claimed_package_approval_consumed: bool = False,
     _claimed_approval_request_id: str | None = None,
     _claim_saved_approval: bool = True,
     _post_claim_refresh_failed: bool = False,
@@ -277,6 +280,7 @@ def _evaluate_runtime_artifact_hook(
         claimed_hash: str,
         *,
         trusted_request_override: bool,
+        package_approval_consumed: bool = False,
         approval_request_id: str | None = None,
     ) -> int | RuntimeArtifactHookState:
         refresh_failed = False
@@ -286,6 +290,7 @@ def _evaluate_runtime_artifact_hook(
                     claimed_hash,
                     trusted_request_override,
                     approval_request_id,
+                    package_approval_consumed,
                 )
             except Exception:
                 refreshed_result = None
@@ -306,6 +311,7 @@ def _evaluate_runtime_artifact_hook(
             post_claim_revalidator=None,
             _claimed_saved_allow_hash=claimed_hash,
             _claimed_trusted_request_override=trusted_request_override,
+            _claimed_package_approval_consumed=package_approval_consumed,
             _claimed_approval_request_id=approval_request_id,
             _claim_saved_approval=False,
             _post_claim_refresh_failed=refresh_failed,
@@ -789,12 +795,16 @@ def _evaluate_runtime_artifact_hook(
         )
         package_reuse_applied = False
         package_saved_allow_applied = False
+        package_approval_claim_disposition: str | None = None
         for reason in package_evaluation.reasons:
             if reason.get("code") in {"saved_package_approval", "saved_package_block"}:
                 package_reuse_applied = True
                 approval_reuse_source = "saved_package_policy"
             if reason.get("code") == "saved_package_approval":
                 package_saved_allow_applied = True
+                raw_claim_disposition = reason.get("approval_claim_disposition")
+                if raw_claim_disposition in {"consumed", "retained"}:
+                    package_approval_claim_disposition = str(raw_claim_disposition)
             raw_reuse = reason.get("approval_reuse")
             if isinstance(raw_reuse, Mapping):
                 package_reuse_applied = True
@@ -812,6 +822,7 @@ def _evaluate_runtime_artifact_hook(
             return revalidate_claimed_allow(
                 runtime_artifact_hash,
                 trusted_request_override=False,
+                package_approval_consumed=package_approval_claim_disposition == "consumed",
             )
         policy_action = (
             _resolved_guard_action(package_evaluation.policy_action, current_policy_action)
@@ -1031,6 +1042,7 @@ def _evaluate_runtime_artifact_hook(
             "allow",
             saved_decision_present=True,
             validation_reason=claimed_validation_reason,
+            fresh_local_approval=_claimed_package_approval_consumed,
         )
         policy_action = approval_reuse.action
         approval_reuse_source = (

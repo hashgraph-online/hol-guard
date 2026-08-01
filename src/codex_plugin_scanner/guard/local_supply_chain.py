@@ -2234,6 +2234,7 @@ def _resolve_stored_package_policy_override(
                 reason_code="saved_package_approval",
                 reason_message="HOL Guard reused your saved approval for this package request.",
                 approval_reuse=reuse,
+                approval_claim_disposition=claim_disposition,
             ),
             approval_reuse_decision=decision,
             claim_disposition=claim_disposition,
@@ -2955,6 +2956,7 @@ def _package_policy_override_evaluation(
     reason_code: str,
     reason_message: str,
     approval_reuse: ApprovalReuseDecision | None = None,
+    approval_claim_disposition: _PackageApprovalClaimDisposition | None = None,
 ) -> Any:
     reason: dict[str, object] = {
         "code": reason_code,
@@ -2964,6 +2966,8 @@ def _package_policy_override_evaluation(
     }
     if approval_reuse is not None:
         reason["approval_reuse"] = approval_reuse.to_evidence()
+    if approval_claim_disposition is not None:
+        reason["approval_claim_disposition"] = approval_claim_disposition
     packages = tuple({**package, "decision": decision} for package in evaluation.packages)
     return replace(
         evaluation,
