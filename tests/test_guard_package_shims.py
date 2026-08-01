@@ -804,6 +804,47 @@ def test_guard_protect_executes_exact_package_request_after_fresh_approval(
     assert replay_payload["verdict"]["action"] == "require-reapproval"
 
 
+def test_legacy_package_approval_rejects_non_package_request() -> None:
+    class _Store:
+        @staticmethod
+        def get_approval_request(_request_id: str) -> dict[str, object]:
+            return {
+                "artifact_type": "tool_action",
+                "status": "resolved",
+                "resolution_action": "allow",
+                "resolution_scope": "artifact",
+                "artifact_id": "artifact-1",
+                "artifact_hash": "hash-1",
+            }
+
+    decision = {
+        "approval_id": "approval-1",
+        "request_id": "request-1",
+        "workspace": None,
+        "artifact_id": "artifact-1",
+        "artifact_hash": "hash-1",
+    }
+
+    assert not local_supply_chain_module._is_legacy_package_local_approval(decision, store=_Store())
+
+
+def test_legacy_package_approval_fails_closed_on_request_lookup_error() -> None:
+    class _Store:
+        @staticmethod
+        def get_approval_request(_request_id: str) -> dict[str, object]:
+            raise sqlite3.OperationalError("database unavailable")
+
+    decision = {
+        "approval_id": "approval-1",
+        "request_id": "request-1",
+        "workspace": None,
+        "artifact_id": "artifact-1",
+        "artifact_hash": "hash-1",
+    }
+
+    assert not local_supply_chain_module._is_legacy_package_local_approval(decision, store=_Store())
+
+
 def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"

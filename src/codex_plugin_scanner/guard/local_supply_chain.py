@@ -2291,9 +2291,13 @@ def _is_legacy_package_local_approval(decision: dict[str, object], *, store: Any
     request_getter = getattr(store, "get_approval_request", None)
     if not callable(request_getter):
         return False
-    request = request_getter(request_id)
+    try:
+        request = request_getter(request_id)
+    except Exception:
+        return False
     return (
         isinstance(request, dict)
+        and request.get("artifact_type") == "package_request"
         and request.get("status") == "resolved"
         and request.get("resolution_action") == "allow"
         and request.get("resolution_scope") == "artifact"
