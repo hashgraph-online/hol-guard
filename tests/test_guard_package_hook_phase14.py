@@ -464,7 +464,7 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
     assert "guard/inbox" not in decision["harness_message"]
 
 
-def test_phase14_claude_daemon_hook_bridge_fails_safe_without_node(tmp_path: Path) -> None:
+def test_phase14_claude_daemon_hook_bridge_fails_safe_when_daemon_unreachable(tmp_path: Path) -> None:
     """Claude hooks must return a native approval when bounded local review cannot finish."""
     from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 
