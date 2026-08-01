@@ -1681,13 +1681,13 @@ def _approval_once_policy_expires_at(resolved_at: str) -> str:
 
 
 def _should_record_local_once_replay(request: Mapping[str, object]) -> bool:
-    if github_workflow_requires_local_once(request):
-        return True
     artifact_type = request.get("artifact_type")
     if artifact_type == "package_request":
-        return True
+        return False
     artifact_id = request.get("artifact_id")
     if isinstance(artifact_id, str) and ":package-request:" in artifact_id:
+        return False
+    if github_workflow_requires_local_once(request):
         return True
     launch_target = request.get("launch_target")
     if not isinstance(launch_target, str):

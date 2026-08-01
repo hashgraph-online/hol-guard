@@ -641,6 +641,169 @@ def test_guard_protect_requires_reapproval_for_untrusted_package_sources_without
     assert payload["verdict"]["action"] == expected_action
 
 
+@pytest.mark.parametrize("legacy_local_replay", (False, True))
+def test_guard_protect_executes_exact_package_request_after_fresh_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+    legacy_local_replay: bool,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    install_dir = tmp_path / "agent" / "npm"
+    workspace_dir.mkdir(parents=True)
+    install_dir.mkdir(parents=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    marker_path = tmp_path / "npm-approved.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    command = [
+        "npm",
+        "install",
+        "guard-github@git+https://example.com/guard.git",
+        "--prefix",
+        str(install_dir),
+        "--legacy-peer-deps",
+    ]
+    store = GuardStore(home_dir)
+
+    initial_exit_code = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            "--dry-run",
+            *command,
+        ]
+    )
+    initial_payload = json.loads(capsys.readouterr().out)
+
+    assert initial_exit_code == 2
+    assert initial_payload["verdict"]["action"] == "require-reapproval"
+    request_id = str(initial_payload["primary_approval_request_id"])
+    apply_approval_resolution(
+        store=store,
+        request_id=request_id,
+        action="allow",
+        scope="artifact",
+        workspace=None,
+        reason="reviewed",
+    )
+    receipt = initial_payload["receipt"]
+    assert isinstance(receipt, dict)
+    if legacy_local_replay:
+        created_at = datetime.now(timezone.utc).isoformat()
+        expires_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+        approval_id = store.record_local_once_approval(
+            request_id=request_id,
+            harness="guard-cli",
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_hash=str(receipt["artifact_hash"]),
+            workspace=None,
+            publisher=None,
+            action="allow",
+            created_at=created_at,
+            expires_at=expires_at,
+        )
+        assert approval_id is not None
+        with sqlite3.connect(home_dir / "guard.db") as connection:
+            connection.execute(
+                "delete from policy_decisions where source = 'approval-gate' and artifact_id = ?",
+                (str(receipt["artifact_id"]),),
+            )
+
+    preflight_exit_code = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            "--dry-run",
+            *command,
+        ]
+    )
+    preflight_payload = json.loads(capsys.readouterr().out)
+
+    assert preflight_exit_code == 0, json.dumps(preflight_payload, sort_keys=True)
+    assert preflight_payload["executed"] is False
+    assert preflight_payload["verdict"]["action"] == "allow"
+    assert not marker_path.exists()
+    with sqlite3.connect(home_dir / "guard.db") as connection:
+        preflight_local_rows = connection.execute(
+            "select claimed_at from guard_local_once_approvals where request_id = ?",
+            (request_id,),
+        ).fetchall()
+    if legacy_local_replay:
+        assert preflight_local_rows == [(None,)]
+    else:
+        assert preflight_local_rows == []
+
+    retry_exit_code = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            *command,
+        ]
+    )
+    retry_payload = json.loads(capsys.readouterr().out)
+
+    assert retry_exit_code == 0, json.dumps(retry_payload, sort_keys=True)
+    assert retry_payload["executed"] is True
+    assert retry_payload["verdict"]["action"] == "allow"
+    assert marker_path.exists()
+    marker_payload = json.loads(marker_path.read_text(encoding="utf-8"))
+    assert marker_payload["argv"][1:] == command[1:]
+    with sqlite3.connect(home_dir / "guard.db") as connection:
+        local_approval_rows = connection.execute(
+            "select claimed_at from guard_local_once_approvals where request_id = ?",
+            (request_id,),
+        ).fetchall()
+        approval_gate_rows = connection.execute(
+            "select count(*) from policy_decisions where source = 'approval-gate' and artifact_id = ?",
+            (str(receipt["artifact_id"]),),
+        ).fetchone()
+    if legacy_local_replay:
+        assert len(local_approval_rows) == 1
+        assert local_approval_rows[0][0] is not None
+    else:
+        assert local_approval_rows == []
+    assert approval_gate_rows == (0,)
+
+    replay_exit_code = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            *command,
+        ]
+    )
+    replay_output = capsys.readouterr()
+    assert replay_output.out, replay_output.err
+    replay_payload = json.loads(replay_output.out)
+
+    assert replay_exit_code == 2
+    assert replay_payload["executed"] is False
+    assert replay_payload["verdict"]["action"] == "require-reapproval"
+
+
 def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"

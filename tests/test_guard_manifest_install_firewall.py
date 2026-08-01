@@ -1455,6 +1455,18 @@ def test_parse_package_intent_supports_pnpm_install_alias(tmp_path: Path) -> Non
     assert intent.lockfile_paths == ("pnpm-lock.yaml",)
 
 
+def test_parse_npm_package_intent_excludes_prefix_destination(tmp_path: Path) -> None:
+    install_dir = tmp_path / "agent" / "npm"
+
+    intent = parse_package_intent(
+        f"npm install @firecrawl/pi-firecrawl --prefix {install_dir} --legacy-peer-deps",
+        workspace=tmp_path,
+    )
+
+    assert intent is not None
+    assert [target.package_name for target in intent.targets] == ["@firecrawl/pi-firecrawl"]
+
+
 def test_evaluate_package_request_artifact_requires_review_for_unsynced_manifest_dependency(
     tmp_path: Path,
 ) -> None:

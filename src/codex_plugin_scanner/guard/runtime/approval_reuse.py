@@ -1,10 +1,11 @@
 """Authoritative composition of current policy with saved approval evidence.
 
 A saved approval is evidence that an exact, previously reviewed request may
-proceed.  It is not a policy input and therefore cannot lower a newly computed
-``require-reapproval``, ``sandbox-required``, or ``block`` action.  This module
-keeps that exception to the normal action lattice explicit and independently
-testable: an exact, valid saved ``allow`` may satisfy only a current ``review``.
+proceed. It is not a policy input and therefore cannot lower a newly computed
+``sandbox-required`` or ``block`` action. A newly issued local approval may
+satisfy the exact ``require-reapproval`` request that created it; durable saved
+policy may satisfy only ``review``. This module keeps both exceptions explicit
+and independently testable.
 """
 
 from __future__ import annotations
@@ -95,12 +96,17 @@ def evaluate_approval_reuse(
     *,
     saved_decision_present: bool | None = None,
     validation_reason: ApprovalReuseValidationFailure | None = None,
+    fresh_local_approval: bool = False,
 ) -> ApprovalReuseDecision:
     """Compose a recomputed action with saved approval evidence.
 
     ``None`` means no saved decision unless ``saved_decision_present`` is set
     explicitly.  The explicit flag lets untyped persistence callers distinguish
     absence from a malformed stored row whose ``action`` value is null.
+
+    ``fresh_local_approval`` identifies short-lived, integrity-bound authority
+    created by the user's immediately preceding review. Persistent policy must
+    never set it.
     """
 
     current = normalize_guard_action_result(current_action, unknown_action="block")
@@ -179,6 +185,15 @@ def evaluate_approval_reuse(
             reason_code=APPROVAL_REUSE_SANDBOX_REQUIRED,
             current=current,
             saved=saved,
+        )
+    if current.action == "require-reapproval" and fresh_local_approval and saved.action == "allow":
+        return _decision(
+            action="allow",
+            status="accepted",
+            reason_code=APPROVAL_REUSE_ACCEPTED,
+            current=current,
+            saved=saved,
+            should_claim=True,
         )
     if current.action == "require-reapproval":
         return _decision(

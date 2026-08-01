@@ -1589,6 +1589,7 @@ def _final_package_protect_authority(
             current.current_action,
             "allow",
             saved_decision_present=True,
+            fresh_local_approval=True,
         )
         if reuse.accepted and reuse.saved_action == "allow":
             return current, _package_policy_override_evaluation(
@@ -2163,24 +2164,41 @@ def _resolve_stored_package_policy_override(
             else diagnosed_reason
         )
     )
+    legacy_local_approval = isinstance(decision, dict) and _is_legacy_package_local_approval(
+        decision,
+        store=store,
+    )
+    fresh_local_approval = isinstance(decision, dict) and (
+        _is_fresh_artifact_approval(decision) or legacy_local_approval
+    )
     reuse = evaluate_approval_reuse(
         effective_current_action,
         action,
         saved_decision_present=True,
         validation_reason=validation_reason,
+        fresh_local_approval=fresh_local_approval,
     )
     claim_disposition: _PackageApprovalClaimDisposition | None = None
     disposition_resolver = getattr(store, "approval_reuse_claim_disposition", None)
-    if isinstance(decision, dict) and callable(disposition_resolver):
+    if fresh_local_approval:
+        claim_disposition = "consumed"
+    elif isinstance(decision, dict) and callable(disposition_resolver):
         raw_disposition = disposition_resolver(decision)
         if raw_disposition in {"consumed", "retained"}:
             claim_disposition = cast(_PackageApprovalClaimDisposition, raw_disposition)
-    if (
-        claim_saved_approval
-        and reuse.should_claim
-        and isinstance(decision, dict)
-        and not store.claim_approval_reuse_decision(decision, now=now)
-    ):
+    claim_succeeded = True
+    if claim_saved_approval and reuse.should_claim and isinstance(decision, dict):
+        if legacy_local_approval:
+            approval_id = decision.get("approval_id")
+            assert isinstance(approval_id, str)
+            claim_succeeded = store.claim_local_once_approval(
+                approval_id,
+                claimed_at=now,
+                expected_decision=decision,
+            )
+        else:
+            claim_succeeded = store.claim_approval_reuse_decision(decision, now=now)
+    if claim_saved_approval and reuse.should_claim and not claim_succeeded:
         reuse = evaluate_approval_reuse(
             effective_current_action,
             action,
@@ -2246,6 +2264,42 @@ def _resolve_stored_package_policy_override(
             )
         )
     return _StoredPackagePolicyResolution(_package_evaluation_with_rejected_reuse(current_evaluation, reuse))
+
+
+def _is_fresh_artifact_approval(decision: dict[str, object]) -> bool:
+    decision_id = decision.get("decision_id")
+    return (
+        isinstance(decision_id, int)
+        and not isinstance(decision_id, bool)
+        and decision.get("source") == "approval-gate"
+        and decision.get("scope") == "artifact"
+        and isinstance(decision.get("expires_at"), str)
+    )
+
+
+def _is_legacy_package_local_approval(decision: dict[str, object], *, store: Any) -> bool:
+    approval_id = decision.get("approval_id")
+    request_id = decision.get("request_id")
+    if (
+        not isinstance(approval_id, str)
+        or not approval_id
+        or not isinstance(request_id, str)
+        or not request_id
+        or decision.get("workspace") is not None
+    ):
+        return False
+    request_getter = getattr(store, "get_approval_request", None)
+    if not callable(request_getter):
+        return False
+    request = request_getter(request_id)
+    return (
+        isinstance(request, dict)
+        and request.get("status") == "resolved"
+        and request.get("resolution_action") == "allow"
+        and request.get("resolution_scope") == "artifact"
+        and request.get("artifact_id") == decision.get("artifact_id")
+        and request.get("artifact_hash") == decision.get("artifact_hash")
+    )
 
 
 def package_saved_allow_validation_reason(

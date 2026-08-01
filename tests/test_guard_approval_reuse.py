@@ -158,6 +158,46 @@ def test_exact_saved_allow_can_satisfy_only_current_review() -> None:
     assert result.should_claim is True
 
 
+def test_fresh_local_allow_satisfies_current_reapproval_once() -> None:
+    result = evaluate_approval_reuse(
+        "require-reapproval",
+        "allow",
+        fresh_local_approval=True,
+    )
+
+    assert result.action == "allow"
+    assert result.status == "accepted"
+    assert result.reason_code == APPROVAL_REUSE_ACCEPTED
+    assert result.should_claim is True
+
+
+@pytest.mark.parametrize("current_action", ("sandbox-required", "block"))
+def test_fresh_local_allow_never_lowers_enforcement(current_action: str) -> None:
+    result = evaluate_approval_reuse(
+        current_action,
+        "allow",
+        fresh_local_approval=True,
+    )
+
+    assert result.action == current_action
+    assert result.status == "rejected"
+    assert result.should_claim is False
+
+
+def test_changed_fresh_local_allow_cannot_satisfy_reapproval() -> None:
+    result = evaluate_approval_reuse(
+        "require-reapproval",
+        "allow",
+        validation_reason="approval_reuse_content_changed",
+        fresh_local_approval=True,
+    )
+
+    assert result.action == "require-reapproval"
+    assert result.status == "rejected"
+    assert result.reason_code == "approval_reuse_content_changed"
+    assert result.should_claim is False
+
+
 @pytest.mark.parametrize(
     ("current_action", "expected_reason"),
     (

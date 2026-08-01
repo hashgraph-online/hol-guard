@@ -501,6 +501,29 @@ class TestGuardProtect:
         assert request.targets[0].source_url is None
         assert "registers a remote server endpoint" not in protect._request_risk_signals(request)
 
+    def test_guard_protect_excludes_npm_prefix_destination_from_targets(self, tmp_path: Path) -> None:
+        install_dir = tmp_path / "agent" / "npm"
+
+        request = protect.parse_protect_command(
+            [
+                "npm",
+                "install",
+                "@firecrawl/pi-firecrawl",
+                "--prefix",
+                str(install_dir),
+                "--legacy-peer-deps",
+            ]
+        )
+
+        assert [target.package_name for target in request.targets] == ["@firecrawl/pi-firecrawl"]
+
+    def test_guard_protect_parses_versioned_scoped_npm_package(self) -> None:
+        request = protect.parse_protect_command(["npm", "install", "@firecrawl/pi-firecrawl@1.2.3"])
+
+        assert len(request.targets) == 1
+        assert request.targets[0].package_name == "@firecrawl/pi-firecrawl"
+        assert request.targets[0].version == "1.2.3"
+
     def test_guard_protect_parses_claude_add_json_payload(self) -> None:
         request = protect.parse_protect_command(
             [

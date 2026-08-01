@@ -740,12 +740,20 @@ def _package_target(ecosystem: str, spec: str) -> ProtectTarget:
 def _collect_package_specs(values: list[str]) -> tuple[str, ...]:
     specs: list[str] = []
     skip_next = False
+    value_options = {
+        "-r",
+        "--extra-index-url",
+        "--index-url",
+        "--prefix",
+        "--registry",
+        "--requirement",
+    }
     for index, value in enumerate(values):
         if skip_next:
             skip_next = False
             continue
         if value.startswith("-"):
-            if value in {"-r", "--requirement", "--index-url", "--extra-index-url", "--registry"}:
+            if value in value_options:
                 skip_next = True
             continue
         if index > 0 and values[index - 1] in {"-r", "--requirement"}:
@@ -769,9 +777,11 @@ def _parse_package_identity(ecosystem: str, spec: str) -> tuple[str | None, str 
     if ecosystem == "go" and "@" in spec:
         name, version = spec.rsplit("@", 1)
         return (name, version)
-    if spec.startswith("@") and spec.count("@") >= 2:
-        name, version = spec.rsplit("@", 1)
-        return (name, version)
+    if spec.startswith("@"):
+        if spec.count("@") >= 2:
+            name, version = spec.rsplit("@", 1)
+            return (name, version)
+        return (spec, None)
     if "@" in spec and not spec.startswith(("http://", "https://", "git+", "file:")):
         name, version = spec.rsplit("@", 1)
         return (name, version)
