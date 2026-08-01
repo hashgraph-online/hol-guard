@@ -315,7 +315,7 @@ class K8sRuntimeClassProvider:
     def plan(
         self,
         context: object,
-        minimum_boundary: GuardExecutionAssuranceBoundary,
+        minimum_boundary: object,
         *,
         evidence: K8sRuntimeClassEvidence | None = None,
         input_paths: tuple[str, ...] = (),
@@ -345,6 +345,8 @@ class K8sRuntimeClassProvider:
             achievable = GuardExecutionAssuranceBoundary.OBSERVED_HOST
 
         # If minimum boundary exceeds what evidence provides, refuse.
+        if not isinstance(minimum_boundary, GuardExecutionAssuranceBoundary):
+            raise ProviderPlanError("unknown minimum assurance boundary")
         achievable_idx = _BOUNDARY_ORDER.index(achievable)
         minimum_idx = _BOUNDARY_ORDER.index(minimum_boundary)
         if minimum_idx > achievable_idx:

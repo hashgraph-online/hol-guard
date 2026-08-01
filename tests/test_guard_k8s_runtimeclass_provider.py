@@ -230,7 +230,7 @@ class TestAdmissionDowngrade:
         ctx = _context()
         evidence = build_k8s_evidence(admission_weaker=True)
         lease = provider.plan(ctx, GuardExecutionAssuranceBoundary.OBSERVED_HOST, evidence=evidence)
-        assert lease is not None
+        assert len(lease.plan_digest) == 64
         with pytest.raises(ProviderPlanError, match="exceeds achievable"):
             provider.plan(ctx, GuardExecutionAssuranceBoundary.CONTROLLED_HOST, evidence=evidence)
 
@@ -627,6 +627,7 @@ class TestFullyVerifiedPod:
         assert AtomicGuaranteeKind.NETWORK in enforced_kinds
         assert enforced_kinds[AtomicGuaranteeKind.NETWORK] is GuardExecutionAssuranceBoundary.OS_ISOLATED
         assert AtomicGuaranteeKind.IDENTITY in enforced_kinds
+        assert enforced_kinds[AtomicGuaranteeKind.IDENTITY] is GuardExecutionAssuranceBoundary.OS_ISOLATED
         assert AtomicGuaranteeKind.PRIVILEGE in enforced_kinds
         assert enforced_kinds[AtomicGuaranteeKind.PRIVILEGE] is GuardExecutionAssuranceBoundary.OS_ISOLATED
         assert AtomicGuaranteeKind.RESOURCE in enforced_kinds
@@ -790,5 +791,5 @@ class TestDenyByDefaultHandlerNameAlone:
         guarantees = _map_guarantees(evidence)
         boundary = _evidence_boundary(evidence)
         assert boundary is GuardExecutionAssuranceBoundary.OBSERVED_HOST
-        for g in guarantees:
-            assert not g.enforced or g.boundary is GuardExecutionAssuranceBoundary.OBSERVED_HOST
+        assert all(not guarantee.enforced for guarantee in guarantees)
+        assert all(guarantee.boundary is GuardExecutionAssuranceBoundary.OBSERVED_HOST for guarantee in guarantees)
