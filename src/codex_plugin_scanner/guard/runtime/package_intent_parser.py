@@ -1336,6 +1336,9 @@ def _raw_command_segments_with_operators(
 
 
 def _normalize_segment(raw_segment: list[str]) -> list[str]:
+    substitution_segment = _shell_substitution_segment(raw_segment)
+    if substitution_segment is not None:
+        return _without_fd_merge_redirections(substitution_segment)
     if _command_builtin_is_lookup(_strip_command_lookup_prefixes(list(raw_segment))):
         return []
     segment = _without_fd_merge_redirections(_strip_wrapper_tokens(list(raw_segment)))
@@ -1344,15 +1347,34 @@ def _normalize_segment(raw_segment: list[str]) -> list[str]:
     return segment
 
 
+def _shell_substitution_segment(segment: list[str]) -> list[str] | None:
+    for index, token in enumerate(segment):
+        if "`" not in token and "$(" not in token:
+            continue
+        markers = [(token.find(marker), marker) for marker in ("`", "$(") if marker in token]
+        position, marker = min(markers)
+        command = token[position + len(marker) :]
+        return [command, *segment[index + 1 :]] if command else list(segment)
+    return None
+
+
 def _strip_command_lookup_prefixes(segment: list[str]) -> list[str]:
-    while segment and _ENV_ASSIGNMENT_RE.match(segment[0]):
-        segment.pop(0)
-    if segment and _command_name(segment[0]) == "time":
-        return _strip_plain_wrapper_flags(segment[1:])
+    while segment:
+        if _ENV_ASSIGNMENT_RE.match(segment[0]):
+            if "`" in segment[0] or "$(" in segment[0]:
+                return segment
+            segment.pop(0)
+            continue
+        if _command_name(segment[0]) == "time":
+            segment = _strip_plain_wrapper_flags(segment[1:])
+            continue
+        break
     return segment
 
 
 def _command_builtin_is_lookup(segment: list[str]) -> bool:
+    if any("`" in token or "$(" in token for token in segment):
+        return False
     if not segment or _command_name(segment[0]) != "command":
         return False
     index = 1

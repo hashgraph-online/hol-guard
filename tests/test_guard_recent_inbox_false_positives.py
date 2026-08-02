@@ -39,7 +39,11 @@ def test_prefixed_command_lookup_does_not_execute_named_package_runner(tmp_path:
     workspace.mkdir()
     (workspace / "README.md").write_text("viewport\n", encoding="utf-8")
 
-    for lookup in ("CHECK=1 command -v npx", "time -p command -V npx"):
+    for lookup in (
+        "CHECK=1 command -v npx",
+        "time -p command -V npx",
+        "time -p CHECK=1 command -v npx",
+    ):
         artifact = _artifact(
             f"{lookup} >/dev/null 2>&1 && rg -n 'viewport' README.md | head -20",
             home=tmp_path,
@@ -55,3 +59,19 @@ def test_command_lookup_does_not_hide_actual_package_execution(tmp_path: Path) -
     command = "command -v npx >/dev/null 2>&1 && npx --yes untrusted-package"
 
     assert _artifact(command, home=tmp_path, workspace=workspace) is not None
+
+
+def test_prefixed_command_lookup_does_not_hide_shell_substitution(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    for assignment in (
+        "CHECK=`npx --yes untrusted-package`",
+        "CHECK=$(npx --yes untrusted-package)",
+        "CHECK=foo`npx --yes untrusted-package`",
+    ):
+        command = f"{assignment} command -v npx >/dev/null 2>&1"
+        assert _artifact(command, home=tmp_path, workspace=workspace) is not None
+
+    timed_lookup = "time -p command -v `npx --yes untrusted-package`"
+    assert _artifact(timed_lookup, home=tmp_path, workspace=workspace) is not None
