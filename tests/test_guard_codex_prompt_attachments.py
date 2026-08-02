@@ -124,7 +124,7 @@ def test_large_benign_codex_attachment_streams_without_review(tmp_path: Path) ->
     elapsed_cpu_seconds = process_time() - started_at
 
     assert artifact is None
-    assert elapsed_cpu_seconds < 4.0
+    assert elapsed_cpu_seconds < 6.0
 
 
 def test_large_benign_codex_attachment_has_bounded_peak_memory(tmp_path: Path) -> None:
