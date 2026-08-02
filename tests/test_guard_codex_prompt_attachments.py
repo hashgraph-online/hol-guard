@@ -116,15 +116,17 @@ def test_large_benign_codex_attachment_streams_without_review(tmp_path: Path) ->
     attachment = _attachment(tmp_path, "Routine release note.\n" * 190_000)
 
     tracemalloc.start()
-    started_at = perf_counter()
-    artifact = _codex_prompt_attachment_artifact(
-        prompt_text=f"Read {attachment} before continuing.",
-        home_dir=tmp_path,
-        config_path="<runtime>",
-    )
-    elapsed_seconds = perf_counter() - started_at
-    _, peak_bytes = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
+    try:
+        started_at = perf_counter()
+        artifact = _codex_prompt_attachment_artifact(
+            prompt_text=f"Read {attachment} before continuing.",
+            home_dir=tmp_path,
+            config_path="<runtime>",
+        )
+        elapsed_seconds = perf_counter() - started_at
+        _, peak_bytes = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
 
     assert artifact is None
     assert elapsed_seconds < 4.0
