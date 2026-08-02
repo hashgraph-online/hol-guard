@@ -365,7 +365,9 @@ def add_approval_request(
                 artifact_label = ?, source_label = ?, trigger_summary = ?, why_now = ?, launch_summary = ?,
                 risk_headline = ?, action_envelope_json = ?, decision_v2_json = ?, fallback_cli_command = ?,
                 scanner_evidence_json = ?, browser_intent_json = ?, review_command = ?, approval_url = ?,
-                raw_command_text = ?, guard_version = ?, last_seen_guard_version = ?
+                raw_command_text = ?, guard_version = ?,
+                first_seen_guard_version = coalesce(first_seen_guard_version, ?),
+                last_seen_guard_version = ?
             where request_id = ? and oauth_source = ?
             """,
             (
@@ -411,6 +413,7 @@ def add_approval_request(
                 approval_url,
                 request.raw_command_text,
                 request.guard_version,
+                request.first_seen_guard_version or request.guard_version,
                 request.last_seen_guard_version or request.guard_version,
                 request_id,
                 normalized_oauth_source,

@@ -1336,11 +1336,19 @@ def _raw_command_segments_with_operators(
 
 
 def _normalize_segment(raw_segment: list[str]) -> list[str]:
-    if _command_builtin_is_lookup(raw_segment):
+    if _command_builtin_is_lookup(_strip_command_lookup_prefixes(list(raw_segment))):
         return []
     segment = _without_fd_merge_redirections(_strip_wrapper_tokens(list(raw_segment)))
     if len(segment) >= 3 and _command_name(segment[0]) in _PYTHON_EXECUTABLES and segment[1] == "-m":
         segment = [segment[2], *segment[3:]]
+    return segment
+
+
+def _strip_command_lookup_prefixes(segment: list[str]) -> list[str]:
+    while segment and _ENV_ASSIGNMENT_RE.match(segment[0]):
+        segment.pop(0)
+    if segment and _command_name(segment[0]) == "time":
+        return _strip_plain_wrapper_flags(segment[1:])
     return segment
 
 
