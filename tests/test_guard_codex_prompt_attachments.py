@@ -242,6 +242,19 @@ def test_previous_sentence_intent_does_not_override_later_negation(tmp_path: Pat
     assert artifact is None
 
 
+def test_long_negation_replaces_inherited_positive_intent(tmp_path: Path) -> None:
+    content = f"Read the README. Do not read {'x' * (_ATTACHMENT_SCAN_CHUNK_BYTES + 1)} .env"
+    attachment = _attachment(tmp_path, content)
+
+    artifact = _codex_prompt_attachment_artifact(
+        prompt_text=f"Read {attachment} before continuing.",
+        home_dir=tmp_path,
+        config_path="<runtime>",
+    )
+
+    assert artifact is None
+
+
 def test_previous_sentence_intent_carries_to_later_secret_reference(tmp_path: Path) -> None:
     content = f"Read the following file. {'x' * (_ATTACHMENT_SCAN_CHUNK_BYTES + 1)} .env"
     attachment = _attachment(tmp_path, content)
