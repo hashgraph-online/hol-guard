@@ -179,6 +179,7 @@ def test_local_next_variants_with_execution_or_write_risk_remain_reviewable(
         "./node_modules/.bin/eslint --config ./attacker.js src/example.ts",
         "./node_modules/.bin/eslint --plugin attacker src/example.ts",
         "./node_modules/.bin/eslint src > output.txt",
+        "./node_modules/.bin/eslint src/*.ts",
         "./node_modules/.bin/tsc --emitDeclarationOnly",
         "./node_modules/.bin/tsc --noEmit --project ../tsconfig.json",
         "./node_modules/.bin/tsc --noEmit --project $HOME/tsconfig.json",
@@ -254,6 +255,57 @@ def test_locally_modified_runner_with_consistent_metadata_remains_reviewable(
         )
         is None
     )
+
+
+def test_dependency_change_invalidates_existing_approval_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, active, workspace = _workspace(tmp_path, "next")
+    next_package_path = workspace / "node_modules" / "next" / "package.json"
+    next_package = cast(dict[str, object], json.loads(next_package_path.read_text(encoding="utf-8")))
+    next_package["dependencies"] = {"helper": "1.0.0"}
+    _write(next_package_path, json.dumps(next_package))
+    _write(
+        workspace / "node_modules" / "helper" / "package.json",
+        json.dumps({"name": "helper", "version": "1.0.0", "main": "index.js"}),
+    )
+    helper = workspace / "node_modules" / "helper" / "index.js"
+    _write(helper, "module.exports = 1\n")
+    _trust_fixture_package(monkeypatch, workspace, "next")
+    command = f"cd {workspace} && ./node_modules/.bin/next build --webpack"
+
+    before = local_tool_approval_eligibility(command, cwd=active, home_dir=home)
+    assert before is not None
+    _write(helper, "module.exports = 2\n")
+    after = local_tool_approval_eligibility(command, cwd=active, home_dir=home)
+
+    assert after is not None
+    assert after.tool_identity_hash != before.tool_identity_hash
+
+
+def test_approval_identity_is_scoped_to_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, active, workspace = _workspace(tmp_path / "first", "next")
+    other_home, other_active, other_workspace = _workspace(tmp_path / "second", "next")
+    _trust_fixture_package(monkeypatch, workspace, "next")
+    _trust_fixture_package(monkeypatch, other_workspace, "next")
+    first = local_tool_approval_eligibility(
+        f"cd {workspace} && ./node_modules/.bin/next build --webpack",
+        cwd=active,
+        home_dir=home,
+    )
+    second = local_tool_approval_eligibility(
+        f"cd {other_workspace} && ./node_modules/.bin/next build --webpack",
+        cwd=other_active,
+        home_dir=other_home,
+    )
+
+    assert first is not None
+    assert second is not None
+    assert first.tool_identity_hash != second.tool_identity_hash
 
 
 @pytest.mark.parametrize(

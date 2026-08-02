@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -12,6 +11,11 @@ from pathlib import Path
 from typing import cast
 
 from .jsonc import loads_jsonc
+from .routine_node_identity import (
+    routine_dependency_closure_digest,
+    routine_package_tree_digest,
+    routine_workspace_identity,
+)
 from .secret_file_request_services.docker_requests import (
     _shell_execution_context_validation_reason,
     shell_execution_context_starts_with_literal_cd,
@@ -47,8 +51,6 @@ TRUSTED_PACKAGE_TREES = {
         "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
     ): "e5e331517b5c57cef26c6ed1c1dd2193ed52002a49a276cf7971b499c7f83b0f",
 }
-_MAX_PACKAGE_TREE_BYTES = 256 * 1024 * 1024
-_MAX_PACKAGE_TREE_FILES = 12_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,7 +128,13 @@ def routine_local_node_approval_profile(
         return None
     package_name = _RUNNER_PACKAGES[command_name]
     binding = _workspace_runner_binding(context.workspace_root, runner=command_name)
-    if binding is None:
+    workspace = context.workspace_root
+    if binding is None or workspace is None:
+        return None
+    try:
+        workspace_identity = routine_workspace_identity(workspace)
+        closure_digest = routine_dependency_closure_digest(workspace, package_name)
+    except (OSError, RuntimeError, ValueError):
         return None
     return RoutineLocalNodeApprovalProfile(
         tool_name={"eslint": "ESLint", "next": "Next.js", "tsc": "TypeScript"}[command_name],
@@ -135,6 +143,8 @@ def routine_local_node_approval_profile(
             "version": 1,
             "package": package_name,
             "binding": binding,
+            "dependency_closure_digest": closure_digest,
+            "workspace": workspace_identity,
             "grammar": "routine-local-node-v1",
         },
     )
@@ -210,7 +220,7 @@ def _safe_relative_config(token: str) -> bool:
 def _dynamic_or_external(token: str) -> bool:
     return (
         token.startswith(("/", "~"))
-        or any(character in token for character in ("$", "`", ">", "<", "|", "&"))
+        or any(character in token for character in ("$", "`", ">", "<", "|", "&", "*", "?", "[", "]", "{", "}"))
         or ".." in Path(token).parts
     )
 
@@ -365,32 +375,6 @@ def _package_tree_has_trusted_identity(
         return routine_package_tree_digest(package_dir) == expected
     except (OSError, RuntimeError, ValueError):
         return False
-
-
-def routine_package_tree_digest(root: Path) -> str:
-    """Hash an installed package tree with bounded, canonical traversal."""
-
-    canonical_root = root.resolve(strict=True)
-    if root.is_symlink() or not canonical_root.is_dir():
-        raise ValueError("package tree is not canonical")
-    records: list[tuple[str, str]] = []
-    total_bytes = 0
-    for directory, directory_names, file_names in os.walk(canonical_root, followlinks=False):
-        directory_names.sort()
-        file_names.sort()
-        for name in file_names:
-            path = Path(directory) / name
-            if path.is_symlink():
-                raise ValueError("package tree contains a symlink")
-            metadata = path.stat()
-            if not path.is_file():
-                raise ValueError("package tree contains a non-file")
-            total_bytes += metadata.st_size
-            if len(records) >= _MAX_PACKAGE_TREE_FILES or total_bytes > _MAX_PACKAGE_TREE_BYTES:
-                raise ValueError("package tree exceeds identity budget")
-            records.append((path.relative_to(canonical_root).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest()))
-    encoded = json.dumps(records, separators=(",", ":"), ensure_ascii=True).encode()
-    return hashlib.sha256(b"hol-guard:package-tree:v1\0" + len(encoded).to_bytes(8, "big") + encoded).hexdigest()
 
 
 def _semver_spec_matches(specifier: str, version: str) -> bool:
