@@ -14,6 +14,7 @@ from .models import GuardAction, PolicyDecision
 from .runtime.approval_context import build_runtime_launch_identity, runtime_launch_identity_is_reusable
 from .runtime.command_model import CommandSegment, parse_shell_command
 from .runtime.command_tokens import executable_name
+from .runtime.routine_local_node import routine_local_node_approval_profile
 from .trusted_local_tool_jq import safe_jq_arguments
 from .trusted_package_tools import trusted_package_tool_profile
 
@@ -135,6 +136,15 @@ def local_tool_approval_eligibility(
     cwd: Path,
     home_dir: Path | None,
 ) -> LocalToolApprovalEligibility | None:
+    routine_profile = routine_local_node_approval_profile(command, home_dir=home_dir or cwd)
+    if routine_profile is not None:
+        return LocalToolApprovalEligibility(
+            tool_name=routine_profile.tool_name,
+            tool_identity_hash=sha256(_canonical_json(routine_profile.identity_material)).hexdigest(),
+            capability=routine_profile.capability,
+            read_only_reason="Authenticated local developer validation command",
+            trust_basis="package-profile",
+        )
     model = parse_shell_command(
         command,
         cwd=cwd,

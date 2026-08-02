@@ -9,6 +9,7 @@ import pytest
 from codex_plugin_scanner.guard.runtime import routine_local_node as routine_module
 from codex_plugin_scanner.guard.runtime.routine_local_node import routine_package_tree_digest
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from codex_plugin_scanner.guard.trusted_local_tools import local_tool_approval_eligibility
 
 
 def _write(path: Path, text: str, *, executable: bool = False) -> None:
@@ -82,7 +83,14 @@ def test_exact_prerelease_next_dependency_is_bound(tmp_path: Path, monkeypatch: 
         home_dir=home,
     )
 
-    assert match is None
+    assert match is not None
+    eligibility = local_tool_approval_eligibility(
+        f"cd {workspace} && ./node_modules/.bin/next build --webpack",
+        cwd=active,
+        home_dir=home,
+    )
+    assert eligibility is not None
+    assert eligibility.capability == "build"
 
 
 @pytest.mark.parametrize(
@@ -97,7 +105,7 @@ def test_exact_prerelease_next_dependency_is_bound(tmp_path: Path, monkeypatch: 
         ("tsc", "./node_modules/.bin/tsc --noEmit -p tsconfig.json 2>&1 | tail -50"),
     ),
 )
-def test_dependency_bound_local_routine_after_sibling_cd_is_allowed(
+def test_dependency_bound_local_routine_offers_reusable_capability_approval(
     tmp_path: Path,
     runner: str,
     invocation: str,
@@ -113,7 +121,18 @@ def test_dependency_bound_local_routine_after_sibling_cd_is_allowed(
         home_dir=home,
     )
 
-    assert match is None
+    assert match is not None
+    eligibility = local_tool_approval_eligibility(
+        f"cd {workspace} && {invocation}",
+        cwd=active,
+        home_dir=home,
+    )
+    assert eligibility is not None
+    approval = eligibility.to_payload()
+    assert approval["allowed_targets"] == ["capability"]
+    durations = cast(list[object], approval["allowed_durations"])
+    assert "5h" in durations
+    assert "always" not in durations
 
 
 @pytest.mark.parametrize(
@@ -130,8 +149,10 @@ def test_dependency_bound_local_routine_after_sibling_cd_is_allowed(
 def test_local_next_variants_with_execution_or_write_risk_remain_reviewable(
     tmp_path: Path,
     invocation: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home, active, workspace = _workspace(tmp_path, "next")
+    _trust_fixture_package(monkeypatch, workspace, "next")
 
     match = extract_sensitive_tool_action_request(
         "Bash",
@@ -141,6 +162,14 @@ def test_local_next_variants_with_execution_or_write_risk_remain_reviewable(
     )
 
     assert match is not None
+    assert (
+        local_tool_approval_eligibility(
+            f"cd {workspace} && {invocation}",
+            cwd=active,
+            home_dir=home,
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(
@@ -205,6 +234,14 @@ def test_locally_modified_runner_with_consistent_metadata_remains_reviewable(
     )
 
     assert match is not None
+    assert (
+        local_tool_approval_eligibility(
+            f"cd {workspace} && ./node_modules/.bin/next build --webpack",
+            cwd=active,
+            home_dir=home,
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(

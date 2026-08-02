@@ -7,6 +7,7 @@ import json
 import os
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -48,6 +49,13 @@ TRUSTED_PACKAGE_TREES = {
 }
 _MAX_PACKAGE_TREE_BYTES = 256 * 1024 * 1024
 _MAX_PACKAGE_TREE_FILES = 12_000
+
+
+@dataclass(frozen=True, slots=True)
+class RoutineLocalNodeApprovalProfile:
+    tool_name: str
+    capability: str
+    identity_material: dict[str, object]
 
 
 def routine_local_node_execution_context(
@@ -100,6 +108,36 @@ def routine_local_node_execution_context(
     if len(context.segments) == 3 and not _bounded_output_filter(context.segments[2]):
         return None
     return context
+
+
+def routine_local_node_approval_profile(
+    command_text: str,
+    *,
+    home_dir: Path,
+) -> RoutineLocalNodeApprovalProfile | None:
+    """Build reusable approval identity for one authenticated routine runner."""
+
+    context = routine_local_node_execution_context(command_text, home_dir=home_dir)
+    if context is None:
+        return None
+    runner = context.segments[1]
+    command_name, _ = _shell_segment_primary_command(list(runner.tokens))
+    if command_name not in _RUNNER_PACKAGES:
+        return None
+    package_name = _RUNNER_PACKAGES[command_name]
+    binding = _workspace_runner_binding(context.workspace_root, runner=command_name)
+    if binding is None:
+        return None
+    return RoutineLocalNodeApprovalProfile(
+        tool_name={"eslint": "ESLint", "next": "Next.js", "tsc": "TypeScript"}[command_name],
+        capability={"eslint": "lint", "next": "build", "tsc": "typecheck"}[command_name],
+        identity_material={
+            "version": 1,
+            "package": package_name,
+            "binding": binding,
+            "grammar": "routine-local-node-v1",
+        },
+    )
 
 
 def _safe_environment(tokens: list[str], *, runner: str) -> bool:
@@ -184,16 +222,22 @@ def _bounded_output_filter(segment: ShellExecutionSegment) -> bool:
 
 
 def _workspace_runner_is_bound(workspace: Path, *, runner: str) -> bool:
+    return _workspace_runner_binding(workspace, runner=runner) is not None
+
+
+def _workspace_runner_binding(workspace: Path | None, *, runner: str) -> dict[str, str] | None:
+    if workspace is None:
+        return None
     package_name = _RUNNER_PACKAGES[runner]
     package_dir = workspace / "node_modules" / package_name
     package = _read_package_json(package_dir / "package.json")
     if package is None or package.get("name") != package_name:
-        return False
+        return None
     installed_version = package.get("version")
     declared_version = _declared_dependency_version(workspace, package_name)
     lockfiles = [workspace / name for name in ("bun.lock", "package-lock.json") if (workspace / name).exists()]
     if not isinstance(installed_version, str) or declared_version is None or len(lockfiles) != 1:
-        return False
+        return None
     locked_identity = _locked_package_identity(lockfiles[0], package_name)
     if (
         locked_identity is None
@@ -206,10 +250,10 @@ def _workspace_runner_is_bound(workspace: Path, *, runner: str) -> bool:
             integrity=locked_identity[1],
         )
     ):
-        return False
+        return None
     target = _package_bin_target(package, runner)
     if target is None:
-        return False
+        return None
     try:
         workspace_root = workspace.resolve(strict=True)
         package_root = package_dir.resolve(strict=True)
@@ -218,8 +262,16 @@ def _workspace_runner_is_bound(workspace: Path, *, runner: str) -> bool:
         _ = package_root.relative_to(workspace_root)
         _ = executable.relative_to(package_root)
     except (OSError, RuntimeError, ValueError):
-        return False
-    return executable == expected and executable.is_file() and os.access(executable, os.X_OK)
+        return None
+    if executable != expected or not executable.is_file() or not os.access(executable, os.X_OK):
+        return None
+    return {
+        "package": package_name,
+        "version": locked_identity[0],
+        "integrity": locked_identity[1],
+        "tree_digest": TRUSTED_PACKAGE_TREES[(package_name, locked_identity[0], locked_identity[1])],
+        "executable": executable.relative_to(workspace_root).as_posix(),
+    }
 
 
 def _package_bin_target(package: dict[str, object], runner: str) -> str | None:
@@ -356,4 +408,10 @@ def _semver_spec_matches(specifier: str, version: str) -> bool:
     return actual == minimum
 
 
-__all__ = ("TRUSTED_PACKAGE_TREES", "routine_local_node_execution_context", "routine_package_tree_digest")
+__all__ = (
+    "TRUSTED_PACKAGE_TREES",
+    "RoutineLocalNodeApprovalProfile",
+    "routine_local_node_approval_profile",
+    "routine_local_node_execution_context",
+    "routine_package_tree_digest",
+)
