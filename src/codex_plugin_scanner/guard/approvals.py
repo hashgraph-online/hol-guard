@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import threading
 import time
 import uuid
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import ParamSpec, TypeGuard, TypeVar
 from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
+from ..version import __version__
 from .action_lattice import normalize_guard_action_result
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
@@ -99,6 +101,13 @@ _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES = frozenset(
         "tool_action_request",
     }
 )
+
+
+def _current_guard_version() -> str:
+    try:
+        return importlib.metadata.version("hol-guard")
+    except importlib.metadata.PackageNotFoundError:
+        return __version__
 
 
 class ApprovalRequestNotFoundError(ValueError):
@@ -520,6 +529,7 @@ def queue_blocked_approvals(
             launch_target=launch_target,
             risk_summary=risk_summary,
         )
+        guard_version = _current_guard_version()
         request = GuardApprovalRequest(
             request_id=request_id,
             harness=detection.harness,
@@ -551,6 +561,9 @@ def queue_blocked_approvals(
             scanner_evidence=scanner_evidence,
             browser_intent=_item_browser_intent(item),
             raw_command_text=raw_command_text,
+            guard_version=guard_version,
+            first_seen_guard_version=guard_version,
+            last_seen_guard_version=guard_version,
         )
         persisted_request_id = store.add_approval_request(request, timestamp)
         created_new_request = persisted_request_id == request.request_id

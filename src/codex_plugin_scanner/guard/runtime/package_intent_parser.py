@@ -1336,10 +1336,25 @@ def _raw_command_segments_with_operators(
 
 
 def _normalize_segment(raw_segment: list[str]) -> list[str]:
+    if _command_builtin_is_lookup(raw_segment):
+        return []
     segment = _without_fd_merge_redirections(_strip_wrapper_tokens(list(raw_segment)))
     if len(segment) >= 3 and _command_name(segment[0]) in _PYTHON_EXECUTABLES and segment[1] == "-m":
         segment = [segment[2], *segment[3:]]
     return segment
+
+
+def _command_builtin_is_lookup(segment: list[str]) -> bool:
+    if not segment or _command_name(segment[0]) != "command":
+        return False
+    index = 1
+    saw_lookup = False
+    while index < len(segment) and segment[index].startswith("-"):
+        option = segment[index]
+        saw_lookup = saw_lookup or "v" in option[1:] or "V" in option[1:]
+        index += 1
+    operands = [token for token in segment[index:] if ">" not in token and "<" not in token]
+    return saw_lookup and len(operands) == 1
 
 
 def _effective_execution_context(

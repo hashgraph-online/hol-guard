@@ -258,6 +258,9 @@ def approval_schema_statement() -> str:
           browser_intent_json text,
           desktop_notified_at text,
           raw_command_text text,
+          guard_version text,
+          first_seen_guard_version text,
+          last_seen_guard_version text,
           review_command text not null,
           approval_url text not null,
           status text not null,
@@ -362,7 +365,7 @@ def add_approval_request(
                 artifact_label = ?, source_label = ?, trigger_summary = ?, why_now = ?, launch_summary = ?,
                 risk_headline = ?, action_envelope_json = ?, decision_v2_json = ?, fallback_cli_command = ?,
                 scanner_evidence_json = ?, browser_intent_json = ?, review_command = ?, approval_url = ?,
-                raw_command_text = ?
+                raw_command_text = ?, guard_version = ?, last_seen_guard_version = ?
             where request_id = ? and oauth_source = ?
             """,
             (
@@ -407,6 +410,8 @@ def add_approval_request(
                 review_command,
                 approval_url,
                 request.raw_command_text,
+                request.guard_version,
+                request.last_seen_guard_version or request.guard_version,
                 request_id,
                 normalized_oauth_source,
             ),
@@ -422,12 +427,12 @@ def add_approval_request(
           risk_signals_json, artifact_label, source_label, trigger_summary, why_now, launch_summary, risk_headline,
           action_envelope_json, decision_v2_json, fallback_cli_command, scanner_evidence_json, browser_intent_json,
           review_command, approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
-          raw_command_text
+          raw_command_text, guard_version, first_seen_guard_version, last_seen_guard_version
         )
         values (
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?
+          ?, ?, ?, ?, ?, ?
             )
         """,
         (
@@ -478,6 +483,9 @@ def add_approval_request(
             now,
             None,
             request.raw_command_text,
+            request.guard_version,
+            request.first_seen_guard_version or request.guard_version,
+            request.last_seen_guard_version or request.guard_version,
         ),
     )
     return request.request_id
@@ -547,7 +555,7 @@ def list_approval_requests(
                 launch_summary, risk_headline, action_envelope_json, decision_v2_json,
                 fallback_cli_command, scanner_evidence_json, browser_intent_json, review_command,
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
-                raw_command_text
+                raw_command_text, guard_version, first_seen_guard_version, last_seen_guard_version
         from approval_requests
         {where_clause}
         order by last_seen_at desc, request_id desc
@@ -576,6 +584,9 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
                 launch_summary, risk_headline, action_envelope_json, decision_v2_json,
                 {_column_expr(columns, "fallback_cli_command", "NULL")},
                 {_column_expr(columns, "raw_command_text", "NULL")},
+                {_column_expr(columns, "guard_version", "NULL")},
+                {_column_expr(columns, "first_seen_guard_version", "NULL")},
+                {_column_expr(columns, "last_seen_guard_version", "NULL")},
                 {_column_expr(columns, "scanner_evidence_json", "'[]'")},
                 {_column_expr(columns, "browser_intent_json", "NULL")}, review_command,
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
@@ -719,6 +730,9 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "decision_v2_json": canonical_decision.decision_v2_json,
         "fallback_cli_command": row["fallback_cli_command"],
         "raw_command_text": row["raw_command_text"],
+        "guard_version": row["guard_version"],
+        "first_seen_guard_version": row["first_seen_guard_version"],
+        "last_seen_guard_version": row["last_seen_guard_version"],
         "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
         "browser_intent": _json_object(row["browser_intent_json"]),
         "review_command": str(row["review_command"]),

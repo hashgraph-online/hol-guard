@@ -234,6 +234,9 @@ class GuardApprovalRequest:
     scanner_evidence: tuple[dict[str, object], ...] = ()
     browser_intent: dict[str, object] | None = None
     raw_command_text: str | None = None
+    guard_version: str | None = None
+    first_seen_guard_version: str | None = None
+    last_seen_guard_version: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)

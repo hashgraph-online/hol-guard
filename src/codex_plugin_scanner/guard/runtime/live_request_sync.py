@@ -225,6 +225,9 @@ def _build_live_request_event(
         "localCreatedAt": created_at,
         "localUpdatedAt": str(item.get("updated_at") or last_seen_at),
         "localLastSeenAt": last_seen_at,
+        "guardVersion": str(item.get("guard_version") or "") or None,
+        "firstSeenGuardVersion": str(item.get("first_seen_guard_version") or "") or None,
+        "lastSeenGuardVersion": str(item.get("last_seen_guard_version") or "") or None,
         "localEmittedAt": _now(),
         "sentAt": _now(),
     }
