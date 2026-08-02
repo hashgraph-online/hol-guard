@@ -177,6 +177,7 @@ def _shell_request(
     *,
     command: str = "npm test",
     artifact_name: str = "Shell command",
+    risk_summary: str | None = None,
     decision_v2_json: dict[str, object] | None = None,
 ) -> GuardApprovalRequest:
     return GuardApprovalRequest(
@@ -193,6 +194,7 @@ def _shell_request(
         config_path="/repo/.cursor/config.toml",
         review_command=f"hol-guard approvals approve {request_id}",
         approval_url=f"http://127.0.0.1:5474/requests/{request_id}",
+        risk_summary=risk_summary,
         decision_v2_json=decision_v2_json,
         action_envelope_json={
             "schema_version": 1,
@@ -256,6 +258,30 @@ def test_is_bulk_allow_once_eligible_allows_shell_command(tmp_path: Path) -> Non
     stored = store.get_approval_request("req-shell")
     assert stored is not None
     assert is_bulk_allow_once_eligible(stored) is True
+
+
+def test_bulk_eligibility_ignores_generated_exfiltration_warning(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    request = _shell_request(
+        "req-remote-read",
+        command="ssh audit-host process-manager logs --lines 20",
+        risk_summary="Remote execution could allow data exfiltration.",
+    )
+    store.add_approval_request(request, "2026-06-16T00:00:00+00:00")
+
+    stored = store.get_approval_request("req-remote-read")
+    assert stored is not None
+    assert is_bulk_allow_once_eligible(stored) is True
+
+
+def test_bulk_eligibility_still_rejects_exfiltration_action_text(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    request = _shell_request("req-exfiltration", command="upload-exfiltrated-data")
+    store.add_approval_request(request, "2026-06-16T00:00:00+00:00")
+
+    stored = store.get_approval_request("req-exfiltration")
+    assert stored is not None
+    assert is_bulk_allow_once_eligible(stored) is False
 
 
 def test_is_bulk_allow_once_eligible_allows_destructive_shell(tmp_path: Path) -> None:
@@ -409,6 +435,33 @@ def test_bulk_allow_read_only_once_accepts_totp_without_password(tmp_path: Path)
     assert result["resolved_count"] == 1
     assert result["failed"] == []
     assert store.get_approval_request("req-totp-bulk")["status"] == "resolved"
+
+
+def test_ineligible_batch_does_not_consume_totp(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    enrollment_now = "2026-06-16T00:00:00+00:00"
+    secret = _enable_totp(store, now=enrollment_now)
+    approve_now = "2026-06-16T00:01:00+00:00"
+    code = totp_code_at_counter(secret=secret, counter=int(datetime.fromisoformat(approve_now).timestamp() // 30))
+    store.add_approval_request(_file_read_request("req-blocked", policy_action="block"), enrollment_now)
+
+    rejected = bulk_allow_read_only_once(
+        store=store,
+        request_ids=["req-blocked"],
+        approval_gate_input=ApprovalGateInput(totp_code=code),
+        now=approve_now,
+    )
+    assert rejected["resolved_count"] == 0
+
+    store.add_approval_request(_file_read_request("req-eligible"), enrollment_now)
+    accepted = bulk_allow_read_only_once(
+        store=store,
+        request_ids=["req-eligible"],
+        approval_gate_input=ApprovalGateInput(totp_code=code),
+        now=approve_now,
+    )
+    assert accepted["resolved_count"] == 1
 
 
 def test_bulk_allow_resolves_mixed_file_read_and_shell(tmp_path: Path) -> None:
