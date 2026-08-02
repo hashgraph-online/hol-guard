@@ -2363,6 +2363,7 @@ def _bulk_action_text(request: Mapping[str, object]) -> str:
         [
             str(request.get("artifact_name") or ""),
             str(request.get("artifact_type") or ""),
+            str(request.get("raw_command_text") or ""),
             str(request.get("launch_target") or ""),
             *envelope_fields,
         ]
@@ -2389,7 +2390,7 @@ def _bulk_has_secret_signal(request: Mapping[str, object]) -> bool:
     categories = _bulk_decision_v2_categories(request)
     if "secret" in categories:
         return True
-    lowered = _bulk_queue_category_text(request).lower()
+    lowered = _bulk_action_text(request).lower()
     return any(hint in lowered for hint in _BULK_SECRET_TEXT_HINTS)
 
 
@@ -2535,7 +2536,6 @@ def bulk_allow_read_only_once(
 
     bulk_resolution_action = "allow"
     bulk_resolution_scope = "artifact"
-    bulk_subject = f"approval-request-batch:{uuid.uuid5(uuid.NAMESPACE_URL, chr(0).join(sorted(request_ids))).hex}"
     resolved_count = 0
     failed: list[dict[str, str]] = []
     eligible_ids: list[str] = []
@@ -2557,6 +2557,7 @@ def bulk_allow_read_only_once(
             "resolution_summary": "0 actions approved once.",
         }
 
+    bulk_subject = f"approval-request-batch:{uuid.uuid5(uuid.NAMESPACE_URL, chr(0).join(sorted(eligible_ids))).hex}"
     bulk_gate_grant = require_approval_decision(
         store.guard_home,
         action=bulk_resolution_action,
@@ -2577,7 +2578,7 @@ def bulk_allow_read_only_once(
                 reason="bulk approve once",
                 now=resolved_at,
                 return_queue_result=False,
-                resolve_scope_matches=True,
+                resolve_scope_matches=False,
                 approval_gate_grant=bulk_gate_grant,
                 approval_gate_subject=bulk_subject,
                 persist_policy=False,
