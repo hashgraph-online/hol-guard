@@ -2345,6 +2345,7 @@ def _bulk_action_text(request: Mapping[str, object]) -> str:
     if isinstance(envelope, dict):
         for key in (
             "command",
+            "prompt_text",
             "prompt_excerpt",
             "mcp_server",
             "mcp_tool",

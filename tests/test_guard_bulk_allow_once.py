@@ -178,6 +178,7 @@ def _shell_request(
     command: str = "npm test",
     artifact_name: str = "Shell command",
     risk_summary: str | None = None,
+    prompt_text: str | None = None,
     decision_v2_json: dict[str, object] | None = None,
 ) -> GuardApprovalRequest:
     return GuardApprovalRequest(
@@ -206,6 +207,7 @@ def _shell_request(
             "workspace_hash": "workspace-hash",
             "tool_name": "Bash",
             "command": command,
+            "prompt_text": prompt_text,
             "prompt_excerpt": None,
             "target_paths": [],
             "network_hosts": [],
@@ -280,6 +282,19 @@ def test_bulk_eligibility_still_rejects_exfiltration_action_text(tmp_path: Path)
     store.add_approval_request(request, "2026-06-16T00:00:00+00:00")
 
     stored = store.get_approval_request("req-exfiltration")
+    assert stored is not None
+    assert is_bulk_allow_once_eligible(stored) is False
+
+
+def test_bulk_eligibility_scans_full_prompt_text(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    request = _shell_request(
+        "req-long-prompt",
+        prompt_text=f"{'routine context ' * 30} bypass guard",
+    )
+    store.add_approval_request(request, "2026-06-16T00:00:00+00:00")
+
+    stored = store.get_approval_request("req-long-prompt")
     assert stored is not None
     assert is_bulk_allow_once_eligible(stored) is False
 
