@@ -17,7 +17,7 @@ from .commands_support_codex_paths import (
     _path_contains_symlink,
 )
 
-_ATTACHMENT_SCAN_CHUNK_BYTES = 64 * 1024
+_ATTACHMENT_SCAN_CHUNK_BYTES = 128 * 1024
 _ATTACHMENT_SCAN_MAX_BYTES = 8 * 1024 * 1024
 _ATTACHMENT_SCAN_OVERLAP_CHARS = 4 * 1024
 _OPEN_SUPPORTS_DIR_FD = os.open in os.supports_dir_fd

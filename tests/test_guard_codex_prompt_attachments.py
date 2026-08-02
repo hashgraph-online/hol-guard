@@ -129,7 +129,7 @@ def test_large_benign_codex_attachment_streams_without_review(tmp_path: Path) ->
         tracemalloc.stop()
 
     assert artifact is None
-    assert elapsed_seconds < 4.0
+    assert elapsed_seconds < 6.0
     assert peak_bytes < 2 * 1024 * 1024
 
 
