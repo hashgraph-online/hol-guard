@@ -115,21 +115,33 @@ def test_codex_attachment_parent_traversal_fails_closed(tmp_path: Path) -> None:
 def test_large_benign_codex_attachment_streams_without_review(tmp_path: Path) -> None:
     attachment = _attachment(tmp_path, "Routine release note.\n" * 190_000)
 
+    started_at = process_time()
+    artifact = _codex_prompt_attachment_artifact(
+        prompt_text=f"Read {attachment} before continuing.",
+        home_dir=tmp_path,
+        config_path="<runtime>",
+    )
+    elapsed_cpu_seconds = process_time() - started_at
+
+    assert artifact is None
+    assert elapsed_cpu_seconds < 4.0
+
+
+def test_large_benign_codex_attachment_has_bounded_peak_memory(tmp_path: Path) -> None:
+    attachment = _attachment(tmp_path, "Routine release note.\n" * 190_000)
+
     tracemalloc.start()
     try:
-        started_at = process_time()
         artifact = _codex_prompt_attachment_artifact(
             prompt_text=f"Read {attachment} before continuing.",
             home_dir=tmp_path,
             config_path="<runtime>",
         )
-        elapsed_cpu_seconds = process_time() - started_at
         _, peak_bytes = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
 
     assert artifact is None
-    assert elapsed_cpu_seconds < 5.0
     assert peak_bytes < 2 * 1024 * 1024
 
 
