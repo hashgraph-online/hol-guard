@@ -20,6 +20,7 @@ from .commands_support_codex_paths import (
 _ATTACHMENT_SCAN_CHUNK_BYTES = 64 * 1024
 _ATTACHMENT_SCAN_MAX_BYTES = 8 * 1024 * 1024
 _ATTACHMENT_SCAN_OVERLAP_CHARS = 4 * 1024
+_OPEN_SUPPORTS_DIR_FD = os.open in os.supports_dir_fd
 _GUARDED_ATTACHMENT_CLASSES = frozenset(
     {"prompt_injection_intent", "guard_bypass_intent", "exfil_intent", "secret_read"}
 )
@@ -42,16 +43,19 @@ def _codex_prompt_attachment_artifact(*, prompt_text: str, home_dir: Path, confi
             continue
         if _path_contains_symlink(candidate, base_dir=attachment_root):
             return _scan_failure(requested_path, "Guard could not verify the Codex attachment path.", config_path)
+        descriptor: int | None = None
         try:
-            resolved_path = candidate.resolve(strict=True)
-        except OSError:
-            return _scan_failure(requested_path, "Guard could not read the Codex attachment safely.", config_path)
-        if not resolved_path.is_relative_to(resolved_root):
-            return _scan_failure(requested_path, "Guard could not verify the Codex attachment path.", config_path)
-        try:
-            classes, digest = _scan_attachment(candidate)
+            descriptor = _open_verified_attachment(
+                candidate,
+                attachment_root=attachment_root,
+                resolved_root=resolved_root,
+            )
+            classes, digest = _scan_attachment(descriptor)
         except (OSError, UnicodeError):
             return _scan_failure(requested_path, "Guard could not fully scan the Codex attachment.", config_path)
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
         if not classes:
             continue
         return GuardArtifact(
@@ -76,33 +80,68 @@ def _codex_prompt_attachment_artifact(*, prompt_text: str, home_dir: Path, confi
     return None
 
 
-def _scan_attachment(path: Path) -> tuple[tuple[str, ...], str]:
-    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+def _open_verified_attachment(candidate: Path, *, attachment_root: Path, resolved_root: Path) -> int:
+    relative_parts = candidate.relative_to(attachment_root).parts
+    if not relative_parts or any(part in {"", ".", ".."} for part in relative_parts):
+        raise OSError("invalid attachment path")
+    if not _OPEN_SUPPORTS_DIR_FD:
+        resolved_candidate = candidate.resolve(strict=True)
+        if not resolved_candidate.is_relative_to(resolved_root):
+            raise OSError("attachment escaped managed root")
+        descriptor = os.open(candidate, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            if candidate.resolve(strict=True) != resolved_candidate or not os.path.samestat(
+                os.fstat(descriptor), candidate.stat(follow_symlinks=False)
+            ):
+                raise OSError("attachment changed while opening")
+        except OSError:
+            os.close(descriptor)
+            raise
+        return descriptor
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    directory_descriptor = os.open(attachment_root, directory_flags)
     try:
-        file_stat = os.fstat(descriptor)
-        if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_size > _ATTACHMENT_SCAN_MAX_BYTES:
-            raise OSError("unsupported attachment shape")
-        decoder = codecs.getincrementaldecoder("utf-8")(errors="strict")
-        digest = hashlib.sha256()
-        overlap = ""
-        guarded_classes: list[str] = []
-        total_bytes = 0
-        while raw_chunk := os.read(descriptor, _ATTACHMENT_SCAN_CHUNK_BYTES):
-            total_bytes += len(raw_chunk)
-            if total_bytes > _ATTACHMENT_SCAN_MAX_BYTES:
-                raise OSError("attachment exceeds scan limit")
-            digest.update(raw_chunk)
-            decoded_chunk = decoder.decode(raw_chunk, final=False)
-            if not guarded_classes:
-                window = f"{overlap}{decoded_chunk}"
-                guarded_classes.extend(_guarded_classes(window))
-                overlap = window[-_ATTACHMENT_SCAN_OVERLAP_CHARS:]
-        final_text = decoder.decode(b"", final=True)
-        if not guarded_classes and final_text:
-            guarded_classes.extend(_guarded_classes(f"{overlap}{final_text}"))
-        return tuple(dict.fromkeys(guarded_classes)), digest.hexdigest()[:_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH]
+        if not stat.S_ISDIR(os.fstat(directory_descriptor).st_mode) or not os.path.samestat(
+            os.fstat(directory_descriptor), resolved_root.stat(follow_symlinks=False)
+        ):
+            raise OSError("attachment root changed while opening")
+        for part in relative_parts[:-1]:
+            next_descriptor = os.open(part, directory_flags, dir_fd=directory_descriptor)
+            os.close(directory_descriptor)
+            directory_descriptor = next_descriptor
+            if not stat.S_ISDIR(os.fstat(directory_descriptor).st_mode):
+                raise OSError("attachment parent is not a directory")
+        return os.open(
+            relative_parts[-1],
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=directory_descriptor,
+        )
     finally:
-        os.close(descriptor)
+        os.close(directory_descriptor)
+
+
+def _scan_attachment(descriptor: int) -> tuple[list[str], str]:
+    file_stat = os.fstat(descriptor)
+    if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_size > _ATTACHMENT_SCAN_MAX_BYTES:
+        raise OSError("unsupported attachment shape")
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="strict")
+    digest = hashlib.sha256()
+    overlap = ""
+    guarded_classes: list[str] = []
+    total_bytes = 0
+    while raw_chunk := os.read(descriptor, _ATTACHMENT_SCAN_CHUNK_BYTES):
+        total_bytes += len(raw_chunk)
+        if total_bytes > _ATTACHMENT_SCAN_MAX_BYTES:
+            raise OSError("attachment exceeds scan limit")
+        digest.update(raw_chunk)
+        decoded_chunk = decoder.decode(raw_chunk, final=False)
+        window = f"{overlap}{decoded_chunk}"
+        guarded_classes.extend(_guarded_classes(window))
+        overlap = window[-_ATTACHMENT_SCAN_OVERLAP_CHARS:]
+    final_text = decoder.decode(b"", final=True)
+    if final_text:
+        guarded_classes.extend(_guarded_classes(f"{overlap}{final_text}"))
+    return list(dict.fromkeys(guarded_classes)), digest.hexdigest()[:_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH]
 
 
 def _guarded_classes(content_window: str) -> tuple[str, ...]:
