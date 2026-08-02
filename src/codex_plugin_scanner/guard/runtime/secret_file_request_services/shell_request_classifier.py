@@ -11,6 +11,7 @@ from ..direct_vitest import direct_local_typescript_execution_context, direct_lo
 from ..github_capability_interaction import github_capability_action_class, github_capability_requires_confirmation
 from ..pytest_config import PytestConfigAssessment
 from ..restricted_pytest import PYTEST_RESTRICTED_PROFILE_VERSION
+from ..routine_local_node import routine_local_node_execution_context
 from ..shell_execution_context import SHELL_CWD_WORKSPACE_ESCAPE, ShellExecutionContext, model_shell_execution_context
 from .constants_core import _SHELL_TOOL_NAMES
 from .docker_requests import _shell_execution_context_validation_reason, shell_execution_context_starts_with_literal_cd
@@ -102,6 +103,7 @@ def _destructive_shell_tool_action_request(
                 cwd=cwd,
                 home_dir=home_dir,
             )
+            or routine_local_node_execution_context(detection_command_text, home_dir=home_dir)
             or literal_cd_execution_context(
                 detection_command_text,
                 home_dir=home_dir,
@@ -119,6 +121,7 @@ def _destructive_shell_tool_action_request(
                 cwd=cwd,
                 home_dir=home_dir,
             )
+            or routine_local_node_execution_context(raw_command_text, home_dir=home_dir)
             or literal_cd_execution_context(raw_command_text, home_dir=home_dir)
             or low_risk_compound_developer_execution_context(raw_command_text, home_dir=home_dir)
             if raw_command_text is not None and raw_command_text != detection_command_text
