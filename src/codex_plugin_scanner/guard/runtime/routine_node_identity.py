@@ -215,9 +215,9 @@ def _json_configuration_modules(
 ) -> tuple[tuple[Path, ...], tuple[str, ...]]:
     payload = cast(object, json.loads(data))
     specifiers: list[str] = []
-    _collect_json_config_specifiers(payload, specifiers)
-    resolved: list[Path] = []
     packages: set[str] = set()
+    _collect_json_config_inputs(payload, specifiers, packages)
+    resolved: list[Path] = []
     for raw in specifiers:
         if raw.startswith("."):
             resolved.append(_resolve_local_module(workspace, importer, raw))
@@ -228,16 +228,61 @@ def _json_configuration_modules(
     return tuple(resolved), tuple(sorted(packages))
 
 
-def _collect_json_config_specifiers(payload: object, specifiers: list[str], *, key: str | None = None) -> None:
+def _collect_json_config_inputs(payload: object, specifiers: list[str], packages: set[str]) -> None:
     if isinstance(payload, dict):
         for raw_key, value in cast(dict[object, object], payload).items():
-            if isinstance(raw_key, str):
-                _collect_json_config_specifiers(value, specifiers, key=raw_key)
-    elif isinstance(payload, list):
-        for value in cast(list[object], payload):
-            _collect_json_config_specifiers(value, specifiers, key=key)
-    elif isinstance(payload, str) and key in {"extends", "path"}:
-        specifiers.append(payload)
+            if not isinstance(raw_key, str):
+                continue
+            if raw_key in {"extends", "path"}:
+                for item in _string_values(value):
+                    normalized = _eslint_extended_package(item)
+                    (packages.add(normalized) if normalized is not None else specifiers.append(item))
+                continue
+            if raw_key == "parser" and isinstance(value, str):
+                package = _bare_package_name(value)
+                if package is not None:
+                    packages.add(package)
+                continue
+            if raw_key == "plugins":
+                _collect_plugin_packages(value, packages)
+                continue
+            _collect_json_config_inputs(value, specifiers, packages)
+
+
+def _string_values(value: object) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, list):
+        return tuple(item for item in cast(list[object], value) if isinstance(item, str))
+    return ()
+
+
+def _collect_plugin_packages(value: object, packages: set[str]) -> None:
+    if not isinstance(value, list):
+        return
+    for item in cast(list[object], value):
+        if isinstance(item, str):
+            packages.add(_eslint_plugin_package(item))
+        elif isinstance(item, dict):
+            name = cast(dict[object, object], item).get("name")
+            if isinstance(name, str):
+                package = _bare_package_name(name)
+                if package is not None:
+                    packages.add(package)
+
+
+def _eslint_extended_package(specifier: str) -> str | None:
+    if not specifier.startswith("plugin:"):
+        return None
+    plugin = specifier.removeprefix("plugin:").split("/", maxsplit=1)[0]
+    return _eslint_plugin_package(plugin)
+
+
+def _eslint_plugin_package(plugin: str) -> str:
+    if plugin.startswith("@"):
+        scope, _, name = plugin.partition("/")
+        return f"{scope}/{name or 'eslint-plugin'}" if name else f"{scope}/eslint-plugin"
+    return plugin if plugin.startswith("eslint-plugin-") else f"eslint-plugin-{plugin}"
 
 
 def _resolve_local_module(workspace: Path, importer: Path, raw: str) -> Path:
