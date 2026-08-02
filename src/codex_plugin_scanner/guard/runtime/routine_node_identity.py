@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
@@ -13,6 +14,10 @@ _DEPENDENCY_SECTIONS = ("dependencies", "optionalDependencies", "peerDependencie
 _MAX_CLOSURE_PACKAGES = 1_000
 _MAX_PACKAGE_TREE_BYTES = 256 * 1024 * 1024
 _MAX_PACKAGE_TREE_FILES = 12_000
+_MAX_CONFIG_FILES = 128
+_MAX_CONFIG_BYTES = 4 * 1024 * 1024
+_LOCAL_MODULE_PATTERN = re.compile(r"(?:from\s+|require\s*\(|import\s*\()\s*['\"](?P<path>\.{1,2}/[^'\"]+)['\"]")
+_MODULE_SUFFIXES = ("", ".js", ".cjs", ".mjs", ".ts", ".cts", ".mts", ".json")
 
 
 def routine_workspace_identity(workspace: Path) -> dict[str, object]:
@@ -63,6 +68,81 @@ def routine_dependency_closure_digest(workspace: Path, package_name: str) -> str
     records.sort()
     encoded = json.dumps(records, separators=(",", ":"), ensure_ascii=True).encode()
     return hashlib.sha256(b"hol-guard:node-closure:v1\0" + len(encoded).to_bytes(8, "big") + encoded).hexdigest()
+
+
+def routine_configuration_digest(workspace: Path, runner: str) -> str:
+    """Hash runner configuration and statically referenced local modules."""
+
+    roots = _configuration_roots(workspace, runner)
+    pending = list(roots)
+    captured: dict[str, str] = {}
+    total_bytes = 0
+    canonical_workspace = workspace.resolve(strict=True)
+    while pending:
+        path = pending.pop()
+        canonical = _canonical_workspace_file(canonical_workspace, path)
+        relative = canonical.relative_to(canonical_workspace).as_posix()
+        if relative in captured:
+            continue
+        if len(captured) >= _MAX_CONFIG_FILES:
+            raise ValueError("configuration closure exceeds identity budget")
+        data = canonical.read_bytes()
+        total_bytes += len(data)
+        if total_bytes > _MAX_CONFIG_BYTES:
+            raise ValueError("configuration closure exceeds identity budget")
+        captured[relative] = hashlib.sha256(data).hexdigest()
+        if canonical.suffix.lower() != ".json":
+            text = data.decode("utf-8")
+            pending.extend(_resolved_local_modules(canonical_workspace, canonical, text))
+    encoded = json.dumps(sorted(captured.items()), separators=(",", ":"), ensure_ascii=True).encode()
+    return hashlib.sha256(b"hol-guard:node-config:v1\0" + len(encoded).to_bytes(8, "big") + encoded).hexdigest()
+
+
+def _configuration_roots(workspace: Path, runner: str) -> tuple[Path, ...]:
+    names = {
+        "next": ("next.config.js", "next.config.cjs", "next.config.mjs", "next.config.ts", "next.config.mts"),
+        "eslint": (
+            "eslint.config.js",
+            "eslint.config.cjs",
+            "eslint.config.mjs",
+            "eslint.config.ts",
+            ".eslintrc.js",
+            ".eslintrc.cjs",
+            ".eslintrc.json",
+        ),
+        "tsc": ("tsconfig.json",),
+    }[runner]
+    candidates = [workspace / "package.json", *(workspace / name for name in names)]
+    return tuple(path for path in candidates if path.exists())
+
+
+def _canonical_workspace_file(workspace: Path, path: Path) -> Path:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("configuration closure contains an unavailable file")
+    canonical = path.resolve(strict=True)
+    try:
+        _ = canonical.relative_to(workspace)
+    except ValueError as exc:
+        raise ValueError("configuration closure escaped workspace") from exc
+    if "node_modules" in canonical.relative_to(workspace).parts:
+        raise ValueError("configuration closure entered node_modules")
+    return canonical
+
+
+def _resolved_local_modules(workspace: Path, importer: Path, text: str) -> tuple[Path, ...]:
+    resolved: list[Path] = []
+    for match in _LOCAL_MODULE_PATTERN.finditer(text):
+        raw = match.group("path")
+        base = importer.parent / raw
+        candidates = [
+            *(Path(f"{base}{suffix}") for suffix in _MODULE_SUFFIXES),
+            *(base / f"index{suffix}" for suffix in _MODULE_SUFFIXES[1:]),
+        ]
+        target = next((candidate for candidate in candidates if candidate.is_file()), None)
+        if target is None:
+            raise ValueError("configuration local module is unresolved")
+        resolved.append(_canonical_workspace_file(workspace, target))
+    return tuple(resolved)
 
 
 def routine_package_tree_digest(root: Path, *, skip_nested_bin: bool = False) -> str:
@@ -116,4 +196,9 @@ def _read_package_json(path: Path) -> dict[str, object] | None:
     return {key: value for key, value in typed.items() if isinstance(key, str)}
 
 
-__all__ = ("routine_dependency_closure_digest", "routine_package_tree_digest", "routine_workspace_identity")
+__all__ = (
+    "routine_configuration_digest",
+    "routine_dependency_closure_digest",
+    "routine_package_tree_digest",
+    "routine_workspace_identity",
+)

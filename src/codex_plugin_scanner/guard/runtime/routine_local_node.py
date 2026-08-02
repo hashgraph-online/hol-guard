@@ -12,6 +12,7 @@ from typing import cast
 
 from .jsonc import loads_jsonc
 from .routine_node_identity import (
+    routine_configuration_digest,
     routine_dependency_closure_digest,
     routine_package_tree_digest,
     routine_workspace_identity,
@@ -134,6 +135,7 @@ def routine_local_node_approval_profile(
     try:
         workspace_identity = routine_workspace_identity(workspace)
         closure_digest = routine_dependency_closure_digest(workspace, package_name)
+        configuration_digest = routine_configuration_digest(workspace, command_name)
     except (OSError, RuntimeError, ValueError):
         return None
     return RoutineLocalNodeApprovalProfile(
@@ -144,6 +146,7 @@ def routine_local_node_approval_profile(
             "package": package_name,
             "binding": binding,
             "dependency_closure_digest": closure_digest,
+            "configuration_digest": configuration_digest,
             "workspace": workspace_identity,
             "grammar": "routine-local-node-v1",
         },
