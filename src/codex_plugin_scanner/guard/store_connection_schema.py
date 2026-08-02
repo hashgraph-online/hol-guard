@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 import threading
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import ClassVar
+from uuid import uuid4
 
 from .sqlite_profile import (
     SQLiteMigrationGateReport,
@@ -142,6 +144,12 @@ _POLICY_INDEX_STATEMENTS = (
 
 _RECEIPT_WARN_ROLLUP_MIGRATION_VERSION = 16
 _REQUIRED_SCHEMA_MIGRATION_VERSIONS = tuple(range(2, STORAGE_QUERY_INDEX_MIGRATION_VERSION + 1))
+_FATAL_SQLITE_ERROR_MARKERS = (
+    "database disk image is malformed",
+    "database corruption",
+    "file is not a database",
+)
+_SQLITE_IO_ERROR_MARKER = "disk i/o error"
 
 
 @dataclass
@@ -162,6 +170,124 @@ class StoreConnectionSchemaMixin:
         _POLICY_INTEGRITY_LOOKUP_UNSET
     )
     _startup_prefetched_policy_integrity_repair_failed = False
+    _storage_recovery_local: ClassVar[threading.local] = threading.local()
+
+    def _current_thread_owns_storage_recovery(self) -> bool:
+        return getattr(self._storage_recovery_local, "owner", None) == id(self)
+
+    @staticmethod
+    def _is_fatal_sqlite_error(error: BaseException) -> bool:
+        return isinstance(error, sqlite3.DatabaseError) and any(
+            marker in str(error).lower() for marker in _FATAL_SQLITE_ERROR_MARKERS
+        )
+
+    @contextmanager
+    def _hold_storage_gate(self, *, exclusive: bool) -> Iterator[None]:
+        path = self.guard_home / "storage-access.lock"
+        deadline = time.monotonic() + sqlite_connect_timeout_seconds()
+        with path.open("a+b") as handle:
+            while True:
+                try:
+                    if os.name == "nt":
+                        import msvcrt
+
+                        handle.seek(0)
+                        if not handle.read(1):
+                            handle.write(b"0")
+                            handle.flush()
+                        handle.seek(0)
+                        mode = msvcrt.LK_NBLCK if exclusive else msvcrt.LK_NBRLCK
+                        msvcrt.locking(handle.fileno(), mode, 1)
+                    else:
+                        import fcntl
+
+                        mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+                        fcntl.flock(handle.fileno(), mode | fcntl.LOCK_NB)
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("Timed out waiting for Guard storage access.") from None
+                    time.sleep(0.01)
+            try:
+                yield
+            finally:
+                if os.name == "nt":
+                    import msvcrt
+
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+    def _store_is_proven_unusable(self, error: BaseException) -> bool:
+        if self._is_fatal_sqlite_error(error):
+            return True
+        if _SQLITE_IO_ERROR_MARKER not in str(error).lower():
+            return False
+        # An I/O error alone does not prove corruption. Only replace the active
+        # path when the same directory supports a fresh SQLite transaction and
+        # the existing database remains unreadable on a second probe.
+        probe_path = self.guard_home / f"storage-probe-{uuid4().hex}.db"
+        try:
+            with sqlite3.connect(probe_path, timeout=0.1) as probe:
+                probe.execute("create table probe (value integer)")
+                probe.execute("insert into probe values (1)")
+            with sqlite3.connect(self.path, timeout=0.1) as existing:
+                _ = existing.execute("pragma schema_version").fetchone()
+                return False
+        except sqlite3.DatabaseError as probe_error:
+            return _SQLITE_IO_ERROR_MARKER in str(probe_error).lower() and probe_path.is_file()
+        finally:
+            with suppress(OSError):
+                probe_path.unlink()
+
+    def _recover_fatal_sqlite_store(self, error: BaseException) -> bool:
+        is_io_error = _SQLITE_IO_ERROR_MARKER in str(error).lower()
+        if (
+            not isinstance(error, sqlite3.DatabaseError)
+            or (not self._is_fatal_sqlite_error(error) and not is_io_error)
+            or self._current_thread_owns_storage_recovery()
+            or self.path.is_symlink()
+        ):
+            return False
+        try:
+            failed_stat = self.path.stat()
+            failed_identity = failed_stat.st_dev, failed_stat.st_ino
+        except OSError:
+            failed_identity = None
+        with self._hold_storage_gate(exclusive=True):
+            # Another process may already have replaced the failed store.
+            try:
+                current_stat = self.path.stat()
+                current_identity = current_stat.st_dev, current_stat.st_ino
+            except OSError:
+                current_identity = None
+            if current_identity != failed_identity:
+                return True
+
+            if not self._store_is_proven_unusable(error):
+                return False
+
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+            quarantine_id = f"{stamp}-{uuid4().hex[:8]}"
+            for suffix in ("", "-wal", "-shm"):
+                source = Path(f"{self.path}{suffix}")
+                if not source.exists() or source.is_symlink():
+                    continue
+                destination = self.guard_home / f"guard.db.corrupt-{quarantine_id}{suffix}"
+                source.replace(destination)
+            _store_logger.error(
+                "Guard quarantined an unusable SQLite store after a fatal storage error: %s",
+                type(error).__name__,
+            )
+            self._storage_recovery_local.owner = id(self)
+            try:
+                self._initialize_schema()
+            finally:
+                self._storage_recovery_local.owner = None
+            return True
 
     def _sqlite_profiler(self) -> SQLiteProfiler:
         profiler = self.__dict__.get("_guard_sqlite_profiler")
@@ -185,6 +311,23 @@ class StoreConnectionSchemaMixin:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
+        if self._current_thread_owns_storage_recovery():
+            with self._connect_once() as connection:
+                yield connection
+            return
+        fatal_error: sqlite3.DatabaseError | None = None
+        with self._hold_storage_gate(exclusive=False):
+            try:
+                with self._connect_once() as connection:
+                    yield connection
+            except sqlite3.DatabaseError as error:
+                fatal_error = error
+        if fatal_error is not None:
+            self._recover_fatal_sqlite_store(fatal_error)
+            raise fatal_error
+
+    @contextmanager
+    def _connect_once(self) -> Iterator[sqlite3.Connection]:
         connect_timeout_seconds = sqlite_connect_timeout_seconds()
         profiler = self._sqlite_profiler()
         connect_started = time.monotonic()
@@ -199,6 +342,7 @@ class StoreConnectionSchemaMixin:
         connection.row_factory = sqlite3.Row
         start = time.monotonic()
         notification: dict[str, object] | None = None
+        database_failed = False
         try:
             connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
             # Hot-path tuning: synchronous=NORMAL is only safe once the database
@@ -219,12 +363,16 @@ class StoreConnectionSchemaMixin:
                 profiler.record_commit((time.monotonic() - commit_started) * 1000)
             notification = self._take_policy_integrity_state_notification(connection)
         except sqlite3.OperationalError as error:
+            database_failed = True
             if sqlite_error_is_busy_locked(error):
                 profiler.record_busy_locked()
             raise
+        except sqlite3.DatabaseError:
+            database_failed = True
+            raise
         finally:
             profiler.record_transaction((time.monotonic() - start) * 1000)
-            if notification is None:
+            if notification is None and not database_failed:
                 self._take_policy_integrity_state_notification(connection)
             connection.close()
             elapsed_ms = (time.monotonic() - start) * 1000
@@ -331,6 +479,17 @@ class StoreConnectionSchemaMixin:
                     _release_advisory_file_lock(handle)
 
     def _initialize_serialized(self) -> None:
+        try:
+            self._initialize_serialized_once()
+        except sqlite3.DatabaseError as error:
+            if self._schema_is_current():
+                self._initialize_policy_integrity()
+                return
+            if not self._recover_fatal_sqlite_store(error):
+                raise
+            self._initialize_policy_integrity()
+
+    def _initialize_serialized_once(self) -> None:
         daemon_managed = getattr(self, "_daemon_managed_schema", False)
         if daemon_managed and self._schema_is_current():
             self._initialize_policy_integrity()
@@ -932,39 +1091,38 @@ class StoreConnectionSchemaMixin:
             return False
         timeout_seconds = sqlite_connect_timeout_seconds()
         try:
-            connection = sqlite3.connect(self.path, timeout=timeout_seconds)
-            try:
-                connection.execute(f"pragma busy_timeout={int(timeout_seconds * 1000)}")
-                placeholders = ", ".join("?" for _ in _REQUIRED_SCHEMA_MIGRATION_VERSIONS)
-                row = connection.execute(
-                    f"select count(*) from schema_migrations where version in ({placeholders})",
-                    _REQUIRED_SCHEMA_MIGRATION_VERSIONS,
-                ).fetchone()
-                storage_row = connection.execute(
-                    """
-                    select 1 from sqlite_master
-                    where type = 'table' and name = 'guard_storage_maintenance'
-                    """
-                ).fetchone()
-                approval_columns = {
-                    str(column[1]) for column in connection.execute("pragma table_info(approval_requests)")
-                }
-                required_approval_columns = {
-                    "guard_version",
-                    "first_seen_guard_version",
-                    "last_seen_guard_version",
-                }
-                return (
-                    row is not None
-                    and int(row[0]) == len(_REQUIRED_SCHEMA_MIGRATION_VERSIONS)
-                    and storage_row is not None
-                    and required_approval_columns <= approval_columns
-                )
-            finally:
-                connection.close()
-        except sqlite3.OperationalError as error:
-            if "locked" in str(error).lower() or "busy" in str(error).lower():
-                return False
+            with self._hold_storage_gate(exclusive=False):
+                connection = sqlite3.connect(self.path, timeout=timeout_seconds)
+                try:
+                    connection.execute(f"pragma busy_timeout={int(timeout_seconds * 1000)}")
+                    placeholders = ", ".join("?" for _ in _REQUIRED_SCHEMA_MIGRATION_VERSIONS)
+                    row = connection.execute(
+                        f"select count(*) from schema_migrations where version in ({placeholders})",
+                        _REQUIRED_SCHEMA_MIGRATION_VERSIONS,
+                    ).fetchone()
+                    storage_row = connection.execute(
+                        """
+                        select 1 from sqlite_master
+                        where type = 'table' and name = 'guard_storage_maintenance'
+                        """
+                    ).fetchone()
+                    approval_columns = {
+                        str(column[1]) for column in connection.execute("pragma table_info(approval_requests)")
+                    }
+                    required_approval_columns = {
+                        "guard_version",
+                        "first_seen_guard_version",
+                        "last_seen_guard_version",
+                    }
+                    return (
+                        row is not None
+                        and int(row[0]) == len(_REQUIRED_SCHEMA_MIGRATION_VERSIONS)
+                        and storage_row is not None
+                        and required_approval_columns <= approval_columns
+                    )
+                finally:
+                    connection.close()
+        except sqlite3.DatabaseError:
             return False
 
     @staticmethod
