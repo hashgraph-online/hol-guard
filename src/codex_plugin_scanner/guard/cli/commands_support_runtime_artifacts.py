@@ -41,6 +41,7 @@ from .commands_support_codex_paths import (
     _collect_codex_tool_response_text,
     _with_codex_prompt_display_metadata,
 )
+from .commands_support_codex_prompt_attachments import _codex_prompt_attachment_artifact
 from .commands_support_codex_reads import _split_codex_safe_read_only_pipeline
 from .commands_support_codex_tool_output import (
     _codex_command_captures_combined_shell_output,
@@ -599,6 +600,14 @@ def _hook_runtime_artifact(
             )
             if prompt_file_artifact is not None:
                 return prompt_file_artifact
+            if harness == "codex":
+                attachment_artifact = _codex_prompt_attachment_artifact(
+                    prompt_text=prompt_text,
+                    home_dir=home_dir,
+                    config_path=config_path,
+                )
+                if attachment_artifact is not None:
+                    return attachment_artifact
     tool_name = _runtime_hook_tool_name(payload)
     tool_arguments = _runtime_hook_tool_arguments(payload)
     raw_command_text = _runtime_hook_raw_command_text(payload, action_envelope)

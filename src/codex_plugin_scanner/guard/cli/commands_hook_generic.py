@@ -115,6 +115,7 @@ from ..trusted_local_tools import (
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .commands_support_codex_paths import _codex_prompt_credential_file_artifact
+from .commands_support_codex_prompt_attachments import _codex_prompt_attachment_artifact
 from .commands_support_command_activity import (
     command_activity_was_prompted,
     hook_is_post_event,
@@ -528,10 +529,20 @@ def _should_relax_configured_default(
             return False
         if extract_prompt_requests(prompt_text):
             return False
-        return (
+        if (
             _codex_prompt_credential_file_artifact(
                 prompt_text=prompt_text,
                 cwd=runtime_workspace,
+                config_path="<runtime>",
+            )
+            is not None
+        ):
+            return False
+        return (
+            home_dir is None
+            or _codex_prompt_attachment_artifact(
+                prompt_text=prompt_text,
+                home_dir=home_dir,
                 config_path="<runtime>",
             )
             is None
