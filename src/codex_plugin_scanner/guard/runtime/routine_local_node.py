@@ -204,11 +204,15 @@ def _eslint_args(args: list[str]) -> bool:
 
 def _safe_relative_config(token: str) -> bool:
     path = Path(token)
-    return not path.is_absolute() and ".." not in path.parts and path.suffix == ".json"
+    return not _dynamic_or_external(token) and not path.is_absolute() and path.suffix == ".json"
 
 
 def _dynamic_or_external(token: str) -> bool:
-    return token.startswith(("/", "~")) or "$" in token or "`" in token or ".." in Path(token).parts
+    return (
+        token.startswith(("/", "~"))
+        or any(character in token for character in ("$", "`", ">", "<", "|", "&"))
+        or ".." in Path(token).parts
+    )
 
 
 def _bounded_output_filter(segment: ShellExecutionSegment) -> bool:

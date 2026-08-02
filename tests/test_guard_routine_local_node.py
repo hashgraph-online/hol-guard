@@ -178,16 +178,20 @@ def test_local_next_variants_with_execution_or_write_risk_remain_reviewable(
         "./node_modules/.bin/eslint --fix src/example.ts",
         "./node_modules/.bin/eslint --config ./attacker.js src/example.ts",
         "./node_modules/.bin/eslint --plugin attacker src/example.ts",
+        "./node_modules/.bin/eslint src > output.txt",
         "./node_modules/.bin/tsc --emitDeclarationOnly",
         "./node_modules/.bin/tsc --noEmit --project ../tsconfig.json",
+        "./node_modules/.bin/tsc --noEmit --project $HOME/tsconfig.json",
     ),
 )
 def test_local_validation_mutation_and_code_loading_options_remain_reviewable(
     tmp_path: Path,
     invocation: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runner = "eslint" if "eslint" in invocation else "tsc"
     home, active, workspace = _workspace(tmp_path, runner)
+    _trust_fixture_package(monkeypatch, workspace, runner)
 
     match = extract_sensitive_tool_action_request(
         "Bash",
@@ -197,6 +201,14 @@ def test_local_validation_mutation_and_code_loading_options_remain_reviewable(
     )
 
     assert match is not None
+    assert (
+        local_tool_approval_eligibility(
+            f"cd {workspace} && {invocation}",
+            cwd=active,
+            home_dir=home,
+        )
+        is None
+    )
 
 
 def test_local_next_runner_symlink_escape_remains_reviewable(tmp_path: Path) -> None:
