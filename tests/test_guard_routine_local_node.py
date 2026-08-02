@@ -143,6 +143,7 @@ def test_dependency_bound_local_routine_offers_reusable_capability_approval(
         "./node_modules/.bin/next build --webpack > build.log",
         "./node_modules/.bin/next build --webpack 2>&1 | tail -1001",
         "./node_modules/.bin/next build --webpack 2>&1 | sh",
+        "./node_modules/.bin/next build --webpack 2>&1 | ./payload/tail -30",
         "./node_modules/.bin/next build --webpack $(touch marker)",
     ),
 )

@@ -231,6 +231,8 @@ def _bounded_output_filter(segment: ShellExecutionSegment) -> bool:
     name, index = _shell_segment_primary_command(tokens)
     if name not in {"head", "tail"} or index is None or control_before != ("|",):
         return False
+    if tokens[index] != name:
+        return False
     args = tokens[index + 1 :]
     return len(args) == 1 and bool(re.fullmatch(r"-[1-9][0-9]{0,2}", args[0]))
 
