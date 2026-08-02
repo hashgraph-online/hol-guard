@@ -459,6 +459,23 @@ def test_computed_configuration_module_remains_reviewable(
     assert eligibility is None
 
 
+def test_concatenated_configuration_module_remains_reviewable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, active, workspace = _workspace(tmp_path, "next")
+    _write(workspace / "next.config.js", "module.exports = require('./rules' + process.env.MODE)\n")
+    _trust_fixture_package(monkeypatch, workspace, "next")
+
+    eligibility = local_tool_approval_eligibility(
+        f"cd {workspace} && ./node_modules/.bin/next build --webpack",
+        cwd=active,
+        home_dir=home,
+    )
+
+    assert eligibility is None
+
+
 def test_create_require_configuration_remains_reviewable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
