@@ -19,6 +19,9 @@ _MAX_CONFIG_FILES = 128
 _MAX_CONFIG_BYTES = 4 * 1024 * 1024
 _STATIC_MODULE_PATTERN = re.compile(r"(?:\bfrom\s+|\brequire\s*\(\s*|\bimport\s*(?:\(\s*)?)['\"](?P<path>[^'\"]+)['\"]")
 _COMPUTED_MODULE_PATTERN = re.compile(r"\b(?:require|import)\s*\(\s*(?!['\"])")
+_COMMENTED_LOADER_PATTERN = re.compile(
+    r"\b(?:createRequire|require|import)\s*(?:/\*.*?\*/|//[^\n]*(?:\n|$))", re.DOTALL
+)
 _MODULE_SUFFIXES = ("", ".js", ".cjs", ".mjs", ".ts", ".cts", ".mts", ".json")
 _NODE_BUILTINS = frozenset(
     {
@@ -195,7 +198,11 @@ def _canonical_workspace_file(workspace: Path, path: Path) -> Path:
 def _script_configuration_modules(
     workspace: Path, importer: Path, text: str
 ) -> tuple[tuple[Path, ...], tuple[str, ...]]:
-    if _COMPUTED_MODULE_PATTERN.search(text) or re.search(r"\bcreateRequire\s*\(", text):
+    if (
+        _COMPUTED_MODULE_PATTERN.search(text)
+        or re.search(r"\bcreateRequire\s*\(", text)
+        or _COMMENTED_LOADER_PATTERN.search(text)
+    ):
         raise ValueError("configuration contains computed module loading")
     resolved: list[Path] = []
     packages: set[str] = set()
@@ -247,6 +254,9 @@ def _collect_json_config_inputs(payload: object, specifiers: list[str], packages
                 _collect_plugin_packages(value, packages)
                 continue
             _collect_json_config_inputs(value, specifiers, packages)
+    elif isinstance(payload, list):
+        for value in cast(list[object], payload):
+            _collect_json_config_inputs(value, specifiers, packages)
 
 
 def _string_values(value: object) -> tuple[str, ...]:
@@ -274,7 +284,9 @@ def _collect_plugin_packages(value: object, packages: set[str]) -> None:
 def _eslint_extended_package(specifier: str) -> str | None:
     if not specifier.startswith("plugin:"):
         return None
-    plugin = specifier.removeprefix("plugin:").split("/", maxsplit=1)[0]
+    remainder = specifier.removeprefix("plugin:")
+    parts = remainder.split("/")
+    plugin = "/".join(parts[:2]) if remainder.startswith("@") and len(parts) >= 2 else parts[0]
     return _eslint_plugin_package(plugin)
 
 
