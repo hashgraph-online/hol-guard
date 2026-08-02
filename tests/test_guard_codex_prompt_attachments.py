@@ -217,6 +217,33 @@ def test_negated_secret_read_intent_stays_negated_across_chunks(tmp_path: Path) 
     assert artifact is None
 
 
+def test_previous_sentence_intent_does_not_override_later_negation(tmp_path: Path) -> None:
+    content = f"Read the README. {'x' * (_ATTACHMENT_SCAN_CHUNK_BYTES + 1)} Do not read .env"
+    attachment = _attachment(tmp_path, content)
+
+    artifact = _codex_prompt_attachment_artifact(
+        prompt_text=f"Read {attachment} before continuing.",
+        home_dir=tmp_path,
+        config_path="<runtime>",
+    )
+
+    assert artifact is None
+
+
+def test_previous_sentence_intent_carries_to_later_secret_reference(tmp_path: Path) -> None:
+    content = f"Read the following file. {'x' * (_ATTACHMENT_SCAN_CHUNK_BYTES + 1)} .env"
+    attachment = _attachment(tmp_path, content)
+
+    artifact = _codex_prompt_attachment_artifact(
+        prompt_text=f"Read {attachment} before continuing.",
+        home_dir=tmp_path,
+        config_path="<runtime>",
+    )
+
+    assert artifact is not None
+    assert artifact.metadata["prompt_request_class"] == "secret_read"
+
+
 @unittest.skipUnless(os.open in os.supports_dir_fd, "descriptor-relative opens are not supported")
 def test_attachment_traversal_uses_directory_descriptors(tmp_path: Path) -> None:
     attachment = _attachment(tmp_path, "Routine release note.")

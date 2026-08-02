@@ -9,7 +9,11 @@ import stat
 from pathlib import Path
 
 from ..models import GuardArtifact
-from ..runtime.runner import _prompt_has_secret_read_intent, extract_prompt_requests
+from ..runtime.runner import (
+    _PROMPT_SENTENCE_BOUNDARY_PATTERN,
+    _prompt_has_secret_read_intent,
+    extract_prompt_requests,
+)
 from .commands_support_codex_paths import (
     _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH,
     _PROMPT_FILE_READ_VERB_PATTERN,
@@ -128,7 +132,7 @@ def _scan_attachment(descriptor: int) -> tuple[list[str], str]:
     digest = hashlib.sha256()
     overlap = ""
     guarded_classes: list[str] = []
-    inherited_secret_read_intent = False
+    inherited_secret_read_distance: int | None = None
     total_bytes = 0
     while raw_chunk := os.read(descriptor, _ATTACHMENT_SCAN_CHUNK_BYTES):
         total_bytes += len(raw_chunk)
@@ -137,9 +141,9 @@ def _scan_attachment(descriptor: int) -> tuple[list[str], str]:
         digest.update(raw_chunk)
         decoded_chunk = decoder.decode(raw_chunk, final=False)
         window = f"{overlap}{decoded_chunk}"
-        window_classes, inherited_secret_read_intent = _classify_stream_window(
+        window_classes, inherited_secret_read_distance = _classify_stream_window(
             window,
-            inherited_secret_read_intent=inherited_secret_read_intent,
+            inherited_secret_read_distance=inherited_secret_read_distance,
         )
         guarded_classes.extend(window_classes)
         overlap = window[-_ATTACHMENT_SCAN_OVERLAP_CHARS:]
@@ -147,7 +151,7 @@ def _scan_attachment(descriptor: int) -> tuple[list[str], str]:
     if final_text:
         window_classes, _ = _classify_stream_window(
             f"{overlap}{final_text}",
-            inherited_secret_read_intent=inherited_secret_read_intent,
+            inherited_secret_read_distance=inherited_secret_read_distance,
         )
         guarded_classes.extend(window_classes)
     return list(dict.fromkeys(guarded_classes)), digest.hexdigest()[:_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH]
@@ -156,19 +160,34 @@ def _scan_attachment(descriptor: int) -> tuple[list[str], str]:
 def _classify_stream_window(
     content_window: str,
     *,
-    inherited_secret_read_intent: bool,
-) -> tuple[tuple[str, ...], bool]:
+    inherited_secret_read_distance: int | None,
+) -> tuple[tuple[str, ...], int | None]:
     classes = list(_guarded_classes(content_window))
-    inherited_window = f"Read {content_window}" if inherited_secret_read_intent else content_window
-    if inherited_secret_read_intent and "secret_read" in _guarded_classes(inherited_window):
+    prefix = "Read " if inherited_secret_read_distance == 0 else "Read something. "
+    inherited_window = f"{prefix}{content_window}" if inherited_secret_read_distance is not None else content_window
+    if inherited_secret_read_distance is not None and "secret_read" in _guarded_classes(inherited_window):
         classes.append("secret_read")
     probe = f"{inherited_window} .env"
-    carries_secret_read_intent = _prompt_has_secret_read_intent(
+    if not _prompt_has_secret_read_intent(
         probe,
         start=len(probe) - len(".env"),
         end=len(probe),
+    ):
+        return tuple(dict.fromkeys(classes)), None
+    trailing_sentence_start = 0
+    for match in _PROMPT_SENTENCE_BOUNDARY_PATTERN.finditer(inherited_window):
+        trailing_sentence_start = match.end()
+    trailing_probe = f"{inherited_window[trailing_sentence_start:]} .env"
+    distance = (
+        0
+        if _prompt_has_secret_read_intent(
+            trailing_probe,
+            start=len(trailing_probe) - len(".env"),
+            end=len(trailing_probe),
+        )
+        else 1
     )
-    return tuple(dict.fromkeys(classes)), carries_secret_read_intent
+    return tuple(dict.fromkeys(classes)), distance
 
 
 def _guarded_classes(content_window: str) -> tuple[str, ...]:
