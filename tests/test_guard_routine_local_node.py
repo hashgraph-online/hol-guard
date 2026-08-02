@@ -308,6 +308,27 @@ def test_configuration_closure_change_invalidates_existing_approval_identity(
     assert after.tool_identity_hash != before.tool_identity_hash
 
 
+def test_module_require_change_invalidates_existing_approval_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, active, workspace = _workspace(tmp_path, "next")
+    config = workspace / "next.config.js"
+    helper = workspace / "config" / "build.js"
+    _write(config, "module.exports = module.require('./config/build.js')\n")
+    _write(helper, "module.exports = {}\n")
+    _trust_fixture_package(monkeypatch, workspace, "next")
+    command = f"cd {workspace} && ./node_modules/.bin/next build --webpack"
+
+    before = local_tool_approval_eligibility(command, cwd=active, home_dir=home)
+    assert before is not None
+    _write(helper, "module.exports = { reactStrictMode: true }\n")
+    after = local_tool_approval_eligibility(command, cwd=active, home_dir=home)
+
+    assert after is not None
+    assert after.tool_identity_hash != before.tool_identity_hash
+
+
 def test_configuration_package_change_invalidates_existing_approval_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -17,12 +17,14 @@ _MAX_CLOSURE_BYTES = 512 * 1024 * 1024
 _MAX_CLOSURE_FILES = 50_000
 _MAX_CONFIG_FILES = 128
 _MAX_CONFIG_BYTES = 4 * 1024 * 1024
-_STATIC_MODULE_PATTERN = re.compile(r"(?:\bfrom\s+|\brequire\s*\(\s*|\bimport\s*(?:\(\s*)?)['\"](?P<path>[^'\"]+)['\"]")
-_COMPUTED_MODULE_PATTERN = re.compile(r"\b(?:require|import)\s*\(\s*(?!['\"])")
-_MODULE_CALL_PATTERN = re.compile(r"\b(?:require|import)\s*\((?P<argument>[^)]*)\)", re.DOTALL)
+_STATIC_MODULE_PATTERN = re.compile(
+    r"(?:\bfrom\s+|\b(?:module\.)?require\s*\(\s*|\bimport\s*(?:\(\s*)?)['\"](?P<path>[^'\"]+)['\"]"
+)
+_COMPUTED_MODULE_PATTERN = re.compile(r"\b(?:(?:module\.)?require|import)\s*\(\s*(?!['\"])")
+_MODULE_CALL_PATTERN = re.compile(r"\b(?:(?:module\.)?require|import)\s*\((?P<argument>[^)]*)\)", re.DOTALL)
 _LITERAL_MODULE_ARGUMENT = re.compile(r"(?P<quote>['\"])(?:\\.|(?!\1).)*(?P=quote)", re.DOTALL)
 _COMMENTED_LOADER_PATTERN = re.compile(
-    r"\b(?:createRequire|require|import)\s*(?:/\*.*?\*/|//[^\n]*(?:\n|$))", re.DOTALL
+    r"\b(?:createRequire|(?:module\.)?require|import)\s*(?:/\*.*?\*/|//[^\n]*(?:\n|$))", re.DOTALL
 )
 _MODULE_SUFFIXES = ("", ".js", ".cjs", ".mjs", ".ts", ".cts", ".mts", ".json")
 _NODE_BUILTINS = frozenset(
