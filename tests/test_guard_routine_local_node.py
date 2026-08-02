@@ -425,6 +425,11 @@ def test_bare_scope_extends_change_invalidates_existing_approval_identity(
     )
     plugin = package / "index.js"
     _write(plugin, "module.exports = {}\n")
+    planted = workspace / "node_modules" / "@typescript-eslint" / "eslint-plugin-recommended"
+    _write(
+        planted / "package.json",
+        json.dumps({"name": "@typescript-eslint/eslint-plugin-recommended", "version": "1.0.0"}),
+    )
     _trust_fixture_package(monkeypatch, workspace, "eslint")
     command = f"cd {workspace} && ./node_modules/.bin/eslint src"
 

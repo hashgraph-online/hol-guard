@@ -247,7 +247,7 @@ def _collect_json_config_inputs(
                 continue
             if raw_key in {"extends", "path"}:
                 for item in _string_values(value):
-                    normalized = _eslint_extended_package(item, workspace)
+                    normalized = _eslint_extended_package(item)
                     (packages.add(normalized) if normalized is not None else specifiers.append(item))
                 continue
             if raw_key == "parser" and isinstance(value, str):
@@ -286,18 +286,15 @@ def _collect_plugin_packages(value: object, packages: set[str]) -> None:
                     packages.add(package)
 
 
-def _eslint_extended_package(specifier: str, workspace: Path) -> str | None:
+def _eslint_extended_package(specifier: str) -> str | None:
     if not specifier.startswith("plugin:"):
         return None
     remainder = specifier.removeprefix("plugin:")
     parts = remainder.split("/")
     if not remainder.startswith("@") or len(parts) < 2:
         return _eslint_plugin_package(parts[0])
-    named = _eslint_plugin_package("/".join(parts[:2]))
-    bare_scope = _eslint_plugin_package(parts[0])
-    if (workspace / "node_modules" / named).is_dir():
-        return named
-    return bare_scope if (workspace / "node_modules" / bare_scope).is_dir() else named
+    plugin = "/".join(parts[:2]) if len(parts) >= 3 else parts[0]
+    return _eslint_plugin_package(plugin)
 
 
 def _eslint_plugin_package(plugin: str) -> str:
