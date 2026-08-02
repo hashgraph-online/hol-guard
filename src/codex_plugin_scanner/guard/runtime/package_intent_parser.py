@@ -62,6 +62,42 @@ _CONTROL_CONTEXT_LABELS = {
 _EXECUTION_CONTEXT_HMAC_KEY = os.urandom(32)
 _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
 _LOCAL_EXECUTION_COMMANDS = frozenset({"bunx", "npx"})
+_PACKAGE_COMMAND_NAMES = frozenset(
+    {
+        "apk",
+        "apt",
+        "apt-get",
+        "brew",
+        "bun",
+        "bundle",
+        "bundler",
+        "bunx",
+        "cargo",
+        "composer",
+        "dnf",
+        "gem",
+        "go",
+        "gradle",
+        "gradlew",
+        "helm",
+        "mvn",
+        "mvnw",
+        "npm",
+        "npx",
+        "pacman",
+        "pip",
+        "pip3",
+        "pipenv",
+        "pipx",
+        "pnpm",
+        "poetry",
+        "uv",
+        "uvx",
+        "yarn",
+        "yum",
+        "zypper",
+    }
+)
 _LOCAL_EXECUTION_FLAGS_BY_COMMAND = {
     "bunx": frozenset({"--bun", "--no-install"}),
     "npx": frozenset({"--no", "--no-install"}),
@@ -1354,7 +1390,9 @@ def _shell_substitution_segment(segment: list[str]) -> list[str] | None:
         markers = [(token.find(marker), marker) for marker in ("`", "$(") if marker in token]
         position, marker = min(markers)
         command = token[position + len(marker) :]
-        return [command, *segment[index + 1 :]] if command else list(segment)
+        normalized = _strip_wrapper_tokens([command, *segment[index + 1 :]]) if command else []
+        if normalized and _command_name(normalized[0]) in _PACKAGE_COMMAND_NAMES:
+            return normalized
     return None
 
 

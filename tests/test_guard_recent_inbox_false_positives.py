@@ -75,3 +75,11 @@ def test_prefixed_command_lookup_does_not_hide_shell_substitution(tmp_path: Path
 
     timed_lookup = "time -p command -v `npx --yes untrusted-package`"
     assert _artifact(timed_lookup, home=tmp_path, workspace=workspace) is not None
+
+    for wrapper in ("env", "command", "sudo"):
+        command = f"time -p command -v `{wrapper} npx --yes untrusted-package`"
+        assert _artifact(command, home=tmp_path, workspace=workspace) is not None
+
+    for outer_runner in ("npx --yes untrusted-package", "bunx untrusted-package"):
+        command = f"CHECK=`date` {outer_runner}"
+        assert _artifact(command, home=tmp_path, workspace=workspace) is not None
