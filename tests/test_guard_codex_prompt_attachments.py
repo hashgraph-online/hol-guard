@@ -188,6 +188,33 @@ def test_guarded_classes_from_separate_chunks_are_preserved(tmp_path: Path) -> N
     assert artifact.metadata["prompt_request_classes"] == ["secret_read", "guard_bypass_intent"]
 
 
+def test_secret_read_intent_carries_across_long_unpunctuated_context(tmp_path: Path) -> None:
+    attachment = _attachment(tmp_path, f"Read {'x' * (_ATTACHMENT_SCAN_CHUNK_BYTES + 1)} .env")
+
+    artifact = _codex_prompt_attachment_artifact(
+        prompt_text=f"Read {attachment} before continuing.",
+        home_dir=tmp_path,
+        config_path="<runtime>",
+    )
+
+    assert artifact is not None
+    request_classes = artifact.metadata["prompt_request_classes"]
+    assert isinstance(request_classes, list)
+    assert "secret_read" in request_classes
+
+
+def test_negated_secret_read_intent_stays_negated_across_chunks(tmp_path: Path) -> None:
+    attachment = _attachment(tmp_path, f"Do not read {'x' * (_ATTACHMENT_SCAN_CHUNK_BYTES + 1)} .env")
+
+    artifact = _codex_prompt_attachment_artifact(
+        prompt_text=f"Read {attachment} before continuing.",
+        home_dir=tmp_path,
+        config_path="<runtime>",
+    )
+
+    assert artifact is None
+
+
 @unittest.skipUnless(os.open in os.supports_dir_fd, "descriptor-relative opens are not supported")
 def test_attachment_traversal_uses_directory_descriptors(tmp_path: Path) -> None:
     attachment = _attachment(tmp_path, "Routine release note.")
