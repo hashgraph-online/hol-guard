@@ -4,7 +4,7 @@ import os
 import tracemalloc
 import unittest
 from pathlib import Path
-from time import perf_counter
+from time import process_time
 from unittest.mock import patch
 
 from codex_plugin_scanner.guard.cli.commands_hook_generic import _should_relax_configured_default
@@ -117,19 +117,19 @@ def test_large_benign_codex_attachment_streams_without_review(tmp_path: Path) ->
 
     tracemalloc.start()
     try:
-        started_at = perf_counter()
+        started_at = process_time()
         artifact = _codex_prompt_attachment_artifact(
             prompt_text=f"Read {attachment} before continuing.",
             home_dir=tmp_path,
             config_path="<runtime>",
         )
-        elapsed_seconds = perf_counter() - started_at
+        elapsed_cpu_seconds = process_time() - started_at
         _, peak_bytes = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
 
     assert artifact is None
-    assert elapsed_seconds < 6.0
+    assert elapsed_cpu_seconds < 5.0
     assert peak_bytes < 2 * 1024 * 1024
 
 
