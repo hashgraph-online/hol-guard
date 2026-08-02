@@ -29,6 +29,8 @@ const request = {
     tool_identity_hash: "sha256-private-binding",
     capability: "request",
     read_only_reason: "HTTP method GET",
+    trust_basis: "verified-files",
+    indefinite_allowed: false,
     allowed_targets: ["capability", "version"],
     allowed_durations: ["once", "15m", "1h", "5h", "version"],
     hard_risk_exclusions: ["shell_chaining", "mutating_capability"],
@@ -42,6 +44,7 @@ assert(defaultLocalToolTarget(options) === "capability", "narrow capability is t
 assert(defaultLocalToolDuration(options) === "once", "reusable trust requires an explicit duration");
 assert(localToolAllowButtonLabel("5h") === "Allow for 5 hours", "CTA mirrors bounded duration");
 assert(localToolAllowButtonLabel("version") === "Trust this version", "version trust is explicit");
+assert(localToolAllowButtonLabel("always") === "Always trust safe calls", "indefinite trust remains conditional");
 assert(
   localToolSummary(options, "capability", "5h") === "Allow · xads.mjs · request · 5 hours",
   "summary names the tool, capability, and duration",
@@ -98,5 +101,33 @@ assert(html.includes("Writes, shell chaining"), "hard-risk boundary remains visi
 assert(html.includes("executable, script, or approved output processor changes"), "digest invalidation is clear");
 assert(html.includes("min-h-11"), "controls preserve 44px touch targets");
 assert(!html.includes("sha256-private-binding"), "stable tool fingerprint is never rendered");
+
+const packageOptions = localToolApprovalOptions({
+  ...request,
+  local_tool_approval: {
+    ...request.local_tool_approval,
+    tool_name: "impeccable",
+    capability: "scan",
+    read_only_reason: "profile_impeccable_scan",
+    trust_basis: "package-profile",
+    indefinite_allowed: true,
+    allowed_targets: ["capability"],
+    allowed_durations: ["once", "5h", "always"],
+  },
+} as GuardApprovalRequest);
+assert(packageOptions !== null, "package profile trust metadata is accepted");
+if (packageOptions === null) throw new Error("package options unexpectedly unavailable");
+const packageHtml = renderToStaticMarkup(
+  <LocalToolApprovalControls
+    options={packageOptions}
+    target="capability"
+    duration="always"
+    onTargetChange={() => undefined}
+    onDurationChange={() => undefined}
+  />,
+);
+assert(packageHtml.includes("Always"), "indefinite profile trust is visible");
+assert(packageHtml.includes("checks package safety"), "indefinite trust explains continuous package checks");
+assert(packageHtml.includes("URLs, writes, unsafe paths"), "package profile exclusions stay visible");
 
 console.log("local-tool-approval.test.tsx: all tests passed");

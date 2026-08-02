@@ -15551,7 +15551,7 @@ function buildTemporaryMcpResolutionFields(options, target, duration) {
   return { mcp_grant_target: target, mcp_grant_duration: duration };
 }
 const TARGETS = /* @__PURE__ */ new Set(["capability", "version"]);
-const DURATIONS = /* @__PURE__ */ new Set(["once", "15m", "1h", "5h", "version"]);
+const DURATIONS = /* @__PURE__ */ new Set(["once", "15m", "1h", "5h", "version", "always"]);
 function nonEmpty(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -15586,6 +15586,8 @@ function parseLocalToolApproval(value) {
     tool_identity_hash: raw.tool_identity_hash,
     capability: raw.capability.trim(),
     read_only_reason: raw.read_only_reason.trim(),
+    trust_basis: raw.trust_basis === "package-profile" ? "package-profile" : "verified-files",
+    indefinite_allowed: raw.indefinite_allowed === true,
     allowed_targets: allowedTargets,
     allowed_durations: allowedDurations,
     hard_risk_exclusions: Array.isArray(raw.hard_risk_exclusions) ? raw.hard_risk_exclusions.filter(nonEmpty).map((entry) => entry.trim()) : []
@@ -15621,7 +15623,8 @@ function localToolDurationLabel(duration) {
     "15m": "15 min",
     "1h": "1 hour",
     "5h": "5 hours",
-    version: "Until tool changes"
+    version: "Until tool changes",
+    always: "Always"
   };
   return labels[duration];
 }
@@ -15637,10 +15640,11 @@ function localToolReadOnlyReasonLabel(reason) {
 function localToolAllowButtonLabel(duration) {
   if (duration === "once") return "Approve once";
   if (duration === "version") return "Trust this version";
+  if (duration === "always") return "Always trust safe calls";
   return `Allow for ${localToolDurationLabel(duration)}`;
 }
 function localToolExpiryLabel(duration, now2 = /* @__PURE__ */ new Date()) {
-  if (duration === "once" || duration === "version") return null;
+  if (duration === "once" || duration === "version" || duration === "always") return null;
   const milliseconds = { "15m": 15 * 6e4, "1h": 60 * 6e4, "5h": 5 * 60 * 6e4 }[duration];
   return new Intl.DateTimeFormat(void 0, {
     dateStyle: "medium",
@@ -28424,7 +28428,7 @@ function pastDecisionVerb(decision) {
       return "blocked";
   }
 }
-const EXCLUSION_COPY$1 = "Privileged browser access, file transfer, secrets, command execution, destructive actions, and shared-profile access still require review.";
+const EXCLUSION_COPY = "Privileged browser access, file transfer, secrets, command execution, destructive actions, and shared-profile access still require review.";
 function TemporaryMcpRetryNotice() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 border-l-2 border-brand-blue bg-brand-blue/[0.04] px-4 py-3", role: "status", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Timed access is not available for this request." }),
@@ -28494,10 +28498,9 @@ function TemporaryMcpApprovalControls(props) {
         ". The Guard service sets the final expiry."
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: descriptionId, className: "text-xs leading-5 text-brand-dark/70", children: EXCLUSION_COPY$1 })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: descriptionId, className: "text-xs leading-5 text-brand-dark/70", children: EXCLUSION_COPY })
   ] });
 }
-const EXCLUSION_COPY = "Guard rechecks the executable and script before every call. Writes, shell chaining, redirects, embedded commands, environment overrides, and changed tool files still require review.";
 function LocalToolApprovalControls(props) {
   const expiry = localToolExpiryLabel(props.duration);
   const durationDescriptionId = "local-tool-duration-description";
@@ -28574,9 +28577,10 @@ function LocalToolApprovalControls(props) {
         expiry,
         ". The Guard service sets the final expiry."
       ] }),
-      props.duration === "version" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: "Trust ends automatically when the executable, script, or approved output processor changes." })
+      props.duration === "version" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: "Trust ends automatically when the executable, script, or approved output processor changes." }),
+      props.duration === "always" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: "Guard still checks package safety, command behavior, paths, and environment settings on every call." })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-brand-dark/70", children: EXCLUSION_COPY })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-brand-dark/70", children: props.options.trust_basis === "package-profile" ? "Only recognized local scan calls are covered. Package risks, URLs, writes, unsafe paths, shell composition, and changed runner files still require review." : "Guard rechecks the executable and script before every call. Writes, shell chaining, redirects, embedded commands, environment overrides, and changed tool files still require review." })
   ] });
 }
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact"]);

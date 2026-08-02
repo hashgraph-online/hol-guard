@@ -6,7 +6,7 @@ import type {
 } from "./guard-types";
 
 const TARGETS = new Set<GuardLocalToolGrantTarget>(["capability", "version"]);
-const DURATIONS = new Set<GuardLocalToolGrantDuration>(["once", "15m", "1h", "5h", "version"]);
+const DURATIONS = new Set<GuardLocalToolGrantDuration>(["once", "15m", "1h", "5h", "version", "always"]);
 
 export type LocalToolApprovalOptions = Omit<GuardLocalToolApproval, "eligible">;
 
@@ -53,6 +53,8 @@ export function parseLocalToolApproval(value: unknown): GuardLocalToolApproval |
     tool_identity_hash: raw.tool_identity_hash,
     capability: raw.capability.trim(),
     read_only_reason: raw.read_only_reason.trim(),
+    trust_basis: raw.trust_basis === "package-profile" ? "package-profile" : "verified-files",
+    indefinite_allowed: raw.indefinite_allowed === true,
     allowed_targets: allowedTargets,
     allowed_durations: allowedDurations,
     hard_risk_exclusions: Array.isArray(raw.hard_risk_exclusions)
@@ -106,6 +108,7 @@ export function localToolDurationLabel(duration: GuardLocalToolGrantDuration): s
     "1h": "1 hour",
     "5h": "5 hours",
     version: "Until tool changes",
+    always: "Always",
   };
   return labels[duration];
 }
@@ -123,6 +126,7 @@ export function localToolReadOnlyReasonLabel(reason: string): string {
 export function localToolAllowButtonLabel(duration: GuardLocalToolGrantDuration): string {
   if (duration === "once") return "Approve once";
   if (duration === "version") return "Trust this version";
+  if (duration === "always") return "Always trust safe calls";
   return `Allow for ${localToolDurationLabel(duration)}`;
 }
 
@@ -130,7 +134,7 @@ export function localToolExpiryLabel(
   duration: GuardLocalToolGrantDuration,
   now: Date = new Date(),
 ): string | null {
-  if (duration === "once" || duration === "version") return null;
+  if (duration === "once" || duration === "version" || duration === "always") return null;
   const milliseconds = { "15m": 15 * 60_000, "1h": 60 * 60_000, "5h": 5 * 60 * 60_000 }[duration];
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",

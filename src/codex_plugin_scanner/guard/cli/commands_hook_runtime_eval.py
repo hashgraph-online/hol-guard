@@ -576,7 +576,7 @@ def _evaluate_runtime_artifact_hook(
     raw_runtime_command = _runtime_package_raw_command(payload_map, action_envelope)
     if (
         event_name == "PreToolUse"
-        and runtime_artifact.artifact_type == "tool_action_request"
+        and runtime_artifact.artifact_type in {"tool_action_request", "package_request"}
         and raw_runtime_command is not None
     ):
         local_tool_eligibility = local_tool_approval_eligibility(
@@ -596,7 +596,7 @@ def _evaluate_runtime_artifact_hook(
         and payload_action_normalization is None
         and not data_flow_signals
         and not scanner_evidence
-        and package_evaluation is None
+        and (package_evaluation is None or package_policy_action != "block")
         else None
     )
     if local_tool_eligibility is not None:

@@ -16,9 +16,6 @@ type Props = {
   onDurationChange: (duration: GuardLocalToolGrantDuration) => void;
 };
 
-const EXCLUSION_COPY =
-  "Guard rechecks the executable and script before every call. Writes, shell chaining, redirects, embedded commands, environment overrides, and changed tool files still require review.";
-
 export function LocalToolApprovalControls(props: Props) {
   const expiry = localToolExpiryLabel(props.duration);
   const durationDescriptionId = "local-tool-duration-description";
@@ -119,9 +116,16 @@ export function LocalToolApprovalControls(props: Props) {
             Trust ends automatically when the executable, script, or approved output processor changes.
           </p>
         )}
+        {props.duration === "always" && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Guard still checks package safety, command behavior, paths, and environment settings on every call.
+          </p>
+        )}
       </div>
       <p className="text-xs leading-5 text-brand-dark/70">
-        {EXCLUSION_COPY}
+        {props.options.trust_basis === "package-profile"
+          ? "Only recognized local scan calls are covered. Package risks, URLs, writes, unsafe paths, shell composition, and changed runner files still require review."
+          : "Guard rechecks the executable and script before every call. Writes, shell chaining, redirects, embedded commands, environment overrides, and changed tool files still require review."}
       </p>
     </div>
   );

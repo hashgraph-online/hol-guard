@@ -14,12 +14,14 @@ from .models import GuardAction, PolicyDecision
 from .runtime.approval_context import build_runtime_launch_identity, runtime_launch_identity_is_reusable
 from .runtime.command_model import CommandSegment, parse_shell_command
 from .runtime.command_tokens import executable_name
+from .trusted_local_tool_jq import safe_jq_arguments
+from .trusted_package_tools import trusted_package_tool_profile
 
 LocalToolGrantTarget = Literal["capability", "version"]
-LocalToolGrantDuration = Literal["15m", "1h", "5h", "version"]
+LocalToolGrantDuration = Literal["15m", "1h", "5h", "version", "always"]
 
 LOCAL_TOOL_GRANT_TARGETS: Final = ("capability", "version")
-LOCAL_TOOL_GRANT_DURATIONS: Final = ("15m", "1h", "5h", "version")
+LOCAL_TOOL_GRANT_DURATIONS: Final = ("15m", "1h", "5h", "version", "always")
 _DURATION_SECONDS: Final = {"15m": 900, "1h": 3600, "5h": 18000}
 _SELECTOR_PREFIX: Final = "local-tool-grant:v1"
 _POLICY_SOURCE: Final = "trusted-local-tool"
@@ -43,36 +45,6 @@ _READ_ONLY_OPERATIONS: Final = frozenset(
 )
 _READ_ONLY_HTTP_METHODS: Final = frozenset({"GET", "HEAD", "OPTIONS"})
 _HTTP_OPERATIONS: Final = frozenset({"api", "fetch", "query", "request"})
-_JQ_FILE_OPTIONS: Final = frozenset(
-    {
-        "-f",
-        "-L",
-        "--argfile",
-        "--from-file",
-        "--library-path",
-        "--rawfile",
-        "--run-tests",
-        "--slurpfile",
-    }
-)
-_JQ_SAFE_SHORT_OPTION_CHARACTERS: Final = frozenset("RacenrSsjMC")
-_JQ_SAFE_LONG_OPTIONS: Final = frozenset(
-    {
-        "--ascii-output",
-        "--compact-output",
-        "--exit-status",
-        "--join-output",
-        "--monochrome-output",
-        "--null-input",
-        "--raw-input",
-        "--raw-output",
-        "--seq",
-        "--slurp",
-        "--sort-keys",
-        "--tab",
-        "--unbuffered",
-    }
-)
 _SIDE_EFFECTING_OPTIONS: Final = frozenset(
     {
         "-o",
@@ -113,6 +85,8 @@ class LocalToolApprovalEligibility:
     tool_identity_hash: str
     capability: str
     read_only_reason: str
+    trust_basis: Literal["verified-files", "package-profile"] = "verified-files"
+    indefinite_allowed: bool = False
 
     def to_evidence(self) -> dict[str, object]:
         return {
@@ -123,13 +97,26 @@ class LocalToolApprovalEligibility:
             "tool_identity_hash": self.tool_identity_hash,
             "capability": self.capability,
             "read_only_reason": self.read_only_reason,
+            "trust_basis": self.trust_basis,
+            "indefinite_allowed": self.indefinite_allowed,
         }
 
     def to_payload(self) -> dict[str, object]:
+        package_profile = self.trust_basis == "package-profile"
+        reusable_durations = (
+            ("15m", "1h", "5h", "always")
+            if package_profile and self.indefinite_allowed
+            else ("15m", "1h", "5h")
+            if package_profile
+            else LOCAL_TOOL_GRANT_DURATIONS[:-1]
+        )
         return {
             **self.to_evidence(),
-            "allowed_targets": list(LOCAL_TOOL_GRANT_TARGETS),
-            "allowed_durations": ["once", *LOCAL_TOOL_GRANT_DURATIONS],
+            "allowed_targets": ["capability"] if package_profile else list(LOCAL_TOOL_GRANT_TARGETS),
+            "allowed_durations": [
+                "once",
+                *reusable_durations,
+            ],
             "hard_risk_exclusions": list(_HARD_RISK_EXCLUSIONS),
         }
 
@@ -159,6 +146,17 @@ def local_tool_approval_eligibility(
     if model.confidence != "exact" or model.redirects or model.embedded_commands or len(model.segments) not in {1, 2}:
         return None
     primary = model.segments[0]
+    package_profile = trusted_package_tool_profile(primary, cwd=cwd, home_dir=home_dir)
+    if package_profile is not None and len(model.segments) == 1:
+        identity_hash = sha256(_canonical_json(package_profile.identity_material)).hexdigest()
+        return LocalToolApprovalEligibility(
+            tool_name=package_profile.tool_name,
+            tool_identity_hash=identity_hash,
+            capability=package_profile.capability,
+            read_only_reason=package_profile.read_only_reason,
+            trust_basis="package-profile",
+            indefinite_allowed=package_profile.indefinite_allowed,
+        )
     if not _safe_top_level_segment(primary, pipeline_index=0):
         return None
     processor_binding: dict[str, object] | None = None
@@ -168,7 +166,7 @@ def local_tool_approval_eligibility(
             return None
         if executable_name(processor.executable) != "jq":
             return None
-        if not _safe_jq_arguments(processor.arguments):
+        if not safe_jq_arguments(processor.arguments):
             return None
         processor_binding = _reusable_launch_binding(processor, cwd=cwd)
         if processor_binding is None:
@@ -217,12 +215,18 @@ def parse_local_tool_grant_selection(
         raise ValueError("local_tool_approval_ineligible")
     if target not in LOCAL_TOOL_GRANT_TARGETS:
         raise ValueError("invalid_local_tool_grant_target")
+    allowed_targets = cast(list[object], eligibility.to_payload()["allowed_targets"])
+    if target not in allowed_targets:
+        raise ValueError("invalid_local_tool_grant_target")
     if duration not in LOCAL_TOOL_GRANT_DURATIONS:
+        raise ValueError("invalid_local_tool_grant_duration")
+    allowed_durations = cast(list[object], eligibility.to_payload()["allowed_durations"])
+    if duration not in allowed_durations:
         raise ValueError("invalid_local_tool_grant_duration")
     typed_target: LocalToolGrantTarget = target
     typed_duration: LocalToolGrantDuration = duration
     expires_at: str | None = None
-    if typed_duration != "version":
+    if typed_duration not in {"version", "always"}:
         parsed_now = datetime.fromisoformat(now.replace("Z", "+00:00"))
         if parsed_now.tzinfo is None:
             parsed_now = parsed_now.replace(tzinfo=timezone.utc)
@@ -305,6 +309,7 @@ def _eligibility_from_request(request: Mapping[str, object]) -> LocalToolApprova
         identity_hash = _nonempty_string(normalized_item.get("tool_identity_hash"))
         capability = _nonempty_string(normalized_item.get("capability"))
         read_only_reason = _nonempty_string(normalized_item.get("read_only_reason"))
+        trust_basis = normalized_item.get("trust_basis", "verified-files")
         if (
             normalized_item.get("eligible") is True
             and tool_name is not None
@@ -312,8 +317,16 @@ def _eligibility_from_request(request: Mapping[str, object]) -> LocalToolApprova
             and _is_sha256(identity_hash)
             and capability is not None
             and read_only_reason is not None
+            and trust_basis in {"verified-files", "package-profile"}
         ):
-            return LocalToolApprovalEligibility(tool_name, identity_hash, capability, read_only_reason)
+            return LocalToolApprovalEligibility(
+                tool_name,
+                identity_hash,
+                capability,
+                read_only_reason,
+                cast(Literal["verified-files", "package-profile"], trust_basis),
+                bool(normalized_item.get("indefinite_allowed", False)),
+            )
     return None
 
 
@@ -443,30 +456,6 @@ def _normalized_option(argument: str) -> str | None:
     if not argument.startswith("-") or argument == "-":
         return None
     return argument.split("=", 1)[0].lower()
-
-
-def _safe_jq_arguments(arguments: Sequence[str]) -> bool:
-    filter_seen = False
-    for argument in arguments:
-        if (
-            argument in _JQ_FILE_OPTIONS
-            or argument.startswith("-L")
-            or any(argument.startswith(f"{option}=") for option in _JQ_FILE_OPTIONS)
-        ):
-            return False
-        if not filter_seen and argument in _JQ_SAFE_LONG_OPTIONS:
-            continue
-        if (
-            not filter_seen
-            and argument.startswith("-")
-            and len(argument) > 1
-            and all(character in _JQ_SAFE_SHORT_OPTION_CHARACTERS for character in argument[1:])
-        ):
-            continue
-        if filter_seen:
-            return False
-        filter_seen = True
-    return filter_seen
 
 
 def _tool_display_name(segment: CommandSegment, binding: Mapping[str, object]) -> str:

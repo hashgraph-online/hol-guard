@@ -233,7 +233,7 @@ export type GuardTemporaryMcpApproval = {
 };
 
 export type GuardLocalToolGrantTarget = "capability" | "version";
-export type GuardLocalToolGrantDuration = "once" | "15m" | "1h" | "5h" | "version";
+export type GuardLocalToolGrantDuration = "once" | "15m" | "1h" | "5h" | "version" | "always";
 
 export type GuardLocalToolApproval = {
   eligible: boolean;
@@ -241,6 +241,8 @@ export type GuardLocalToolApproval = {
   tool_identity_hash: string;
   capability: string;
   read_only_reason: string;
+  trust_basis: "verified-files" | "package-profile";
+  indefinite_allowed: boolean;
   allowed_targets: GuardLocalToolGrantTarget[];
   allowed_durations: GuardLocalToolGrantDuration[];
   hard_risk_exclusions: string[];

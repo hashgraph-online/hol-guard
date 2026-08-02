@@ -11,7 +11,11 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.trusted_local_tools import local_tool_approval_eligibility
+from codex_plugin_scanner.guard.trusted_local_tool_jq import safe_jq_arguments
+from codex_plugin_scanner.guard.trusted_local_tools import (
+    local_tool_approval_eligibility,
+    parse_local_tool_grant_selection,
+)
 
 
 def _write_event(
@@ -137,6 +141,178 @@ def test_local_tool_eligibility_supports_verified_jq_output_processing(
     )
     assert changed_filter is not None
     assert changed_filter.tool_identity_hash != eligibility.tool_identity_hash
+
+
+def test_jq_trust_rejects_unknown_options() -> None:
+    assert safe_jq_arguments(["--indent"]) is False
+
+
+def test_impeccable_local_scan_can_receive_conditional_package_trust(tmp_path: Path) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    target = source / "email.tsx"
+    _ = target.write_text("export const Email = () => null;\n")
+    context = tmp_path / "docs"
+    context.mkdir()
+    command = f"IMPECCABLE_CONTEXT_DIR={context} npx impeccable --json {target}"
+
+    eligibility = local_tool_approval_eligibility(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert eligibility is not None
+    assert eligibility.tool_name == "impeccable"
+    assert eligibility.capability == "scan"
+    assert eligibility.trust_basis == "package-profile"
+    assert eligibility.to_payload()["allowed_durations"] == [
+        "once",
+        "15m",
+        "1h",
+        "5h",
+    ]
+    pinned = local_tool_approval_eligibility(
+        command.replace("npx impeccable", "npx impeccable@3.3.1"),
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    assert pinned is not None
+    assert "always" in cast(list[object], pinned.to_payload()["allowed_durations"])
+    latest = local_tool_approval_eligibility(
+        command.replace("npx impeccable ", "npx impeccable@latest "),
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    assert latest is not None
+    assert latest.tool_identity_hash != eligibility.tool_identity_hash
+
+
+def test_impeccable_package_trust_without_home_stays_in_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.tsx"
+    _ = outside.write_text("export const Outside = () => null;\n")
+
+    assert (
+        local_tool_approval_eligibility(
+            f"npx impeccable@3.3.1 --json {outside}",
+            cwd=workspace,
+            home_dir=None,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    (
+        "skills install",
+        "detect https://example.test",
+        "--output report.json src",
+        "--json ~/.ssh",
+    ),
+)
+def test_impeccable_package_trust_rejects_mutating_or_unsafe_calls(tmp_path: Path, arguments: str) -> None:
+    (tmp_path / "src").mkdir()
+    command = f"npx impeccable {arguments}"
+    assert local_tool_approval_eligibility(command, cwd=tmp_path, home_dir=tmp_path) is None
+
+
+def test_indefinite_trust_is_limited_to_package_profiles(
+    local_tool_workspace: tuple[Path, Path],
+) -> None:
+    workspace, _tool = local_tool_workspace
+    direct = local_tool_approval_eligibility(
+        "node xads.mjs request --method=GET --path=/stats",
+        cwd=workspace,
+        home_dir=workspace,
+    )
+    assert direct is not None
+    request = {"scanner_evidence": [direct.to_evidence()]}
+
+    with pytest.raises(ValueError, match="invalid_local_tool_grant_duration"):
+        _ = parse_local_tool_grant_selection(
+            request,
+            target="capability",
+            duration="always",
+            now="2026-08-02T12:00:00+00:00",
+        )
+
+
+def test_impeccable_package_request_exposes_trust_controls_in_review(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    context = workspace / "docs"
+    context.mkdir()
+    target = workspace / "email.tsx"
+    _ = target.write_text("export const Email = () => null;\n")
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    _ = (guard_home / "config.toml").write_text(
+        'mode = "enforce"\nsecurity_level = "balanced"\ndefault_action = "require-reapproval"\n'
+    )
+    monkeypatch.setenv("CODEX_MANAGED_BY_BUN", "1")
+
+    def schedule_daemon(_guard_home: Path, **_kwargs: object) -> str:
+        return "http://127.0.0.1:4455"
+
+    monkeypatch.setattr(guard_commands_module, "schedule_guard_daemon_ensure", schedule_daemon)
+
+    def unavailable_daemon(_guard_home: Path) -> object:
+        raise RuntimeError("daemon unavailable")
+
+    monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", unavailable_daemon)
+    event = tmp_path / "impeccable.json"
+    _write_event(
+        event,
+        workspace=workspace,
+        command=f"IMPECCABLE_CONTEXT_DIR={context} npx impeccable@3.3.1 --json {target}",
+        call_id="impeccable",
+    )
+
+    assert _run_hook(guard_home=guard_home, workspace=workspace, event_path=event) == 0
+    _ = capsys.readouterr()
+    pending = GuardStore(guard_home).list_approval_requests(limit=5)
+    assert len(pending) == 1
+    assert pending[0]["artifact_type"] == "package_request"
+    assert "local_tool_approval" in pending[0], [
+        cast(Mapping[str, object], item).get("source")
+        for item in cast(list[object], pending[0].get("scanner_evidence", []))
+        if isinstance(item, Mapping)
+    ]
+    approval = cast(Mapping[str, object], pending[0]["local_tool_approval"])
+    assert approval["tool_name"] == "impeccable"
+    assert approval["capability"] == "scan"
+    assert approval["trust_basis"] == "package-profile"
+    assert "always" in cast(list[object], approval["allowed_durations"])
+
+    resolved = apply_approval_resolution(
+        store=GuardStore(guard_home),
+        request_id=str(pending[0]["request_id"]),
+        action="allow",
+        scope="artifact",
+        workspace=str(workspace),
+        reason="trusted local design scan",
+        now="2026-08-02T12:00:00+00:00",
+        local_tool_grant_target="capability",
+        local_tool_grant_duration="always",
+    )
+    grant = cast(Mapping[str, object], resolved["local_tool_grant"])
+    assert grant["expires_at"] is None
+
+    second_target = workspace / "second-email.tsx"
+    _ = second_target.write_text("export const SecondEmail = () => null;\n")
+    second_event = tmp_path / "impeccable-second.json"
+    _write_event(
+        second_event,
+        workspace=workspace,
+        command=f"IMPECCABLE_CONTEXT_DIR={context} npx impeccable@3.3.1 --json {second_target}",
+        call_id="impeccable-second",
+    )
+    assert _run_hook(guard_home=guard_home, workspace=workspace, event_path=second_event) == 0
+    assert capsys.readouterr().out == ""
+    assert GuardStore(guard_home).list_approval_requests(limit=5) == []
 
 
 @pytest.mark.parametrize(

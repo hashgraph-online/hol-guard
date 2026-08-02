@@ -76,7 +76,7 @@ def add_approval_parser(
             )
             decision_parser.add_argument(
                 "--trust-duration",
-                choices=("15m", "1h", "5h", "version"),
+                choices=("15m", "1h", "5h", "version", "always"),
                 default="1h",
                 help="How long the local tool grant remains active.",
             )
