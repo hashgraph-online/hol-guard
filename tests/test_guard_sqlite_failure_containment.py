@@ -180,6 +180,15 @@ def test_unrelated_sql_error_does_not_enter_recovery(tmp_path: Path) -> None:
     assert _quarantined_databases(store.guard_home) == []
 
 
+def test_storage_gate_allows_nested_reads_on_one_thread(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+
+    with store._connect() as outer:  # pyright: ignore[reportPrivateUsage]
+        assert outer.execute("pragma schema_version").fetchone() is not None
+        with store._connect() as inner:  # pyright: ignore[reportPrivateUsage]
+            assert inner.execute("pragma schema_version").fetchone() is not None
+
+
 def test_replacement_remains_exclusive_until_schema_is_ready(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

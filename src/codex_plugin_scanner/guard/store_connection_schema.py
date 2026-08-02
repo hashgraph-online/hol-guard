@@ -171,6 +171,7 @@ class StoreConnectionSchemaMixin:
     )
     _startup_prefetched_policy_integrity_repair_failed = False
     _storage_recovery_local: ClassVar[threading.local] = threading.local()
+    _storage_gate_local: ClassVar[threading.local] = threading.local()
 
     def _current_thread_owns_storage_recovery(self) -> bool:
         return getattr(self._storage_recovery_local, "owner", None) == id(self)
@@ -183,6 +184,16 @@ class StoreConnectionSchemaMixin:
 
     @contextmanager
     def _hold_storage_gate(self, *, exclusive: bool) -> Iterator[None]:
+        local = self._storage_gate_local
+        if getattr(local, "owner", None) == id(self) and getattr(local, "depth", 0) > 0:
+            if exclusive and getattr(local, "exclusive", False) is False:
+                raise RuntimeError("Cannot upgrade an active Guard storage read gate.")
+            local.depth += 1
+            try:
+                yield
+            finally:
+                local.depth -= 1
+            return
         path = self.guard_home / "storage-access.lock"
         deadline = time.monotonic() + sqlite_connect_timeout_seconds()
         with path.open("a+b") as handle:
@@ -208,9 +219,15 @@ class StoreConnectionSchemaMixin:
                     if time.monotonic() >= deadline:
                         raise TimeoutError("Timed out waiting for Guard storage access.") from None
                     time.sleep(0.01)
+            local.owner = id(self)
+            local.depth = 1
+            local.exclusive = exclusive
             try:
                 yield
             finally:
+                local.owner = None
+                local.depth = 0
+                local.exclusive = False
                 if os.name == "nt":
                     import msvcrt
 
