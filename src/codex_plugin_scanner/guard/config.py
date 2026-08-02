@@ -36,12 +36,14 @@ NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset(
         "guard.db-shm",
         "guard.db-wal",
         "schema-migration.lock",
+        "storage-access.lock",
     }
 )
 GUARD_HOME_METADATA_FILES = frozenset(
     {
         "oauth-keychain-access.json",
         "schema-migration.lock",
+        "storage-access.lock",
         "system-keyring-availability.json",
     }
 )
