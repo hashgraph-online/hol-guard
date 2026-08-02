@@ -7,17 +7,59 @@ import json
 import os
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
 _DEPENDENCY_SECTIONS = ("dependencies", "optionalDependencies", "peerDependencies")
 _MAX_CLOSURE_PACKAGES = 1_000
-_MAX_PACKAGE_TREE_BYTES = 256 * 1024 * 1024
-_MAX_PACKAGE_TREE_FILES = 12_000
+_MAX_CLOSURE_BYTES = 512 * 1024 * 1024
+_MAX_CLOSURE_FILES = 50_000
 _MAX_CONFIG_FILES = 128
 _MAX_CONFIG_BYTES = 4 * 1024 * 1024
-_LOCAL_MODULE_PATTERN = re.compile(r"(?:from\s+|require\s*\(|import\s*\()\s*['\"](?P<path>\.{1,2}/[^'\"]+)['\"]")
+_STATIC_MODULE_PATTERN = re.compile(r"(?:\bfrom\s+|\brequire\s*\(\s*|\bimport\s*(?:\(\s*)?)['\"](?P<path>[^'\"]+)['\"]")
+_COMPUTED_MODULE_PATTERN = re.compile(r"\b(?:require|import)\s*\(\s*(?!['\"])")
 _MODULE_SUFFIXES = ("", ".js", ".cjs", ".mjs", ".ts", ".cts", ".mts", ".json")
+_NODE_BUILTINS = frozenset(
+    {
+        "assert",
+        "buffer",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dns",
+        "events",
+        "fs",
+        "http",
+        "https",
+        "module",
+        "net",
+        "os",
+        "path",
+        "perf_hooks",
+        "process",
+        "querystring",
+        "readline",
+        "stream",
+        "string_decoder",
+        "timers",
+        "tls",
+        "tty",
+        "url",
+        "util",
+        "v8",
+        "vm",
+        "worker_threads",
+        "zlib",
+    }
+)
+
+
+@dataclass(slots=True)
+class _TreeBudget:
+    files: int = 0
+    size: int = 0
 
 
 def routine_workspace_identity(workspace: Path) -> dict[str, object]:
@@ -32,11 +74,12 @@ def routine_workspace_identity(workspace: Path) -> dict[str, object]:
     }
 
 
-def routine_dependency_closure_digest(workspace: Path, package_name: str) -> str:
+def routine_dependency_closure_digest(workspace: Path, package_names: tuple[str, ...]) -> str:
     """Hash every installed package reachable from the routine runner."""
 
     node_modules = (workspace / "node_modules").resolve(strict=True)
-    pending = [package_name]
+    pending = list(package_names)
+    budget = _TreeBudget()
     visited: set[str] = set()
     records: list[tuple[str, str, str]] = []
     while pending:
@@ -60,7 +103,7 @@ def routine_dependency_closure_digest(workspace: Path, package_name: str) -> str
         if not isinstance(version, str):
             raise ValueError("dependency closure package version is invalid")
         visited.add(name)
-        records.append((name, version, routine_package_tree_digest(canonical, skip_nested_bin=True)))
+        records.append((name, version, routine_package_tree_digest(canonical, skip_nested_bin=True, budget=budget)))
         for dependency in _dependency_names(package):
             if (node_modules / dependency).is_dir():
                 pending.append(dependency)
@@ -70,12 +113,13 @@ def routine_dependency_closure_digest(workspace: Path, package_name: str) -> str
     return hashlib.sha256(b"hol-guard:node-closure:v1\0" + len(encoded).to_bytes(8, "big") + encoded).hexdigest()
 
 
-def routine_configuration_digest(workspace: Path, runner: str) -> str:
+def routine_configuration_identity(workspace: Path, runner: str) -> tuple[str, tuple[str, ...]]:
     """Hash runner configuration and statically referenced local modules."""
 
     roots = _configuration_roots(workspace, runner)
     pending = list(roots)
     captured: dict[str, str] = {}
+    packages: set[str] = set()
     total_bytes = 0
     canonical_workspace = workspace.resolve(strict=True)
     while pending:
@@ -91,24 +135,43 @@ def routine_configuration_digest(workspace: Path, runner: str) -> str:
         if total_bytes > _MAX_CONFIG_BYTES:
             raise ValueError("configuration closure exceeds identity budget")
         captured[relative] = hashlib.sha256(data).hexdigest()
-        if canonical.suffix.lower() != ".json":
-            text = data.decode("utf-8")
-            pending.extend(_resolved_local_modules(canonical_workspace, canonical, text))
+        suffix = canonical.suffix.lower()
+        if suffix in {".yaml", ".yml"} or canonical.name == ".eslintrc":
+            raise ValueError("configuration format cannot provide a complete static closure")
+        if suffix == ".json":
+            local, external = _json_configuration_modules(canonical_workspace, canonical, data)
+        else:
+            local, external = _script_configuration_modules(canonical_workspace, canonical, data.decode("utf-8"))
+        pending.extend(local)
+        packages.update(external)
     encoded = json.dumps(sorted(captured.items()), separators=(",", ":"), ensure_ascii=True).encode()
-    return hashlib.sha256(b"hol-guard:node-config:v1\0" + len(encoded).to_bytes(8, "big") + encoded).hexdigest()
+    digest = hashlib.sha256(b"hol-guard:node-config:v1\0" + len(encoded).to_bytes(8, "big") + encoded).hexdigest()
+    return digest, tuple(sorted(packages))
 
 
 def _configuration_roots(workspace: Path, runner: str) -> tuple[Path, ...]:
     names = {
-        "next": ("next.config.js", "next.config.cjs", "next.config.mjs", "next.config.ts", "next.config.mts"),
+        "next": (
+            "next.config.js",
+            "next.config.cjs",
+            "next.config.mjs",
+            "next.config.ts",
+            "next.config.cts",
+            "next.config.mts",
+        ),
         "eslint": (
             "eslint.config.js",
             "eslint.config.cjs",
             "eslint.config.mjs",
             "eslint.config.ts",
+            "eslint.config.cts",
+            "eslint.config.mts",
+            ".eslintrc",
             ".eslintrc.js",
             ".eslintrc.cjs",
             ".eslintrc.json",
+            ".eslintrc.yaml",
+            ".eslintrc.yml",
         ),
         "tsc": ("tsconfig.json",),
     }[runner]
@@ -129,35 +192,93 @@ def _canonical_workspace_file(workspace: Path, path: Path) -> Path:
     return canonical
 
 
-def _resolved_local_modules(workspace: Path, importer: Path, text: str) -> tuple[Path, ...]:
+def _script_configuration_modules(
+    workspace: Path, importer: Path, text: str
+) -> tuple[tuple[Path, ...], tuple[str, ...]]:
+    if _COMPUTED_MODULE_PATTERN.search(text):
+        raise ValueError("configuration contains computed module loading")
     resolved: list[Path] = []
-    for match in _LOCAL_MODULE_PATTERN.finditer(text):
+    packages: set[str] = set()
+    for match in _STATIC_MODULE_PATTERN.finditer(text):
         raw = match.group("path")
-        base = importer.parent / raw
-        candidates = [
-            *(Path(f"{base}{suffix}") for suffix in _MODULE_SUFFIXES),
-            *(base / f"index{suffix}" for suffix in _MODULE_SUFFIXES[1:]),
-        ]
-        target = next((candidate for candidate in candidates if candidate.is_file()), None)
-        if target is None:
-            raise ValueError("configuration local module is unresolved")
-        resolved.append(_canonical_workspace_file(workspace, target))
-    return tuple(resolved)
+        if not raw.startswith("."):
+            package = _bare_package_name(raw)
+            if package is not None:
+                packages.add(package)
+            continue
+        resolved.append(_resolve_local_module(workspace, importer, raw))
+    return tuple(resolved), tuple(sorted(packages))
 
 
-def routine_package_tree_digest(root: Path, *, skip_nested_bin: bool = False) -> str:
+def _json_configuration_modules(
+    workspace: Path, importer: Path, data: bytes
+) -> tuple[tuple[Path, ...], tuple[str, ...]]:
+    payload = cast(object, json.loads(data))
+    specifiers: list[str] = []
+    _collect_json_config_specifiers(payload, specifiers)
+    resolved: list[Path] = []
+    packages: set[str] = set()
+    for raw in specifiers:
+        if raw.startswith("."):
+            resolved.append(_resolve_local_module(workspace, importer, raw))
+        else:
+            package = _bare_package_name(raw)
+            if package is not None:
+                packages.add(package)
+    return tuple(resolved), tuple(sorted(packages))
+
+
+def _collect_json_config_specifiers(payload: object, specifiers: list[str], *, key: str | None = None) -> None:
+    if isinstance(payload, dict):
+        for raw_key, value in cast(dict[object, object], payload).items():
+            if isinstance(raw_key, str):
+                _collect_json_config_specifiers(value, specifiers, key=raw_key)
+    elif isinstance(payload, list):
+        for value in cast(list[object], payload):
+            _collect_json_config_specifiers(value, specifiers, key=key)
+    elif isinstance(payload, str) and key in {"extends", "path"}:
+        specifiers.append(payload)
+
+
+def _resolve_local_module(workspace: Path, importer: Path, raw: str) -> Path:
+    base = importer.parent / raw
+    candidates = [
+        *(Path(f"{base}{suffix}") for suffix in _MODULE_SUFFIXES),
+        *(base / f"index{suffix}" for suffix in _MODULE_SUFFIXES[1:]),
+    ]
+    target = next((candidate for candidate in candidates if candidate.is_file()), None)
+    if target is None:
+        raise ValueError("configuration local module is unresolved")
+    return _canonical_workspace_file(workspace, target)
+
+
+def _bare_package_name(specifier: str) -> str | None:
+    if specifier.startswith(("node:", "eslint:", "plugin:")) or specifier in _NODE_BUILTINS:
+        return None
+    parts = specifier.split("/")
+    return "/".join(parts[:2]) if specifier.startswith("@") and len(parts) >= 2 else parts[0]
+
+
+def routine_package_tree_digest(
+    root: Path,
+    *,
+    skip_nested_bin: bool = False,
+    budget: _TreeBudget | None = None,
+) -> str:
     """Hash an installed package tree with bounded, canonical traversal."""
 
     canonical_root = root.resolve(strict=True)
     if root.is_symlink() or not canonical_root.is_dir():
         raise ValueError("package tree is not canonical")
     records: list[tuple[str, str]] = []
-    total_bytes = 0
+    active_budget = budget or _TreeBudget()
     for directory, directory_names, file_names in os.walk(canonical_root, followlinks=False):
         directory_names.sort()
         file_names.sort()
         if skip_nested_bin and Path(directory).name == "node_modules" and ".bin" in directory_names:
             directory_names.remove(".bin")
+        if any((Path(directory) / name).is_symlink() for name in directory_names):
+            raise ValueError("package tree contains a symlink")
         for name in file_names:
             path = Path(directory) / name
             if path.is_symlink():
@@ -165,8 +286,9 @@ def routine_package_tree_digest(root: Path, *, skip_nested_bin: bool = False) ->
             metadata = path.stat()
             if not path.is_file():
                 raise ValueError("package tree contains a non-file")
-            total_bytes += metadata.st_size
-            if len(records) >= _MAX_PACKAGE_TREE_FILES or total_bytes > _MAX_PACKAGE_TREE_BYTES:
+            active_budget.files += 1
+            active_budget.size += metadata.st_size
+            if active_budget.files > _MAX_CLOSURE_FILES or active_budget.size > _MAX_CLOSURE_BYTES:
                 raise ValueError("package tree exceeds identity budget")
             records.append((path.relative_to(canonical_root).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest()))
     encoded = json.dumps(records, separators=(",", ":"), ensure_ascii=True).encode()
@@ -197,7 +319,7 @@ def _read_package_json(path: Path) -> dict[str, object] | None:
 
 
 __all__ = (
-    "routine_configuration_digest",
+    "routine_configuration_identity",
     "routine_dependency_closure_digest",
     "routine_package_tree_digest",
     "routine_workspace_identity",

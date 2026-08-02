@@ -7,6 +7,7 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard.runtime import routine_local_node as routine_module
+from codex_plugin_scanner.guard.runtime import routine_node_identity as identity_module
 from codex_plugin_scanner.guard.runtime.routine_local_node import routine_package_tree_digest
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 from codex_plugin_scanner.guard.trusted_local_tools import local_tool_approval_eligibility
@@ -183,6 +184,7 @@ def test_local_next_variants_with_execution_or_write_risk_remain_reviewable(
         "./node_modules/.bin/eslint src/*.ts",
         "./node_modules/.bin/tsc --emitDeclarationOnly",
         "./node_modules/.bin/tsc --noEmit --project ../tsconfig.json",
+        "./node_modules/.bin/tsc --noEmit --project tsconfig.build.json",
         "./node_modules/.bin/tsc --noEmit --project $HOME/tsconfig.json",
     ),
 )
@@ -304,6 +306,89 @@ def test_configuration_closure_change_invalidates_existing_approval_identity(
 
     assert after is not None
     assert after.tool_identity_hash != before.tool_identity_hash
+
+
+def test_configuration_package_change_invalidates_existing_approval_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, active, workspace = _workspace(tmp_path, "next")
+    _write(workspace / "next.config.mjs", "import 'config-helper'; export default {}\n")
+    _write(
+        workspace / "node_modules" / "config-helper" / "package.json",
+        json.dumps({"name": "config-helper", "version": "1.0.0", "main": "index.js"}),
+    )
+    helper = workspace / "node_modules" / "config-helper" / "index.js"
+    _write(helper, "module.exports = 1\n")
+    _trust_fixture_package(monkeypatch, workspace, "next")
+    command = f"cd {workspace} && ./node_modules/.bin/next build --webpack"
+
+    before = local_tool_approval_eligibility(command, cwd=active, home_dir=home)
+    assert before is not None
+    _write(helper, "module.exports = 2\n")
+    after = local_tool_approval_eligibility(command, cwd=active, home_dir=home)
+
+    assert after is not None
+    assert after.tool_identity_hash != before.tool_identity_hash
+
+
+def test_computed_configuration_module_remains_reviewable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, active, workspace = _workspace(tmp_path, "next")
+    _write(workspace / "next.config.js", "module.exports = require(process.env.BUILD_CONFIG)\n")
+    _trust_fixture_package(monkeypatch, workspace, "next")
+
+    eligibility = local_tool_approval_eligibility(
+        f"cd {workspace} && ./node_modules/.bin/next build --webpack",
+        cwd=active,
+        home_dir=home,
+    )
+
+    assert eligibility is None
+
+
+def test_dependency_directory_symlink_remains_reviewable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, active, workspace = _workspace(tmp_path, "next")
+    package_path = workspace / "node_modules" / "next" / "package.json"
+    package = cast(dict[str, object], json.loads(package_path.read_text(encoding="utf-8")))
+    package["dependencies"] = {"helper": "1.0.0"}
+    _write(package_path, json.dumps(package))
+    helper = workspace / "node_modules" / "helper"
+    _write(helper / "package.json", json.dumps({"name": "helper", "version": "1.0.0"}))
+    outside = home / "outside"
+    outside.mkdir()
+    (helper / "dynamic").symlink_to(outside, target_is_directory=True)
+    _trust_fixture_package(monkeypatch, workspace, "next")
+
+    eligibility = local_tool_approval_eligibility(
+        f"cd {workspace} && ./node_modules/.bin/next build --webpack",
+        cwd=active,
+        home_dir=home,
+    )
+
+    assert eligibility is None
+
+
+def test_dependency_closure_uses_one_aggregate_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, active, workspace = _workspace(tmp_path, "next")
+    _trust_fixture_package(monkeypatch, workspace, "next")
+    monkeypatch.setattr(identity_module, "_MAX_CLOSURE_FILES", 1)
+
+    eligibility = local_tool_approval_eligibility(
+        f"cd {workspace} && ./node_modules/.bin/next build --webpack",
+        cwd=active,
+        home_dir=home,
+    )
+
+    assert eligibility is None
 
 
 def test_approval_identity_is_scoped_to_workspace(

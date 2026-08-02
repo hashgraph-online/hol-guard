@@ -12,7 +12,7 @@ from typing import cast
 
 from .jsonc import loads_jsonc
 from .routine_node_identity import (
-    routine_configuration_digest,
+    routine_configuration_identity,
     routine_dependency_closure_digest,
     routine_package_tree_digest,
     routine_workspace_identity,
@@ -134,8 +134,8 @@ def routine_local_node_approval_profile(
         return None
     try:
         workspace_identity = routine_workspace_identity(workspace)
-        closure_digest = routine_dependency_closure_digest(workspace, package_name)
-        configuration_digest = routine_configuration_digest(workspace, command_name)
+        configuration_digest, configuration_packages = routine_configuration_identity(workspace, command_name)
+        closure_digest = routine_dependency_closure_digest(workspace, (package_name, *configuration_packages))
     except (OSError, RuntimeError, ValueError):
         return None
     return RoutineLocalNodeApprovalProfile(
@@ -186,7 +186,7 @@ def _typescript_args(args: list[str]) -> bool:
         del remaining[:2]
     if remaining and remaining[0] in {"-p", "--project"}:
         _ = remaining.pop(0)
-        if not remaining or not _safe_relative_config(remaining.pop(0)):
+        if not remaining or remaining.pop(0) != "tsconfig.json":
             return False
     return not remaining
 
@@ -213,11 +213,6 @@ def _eslint_args(args: list[str]) -> bool:
         targets.append(token)
         index += 1
     return bool(targets)
-
-
-def _safe_relative_config(token: str) -> bool:
-    path = Path(token)
-    return not _dynamic_or_external(token) and not path.is_absolute() and path.suffix == ".json"
 
 
 def _dynamic_or_external(token: str) -> bool:
