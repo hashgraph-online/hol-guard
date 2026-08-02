@@ -223,7 +223,7 @@ def _json_configuration_modules(
     payload = cast(object, json.loads(data))
     specifiers: list[str] = []
     packages: set[str] = set()
-    _collect_json_config_inputs(payload, specifiers, packages)
+    _collect_json_config_inputs(payload, specifiers, packages, workspace)
     resolved: list[Path] = []
     for raw in specifiers:
         if raw.startswith("."):
@@ -235,14 +235,19 @@ def _json_configuration_modules(
     return tuple(resolved), tuple(sorted(packages))
 
 
-def _collect_json_config_inputs(payload: object, specifiers: list[str], packages: set[str]) -> None:
+def _collect_json_config_inputs(
+    payload: object,
+    specifiers: list[str],
+    packages: set[str],
+    workspace: Path,
+) -> None:
     if isinstance(payload, dict):
         for raw_key, value in cast(dict[object, object], payload).items():
             if not isinstance(raw_key, str):
                 continue
             if raw_key in {"extends", "path"}:
                 for item in _string_values(value):
-                    normalized = _eslint_extended_package(item)
+                    normalized = _eslint_extended_package(item, workspace)
                     (packages.add(normalized) if normalized is not None else specifiers.append(item))
                 continue
             if raw_key == "parser" and isinstance(value, str):
@@ -253,10 +258,10 @@ def _collect_json_config_inputs(payload: object, specifiers: list[str], packages
             if raw_key == "plugins":
                 _collect_plugin_packages(value, packages)
                 continue
-            _collect_json_config_inputs(value, specifiers, packages)
+            _collect_json_config_inputs(value, specifiers, packages, workspace)
     elif isinstance(payload, list):
         for value in cast(list[object], payload):
-            _collect_json_config_inputs(value, specifiers, packages)
+            _collect_json_config_inputs(value, specifiers, packages, workspace)
 
 
 def _string_values(value: object) -> tuple[str, ...]:
@@ -281,13 +286,18 @@ def _collect_plugin_packages(value: object, packages: set[str]) -> None:
                     packages.add(package)
 
 
-def _eslint_extended_package(specifier: str) -> str | None:
+def _eslint_extended_package(specifier: str, workspace: Path) -> str | None:
     if not specifier.startswith("plugin:"):
         return None
     remainder = specifier.removeprefix("plugin:")
     parts = remainder.split("/")
-    plugin = "/".join(parts[:2]) if remainder.startswith("@") and len(parts) >= 2 else parts[0]
-    return _eslint_plugin_package(plugin)
+    if not remainder.startswith("@") or len(parts) < 2:
+        return _eslint_plugin_package(parts[0])
+    named = _eslint_plugin_package("/".join(parts[:2]))
+    bare_scope = _eslint_plugin_package(parts[0])
+    if (workspace / "node_modules" / named).is_dir():
+        return named
+    return bare_scope if (workspace / "node_modules" / bare_scope).is_dir() else named
 
 
 def _eslint_plugin_package(plugin: str) -> str:
