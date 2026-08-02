@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -28,6 +29,25 @@ _WRITE_FLAGS = {
     "--output-file",
 }
 _ESLINT_FLAGS = {"--no-cache", "--no-error-on-unmatched-pattern", "--no-warn-ignored", "--quiet"}
+TRUSTED_PACKAGE_TREES = {
+    (
+        "eslint",
+        "9.38.0",
+        "sha512-t5aPOpmtJcZcz5UJyY2GbvpDlsK5E8JqRqoKtfiKE3cNh437KIqfJr3A3AKf5k64NPx6d0G3dno6XDY05PqPtw==",
+    ): "39f4230ad4489863c6fcced909d99460cc4637f8af83065a9344a9ae2153e768",
+    (
+        "next",
+        "16.3.0-preview.8",
+        "sha512-c9CF1GAZnpB7iwZWCnPdSPfdrmGkvr+lGqcRuH++EIYFxb4Mk6EIve13ExuO4ghbhayQVGyP+hY8BocnQ/aHbA==",
+    ): "14e290417e32af06148c8715812f7b03bd98958e0382032637d8b8d844e5b98d",
+    (
+        "typescript",
+        "5.9.3",
+        "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+    ): "e5e331517b5c57cef26c6ed1c1dd2193ed52002a49a276cf7971b499c7f83b0f",
+}
+_MAX_PACKAGE_TREE_BYTES = 256 * 1024 * 1024
+_MAX_PACKAGE_TREE_FILES = 12_000
 
 
 def routine_local_node_execution_context(
@@ -174,8 +194,18 @@ def _workspace_runner_is_bound(workspace: Path, *, runner: str) -> bool:
     lockfiles = [workspace / name for name in ("bun.lock", "package-lock.json") if (workspace / name).exists()]
     if not isinstance(installed_version, str) or declared_version is None or len(lockfiles) != 1:
         return False
-    locked_version = _locked_package_version(lockfiles[0], package_name)
-    if locked_version != installed_version or not _semver_spec_matches(declared_version, installed_version):
+    locked_identity = _locked_package_identity(lockfiles[0], package_name)
+    if (
+        locked_identity is None
+        or locked_identity[0] != installed_version
+        or not _semver_spec_matches(declared_version, installed_version)
+        or not _package_tree_has_trusted_identity(
+            package_dir,
+            package_name=package_name,
+            version=locked_identity[0],
+            integrity=locked_identity[1],
+        )
+    ):
         return False
     target = _package_bin_target(package, runner)
     if target is None:
@@ -229,7 +259,7 @@ def _declared_dependency_version(workspace: Path, package_name: str) -> str | No
     return None
 
 
-def _locked_package_version(path: Path, package_name: str) -> str | None:
+def _locked_package_identity(path: Path, package_name: str) -> tuple[str, str] | None:
     try:
         if path.is_symlink() or not path.is_file() or path.stat().st_size > 16 * 1024 * 1024:
             return None
@@ -245,14 +275,66 @@ def _locked_package_version(path: Path, package_name: str) -> str | None:
     entries = cast(dict[object, object], packages)
     entry = entries.get(package_name if path.name == "bun.lock" else f"node_modules/{package_name}")
     if path.name == "bun.lock":
-        if not isinstance(entry, list) or not entry or not isinstance(entry[0], str):
+        typed_entry = cast(list[object], entry) if isinstance(entry, list) else []
+        if (
+            len(typed_entry) < 4
+            or not isinstance(typed_entry[0], str)
+            or not isinstance(typed_entry[3], str)
+            or not typed_entry[3].startswith("sha512-")
+        ):
             return None
         prefix = f"{package_name}@"
-        return entry[0][len(prefix) :] if entry[0].startswith(prefix) else None
+        return (typed_entry[0][len(prefix) :], typed_entry[3]) if typed_entry[0].startswith(prefix) else None
     if not isinstance(entry, dict):
         return None
-    version = cast(dict[object, object], entry).get("version")
-    return version if isinstance(version, str) else None
+    typed_entry = cast(dict[object, object], entry)
+    version = typed_entry.get("version")
+    integrity = typed_entry.get("integrity")
+    if not isinstance(version, str) or not isinstance(integrity, str) or not integrity.startswith("sha512-"):
+        return None
+    return version, integrity
+
+
+def _package_tree_has_trusted_identity(
+    package_dir: Path,
+    *,
+    package_name: str,
+    version: str,
+    integrity: str,
+) -> bool:
+    expected = TRUSTED_PACKAGE_TREES.get((package_name, version, integrity))
+    if expected is None:
+        return False
+    try:
+        return routine_package_tree_digest(package_dir) == expected
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def routine_package_tree_digest(root: Path) -> str:
+    """Hash an installed package tree with bounded, canonical traversal."""
+
+    canonical_root = root.resolve(strict=True)
+    if root.is_symlink() or not canonical_root.is_dir():
+        raise ValueError("package tree is not canonical")
+    records: list[tuple[str, str]] = []
+    total_bytes = 0
+    for directory, directory_names, file_names in os.walk(canonical_root, followlinks=False):
+        directory_names.sort()
+        file_names.sort()
+        for name in file_names:
+            path = Path(directory) / name
+            if path.is_symlink():
+                raise ValueError("package tree contains a symlink")
+            metadata = path.stat()
+            if not path.is_file():
+                raise ValueError("package tree contains a non-file")
+            total_bytes += metadata.st_size
+            if len(records) >= _MAX_PACKAGE_TREE_FILES or total_bytes > _MAX_PACKAGE_TREE_BYTES:
+                raise ValueError("package tree exceeds identity budget")
+            records.append((path.relative_to(canonical_root).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest()))
+    encoded = json.dumps(records, separators=(",", ":"), ensure_ascii=True).encode()
+    return hashlib.sha256(b"hol-guard:package-tree:v1\0" + len(encoded).to_bytes(8, "big") + encoded).hexdigest()
 
 
 def _semver_spec_matches(specifier: str, version: str) -> bool:
@@ -274,4 +356,4 @@ def _semver_spec_matches(specifier: str, version: str) -> bool:
     return actual == minimum
 
 
-__all__ = ("routine_local_node_execution_context",)
+__all__ = ("TRUSTED_PACKAGE_TREES", "routine_local_node_execution_context", "routine_package_tree_digest")

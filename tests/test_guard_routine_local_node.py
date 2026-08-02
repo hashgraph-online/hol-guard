@@ -6,6 +6,8 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime import routine_local_node as routine_module
+from codex_plugin_scanner.guard.runtime.routine_local_node import routine_package_tree_digest
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
 
@@ -33,6 +35,7 @@ def _workspace(tmp_path: Path, runner: str, *, version: str = "1.2.3") -> tuple[
                     f"node_modules/{package}": {
                         "version": version,
                         "resolved": f"https://registry.npmjs.org/{package}/-/{package}-{version}.tgz",
+                        "integrity": "sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==",
                     }
                 }
             }
@@ -50,12 +53,27 @@ def _workspace(tmp_path: Path, runner: str, *, version: str = "1.2.3") -> tuple[
     return home, active, workspace
 
 
-def test_exact_prerelease_next_dependency_is_bound(tmp_path: Path) -> None:
+def _trust_fixture_package(monkeypatch: pytest.MonkeyPatch, workspace: Path, runner: str) -> None:
+    package = {"next": "next", "eslint": "eslint", "tsc": "typescript"}[runner]
+    payload = cast(
+        dict[str, object],
+        json.loads((workspace / "node_modules" / package / "package.json").read_text(encoding="utf-8")),
+    )
+    version = cast(str, payload["version"])
+    monkeypatch.setitem(
+        routine_module.TRUSTED_PACKAGE_TREES,
+        (package, version, "sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ=="),
+        routine_package_tree_digest(workspace / "node_modules" / package),
+    )
+
+
+def test_exact_prerelease_next_dependency_is_bound(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     home, active, workspace = _workspace(tmp_path, "next", version="16.3.0-preview.8")
     package = cast(dict[str, object], json.loads((workspace / "package.json").read_text(encoding="utf-8")))
     dependencies = cast(dict[str, str], package["devDependencies"])
     dependencies["next"] = "16.3.0-preview.8"
     _ = (workspace / "package.json").write_text(json.dumps(package), encoding="utf-8")
+    _trust_fixture_package(monkeypatch, workspace, "next")
 
     match = extract_sensitive_tool_action_request(
         "Bash",
@@ -83,8 +101,10 @@ def test_dependency_bound_local_routine_after_sibling_cd_is_allowed(
     tmp_path: Path,
     runner: str,
     invocation: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home, active, workspace = _workspace(tmp_path, runner)
+    _trust_fixture_package(monkeypatch, workspace, runner)
 
     match = extract_sensitive_tool_action_request(
         "Bash",
@@ -157,6 +177,25 @@ def test_local_next_runner_symlink_escape_remains_reviewable(tmp_path: Path) -> 
     binary = workspace / "node_modules" / ".bin" / "next"
     binary.unlink()
     binary.symlink_to(outside)
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": f"cd {workspace} && ./node_modules/.bin/next build --webpack"},
+        cwd=active,
+        home_dir=home,
+    )
+
+    assert match is not None
+
+
+def test_locally_modified_runner_with_consistent_metadata_remains_reviewable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, active, workspace = _workspace(tmp_path, "next")
+    _trust_fixture_package(monkeypatch, workspace, "next")
+    executable = workspace / "node_modules" / "next" / "dist" / "bin" / "next"
+    _write(executable, "#!/usr/bin/env node\nrequire('./payload.js')\n", executable=True)
 
     match = extract_sensitive_tool_action_request(
         "Bash",
