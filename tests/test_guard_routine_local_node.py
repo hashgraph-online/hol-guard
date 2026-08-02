@@ -356,12 +356,62 @@ def test_json_configuration_plugin_change_invalidates_existing_approval_identity
     assert after.tool_identity_hash != before.tool_identity_hash
 
 
+def test_scoped_json_plugin_change_invalidates_existing_approval_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, active, workspace = _workspace(tmp_path, "eslint")
+    _write(workspace / ".eslintrc.json", json.dumps({"plugins": ["@scope/name"]}))
+    package = workspace / "node_modules" / "@scope" / "eslint-plugin-name"
+    _write(
+        package / "package.json",
+        json.dumps({"name": "@scope/eslint-plugin-name", "version": "1.0.0", "main": "index.js"}),
+    )
+    plugin = package / "index.js"
+    _write(plugin, "module.exports = {}\n")
+    _trust_fixture_package(monkeypatch, workspace, "eslint")
+    command = f"cd {workspace} && ./node_modules/.bin/eslint src"
+
+    before = local_tool_approval_eligibility(command, cwd=active, home_dir=home)
+    assert before is not None
+    _write(plugin, "module.exports = { rules: {} }\n")
+    after = local_tool_approval_eligibility(command, cwd=active, home_dir=home)
+
+    assert after is not None
+    assert after.tool_identity_hash != before.tool_identity_hash
+
+
 def test_computed_configuration_module_remains_reviewable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home, active, workspace = _workspace(tmp_path, "next")
     _write(workspace / "next.config.js", "module.exports = require(process.env.BUILD_CONFIG)\n")
+    _trust_fixture_package(monkeypatch, workspace, "next")
+
+    eligibility = local_tool_approval_eligibility(
+        f"cd {workspace} && ./node_modules/.bin/next build --webpack",
+        cwd=active,
+        home_dir=home,
+    )
+
+    assert eligibility is None
+
+
+def test_create_require_configuration_remains_reviewable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, active, workspace = _workspace(tmp_path, "next")
+    _write(
+        workspace / "next.config.mjs",
+        "".join(
+            (
+                "import { createRequire } from 'node:module'; const load = createRequire(import.meta.url); ",
+                "export default load('./config.js')\n",
+            )
+        ),
+    )
     _trust_fixture_package(monkeypatch, workspace, "next")
 
     eligibility = local_tool_approval_eligibility(

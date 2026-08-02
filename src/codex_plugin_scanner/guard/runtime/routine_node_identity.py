@@ -195,7 +195,7 @@ def _canonical_workspace_file(workspace: Path, path: Path) -> Path:
 def _script_configuration_modules(
     workspace: Path, importer: Path, text: str
 ) -> tuple[tuple[Path, ...], tuple[str, ...]]:
-    if _COMPUTED_MODULE_PATTERN.search(text):
+    if _COMPUTED_MODULE_PATTERN.search(text) or re.search(r"\bcreateRequire\s*\(", text):
         raise ValueError("configuration contains computed module loading")
     resolved: list[Path] = []
     packages: set[str] = set()
@@ -281,7 +281,9 @@ def _eslint_extended_package(specifier: str) -> str | None:
 def _eslint_plugin_package(plugin: str) -> str:
     if plugin.startswith("@"):
         scope, _, name = plugin.partition("/")
-        return f"{scope}/{name or 'eslint-plugin'}" if name else f"{scope}/eslint-plugin"
+        if not name:
+            return f"{scope}/eslint-plugin"
+        return f"{scope}/{name}" if name.startswith("eslint-plugin") else f"{scope}/eslint-plugin-{name}"
     return plugin if plugin.startswith("eslint-plugin-") else f"eslint-plugin-{plugin}"
 
 
